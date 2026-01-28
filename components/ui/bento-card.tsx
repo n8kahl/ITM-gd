@@ -97,7 +97,7 @@ export function BentoCard({
         {graphic ? (
           <div
             className={cn(
-              "relative w-full h-48 md:h-56 mb-6 rounded-lg overflow-hidden",
+              "relative w-full h-56 md:h-64 mb-6 rounded-lg overflow-hidden",
               "bg-[rgba(10,10,11,0.8)] border border-white/[0.04]",
               graphicClassName
             )}
@@ -118,7 +118,7 @@ export function BentoCard({
         ) : image ? (
           <div
             className={cn(
-              "relative w-full h-48 md:h-56 mb-6 rounded-lg overflow-hidden",
+              "relative w-full h-56 md:h-64 mb-6 rounded-lg overflow-hidden",
               "bg-[rgba(10,10,11,0.8)] border border-white/[0.04]"
             )}
           >

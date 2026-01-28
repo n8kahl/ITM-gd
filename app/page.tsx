@@ -14,6 +14,7 @@ import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/c
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
+import { DiscordMock } from "@/components/ui/discord-mock";
 
 export default function Home() {
   return (
@@ -207,14 +208,15 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Active Community with Signal Pulse */}
+            {/* Active Community with Discord Mock */}
             <StaggerItem>
               <BentoCard
                 icon={Users}
-                title="Live Signal Feed"
-                description="Network with thousands of like-minded traders, share insights, and learn from collective experience."
+                title="Active Community"
+                description="Join thousands of traders sharing real-time wins in our exclusive Discord."
                 spotlight="emerald"
-                graphic={<SignalPulse className="absolute inset-0 p-4" signalCount={8} />}
+                graphic={<DiscordMock />}
+                graphicClassName="!bg-transparent !border-0"
               />
             </StaggerItem>
 
