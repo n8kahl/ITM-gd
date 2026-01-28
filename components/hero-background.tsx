@@ -1,57 +1,77 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-// Volatility Surface Parameters
-const GRID_SIZE = 80; // Number of points per side
+// Optimized Parameters - Reduced for better performance
+const GRID_SIZE_DESKTOP = 50; // Reduced from 80
+const GRID_SIZE_MOBILE = 30; // Even smaller for mobile (if ever used)
 const SURFACE_WIDTH = 20;
 const SURFACE_DEPTH = 16;
 const WAVE_SPEED = 0.3;
 const BASE_AMPLITUDE = 1.2;
+const POINT_COUNT_DESKTOP = 100; // Reduced from 200
 
 // Signal Green color
 const SIGNAL_GREEN = "#00E676";
 
+// Mobile detection hook
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
 function VolatilitySurface() {
   const meshRef = useRef<THREE.LineSegments>(null);
   const timeRef = useRef(0);
+  const gridSize = GRID_SIZE_DESKTOP;
 
   // Create the grid geometry for wireframe
   const { positions, indices } = useMemo(() => {
-    const positions = new Float32Array(GRID_SIZE * GRID_SIZE * 3);
+    const positions = new Float32Array(gridSize * gridSize * 3);
     const indices: number[] = [];
 
     // Create grid positions
-    for (let z = 0; z < GRID_SIZE; z++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        const idx = (z * GRID_SIZE + x) * 3;
-        positions[idx] = (x / (GRID_SIZE - 1) - 0.5) * SURFACE_WIDTH;
-        positions[idx + 1] = 0; // Y will be animated
-        positions[idx + 2] = (z / (GRID_SIZE - 1) - 0.5) * SURFACE_DEPTH;
+    for (let z = 0; z < gridSize; z++) {
+      for (let x = 0; x < gridSize; x++) {
+        const idx = (z * gridSize + x) * 3;
+        positions[idx] = (x / (gridSize - 1) - 0.5) * SURFACE_WIDTH;
+        positions[idx + 1] = 0;
+        positions[idx + 2] = (z / (gridSize - 1) - 0.5) * SURFACE_DEPTH;
       }
     }
 
-    // Create line indices for wireframe grid
-    for (let z = 0; z < GRID_SIZE; z++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        const current = z * GRID_SIZE + x;
+    // Create line indices for wireframe grid - skip every other line for performance
+    for (let z = 0; z < gridSize; z += 2) {
+      for (let x = 0; x < gridSize; x++) {
+        const current = z * gridSize + x;
 
         // Horizontal lines (along X)
-        if (x < GRID_SIZE - 1) {
+        if (x < gridSize - 1) {
           indices.push(current, current + 1);
         }
 
-        // Vertical lines (along Z)
-        if (z < GRID_SIZE - 1) {
-          indices.push(current, current + GRID_SIZE);
+        // Vertical lines (along Z) - only every other
+        if (z < gridSize - 2) {
+          indices.push(current, current + gridSize * 2);
         }
       }
     }
 
     return { positions, indices };
-  }, []);
+  }, [gridSize]);
 
   // Create buffer geometry
   const geometry = useMemo(() => {
@@ -70,31 +90,23 @@ function VolatilitySurface() {
     const positionAttribute = meshRef.current.geometry.getAttribute("position");
     const posArray = positionAttribute.array as Float32Array;
 
-    for (let z = 0; z < GRID_SIZE; z++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        const idx = (z * GRID_SIZE + x) * 3;
+    // Optimized loop - process fewer calculations
+    for (let z = 0; z < gridSize; z++) {
+      for (let x = 0; x < gridSize; x++) {
+        const idx = (z * gridSize + x) * 3;
         const xPos = posArray[idx];
         const zPos = posArray[idx + 2];
 
-        // Create multiple wave patterns for volatility surface effect
-        // Primary wave - large undulations
+        // Simplified wave calculations (reduced from 4 to 2 waves)
         const wave1 = Math.sin(xPos * 0.3 + time) * Math.cos(zPos * 0.4 + time * 0.7) * BASE_AMPLITUDE;
+        const wave2 = Math.sin(xPos * 0.15 + zPos * 0.1 + time * 0.5) * 0.8;
 
-        // Secondary wave - faster, smaller ripples (like market volatility)
-        const wave2 = Math.sin(xPos * 0.8 + time * 2) * 0.3;
-
-        // Tertiary wave - creates the "trading chart" peaks and valleys
-        const wave3 = Math.sin(xPos * 0.15 + zPos * 0.1 + time * 0.5) * 0.8;
-
-        // Random noise simulation for volatility spikes
-        const noise = Math.sin(xPos * 2 + zPos * 3 + time * 3) * 0.15;
-
-        // Edge fade - surface fades at edges
+        // Edge fade
         const edgeFadeX = 1 - Math.pow(Math.abs(xPos) / (SURFACE_WIDTH / 2), 4);
         const edgeFadeZ = 1 - Math.pow(Math.abs(zPos) / (SURFACE_DEPTH / 2), 4);
         const edgeFade = edgeFadeX * edgeFadeZ;
 
-        posArray[idx + 1] = (wave1 + wave2 + wave3 + noise) * edgeFade;
+        posArray[idx + 1] = (wave1 + wave2) * edgeFade;
       }
     }
 
@@ -126,7 +138,7 @@ function GridFloor() {
   return (
     <gridHelper
       ref={gridRef}
-      args={[40, 40, SIGNAL_GREEN, SIGNAL_GREEN]}
+      args={[40, 20, SIGNAL_GREEN, SIGNAL_GREEN]} // Reduced from 40 divisions to 20
       position={[0, -4, 0]}
       rotation={[0, 0, 0]}
       material-opacity={0.08}
@@ -135,16 +147,15 @@ function GridFloor() {
   );
 }
 
-// Floating data points around the surface
+// Floating data points - reduced count
 function DataPoints() {
   const pointsRef = useRef<THREE.Points>(null);
-  const POINT_COUNT = 200;
 
   const { positions, velocities } = useMemo(() => {
-    const positions = new Float32Array(POINT_COUNT * 3);
-    const velocities = new Float32Array(POINT_COUNT * 3);
+    const positions = new Float32Array(POINT_COUNT_DESKTOP * 3);
+    const velocities = new Float32Array(POINT_COUNT_DESKTOP * 3);
 
-    for (let i = 0; i < POINT_COUNT; i++) {
+    for (let i = 0; i < POINT_COUNT_DESKTOP; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 20;
       positions[i * 3 + 1] = (Math.random() - 0.5) * 8 - 1;
       positions[i * 3 + 2] = (Math.random() - 0.5) * 12;
@@ -163,7 +174,7 @@ function DataPoints() {
     const positionAttribute = pointsRef.current.geometry.getAttribute("position");
     const posArray = positionAttribute.array as Float32Array;
 
-    for (let i = 0; i < POINT_COUNT; i++) {
+    for (let i = 0; i < POINT_COUNT_DESKTOP; i++) {
       posArray[i * 3] += velocities[i * 3];
       posArray[i * 3 + 1] += velocities[i * 3 + 1];
       posArray[i * 3 + 2] += velocities[i * 3 + 2];
@@ -183,7 +194,7 @@ function DataPoints() {
         <bufferAttribute
           attach="attributes-position"
           array={positions}
-          count={POINT_COUNT}
+          count={POINT_COUNT_DESKTOP}
           itemSize={3}
         />
       </bufferGeometry>
@@ -201,36 +212,116 @@ function DataPoints() {
 function Scene() {
   return (
     <>
-      {/* Void black background */}
       <color attach="background" args={["#020202"]} />
-
-      {/* Subtle ambient lighting */}
       <ambientLight intensity={0.3} />
-
-      {/* Directional light for depth */}
       <directionalLight position={[5, 5, 5]} intensity={0.2} color={SIGNAL_GREEN} />
-
-      {/* Main Volatility Surface */}
       <VolatilitySurface />
-
-      {/* Subtle grid floor */}
       <GridFloor />
-
-      {/* Floating data points */}
       <DataPoints />
     </>
   );
 }
 
+// Static mobile background - no Three.js, pure CSS
+function MobileBackground() {
+  return (
+    <div className="absolute inset-0 z-0 bg-[#020202]">
+      {/* Static gradient that mimics the 3D effect */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0, 230, 118, 0.08) 0%, transparent 50%),
+            radial-gradient(ellipse 60% 40% at 30% 60%, rgba(0, 230, 118, 0.05) 0%, transparent 40%),
+            radial-gradient(ellipse 50% 30% at 70% 30%, rgba(0, 230, 118, 0.04) 0%, transparent 35%)
+          `,
+        }}
+      />
+
+      {/* Static grid pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.04]"
+        style={{
+          backgroundImage: `
+            linear-gradient(rgba(0, 230, 118, 0.5) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 230, 118, 0.5) 1px, transparent 1px)
+          `,
+          backgroundSize: "60px 60px",
+        }}
+      />
+
+      {/* Scanline overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.02]"
+        style={{
+          backgroundImage: `repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 230, 118, 0.1) 2px,
+            rgba(0, 230, 118, 0.1) 4px
+          )`,
+        }}
+      />
+
+      {/* Vignette overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(2, 2, 2, 0.5) 70%, rgba(2, 2, 2, 0.9) 100%)`,
+        }}
+      />
+
+      {/* Top fade for navbar */}
+      <div
+        className="absolute top-0 left-0 right-0 h-32 pointer-events-none"
+        style={{
+          background: `linear-gradient(to bottom, rgba(2, 2, 2, 0.8) 0%, transparent 100%)`,
+        }}
+      />
+
+      {/* Bottom fade */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none"
+        style={{
+          background: `linear-gradient(to top, rgba(2, 2, 2, 1) 0%, rgba(2, 2, 2, 0.8) 30%, transparent 100%)`,
+        }}
+      />
+    </div>
+  );
+}
+
 export function HeroBackground() {
+  const isMobile = useIsMobile();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Server-side and initial render - show nothing to prevent hydration mismatch
+  if (!mounted) {
+    return <div className="absolute inset-0 z-0 bg-[#020202]" />;
+  }
+
+  // Mobile devices get static background - no GPU-heavy Three.js
+  if (isMobile) {
+    return <MobileBackground />;
+  }
+
+  // Desktop gets the full Three.js experience
   return (
     <div className="absolute inset-0 z-0">
-      {/* Three.js Canvas */}
+      {/* Three.js Canvas - Desktop only */}
       <Canvas
         camera={{ position: [0, 2, 10], fov: 50 }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]} // Reduced max DPR from 2 to 1.5
         style={{ background: "#020202" }}
-        gl={{ antialias: true, alpha: false }}
+        gl={{
+          antialias: false, // Disable antialiasing for performance
+          alpha: false,
+          powerPreference: "high-performance",
+        }}
       >
         <Scene />
       </Canvas>

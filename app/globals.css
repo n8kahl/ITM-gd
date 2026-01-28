@@ -276,6 +276,7 @@
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--radius);
     transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    will-change: transform, opacity;
   }
 
   .glass-card:hover {
@@ -294,6 +295,7 @@
       0 8px 32px rgba(0, 0, 0, 0.4),
       inset 0 1px 0 rgba(255, 255, 255, 0.02);
     transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    will-change: transform, opacity;
   }
 
   .glass-card-heavy:hover {
@@ -316,6 +318,7 @@
       0 8px 32px rgba(0, 0, 0, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.02);
     transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    will-change: transform, opacity;
   }
 
   .glass-card-platinum:hover {
@@ -835,5 +838,118 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+}
+
+/* ============================================
+   MOBILE PERFORMANCE OPTIMIZATIONS
+   Reduces GPU-intensive effects on mobile devices
+   ============================================ */
+@media (max-width: 767px) {
+  /* Reduce backdrop-filter blur significantly on mobile */
+  .glass-card {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    background: rgba(18, 18, 20, 0.85);
+  }
+
+  .glass-card-heavy {
+    backdrop-filter: blur(12px) saturate(100%);
+    -webkit-backdrop-filter: blur(12px) saturate(100%);
+    background: rgba(18, 18, 20, 0.9);
+  }
+
+  .glass-card-platinum {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(18, 18, 20, 0.88);
+  }
+
+  /* Disable hover transforms on touch devices */
+  .glass-card:hover,
+  .glass-card-heavy:hover,
+  .glass-card-platinum:hover,
+  .card-hover-premium:hover {
+    transform: none;
+  }
+
+  /* Simplify body background effects */
+  body::after {
+    opacity: 0.15;
+    background-size: 100px 100px;
+  }
+
+  /* Reduce noise texture impact */
+  body::before {
+    opacity: 0.015;
+  }
+
+  /* Disable complex animations on mobile */
+  .animate-pulse-subtle,
+  .animate-pulse-emerald,
+  .animate-pulse-green {
+    animation: none;
+  }
+
+  /* Simplify shimmer animation */
+  .shimmer {
+    animation-duration: 4s;
+  }
+
+  /* Reduce data-stream animation complexity */
+  .data-stream {
+    animation-duration: 6s;
+  }
+
+  /* Faster, simpler fade animations */
+  .fade-in-up {
+    animation-duration: 0.5s;
+  }
+
+  .reveal-slow {
+    animation-duration: 0.8s;
+  }
+
+  /* Disable animated borders on mobile */
+  .animated-border::before {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
+/* Tablet optimizations (slightly less aggressive) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .glass-card {
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+  }
+
+  .glass-card-heavy {
+    backdrop-filter: blur(35px) saturate(110%);
+    -webkit-backdrop-filter: blur(35px) saturate(110%);
+  }
+
+  .glass-card-platinum {
+    backdrop-filter: blur(35px);
+    -webkit-backdrop-filter: blur(35px);
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .shimmer,
+  .data-stream,
+  .animate-pulse-subtle,
+  .animate-pulse-emerald,
+  .animate-pulse-green {
+    animation: none !important;
   }
 }
