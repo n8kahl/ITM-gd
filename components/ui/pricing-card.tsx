@@ -15,6 +15,8 @@ interface PricingCardProps {
   whopLink: string;
   popular?: boolean;
   tier: "starter" | "pro" | "elite";
+  urgencyText?: string;
+  spotsLeft?: number;
 }
 
 // CSS Credit Card Component
@@ -206,6 +208,8 @@ export function PricingCard({
   whopLink,
   popular = false,
   tier,
+  urgencyText,
+  spotsLeft,
 }: PricingCardProps) {
   const isElite = tier === "elite";
   const isPro = tier === "pro";
@@ -361,14 +365,38 @@ export function PricingCard({
             <div className="text-center mb-6">
               {/* Elite Tag - Primary Available Option */}
               {isElite && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 mb-4">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
-                  </span>
-                  <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider font-mono">
-                    NOW AVAILABLE
-                  </span>
+                <div className="space-y-3 mb-4">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                    </span>
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider font-mono">
+                      NOW AVAILABLE
+                    </span>
+                  </div>
+
+                  {/* Urgency/Scarcity Banner */}
+                  {(urgencyText || spotsLeft) && (
+                    <motion.div
+                      className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30"
+                      animate={{
+                        borderColor: ["rgba(239,68,68,0.3)", "rgba(239,68,68,0.6)", "rgba(239,68,68,0.3)"],
+                      }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      {spotsLeft && (
+                        <span className="text-xs font-bold text-red-400 font-mono">
+                          ⚡ Only {spotsLeft} spots left this month
+                        </span>
+                      )}
+                      {urgencyText && !spotsLeft && (
+                        <span className="text-xs font-bold text-red-400">
+                          {urgencyText}
+                        </span>
+                      )}
+                    </motion.div>
+                  )}
                 </div>
               )}
 

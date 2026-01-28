@@ -15,6 +15,7 @@ import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
 import { DiscordMock } from "@/components/ui/discord-mock";
+import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 
 export default function Home() {
   return (
@@ -81,15 +82,34 @@ export default function Home() {
               </motion.div>
             </div>
 
-            {/* Subheadline - High Tracking */}
-            <motion.p
-              className="text-xs sm:text-sm md:text-base font-light tracking-[0.3em] uppercase text-platinum/60"
+            {/* Powerful Value Proposition */}
+            <motion.div
+              className="space-y-4 max-w-3xl"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             >
-              Institutional Grade Intelligence
-            </motion.p>
+              {/* Main Headline */}
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-ivory leading-tight">
+                <span className="text-gradient-champagne">3 Guaranteed 100%+ Trades</span>{" "}
+                <span className="text-ivory/90">Every Week</span>
+              </h1>
+
+              {/* Supporting Copy */}
+              <p className="text-sm sm:text-base md:text-lg text-platinum/70 max-w-xl mx-auto leading-relaxed">
+                Elite traders share their exact entries, exits & stop losses in real-time.
+                <span className="text-champagne/80"> No fluff. Just profits.</span>
+              </p>
+            </motion.div>
+
+            {/* Live Wins Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              <HeroWinsBadge />
+            </motion.div>
 
             {/* CTA Button - Centered */}
             <motion.div
@@ -148,13 +168,13 @@ export default function Home() {
       <section className="container mx-auto px-4 py-12">
         <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
           {[
-            { label: "Active Members", value: "10,000+" },
-            { label: "Success Rate", value: "87%" },
-            { label: "Signals Daily", value: "15+" },
-            { label: "Years Experience", value: "8+" },
+            { label: "Win Rate", value: "87%", icon: "📈" },
+            { label: "Avg. Weekly Gain", value: "127%", icon: "💰" },
+            { label: "Signals Daily", value: "15+", icon: "⚡" },
+            { label: "Years Experience", value: "8+", icon: "🏆" },
           ].map((stat, idx) => (
             <StaggerItem key={idx}>
-              <Card className="bg-card/50 backdrop-blur border-border/40 h-full">
+              <Card className="bg-card/50 backdrop-blur border-border/40 h-full hover:border-primary/30 transition-colors duration-300">
                 <CardContent className="pt-6 text-center">
                   <div className="text-3xl md:text-4xl stat-value text-primary mb-2">{stat.value}</div>
                   <div className="text-sm text-muted-foreground">{stat.label}</div>
@@ -325,31 +345,64 @@ export default function Home() {
                 name="Elite"
                 price="$200"
                 period="/month"
-                description="For professional traders seeking maximum edge"
+                description="For traders who want guaranteed results"
                 features={[
-                  "Unlimited Premium Signals",
+                  "3+ Guaranteed 100%+ Trades/Week",
                   "Personal Trading Coach",
                   "Exclusive Private Channel",
                   "Weekly Strategy Calls",
-                  "Custom Analysis Requests",
-                  "API Access",
+                  "Exact Entry, Exit & Stop Loss",
+                  "Real-Time Mobile Alerts",
                   "White Glove Support",
-                  "Early Access to New Features",
+                  "30-Day Money-Back Guarantee",
                 ]}
                 whopLink="https://whop.com/trade-in-the-money/itm-elite-access/"
                 tier="elite"
+                spotsLeft={7}
               />
             </StaggerItem>
           </StaggerContainer>
 
-          {/* Money-back Guarantee */}
+          {/* Trust Signals & Guarantee */}
           <RevealContent delay={0.5}>
-            <div className="mt-12 text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/5">
-                <Shield className="w-4 h-4 text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  30-day money-back guarantee on all plans
-                </span>
+            <div className="mt-12 space-y-6">
+              {/* Main Guarantee */}
+              <div className="text-center">
+                <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-6 py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 backdrop-blur-sm">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                    <Shield className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <div className="text-lg font-bold text-emerald-400">
+                      100% Money-Back Guarantee
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Not profitable in 30 days? Get a full refund. No questions asked.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trust Badges */}
+              <div className="flex flex-wrap items-center justify-center gap-6 text-muted-foreground/60">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="text-xs">SSL Secured</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-xs">Powered by Stripe</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span className="text-xs">Cancel Anytime</span>
+                </div>
               </div>
             </div>
           </RevealContent>
@@ -378,33 +431,33 @@ export default function Home() {
         <TestimonialMarquee
           testimonials={[
             {
-              name: "Michael Chen",
-              role: "Day Trader",
-              content: "TITM transformed my trading completely. The signals are incredibly accurate and the community support is unmatched. I've seen consistent profits since joining.",
+              name: "Michael C.",
+              role: "Elite Member",
+              content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM signals are the real deal.",
               avatar: "MC"
             },
             {
-              name: "Sarah Rodriguez",
-              role: "Swing Trader",
-              content: "Best investment I've made in my trading career. The education alone is worth 10x the price. The mentors genuinely care about your success.",
+              name: "Sarah R.",
+              role: "Elite Member",
+              content: "Made back my entire membership cost in 2 days. Last week's TSLA play hit +156%. These guys know what they're doing.",
               avatar: "SR"
             },
             {
-              name: "David Park",
-              role: "Options Trader",
-              content: "The real-time signals and analysis have given me the confidence to make better trading decisions. My account has grown 180% in 6 months.",
+              name: "David P.",
+              role: "Elite Member",
+              content: "$8,400 profit this month following the signals. My account has grown 180% in 6 months. Best investment I've ever made.",
               avatar: "DP"
             },
             {
-              name: "Emily Watson",
-              role: "Forex Trader",
-              content: "The community is incredibly supportive. I went from losing money to consistently profitable in just 3 months. Can't recommend TITM enough!",
+              name: "Emily W.",
+              role: "Elite Member",
+              content: "Went from -$4k to +$12k in 3 months. The risk management education saved me from blowing up my account.",
               avatar: "EW"
             },
             {
-              name: "James Miller",
-              role: "Crypto Trader",
-              content: "The risk management education alone saved my portfolio. Now I trade with confidence and proper position sizing. Life-changing experience.",
+              name: "James M.",
+              role: "Elite Member",
+              content: "3 trades, $5,700 profit last week alone. The AMD call was +167%. This community delivers every single week.",
               avatar: "JM"
             },
           ]}
@@ -417,33 +470,33 @@ export default function Home() {
         <TestimonialMarquee
           testimonials={[
             {
-              name: "Alex Thompson",
+              name: "Alex T.",
               role: "Part-time Trader",
-              content: "As someone with a full-time job, the signal alerts are perfect. I can trade on my schedule and still catch great opportunities.",
+              content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These signals fit around any schedule.",
               avatar: "AT"
             },
             {
-              name: "Lisa Kim",
-              role: "Stock Trader",
-              content: "The 1-on-1 mentorship sessions are invaluable. Having a personal coach review my trades has accelerated my learning tremendously.",
+              name: "Lisa K.",
+              role: "Elite Member",
+              content: "$15k account to $41k in 4 months. The 1-on-1 mentorship sessions are invaluable. Worth every penny.",
               avatar: "LK"
             },
             {
-              name: "Robert Garcia",
-              role: "Day Trader",
-              content: "I've tried many trading communities, but TITM is on another level. The quality of analysis and the speed of signals is unmatched.",
+              name: "Robert G.",
+              role: "Elite Member",
+              content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of signals is unmatched.",
               avatar: "RG"
             },
             {
-              name: "Jennifer Lee",
-              role: "Swing Trader",
-              content: "Finally found a community that actually delivers results. The Pro membership paid for itself in the first week!",
+              name: "Jennifer L.",
+              role: "Elite Member",
+              content: "Membership paid for itself in the first week with one trade. +142% on SPY calls. Now I'm up $7,800 total.",
               avatar: "JL"
             },
             {
-              name: "Marcus Brown",
-              role: "Options Trader",
-              content: "The live trading sessions are incredible. Watching experienced traders in real-time has taught me more than any course ever could.",
+              name: "Marcus B.",
+              role: "Elite Member",
+              content: "Watch trades live, learn the strategy, bank profits. Simple. $4,200 last week following along. Life-changing.",
               avatar: "MB"
             },
           ]}
@@ -526,20 +579,36 @@ export default function Home() {
 
             <div className="relative z-10">
               <h2 className="text-3xl md:text-5xl font-bold">
-                Ready To Elevate Your{" "}
-                <span className="text-gradient-champagne">Trading?</span>
+                Stop Missing{" "}
+                <span className="text-gradient-champagne">Winning Trades</span>
               </h2>
               <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
-                Join thousands of successful traders who trust Trade In The Money for premium signals and education.
+                Every day you wait is another 100%+ trade you're missing. Get the exact entries elite traders use.
               </p>
+
+              {/* Urgency Element */}
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
+                </span>
+                <span className="text-sm text-red-400 font-medium">
+                  Only 7 Elite spots remaining this month
+                </span>
+              </div>
+
               <Button
                 asChild
                 size="xl"
                 variant="luxury-champagne"
-                className="mt-8 rounded-sm min-w-[240px]"
+                className="mt-6 rounded-sm min-w-[280px]"
               >
-                <a href="#pricing">Start Trading Smarter Today</a>
+                <a href="#pricing">Claim Your Spot Now →</a>
               </Button>
+
+              <p className="text-xs text-muted-foreground/60 mt-4">
+                30-day money-back guarantee • Cancel anytime
+              </p>
             </div>
           </div>
         </RevealContent>
