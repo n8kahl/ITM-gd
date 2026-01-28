@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, Crown, Sparkles, Star } from "lucide-react";
+import Image from "next/image";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -15,6 +16,12 @@ interface PricingCardProps {
   popular?: boolean;
   tier: "starter" | "pro" | "elite";
 }
+
+const cardImages = {
+  starter: "/card-starter.png",
+  pro: "/card-pro.png",
+  elite: "/card-elite.png",
+};
 
 export function PricingCard({
   name,
@@ -79,28 +86,19 @@ export function PricingCard({
 
         {/* Card Content */}
         <div className="relative z-10 flex flex-col h-full">
+          {/* Card Image */}
+          <div className="relative w-full h-32 md:h-40 mb-6 flex items-center justify-center">
+            <Image
+              src={cardImages[tier]}
+              alt={`${name} membership card`}
+              width={200}
+              height={120}
+              className="object-contain drop-shadow-2xl"
+            />
+          </div>
+
           {/* Header */}
           <div className="text-center mb-6">
-            {/* Plan Icon */}
-            <div
-              className={cn(
-                "w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center",
-                isPro
-                  ? "bg-gradient-to-br from-gold/20 to-gold-dark/20"
-                  : tier === "elite"
-                    ? "bg-gradient-to-br from-primary/20 to-money-green-dark/20"
-                    : "bg-white/5"
-              )}
-            >
-              {tier === "starter" && (
-                <Star className="w-6 h-6 text-smoke/70" />
-              )}
-              {tier === "pro" && <Crown className="w-6 h-6 text-gold" />}
-              {tier === "elite" && (
-                <Sparkles className="w-6 h-6 text-primary" />
-              )}
-            </div>
-
             {/* Popular Tag */}
             {popular && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold/10 border border-gold/30 mb-4">

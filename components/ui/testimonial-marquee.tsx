@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Quote } from "lucide-react";
 
@@ -36,15 +37,18 @@ function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
 
         {/* Content */}
         <p className="text-smoke/80 text-sm leading-relaxed mb-6 line-clamp-4">
-          "{testimonial.content}"
+          &ldquo;{testimonial.content}&rdquo;
         </p>
 
         {/* Author */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold/20 to-primary/20 flex items-center justify-center">
-            <span className="text-sm font-semibold text-gold">
-              {testimonial.avatar}
-            </span>
+          <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-gold/20 to-primary/20">
+            <Image
+              src="/trader-avatar.png"
+              alt={testimonial.name}
+              fill
+              className="object-cover opacity-80"
+            />
           </div>
           <div>
             <div className="font-semibold text-smoke text-sm">

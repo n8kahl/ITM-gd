@@ -10,6 +10,7 @@ import { PricingCard } from "@/components/ui/pricing-card";
 import { FloatingNavbar } from "@/components/ui/floating-navbar";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
+import { RibbonDivider } from "@/components/ui/ribbon-divider";
 
 export default function Home() {
   return (
@@ -135,6 +136,9 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Ribbon Divider */}
+      <RibbonDivider />
+
       {/* Stats Section */}
       <section className="container mx-auto px-4 py-16">
         <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
@@ -194,6 +198,7 @@ export default function Home() {
                 description="Access exclusive courses, webinars, and tutorials covering technical analysis, fundamental analysis, and risk management. From beginner basics to advanced strategies, we provide the knowledge you need to become a confident trader."
                 className="h-full"
                 spotlight="gold"
+                image="/icon-education.png"
               />
             </StaggerItem>
 
@@ -224,6 +229,7 @@ export default function Home() {
                 title="Lightning Fast"
                 description="Receive signals instantly via Discord notifications so you never miss a profitable opportunity."
                 spotlight="emerald"
+                image="/icon-lightning.png"
               />
             </StaggerItem>
 
@@ -234,11 +240,15 @@ export default function Home() {
                 title="Risk Management"
                 description="Learn proper position sizing, portfolio management, and strategies to protect your capital."
                 spotlight="gold"
+                image="/icon-shield.png"
               />
             </StaggerItem>
           </StaggerContainer>
         </div>
       </section>
+
+      {/* Ribbon Divider */}
+      <RibbonDivider flip />
 
       {/* Pricing Section - Membership Cards */}
       <section id="pricing" className="container mx-auto px-4 py-20">
@@ -433,6 +443,9 @@ export default function Home() {
           speed={30}
         />
       </section>
+
+      {/* Ribbon Divider */}
+      <RibbonDivider />
 
       {/* Post-Purchase Instructions Section */}
       <section className="container mx-auto px-4 py-20">
