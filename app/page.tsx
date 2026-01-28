@@ -1,10 +1,12 @@
 "use client";
 
 import Image from "next/image";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight, Star } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
+import { AuroraBackground } from "@/components/ui/aurora-background";
 import { BentoCard } from "@/components/ui/bento-card";
 import { PricingCard } from "@/components/ui/pricing-card";
 import { FloatingNavbar } from "@/components/ui/floating-navbar";
@@ -22,59 +24,100 @@ export default function Home() {
       {/* Floating Island Navbar */}
       <FloatingNavbar />
 
-      {/* Hero Section - Luxury Magazine Cover */}
-      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden bg-noise">
-        {/* Cinematic Gradient Background - Emerald Spotlight */}
-        <div className="absolute inset-0 z-0">
-          {/* Primary radial gradient - emerald spotlight from bottom */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `radial-gradient(ellipse 80% 60% at 50% 100%, rgba(4, 120, 87, 0.25) 0%, rgba(4, 120, 87, 0.08) 40%, transparent 70%)`,
-            }}
-          />
-          {/* Secondary subtle emerald glow */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `radial-gradient(ellipse 60% 40% at 50% 90%, rgba(5, 150, 105, 0.15) 0%, transparent 60%)`,
-            }}
-          />
-          {/* Top vignette for depth */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(180deg, rgba(10, 10, 11, 0.4) 0%, transparent 30%, transparent 70%, rgba(10, 10, 11, 0.2) 100%)`,
-            }}
-          />
-        </div>
+      {/* Hero Section - Luxury Magazine Cover with Aurora Background */}
+      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
+        {/* Aurora Animated Background */}
+        <AuroraBackground />
 
         {/* Main Content - Center Aligned */}
         <div className="container mx-auto relative z-20">
           <div className="max-w-4xl mx-auto text-center space-y-8">
-            {/* Editorial H1 - Serif Typography */}
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-serif font-medium tracking-tight leading-[1.1] text-ivory">
-              Precision Trading for the
-              <br />
-              <span className="text-gradient-luminous-emerald italic">Modern Elite</span>
-            </h1>
+            {/* Editorial H1 - Staggered Fade-Up Animation */}
+            <motion.h1
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-serif font-medium tracking-tight leading-[1.1] text-ivory"
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: {
+                  transition: {
+                    staggerChildren: 0.15,
+                  },
+                },
+              }}
+            >
+              <motion.span
+                className="block"
+                variants={{
+                  hidden: { opacity: 0, y: 30, filter: "blur(10px)" },
+                  visible: {
+                    opacity: 1,
+                    y: 0,
+                    filter: "blur(0px)",
+                    transition: { duration: 0.8, ease: [0.25, 0.4, 0.25, 1] },
+                  },
+                }}
+              >
+                Precision Trading for the
+              </motion.span>
+              <motion.span
+                className="block text-gradient-luminous-emerald italic"
+                variants={{
+                  hidden: { opacity: 0, y: 30, filter: "blur(10px)" },
+                  visible: {
+                    opacity: 1,
+                    y: 0,
+                    filter: "blur(0px)",
+                    transition: { duration: 0.8, ease: [0.25, 0.4, 0.25, 1] },
+                  },
+                }}
+              >
+                Modern Elite
+              </motion.span>
+            </motion.h1>
 
-            {/* Subheadline - Light and Spacious */}
-            <p className="text-lg sm:text-xl md:text-2xl font-light text-ivory/70 tracking-wide max-w-2xl mx-auto">
+            {/* Subheadline - Light and Spacious with Fade-Up */}
+            <motion.p
+              className="text-lg sm:text-xl md:text-2xl font-light text-ivory/70 tracking-wide max-w-2xl mx-auto"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
+            >
               Institutional-grade signals. Private community. Uncapped potential.
-            </p>
+            </motion.p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4 w-full sm:w-auto">
-              {/* Primary Button - Solid Champagne/Platinum */}
-              <Button
-                asChild
-                size="xl"
-                variant="luxury-champagne"
-                className="w-full sm:w-auto sm:min-w-[200px] rounded-sm font-medium tracking-wide"
+            <motion.div
+              className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4 w-full sm:w-auto"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              {/* Primary Button - Gold Pulse Animation */}
+              <motion.div
+                animate={{
+                  boxShadow: [
+                    "0 0 20px rgba(212, 175, 55, 0.3)",
+                    "0 0 40px rgba(212, 175, 55, 0.5)",
+                    "0 0 20px rgba(212, 175, 55, 0.3)",
+                  ],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                className="rounded-sm"
               >
-                <a href="#pricing">Request Access</a>
-              </Button>
+                <Button
+                  asChild
+                  size="xl"
+                  variant="luxury-champagne"
+                  className="w-full sm:w-auto sm:min-w-[200px] rounded-sm font-medium tracking-wide"
+                >
+                  <a href="#pricing">Join Now</a>
+                </Button>
+              </motion.div>
 
               {/* Secondary Button - Text Link with Underline */}
               <a
@@ -86,10 +129,15 @@ export default function Home() {
                 </span>
                 <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
               </a>
-            </div>
+            </motion.div>
 
             {/* Social Proof - Elegant and Minimal */}
-            <div className="pt-12 flex flex-col items-center gap-3">
+            <motion.div
+              className="pt-12 flex flex-col items-center gap-3"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1, delay: 1 }}
+            >
               {/* 5 Gold Stars - Small and Refined */}
               <div className="flex items-center gap-1.5">
                 {[...Array(5)].map((_, i) => (
@@ -103,14 +151,23 @@ export default function Home() {
               <p className="text-sm font-light tracking-[0.2em] uppercase text-ivory/50">
                 Trusted by Traders Worldwide
               </p>
-            </div>
+            </motion.div>
           </div>
         </div>
 
         {/* Subtle Scroll Indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
-          <div className="w-[1px] h-16 bg-gradient-to-b from-transparent via-champagne/30 to-transparent" />
-        </div>
+        <motion.div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, delay: 1.2 }}
+        >
+          <motion.div
+            className="w-[1px] h-16 bg-gradient-to-b from-transparent via-champagne/30 to-transparent"
+            animate={{ scaleY: [1, 1.2, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </motion.div>
       </section>
 
       {/* Ribbon Divider */}
@@ -290,11 +347,11 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Elite Card - $199/mo - The Premium Option */}
+            {/* Elite Card - $200/mo - The Premium Option */}
             <StaggerItem>
               <PricingCard
                 name="Elite"
-                price="$199"
+                price="$200"
                 period="/month"
                 description="For professional traders seeking maximum edge"
                 features={[
