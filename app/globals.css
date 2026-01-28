@@ -4,8 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================
-   LUXURY FINTECH DESIGN SYSTEM
-   Trade In The Money - Premium Brand
+   COLD LUXURY / INSTITUTIONAL DESIGN SYSTEM
+   Trade In The Money - Platinum & Electric Green
    ============================================ */
 
 /* Light mode variables (fallback, not primary) */
@@ -16,47 +16,47 @@
   --card-foreground: #EDEDED;
   --popover: rgba(10, 10, 10, 0.9);
   --popover-foreground: #EDEDED;
-  --primary: #10B981;
+  --primary: #00E676;
   --primary-foreground: #050505;
   --secondary: #1a1a1a;
   --secondary-foreground: #EDEDED;
   --muted: #1a1a1a;
   --muted-foreground: #888888;
-  --accent: #D4AF37;
+  --accent: #E5E4E2;
   --accent-foreground: #050505;
   --destructive: #dc2626;
   --destructive-foreground: #EDEDED;
-  --border: rgba(212, 175, 55, 0.2);
+  --border: rgba(229, 228, 226, 0.2);
   --input: rgba(255, 255, 255, 0.05);
-  --ring: #D4AF37;
-  --chart-1: #10B981;
-  --chart-2: #059669;
-  --chart-3: #047857;
-  --chart-4: #D4AF37;
-  --chart-5: #B8860B;
+  --ring: #E5E4E2;
+  --chart-1: #00E676;
+  --chart-2: #00C853;
+  --chart-3: #00A843;
+  --chart-4: #E5E4E2;
+  --chart-5: #A0A0A0;
   --radius: 0.75rem;
   --sidebar: #0a0a0a;
   --sidebar-foreground: #EDEDED;
-  --sidebar-primary: #10B981;
+  --sidebar-primary: #00E676;
   --sidebar-primary-foreground: #050505;
   --sidebar-accent: #1a1a1a;
   --sidebar-accent-foreground: #EDEDED;
-  --sidebar-border: rgba(212, 175, 55, 0.2);
-  --sidebar-ring: #D4AF37;
+  --sidebar-border: rgba(229, 228, 226, 0.2);
+  --sidebar-ring: #E5E4E2;
 
-  /* Luxury Brand Colors */
-  --gold: #D4AF37;
-  --gold-light: #E5C158;
-  --gold-dark: #B8860B;
-  --money-green: #10B981;
-  --money-green-light: #34D399;
-  --money-green-dark: #059669;
+  /* Luxury Brand Colors - Platinum Edition */
+  --platinum: #E5E4E2;
+  --platinum-light: #F5F5F5;
+  --platinum-dark: #A0A0A0;
+  --signal-green: #00E676;
+  --signal-green-light: #69F0AE;
+  --signal-green-dark: #00C853;
   --void: #050505;
   --smoke: #EDEDED;
 
   /* Glassmorphism */
   --glass-bg: rgba(10, 10, 10, 0.6);
-  --glass-border: rgba(212, 175, 55, 0.15);
+  --glass-border: rgba(229, 228, 226, 0.15);
   --glass-blur: 20px;
 }
 
@@ -68,32 +68,32 @@
   --card-foreground: #EDEDED;
   --popover: rgba(10, 10, 10, 0.95);
   --popover-foreground: #EDEDED;
-  --primary: #10B981;
+  --primary: #00E676;
   --primary-foreground: #050505;
   --secondary: #1a1a1a;
   --secondary-foreground: #EDEDED;
   --muted: #1a1a1a;
   --muted-foreground: #888888;
-  --accent: #D4AF37;
+  --accent: #E5E4E2;
   --accent-foreground: #050505;
   --destructive: #dc2626;
   --destructive-foreground: #EDEDED;
-  --border: rgba(212, 175, 55, 0.2);
+  --border: rgba(229, 228, 226, 0.2);
   --input: rgba(255, 255, 255, 0.05);
-  --ring: #D4AF37;
-  --chart-1: #10B981;
-  --chart-2: #059669;
-  --chart-3: #047857;
-  --chart-4: #D4AF37;
-  --chart-5: #B8860B;
+  --ring: #E5E4E2;
+  --chart-1: #00E676;
+  --chart-2: #00C853;
+  --chart-3: #00A843;
+  --chart-4: #E5E4E2;
+  --chart-5: #A0A0A0;
   --sidebar: #0a0a0a;
   --sidebar-foreground: #EDEDED;
-  --sidebar-primary: #10B981;
+  --sidebar-primary: #00E676;
   --sidebar-primary-foreground: #050505;
   --sidebar-accent: #1a1a1a;
   --sidebar-accent-foreground: #EDEDED;
-  --sidebar-border: rgba(212, 175, 55, 0.2);
-  --sidebar-ring: #D4AF37;
+  --sidebar-border: rgba(229, 228, 226, 0.2);
+  --sidebar-ring: #E5E4E2;
 }
 
 /* Tailwind Theme Configuration */
@@ -138,13 +138,13 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Luxury Brand Colors */
-  --color-gold: var(--gold);
-  --color-gold-light: var(--gold-light);
-  --color-gold-dark: var(--gold-dark);
-  --color-money-green: var(--money-green);
-  --color-money-green-light: var(--money-green-light);
-  --color-money-green-dark: var(--money-green-dark);
+  /* Luxury Brand Colors - Platinum Edition */
+  --color-platinum: var(--platinum);
+  --color-platinum-light: var(--platinum-light);
+  --color-platinum-dark: var(--platinum-dark);
+  --color-signal-green: var(--signal-green);
+  --color-signal-green-light: var(--signal-green-light);
+  --color-signal-green-dark: var(--signal-green-dark);
   --color-void: var(--void);
   --color-smoke: var(--smoke);
 }
@@ -220,7 +220,7 @@
     background: rgba(10, 10, 10, 0.6);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(229, 228, 226, 0.15);
     border-radius: var(--radius);
   }
 
@@ -228,29 +228,65 @@
     background: rgba(5, 5, 5, 0.8);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
-    border: 1px solid rgba(212, 175, 55, 0.2);
+    border: 1px solid rgba(229, 228, 226, 0.2);
     border-radius: var(--radius);
   }
 
-  /* Money Green Gradient */
-  .gradient-money-green {
-    background: linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%);
+  /* Platinum Frosted Metal Glass Card */
+  .glass-card-platinum {
+    background: rgba(20, 20, 22, 0.7);
+    backdrop-filter: blur(60px);
+    -webkit-backdrop-filter: blur(60px);
+    border: 1px solid rgba(229, 228, 226, 0.25);
+    border-radius: var(--radius);
+    box-shadow:
+      0 4px 30px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  .text-gradient-money-green {
-    background: linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%);
+  /* Signal Green Gradient */
+  .gradient-signal-green {
+    background: linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%);
+  }
+
+  .text-gradient-signal-green {
+    background: linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Gold Gradient */
+  /* Money Green Gradient (legacy support) */
+  .gradient-money-green {
+    background: linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%);
+  }
+
+  .text-gradient-money-green {
+    background: linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Platinum Gradient */
+  .gradient-platinum {
+    background: linear-gradient(135deg, #A0A0A0 0%, #FFFFFF 50%, #A0A0A0 100%);
+  }
+
+  .text-gradient-platinum {
+    background: linear-gradient(135deg, #A0A0A0 0%, #FFFFFF 50%, #A0A0A0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Legacy gold gradient - now maps to platinum */
   .gradient-gold {
-    background: linear-gradient(135deg, #B8860B 0%, #D4AF37 50%, #E5C158 100%);
+    background: linear-gradient(135deg, #A0A0A0 0%, #FFFFFF 50%, #A0A0A0 100%);
   }
 
   .text-gradient-gold {
-    background: linear-gradient(135deg, #B8860B 0%, #D4AF37 50%, #E5C158 100%);
+    background: linear-gradient(135deg, #A0A0A0 0%, #FFFFFF 50%, #A0A0A0 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -258,54 +294,69 @@
 
   /* Premium Button Styles */
   .btn-premium {
-    background: linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%);
+    background: linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%);
     color: #050505;
     font-weight: 600;
     padding: 0.875rem 2rem;
     border-radius: var(--radius);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 230, 118, 0.3);
   }
 
   .btn-premium:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 8px 30px rgba(0, 230, 118, 0.4);
   }
 
   .btn-premium-outline {
     background: transparent;
-    color: #D4AF37;
+    color: #E5E4E2;
     font-weight: 600;
     padding: 0.875rem 2rem;
-    border: 1px solid #D4AF37;
+    border: 1px solid #E5E4E2;
     border-radius: var(--radius);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .btn-premium-outline:hover {
-    background: rgba(212, 175, 55, 0.1);
-    box-shadow: 0 4px 20px rgba(212, 175, 55, 0.2);
+    background: rgba(229, 228, 226, 0.1);
+    box-shadow: 0 4px 20px rgba(229, 228, 226, 0.2);
   }
 
-  /* Gold Accent Border */
+  /* Platinum Accent Border */
+  .border-platinum-glow {
+    border: 1px solid rgba(229, 228, 226, 0.3);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
+  }
+
+  /* Legacy gold border - now maps to platinum */
   .border-gold-glow {
-    border: 1px solid rgba(212, 175, 55, 0.3);
-    box-shadow: 0 0 20px rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(229, 228, 226, 0.3);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
   }
 
   /* Section Divider */
+  .divider-platinum {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(229, 228, 226, 0.5), transparent);
+  }
+
   .divider-gold {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.5), transparent);
+    background: linear-gradient(90deg, transparent, rgba(229, 228, 226, 0.5), transparent);
   }
 
   /* Glow Effects */
   .glow-green {
-    box-shadow: 0 0 40px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 0 40px rgba(0, 230, 118, 0.15);
+  }
+
+  .glow-platinum {
+    box-shadow: 0 0 40px rgba(229, 228, 226, 0.15);
   }
 
   .glow-gold {
-    box-shadow: 0 0 40px rgba(212, 175, 55, 0.15);
+    box-shadow: 0 0 40px rgba(229, 228, 226, 0.15);
   }
 
   /* Premium Card Hover Effect */
@@ -315,8 +366,31 @@
 
   .card-hover-premium:hover {
     transform: translateY(-4px);
-    border-color: rgba(212, 175, 55, 0.4);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 40px rgba(212, 175, 55, 0.1);
+    border-color: rgba(229, 228, 226, 0.4);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 40px rgba(229, 228, 226, 0.1);
+  }
+
+  /* Monospace Numbers - Critical for Trader Aesthetic */
+  .font-mono-numbers {
+    font-family: var(--font-geist-mono), 'Geist Mono', 'Fira Code', monospace;
+    font-feature-settings: 'tnum' 1, 'zero' 1;
+    letter-spacing: -0.02em;
+  }
+
+  /* Stat/Price Display */
+  .stat-value {
+    font-family: var(--font-geist-mono), 'Geist Mono', 'Fira Code', monospace;
+    font-feature-settings: 'tnum' 1, 'zero' 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /* Price Display */
+  .price-display {
+    font-family: var(--font-geist-mono), 'Geist Mono', 'Fira Code', monospace;
+    font-feature-settings: 'tnum' 1, 'zero' 1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
   }
 }
 
@@ -324,7 +398,7 @@
 @layer utilities {
   /* Selection styling */
   ::selection {
-    background: rgba(16, 185, 129, 0.3);
+    background: rgba(0, 230, 118, 0.3);
     color: #EDEDED;
   }
 
@@ -339,17 +413,22 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(212, 175, 55, 0.3);
+    background: rgba(229, 228, 226, 0.3);
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(212, 175, 55, 0.5);
+    background: rgba(229, 228, 226, 0.5);
   }
 
   /* Focus visible styling */
+  .focus-platinum:focus-visible {
+    outline: 2px solid #E5E4E2;
+    outline-offset: 2px;
+  }
+
   .focus-gold:focus-visible {
-    outline: 2px solid #D4AF37;
+    outline: 2px solid #E5E4E2;
     outline-offset: 2px;
   }
 
@@ -366,7 +445,7 @@
     inset: -1px;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, #D4AF37, #10B981, #D4AF37);
+    background: linear-gradient(135deg, #E5E4E2, #00E676, #E5E4E2);
     -webkit-mask:
       linear-gradient(#fff 0 0) content-box,
       linear-gradient(#fff 0 0);
@@ -380,19 +459,19 @@
 
   @keyframes border-rotate {
     0% {
-      background: linear-gradient(0deg, #D4AF37, #10B981, #D4AF37);
+      background: linear-gradient(0deg, #E5E4E2, #00E676, #E5E4E2);
     }
     25% {
-      background: linear-gradient(90deg, #D4AF37, #10B981, #D4AF37);
+      background: linear-gradient(90deg, #E5E4E2, #00E676, #E5E4E2);
     }
     50% {
-      background: linear-gradient(180deg, #D4AF37, #10B981, #D4AF37);
+      background: linear-gradient(180deg, #E5E4E2, #00E676, #E5E4E2);
     }
     75% {
-      background: linear-gradient(270deg, #D4AF37, #10B981, #D4AF37);
+      background: linear-gradient(270deg, #E5E4E2, #00E676, #E5E4E2);
     }
     100% {
-      background: linear-gradient(360deg, #D4AF37, #10B981, #D4AF37);
+      background: linear-gradient(360deg, #E5E4E2, #00E676, #E5E4E2);
     }
   }
 
@@ -417,17 +496,31 @@
     }
   }
 
-  /* Subtle pulse animation for CTA buttons */
+  /* Subtle pulse animation for CTA buttons - now platinum */
   .animate-pulse-subtle {
     animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
   @keyframes pulse-subtle {
     0%, 100% {
-      box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+      box-shadow: 0 0 20px rgba(229, 228, 226, 0.3);
     }
     50% {
-      box-shadow: 0 0 35px rgba(212, 175, 55, 0.5);
+      box-shadow: 0 0 35px rgba(229, 228, 226, 0.5);
+    }
+  }
+
+  /* Electric green pulse for primary actions */
+  .animate-pulse-green {
+    animation: pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-green {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(0, 230, 118, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 35px rgba(0, 230, 118, 0.5);
     }
   }
 }
