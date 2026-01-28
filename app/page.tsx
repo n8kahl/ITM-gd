@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
+import { HeroBackground } from "@/components/hero-background";
 import { BentoCard } from "@/components/ui/bento-card";
 import { PricingCard } from "@/components/ui/pricing-card";
 import { FloatingNavbar } from "@/components/ui/floating-navbar";
@@ -23,6 +24,9 @@ export default function Home() {
 
       {/* Hero Section - Cinematic Entrance */}
       <section className="relative min-h-[90vh] flex items-center justify-center px-4 py-20 md:py-32 overflow-hidden">
+        {/* 3D Particle Wave Background */}
+        <HeroBackground />
+
         <div className="container mx-auto relative z-10">
           {/* Floating Glass Card Container */}
           <div className="max-w-5xl mx-auto">
