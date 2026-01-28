@@ -4,29 +4,29 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================
-   COLD LUXURY / INSTITUTIONAL DESIGN SYSTEM
+   HIGH-FREQUENCY TRADING TERMINAL DESIGN SYSTEM
    Trade In The Money - Platinum & Electric Green
    ============================================ */
 
 /* Light mode variables (fallback, not primary) */
 :root {
-  --background: #050505;
+  --background: #020202;
   --foreground: #EDEDED;
-  --card: rgba(10, 10, 10, 0.6);
+  --card: rgba(8, 8, 8, 0.7);
   --card-foreground: #EDEDED;
-  --popover: rgba(10, 10, 10, 0.9);
+  --popover: rgba(8, 8, 8, 0.95);
   --popover-foreground: #EDEDED;
   --primary: #00E676;
-  --primary-foreground: #050505;
-  --secondary: #1a1a1a;
+  --primary-foreground: #020202;
+  --secondary: #0a0a0a;
   --secondary-foreground: #EDEDED;
-  --muted: #1a1a1a;
+  --muted: #0a0a0a;
   --muted-foreground: #888888;
   --accent: #E5E4E2;
-  --accent-foreground: #050505;
+  --accent-foreground: #020202;
   --destructive: #dc2626;
   --destructive-foreground: #EDEDED;
-  --border: rgba(229, 228, 226, 0.2);
+  --border: rgba(229, 228, 226, 0.15);
   --input: rgba(255, 255, 255, 0.05);
   --ring: #E5E4E2;
   --chart-1: #00E676;
@@ -35,50 +35,55 @@
   --chart-4: #E5E4E2;
   --chart-5: #A0A0A0;
   --radius: 0.75rem;
-  --sidebar: #0a0a0a;
+  --sidebar: #050505;
   --sidebar-foreground: #EDEDED;
   --sidebar-primary: #00E676;
-  --sidebar-primary-foreground: #050505;
-  --sidebar-accent: #1a1a1a;
+  --sidebar-primary-foreground: #020202;
+  --sidebar-accent: #0a0a0a;
   --sidebar-accent-foreground: #EDEDED;
-  --sidebar-border: rgba(229, 228, 226, 0.2);
+  --sidebar-border: rgba(229, 228, 226, 0.15);
   --sidebar-ring: #E5E4E2;
 
-  /* Luxury Brand Colors - Platinum Edition */
+  /* HFT Terminal Colors */
   --platinum: #E5E4E2;
   --platinum-light: #F5F5F5;
   --platinum-dark: #A0A0A0;
   --signal-green: #00E676;
   --signal-green-light: #69F0AE;
   --signal-green-dark: #00C853;
-  --void: #050505;
+  --void: #020202;
+  --void-light: #050505;
   --smoke: #EDEDED;
+  --terminal-grid: rgba(0, 230, 118, 0.03);
+  --terminal-line: rgba(0, 230, 118, 0.08);
+  --holo-cyan: #00E5FF;
+  --holo-magenta: #FF00E5;
 
   /* Glassmorphism */
-  --glass-bg: rgba(10, 10, 10, 0.6);
-  --glass-border: rgba(229, 228, 226, 0.15);
-  --glass-blur: 20px;
+  --glass-bg: rgba(8, 8, 8, 0.7);
+  --glass-border: rgba(229, 228, 226, 0.12);
+  --glass-blur: 40px;
 }
 
 /* Dark mode (primary theme) */
 .dark {
-  --background: #050505;
+  --background: #020202;
   --foreground: #EDEDED;
-  --card: rgba(10, 10, 10, 0.6);
+  --card: rgba(8, 8, 8, 0.7);
   --card-foreground: #EDEDED;
-  --popover: rgba(10, 10, 10, 0.95);
+  --popover: rgba(8, 8, 8, 0.95);
   --popover-foreground: #EDEDED;
   --primary: #00E676;
-  --primary-foreground: #050505;
-  --secondary: #1a1a1a;
+  --primary-foreground: #020202;
+  --secondary: #0a0a0a;
   --secondary-foreground: #EDEDED;
-  --muted: #1a1a1a;
+  --muted: #0a0a0a;
   --muted-foreground: #888888;
   --accent: #E5E4E2;
-  --accent-foreground: #050505;
+  --accent-foreground: #020202;
   --destructive: #dc2626;
   --destructive-foreground: #EDEDED;
-  --border: rgba(229, 228, 226, 0.2);
+  --border: rgba(229, 228, 226, 0.15);
   --input: rgba(255, 255, 255, 0.05);
   --ring: #E5E4E2;
   --chart-1: #00E676;
@@ -86,13 +91,13 @@
   --chart-3: #00A843;
   --chart-4: #E5E4E2;
   --chart-5: #A0A0A0;
-  --sidebar: #0a0a0a;
+  --sidebar: #050505;
   --sidebar-foreground: #EDEDED;
   --sidebar-primary: #00E676;
-  --sidebar-primary-foreground: #050505;
-  --sidebar-accent: #1a1a1a;
+  --sidebar-primary-foreground: #020202;
+  --sidebar-accent: #0a0a0a;
   --sidebar-accent-foreground: #EDEDED;
-  --sidebar-border: rgba(229, 228, 226, 0.2);
+  --sidebar-border: rgba(229, 228, 226, 0.15);
   --sidebar-ring: #E5E4E2;
 }
 
@@ -138,7 +143,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Luxury Brand Colors - Platinum Edition */
+  /* HFT Terminal Colors */
   --color-platinum: var(--platinum);
   --color-platinum-light: var(--platinum-light);
   --color-platinum-dark: var(--platinum-dark);
@@ -147,6 +152,9 @@
   --color-signal-green-dark: var(--signal-green-dark);
   --color-void: var(--void);
   --color-smoke: var(--smoke);
+  --color-terminal-grid: var(--terminal-grid);
+  --color-holo-cyan: var(--holo-cyan);
+  --color-holo-magenta: var(--holo-magenta);
 }
 
 /* Base Layer Styles */
@@ -164,9 +172,26 @@
 
   body {
     @apply bg-background text-foreground;
-    background-color: #050505;
+    background-color: #020202;
     min-height: 100vh;
     position: relative;
+  }
+
+  /* Terminal Grid Background */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(var(--terminal-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--terminal-line) 1px, transparent 1px);
+    background-size: 50px 50px;
+    opacity: 0.5;
   }
 
   /* Global Noise Texture Overlay */
@@ -179,7 +204,7 @@
     height: 100%;
     pointer-events: none;
     z-index: 9999;
-    opacity: 0.035;
+    opacity: 0.04;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
     background-repeat: repeat;
   }
@@ -213,35 +238,120 @@
   }
 }
 
-/* Component Layer - Luxury Utilities */
+/* Component Layer - HFT Terminal Utilities */
 @layer components {
   /* Glassmorphism Card */
   .glass-card {
-    background: rgba(10, 10, 10, 0.6);
+    background: rgba(8, 8, 8, 0.6);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(229, 228, 226, 0.15);
+    border: 1px solid rgba(229, 228, 226, 0.12);
     border-radius: var(--radius);
   }
 
+  /* Thick Glass - HFT Terminal Style */
   .glass-card-heavy {
-    background: rgba(5, 5, 5, 0.8);
-    backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px);
-    border: 1px solid rgba(229, 228, 226, 0.2);
+    background: rgba(5, 5, 5, 0.85);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(229, 228, 226, 0.18);
     border-radius: var(--radius);
+    box-shadow:
+      0 4px 30px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .glass-card-heavy:hover {
+    border-color: rgba(0, 230, 118, 0.3);
+    box-shadow:
+      0 4px 30px rgba(0, 0, 0, 0.5),
+      0 0 40px rgba(0, 230, 118, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
   }
 
   /* Platinum Frosted Metal Glass Card */
   .glass-card-platinum {
-    background: rgba(20, 20, 22, 0.7);
+    background: rgba(15, 15, 17, 0.8);
     backdrop-filter: blur(60px);
     -webkit-backdrop-filter: blur(60px);
-    border: 1px solid rgba(229, 228, 226, 0.25);
+    border: 1px solid rgba(229, 228, 226, 0.2);
     border-radius: var(--radius);
     box-shadow:
-      0 4px 30px rgba(0, 0, 0, 0.3),
+      0 4px 30px rgba(0, 0, 0, 0.4),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* ============================================
+     HOLOGRAPHIC BORDER - Scanning Laser Effect
+     ============================================ */
+  .border-holo {
+    position: relative;
+    border-radius: var(--radius);
+  }
+
+  .border-holo::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--holo-angle, 0deg),
+      #00E676 0deg,
+      #00E5FF 60deg,
+      #E5E4E2 120deg,
+      #FF00E5 180deg,
+      #00E676 240deg,
+      #00E5FF 300deg,
+      #00E676 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: holo-rotate 3s linear infinite;
+    opacity: 0.8;
+  }
+
+  .border-holo::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from var(--holo-angle, 0deg),
+      transparent,
+      rgba(0, 230, 118, 0.3),
+      transparent,
+      rgba(0, 229, 255, 0.3),
+      transparent
+    );
+    filter: blur(15px);
+    animation: holo-rotate 3s linear infinite;
+    opacity: 0.6;
+    z-index: -1;
+  }
+
+  @keyframes holo-rotate {
+    0% {
+      --holo-angle: 0deg;
+    }
+    100% {
+      --holo-angle: 360deg;
+    }
+  }
+
+  @property --holo-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
   }
 
   /* Signal Green Gradient */
@@ -295,7 +405,7 @@
   /* Premium Button Styles */
   .btn-premium {
     background: linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%);
-    color: #050505;
+    color: #020202;
     font-weight: 600;
     padding: 0.875rem 2rem;
     border-radius: var(--radius);
@@ -323,16 +433,124 @@
     box-shadow: 0 4px 20px rgba(229, 228, 226, 0.2);
   }
 
+  /* ============================================
+     GLITCH BUTTON EFFECT - Trade Execution
+     ============================================ */
+  .btn-glitch {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-glitch::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(0, 230, 118, 0.4) 45%,
+      rgba(0, 229, 255, 0.4) 55%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .btn-glitch:hover::before {
+    animation: glitch-scan 0.3s ease-out;
+    opacity: 1;
+  }
+
+  .btn-glitch:hover {
+    animation: glitch-shake 0.3s ease-out;
+  }
+
+  @keyframes glitch-scan {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes glitch-shake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    10% {
+      transform: translateX(-2px);
+    }
+    20% {
+      transform: translateX(2px);
+    }
+    30% {
+      transform: translateX(-1px);
+    }
+    40% {
+      transform: translateX(1px);
+    }
+    50% {
+      transform: translateX(-2px);
+    }
+    60% {
+      transform: translateX(2px);
+    }
+    70% {
+      transform: translateX(-1px);
+    }
+    80% {
+      transform: translateX(1px);
+    }
+    90% {
+      transform: translateX(0);
+    }
+  }
+
+  /* Rapid color shift on hover */
+  .btn-execute {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.15s ease;
+  }
+
+  .btn-execute:hover {
+    animation: execute-flash 0.15s ease-out;
+    box-shadow:
+      0 0 20px rgba(0, 230, 118, 0.5),
+      0 0 40px rgba(0, 230, 118, 0.3),
+      0 0 60px rgba(0, 230, 118, 0.1);
+  }
+
+  @keyframes execute-flash {
+    0% {
+      filter: brightness(1) hue-rotate(0deg);
+    }
+    25% {
+      filter: brightness(1.3) hue-rotate(-10deg);
+    }
+    50% {
+      filter: brightness(1.5) hue-rotate(10deg);
+    }
+    75% {
+      filter: brightness(1.2) hue-rotate(-5deg);
+    }
+    100% {
+      filter: brightness(1) hue-rotate(0deg);
+    }
+  }
+
   /* Platinum Accent Border */
   .border-platinum-glow {
-    border: 1px solid rgba(229, 228, 226, 0.3);
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(229, 228, 226, 0.25);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
   }
 
   /* Legacy gold border - now maps to platinum */
   .border-gold-glow {
-    border: 1px solid rgba(229, 228, 226, 0.3);
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(229, 228, 226, 0.25);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
   }
 
   /* Section Divider */
@@ -392,6 +610,12 @@
     font-weight: 700;
     letter-spacing: -0.03em;
   }
+
+  /* Terminal Text */
+  .terminal-text {
+    font-family: var(--font-geist-mono), 'Geist Mono', 'Fira Code', monospace;
+    text-shadow: 0 0 10px rgba(0, 230, 118, 0.5);
+  }
 }
 
 /* Utility Layer */
@@ -402,23 +626,23 @@
     color: #EDEDED;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - Terminal style */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    background: #020202;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(229, 228, 226, 0.3);
-    border-radius: 4px;
+    background: rgba(0, 230, 118, 0.3);
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(229, 228, 226, 0.5);
+    background: rgba(0, 230, 118, 0.5);
   }
 
   /* Focus visible styling */
@@ -435,7 +659,7 @@
   /* Animated gradient border */
   .animated-border {
     position: relative;
-    background: #050505;
+    background: #020202;
     border-radius: var(--radius);
   }
 
@@ -521,6 +745,47 @@
     }
     50% {
       box-shadow: 0 0 35px rgba(0, 230, 118, 0.5);
+    }
+  }
+
+  /* Scanline effect */
+  .scanlines {
+    position: relative;
+  }
+
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.1) 2px,
+      rgba(0, 0, 0, 0.1) 4px
+    );
+    pointer-events: none;
+    opacity: 0.3;
+  }
+
+  /* Data stream animation */
+  .data-stream {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(0, 230, 118, 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 100% 200%;
+    animation: data-flow 2s linear infinite;
+  }
+
+  @keyframes data-flow {
+    0% {
+      background-position: 0% 0%;
+    }
+    100% {
+      background-position: 0% 200%;
     }
   }
 }
