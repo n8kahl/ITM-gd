@@ -306,7 +306,7 @@ export function PricingCard({
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 font-mono tracking-wide"
                   >
-                    APPLY FOR ACCESS
+                    JOIN TODAY
                   </a>
                 </Button>
               ) : (
