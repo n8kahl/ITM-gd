@@ -257,6 +257,7 @@ export default function Home() {
           {/* Pricing Cards Grid */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
             {/* Starter Card */}
+            {/* Starter Card - Ghost */}
             <StaggerItem>
               <PricingCard
                 name="Starter"
@@ -275,29 +276,7 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Pro Card - Black Titanium */}
-            <StaggerItem>
-              <PricingCard
-                name="Pro"
-                price="$99"
-                period="/month"
-                description="Most popular choice for serious traders"
-                features={[
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support",
-                ]}
-                whopLink="https://whop.com/checkout/plan_pro"
-                tier="pro"
-                popular
-              />
-            </StaggerItem>
-
-            {/* Elite Card */}
+            {/* Elite Card - Hero (Matte Black & Green) */}
             <StaggerItem>
               <PricingCard
                 name="Elite"
@@ -316,6 +295,28 @@ export default function Home() {
                 ]}
                 whopLink="https://whop.com/checkout/plan_T02fUg2d3tG8H"
                 tier="elite"
+              />
+            </StaggerItem>
+
+            {/* Pro Card - Brushed Platinum */}
+            <StaggerItem>
+              <PricingCard
+                name="Pro"
+                price="$99"
+                period="/month"
+                description="Most popular choice for serious traders"
+                features={[
+                  "15+ Daily Signals",
+                  "Advanced Technical Analysis",
+                  "Priority Discord Access",
+                  "Live Trading Sessions",
+                  "1-on-1 Mentorship (Monthly)",
+                  "Risk Management Tools",
+                  "24/7 Priority Support",
+                ]}
+                whopLink="https://whop.com/checkout/plan_pro"
+                tier="pro"
+                popular
               />
             </StaggerItem>
           </StaggerContainer>
