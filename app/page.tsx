@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { BentoCard } from "@/components/ui/bento-card";
+import { PricingCard } from "@/components/ui/pricing-card";
 
 export default function Home() {
   return (
@@ -236,102 +237,88 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* Pricing Section - Membership Cards */}
       <section id="pricing" className="container mx-auto px-4 py-20">
         <div className="max-w-6xl mx-auto">
+          {/* Section Header */}
           <div className="text-center mb-16 space-y-4">
-            <h3 className="text-3xl md:text-5xl font-bold text-balance">Choose Your Path To Success</h3>
+            <h2 className="text-3xl md:text-5xl font-bold">
+              Choose Your{" "}
+              <span className="text-gradient-gold">Membership</span>
+            </h2>
             <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
               Select the plan that fits your trading goals and budget
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-            {[
-              {
-                name: "Starter",
-                price: "$49",
-                period: "/month",
-                description: "Perfect for beginners looking to get started",
-                features: [
-                  "5 Daily Signals",
-                  "Basic Market Analysis",
-                  "Community Access",
-                  "Email Support",
-                  "Educational Resources"
-                ],
-                whopLink: "https://whop.com/titm-starter",
-                popular: false
-              },
-              {
-                name: "Pro",
-                price: "$99",
-                period: "/month",
-                description: "Most popular choice for serious traders",
-                features: [
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support"
-                ],
-                whopLink: "https://whop.com/titm-pro",
-                popular: true
-              },
-              {
-                name: "Elite",
-                price: "$199",
-                period: "/month",
-                description: "For professional traders seeking maximum edge",
-                features: [
-                  "Unlimited Premium Signals",
-                  "Personal Trading Coach",
-                  "Exclusive Private Channel",
-                  "Weekly Strategy Calls",
-                  "Custom Analysis Requests",
-                  "API Access",
-                  "White Glove Support",
-                  "Early Access to New Features"
-                ],
-                whopLink: "https://whop.com/titm-elite",
-                popular: false
-              }
-            ].map((plan, idx) => (
-              <Card key={idx} className={`relative ${plan.popular ? 'border-primary shadow-lg shadow-primary/20 scale-105' : 'bg-card/60 border-border/40'} backdrop-blur`}>
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground px-4 py-1 font-semibold">Most Popular</Badge>
-                  </div>
-                )}
-                <CardHeader className="text-center pb-8 pt-8">
-                  <CardTitle className="text-2xl mb-2">{plan.name}</CardTitle>
-                  <div className="mb-2">
-                    <span className="text-5xl font-bold">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
-                  </div>
-                  <CardDescription className="text-base">{plan.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <ul className="space-y-3">
-                    {plan.features.map((feature, fidx) => (
-                      <li key={fidx} className="flex items-start gap-3">
-                        <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <span className="text-sm leading-relaxed">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button 
-                    asChild 
-                    className={`w-full h-12 text-base font-semibold ${plan.popular ? 'bg-primary hover:bg-primary/90 text-primary-foreground' : 'bg-secondary hover:bg-secondary/90 text-secondary-foreground'}`}
-                  >
-                    <a href={plan.whopLink} target="_blank" rel="noopener noreferrer">
-                      Get {plan.name}
-                    </a>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+
+          {/* Pricing Cards Grid */}
+          <div className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch">
+            {/* Starter Card */}
+            <PricingCard
+              name="Starter"
+              price="$49"
+              period="/month"
+              description="Perfect for beginners looking to get started"
+              features={[
+                "5 Daily Signals",
+                "Basic Market Analysis",
+                "Community Access",
+                "Email Support",
+                "Educational Resources",
+              ]}
+              whopLink="https://whop.com/checkout/plan_starter"
+              tier="starter"
+            />
+
+            {/* Pro Card - Black Titanium */}
+            <PricingCard
+              name="Pro"
+              price="$99"
+              period="/month"
+              description="Most popular choice for serious traders"
+              features={[
+                "15+ Daily Signals",
+                "Advanced Technical Analysis",
+                "Priority Discord Access",
+                "Live Trading Sessions",
+                "1-on-1 Mentorship (Monthly)",
+                "Risk Management Tools",
+                "24/7 Priority Support",
+              ]}
+              whopLink="https://whop.com/checkout/plan_pro"
+              tier="pro"
+              popular
+            />
+
+            {/* Elite Card */}
+            <PricingCard
+              name="Elite"
+              price="$199"
+              period="/month"
+              description="For professional traders seeking maximum edge"
+              features={[
+                "Unlimited Premium Signals",
+                "Personal Trading Coach",
+                "Exclusive Private Channel",
+                "Weekly Strategy Calls",
+                "Custom Analysis Requests",
+                "API Access",
+                "White Glove Support",
+                "Early Access to New Features",
+              ]}
+              whopLink="https://whop.com/checkout/plan_elite"
+              tier="elite"
+            />
+          </div>
+
+          {/* Money-back Guarantee */}
+          <div className="mt-12 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/5">
+              <Shield className="w-4 h-4 text-primary" />
+              <span className="text-sm text-muted-foreground">
+                30-day money-back guarantee on all plans
+              </span>
+            </div>
           </div>
         </div>
       </section>
