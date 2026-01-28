@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { useState, useRef, ReactNode } from "react";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -13,7 +12,7 @@ interface BentoCardProps {
   className?: string;
   iconClassName?: string;
   spotlight?: "emerald" | "gold";
-  image?: string;
+  image?: string; // Deprecated - prefer icons
   graphic?: ReactNode; // Custom graphic (charts, etc.)
   graphicClassName?: string;
 }
@@ -42,48 +41,49 @@ export function BentoCard({
     });
   };
 
+  // Refined, subtle spotlight colors
   const spotlightColor =
     spotlight === "gold"
-      ? "rgba(212, 175, 55, 0.15)"
-      : "rgba(16, 185, 129, 0.15)";
+      ? "rgba(212, 175, 55, 0.08)"
+      : "rgba(4, 120, 87, 0.10)";
 
   const borderColor =
     spotlight === "gold"
-      ? "rgba(212, 175, 55, 0.6)"
-      : "rgba(16, 185, 129, 0.6)";
+      ? "rgba(232, 228, 217, 0.3)"
+      : "rgba(4, 120, 87, 0.4)";
 
   return (
     <motion.div
       ref={cardRef}
       className={cn(
-        "relative group rounded-2xl overflow-hidden",
-        "bg-[rgba(10,10,10,0.6)] backdrop-blur-xl",
-        "border border-white/[0.08]",
-        "transition-colors duration-500",
+        "relative group rounded-xl overflow-hidden",
+        "bg-[rgba(10,10,11,0.7)] backdrop-blur-xl",
+        "border border-white/[0.06]",
+        "transition-all duration-500",
         className
       )}
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      whileHover={{ scale: 1.02 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      whileHover={{ y: -4 }}
+      transition={{ type: "spring", stiffness: 300, damping: 25 }}
     >
       {/* Spotlight gradient that follows mouse */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700"
         style={{
           background: isHovered
-            ? `radial-gradient(600px circle at ${mousePosition.x}px ${mousePosition.y}px, ${spotlightColor}, transparent 40%)`
+            ? `radial-gradient(500px circle at ${mousePosition.x}px ${mousePosition.y}px, ${spotlightColor}, transparent 40%)`
             : "none",
         }}
       />
 
       {/* Border glow effect */}
       <div
-        className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        className="pointer-events-none absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"
         style={{
           background: isHovered
-            ? `radial-gradient(400px circle at ${mousePosition.x}px ${mousePosition.y}px, ${borderColor}, transparent 40%)`
+            ? `radial-gradient(300px circle at ${mousePosition.x}px ${mousePosition.y}px, ${borderColor}, transparent 40%)`
             : "none",
           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           maskComposite: "exclude",
@@ -93,66 +93,97 @@ export function BentoCard({
 
       {/* Content */}
       <div className="relative z-10 p-6 md:p-8 h-full flex flex-col">
-        {/* Graphic, Icon, or Image */}
+        {/* Graphic (for charts) or Icon */}
         {graphic ? (
           <div
             className={cn(
-              "relative w-full h-32 md:h-40 mb-6 rounded-xl overflow-hidden",
-              "bg-void/50 border border-white/5",
+              "relative w-full h-32 md:h-40 mb-6 rounded-lg overflow-hidden",
+              "bg-[rgba(10,10,11,0.8)] border border-white/[0.04]",
               graphicClassName
             )}
           >
-            {graphic}
-          </div>
-        ) : image ? (
-          <div className="relative w-20 h-20 md:w-24 md:h-24 mb-6">
-            <Image
-              src={image}
-              alt={title}
-              fill
-              className="object-contain drop-shadow-lg grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500"
+            {/* Terminal Grid Background */}
+            <div
+              className="absolute inset-0 pointer-events-none opacity-30"
+              style={{
+                backgroundImage: `
+                  linear-gradient(rgba(232,228,217,0.03) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(232,228,217,0.03) 1px, transparent 1px)
+                `,
+                backgroundSize: '20px 20px',
+              }}
             />
+            {graphic}
           </div>
         ) : Icon ? (
           <div
             className={cn(
-              "w-14 h-14 md:w-16 md:h-16 rounded-xl flex items-center justify-center mb-6",
-              "bg-gradient-to-br",
+              "w-12 h-12 md:w-14 md:h-14 rounded-lg flex items-center justify-center mb-6",
+              "bg-gradient-to-br border",
               spotlight === "gold"
-                ? "from-gold/20 to-gold-dark/10"
-                : "from-primary/20 to-money-green-dark/10",
+                ? "from-champagne/10 to-champagne/5 border-champagne/20"
+                : "from-wealth-emerald/10 to-wealth-emerald/5 border-wealth-emerald/20",
               iconClassName
             )}
           >
+            {/* Icon with gradient effect via SVG defs */}
+            <svg width="0" height="0" className="absolute">
+              <defs>
+                <linearGradient id="icon-gradient-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#E8E4D9" />
+                  <stop offset="50%" stopColor="#D4AF37" />
+                  <stop offset="100%" stopColor="#B8B5AD" />
+                </linearGradient>
+                <linearGradient id="icon-gradient-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#047857" />
+                  <stop offset="50%" stopColor="#059669" />
+                  <stop offset="100%" stopColor="#10B981" />
+                </linearGradient>
+              </defs>
+            </svg>
             <Icon
               className={cn(
-                "w-7 h-7 md:w-8 md:h-8",
-                spotlight === "gold" ? "text-gold" : "text-primary"
+                "w-6 h-6 md:w-7 md:h-7",
+                spotlight === "gold" ? "text-champagne" : "text-wealth-emerald"
               )}
+              strokeWidth={1.5}
+              style={{
+                stroke: spotlight === "gold"
+                  ? "url(#icon-gradient-gold)"
+                  : "url(#icon-gradient-emerald)",
+              }}
             />
           </div>
         ) : null}
 
-        {/* Title */}
-        <h3 className="text-xl md:text-2xl font-bold text-smoke mb-3">
+        {/* Title - Editorial Style */}
+        <h3 className="text-lg md:text-xl font-semibold text-ivory mb-2 tracking-tight">
           {title}
         </h3>
 
-        {/* Description */}
-        <p className="text-muted-foreground leading-relaxed flex-grow">
+        {/* Description - Light and readable */}
+        <p className="text-sm text-ivory/60 leading-relaxed flex-grow font-light">
           {description}
         </p>
 
-        {/* Decorative corner accent */}
+        {/* Subtle corner accent */}
         <div
           className={cn(
-            "absolute bottom-0 right-0 w-24 h-24 opacity-0 group-hover:opacity-100 transition-opacity duration-500",
+            "absolute bottom-0 right-0 w-20 h-20 opacity-0 group-hover:opacity-100 transition-opacity duration-700",
             spotlight === "gold"
-              ? "bg-gradient-to-tl from-gold/10 to-transparent"
-              : "bg-gradient-to-tl from-primary/10 to-transparent"
+              ? "bg-gradient-to-tl from-champagne/5 to-transparent"
+              : "bg-gradient-to-tl from-wealth-emerald/5 to-transparent"
           )}
         />
       </div>
+
+      {/* Noise texture overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.015]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+        }}
+      />
     </motion.div>
   );
 }

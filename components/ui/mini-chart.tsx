@@ -14,7 +14,22 @@ import {
 } from "recharts";
 
 // ============================================
-// CANDLESTICK CHART - Live Trading Feed
+// COLOR PALETTE - Bloomberg Terminal Style
+// ============================================
+const COLORS = {
+  emerald: "#047857",       // Deep emerald for primary
+  emeraldLight: "#059669",  // Lighter emerald
+  emeraldGlow: "#10B981",   // Brightest emerald for accents
+  gold: "#D4AF37",          // Gold for highlights
+  champagne: "#E8E4D9",     // Champagne for text/accents
+  red: "#991B1B",           // Deep red for sell/bearish
+  redLight: "#DC2626",      // Lighter red
+  gridLine: "rgba(232, 228, 217, 0.04)",  // Subtle grid
+  gridLineBright: "rgba(232, 228, 217, 0.08)",
+};
+
+// ============================================
+// CANDLESTICK CHART - Professional Trading Feed
 // ============================================
 
 interface CandleData {
@@ -91,17 +106,14 @@ export function CandlestickChart({
     return () => clearInterval(interval);
   }, [updateInterval]);
 
-  // Transform data for the composed chart (we'll fake candlesticks with bars)
+  // Transform data for the composed chart
   const chartData = useMemo(() => {
     return candles.map((candle) => ({
       time: candle.time,
-      // For the body of the candle
       bodyBottom: Math.min(candle.open, candle.close),
       bodyHeight: Math.abs(candle.close - candle.open),
-      // For wicks
       wickLow: candle.low,
       wickHigh: candle.high,
-      // Color
       bullish: candle.close >= candle.open,
       open: candle.open,
       close: candle.close,
@@ -115,8 +127,27 @@ export function CandlestickChart({
 
   return (
     <div className={className}>
+      {/* Terminal Grid Background */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: '16px 16px',
+        }}
+      />
+
+      {/* Horizontal price level lines */}
+      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between py-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="w-full h-px" style={{ backgroundColor: COLORS.gridLineBright }} />
+        ))}
+      </div>
+
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+        <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
           <XAxis dataKey="time" hide />
           <YAxis domain={[minPrice, maxPrice]} hide />
 
@@ -124,25 +155,23 @@ export function CandlestickChart({
           <Bar
             dataKey="bodyHeight"
             stackId="candle"
-            barSize={8}
+            barSize={6}
             isAnimationActive={false}
           >
             {chartData.map((entry, index) => (
               <Cell
                 key={`body-${index}`}
-                fill={entry.bullish ? "#00E676" : "#FF5252"}
-                fillOpacity={0.9}
+                fill={entry.bullish ? COLORS.emerald : COLORS.red}
+                stroke={entry.bullish ? COLORS.gold : COLORS.redLight}
+                strokeWidth={0.5}
               />
             ))}
           </Bar>
-
-          {/* Wicks - represented as thin lines via custom shape would be ideal,
-              but for simplicity we'll use the bar approach with visual styling */}
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* Custom wick overlay using divs for better visual */}
-      <div className="absolute inset-0 flex items-end justify-around pointer-events-none px-1">
+      {/* Custom wick overlay */}
+      <div className="absolute inset-0 flex items-end justify-around pointer-events-none px-2">
         {chartData.map((candle, i) => {
           const range = maxPrice - minPrice;
           const wickTopPercent = ((maxPrice - candle.high) / range) * 100;
@@ -159,13 +188,28 @@ export function CandlestickChart({
                 style={{
                   top: `${wickTopPercent}%`,
                   height: `${wickHeight}%`,
-                  backgroundColor: candle.bullish ? "#00E676" : "#FF5252",
-                  opacity: 0.6,
+                  backgroundColor: candle.bullish ? COLORS.emeraldLight : COLORS.redLight,
+                  opacity: 0.5,
                 }}
               />
             </div>
           );
         })}
+      </div>
+
+      {/* Price axis labels */}
+      <div className="absolute right-1 top-1 bottom-1 flex flex-col justify-between pointer-events-none">
+        <span className="text-[8px] font-mono text-champagne/40">{maxPrice.toFixed(1)}</span>
+        <span className="text-[8px] font-mono text-champagne/40">{minPrice.toFixed(1)}</span>
+      </div>
+
+      {/* Live indicator */}
+      <div className="absolute top-2 left-2 flex items-center gap-1.5">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span className="text-[9px] font-mono text-champagne/50 uppercase tracking-wider">Live</span>
       </div>
     </div>
   );
@@ -213,22 +257,41 @@ export function WinRateChart({
   }, [percentage, animationDuration]);
 
   const data = [
-    { name: "Win Rate", value: currentValue, fill: "#00E676" },
+    { name: "Win Rate", value: currentValue, fill: COLORS.emerald },
   ];
 
   return (
     <div className={className}>
+      {/* Terminal Grid Background */}
+      <div
+        className="absolute inset-0 pointer-events-none rounded-lg"
+        style={{
+          backgroundImage: `
+            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: '20px 20px',
+        }}
+      />
+
       <ResponsiveContainer width="100%" height="100%">
         <RadialBarChart
           cx="50%"
           cy="50%"
-          innerRadius="70%"
-          outerRadius="100%"
-          barSize={12}
+          innerRadius="65%"
+          outerRadius="95%"
+          barSize={10}
           data={data}
           startAngle={90}
           endAngle={-270}
         >
+          <defs>
+            <linearGradient id="winRateGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={COLORS.emerald} />
+              <stop offset="50%" stopColor={COLORS.emeraldLight} />
+              <stop offset="100%" stopColor={COLORS.gold} />
+            </linearGradient>
+          </defs>
           <PolarAngleAxis
             type="number"
             domain={[0, 100]}
@@ -236,23 +299,32 @@ export function WinRateChart({
             tick={false}
           />
           <RadialBar
-            background={{ fill: "rgba(255,255,255,0.05)" }}
+            background={{ fill: "rgba(255,255,255,0.03)" }}
             dataKey="value"
-            cornerRadius={6}
+            cornerRadius={4}
             isAnimationActive={false}
+            fill="url(#winRateGradient)"
           />
         </RadialBarChart>
       </ResponsiveContainer>
 
       {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl md:text-4xl font-bold font-mono text-primary">
+        <span className="text-2xl md:text-3xl font-semibold font-mono text-champagne">
           {currentValue}%
         </span>
-        <span className="text-xs text-smoke/50 font-mono uppercase tracking-wider">
+        <span className="text-[10px] text-champagne/40 font-mono uppercase tracking-widest">
           Win Rate
         </span>
       </div>
+
+      {/* Gold accent ring */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(circle at 50% 50%, transparent 45%, ${COLORS.gold}10 48%, transparent 52%)`,
+        }}
+      />
     </div>
   );
 }
@@ -303,20 +375,32 @@ export function SignalPulse({ className, signalCount = 5 }: SignalPulseProps) {
 
   return (
     <div className={className}>
-      <div className="flex items-end justify-around h-full gap-1 px-2">
+      {/* Terminal Grid Background */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: '16px 16px',
+        }}
+      />
+
+      <div className="flex items-end justify-around h-full gap-1.5 px-3 pb-8">
         {signals.map((signal) => (
           <div
             key={signal.id}
-            className="flex-1 flex flex-col items-center justify-end gap-1"
+            className="flex-1 flex flex-col items-center justify-end gap-1.5"
           >
             {/* Signal bar */}
             <div
-              className={`w-full rounded-t transition-all duration-300 ${
+              className={`w-full rounded-t-sm transition-all duration-300 border-t ${
                 signal.active
                   ? signal.type === "buy"
-                    ? "bg-primary shadow-[0_0_10px_rgba(0,230,118,0.5)]"
-                    : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                  : "bg-smoke/10"
+                    ? "bg-gradient-to-t from-emerald-900/50 to-emerald-600 border-gold shadow-[0_0_12px_rgba(4,120,87,0.4)]"
+                    : "bg-gradient-to-t from-red-900/50 to-red-600 border-red-400 shadow-[0_0_12px_rgba(153,27,27,0.4)]"
+                  : "bg-champagne/5 border-champagne/10"
               }`}
               style={{
                 height: signal.active ? `${40 + Math.random() * 50}%` : "20%",
@@ -324,27 +408,27 @@ export function SignalPulse({ className, signalCount = 5 }: SignalPulseProps) {
             />
             {/* Indicator dot */}
             <div
-              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+              className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
                 signal.active
                   ? signal.type === "buy"
-                    ? "bg-primary animate-pulse"
-                    : "bg-red-500 animate-pulse"
-                  : "bg-smoke/20"
+                    ? "bg-emerald-500"
+                    : "bg-red-500"
+                  : "bg-champagne/20"
               }`}
             />
           </div>
         ))}
       </div>
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-4 text-[10px] font-mono">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-primary" />
-          <span className="text-smoke/40">BUY</span>
+      {/* Legend - Professional Style */}
+      <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-6 text-[9px] font-mono">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-sm bg-gradient-to-t from-emerald-900 to-emerald-500 border border-gold/50" />
+          <span className="text-champagne/50 uppercase tracking-wider">Long</span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-red-500" />
-          <span className="text-smoke/40">SELL</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-sm bg-gradient-to-t from-red-900 to-red-500 border border-red-400/50" />
+          <span className="text-champagne/50 uppercase tracking-wider">Short</span>
         </div>
       </div>
     </div>
@@ -364,7 +448,7 @@ interface MiniLineChartProps {
 
 export function MiniLineChart({
   className,
-  color = "#00E676",
+  color = COLORS.emerald,
   pointCount = 30,
 }: MiniLineChartProps) {
   const [points, setPoints] = useState<number[]>(() => {
@@ -413,40 +497,66 @@ export function MiniLineChart({
 
   return (
     <div className={className}>
+      {/* Terminal Grid Background */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: '20px 20px',
+        }}
+      />
+
       <svg
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
-        className="w-full h-full"
+        className="w-full h-full relative z-10"
       >
-        {/* Gradient fill */}
+        {/* Gradient fill - Deep Emerald */}
         <defs>
-          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          <linearGradient id="terminalLineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={COLORS.emerald} stopOpacity="0.4" />
+            <stop offset="100%" stopColor={COLORS.emerald} stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
         {/* Area fill */}
-        <path d={areaD} fill="url(#lineGradient)" />
+        <path d={areaD} fill="url(#terminalLineGradient)" />
 
-        {/* Line */}
+        {/* Line - Gold stroke */}
         <path
           d={pathD}
           fill="none"
-          stroke={color}
-          strokeWidth="2"
+          stroke={COLORS.gold}
+          strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
+          opacity="0.8"
+        />
+
+        {/* Emerald line underneath for depth */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke={COLORS.emerald}
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          opacity="0.3"
         />
 
         {/* Current value dot */}
         <circle
           cx="100"
           cy={100 - points[points.length - 1]}
-          r="3"
-          fill={color}
-          className="animate-pulse"
+          r="2.5"
+          fill={COLORS.gold}
+          stroke={COLORS.champagne}
+          strokeWidth="1"
         />
       </svg>
     </div>
