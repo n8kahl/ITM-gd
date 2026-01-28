@@ -232,8 +232,8 @@ export function PricingCard({
   const isElite = tier === "elite";
   const isPro = tier === "pro";
   const isStarter = tier === "starter";
-  // All tiers are now available - no longer marking Starter/Pro as unavailable
-  const isUnavailable = false;
+  // Starter and Pro tiers are not yet available
+  const isUnavailable = isPro || isStarter;
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -509,12 +509,11 @@ export function PricingCard({
                 </div>
               ) : (
                 <Button
-                  asChild
-                  className="w-full h-14 text-base font-medium rounded-xl bg-white/5 text-smoke/70 border border-white/10 hover:bg-white/10 hover:text-smoke/90 transition-all duration-300"
+                  disabled
+                  className="w-full h-14 text-base font-medium rounded-xl bg-white/5 text-smoke/40 border border-white/10 cursor-not-allowed"
                 >
-                  <a href={whopLink} target="_blank" rel="noopener noreferrer">
-                    <span className="font-mono tracking-wide">GET INSTANT ACCESS</span>
-                  </a>
+                  <Lock className="w-4 h-4 mr-2" />
+                  <span className="font-mono tracking-wide">COMING SOON</span>
                 </Button>
               )}
 
