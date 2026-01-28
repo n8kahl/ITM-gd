@@ -93,11 +93,11 @@ export function BentoCard({
 
       {/* Content */}
       <div className="relative z-10 p-6 md:p-8 h-full flex flex-col">
-        {/* Graphic (for charts) or Icon */}
+        {/* Graphic (for charts) or Icon or Image */}
         {graphic ? (
           <div
             className={cn(
-              "relative w-full h-32 md:h-40 mb-6 rounded-lg overflow-hidden",
+              "relative w-full h-48 md:h-56 mb-6 rounded-lg overflow-hidden",
               "bg-[rgba(10,10,11,0.8)] border border-white/[0.04]",
               graphicClassName
             )}
@@ -115,10 +115,31 @@ export function BentoCard({
             />
             {graphic}
           </div>
+        ) : image ? (
+          <div
+            className={cn(
+              "relative w-full h-48 md:h-56 mb-6 rounded-lg overflow-hidden",
+              "bg-[rgba(10,10,11,0.8)] border border-white/[0.04]"
+            )}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+            {/* Bottom fade gradient */}
+            <div
+              className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
+              style={{
+                background: "linear-gradient(to top, rgba(10,10,11,0.9) 0%, transparent 100%)",
+              }}
+            />
+          </div>
         ) : Icon ? (
           <div
             className={cn(
-              "w-12 h-12 md:w-14 md:h-14 rounded-lg flex items-center justify-center mb-6",
+              "w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center mb-6",
               "bg-gradient-to-br border",
               spotlight === "gold"
                 ? "from-champagne/10 to-champagne/5 border-champagne/20"
@@ -143,7 +164,7 @@ export function BentoCard({
             </svg>
             <Icon
               className={cn(
-                "w-6 h-6 md:w-7 md:h-7",
+                "w-8 h-8 md:w-10 md:h-10",
                 spotlight === "gold" ? "text-champagne" : "text-wealth-emerald"
               )}
               strokeWidth={1.5}
