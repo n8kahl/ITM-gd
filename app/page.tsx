@@ -145,7 +145,7 @@ export default function Home() {
       <RibbonDivider />
 
       {/* Stats Section */}
-      <section className="container mx-auto px-4 py-16">
+      <section className="container mx-auto px-4 py-12">
         <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
           {[
             { label: "Active Members", value: "10,000+" },
@@ -166,7 +166,7 @@ export default function Home() {
       </section>
 
       {/* Features Section - Bento Grid */}
-      <section id="features" className="container mx-auto px-4 py-20">
+      <section id="features" className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16 space-y-4">
@@ -260,7 +260,7 @@ export default function Home() {
       <RibbonDivider flip />
 
       {/* Pricing Section - Membership Cards */}
-      <section id="pricing" className="container mx-auto px-4 py-20">
+      <section id="pricing" className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16 space-y-4">
@@ -357,7 +357,7 @@ export default function Home() {
       </section>
 
       {/* Testimonials Section - Infinite Marquee */}
-      <section id="testimonials" className="py-20 overflow-hidden">
+      <section id="testimonials" className="py-14 overflow-hidden">
         <div className="container mx-auto px-4 mb-12">
           <div className="text-center space-y-4">
             <RevealHeading>
@@ -456,7 +456,7 @@ export default function Home() {
       <RibbonDivider />
 
       {/* Post-Purchase Instructions Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-14">
         <RevealContent>
           <div className="max-w-3xl mx-auto">
             <Card className="glass-card-heavy border-primary/30">
@@ -518,7 +518,7 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-14">
         <RevealContent>
           <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-champagne-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
             {/* Background gradient accent */}
