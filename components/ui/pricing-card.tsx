@@ -1,7 +1,6 @@
 "use client";
 
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import Image from "next/image";
 import { Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,11 +17,185 @@ interface PricingCardProps {
   tier: "starter" | "pro" | "elite";
 }
 
-const cardImages = {
-  starter: "/card-starter.png",
-  pro: "/card-pro.png",
-  elite: "/card-elite.png",
-};
+// CSS Credit Card Component
+function CreditCardVisual({ tier, isHovered }: { tier: "starter" | "pro" | "elite"; isHovered: boolean }) {
+  const isElite = tier === "elite";
+  const isPro = tier === "pro";
+  const isStarter = tier === "starter";
+  const isUnavailable = isPro || isStarter;
+
+  return (
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-xl",
+        "transition-transform duration-500",
+        isHovered && isElite && "scale-105"
+      )}
+      style={{
+        aspectRatio: "1.586",
+      }}
+    >
+      {/* Card Background */}
+      <div
+        className={cn(
+          "absolute inset-0 rounded-xl overflow-hidden",
+          // Starter - Frosted Glass
+          isStarter && "bg-gradient-to-br from-white/20 via-white/10 to-white/5 backdrop-blur-sm",
+          // Pro - Brushed Metal
+          isPro && "bg-gradient-to-br from-zinc-700 via-zinc-800 to-zinc-900",
+          // Elite - Black Card
+          isElite && "bg-gradient-to-br from-[#0a0a0a] via-[#111] to-[#0a0a0a]"
+        )}
+      >
+        {/* Starter - Glass refraction effect */}
+        {isStarter && (
+          <>
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{
+                background: "linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%, rgba(255,255,255,0.1) 100%)",
+              }}
+            />
+            <div className="absolute inset-0 border border-white/20 rounded-xl" />
+          </>
+        )}
+
+        {/* Pro - Brushed metal texture */}
+        {isPro && (
+          <>
+            <div
+              className="absolute inset-0 opacity-20"
+              style={{
+                backgroundImage: `repeating-linear-gradient(
+                  115deg,
+                  transparent,
+                  transparent 1px,
+                  rgba(255,255,255,0.03) 1px,
+                  rgba(255,255,255,0.03) 2px
+                )`,
+              }}
+            />
+            <div className="absolute inset-0 border border-zinc-600/50 rounded-xl" />
+          </>
+        )}
+
+        {/* Elite - Premium black with gold border */}
+        {isElite && (
+          <>
+            {/* Subtle inner glow */}
+            <div
+              className="absolute inset-0 opacity-40"
+              style={{
+                background: "radial-gradient(ellipse at 30% 20%, rgba(212,175,55,0.1) 0%, transparent 50%)",
+              }}
+            />
+            {/* Gold border */}
+            <div
+              className="absolute inset-0 rounded-xl"
+              style={{
+                border: "1.5px solid rgba(212,175,55,0.5)",
+                boxShadow: "inset 0 0 20px rgba(212,175,55,0.1)",
+              }}
+            />
+            {/* Corner accents */}
+            <div className="absolute top-2 left-2 w-4 h-4 border-t border-l border-[#D4AF37]/60" />
+            <div className="absolute top-2 right-2 w-4 h-4 border-t border-r border-[#D4AF37]/60" />
+            <div className="absolute bottom-2 left-2 w-4 h-4 border-b border-l border-[#D4AF37]/60" />
+            <div className="absolute bottom-2 right-2 w-4 h-4 border-b border-r border-[#D4AF37]/60" />
+          </>
+        )}
+
+        {/* Sheen animation - runs every 4 seconds */}
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          initial={{ x: "-100%" }}
+          animate={{ x: ["−100%", "200%"] }}
+          transition={{
+            duration: 1.5,
+            repeat: Infinity,
+            repeatDelay: 4,
+            ease: "easeInOut",
+          }}
+          style={{
+            background: `linear-gradient(
+              105deg,
+              transparent 40%,
+              ${isElite ? "rgba(212,175,55,0.15)" : isPro ? "rgba(192,192,192,0.1)" : "rgba(255,255,255,0.2)"} 50%,
+              transparent 60%
+            )`,
+          }}
+        />
+
+        {/* Card chip (Elite only) */}
+        {isElite && (
+          <div className="absolute top-4 left-4">
+            <div
+              className="w-8 h-6 rounded-sm"
+              style={{
+                background: "linear-gradient(135deg, #D4AF37 0%, #B8860B 50%, #D4AF37 100%)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              }}
+            >
+              <div className="absolute inset-[2px] rounded-[2px] opacity-50"
+                style={{
+                  background: "repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px)",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tier Name - Centered */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span
+            className={cn(
+              "text-2xl md:text-3xl font-serif font-medium tracking-wide",
+              // Starter - Muted white
+              isStarter && "text-white/40",
+              // Pro - Silver stamping
+              isPro && "text-transparent bg-clip-text bg-gradient-to-b from-zinc-300 via-zinc-400 to-zinc-500",
+              // Elite - Gold foil
+              isElite && "text-transparent bg-clip-text bg-gradient-to-b from-[#E8E4D9] via-[#D4AF37] to-[#B8860B]",
+              isUnavailable && "grayscale"
+            )}
+            style={{
+              textShadow: isElite ? "0 2px 4px rgba(0,0,0,0.5)" : undefined,
+            }}
+          >
+            {tier.charAt(0).toUpperCase() + tier.slice(1)}
+          </span>
+        </div>
+
+        {/* ITM Logo mark - Bottom right */}
+        <div className="absolute bottom-3 right-4">
+          <span
+            className={cn(
+              "text-xs font-mono tracking-widest uppercase",
+              isStarter && "text-white/20",
+              isPro && "text-zinc-500",
+              isElite && "text-[#D4AF37]/60"
+            )}
+          >
+            ITM
+          </span>
+        </div>
+
+        {/* Noise texture */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.03] rounded-xl"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+          }}
+        />
+      </div>
+
+      {/* Grayscale overlay for unavailable */}
+      {isUnavailable && (
+        <div className="absolute inset-0 bg-black/20 rounded-xl" />
+      )}
+    </div>
+  );
+}
 
 export function PricingCard({
   name,
@@ -58,7 +231,6 @@ export function PricingCard({
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
-    // Normalized position from -0.5 to 0.5
     const normalizedX = (e.clientX - centerX) / rect.width;
     const normalizedY = (e.clientY - centerY) / rect.height;
 
@@ -107,7 +279,6 @@ export function PricingCard({
         {/* Elite Card - Liquid Metal Shimmer Border */}
         {isElite && (
           <>
-            {/* Base gradient border */}
             <motion.div
               className="absolute -inset-[2px] rounded-2xl -z-10"
               style={{
@@ -122,7 +293,6 @@ export function PricingCard({
                 ease: "linear",
               }}
             />
-            {/* Shimmer overlay */}
             <motion.div
               className="absolute -inset-[2px] rounded-2xl -z-10 opacity-60"
               animate={{
@@ -141,7 +311,6 @@ export function PricingCard({
                 backgroundSize: "200% 100%",
               }}
             />
-            {/* Glow effect */}
             <motion.div
               className="absolute -inset-[2px] rounded-2xl -z-20"
               animate={{
@@ -166,9 +335,7 @@ export function PricingCard({
         <div
           className={cn(
             "relative h-full p-6 md:p-8 rounded-2xl border overflow-hidden",
-            // Unavailable cards - muted styling
             isUnavailable && "bg-[rgba(12,12,12,0.9)] backdrop-blur-xl border-white/5",
-            // Elite - Dark Frosted Glass
             isElite && "bg-[rgba(8,8,8,0.95)] backdrop-blur-xl border-white/10"
           )}
         >
@@ -185,20 +352,9 @@ export function PricingCard({
 
           {/* Card Content */}
           <div className="relative z-10 flex flex-col h-full">
-            {/* Card Image */}
-            <div className="relative w-full h-32 md:h-40 mb-6 flex items-center justify-center">
-              <Image
-                src={cardImages[tier]}
-                alt={`${name} membership card`}
-                width={200}
-                height={120}
-                className={cn(
-                  "object-contain transition-all duration-500",
-                  isElite && "drop-shadow-[0_0_30px_rgba(232,228,217,0.3)]",
-                  isUnavailable && "grayscale opacity-60",
-                  isHovered && isElite && "scale-105"
-                )}
-              />
+            {/* CSS Credit Card Visual */}
+            <div className="relative w-full mb-6 flex items-center justify-center px-4">
+              <CreditCardVisual tier={tier} isHovered={isHovered} />
             </div>
 
             {/* Header */}
