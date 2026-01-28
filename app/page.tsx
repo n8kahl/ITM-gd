@@ -328,7 +328,7 @@ export default function Home() {
                   "White Glove Support",
                   "Early Access to New Features",
                 ]}
-                whopLink="https://whop.com/checkout/plan_elite"
+                whopLink="https://whop.com/checkout/plan_T02fUg2d3tG8H"
                 tier="elite"
               />
             </StaggerItem>
