@@ -3,18 +3,14 @@
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight, Activity } from "lucide-react";
+import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight, Star } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
-import { HeroBackground } from "@/components/hero-background";
 import { BentoCard } from "@/components/ui/bento-card";
 import { PricingCard } from "@/components/ui/pricing-card";
 import { FloatingNavbar } from "@/components/ui/floating-navbar";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
-import { TickerTape } from "@/components/ui/ticker-tape";
-import { LiveActivityFeed } from "@/components/ui/live-activity-feed";
-import { ScrambleHeadline } from "@/components/ui/text-scramble";
 import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
 
 export default function Home() {
@@ -26,185 +22,94 @@ export default function Home() {
       {/* Floating Island Navbar */}
       <FloatingNavbar />
 
-      {/* Ticker Tape - HFT Data Feed */}
-      <div className="fixed top-16 left-0 right-0 z-40">
-        <TickerTape />
-      </div>
-
-      {/* Hero Section - HUD Terminal Style */}
-      <section className="relative min-h-[100vh] flex items-center justify-center px-4 py-20 md:py-32 overflow-hidden">
-        {/* 3D Volatility Surface Background */}
-        <HeroBackground />
-
-        {/* HUD Overlay Layer */}
-        <div className="absolute inset-0 z-10 pointer-events-none">
-          {/* Top Left - System Status */}
-          <div className="absolute top-24 left-6 md:left-10">
-            <div className="flex items-center gap-3 px-4 py-2 rounded border border-primary/30 bg-void/60 backdrop-blur-sm">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
-              </span>
-              <div className="font-mono text-xs">
-                <span className="text-smoke/50">SYSTEM STATUS:</span>
-                <span className="text-primary ml-2 font-semibold">ONLINE</span>
-              </div>
-            </div>
-            {/* Secondary status info */}
-            <div className="mt-2 px-4 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-              <div className="font-mono text-[10px] text-smoke/40 space-y-0.5">
-                <div>LATENCY: <span className="text-primary">12ms</span></div>
-                <div>UPTIME: <span className="text-platinum/60">99.97%</span></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Right - Market Volatility Meter */}
-          <div className="absolute top-24 right-6 md:right-10">
-            <div className="px-4 py-3 rounded border border-primary/30 bg-void/60 backdrop-blur-sm min-w-[180px]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-xs text-smoke/50">MARKET VOLATILITY</span>
-                <Activity className="h-3 w-3 text-primary" />
-              </div>
-              {/* Volatility Bar */}
-              <div className="h-2 bg-smoke/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-primary/60 via-primary to-primary/80 rounded-full animate-pulse"
-                  style={{ width: "72%" }}
-                />
-              </div>
-              <div className="flex justify-between mt-1.5 font-mono text-[10px]">
-                <span className="text-smoke/40">LOW</span>
-                <span className="text-primary font-semibold">72%</span>
-                <span className="text-smoke/40">HIGH</span>
-              </div>
-            </div>
-            {/* Secondary metrics */}
-            <div className="mt-2 px-4 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-              <div className="font-mono text-[10px] text-smoke/40 flex gap-4">
-                <div>VIX: <span className="text-primary">18.42</span></div>
-                <div>FEAR: <span className="text-platinum/60">NEUTRAL</span></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Left - Connection Info */}
-          <div className="absolute bottom-24 left-6 md:left-10">
-            <div className="px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-              <div className="font-mono text-[10px] text-smoke/30">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                  SIGNAL FEED ACTIVE
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Right - Timestamp */}
-          <div className="absolute bottom-24 right-6 md:right-10">
-            <div className="px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-              <div className="font-mono text-[10px] text-smoke/30">
-                TERMINAL v2.4.1
-              </div>
-            </div>
-          </div>
-
-          {/* Corner Brackets - HUD Frame */}
-          <div className="absolute top-20 left-4 w-8 h-8 border-l-2 border-t-2 border-primary/30" />
-          <div className="absolute top-20 right-4 w-8 h-8 border-r-2 border-t-2 border-primary/30" />
-          <div className="absolute bottom-20 left-4 w-8 h-8 border-l-2 border-b-2 border-primary/30" />
-          <div className="absolute bottom-20 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/30" />
+      {/* Hero Section - Luxury Magazine Cover */}
+      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
+        {/* Cinematic Gradient Background - Emerald Spotlight */}
+        <div className="absolute inset-0 z-0">
+          {/* Primary radial gradient - emerald spotlight from bottom */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `radial-gradient(ellipse 80% 60% at 50% 100%, rgba(4, 120, 87, 0.25) 0%, rgba(4, 120, 87, 0.08) 40%, transparent 70%)`,
+            }}
+          />
+          {/* Secondary subtle emerald glow */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `radial-gradient(ellipse 60% 40% at 50% 90%, rgba(5, 150, 105, 0.15) 0%, transparent 60%)`,
+            }}
+          />
+          {/* Top vignette for depth */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(180deg, rgba(10, 10, 11, 0.4) 0%, transparent 30%, transparent 70%, rgba(10, 10, 11, 0.2) 100%)`,
+            }}
+          />
         </div>
 
-        {/* Main Content - Center */}
+        {/* Main Content - Center Aligned */}
         <div className="container mx-auto relative z-20">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center space-y-8">
-              {/* Eyebrow Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/5 backdrop-blur-sm">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+          <div className="max-w-4xl mx-auto text-center space-y-8">
+            {/* Editorial H1 - Serif Typography */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-serif font-medium tracking-tight leading-[1.1] text-ivory">
+              Precision Trading for the
+              <br />
+              <span className="text-wealth-emerald italic">Modern Elite</span>
+            </h1>
+
+            {/* Subheadline - Light and Spacious */}
+            <p className="text-lg sm:text-xl md:text-2xl font-light text-ivory/70 tracking-wide max-w-2xl mx-auto">
+              Institutional-grade signals. Private community. Uncapped potential.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4 w-full sm:w-auto">
+              {/* Primary Button - Solid Champagne/Platinum */}
+              <Button
+                asChild
+                size="xl"
+                variant="luxury-champagne"
+                className="w-full sm:w-auto sm:min-w-[200px] rounded-sm font-medium tracking-wide"
+              >
+                <a href="#pricing">Request Access</a>
+              </Button>
+
+              {/* Secondary Button - Text Link with Underline */}
+              <a
+                href="#features"
+                className="group inline-flex items-center justify-center gap-2 text-base font-light text-champagne/80 hover:text-champagne transition-colors duration-300 h-12 sm:h-auto"
+              >
+                <span className="underline underline-offset-4 decoration-champagne/30 group-hover:decoration-champagne/60 transition-all duration-300">
+                  View Performance
                 </span>
-                <span className="text-sm font-medium font-mono text-primary">SIGNALS LIVE</span>
+                <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
+              </a>
+            </div>
+
+            {/* Social Proof - Elegant and Minimal */}
+            <div className="pt-12 flex flex-col items-center gap-4">
+              {/* 5 Gold Stars */}
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    className="w-5 h-5 fill-champagne text-champagne"
+                  />
+                ))}
               </div>
-
-              {/* Massive H1 with Scramble Effect */}
-              <div className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
-                <ScrambleHeadline
-                  text="TRADE IN THE MONEY"
-                  className="text-gradient-platinum"
-                  as="h1"
-                  speed={70}
-                  delay={600}
-                />
-              </div>
-
-              {/* Subheadline */}
-              <h2 className="text-2xl md:text-3xl lg:text-4xl font-serif text-smoke/90 font-normal">
-                Master The Markets With <span className="text-primary font-semibold">Elite Signals</span>
-              </h2>
-
-              {/* Description */}
-              <p className="text-lg md:text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed">
-                Join an exclusive community of professional traders. Get real-time signals,
-                comprehensive education, and proven strategies to elevate your trading game.
+              {/* Trust Text */}
+              <p className="text-sm font-light tracking-widest uppercase text-ivory/50">
+                Trusted by 10,000+ Traders
               </p>
-
-              {/* CTA Buttons - HFT Style */}
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-6">
-                {/* Primary Button - Execute Trade Style */}
-                <Button
-                  asChild
-                  size="lg"
-                  className="relative group btn-glitch bg-gradient-to-r from-signal-green-dark via-primary to-signal-green-dark text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(0,230,118,0.4)]"
-                >
-                  <a href="#pricing" className="flex items-center gap-2">
-                    <span className="font-mono font-bold">EXECUTE</span>
-                    <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-                  </a>
-                </Button>
-
-                {/* Secondary Button - Thin Platinum border */}
-                <Button
-                  asChild
-                  variant="outline"
-                  size="lg"
-                  className="bg-transparent text-platinum/80 font-semibold text-lg px-10 h-14 rounded-xl border border-platinum/30 hover:border-platinum/60 hover:text-white hover:shadow-[0_0_20px_rgba(229,228,226,0.15)] transition-all duration-300"
-                >
-                  <a href="#features" className="font-mono">LEARN MORE</a>
-                </Button>
-              </div>
-
-              {/* Quick Stats - Monospace Terminal Style */}
-              <div className="flex flex-wrap gap-6 justify-center items-center pt-8">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="font-mono text-xs text-smoke/70">REAL-TIME SIGNALS</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="font-mono text-xs text-primary">87%</span>
-                  <span className="font-mono text-xs text-smoke/70">SUCCESS</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="font-mono text-xs text-primary">10,000+</span>
-                  <span className="font-mono text-xs text-smoke/70">TRADERS</span>
-                </div>
-              </div>
             </div>
           </div>
-
-          {/* Live Activity Feed */}
-          <LiveActivityFeed />
         </div>
 
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce z-20">
-          <div className="w-6 h-10 rounded-full border-2 border-primary/30 flex items-start justify-center p-2">
-            <div className="w-1 h-2 bg-primary/50 rounded-full animate-pulse" />
-          </div>
+        {/* Subtle Scroll Indicator */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
+          <div className="w-[1px] h-16 bg-gradient-to-b from-transparent via-champagne/30 to-transparent" />
         </div>
       </section>
 
@@ -240,7 +145,7 @@ export default function Home() {
             <RevealHeading>
               <h2 className="text-3xl md:text-5xl font-bold">
                 Everything You Need To{" "}
-                <span className="text-gradient-gold">Succeed</span>
+                <span className="text-gradient-champagne">Succeed</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
@@ -251,7 +156,7 @@ export default function Home() {
           </div>
 
           {/* Bento Grid Layout */}
-          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6" staggerDelay={0.1}>
+          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
             {/* Real-Time Signals - Wide Card (2 columns) with Live Candlestick */}
             <StaggerItem className="md:col-span-2 lg:col-span-2">
               <BentoCard
@@ -333,7 +238,7 @@ export default function Home() {
             <RevealHeading>
               <h2 className="text-3xl md:text-5xl font-bold">
                 Choose Your{" "}
-                <span className="text-gradient-gold">Membership</span>
+                <span className="text-gradient-champagne">Membership</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
@@ -431,7 +336,7 @@ export default function Home() {
             <RevealHeading>
               <h2 className="text-3xl md:text-5xl font-bold">
                 Trusted By Traders{" "}
-                <span className="text-gradient-gold">Worldwide</span>
+                <span className="text-gradient-champagne">Worldwide</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
@@ -563,7 +468,7 @@ export default function Home() {
                   ].map((step, idx) => (
                     <StaggerItem key={idx}>
                       <div className="flex gap-4">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-money-green-dark flex items-center justify-center font-bold text-primary-foreground shrink-0">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-wealth-emerald-dark flex items-center justify-center font-bold text-primary-foreground shrink-0">
                           {step.step}
                         </div>
                         <div className="flex-1 pt-1">
@@ -588,22 +493,23 @@ export default function Home() {
       {/* CTA Section */}
       <section className="container mx-auto px-4 py-20">
         <RevealContent>
-          <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-platinum-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
+          <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-champagne-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
             {/* Background gradient accent */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-platinum/5 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-champagne/5 pointer-events-none" />
 
             <div className="relative z-10">
               <h2 className="text-3xl md:text-5xl font-bold">
                 Ready To Elevate Your{" "}
-                <span className="text-gradient-platinum">Trading?</span>
+                <span className="text-gradient-champagne">Trading?</span>
               </h2>
               <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
                 Join thousands of successful traders who trust Trade In The Money for premium signals and education.
               </p>
               <Button
                 asChild
-                size="lg"
-                className="bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light text-void font-bold text-lg px-10 h-14 mt-8 rounded-xl hover:scale-105 hover:shadow-[0_0_40px_rgba(229,228,226,0.4)] transition-all duration-300"
+                size="xl"
+                variant="luxury-champagne"
+                className="mt-8 rounded-sm min-w-[240px]"
               >
                 <a href="#pricing">Start Trading Smarter Today</a>
               </Button>
@@ -613,20 +519,28 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-platinum/10 bg-[rgba(5,5,5,0.8)] backdrop-blur-xl">
+      <footer className="border-t border-champagne/10 bg-[rgba(10,10,11,0.9)] backdrop-blur-xl">
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3">
-              <Image src="/logo.png" alt="TITM Logo" width={40} height={40} className="h-10 w-auto" />
-              <div>
-                <div className="font-bold text-gradient-platinum">Trade In The Money</div>
+              {/* Typographic Logo in Footer */}
+              <div className="flex items-center gap-1">
+                <span className="font-serif text-xl tracking-tight font-semibold text-ivory">
+                  Trade
+                </span>
+                <span className="font-serif text-xl tracking-tight font-semibold text-champagne">
+                  ITM
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-wealth-emerald ml-0.5 mb-2" />
+              </div>
+              <div className="ml-2">
                 <div className="text-xs text-muted-foreground">© 2026 All rights reserved</div>
               </div>
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-platinum transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-platinum transition-colors">Terms of Service</a>
-              <a href="mailto:support@tradeinthemoney.com" className="hover:text-platinum transition-colors">Contact</a>
+              <a href="#" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
+              <a href="#" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <a href="mailto:support@tradeinthemoney.com" className="hover:text-champagne transition-colors duration-300">Contact</a>
             </div>
           </div>
           <div className="mt-6 text-center text-xs text-muted-foreground">
