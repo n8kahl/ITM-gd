@@ -2,7 +2,7 @@
 
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import Image from "next/image";
-import { Check, AlertCircle } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
@@ -37,6 +37,7 @@ export function PricingCard({
   const isElite = tier === "elite";
   const isPro = tier === "pro";
   const isStarter = tier === "starter";
+  const isUnavailable = isPro || isStarter;
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -76,7 +77,8 @@ export function PricingCard({
       ref={cardRef}
       className={cn(
         "relative rounded-2xl overflow-visible h-full",
-        isElite ? "lg:scale-105 z-10" : ""
+        isElite && "lg:scale-105 z-10",
+        isUnavailable && "opacity-50"
       )}
       style={{
         perspective: 1000,
@@ -94,105 +96,89 @@ export function PricingCard({
           rotateY: isHovered ? rotateY : 0,
           transformStyle: "preserve-3d",
         }}
-        whileHover={{ y: -8, scale: 1.02 }}
+        whileHover={isElite ? { y: -8, scale: 1.02 } : { y: -4, scale: 1.01 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        {/* Pro Card - Subtle border (disabled state) */}
-        {isPro && (
+        {/* Unavailable Cards - Subtle border */}
+        {isUnavailable && (
           <div className="absolute -inset-[1px] rounded-2xl bg-white/5 -z-10" />
         )}
 
-        {/* Elite Card - Subtle border glow */}
+        {/* Elite Card - Liquid Metal Shimmer Border */}
         {isElite && (
-          <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-br from-white/20 via-white/5 to-white/10 -z-10" />
+          <>
+            {/* Base gradient border */}
+            <motion.div
+              className="absolute -inset-[2px] rounded-2xl -z-10"
+              style={{
+                background: "linear-gradient(135deg, rgba(232,228,217,0.4) 0%, rgba(212,175,55,0.3) 25%, rgba(232,228,217,0.5) 50%, rgba(192,192,192,0.3) 75%, rgba(232,228,217,0.4) 100%)",
+              }}
+              animate={{
+                backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
+              }}
+              transition={{
+                duration: 5,
+                repeat: Infinity,
+                ease: "linear",
+              }}
+            />
+            {/* Shimmer overlay */}
+            <motion.div
+              className="absolute -inset-[2px] rounded-2xl -z-10 opacity-60"
+              animate={{
+                background: [
+                  "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
+                  "linear-gradient(90deg, transparent 100%, rgba(255,255,255,0.3) 150%, transparent 200%)",
+                ],
+                backgroundPosition: ["-200% 0%", "200% 0%"],
+              }}
+              transition={{
+                duration: 3,
+                repeat: Infinity,
+                ease: "linear",
+              }}
+              style={{
+                backgroundSize: "200% 100%",
+              }}
+            />
+            {/* Glow effect */}
+            <motion.div
+              className="absolute -inset-[2px] rounded-2xl -z-20"
+              animate={{
+                boxShadow: isHovered
+                  ? [
+                      "0 0 30px rgba(232,228,217,0.3), 0 0 60px rgba(212,175,55,0.2)",
+                      "0 0 40px rgba(232,228,217,0.4), 0 0 80px rgba(212,175,55,0.3)",
+                      "0 0 30px rgba(232,228,217,0.3), 0 0 60px rgba(212,175,55,0.2)",
+                    ]
+                  : "0 0 20px rgba(232,228,217,0.15), 0 0 40px rgba(212,175,55,0.1)",
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+          </>
         )}
 
         {/* Card Container */}
         <div
           className={cn(
             "relative h-full p-6 md:p-8 rounded-2xl border overflow-hidden",
-            // Pro - Black Titanium metallic gradient
-            isPro &&
-              "bg-gradient-to-br from-[#1a1a1a] via-[#0d0d0d] to-[#1a1a1a] border-primary/50",
+            // Unavailable cards - muted styling
+            isUnavailable && "bg-[rgba(12,12,12,0.9)] backdrop-blur-xl border-white/5",
             // Elite - Dark Frosted Glass
-            isElite &&
-              "bg-[rgba(8,8,8,0.9)] backdrop-blur-xl border-white/10",
-            // Starter - Ghost frosted glass
-            isStarter && "bg-[rgba(15,15,15,0.8)] backdrop-blur-xl border-white/10"
+            isElite && "bg-[rgba(8,8,8,0.95)] backdrop-blur-xl border-white/10"
           )}
         >
-          {/* Not Available Banner - Starter & Pro */}
-          {(isPro || isStarter) && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-              <div className="absolute inset-0 bg-onyx/60 backdrop-blur-[2px]" />
-              <div className="relative transform -rotate-12">
-                <div className="px-8 py-3 bg-champagne/95 shadow-lg">
-                  <span className="text-sm font-semibold text-onyx uppercase tracking-widest">
-                    Coming Soon
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Pro - Brushed metal texture */}
-          {isPro && (
-            <div
-              className="absolute inset-0 opacity-[0.04] pointer-events-none"
-              style={{
-                backgroundImage: `repeating-linear-gradient(
-                  90deg,
-                  transparent,
-                  transparent 1px,
-                  rgba(255,255,255,0.1) 1px,
-                  rgba(255,255,255,0.1) 2px
-                )`,
-              }}
-            />
-          )}
-
-          {/* Elite - Limited Spots Badge */}
-          {isElite && (
-            <motion.div
-              className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40"
-              animate={{
-                boxShadow: [
-                  "0 0 10px rgba(239, 68, 68, 0.3)",
-                  "0 0 20px rgba(239, 68, 68, 0.5)",
-                  "0 0 10px rgba(239, 68, 68, 0.3)",
-                ],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            >
-              <AlertCircle className="w-3 h-3 text-red-400" />
-              <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider font-mono">
-                Limited Spots
-              </span>
-            </motion.div>
-          )}
-
-          {/* Elite - Frosted glass overlay */}
+          {/* Elite - Premium Frosted glass overlay */}
           {isElite && (
             <div
-              className="absolute inset-0 opacity-50 pointer-events-none"
+              className="absolute inset-0 opacity-60 pointer-events-none"
               style={{
                 background:
-                  "radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.08) 0%, transparent 50%)",
-              }}
-            />
-          )}
-
-          {/* Starter - Frosted overlay */}
-          {isStarter && (
-            <div
-              className="absolute inset-0 opacity-30 pointer-events-none"
-              style={{
-                background:
-                  "radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 60%)",
+                  "radial-gradient(ellipse at 50% 0%, rgba(232,228,217,0.08) 0%, transparent 50%)",
               }}
             />
           )}
@@ -207,41 +193,38 @@ export function PricingCard({
                 width={200}
                 height={120}
                 className={cn(
-                  "object-contain transition-transform duration-300",
-                  isPro && "drop-shadow-[0_0_25px_rgba(0,230,118,0.4)]",
-                  isElite && "drop-shadow-xl opacity-95",
-                  isStarter && "drop-shadow-xl opacity-90",
-                  isHovered && "scale-105"
+                  "object-contain transition-all duration-500",
+                  isElite && "drop-shadow-[0_0_30px_rgba(232,228,217,0.3)]",
+                  isUnavailable && "grayscale opacity-60",
+                  isHovered && isElite && "scale-105"
                 )}
               />
             </div>
 
             {/* Header */}
             <div className="text-center mb-6">
-              {/* Pro Tag - Removed as not available */}
-
               {/* Elite Tag - Primary Available Option */}
               {isElite && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-wealth-emerald/20 border border-wealth-emerald/40 mb-4">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 mb-4">
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-wealth-emerald opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-wealth-emerald"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                   </span>
-                  <span className="text-xs font-semibold text-champagne uppercase tracking-wider font-mono">
+                  <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider font-mono">
                     NOW AVAILABLE
                   </span>
                 </div>
               )}
 
-              {/* Plan Name */}
+              {/* Plan Name with Lock for unavailable */}
               <h3
                 className={cn(
-                  "text-2xl font-bold mb-2",
-                  isPro && "text-gradient-signal-green",
-                  isElite && "text-gradient-platinum",
-                  isStarter && "text-smoke/80"
+                  "text-2xl font-bold mb-2 flex items-center justify-center gap-2",
+                  isElite && "text-gradient-champagne",
+                  isUnavailable && "text-smoke/50"
                 )}
               >
+                {isUnavailable && <Lock className="w-5 h-5 text-smoke/40" />}
                 {name}
               </h3>
 
@@ -250,30 +233,31 @@ export function PricingCard({
                 <span
                   className={cn(
                     "text-5xl price-display",
-                    isPro && "text-white",
-                    isElite && "text-platinum",
-                    isStarter && "text-smoke/70"
+                    isElite && "text-champagne",
+                    isUnavailable && "text-smoke/40"
                   )}
                 >
                   {price}
                 </span>
-                <span className="text-lg text-muted-foreground">{period}</span>
+                <span className={cn(
+                  "text-lg",
+                  isElite ? "text-muted-foreground" : "text-muted-foreground/50"
+                )}>{period}</span>
               </div>
 
               {/* Description */}
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p className={cn(
+                "text-sm",
+                isElite ? "text-muted-foreground" : "text-muted-foreground/50"
+              )}>{description}</p>
             </div>
 
             {/* Divider */}
             <div
               className={cn(
                 "h-px w-full mb-6",
-                isPro &&
-                  "bg-gradient-to-r from-transparent via-primary/40 to-transparent",
-                isElite &&
-                  "bg-gradient-to-r from-transparent via-white/20 to-transparent",
-                isStarter &&
-                  "bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                isElite && "bg-gradient-to-r from-transparent via-champagne/30 to-transparent",
+                isUnavailable && "bg-gradient-to-r from-transparent via-white/10 to-transparent"
               )}
             />
 
@@ -284,26 +268,23 @@ export function PricingCard({
                   <div
                     className={cn(
                       "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      isPro && "bg-primary/30",
-                      isElite && "bg-white/10",
-                      isStarter && "bg-white/10"
+                      isElite && "bg-champagne/10",
+                      isUnavailable && "bg-white/5"
                     )}
                   >
                     <Check
                       className={cn(
                         "w-3 h-3",
-                        isPro && "text-primary",
-                        isElite && "text-platinum",
-                        isStarter && "text-smoke/60"
+                        isElite && "text-champagne",
+                        isUnavailable && "text-smoke/30"
                       )}
                     />
                   </div>
                   <span
                     className={cn(
                       "text-sm leading-relaxed",
-                      isPro && "text-smoke/90",
                       isElite && "text-smoke/80",
-                      isStarter && "text-smoke/60"
+                      isUnavailable && "text-smoke/40"
                     )}
                   >
                     {feature}
@@ -317,31 +298,26 @@ export function PricingCard({
               {isElite ? (
                 <Button
                   asChild
-                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-300 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_30px_rgba(232,228,217,0.4)]"
+                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-500 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_40px_rgba(232,228,217,0.5)] hover:-translate-y-0.5"
                 >
                   <a
                     href={whopLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 font-mono"
+                    className="flex items-center justify-center gap-2 font-mono tracking-wide"
                   >
-                    APPLY NOW
+                    APPLY FOR ACCESS
                   </a>
                 </Button>
               ) : (
                 <Button
-                  disabled
-                  className={cn(
-                    "w-full h-14 text-base font-bold rounded-xl cursor-not-allowed opacity-50",
-                    isPro && "bg-primary/30 text-smoke/50",
-                    isStarter && "bg-white/10 text-smoke/40 border border-white/10"
-                  )}
+                  className="w-full h-14 text-base font-medium rounded-xl bg-white/5 text-smoke/50 border border-white/10 hover:bg-white/10 hover:text-smoke/70 transition-all duration-300"
                 >
-                  <span className="font-mono">NOT AVAILABLE</span>
+                  <span className="font-mono tracking-wide">JOIN WAITLIST</span>
                 </Button>
               )}
 
-              {/* Security Badge */}
+              {/* Security Badge - Elite only */}
               {isElite && (
                 <p className="text-center text-xs text-muted-foreground/60">
                   Secure transaction powered by{" "}
@@ -355,20 +331,10 @@ export function PricingCard({
           {/* Elite - Corner accents */}
           {isElite && (
             <>
-              <div className="absolute top-0 left-0 w-8 h-8 border-t border-l border-white/20 rounded-tl-2xl" />
-              <div className="absolute top-0 right-0 w-8 h-8 border-t border-r border-white/20 rounded-tr-2xl" />
-              <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-white/20 rounded-bl-2xl" />
-              <div className="absolute bottom-0 right-0 w-8 h-8 border-b border-r border-white/20 rounded-br-2xl" />
-            </>
-          )}
-
-          {/* Pro - Corner accents */}
-          {isPro && (
-            <>
-              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-primary/50 rounded-tl-2xl" />
-              <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-primary/50 rounded-tr-2xl" />
-              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-primary/50 rounded-bl-2xl" />
-              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-primary/50 rounded-br-2xl" />
+              <div className="absolute top-0 left-0 w-10 h-10 border-t-2 border-l-2 border-champagne/30 rounded-tl-2xl" />
+              <div className="absolute top-0 right-0 w-10 h-10 border-t-2 border-r-2 border-champagne/30 rounded-tr-2xl" />
+              <div className="absolute bottom-0 left-0 w-10 h-10 border-b-2 border-l-2 border-champagne/30 rounded-bl-2xl" />
+              <div className="absolute bottom-0 right-0 w-10 h-10 border-b-2 border-r-2 border-champagne/30 rounded-br-2xl" />
             </>
           )}
 
@@ -385,11 +351,9 @@ export function PricingCard({
         <motion.div
           className="absolute inset-x-4 -bottom-4 h-8 rounded-2xl -z-20"
           style={{
-            background: isPro
-              ? "radial-gradient(ellipse at center, rgba(0, 230, 118, 0.2) 0%, transparent 70%)"
-              : isElite
-              ? "radial-gradient(ellipse at center, rgba(229, 228, 226, 0.1) 0%, transparent 70%)"
-              : "radial-gradient(ellipse at center, rgba(255, 255, 255, 0.05) 0%, transparent 70%)",
+            background: isElite
+              ? "radial-gradient(ellipse at center, rgba(232,228,217,0.2) 0%, transparent 70%)"
+              : "radial-gradient(ellipse at center, rgba(255, 255, 255, 0.03) 0%, transparent 70%)",
             filter: "blur(12px)",
             opacity: isHovered ? 1 : 0.5,
             transition: "opacity 0.3s ease",
