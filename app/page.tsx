@@ -23,7 +23,7 @@ export default function Home() {
       <FloatingNavbar />
 
       {/* Hero Section - Luxury Magazine Cover */}
-      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
+      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden bg-noise">
         {/* Cinematic Gradient Background - Emerald Spotlight */}
         <div className="absolute inset-0 z-0">
           {/* Primary radial gradient - emerald spotlight from bottom */}
@@ -56,7 +56,7 @@ export default function Home() {
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-serif font-medium tracking-tight leading-[1.1] text-ivory">
               Precision Trading for the
               <br />
-              <span className="text-wealth-emerald italic">Modern Elite</span>
+              <span className="text-gradient-luminous-emerald italic">Modern Elite</span>
             </h1>
 
             {/* Subheadline - Light and Spacious */}
@@ -89,19 +89,19 @@ export default function Home() {
             </div>
 
             {/* Social Proof - Elegant and Minimal */}
-            <div className="pt-12 flex flex-col items-center gap-4">
-              {/* 5 Gold Stars */}
-              <div className="flex items-center gap-1">
+            <div className="pt-12 flex flex-col items-center gap-3">
+              {/* 5 Gold Stars - Small and Refined */}
+              <div className="flex items-center gap-1.5">
                 {[...Array(5)].map((_, i) => (
                   <Star
                     key={i}
-                    className="w-5 h-5 fill-champagne text-champagne"
+                    className="w-4 h-4 fill-amber-400 text-amber-400"
                   />
                 ))}
               </div>
               {/* Trust Text */}
-              <p className="text-sm font-light tracking-widest uppercase text-ivory/50">
-                Trusted by 10,000+ Traders
+              <p className="text-sm font-light tracking-[0.2em] uppercase text-ivory/50">
+                Trusted by Traders Worldwide
               </p>
             </div>
           </div>
@@ -248,10 +248,9 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Pricing Cards Grid */}
+          {/* Pricing Cards Grid - Ordered by price: Starter → Pro → Elite */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
-            {/* Starter Card */}
-            {/* Starter Card - Ghost */}
+            {/* Starter Card - $49/mo */}
             <StaggerItem>
               <PricingCard
                 name="Starter"
@@ -270,7 +269,28 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Elite Card - Hero (Matte Black & Green) */}
+            {/* Pro Card - $99/mo */}
+            <StaggerItem>
+              <PricingCard
+                name="Pro"
+                price="$99"
+                period="/month"
+                description="Most popular choice for serious traders"
+                features={[
+                  "15+ Daily Signals",
+                  "Advanced Technical Analysis",
+                  "Priority Discord Access",
+                  "Live Trading Sessions",
+                  "1-on-1 Mentorship (Monthly)",
+                  "Risk Management Tools",
+                  "24/7 Priority Support",
+                ]}
+                whopLink="https://whop.com/checkout/plan_pro"
+                tier="pro"
+              />
+            </StaggerItem>
+
+            {/* Elite Card - $199/mo - The Premium Option */}
             <StaggerItem>
               <PricingCard
                 name="Elite"
@@ -289,28 +309,6 @@ export default function Home() {
                 ]}
                 whopLink="https://whop.com/checkout/plan_T02fUg2d3tG8H"
                 tier="elite"
-              />
-            </StaggerItem>
-
-            {/* Pro Card - Brushed Platinum */}
-            <StaggerItem>
-              <PricingCard
-                name="Pro"
-                price="$99"
-                period="/month"
-                description="Most popular choice for serious traders"
-                features={[
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support",
-                ]}
-                whopLink="https://whop.com/checkout/plan_pro"
-                tier="pro"
-                popular
               />
             </StaggerItem>
           </StaggerContainer>
