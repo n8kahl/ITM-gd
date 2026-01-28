@@ -1,19 +1,21 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useRef } from "react";
+import { useState, useRef, ReactNode } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
 interface BentoCardProps {
-  icon: LucideIcon;
+  icon?: LucideIcon;
   title: string;
   description: string;
   className?: string;
   iconClassName?: string;
   spotlight?: "emerald" | "gold";
   image?: string;
+  graphic?: ReactNode; // Custom graphic (charts, etc.)
+  graphicClassName?: string;
 }
 
 export function BentoCard({
@@ -24,6 +26,8 @@ export function BentoCard({
   iconClassName,
   spotlight = "emerald",
   image,
+  graphic,
+  graphicClassName,
 }: BentoCardProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
@@ -89,8 +93,18 @@ export function BentoCard({
 
       {/* Content */}
       <div className="relative z-10 p-6 md:p-8 h-full flex flex-col">
-        {/* Icon or Image */}
-        {image ? (
+        {/* Graphic, Icon, or Image */}
+        {graphic ? (
+          <div
+            className={cn(
+              "relative w-full h-32 md:h-40 mb-6 rounded-xl overflow-hidden",
+              "bg-void/50 border border-white/5",
+              graphicClassName
+            )}
+          >
+            {graphic}
+          </div>
+        ) : image ? (
           <div className="relative w-20 h-20 md:w-24 md:h-24 mb-6">
             <Image
               src={image}
@@ -99,7 +113,7 @@ export function BentoCard({
               className="object-contain drop-shadow-lg"
             />
           </div>
-        ) : (
+        ) : Icon ? (
           <div
             className={cn(
               "w-14 h-14 md:w-16 md:h-16 rounded-xl flex items-center justify-center mb-6",
@@ -117,7 +131,7 @@ export function BentoCard({
               )}
             />
           </div>
-        )}
+        ) : null}
 
         {/* Title */}
         <h3 className="text-xl md:text-2xl font-bold text-smoke mb-3">
