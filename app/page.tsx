@@ -203,28 +203,28 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Bento Grid Layout */}
+          {/* Bento Grid Layout - Clean 2x3 grid */}
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
-            {/* Real-Time Signals - Wide Card (2 columns) with Live Candlestick */}
-            <StaggerItem className="md:col-span-2 lg:col-span-2">
+            {/* Row 1 */}
+            {/* Real-Time Signals with Live Candlestick */}
+            <StaggerItem>
               <BentoCard
                 icon={TrendingUp}
                 title="Real-Time Signals"
-                description="Get instant trade alerts from experienced traders with detailed entry, exit, and stop-loss levels. Our signals are backed by years of market analysis and proven strategies that consistently deliver results."
+                description="Get instant trade alerts with detailed entry, exit, and stop-loss levels backed by proven strategies."
                 spotlight="emerald"
                 graphic={<CandlestickChart className="absolute inset-0" />}
               />
             </StaggerItem>
 
-            {/* Educational Content - Tall Card (2 rows) */}
-            <StaggerItem className="md:row-span-2">
+            {/* 87% Success Rate with Win Rate Chart */}
+            <StaggerItem>
               <BentoCard
-                icon={BookOpen}
-                title="Educational Content"
-                description="Access exclusive courses, webinars, and tutorials covering technical analysis, fundamental analysis, and risk management. From beginner basics to advanced strategies, we provide the knowledge you need to become a confident trader."
-                className="h-full"
-                spotlight="gold"
-                image="/icon-education.png"
+                icon={Target}
+                title="87% Success Rate"
+                description="Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
+                spotlight="emerald"
+                graphic={<WinRateChart className="absolute inset-0" percentage={87} />}
               />
             </StaggerItem>
 
@@ -233,21 +233,22 @@ export default function Home() {
               <BentoCard
                 icon={Users}
                 title="Active Community"
-                description="Join thousands of traders sharing real-time wins in our exclusive Discord."
+                description="Join thousands of traders sharing real-time wins in our exclusive Discord server."
                 spotlight="emerald"
                 graphic={<DiscordMock />}
                 graphicClassName="!bg-transparent !border-0"
               />
             </StaggerItem>
 
-            {/* Precise Analysis with Win Rate Chart */}
+            {/* Row 2 */}
+            {/* Educational Content */}
             <StaggerItem>
               <BentoCard
-                icon={Target}
-                title="87% Success Rate"
-                description="Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
-                spotlight="emerald"
-                graphic={<WinRateChart className="absolute inset-0" percentage={87} />}
+                icon={BookOpen}
+                title="Educational Content"
+                description="Access exclusive courses, webinars, and tutorials from beginner basics to advanced strategies."
+                spotlight="gold"
+                image="/icon-education.png"
               />
             </StaggerItem>
 
