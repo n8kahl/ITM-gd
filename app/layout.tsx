@@ -28,8 +28,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Trade In The Money - Premium Trading Signals & Education',
-  description: 'Join the elite trading community. Get real-time signals, expert education, and proven strategies from professional traders.',
+  description: 'Join the elite trading community. Get real-time signals, expert education, and proven strategies from professional traders. 3 Guaranteed 100%+ Trades Every Week.',
   generator: 'v0.app',
+  metadataBase: new URL('https://tradeinthemoney.com'),
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -38,6 +39,18 @@ export const metadata: Metadata = {
     ],
     shortcut: '/favicon.png',
     apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'Trade In The Money - Premium Trading Signals',
+    description: '3 Guaranteed 100%+ Trades Every Week. Join the elite trading community with real-time signals and expert education.',
+    siteName: 'Trade In The Money',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Trade In The Money - Premium Trading Signals',
+    description: '3 Guaranteed 100%+ Trades Every Week. Join the elite trading community.',
   },
 }
 
