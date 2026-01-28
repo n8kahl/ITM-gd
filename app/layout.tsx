@@ -31,9 +31,13 @@ export const metadata: Metadata = {
   description: 'Join the elite trading community. Get real-time signals, expert education, and proven strategies from professional traders.',
   generator: 'v0.app',
   icons: {
-    icon: '/favicon.png',
+    icon: [
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon.png', sizes: '192x192', type: 'image/png' },
+    ],
     shortcut: '/favicon.png',
-    apple: '/favicon.png',
+    apple: '/apple-touch-icon.png',
   },
 }
 
