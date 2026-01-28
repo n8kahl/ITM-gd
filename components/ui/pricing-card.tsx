@@ -109,7 +109,7 @@ function CreditCardVisual({ tier, isHovered }: { tier: "starter" | "pro" | "elit
         <motion.div
           className="absolute inset-0 pointer-events-none"
           initial={{ x: "-100%" }}
-          animate={{ x: ["−100%", "200%"] }}
+          animate={{ x: ["-100%", "200%"] }}
           transition={{
             duration: 1.5,
             repeat: Infinity,
@@ -450,17 +450,17 @@ export function PricingCard({
             </ul>
 
             {/* CTA Button */}
-            <div className="space-y-3">
+            <div className="space-y-3 relative z-50 pointer-events-auto">
               {isElite ? (
                 <Button
                   asChild
-                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-500 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_40px_rgba(232,228,217,0.5)] hover:-translate-y-0.5"
+                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-500 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_40px_rgba(232,228,217,0.5)] hover:-translate-y-0.5 pointer-events-auto cursor-pointer"
                 >
                   <a
                     href={whopLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 font-mono tracking-wide"
+                    className="flex items-center justify-center gap-2 font-mono tracking-wide pointer-events-auto cursor-pointer"
                   >
                     JOIN TODAY
                   </a>
