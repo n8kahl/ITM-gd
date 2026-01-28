@@ -377,7 +377,7 @@ export default function Home() {
                       100% Money-Back Guarantee
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Not profitable in 30 days? Get a full refund. No questions asked.
+                      Follow our signals, and we guarantee a profit within 30 days or your money back!
                     </p>
                   </div>
                 </div>
@@ -634,8 +634,8 @@ export default function Home() {
               </div>
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
-              <a href="#" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
+              <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
               <a href="mailto:support@tradeinthemoney.com" className="hover:text-champagne transition-colors duration-300">Contact</a>
             </div>
           </div>
