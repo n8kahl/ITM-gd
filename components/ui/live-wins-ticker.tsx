@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { TrendingUp, DollarSign, Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useRef, memo } from "react";
+import { TrendingUp, DollarSign } from "lucide-react";
 
 interface WinEvent {
   id: number;
@@ -30,23 +30,62 @@ function generateTime(): string {
   return `${minutes}m ago`;
 }
 
-export function LiveWinsTicker() {
-  const [wins, setWins] = useState<WinEvent[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+// Mobile detection hook
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Initialize with a few wins
-    const initialWins = SAMPLE_WINS.slice(0, 5).map((w, i) => ({
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
+export const LiveWinsTicker = memo(function LiveWinsTicker() {
+  const [wins, setWins] = useState<WinEvent[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const isMobile = useIsMobile();
+  const isVisible = useRef(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Intersection Observer - pause when not visible
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible.current = entry.isIntersecting;
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    // Initialize with fewer wins on mobile
+    const initialCount = isMobile ? 3 : 5;
+    const initialWins = SAMPLE_WINS.slice(0, initialCount).map((w, i) => ({
       ...w,
       id: i,
       time: generateTime(),
     }));
     setWins(initialWins);
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
-    // Add new wins periodically
+    // Slower interval on mobile (6s vs 4s)
+    const intervalDuration = isMobile ? 6000 : 4000;
+    const maxWins = isMobile ? 3 : 5;
+
     const interval = setInterval(() => {
+      // Skip update if not visible
+      if (!isVisible.current) return;
+
       setCurrentIndex((prev) => {
         const nextIndex = (prev + 1) % SAMPLE_WINS.length;
         setWins((prevWins) => {
@@ -55,17 +94,20 @@ export function LiveWinsTicker() {
             id: Date.now(),
             time: "Just now",
           };
-          return [newWin, ...prevWins.slice(0, 4)];
+          return [newWin, ...prevWins.slice(0, maxWins - 1)];
         });
         return nextIndex;
       });
-    }, 4000);
+    }, intervalDuration);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [isMobile]);
+
+  // Reduced visible items on mobile
+  const visibleWins = isMobile ? wins.slice(0, 3) : wins;
 
   return (
-    <div className="w-full overflow-hidden">
+    <div ref={containerRef} className="w-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-center gap-2 mb-4">
         <div className="relative flex h-2 w-2">
@@ -77,51 +119,77 @@ export function LiveWinsTicker() {
         </span>
       </div>
 
-      {/* Wins Feed */}
-      <div className="relative h-[180px] overflow-hidden">
+      {/* Wins Feed - Reduced height on mobile */}
+      <div className={`relative overflow-hidden ${isMobile ? 'h-[120px]' : 'h-[180px]'}`}>
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#050505] pointer-events-none z-10" />
 
-        <motion.div layout className="space-y-2">
-          {wins.map((win, index) => (
-            <motion.div
-              key={win.id}
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1 - index * 0.15, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-              className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[rgba(16,185,129,0.08)] border border-emerald-500/20 backdrop-blur-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-ivory/90">{win.trader}</span>
-                    <span className="text-xs text-muted-foreground/60">•</span>
-                    <span className="text-xs font-mono text-muted-foreground">{win.ticker}</span>
+        {/* Use AnimatePresence with mode="popLayout" for smoother transitions */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div layout="position" className="space-y-2">
+            {visibleWins.map((win, index) => (
+              <motion.div
+                key={win.id}
+                layout
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1 - index * 0.2, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{
+                  duration: 0.3,
+                  ease: "easeOut",
+                  layout: { duration: 0.2 }
+                }}
+                className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[rgba(16,185,129,0.08)] border border-emerald-500/20 backdrop-blur-sm will-change-transform"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <span className="text-xs text-muted-foreground/60">{win.time}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-ivory/90">{win.trader}</span>
+                      <span className="text-xs text-muted-foreground/60">•</span>
+                      <span className="text-xs font-mono text-muted-foreground">{win.ticker}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground/60">{win.time}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-lg font-bold text-emerald-400 font-mono">{win.gain}</span>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-lg font-bold text-emerald-400 font-mono">{win.gain}</span>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
-}
+});
 
 // Compact inline ticker for hero section
-export function HeroWinsBadge() {
+export const HeroWinsBadge = memo(function HeroWinsBadge() {
   const [currentWin, setCurrentWin] = useState(0);
+  const isVisible = useRef(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Intersection Observer - pause when not visible
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible.current = entry.isIntersecting;
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
+      if (!isVisible.current) return;
       setCurrentWin((prev) => (prev + 1) % SAMPLE_WINS.length);
     }, 3000);
     return () => clearInterval(interval);
@@ -131,6 +199,7 @@ export function HeroWinsBadge() {
 
   return (
     <motion.div
+      ref={containerRef}
       className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/30 backdrop-blur-sm"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -140,18 +209,20 @@ export function HeroWinsBadge() {
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
       </div>
-      <motion.div
-        key={currentWin}
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -5 }}
-        transition={{ duration: 0.3 }}
-        className="flex items-center gap-2"
-      >
-        <span className="text-xs text-ivory/70">{win.trader} just hit</span>
-        <span className="text-sm font-bold text-emerald-400 font-mono">{win.gain}</span>
-        <span className="text-xs text-ivory/70">on {win.ticker}</span>
-      </motion.div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentWin}
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -5 }}
+          transition={{ duration: 0.3 }}
+          className="flex items-center gap-2"
+        >
+          <span className="text-xs text-ivory/70">{win.trader} just hit</span>
+          <span className="text-sm font-bold text-emerald-400 font-mono">{win.gain}</span>
+          <span className="text-xs text-ivory/70">on {win.ticker}</span>
+        </motion.div>
+      </AnimatePresence>
     </motion.div>
   );
-}
+});

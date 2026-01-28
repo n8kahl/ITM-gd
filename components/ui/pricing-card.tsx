@@ -4,7 +4,25 @@ import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
+
+// Detect touch devices to disable 3D tilt
+function useIsTouchDevice() {
+  const [isTouch, setIsTouch] = useState(false);
+
+  useEffect(() => {
+    const checkTouch = () => {
+      setIsTouch(
+        'ontouchstart' in window ||
+        navigator.maxTouchPoints > 0 ||
+        window.matchMedia('(pointer: coarse)').matches
+      );
+    };
+    checkTouch();
+  }, []);
+
+  return isTouch;
+}
 
 interface PricingCardProps {
   name: string;
@@ -218,8 +236,9 @@ export function PricingCard({
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const isTouchDevice = useIsTouchDevice();
 
-  // Mouse position for 3D tilt
+  // Mouse position for 3D tilt (disabled on touch devices)
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
@@ -229,7 +248,8 @@ export function PricingCard({
   const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-8, 8]), springConfig);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    // Disable 3D tilt on touch devices
+    if (isTouchDevice || !cardRef.current) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -272,12 +292,12 @@ export function PricingCard({
       onMouseLeave={handleMouseLeave}
       onClick={handleCardClick}
     >
-      {/* 3D Tilt Container */}
+      {/* 3D Tilt Container - disabled on touch devices */}
       <motion.div
         className="relative h-full [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
         style={{
-          rotateX: isHovered ? rotateX : 0,
-          rotateY: isHovered ? rotateY : 0,
+          rotateX: isHovered && !isTouchDevice ? rotateX : 0,
+          rotateY: isHovered && !isTouchDevice ? rotateY : 0,
           transformStyle: "preserve-3d",
         }}
         whileHover={isElite ? { y: -8, scale: 1.02 } : { y: -4, scale: 1.01 }}
@@ -288,57 +308,36 @@ export function PricingCard({
           <div className="absolute -inset-[1px] rounded-2xl bg-white/5 -z-10" />
         )}
 
-        {/* Elite Card - Liquid Metal Shimmer Border */}
+        {/* Elite Card - CSS Shimmer Border (more performant than Framer Motion) */}
         {isElite && (
           <>
-            <motion.div
+            {/* Base gradient border */}
+            <div
               className="absolute -inset-[2px] rounded-2xl -z-10"
               style={{
                 background: "linear-gradient(135deg, rgba(232,228,217,0.4) 0%, rgba(212,175,55,0.3) 25%, rgba(232,228,217,0.5) 50%, rgba(192,192,192,0.3) 75%, rgba(232,228,217,0.4) 100%)",
               }}
-              animate={{
-                backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
-              }}
-              transition={{
-                duration: 5,
-                repeat: Infinity,
-                ease: "linear",
-              }}
             />
-            <motion.div
-              className="absolute -inset-[2px] rounded-2xl -z-10 opacity-60"
-              animate={{
-                background: [
-                  "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
-                  "linear-gradient(90deg, transparent 100%, rgba(255,255,255,0.3) 150%, transparent 200%)",
-                ],
-                backgroundPosition: ["-200% 0%", "200% 0%"],
-              }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                ease: "linear",
-              }}
-              style={{
-                backgroundSize: "200% 100%",
-              }}
-            />
-            <motion.div
-              className="absolute -inset-[2px] rounded-2xl -z-20"
-              animate={{
-                boxShadow: isHovered
-                  ? [
-                      "0 0 30px rgba(232,228,217,0.3), 0 0 60px rgba(212,175,55,0.2)",
-                      "0 0 40px rgba(232,228,217,0.4), 0 0 80px rgba(212,175,55,0.3)",
-                      "0 0 30px rgba(232,228,217,0.3), 0 0 60px rgba(212,175,55,0.2)",
-                    ]
-                  : "0 0 20px rgba(232,228,217,0.15), 0 0 40px rgba(212,175,55,0.1)",
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
+            {/* CSS Shimmer animation - uses GPU-accelerated transform */}
+            <div
+              className="absolute -inset-[2px] rounded-2xl -z-10 overflow-hidden"
+            >
+              <div
+                className="absolute inset-0 animate-shimmer"
+                style={{
+                  background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)",
+                  backgroundSize: "200% 100%",
+                }}
+              />
+            </div>
+            {/* Glow effect */}
+            <div
+              className={cn(
+                "absolute -inset-[2px] rounded-2xl -z-20 transition-all duration-500",
+                isHovered
+                  ? "shadow-[0_0_40px_rgba(232,228,217,0.4),0_0_80px_rgba(212,175,55,0.3)]"
+                  : "shadow-[0_0_20px_rgba(232,228,217,0.15),0_0_40px_rgba(212,175,55,0.1)]"
+              )}
             />
           </>
         )}
@@ -420,20 +419,32 @@ export function PricingCard({
                 {name}
               </h3>
 
-              {/* Price */}
-              <div className="mb-3">
+              {/* Price - Improved typography hierarchy */}
+              <div className="mb-3 flex items-baseline justify-center gap-1">
+                {/* Currency symbol - smaller */}
                 <span
                   className={cn(
-                    "text-5xl price-display",
+                    "text-2xl font-light align-top relative -top-3",
+                    isElite && "text-champagne/70",
+                    isUnavailable && "text-smoke/30"
+                  )}
+                >
+                  $
+                </span>
+                {/* Price amount - larger, bolder */}
+                <span
+                  className={cn(
+                    "text-6xl md:text-7xl font-serif font-semibold tracking-tight",
                     isElite && "text-champagne",
                     isUnavailable && "text-smoke/40"
                   )}
                 >
-                  {price}
+                  {price.replace('$', '')}
                 </span>
+                {/* Period - smaller, muted */}
                 <span className={cn(
-                  "text-lg",
-                  isElite ? "text-muted-foreground" : "text-muted-foreground/50"
+                  "text-base ml-1",
+                  isElite ? "text-muted-foreground/70" : "text-muted-foreground/40"
                 )}>{period}</span>
               </div>
 

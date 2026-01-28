@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState, useRef, ReactNode } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -122,11 +123,14 @@ export function BentoCard({
               "bg-[rgba(10,10,11,0.8)] border border-white/[0.04]"
             )}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={image}
               alt=""
-              className="w-full h-full object-cover"
+              fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              className="object-cover"
+              loading="lazy"
+              placeholder="empty"
             />
             {/* Bottom fade gradient */}
             <div

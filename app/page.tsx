@@ -75,6 +75,7 @@ export default function Home() {
                     alt="TradeITM"
                     width={600}
                     height={200}
+                    sizes="(max-width: 768px) 80vw, 600px"
                     className="w-[80vw] md:w-[600px] h-auto object-contain drop-shadow-[0_0_40px_rgba(4,120,87,0.3)]"
                     priority
                   />

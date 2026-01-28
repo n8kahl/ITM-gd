@@ -43,9 +43,20 @@ export function FloatingNavbar() {
         "fixed top-0 left-0 right-0 z-50",
         "transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
         isScrolled
-          ? "bg-[rgba(10,10,11,0.85)] backdrop-blur-[60px] border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.3)]"
-          : "bg-transparent border-b border-transparent"
+          ? "bg-[rgba(10,10,11,0.85)] backdrop-blur-[60px] shadow-[0_4px_30px_rgba(0,0,0,0.3)]"
+          : "bg-transparent"
       )}
+      style={{
+        // Gradient border only when scrolled - more elegant than solid border
+        borderBottom: isScrolled
+          ? '1px solid transparent'
+          : '1px solid transparent',
+        backgroundImage: isScrolled
+          ? 'linear-gradient(rgba(10,10,11,0.85), rgba(10,10,11,0.85)), linear-gradient(90deg, transparent 0%, rgba(232,228,217,0.15) 50%, transparent 100%)'
+          : undefined,
+        backgroundOrigin: 'padding-box, border-box',
+        backgroundClip: 'padding-box, border-box',
+      }}
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
@@ -109,7 +120,7 @@ export function FloatingNavbar() {
           </button>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu - Smoother spring animation */}
         <motion.div
           initial={false}
           animate={{
@@ -117,17 +128,35 @@ export function FloatingNavbar() {
             opacity: isMobileMenuOpen ? 1 : 0,
           }}
           transition={{
-            duration: 0.4,
-            ease: [0.25, 0.46, 0.45, 0.94],
+            height: {
+              type: "spring",
+              stiffness: 300,
+              damping: 30,
+              mass: 0.8,
+            },
+            opacity: {
+              duration: 0.2,
+              ease: "easeOut",
+            },
           }}
           className="md:hidden overflow-hidden"
         >
           <div className="py-4 space-y-1 border-t border-white/[0.08]">
-            {navLinks.map((link) => (
-              <a
+            {navLinks.map((link, index) => (
+              <motion.a
                 key={link.href}
                 href={link.href}
                 onClick={() => setIsMobileMenuOpen(false)}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{
+                  opacity: isMobileMenuOpen ? 1 : 0,
+                  x: isMobileMenuOpen ? 0 : -10,
+                }}
+                transition={{
+                  delay: isMobileMenuOpen ? index * 0.05 : 0,
+                  duration: 0.2,
+                  ease: "easeOut",
+                }}
                 className={cn(
                   "flex items-center h-12 px-2",
                   "text-base font-light tracking-wide",
@@ -136,11 +165,23 @@ export function FloatingNavbar() {
                 )}
               >
                 {link.label}
-              </a>
+              </motion.a>
             ))}
 
             {/* Mobile CTA Button - Full Width */}
-            <div className="pt-3">
+            <motion.div
+              className="pt-3"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{
+                opacity: isMobileMenuOpen ? 1 : 0,
+                y: isMobileMenuOpen ? 0 : 10,
+              }}
+              transition={{
+                delay: isMobileMenuOpen ? navLinks.length * 0.05 : 0,
+                duration: 0.25,
+                ease: "easeOut",
+              }}
+            >
               <Button
                 asChild
                 variant="luxury"
@@ -151,7 +192,7 @@ export function FloatingNavbar() {
                   Join Now
                 </a>
               </Button>
-            </div>
+            </motion.div>
           </div>
         </motion.div>
       </nav>
