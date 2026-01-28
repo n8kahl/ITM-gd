@@ -9,9 +9,9 @@ const WAVE_SPEED = 0.15;
 const WAVE_AMPLITUDE = 0.8;
 const WAVE_FREQUENCY = 0.4;
 
-// Colors
-const EMERALD = new THREE.Color("#10B981");
-const GOLD = new THREE.Color("#D4AF37");
+// Colors - Platinum & Signal Green
+const SIGNAL_GREEN = new THREE.Color("#00E676");
+const PLATINUM = new THREE.Color("#E5E4E2");
 
 function ParticleWave() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -78,10 +78,10 @@ function ParticleWave() {
       dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, dummy.matrix);
 
-      // Interpolate between emerald and gold based on mix value
+      // Interpolate between signal green and platinum based on mix value
       // Add time-based color shifting for shimmer effect
       const shiftedMix = (mix + Math.sin(time * 0.5 + i * 0.005) * 0.15 + 1) % 1;
-      color.copy(EMERALD).lerp(GOLD, shiftedMix);
+      color.copy(SIGNAL_GREEN).lerp(PLATINUM, shiftedMix);
       meshRef.current.setColorAt(i, color);
     }
 
@@ -139,7 +139,7 @@ export function HeroBackground() {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(16, 185, 129, 0.08) 0%, transparent 50%)`,
+          background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0, 230, 118, 0.08) 0%, transparent 50%)`,
         }}
       />
 

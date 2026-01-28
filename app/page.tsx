@@ -59,11 +59,11 @@ export default function Home() {
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-6">
-                  {/* Primary Button - Gold/White with Glow */}
+                  {/* Primary Button - Platinum with Glow */}
                   <Button
                     asChild
                     size="lg"
-                    className="relative group bg-gradient-to-r from-gold-dark via-gold to-gold-light text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(212,175,55,0.4)]"
+                    className="relative group bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(229,228,226,0.4)]"
                   >
                     <a href="#pricing" className="flex items-center gap-2">
                       Get Started
@@ -155,7 +155,7 @@ export default function Home() {
             <StaggerItem key={idx}>
               <Card className="bg-card/50 backdrop-blur border-border/40 h-full">
                 <CardContent className="pt-6 text-center">
-                  <div className="text-3xl md:text-4xl font-bold text-primary mb-2">{stat.value}</div>
+                  <div className="text-3xl md:text-4xl stat-value text-primary mb-2">{stat.value}</div>
                   <div className="text-sm text-muted-foreground">{stat.label}</div>
                 </CardContent>
               </Card>
@@ -516,14 +516,14 @@ export default function Home() {
       {/* CTA Section */}
       <section className="container mx-auto px-4 py-20">
         <RevealContent>
-          <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-gold-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
+          <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-platinum-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
             {/* Background gradient accent */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-gold/5 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-platinum/5 pointer-events-none" />
 
             <div className="relative z-10">
               <h2 className="text-3xl md:text-5xl font-bold">
                 Ready To Elevate Your{" "}
-                <span className="text-gradient-gold">Trading?</span>
+                <span className="text-gradient-platinum">Trading?</span>
               </h2>
               <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
                 Join thousands of successful traders who trust Trade In The Money for premium signals and education.
@@ -531,7 +531,7 @@ export default function Home() {
               <Button
                 asChild
                 size="lg"
-                className="bg-gradient-to-r from-gold-dark via-gold to-gold-light text-void font-bold text-lg px-10 h-14 mt-8 rounded-xl hover:scale-105 hover:shadow-[0_0_40px_rgba(212,175,55,0.4)] transition-all duration-300"
+                className="bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light text-void font-bold text-lg px-10 h-14 mt-8 rounded-xl hover:scale-105 hover:shadow-[0_0_40px_rgba(229,228,226,0.4)] transition-all duration-300"
               >
                 <a href="#pricing">Start Trading Smarter Today</a>
               </Button>
@@ -541,20 +541,20 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gold/10 bg-[rgba(5,5,5,0.8)] backdrop-blur-xl">
+      <footer className="border-t border-platinum/10 bg-[rgba(5,5,5,0.8)] backdrop-blur-xl">
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3">
               <Image src="/logo.png" alt="TITM Logo" width={40} height={40} className="h-10 w-auto" />
               <div>
-                <div className="font-bold text-gradient-gold">Trade In The Money</div>
+                <div className="font-bold text-gradient-platinum">Trade In The Money</div>
                 <div className="text-xs text-muted-foreground">© 2026 All rights reserved</div>
               </div>
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-gold transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-gold transition-colors">Terms of Service</a>
-              <a href="mailto:support@tradeinthemoney.com" className="hover:text-gold transition-colors">Contact</a>
+              <a href="#" className="hover:text-platinum transition-colors">Privacy Policy</a>
+              <a href="#" className="hover:text-platinum transition-colors">Terms of Service</a>
+              <a href="mailto:support@tradeinthemoney.com" className="hover:text-platinum transition-colors">Contact</a>
             </div>
           </div>
           <div className="mt-6 text-center text-xs text-muted-foreground">
