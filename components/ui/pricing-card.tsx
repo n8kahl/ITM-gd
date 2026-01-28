@@ -33,55 +33,112 @@ export function PricingCard({
   popular = false,
   tier,
 }: PricingCardProps) {
+  const isElite = tier === "elite";
   const isPro = tier === "pro";
+  const isStarter = tier === "starter";
 
   return (
     <motion.div
       className={cn(
         "relative rounded-2xl overflow-hidden h-full",
-        isPro ? "lg:scale-105 z-10" : ""
+        isElite ? "lg:scale-105 z-10" : ""
       )}
       whileHover={{ y: -8 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
-      {/* Popular Badge - Platinum gradient */}
-      {popular && (
-        <div className="absolute -top-px left-0 right-0 h-1 bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light" />
+      {/* Elite Card - Neon Green Pulsing Border Glow */}
+      {isElite && (
+        <motion.div
+          className="absolute -inset-[2px] rounded-2xl -z-10"
+          style={{
+            background: "linear-gradient(135deg, #00E676, #00C853, #00E676)",
+          }}
+          animate={{
+            boxShadow: [
+              "0 0 20px rgba(0, 230, 118, 0.4), 0 0 40px rgba(0, 230, 118, 0.2)",
+              "0 0 30px rgba(0, 230, 118, 0.6), 0 0 60px rgba(0, 230, 118, 0.3)",
+              "0 0 20px rgba(0, 230, 118, 0.4), 0 0 40px rgba(0, 230, 118, 0.2)",
+            ],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      )}
+
+      {/* Pro Card - Platinum glow */}
+      {isPro && (
+        <div className="absolute -inset-1 bg-gradient-to-r from-platinum/20 via-platinum/30 to-platinum/20 rounded-2xl blur-xl -z-10 opacity-60" />
       )}
 
       {/* Card Container */}
       <div
         className={cn(
-          "relative h-full p-6 md:p-8 rounded-2xl border",
-          // Pro card - Black Titanium metallic look with platinum accents
-          isPro
-            ? "bg-gradient-to-br from-[#1a1a1a] via-[#2d2d2d] to-[#1a1a1a] border-platinum/30"
-            : // Glass cards for Starter and Elite
-              "glass-card-heavy border-white/10"
+          "relative h-full p-6 md:p-8 rounded-2xl border overflow-hidden",
+          // Elite - Matte Black
+          isElite && "bg-[#0a0a0a] border-primary/50",
+          // Pro - Brushed Platinum metallic
+          isPro && "bg-gradient-to-br from-[#d4d4d4] via-[#f5f5f5] to-[#d4d4d4] border-white/50",
+          // Starter - Ghost frosted glass
+          isStarter && "bg-[rgba(15,15,15,0.8)] backdrop-blur-xl border-white/10"
         )}
       >
-        {/* Metallic sheen overlay for Pro card - platinum */}
+        {/* Elite - Scanner Light Effect */}
+        {isElite && (
+          <motion.div
+            className="absolute left-0 right-0 h-[2px] pointer-events-none z-20"
+            style={{
+              background: "linear-gradient(90deg, transparent, rgba(0, 230, 118, 0.6), transparent)",
+              boxShadow: "0 0 20px rgba(0, 230, 118, 0.5), 0 0 40px rgba(0, 230, 118, 0.3)",
+            }}
+            animate={{
+              top: ["-2px", "100%"],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              repeatDelay: 2,
+              ease: "linear",
+            }}
+          />
+        )}
+
+        {/* Pro - Brushed metal texture overlay */}
         {isPro && (
           <>
-            {/* Primary metallic sheen */}
+            {/* Horizontal brush lines */}
             <div
-              className="absolute inset-0 opacity-20 pointer-events-none"
+              className="absolute inset-0 opacity-[0.08] pointer-events-none"
               style={{
-                background:
-                  "linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.1) 25%, transparent 50%, rgba(255,255,255,0.05) 75%, transparent 100%)",
+                backgroundImage: `repeating-linear-gradient(
+                  0deg,
+                  transparent,
+                  transparent 2px,
+                  rgba(0,0,0,0.1) 2px,
+                  rgba(0,0,0,0.1) 3px
+                )`,
               }}
             />
-            {/* Secondary diagonal shine - platinum */}
+            {/* Diagonal shine */}
             <div
-              className="absolute inset-0 opacity-10 pointer-events-none"
+              className="absolute inset-0 opacity-30 pointer-events-none"
               style={{
-                background:
-                  "linear-gradient(45deg, transparent 30%, rgba(229,228,226,0.3) 50%, transparent 70%)",
+                background: "linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.5) 25%, transparent 50%, rgba(255,255,255,0.3) 75%, transparent 100%)",
               }}
             />
-            {/* Edge highlight */}
-            <div className="absolute inset-0 rounded-2xl pointer-events-none border border-white/5" />
           </>
+        )}
+
+        {/* Starter - Frosted overlay */}
+        {isStarter && (
+          <div
+            className="absolute inset-0 opacity-30 pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 60%)",
+            }}
+          />
         )}
 
         {/* Card Content */}
@@ -93,16 +150,34 @@ export function PricingCard({
               alt={`${name} membership card`}
               width={200}
               height={120}
-              className="object-contain drop-shadow-2xl"
+              className={cn(
+                "object-contain",
+                isElite && "drop-shadow-[0_0_20px_rgba(0,230,118,0.3)]",
+                isPro && "drop-shadow-lg",
+                isStarter && "drop-shadow-xl opacity-90"
+              )}
             />
           </div>
 
           {/* Header */}
           <div className="text-center mb-6">
-            {/* Popular Tag */}
-            {popular && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-platinum/10 border border-platinum/30 mb-4">
-                <span className="text-xs font-semibold text-platinum uppercase tracking-wider">
+            {/* Elite Tag */}
+            {isElite && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/20 border border-primary/40 mb-4">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+                <span className="text-xs font-semibold text-primary uppercase tracking-wider font-mono">
+                  RECOMMENDED
+                </span>
+              </div>
+            )}
+
+            {/* Popular Tag for Pro */}
+            {popular && isPro && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/10 border border-black/20 mb-4">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Most Popular
                 </span>
               </div>
@@ -112,7 +187,9 @@ export function PricingCard({
             <h3
               className={cn(
                 "text-2xl font-bold mb-2",
-                isPro ? "text-gradient-platinum" : "text-smoke"
+                isElite && "text-gradient-signal-green",
+                isPro && "text-gray-800",
+                isStarter && "text-smoke/80"
               )}
             >
               {name}
@@ -123,25 +200,41 @@ export function PricingCard({
               <span
                 className={cn(
                   "text-5xl price-display",
-                  isPro ? "text-white" : "text-smoke"
+                  isElite && "text-white",
+                  isPro && "text-gray-900",
+                  isStarter && "text-smoke/70"
                 )}
               >
                 {price}
               </span>
-              <span className="text-muted-foreground text-lg">{period}</span>
+              <span
+                className={cn(
+                  "text-lg",
+                  isPro ? "text-gray-600" : "text-muted-foreground"
+                )}
+              >
+                {period}
+              </span>
             </div>
 
             {/* Description */}
-            <p className="text-muted-foreground text-sm">{description}</p>
+            <p
+              className={cn(
+                "text-sm",
+                isPro ? "text-gray-600" : "text-muted-foreground"
+              )}
+            >
+              {description}
+            </p>
           </div>
 
           {/* Divider */}
           <div
             className={cn(
               "h-px w-full mb-6",
-              isPro
-                ? "bg-gradient-to-r from-transparent via-platinum/30 to-transparent"
-                : "bg-gradient-to-r from-transparent via-white/10 to-transparent"
+              isElite && "bg-gradient-to-r from-transparent via-primary/40 to-transparent",
+              isPro && "bg-gradient-to-r from-transparent via-gray-400 to-transparent",
+              isStarter && "bg-gradient-to-r from-transparent via-white/10 to-transparent"
             )}
           />
 
@@ -152,17 +245,28 @@ export function PricingCard({
                 <div
                   className={cn(
                     "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                    isPro ? "bg-primary/20" : "bg-primary/10"
+                    isElite && "bg-primary/30",
+                    isPro && "bg-gray-800/20",
+                    isStarter && "bg-white/10"
                   )}
                 >
                   <Check
                     className={cn(
                       "w-3 h-3",
-                      isPro ? "text-primary" : "text-primary/80"
+                      isElite && "text-primary",
+                      isPro && "text-gray-700",
+                      isStarter && "text-smoke/60"
                     )}
                   />
                 </div>
-                <span className="text-sm text-smoke/80 leading-relaxed">
+                <span
+                  className={cn(
+                    "text-sm leading-relaxed",
+                    isElite && "text-smoke/80",
+                    isPro && "text-gray-700",
+                    isStarter && "text-smoke/60"
+                  )}
+                >
                   {feature}
                 </span>
               </li>
@@ -175,12 +279,12 @@ export function PricingCard({
               asChild
               className={cn(
                 "w-full h-14 text-base font-bold rounded-xl transition-all duration-300",
-                isPro
-                  ? // Pro button - platinum gradient with pulse
-                    "bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light text-void hover:shadow-[0_0_30px_rgba(229,228,226,0.4)] animate-pulse-subtle"
-                  : tier === "elite"
-                    ? "bg-gradient-to-r from-signal-green-dark via-primary to-signal-green-light text-void hover:shadow-[0_0_20px_rgba(0,230,118,0.3)]"
-                    : "bg-white/10 text-smoke hover:bg-white/20 border border-white/10"
+                // Elite - Solid Electric Green
+                isElite && "bg-primary hover:bg-primary/90 text-void hover:shadow-[0_0_30px_rgba(0,230,118,0.5)]",
+                // Pro - Solid Black
+                isPro && "bg-gray-900 hover:bg-black text-white hover:shadow-lg",
+                // Starter - Ghost outline
+                isStarter && "bg-transparent text-smoke/70 border border-white/20 hover:border-white/40 hover:bg-white/5"
               )}
             >
               <a
@@ -189,34 +293,52 @@ export function PricingCard({
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2"
               >
-                {isPro ? "Join Now" : `Get ${name}`}
+                {isElite ? "Join Elite" : isPro ? "Get Pro" : "Get Started"}
               </a>
             </Button>
 
             {/* Security Badge */}
-            <p className="text-center text-xs text-muted-foreground/60">
+            <p
+              className={cn(
+                "text-center text-xs",
+                isPro ? "text-gray-500" : "text-muted-foreground/60"
+              )}
+            >
               Secure transaction powered by{" "}
-              <span className="text-muted-foreground/80">Whop</span> &{" "}
-              <span className="text-muted-foreground/80">Stripe</span>
+              <span className={isPro ? "text-gray-600" : "text-muted-foreground/80"}>
+                Whop
+              </span>{" "}
+              &{" "}
+              <span className={isPro ? "text-gray-600" : "text-muted-foreground/80"}>
+                Stripe
+              </span>
             </p>
           </div>
         </div>
 
-        {/* Card texture overlay */}
-        {isPro && (
-          <div
-            className="absolute inset-0 opacity-[0.02] pointer-events-none"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-            }}
-          />
+        {/* Elite - Corner accents */}
+        {isElite && (
+          <>
+            <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-primary/50 rounded-tl-2xl" />
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary/50 rounded-tr-2xl" />
+            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-primary/50 rounded-bl-2xl" />
+            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-primary/50 rounded-br-2xl" />
+          </>
         )}
-      </div>
 
-      {/* Glow effect for Pro card - platinum */}
-      {isPro && (
-        <div className="absolute -inset-1 bg-gradient-to-r from-platinum/20 via-platinum/10 to-platinum/20 rounded-2xl blur-xl -z-10 opacity-50" />
-      )}
+        {/* Noise texture for all cards */}
+        <div
+          className={cn(
+            "absolute inset-0 pointer-events-none",
+            isElite && "opacity-[0.03]",
+            isPro && "opacity-[0.02]",
+            isStarter && "opacity-[0.02]"
+          )}
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+          }}
+        />
+      </div>
     </motion.div>
   );
 }
