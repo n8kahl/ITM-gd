@@ -65,13 +65,13 @@ export default function Home() {
             </p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4 w-full sm:w-auto">
               {/* Primary Button - Solid Champagne/Platinum */}
               <Button
                 asChild
                 size="xl"
                 variant="luxury-champagne"
-                className="min-w-[200px] rounded-sm font-medium tracking-wide"
+                className="w-full sm:w-auto sm:min-w-[200px] rounded-sm font-medium tracking-wide"
               >
                 <a href="#pricing">Request Access</a>
               </Button>
@@ -79,7 +79,7 @@ export default function Home() {
               {/* Secondary Button - Text Link with Underline */}
               <a
                 href="#features"
-                className="group inline-flex items-center gap-2 text-base font-light text-champagne/80 hover:text-champagne transition-colors duration-300"
+                className="group inline-flex items-center justify-center gap-2 text-base font-light text-champagne/80 hover:text-champagne transition-colors duration-300 h-12 sm:h-auto"
               >
                 <span className="underline underline-offset-4 decoration-champagne/30 group-hover:decoration-champagne/60 transition-all duration-300">
                   View Performance
@@ -156,7 +156,7 @@ export default function Home() {
           </div>
 
           {/* Bento Grid Layout */}
-          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6" staggerDelay={0.1}>
+          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
             {/* Real-Time Signals - Wide Card (2 columns) with Live Candlestick */}
             <StaggerItem className="md:col-span-2 lg:col-span-2">
               <BentoCard

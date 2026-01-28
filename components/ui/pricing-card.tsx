@@ -97,28 +97,9 @@ export function PricingCard({
         whileHover={{ y: -8, scale: 1.02 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        {/* Pro Card - Signal Green Glowing Border */}
+        {/* Pro Card - Subtle border (disabled state) */}
         {isPro && (
-          <motion.div
-            className="absolute -inset-[2px] rounded-2xl -z-10"
-            style={{
-              background: "linear-gradient(135deg, #00E676, #00C853, #00E676)",
-            }}
-            animate={{
-              boxShadow: isHovered
-                ? [
-                    "0 0 25px rgba(0, 230, 118, 0.5), 0 0 50px rgba(0, 230, 118, 0.3)",
-                    "0 0 35px rgba(0, 230, 118, 0.7), 0 0 70px rgba(0, 230, 118, 0.4)",
-                    "0 0 25px rgba(0, 230, 118, 0.5), 0 0 50px rgba(0, 230, 118, 0.3)",
-                  ]
-                : "0 0 20px rgba(0, 230, 118, 0.3), 0 0 40px rgba(0, 230, 118, 0.15)",
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          />
+          <div className="absolute -inset-[1px] rounded-2xl bg-white/5 -z-10" />
         )}
 
         {/* Elite Card - Subtle border glow */}
@@ -140,27 +121,18 @@ export function PricingCard({
             isStarter && "bg-[rgba(15,15,15,0.8)] backdrop-blur-xl border-white/10"
           )}
         >
-          {/* Pro - Animated Diagonal Sheen */}
-          {isPro && (
-            <motion.div
-              className="absolute inset-0 pointer-events-none z-10"
-              initial={{ x: "-100%", opacity: 0 }}
-              animate={{
-                x: ["−150%", "250%"],
-                opacity: [0, 0.3, 0.3, 0],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                repeatDelay: 5,
-                ease: "easeInOut",
-              }}
-              style={{
-                background:
-                  "linear-gradient(105deg, transparent 20%, rgba(0, 230, 118, 0.15) 40%, rgba(255, 255, 255, 0.2) 50%, rgba(0, 230, 118, 0.15) 60%, transparent 80%)",
-                transform: "skewX(-20deg)",
-              }}
-            />
+          {/* Not Available Banner - Starter & Pro */}
+          {(isPro || isStarter) && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+              <div className="absolute inset-0 bg-onyx/60 backdrop-blur-[2px]" />
+              <div className="relative transform -rotate-12">
+                <div className="px-8 py-3 bg-champagne/95 shadow-lg">
+                  <span className="text-sm font-semibold text-onyx uppercase tracking-widest">
+                    Coming Soon
+                  </span>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Pro - Brushed metal texture */}
@@ -246,24 +218,17 @@ export function PricingCard({
 
             {/* Header */}
             <div className="text-center mb-6">
-              {/* Pro Tag */}
-              {isPro && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/20 border border-primary/40 mb-4">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                  <span className="text-xs font-semibold text-primary uppercase tracking-wider font-mono">
-                    MOST POPULAR
-                  </span>
-                </div>
-              )}
+              {/* Pro Tag - Removed as not available */}
 
-              {/* Elite Tag */}
+              {/* Elite Tag - Primary Available Option */}
               {isElite && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 mb-4">
-                  <span className="text-xs font-semibold text-platinum uppercase tracking-wider font-mono">
-                    THE BLACK CARD
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-wealth-emerald/20 border border-wealth-emerald/40 mb-4">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-wealth-emerald opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-wealth-emerald"></span>
+                  </span>
+                  <span className="text-xs font-semibold text-champagne uppercase tracking-wider font-mono">
+                    NOW AVAILABLE
                   </span>
                 </div>
               )}
@@ -349,37 +314,41 @@ export function PricingCard({
 
             {/* CTA Button */}
             <div className="space-y-3">
-              <Button
-                asChild
-                className={cn(
-                  "w-full h-14 text-base font-bold rounded-xl transition-all duration-300",
-                  // Pro - Solid Electric Green
-                  isPro &&
-                    "bg-primary hover:bg-primary/90 text-void hover:shadow-[0_0_30px_rgba(0,230,118,0.5)]",
-                  // Elite - Platinum gradient
-                  isElite &&
-                    "bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light text-void hover:shadow-[0_0_30px_rgba(229,228,226,0.4)]",
-                  // Starter - Ghost outline
-                  isStarter &&
-                    "bg-transparent text-smoke/70 border border-white/20 hover:border-white/40 hover:bg-white/5"
-                )}
-              >
-                <a
-                  href={whopLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 font-mono"
+              {isElite ? (
+                <Button
+                  asChild
+                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-300 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_30px_rgba(232,228,217,0.4)]"
                 >
-                  {isPro ? "EXECUTE" : isElite ? "APPLY NOW" : "GET STARTED"}
-                </a>
-              </Button>
+                  <a
+                    href={whopLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 font-mono"
+                  >
+                    APPLY NOW
+                  </a>
+                </Button>
+              ) : (
+                <Button
+                  disabled
+                  className={cn(
+                    "w-full h-14 text-base font-bold rounded-xl cursor-not-allowed opacity-50",
+                    isPro && "bg-primary/30 text-smoke/50",
+                    isStarter && "bg-white/10 text-smoke/40 border border-white/10"
+                  )}
+                >
+                  <span className="font-mono">NOT AVAILABLE</span>
+                </Button>
+              )}
 
               {/* Security Badge */}
-              <p className="text-center text-xs text-muted-foreground/60">
-                Secure transaction powered by{" "}
-                <span className="text-muted-foreground/80">Whop</span> &{" "}
-                <span className="text-muted-foreground/80">Stripe</span>
-              </p>
+              {isElite && (
+                <p className="text-center text-xs text-muted-foreground/60">
+                  Secure transaction powered by{" "}
+                  <span className="text-muted-foreground/80">Whop</span> &{" "}
+                  <span className="text-muted-foreground/80">Stripe</span>
+                </p>
+              )}
             </div>
           </div>
 
