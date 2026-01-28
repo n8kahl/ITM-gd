@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState, useRef } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -12,6 +13,7 @@ interface BentoCardProps {
   className?: string;
   iconClassName?: string;
   spotlight?: "emerald" | "gold";
+  image?: string;
 }
 
 export function BentoCard({
@@ -21,6 +23,7 @@ export function BentoCard({
   className,
   iconClassName,
   spotlight = "emerald",
+  image,
 }: BentoCardProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
@@ -86,24 +89,35 @@ export function BentoCard({
 
       {/* Content */}
       <div className="relative z-10 p-6 md:p-8 h-full flex flex-col">
-        {/* Icon */}
-        <div
-          className={cn(
-            "w-14 h-14 md:w-16 md:h-16 rounded-xl flex items-center justify-center mb-6",
-            "bg-gradient-to-br",
-            spotlight === "gold"
-              ? "from-gold/20 to-gold-dark/10"
-              : "from-primary/20 to-money-green-dark/10",
-            iconClassName
-          )}
-        >
-          <Icon
+        {/* Icon or Image */}
+        {image ? (
+          <div className="relative w-20 h-20 md:w-24 md:h-24 mb-6">
+            <Image
+              src={image}
+              alt={title}
+              fill
+              className="object-contain drop-shadow-lg"
+            />
+          </div>
+        ) : (
+          <div
             className={cn(
-              "w-7 h-7 md:w-8 md:h-8",
-              spotlight === "gold" ? "text-gold" : "text-primary"
+              "w-14 h-14 md:w-16 md:h-16 rounded-xl flex items-center justify-center mb-6",
+              "bg-gradient-to-br",
+              spotlight === "gold"
+                ? "from-gold/20 to-gold-dark/10"
+                : "from-primary/20 to-money-green-dark/10",
+              iconClassName
             )}
-          />
-        </div>
+          >
+            <Icon
+              className={cn(
+                "w-7 h-7 md:w-8 md:h-8",
+                spotlight === "gold" ? "text-gold" : "text-primary"
+              )}
+            />
+          </div>
+        )}
 
         {/* Title */}
         <h3 className="text-xl md:text-2xl font-bold text-smoke mb-3">
