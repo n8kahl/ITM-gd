@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   title: 'Trade In The Money - Premium Trading Signals & Education',
   description: 'Join the elite trading community. Get real-time signals, expert education, and proven strategies from professional traders. 3 Guaranteed 100%+ Trades Every Week.',
   generator: 'v0.app',
-  metadataBase: new URL('https://tradeinthemoney.com'),
+  metadataBase: new URL('https://trade-itm-prod.up.railway.app'),
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
