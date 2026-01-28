@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight } from "lucide-react";
+import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight, Activity } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { HeroBackground } from "@/components/hero-background";
 import { BentoCard } from "@/components/ui/bento-card";
@@ -14,6 +14,7 @@ import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { TickerTape } from "@/components/ui/ticker-tape";
 import { LiveActivityFeed } from "@/components/ui/live-activity-feed";
+import { ScrambleHeadline } from "@/components/ui/text-scramble";
 
 export default function Home() {
   return (
@@ -29,95 +30,179 @@ export default function Home() {
         <TickerTape />
       </div>
 
-      {/* Hero Section - High-Frequency Trading Style */}
-      <section className="relative min-h-[90vh] flex items-center justify-center px-4 py-20 md:py-32 overflow-hidden">
-        {/* 3D Particle Wave Background */}
+      {/* Hero Section - HUD Terminal Style */}
+      <section className="relative min-h-[100vh] flex items-center justify-center px-4 py-20 md:py-32 overflow-hidden">
+        {/* 3D Volatility Surface Background */}
         <HeroBackground />
 
-        <div className="container mx-auto relative z-10">
-          {/* Floating Glass Card Container */}
-          <div className="max-w-5xl mx-auto">
-            <div className="glass-card-heavy p-8 md:p-12 lg:p-16 rounded-2xl border-platinum-glow">
-              <div className="text-center space-y-8">
-                {/* Eyebrow Badge */}
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                  <span className="text-sm font-medium font-mono text-primary">SIGNALS LIVE</span>
-                </div>
+        {/* HUD Overlay Layer */}
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          {/* Top Left - System Status */}
+          <div className="absolute top-24 left-6 md:left-10">
+            <div className="flex items-center gap-3 px-4 py-2 rounded border border-primary/30 bg-void/60 backdrop-blur-sm">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+              </span>
+              <div className="font-mono text-xs">
+                <span className="text-smoke/50">SYSTEM STATUS:</span>
+                <span className="text-primary ml-2 font-semibold">ONLINE</span>
+              </div>
+            </div>
+            {/* Secondary status info */}
+            <div className="mt-2 px-4 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+              <div className="font-mono text-[10px] text-smoke/40 space-y-0.5">
+                <div>LATENCY: <span className="text-primary">12ms</span></div>
+                <div>UPTIME: <span className="text-platinum/60">99.97%</span></div>
+              </div>
+            </div>
+          </div>
 
-                {/* Massive H1 with Platinum Gradient */}
-                <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
-                  <span className="text-gradient-platinum">Trade In The Money</span>
-                </h1>
+          {/* Top Right - Market Volatility Meter */}
+          <div className="absolute top-24 right-6 md:right-10">
+            <div className="px-4 py-3 rounded border border-primary/30 bg-void/60 backdrop-blur-sm min-w-[180px]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-xs text-smoke/50">MARKET VOLATILITY</span>
+                <Activity className="h-3 w-3 text-primary" />
+              </div>
+              {/* Volatility Bar */}
+              <div className="h-2 bg-smoke/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-primary/60 via-primary to-primary/80 rounded-full animate-pulse"
+                  style={{ width: "72%" }}
+                />
+              </div>
+              <div className="flex justify-between mt-1.5 font-mono text-[10px]">
+                <span className="text-smoke/40">LOW</span>
+                <span className="text-primary font-semibold">72%</span>
+                <span className="text-smoke/40">HIGH</span>
+              </div>
+            </div>
+            {/* Secondary metrics */}
+            <div className="mt-2 px-4 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+              <div className="font-mono text-[10px] text-smoke/40 flex gap-4">
+                <div>VIX: <span className="text-primary">18.42</span></div>
+                <div>FEAR: <span className="text-platinum/60">NEUTRAL</span></div>
+              </div>
+            </div>
+          </div>
 
-                {/* Subheadline */}
-                <h2 className="text-2xl md:text-3xl lg:text-4xl font-serif text-smoke/90 font-normal">
-                  Master The Markets With <span className="text-primary font-semibold">Elite Signals</span>
-                </h2>
-
-                {/* Description */}
-                <p className="text-lg md:text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed">
-                  Join an exclusive community of professional traders. Get real-time signals,
-                  comprehensive education, and proven strategies to elevate your trading game.
-                </p>
-
-                {/* CTA Buttons - HFT Style */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-6">
-                  {/* Primary Button - Dark Green bg with Platinum text */}
-                  <Button
-                    asChild
-                    size="lg"
-                    className="relative group bg-gradient-to-r from-signal-green-dark via-primary to-signal-green-dark text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(0,230,118,0.4)]"
-                  >
-                    <a href="#pricing" className="flex items-center gap-2">
-                      <span className="text-gradient-platinum font-bold">Get Started</span>
-                      <ArrowRight className="h-5 w-5 text-platinum transition-transform group-hover:translate-x-1" />
-                    </a>
-                  </Button>
-
-                  {/* Secondary Button - Thin Platinum border, transparent */}
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="lg"
-                    className="bg-transparent text-platinum/80 font-semibold text-lg px-10 h-14 rounded-xl border border-platinum/30 hover:border-platinum/60 hover:text-white hover:shadow-[0_0_20px_rgba(229,228,226,0.15)] transition-all duration-300"
-                  >
-                    <a href="#features">Learn More</a>
-                  </Button>
-                </div>
-
-                {/* Quick Stats - Monospace Numbers */}
-                <div className="flex flex-wrap gap-8 justify-center items-center pt-8 text-sm">
-                  <div className="flex items-center gap-2 text-smoke/70">
-                    <Check className="h-5 w-5 text-primary" />
-                    <span>Real-Time Signals</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-smoke/70">
-                    <Check className="h-5 w-5 text-primary" />
-                    <span className="font-mono">87%</span>
-                    <span>Success Rate</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-smoke/70">
-                    <Check className="h-5 w-5 text-primary" />
-                    <span className="font-mono">10,000+</span>
-                    <span>Members</span>
-                  </div>
+          {/* Bottom Left - Connection Info */}
+          <div className="absolute bottom-24 left-6 md:left-10">
+            <div className="px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+              <div className="font-mono text-[10px] text-smoke/30">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                  SIGNAL FEED ACTIVE
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Live Activity Feed - replaces Trusted By */}
+          {/* Bottom Right - Timestamp */}
+          <div className="absolute bottom-24 right-6 md:right-10">
+            <div className="px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+              <div className="font-mono text-[10px] text-smoke/30">
+                TERMINAL v2.4.1
+              </div>
+            </div>
+          </div>
+
+          {/* Corner Brackets - HUD Frame */}
+          <div className="absolute top-20 left-4 w-8 h-8 border-l-2 border-t-2 border-primary/30" />
+          <div className="absolute top-20 right-4 w-8 h-8 border-r-2 border-t-2 border-primary/30" />
+          <div className="absolute bottom-20 left-4 w-8 h-8 border-l-2 border-b-2 border-primary/30" />
+          <div className="absolute bottom-20 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/30" />
+        </div>
+
+        {/* Main Content - Center */}
+        <div className="container mx-auto relative z-20">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center space-y-8">
+              {/* Eyebrow Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/5 backdrop-blur-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+                <span className="text-sm font-medium font-mono text-primary">SIGNALS LIVE</span>
+              </div>
+
+              {/* Massive H1 with Scramble Effect */}
+              <div className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
+                <ScrambleHeadline
+                  text="TRADE IN THE MONEY"
+                  className="text-gradient-platinum"
+                  as="h1"
+                  speed={70}
+                  delay={600}
+                />
+              </div>
+
+              {/* Subheadline */}
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-serif text-smoke/90 font-normal">
+                Master The Markets With <span className="text-primary font-semibold">Elite Signals</span>
+              </h2>
+
+              {/* Description */}
+              <p className="text-lg md:text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed">
+                Join an exclusive community of professional traders. Get real-time signals,
+                comprehensive education, and proven strategies to elevate your trading game.
+              </p>
+
+              {/* CTA Buttons - HFT Style */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-6">
+                {/* Primary Button - Execute Trade Style */}
+                <Button
+                  asChild
+                  size="lg"
+                  className="relative group btn-glitch bg-gradient-to-r from-signal-green-dark via-primary to-signal-green-dark text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(0,230,118,0.4)]"
+                >
+                  <a href="#pricing" className="flex items-center gap-2">
+                    <span className="font-mono font-bold">EXECUTE</span>
+                    <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  </a>
+                </Button>
+
+                {/* Secondary Button - Thin Platinum border */}
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="bg-transparent text-platinum/80 font-semibold text-lg px-10 h-14 rounded-xl border border-platinum/30 hover:border-platinum/60 hover:text-white hover:shadow-[0_0_20px_rgba(229,228,226,0.15)] transition-all duration-300"
+                >
+                  <a href="#features" className="font-mono">LEARN MORE</a>
+                </Button>
+              </div>
+
+              {/* Quick Stats - Monospace Terminal Style */}
+              <div className="flex flex-wrap gap-6 justify-center items-center pt-8">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="font-mono text-xs text-smoke/70">REAL-TIME SIGNALS</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="font-mono text-xs text-primary">87%</span>
+                  <span className="font-mono text-xs text-smoke/70">SUCCESS</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-smoke/10 bg-void/40 backdrop-blur-sm">
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="font-mono text-xs text-primary">10,000+</span>
+                  <span className="font-mono text-xs text-smoke/70">TRADERS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Activity Feed */}
           <LiveActivityFeed />
         </div>
 
         {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-          <div className="w-6 h-10 rounded-full border-2 border-smoke/30 flex items-start justify-center p-2">
-            <div className="w-1 h-2 bg-smoke/50 rounded-full animate-pulse" />
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce z-20">
+          <div className="w-6 h-10 rounded-full border-2 border-primary/30 flex items-start justify-center p-2">
+            <div className="w-1 h-2 bg-primary/50 rounded-full animate-pulse" />
           </div>
         </div>
       </section>
@@ -257,6 +342,7 @@ export default function Home() {
           {/* Pricing Cards Grid */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
             {/* Starter Card */}
+            {/* Starter Card - Ghost */}
             <StaggerItem>
               <PricingCard
                 name="Starter"
@@ -275,29 +361,7 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Pro Card - Black Titanium */}
-            <StaggerItem>
-              <PricingCard
-                name="Pro"
-                price="$99"
-                period="/month"
-                description="Most popular choice for serious traders"
-                features={[
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support",
-                ]}
-                whopLink="https://whop.com/checkout/plan_pro"
-                tier="pro"
-                popular
-              />
-            </StaggerItem>
-
-            {/* Elite Card */}
+            {/* Elite Card - Hero (Matte Black & Green) */}
             <StaggerItem>
               <PricingCard
                 name="Elite"
@@ -316,6 +380,28 @@ export default function Home() {
                 ]}
                 whopLink="https://whop.com/checkout/plan_T02fUg2d3tG8H"
                 tier="elite"
+              />
+            </StaggerItem>
+
+            {/* Pro Card - Brushed Platinum */}
+            <StaggerItem>
+              <PricingCard
+                name="Pro"
+                price="$99"
+                period="/month"
+                description="Most popular choice for serious traders"
+                features={[
+                  "15+ Daily Signals",
+                  "Advanced Technical Analysis",
+                  "Priority Discord Access",
+                  "Live Trading Sessions",
+                  "1-on-1 Mentorship (Monthly)",
+                  "Risk Management Tools",
+                  "24/7 Priority Support",
+                ]}
+                whopLink="https://whop.com/checkout/plan_pro"
+                tier="pro"
+                popular
               />
             </StaggerItem>
           </StaggerContainer>
