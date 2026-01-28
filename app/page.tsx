@@ -12,6 +12,8 @@ import { FloatingNavbar } from "@/components/ui/floating-navbar";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
+import { TickerTape } from "@/components/ui/ticker-tape";
+import { LiveActivityFeed } from "@/components/ui/live-activity-feed";
 
 export default function Home() {
   return (
@@ -22,7 +24,12 @@ export default function Home() {
       {/* Floating Island Navbar */}
       <FloatingNavbar />
 
-      {/* Hero Section - Cinematic Entrance */}
+      {/* Ticker Tape - HFT Data Feed */}
+      <div className="fixed top-16 left-0 right-0 z-40">
+        <TickerTape />
+      </div>
+
+      {/* Hero Section - High-Frequency Trading Style */}
       <section className="relative min-h-[90vh] flex items-center justify-center px-4 py-20 md:py-32 overflow-hidden">
         {/* 3D Particle Wave Background */}
         <HeroBackground />
@@ -30,25 +37,25 @@ export default function Home() {
         <div className="container mx-auto relative z-10">
           {/* Floating Glass Card Container */}
           <div className="max-w-5xl mx-auto">
-            <div className="glass-card-heavy p-8 md:p-12 lg:p-16 rounded-2xl border-gold-glow">
+            <div className="glass-card-heavy p-8 md:p-12 lg:p-16 rounded-2xl border-platinum-glow">
               <div className="text-center space-y-8">
                 {/* Eyebrow Badge */}
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-accent/30 bg-accent/5">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/5">
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                   </span>
-                  <span className="text-sm font-medium text-accent">Live Trading Signals Active</span>
+                  <span className="text-sm font-medium font-mono text-primary">SIGNALS LIVE</span>
                 </div>
 
-                {/* Massive H1 with Gold Gradient */}
+                {/* Massive H1 with Platinum Gradient */}
                 <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
-                  <span className="text-gradient-gold">Trade In The Money</span>
+                  <span className="text-gradient-platinum">Trade In The Money</span>
                 </h1>
 
                 {/* Subheadline */}
                 <h2 className="text-2xl md:text-3xl lg:text-4xl font-serif text-smoke/90 font-normal">
-                  Master The Markets With <span className="text-primary">Elite Signals</span>
+                  Master The Markets With <span className="text-primary font-semibold">Elite Signals</span>
                 </h2>
 
                 {/* Description */}
@@ -57,32 +64,32 @@ export default function Home() {
                   comprehensive education, and proven strategies to elevate your trading game.
                 </p>
 
-                {/* CTA Buttons */}
+                {/* CTA Buttons - HFT Style */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-6">
-                  {/* Primary Button - Platinum with Glow */}
+                  {/* Primary Button - Dark Green bg with Platinum text */}
                   <Button
                     asChild
                     size="lg"
-                    className="relative group bg-gradient-to-r from-platinum-dark via-platinum to-platinum-light text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(229,228,226,0.4)]"
+                    className="relative group bg-gradient-to-r from-signal-green-dark via-primary to-signal-green-dark text-void font-bold text-lg px-10 h-14 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(0,230,118,0.4)]"
                   >
                     <a href="#pricing" className="flex items-center gap-2">
-                      Get Started
-                      <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                      <span className="text-gradient-platinum font-bold">Get Started</span>
+                      <ArrowRight className="h-5 w-5 text-platinum transition-transform group-hover:translate-x-1" />
                     </a>
                   </Button>
 
-                  {/* Secondary Button - Glass with Border */}
+                  {/* Secondary Button - Thin Platinum border, transparent */}
                   <Button
                     asChild
                     variant="outline"
                     size="lg"
-                    className="glass-card text-smoke font-semibold text-lg px-10 h-14 rounded-xl border border-smoke/20 hover:border-smoke/40 hover:bg-white/5 transition-all duration-300"
+                    className="bg-transparent text-platinum/80 font-semibold text-lg px-10 h-14 rounded-xl border border-platinum/30 hover:border-platinum/60 hover:text-white hover:shadow-[0_0_20px_rgba(229,228,226,0.15)] transition-all duration-300"
                   >
                     <a href="#features">Learn More</a>
                   </Button>
                 </div>
 
-                {/* Quick Stats */}
+                {/* Quick Stats - Monospace Numbers */}
                 <div className="flex flex-wrap gap-8 justify-center items-center pt-8 text-sm">
                   <div className="flex items-center gap-2 text-smoke/70">
                     <Check className="h-5 w-5 text-primary" />
@@ -90,46 +97,21 @@ export default function Home() {
                   </div>
                   <div className="flex items-center gap-2 text-smoke/70">
                     <Check className="h-5 w-5 text-primary" />
-                    <span>87% Success Rate</span>
+                    <span className="font-mono">87%</span>
+                    <span>Success Rate</span>
                   </div>
                   <div className="flex items-center gap-2 text-smoke/70">
                     <Check className="h-5 w-5 text-primary" />
-                    <span>10,000+ Members</span>
+                    <span className="font-mono">10,000+</span>
+                    <span>Members</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Trusted By Social Proof Strip */}
-          <div className="mt-16 md:mt-24">
-            <div className="text-center mb-8">
-              <p className="text-sm uppercase tracking-widest text-muted-foreground/60 font-medium">
-                Trusted By Traders From
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
-              {/* Placeholder logos - monochrome style */}
-              {[
-                { name: "Bloomberg", width: 120 },
-                { name: "Reuters", width: 100 },
-                { name: "CNBC", width: 80 },
-                { name: "Forbes", width: 90 },
-                { name: "Yahoo Finance", width: 110 },
-              ].map((brand, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-center opacity-40 hover:opacity-60 transition-opacity duration-300 grayscale"
-                  style={{ width: brand.width }}
-                >
-                  {/* Text placeholder for logos */}
-                  <span className="text-xl md:text-2xl font-bold text-smoke/50 tracking-tight">
-                    {brand.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Live Activity Feed - replaces Trusted By */}
+          <LiveActivityFeed />
         </div>
 
         {/* Scroll indicator */}
