@@ -4,44 +4,62 @@ import { useRef, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-const PARTICLE_COUNT = 3000;
-const WAVE_SPEED = 0.15;
-const WAVE_AMPLITUDE = 0.8;
-const WAVE_FREQUENCY = 0.4;
+// Volatility Surface Parameters
+const GRID_SIZE = 80; // Number of points per side
+const SURFACE_WIDTH = 20;
+const SURFACE_DEPTH = 16;
+const WAVE_SPEED = 0.3;
+const BASE_AMPLITUDE = 1.2;
 
-// Colors - Platinum & Signal Green
-const SIGNAL_GREEN = new THREE.Color("#00E676");
-const PLATINUM = new THREE.Color("#E5E4E2");
+// Signal Green color
+const SIGNAL_GREEN = "#00E676";
 
-function ParticleWave() {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
+function VolatilitySurface() {
+  const meshRef = useRef<THREE.LineSegments>(null);
   const timeRef = useRef(0);
 
-  // Create particle positions and properties
-  const { positions, scales, colorMix } = useMemo(() => {
-    const positions = new Float32Array(PARTICLE_COUNT * 3);
-    const scales = new Float32Array(PARTICLE_COUNT);
-    const colorMix = new Float32Array(PARTICLE_COUNT);
+  // Create the grid geometry for wireframe
+  const { positions, indices } = useMemo(() => {
+    const positions = new Float32Array(GRID_SIZE * GRID_SIZE * 3);
+    const indices: number[] = [];
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      // Spread particles in a wide field
-      positions[i * 3] = (Math.random() - 0.5) * 25; // x
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 12; // y
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 15 - 5; // z (pushed back)
-
-      // Random scale for depth variation
-      scales[i] = Math.random() * 0.8 + 0.2;
-
-      // Random color mix (0 = emerald, 1 = gold)
-      colorMix[i] = Math.random();
+    // Create grid positions
+    for (let z = 0; z < GRID_SIZE; z++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        const idx = (z * GRID_SIZE + x) * 3;
+        positions[idx] = (x / (GRID_SIZE - 1) - 0.5) * SURFACE_WIDTH;
+        positions[idx + 1] = 0; // Y will be animated
+        positions[idx + 2] = (z / (GRID_SIZE - 1) - 0.5) * SURFACE_DEPTH;
+      }
     }
 
-    return { positions, scales, colorMix };
+    // Create line indices for wireframe grid
+    for (let z = 0; z < GRID_SIZE; z++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        const current = z * GRID_SIZE + x;
+
+        // Horizontal lines (along X)
+        if (x < GRID_SIZE - 1) {
+          indices.push(current, current + 1);
+        }
+
+        // Vertical lines (along Z)
+        if (z < GRID_SIZE - 1) {
+          indices.push(current, current + GRID_SIZE);
+        }
+      }
+    }
+
+    return { positions, indices };
   }, []);
 
-  // Pre-create objects for animation
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const color = useMemo(() => new THREE.Color(), []);
+  // Create buffer geometry
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    return geo;
+  }, [positions, indices]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -49,67 +67,157 @@ function ParticleWave() {
     timeRef.current += delta * WAVE_SPEED;
     const time = timeRef.current;
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const baseX = positions[i * 3];
-      const baseY = positions[i * 3 + 1];
-      const baseZ = positions[i * 3 + 2];
-      const scale = scales[i];
-      const mix = colorMix[i];
+    const positionAttribute = meshRef.current.geometry.getAttribute("position");
+    const posArray = positionAttribute.array as Float32Array;
 
-      // Create flowing wave motion
-      const waveX = Math.sin(baseY * WAVE_FREQUENCY + time) * WAVE_AMPLITUDE;
-      const waveY = Math.sin(baseX * WAVE_FREQUENCY * 0.8 + time * 1.2) * WAVE_AMPLITUDE * 0.5;
-      const waveZ = Math.cos(baseX * WAVE_FREQUENCY * 0.5 + baseY * WAVE_FREQUENCY * 0.3 + time * 0.8) * WAVE_AMPLITUDE * 0.3;
+    for (let z = 0; z < GRID_SIZE; z++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        const idx = (z * GRID_SIZE + x) * 3;
+        const xPos = posArray[idx];
+        const zPos = posArray[idx + 2];
 
-      // Apply position with wave offset
-      dummy.position.set(
-        baseX + waveX,
-        baseY + waveY,
-        baseZ + waveZ
-      );
+        // Create multiple wave patterns for volatility surface effect
+        // Primary wave - large undulations
+        const wave1 = Math.sin(xPos * 0.3 + time) * Math.cos(zPos * 0.4 + time * 0.7) * BASE_AMPLITUDE;
 
-      // Gentle rotation based on position
-      dummy.rotation.z = Math.sin(time + baseX * 0.1) * 0.5;
+        // Secondary wave - faster, smaller ripples (like market volatility)
+        const wave2 = Math.sin(xPos * 0.8 + time * 2) * 0.3;
 
-      // Pulsing scale
-      const pulseScale = scale * (0.8 + Math.sin(time * 2 + i * 0.01) * 0.2);
-      dummy.scale.setScalar(pulseScale * 0.03);
+        // Tertiary wave - creates the "trading chart" peaks and valleys
+        const wave3 = Math.sin(xPos * 0.15 + zPos * 0.1 + time * 0.5) * 0.8;
 
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+        // Random noise simulation for volatility spikes
+        const noise = Math.sin(xPos * 2 + zPos * 3 + time * 3) * 0.15;
 
-      // Interpolate between signal green and platinum based on mix value
-      // Add time-based color shifting for shimmer effect
-      const shiftedMix = (mix + Math.sin(time * 0.5 + i * 0.005) * 0.15 + 1) % 1;
-      color.copy(SIGNAL_GREEN).lerp(PLATINUM, shiftedMix);
-      meshRef.current.setColorAt(i, color);
+        // Edge fade - surface fades at edges
+        const edgeFadeX = 1 - Math.pow(Math.abs(xPos) / (SURFACE_WIDTH / 2), 4);
+        const edgeFadeZ = 1 - Math.pow(Math.abs(zPos) / (SURFACE_DEPTH / 2), 4);
+        const edgeFade = edgeFadeX * edgeFadeZ;
+
+        posArray[idx + 1] = (wave1 + wave2 + wave3 + noise) * edgeFade;
+      }
     }
 
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) {
-      meshRef.current.instanceColor.needsUpdate = true;
+    positionAttribute.needsUpdate = true;
+  });
+
+  return (
+    <lineSegments ref={meshRef} geometry={geometry} rotation={[-Math.PI / 4, 0, 0]} position={[0, -1, -2]}>
+      <lineBasicMaterial
+        color={SIGNAL_GREEN}
+        transparent
+        opacity={0.6}
+        linewidth={1}
+      />
+    </lineSegments>
+  );
+}
+
+// Subtle grid floor for depth
+function GridFloor() {
+  const gridRef = useRef<THREE.GridHelper>(null);
+
+  useFrame((state) => {
+    if (gridRef.current) {
+      gridRef.current.position.z = (state.clock.elapsedTime * 0.5) % 1;
     }
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]}>
-      <sphereGeometry args={[1, 8, 8]} />
-      <meshBasicMaterial transparent opacity={0.7} />
-    </instancedMesh>
+    <gridHelper
+      ref={gridRef}
+      args={[40, 40, SIGNAL_GREEN, SIGNAL_GREEN]}
+      position={[0, -4, 0]}
+      rotation={[0, 0, 0]}
+      material-opacity={0.08}
+      material-transparent={true}
+    />
+  );
+}
+
+// Floating data points around the surface
+function DataPoints() {
+  const pointsRef = useRef<THREE.Points>(null);
+  const POINT_COUNT = 200;
+
+  const { positions, velocities } = useMemo(() => {
+    const positions = new Float32Array(POINT_COUNT * 3);
+    const velocities = new Float32Array(POINT_COUNT * 3);
+
+    for (let i = 0; i < POINT_COUNT; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 20;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 8 - 1;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 12;
+
+      velocities[i * 3] = (Math.random() - 0.5) * 0.02;
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.01;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.015;
+    }
+
+    return { positions, velocities };
+  }, []);
+
+  useFrame(() => {
+    if (!pointsRef.current) return;
+
+    const positionAttribute = pointsRef.current.geometry.getAttribute("position");
+    const posArray = positionAttribute.array as Float32Array;
+
+    for (let i = 0; i < POINT_COUNT; i++) {
+      posArray[i * 3] += velocities[i * 3];
+      posArray[i * 3 + 1] += velocities[i * 3 + 1];
+      posArray[i * 3 + 2] += velocities[i * 3 + 2];
+
+      // Wrap around
+      if (Math.abs(posArray[i * 3]) > 10) velocities[i * 3] *= -1;
+      if (Math.abs(posArray[i * 3 + 1]) > 5) velocities[i * 3 + 1] *= -1;
+      if (Math.abs(posArray[i * 3 + 2]) > 6) velocities[i * 3 + 2] *= -1;
+    }
+
+    positionAttribute.needsUpdate = true;
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          array={positions}
+          count={POINT_COUNT}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        color={SIGNAL_GREEN}
+        size={0.03}
+        transparent
+        opacity={0.4}
+        sizeAttenuation
+      />
+    </points>
   );
 }
 
 function Scene() {
   return (
     <>
-      {/* Deep void background */}
-      <color attach="background" args={["#020617"]} />
+      {/* Void black background */}
+      <color attach="background" args={["#020202"]} />
 
       {/* Subtle ambient lighting */}
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.3} />
 
-      {/* Particle wave system */}
-      <ParticleWave />
+      {/* Directional light for depth */}
+      <directionalLight position={[5, 5, 5]} intensity={0.2} color={SIGNAL_GREEN} />
+
+      {/* Main Volatility Surface */}
+      <VolatilitySurface />
+
+      {/* Subtle grid floor */}
+      <GridFloor />
+
+      {/* Floating data points */}
+      <DataPoints />
     </>
   );
 }
@@ -119,27 +227,41 @@ export function HeroBackground() {
     <div className="absolute inset-0 z-0">
       {/* Three.js Canvas */}
       <Canvas
-        camera={{ position: [0, 0, 8], fov: 60 }}
-        dpr={[1, 1.5]}
-        style={{ background: "#020617" }}
+        camera={{ position: [0, 2, 10], fov: 50 }}
+        dpr={[1, 2]}
+        style={{ background: "#020202" }}
         gl={{ antialias: true, alpha: false }}
       >
         <Scene />
       </Canvas>
 
+      {/* Scanline overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 230, 118, 0.1) 2px,
+            rgba(0, 230, 118, 0.1) 4px
+          )`,
+        }}
+      />
+
       {/* Vignette overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(2, 6, 23, 0.4) 70%, rgba(2, 6, 23, 0.8) 100%)`,
+          background: `radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(2, 2, 2, 0.5) 70%, rgba(2, 2, 2, 0.9) 100%)`,
         }}
       />
 
-      {/* Radial gradient for text readability - center glow */}
+      {/* Center glow for text readability */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0, 230, 118, 0.08) 0%, transparent 50%)`,
+          background: `radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0, 230, 118, 0.05) 0%, transparent 50%)`,
         }}
       />
 
@@ -147,7 +269,7 @@ export function HeroBackground() {
       <div
         className="absolute top-0 left-0 right-0 h-32 pointer-events-none"
         style={{
-          background: `linear-gradient(to bottom, rgba(2, 6, 23, 0.6) 0%, transparent 100%)`,
+          background: `linear-gradient(to bottom, rgba(2, 2, 2, 0.8) 0%, transparent 100%)`,
         }}
       />
 
@@ -155,15 +277,19 @@ export function HeroBackground() {
       <div
         className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none"
         style={{
-          background: `linear-gradient(to top, rgba(5, 5, 5, 1) 0%, rgba(5, 5, 5, 0.8) 30%, transparent 100%)`,
+          background: `linear-gradient(to top, rgba(2, 2, 2, 1) 0%, rgba(2, 2, 2, 0.8) 30%, transparent 100%)`,
         }}
       />
 
-      {/* Subtle noise texture overlay */}
+      {/* Grid overlay for HUD feel */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        className="absolute inset-0 pointer-events-none opacity-[0.02]"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+          backgroundImage: `
+            linear-gradient(rgba(0, 230, 118, 0.3) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 230, 118, 0.3) 1px, transparent 1px)
+          `,
+          backgroundSize: "50px 50px",
         }}
       />
     </div>
