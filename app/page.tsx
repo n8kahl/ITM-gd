@@ -248,10 +248,9 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Pricing Cards Grid */}
+          {/* Pricing Cards Grid - Ordered by price: Starter → Pro → Elite */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
-            {/* Starter Card */}
-            {/* Starter Card - Ghost */}
+            {/* Starter Card - $49/mo */}
             <StaggerItem>
               <PricingCard
                 name="Starter"
@@ -270,7 +269,28 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Elite Card - Hero (Matte Black & Green) */}
+            {/* Pro Card - $99/mo */}
+            <StaggerItem>
+              <PricingCard
+                name="Pro"
+                price="$99"
+                period="/month"
+                description="Most popular choice for serious traders"
+                features={[
+                  "15+ Daily Signals",
+                  "Advanced Technical Analysis",
+                  "Priority Discord Access",
+                  "Live Trading Sessions",
+                  "1-on-1 Mentorship (Monthly)",
+                  "Risk Management Tools",
+                  "24/7 Priority Support",
+                ]}
+                whopLink="https://whop.com/checkout/plan_pro"
+                tier="pro"
+              />
+            </StaggerItem>
+
+            {/* Elite Card - $199/mo - The Premium Option */}
             <StaggerItem>
               <PricingCard
                 name="Elite"
@@ -289,28 +309,6 @@ export default function Home() {
                 ]}
                 whopLink="https://whop.com/checkout/plan_T02fUg2d3tG8H"
                 tier="elite"
-              />
-            </StaggerItem>
-
-            {/* Pro Card - Brushed Platinum */}
-            <StaggerItem>
-              <PricingCard
-                name="Pro"
-                price="$99"
-                period="/month"
-                description="Most popular choice for serious traders"
-                features={[
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support",
-                ]}
-                whopLink="https://whop.com/checkout/plan_pro"
-                tier="pro"
-                popular
               />
             </StaggerItem>
           </StaggerContainer>
