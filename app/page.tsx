@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
+import { BentoCard } from "@/components/ui/bento-card";
 
 export default function Home() {
   return (
@@ -166,58 +167,71 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section - Bento Grid */}
       <section id="features" className="container mx-auto px-4 py-20">
         <div className="max-w-6xl mx-auto">
+          {/* Section Header */}
           <div className="text-center mb-16 space-y-4">
-            <h3 className="text-3xl md:text-5xl font-bold text-balance">Everything You Need To Succeed</h3>
+            <h2 className="text-3xl md:text-5xl font-bold">
+              Everything You Need To{" "}
+              <span className="text-gradient-gold">Succeed</span>
+            </h2>
             <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
               Comprehensive tools and resources designed to transform your trading journey
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: TrendingUp,
-                title: "Real-Time Signals",
-                description: "Get instant trade alerts from experienced traders with detailed entry, exit, and stop-loss levels."
-              },
-              {
-                icon: BookOpen,
-                title: "Educational Content",
-                description: "Access exclusive courses, webinars, and tutorials covering technical analysis and risk management."
-              },
-              {
-                icon: Users,
-                title: "Active Community",
-                description: "Network with thousands of like-minded traders, share insights, and learn from collective experience."
-              },
-              {
-                icon: Target,
-                title: "Precise Analysis",
-                description: "Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
-              },
-              {
-                icon: Zap,
-                title: "Lightning Fast",
-                description: "Receive signals instantly via Discord notifications so you never miss a profitable opportunity."
-              },
-              {
-                icon: Shield,
-                title: "Risk Management",
-                description: "Learn proper position sizing, portfolio management, and strategies to protect your capital."
-              },
-            ].map((feature, idx) => (
-              <Card key={idx} className="bg-card/60 backdrop-blur border-border/40 hover:bg-card/80 transition-all duration-300 hover:border-primary/30">
-                <CardHeader>
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                    <feature.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-xl">{feature.title}</CardTitle>
-                  <CardDescription className="text-base leading-relaxed">{feature.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
+
+          {/* Bento Grid Layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {/* Real-Time Signals - Wide Card (2 columns) */}
+            <BentoCard
+              icon={TrendingUp}
+              title="Real-Time Signals"
+              description="Get instant trade alerts from experienced traders with detailed entry, exit, and stop-loss levels. Our signals are backed by years of market analysis and proven strategies that consistently deliver results."
+              className="md:col-span-2 lg:col-span-2"
+              spotlight="emerald"
+            />
+
+            {/* Educational Content - Tall Card (2 rows) */}
+            <BentoCard
+              icon={BookOpen}
+              title="Educational Content"
+              description="Access exclusive courses, webinars, and tutorials covering technical analysis, fundamental analysis, and risk management. From beginner basics to advanced strategies, we provide the knowledge you need to become a confident trader."
+              className="md:row-span-2"
+              spotlight="gold"
+            />
+
+            {/* Active Community */}
+            <BentoCard
+              icon={Users}
+              title="Active Community"
+              description="Network with thousands of like-minded traders, share insights, and learn from collective experience."
+              spotlight="emerald"
+            />
+
+            {/* Precise Analysis */}
+            <BentoCard
+              icon={Target}
+              title="Precise Analysis"
+              description="Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
+              spotlight="gold"
+            />
+
+            {/* Lightning Fast */}
+            <BentoCard
+              icon={Zap}
+              title="Lightning Fast"
+              description="Receive signals instantly via Discord notifications so you never miss a profitable opportunity."
+              spotlight="emerald"
+            />
+
+            {/* Risk Management */}
+            <BentoCard
+              icon={Shield}
+              title="Risk Management"
+              description="Learn proper position sizing, portfolio management, and strategies to protect your capital."
+              spotlight="gold"
+            />
           </div>
         </div>
       </section>
