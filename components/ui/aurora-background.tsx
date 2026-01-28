@@ -14,21 +14,84 @@ export function AuroraBackground() {
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      {/* Base dark layer */}
+      {/* Base deep onyx layer */}
       <div className="absolute inset-0 bg-[#050505]" />
 
-      {/* Primary aurora blob - Emerald */}
+      {/* Primary liquid silk blob - Emerald */}
       <motion.div
-        className="absolute w-[80vw] h-[80vh] rounded-full blur-[120px] opacity-30"
+        className="absolute w-[90vw] h-[90vh] rounded-full"
         style={{
-          background: "radial-gradient(circle, #047857 0%, transparent 70%)",
-          left: "10%",
-          top: "20%",
+          background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.4) 0%, rgba(4, 120, 87, 0.1) 40%, transparent 70%)",
+          filter: "blur(80px)",
+          left: "-10%",
+          top: "-10%",
         }}
         animate={{
-          x: [0, 100, 50, -50, 0],
-          y: [0, -50, 100, 50, 0],
-          scale: [1, 1.2, 0.9, 1.1, 1],
+          x: [0, 150, 80, -80, 0],
+          y: [0, -80, 120, 60, 0],
+          scale: [1, 1.15, 0.95, 1.1, 1],
+        }}
+        transition={{
+          duration: 30,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Secondary liquid blob - Deep Gold */}
+      <motion.div
+        className="absolute w-[70vw] h-[70vh] rounded-full"
+        style={{
+          background: "radial-gradient(ellipse at center, rgba(212, 175, 55, 0.25) 0%, rgba(212, 175, 55, 0.05) 50%, transparent 70%)",
+          filter: "blur(100px)",
+          right: "-20%",
+          bottom: "-20%",
+        }}
+        animate={{
+          x: [0, -120, -60, 100, 0],
+          y: [0, 100, -60, -80, 0],
+          scale: [1, 0.9, 1.2, 0.95, 1],
+        }}
+        transition={{
+          duration: 35,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Tertiary silk layer - Emerald deeper */}
+      <motion.div
+        className="absolute w-[80vw] h-[60vh] rounded-full"
+        style={{
+          background: "radial-gradient(ellipse at center, rgba(6, 95, 70, 0.35) 0%, transparent 60%)",
+          filter: "blur(120px)",
+          left: "20%",
+          bottom: "10%",
+        }}
+        animate={{
+          x: [0, -100, 120, -40, 0],
+          y: [0, 80, -40, 100, 0],
+          scale: [1, 1.1, 0.85, 1.15, 1],
+        }}
+        transition={{
+          duration: 28,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Floating gold accent ribbon */}
+      <motion.div
+        className="absolute w-[120vw] h-[300px] -left-[10vw]"
+        style={{
+          background: "linear-gradient(180deg, transparent 0%, rgba(212, 175, 55, 0.08) 50%, transparent 100%)",
+          filter: "blur(40px)",
+          top: "30%",
+        }}
+        animate={{
+          y: [0, 80, -60, 40, 0],
+          rotate: [0, 2, -1, 1, 0],
+          opacity: [0.8, 1, 0.7, 0.9, 0.8],
         }}
         transition={{
           duration: 20,
@@ -37,18 +100,37 @@ export function AuroraBackground() {
         }}
       />
 
-      {/* Secondary aurora blob - Gold accent */}
+      {/* Center glow - for logo pop */}
       <motion.div
-        className="absolute w-[60vw] h-[60vh] rounded-full blur-[100px] opacity-20"
+        className="absolute w-[60vw] h-[60vh] rounded-full"
         style={{
-          background: "radial-gradient(circle, #D4AF37 0%, transparent 70%)",
-          right: "5%",
-          bottom: "10%",
+          background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.15) 0%, rgba(212, 175, 55, 0.05) 30%, transparent 60%)",
+          filter: "blur(60px)",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
         }}
         animate={{
-          x: [0, -80, -40, 60, 0],
-          y: [0, 60, -40, -60, 0],
-          scale: [1, 0.9, 1.15, 0.95, 1],
+          scale: [1, 1.1, 0.95, 1.05, 1],
+          opacity: [0.6, 0.8, 0.5, 0.7, 0.6],
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Subtle shimmer streaks */}
+      <motion.div
+        className="absolute w-[150vw] h-[1px] -left-[25vw]"
+        style={{
+          background: "linear-gradient(90deg, transparent 0%, rgba(232, 228, 217, 0.1) 20%, rgba(212, 175, 55, 0.15) 50%, rgba(232, 228, 217, 0.1) 80%, transparent 100%)",
+          top: "35%",
+        }}
+        animate={{
+          y: [0, 150, 80, -50, 0],
+          opacity: [0.3, 0.6, 0.2, 0.5, 0.3],
         }}
         transition={{
           duration: 25,
@@ -57,65 +139,27 @@ export function AuroraBackground() {
         }}
       />
 
-      {/* Tertiary aurora blob - Deep emerald */}
-      <motion.div
-        className="absolute w-[70vw] h-[50vh] rounded-full blur-[150px] opacity-25"
-        style={{
-          background: "radial-gradient(circle, #065F46 0%, transparent 70%)",
-          left: "30%",
-          bottom: "20%",
-        }}
-        animate={{
-          x: [0, -60, 80, -30, 0],
-          y: [0, 80, -20, 60, 0],
-          scale: [1, 1.1, 0.85, 1.05, 1],
-        }}
-        transition={{
-          duration: 18,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      />
-
-      {/* Subtle gold highlight streak */}
-      <motion.div
-        className="absolute w-[100vw] h-[2px] blur-[2px] opacity-10"
-        style={{
-          background: "linear-gradient(90deg, transparent 0%, #D4AF37 50%, transparent 100%)",
-          top: "40%",
-        }}
-        animate={{
-          y: [0, 100, -50, 50, 0],
-          opacity: [0.1, 0.15, 0.08, 0.12, 0.1],
-        }}
-        transition={{
-          duration: 15,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      />
-
-      {/* Top gradient overlay for depth */}
+      {/* Top vignette for depth */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          background: "linear-gradient(180deg, rgba(5,5,5,0.8) 0%, transparent 30%, transparent 70%, rgba(5,5,5,0.6) 100%)",
+          background: "linear-gradient(180deg, rgba(5,5,5,0.7) 0%, transparent 25%, transparent 75%, rgba(5,5,5,0.5) 100%)",
         }}
       />
 
       {/* Radial vignette */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          background: "radial-gradient(ellipse at 50% 50%, transparent 0%, rgba(5,5,5,0.4) 100%)",
+          background: "radial-gradient(ellipse 80% 80% at 50% 50%, transparent 0%, rgba(5,5,5,0.6) 100%)",
         }}
       />
 
-      {/* Noise texture overlay */}
+      {/* Noise texture overlay for luxury feel */}
       <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        className="absolute inset-0 opacity-[0.025] pointer-events-none"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
         }}
       />
     </div>

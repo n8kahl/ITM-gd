@@ -4,7 +4,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3, ArrowRight, Star } from "lucide-react";
+import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3 } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { BentoCard } from "@/components/ui/bento-card";
@@ -24,86 +24,89 @@ export default function Home() {
       {/* Floating Island Navbar */}
       <FloatingNavbar />
 
-      {/* Hero Section - Luxury Magazine Cover with Aurora Background */}
+      {/* Hero Section - Cinematic Brand Reveal */}
       <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
-        {/* Aurora Animated Background */}
+        {/* Aurora Liquid Light Background */}
         <AuroraBackground />
 
-        {/* Main Content - Center Aligned */}
+        {/* Main Content - Logo Centered */}
         <div className="container mx-auto relative z-20">
-          <div className="max-w-4xl mx-auto text-center space-y-8">
-            {/* Editorial H1 - Staggered Fade-Up Animation */}
-            <motion.h1
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-serif font-medium tracking-tight leading-[1.1] text-ivory"
-              initial="hidden"
-              animate="visible"
-              variants={{
-                hidden: {},
-                visible: {
-                  transition: {
-                    staggerChildren: 0.15,
-                  },
-                },
-              }}
-            >
-              <motion.span
-                className="block"
-                variants={{
-                  hidden: { opacity: 0, y: 30, filter: "blur(10px)" },
-                  visible: {
-                    opacity: 1,
-                    y: 0,
-                    filter: "blur(0px)",
-                    transition: { duration: 0.8, ease: [0.25, 0.4, 0.25, 1] },
-                  },
+          <div className="flex flex-col items-center justify-center text-center space-y-10">
+            {/* Logo with Backlight Effect */}
+            <div className="relative">
+              {/* Pulsing Backlight Glow */}
+              <motion.div
+                className="absolute inset-0 -inset-x-20 -inset-y-10"
+                style={{
+                  background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.4) 0%, rgba(212, 175, 55, 0.2) 40%, transparent 70%)",
+                  filter: "blur(60px)",
                 }}
-              >
-                Precision Trading for the
-              </motion.span>
-              <motion.span
-                className="block text-gradient-luminous-emerald italic"
-                variants={{
-                  hidden: { opacity: 0, y: 30, filter: "blur(10px)" },
-                  visible: {
-                    opacity: 1,
-                    y: 0,
-                    filter: "blur(0px)",
-                    transition: { duration: 0.8, ease: [0.25, 0.4, 0.25, 1] },
-                  },
+                animate={{
+                  scale: [1, 1.15, 1],
+                  opacity: [0.6, 0.9, 0.6],
                 }}
-              >
-                Modern Elite
-              </motion.span>
-            </motion.h1>
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              />
 
-            {/* Subheadline - Light and Spacious with Fade-Up */}
+              {/* Floating Logo */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 1.2, ease: [0.25, 0.4, 0.25, 1] }}
+              >
+                <motion.div
+                  animate={{
+                    y: [0, -10, 0],
+                  }}
+                  transition={{
+                    duration: 6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <Image
+                    src="/hero-logo.png"
+                    alt="TradeITM"
+                    width={600}
+                    height={200}
+                    className="w-[80vw] md:w-[600px] h-auto object-contain drop-shadow-[0_0_40px_rgba(4,120,87,0.3)]"
+                    priority
+                  />
+                </motion.div>
+              </motion.div>
+            </div>
+
+            {/* Subheadline - High Tracking */}
             <motion.p
-              className="text-lg sm:text-xl md:text-2xl font-light text-ivory/70 tracking-wide max-w-2xl mx-auto"
+              className="text-xs sm:text-sm md:text-base font-light tracking-[0.3em] uppercase text-platinum/60"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
+              transition={{ duration: 0.8, delay: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             >
-              Institutional-grade signals. Private community. Uncapped potential.
+              Institutional Grade Intelligence
             </motion.p>
 
-            {/* CTA Buttons */}
+            {/* CTA Button - Centered */}
             <motion.div
-              className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4 w-full sm:w-auto"
+              className="pt-4"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] }}
+              transition={{ duration: 0.8, delay: 0.9, ease: [0.25, 0.4, 0.25, 1] }}
             >
-              {/* Primary Button - Gold Pulse Animation */}
               <motion.div
                 animate={{
                   boxShadow: [
                     "0 0 20px rgba(212, 175, 55, 0.3)",
-                    "0 0 40px rgba(212, 175, 55, 0.5)",
+                    "0 0 50px rgba(212, 175, 55, 0.5)",
                     "0 0 20px rgba(212, 175, 55, 0.3)",
                   ],
                 }}
                 transition={{
-                  duration: 2,
+                  duration: 2.5,
                   repeat: Infinity,
                   ease: "easeInOut",
                 }}
@@ -113,44 +116,11 @@ export default function Home() {
                   asChild
                   size="xl"
                   variant="luxury-champagne"
-                  className="w-full sm:w-auto sm:min-w-[200px] rounded-sm font-medium tracking-wide"
+                  className="min-w-[220px] rounded-sm font-medium tracking-widest text-sm"
                 >
-                  <a href="#pricing">Join Now</a>
+                  <a href="#pricing">JOIN NOW</a>
                 </Button>
               </motion.div>
-
-              {/* Secondary Button - Text Link with Underline */}
-              <a
-                href="#features"
-                className="group inline-flex items-center justify-center gap-2 text-base font-light text-champagne/80 hover:text-champagne transition-colors duration-300 h-12 sm:h-auto"
-              >
-                <span className="underline underline-offset-4 decoration-champagne/30 group-hover:decoration-champagne/60 transition-all duration-300">
-                  View Performance
-                </span>
-                <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-              </a>
-            </motion.div>
-
-            {/* Social Proof - Elegant and Minimal */}
-            <motion.div
-              className="pt-12 flex flex-col items-center gap-3"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, delay: 1 }}
-            >
-              {/* 5 Gold Stars - Small and Refined */}
-              <div className="flex items-center gap-1.5">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className="w-4 h-4 fill-amber-400 text-amber-400"
-                  />
-                ))}
-              </div>
-              {/* Trust Text */}
-              <p className="text-sm font-light tracking-[0.2em] uppercase text-ivory/50">
-                Trusted by Traders Worldwide
-              </p>
             </motion.div>
           </div>
         </div>
@@ -160,12 +130,12 @@ export default function Home() {
           className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 1.2 }}
+          transition={{ duration: 1, delay: 1.5 }}
         >
           <motion.div
-            className="w-[1px] h-16 bg-gradient-to-b from-transparent via-champagne/30 to-transparent"
-            animate={{ scaleY: [1, 1.2, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            className="w-[1px] h-20 bg-gradient-to-b from-transparent via-champagne/20 to-transparent"
+            animate={{ scaleY: [1, 1.3, 1] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           />
         </motion.div>
       </section>
