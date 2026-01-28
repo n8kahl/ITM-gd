@@ -16,6 +16,7 @@ import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
+import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
 
 export default function Home() {
   return (
@@ -25,6 +26,9 @@ export default function Home() {
 
       {/* Floating Island Navbar */}
       <FloatingNavbar />
+
+      {/* Mobile Sticky CTA - appears after scrolling past hero */}
+      <MobileStickyCtA />
 
       {/* Hero Section - Cinematic Brand Reveal */}
       <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
