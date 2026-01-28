@@ -15,6 +15,7 @@ import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { TickerTape } from "@/components/ui/ticker-tape";
 import { LiveActivityFeed } from "@/components/ui/live-activity-feed";
 import { ScrambleHeadline } from "@/components/ui/text-scramble";
+import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
 
 export default function Home() {
   return (
@@ -251,13 +252,14 @@ export default function Home() {
 
           {/* Bento Grid Layout */}
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6" staggerDelay={0.1}>
-            {/* Real-Time Signals - Wide Card (2 columns) */}
+            {/* Real-Time Signals - Wide Card (2 columns) with Live Candlestick */}
             <StaggerItem className="md:col-span-2 lg:col-span-2">
               <BentoCard
                 icon={TrendingUp}
                 title="Real-Time Signals"
                 description="Get instant trade alerts from experienced traders with detailed entry, exit, and stop-loss levels. Our signals are backed by years of market analysis and proven strategies that consistently deliver results."
                 spotlight="emerald"
+                graphic={<CandlestickChart className="absolute inset-0" />}
               />
             </StaggerItem>
 
@@ -273,23 +275,25 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Active Community */}
+            {/* Active Community with Signal Pulse */}
             <StaggerItem>
               <BentoCard
                 icon={Users}
-                title="Active Community"
+                title="Live Signal Feed"
                 description="Network with thousands of like-minded traders, share insights, and learn from collective experience."
                 spotlight="emerald"
+                graphic={<SignalPulse className="absolute inset-0 p-4" signalCount={8} />}
               />
             </StaggerItem>
 
-            {/* Precise Analysis */}
+            {/* Precise Analysis with Win Rate Chart */}
             <StaggerItem>
               <BentoCard
                 icon={Target}
-                title="Precise Analysis"
+                title="87% Success Rate"
                 description="Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
-                spotlight="gold"
+                spotlight="emerald"
+                graphic={<WinRateChart className="absolute inset-0" percentage={87} />}
               />
             </StaggerItem>
 
