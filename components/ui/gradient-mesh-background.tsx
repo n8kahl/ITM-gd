@@ -8,13 +8,13 @@ export function GradientMeshBackground() {
       {/* Base dark layer */}
       <div className="absolute inset-0 bg-void" />
 
-      {/* Animated gradient orbs - "market liquidity" effect */}
+      {/* Animated gradient orbs - "Cold HFT" effect */}
       <div className="absolute inset-0">
-        {/* Primary green orb - top left */}
+        {/* Deep Emerald orb - top left */}
         <motion.div
-          className="absolute w-[600px] h-[600px] rounded-full opacity-30"
+          className="absolute w-[600px] h-[600px] rounded-full opacity-25"
           style={{
-            background: "radial-gradient(circle, rgba(16, 185, 129, 0.4) 0%, rgba(16, 185, 129, 0) 70%)",
+            background: "radial-gradient(circle, rgba(0, 230, 118, 0.35) 0%, rgba(0, 230, 118, 0) 70%)",
             filter: "blur(60px)",
             left: "-10%",
             top: "-20%",
@@ -31,11 +31,11 @@ export function GradientMeshBackground() {
           }}
         />
 
-        {/* Secondary green orb - bottom right */}
+        {/* Bright Cyan orb - bottom right */}
         <motion.div
-          className="absolute w-[500px] h-[500px] rounded-full opacity-25"
+          className="absolute w-[500px] h-[500px] rounded-full opacity-20"
           style={{
-            background: "radial-gradient(circle, rgba(5, 150, 105, 0.5) 0%, rgba(5, 150, 105, 0) 70%)",
+            background: "radial-gradient(circle, rgba(0, 188, 212, 0.5) 0%, rgba(0, 188, 212, 0) 70%)",
             filter: "blur(80px)",
             right: "-5%",
             bottom: "-15%",
@@ -52,11 +52,11 @@ export function GradientMeshBackground() {
           }}
         />
 
-        {/* Gold accent orb - center right */}
+        {/* Cool Grey orb - center right */}
         <motion.div
-          className="absolute w-[400px] h-[400px] rounded-full opacity-20"
+          className="absolute w-[400px] h-[400px] rounded-full opacity-15"
           style={{
-            background: "radial-gradient(circle, rgba(212, 175, 55, 0.4) 0%, rgba(212, 175, 55, 0) 70%)",
+            background: "radial-gradient(circle, rgba(160, 160, 160, 0.4) 0%, rgba(160, 160, 160, 0) 70%)",
             filter: "blur(70px)",
             right: "20%",
             top: "30%",
@@ -73,11 +73,11 @@ export function GradientMeshBackground() {
           }}
         />
 
-        {/* Deep green orb - bottom left */}
+        {/* Deep Teal orb - bottom left */}
         <motion.div
           className="absolute w-[450px] h-[450px] rounded-full opacity-20"
           style={{
-            background: "radial-gradient(circle, rgba(4, 120, 87, 0.5) 0%, rgba(4, 120, 87, 0) 70%)",
+            background: "radial-gradient(circle, rgba(0, 150, 136, 0.5) 0%, rgba(0, 150, 136, 0) 70%)",
             filter: "blur(90px)",
             left: "10%",
             bottom: "10%",
@@ -94,11 +94,11 @@ export function GradientMeshBackground() {
           }}
         />
 
-        {/* Small gold accent - top right */}
+        {/* Bright Cyan accent - top right */}
         <motion.div
           className="absolute w-[300px] h-[300px] rounded-full opacity-15"
           style={{
-            background: "radial-gradient(circle, rgba(184, 134, 11, 0.5) 0%, rgba(184, 134, 11, 0) 70%)",
+            background: "radial-gradient(circle, rgba(0, 229, 255, 0.4) 0%, rgba(0, 229, 255, 0) 70%)",
             filter: "blur(50px)",
             right: "5%",
             top: "5%",
@@ -116,26 +116,26 @@ export function GradientMeshBackground() {
         />
       </div>
 
-      {/* Mesh gradient overlay for depth */}
+      {/* Mesh gradient overlay for depth - cold tones */}
       <div
         className="absolute inset-0 opacity-40"
         style={{
           backgroundImage: `
-            radial-gradient(at 20% 30%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
-            radial-gradient(at 80% 70%, rgba(5, 150, 105, 0.1) 0px, transparent 50%),
-            radial-gradient(at 60% 20%, rgba(212, 175, 55, 0.08) 0px, transparent 50%),
-            radial-gradient(at 40% 80%, rgba(4, 120, 87, 0.12) 0px, transparent 50%)
+            radial-gradient(at 20% 30%, rgba(0, 230, 118, 0.12) 0px, transparent 50%),
+            radial-gradient(at 80% 70%, rgba(0, 188, 212, 0.1) 0px, transparent 50%),
+            radial-gradient(at 60% 20%, rgba(160, 160, 160, 0.08) 0px, transparent 50%),
+            radial-gradient(at 40% 80%, rgba(0, 150, 136, 0.1) 0px, transparent 50%)
           `,
         }}
       />
 
-      {/* Subtle grid pattern for texture */}
+      {/* Subtle grid pattern for texture - platinum */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
+        className="absolute inset-0 opacity-[0.02]"
         style={{
           backgroundImage: `
-            linear-gradient(rgba(212, 175, 55, 0.5) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.5) 1px, transparent 1px)
+            linear-gradient(rgba(229, 228, 226, 0.5) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(229, 228, 226, 0.5) 1px, transparent 1px)
           `,
           backgroundSize: "60px 60px",
         }}
