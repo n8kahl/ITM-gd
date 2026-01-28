@@ -191,7 +191,7 @@ export const CandlestickChart = memo(function CandlestickChart({ className }: Ca
   const bodyWidth = candleWidth * 0.7;
 
   return (
-    <div ref={containerRef} className={\`relative w-full h-full \${className}\`}>
+    <div ref={containerRef} className={`relative w-full h-full \${className}`}>
       <svg className="absolute inset-0 w-full h-full">
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -206,7 +206,7 @@ export const CandlestickChart = memo(function CandlestickChart({ className }: Ca
           d={sma.map((val, i) => {
             const x = (i + 0.5) * candleWidth;
             const y = priceToY(val, 100);
-            return \`\${i === 0 ? 'M' : 'L'} \${x} \${y}\`;
+            return `\${i === 0 ? 'M' : 'L'} \${x} \${y}`;
           }).join(' ')}
           fill="none"
           stroke={COLORS.sma}
@@ -315,9 +315,9 @@ export const WinRateChart = memo(function WinRateChart({ percentage = 87, classN
   const data = [{ name: "Win Rate", value: currentValue, fill: COLORS.bullish }];
 
   return (
-    <div ref={containerRef} className={\`relative w-full h-full \${className}\`}>
+    <div ref={containerRef} className={`relative w-full h-full \${className}`}>
       <div className="absolute inset-0 opacity-50" style={{
-        backgroundImage: \`linear-gradient(\${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, \${COLORS.grid} 1px, transparent 1px)\`,
+        backgroundImage: `linear-gradient(\${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, \${COLORS.grid} 1px, transparent 1px)`,
         backgroundSize: '30px 30px',
       }} />
 
@@ -396,9 +396,9 @@ export const SignalPulse = memo(function SignalPulse({ className }: SignalPulseP
   }, [signals.length, isMobile]);
 
   return (
-    <div ref={containerRef} className={\`relative w-full h-full \${className}\`}>
+    <div ref={containerRef} className={`relative w-full h-full \${className}`}>
       <div className="absolute inset-0 opacity-50" style={{
-        backgroundImage: \`linear-gradient(\${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, \${COLORS.grid} 1px, transparent 1px)\`,
+        backgroundImage: `linear-gradient(\${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, \${COLORS.grid} 1px, transparent 1px)`,
         backgroundSize: '20px 20px',
       }} />
 
@@ -406,13 +406,13 @@ export const SignalPulse = memo(function SignalPulse({ className }: SignalPulseP
         {signals.map((signal) => (
           <div key={signal.id} className="flex-1 flex flex-col items-center justify-end h-full">
             <div className="w-full rounded-t transition-all duration-300 ease-out" style={{
-              height: \`\${signal.strength}%\`,
+              height: `\${signal.strength}%`,
               backgroundColor: signal.active ? (signal.type === "long" ? COLORS.bullish : COLORS.bearish) : "rgba(255,255,255,0.08)",
-              boxShadow: signal.active ? \`0 0 20px \${signal.type === "long" ? COLORS.bullish : COLORS.bearish}60\` : "none",
+              boxShadow: signal.active ? `0 0 20px \${signal.type === "long" ? COLORS.bullish : COLORS.bearish}60` : "none",
             }} />
             <div className="w-2 h-2 rounded-full mt-2 transition-all duration-300" style={{
               backgroundColor: signal.active ? (signal.type === "long" ? COLORS.bullish : COLORS.bearish) : "rgba(255,255,255,0.15)",
-              boxShadow: signal.active ? \`0 0 8px \${signal.type === "long" ? COLORS.bullish : COLORS.bearish}\` : "none",
+              boxShadow: signal.active ? `0 0 8px \${signal.type === "long" ? COLORS.bullish : COLORS.bearish}` : "none",
             }} />
           </div>
         ))}
@@ -488,18 +488,18 @@ export const MiniLineChart = memo(function MiniLineChart({ className }: MiniLine
     return points.map((p, i) => {
       const x = (i / (points.length - 1)) * 100;
       const y = 100 - p;
-      return \`\${i === 0 ? 'M' : 'L'} \${x} \${y}\`;
+      return `\${i === 0 ? 'M' : 'L'} \${x} \${y}`;
     }).join(' ');
   }, [points]);
 
-  const areaD = \`\${pathD} L 100 100 L 0 100 Z\`;
+  const areaD = `\${pathD} L 100 100 L 0 100 Z`;
   const isUp = points[points.length - 1] > points[0];
   const color = isUp ? COLORS.bullish : COLORS.bearish;
 
   return (
-    <div ref={containerRef} className={\`relative w-full h-full \${className}\`}>
+    <div ref={containerRef} className={`relative w-full h-full \${className}`}>
       <div className="absolute inset-0 opacity-50" style={{
-        backgroundImage: \`linear-gradient(\${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, \${COLORS.grid} 1px, transparent 1px)\`,
+        backgroundImage: `linear-gradient(\${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, \${COLORS.grid} 1px, transparent 1px)`,
         backgroundSize: '25px 25px',
       }} />
 

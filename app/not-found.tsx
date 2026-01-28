@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { AuroraBackground } from "@/components/ui/aurora-background";
-import { SignalOff, ArrowLeft } from "lucide-react";
+import { WifiOff, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 export default function NotFound() {
@@ -32,7 +32,7 @@ export default function NotFound() {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="mx-auto w-20 h-20 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center"
           >
-            <SignalOff className="w-10 h-10 text-red-400" />
+            <WifiOff className="w-10 h-10 text-red-400" />
           </motion.div>
 
           {/* 404 Text */}
