@@ -108,32 +108,38 @@ export function CandlestickChart({ className }: CandlestickChartProps) {
   const [candles, setCandles] = useState<Candle[]>(() => generateRealisticCandles(32));
   const [, setTick] = useState(0);
 
-  // Add new candle periodically
+  // Add new candle periodically - FAST and exciting
   useEffect(() => {
     const interval = setInterval(() => {
       setCandles(prev => {
         const lastCandle = prev[prev.length - 1];
         const price = lastCandle.close;
 
-        // Continue the trend with some randomness
+        // More dramatic trend continuation with momentum
         const trend = lastCandle.close > lastCandle.open ? 1 : -1;
-        const continueTrend = Math.random() < 0.6;
-        const direction = continueTrend ? trend : -trend;
+        const momentum = Math.random() < 0.7; // 70% chance to continue trend
+        const breakout = Math.random() < 0.15; // 15% chance of breakout move
+        const direction = momentum ? trend : -trend;
 
-        const volatility = 0.008;
-        const move = direction * (Math.random() * volatility * price) + (Math.random() - 0.5) * volatility * price;
+        // Higher volatility for more exciting movement
+        const baseVolatility = 0.012;
+        const volatility = breakout ? baseVolatility * 2.5 : baseVolatility;
+        const move = direction * (Math.random() * volatility * price) + (Math.random() - 0.5) * volatility * price * 0.5;
 
         const open = price;
         const close = price + move;
         const bodySize = Math.abs(close - open);
-        const high = Math.max(open, close) + Math.random() * bodySize * 1.2;
-        const low = Math.min(open, close) - Math.random() * bodySize * 1.2;
-        const volume = 50 + Math.random() * 80;
+        // Bigger wicks on breakouts
+        const wickMultiplier = breakout ? 2 : 1.2;
+        const high = Math.max(open, close) + Math.random() * bodySize * wickMultiplier;
+        const low = Math.min(open, close) - Math.random() * bodySize * wickMultiplier;
+        // Volume spikes on breakouts
+        const volume = breakout ? 100 + Math.random() * 100 : 40 + Math.random() * 60;
 
         return [...prev.slice(1), { open, high, low, close, volume }];
       });
       setTick(t => t + 1);
-    }, 2000);
+    }, 600); // Much faster: 600ms instead of 2000ms
 
     return () => clearInterval(interval);
   }, []);
@@ -402,30 +408,35 @@ export function SignalPulse({ className }: SignalPulseProps) {
   );
 
   useEffect(() => {
-    // Fire signals randomly
+    // Fire signals randomly - faster and more exciting
     const interval = setInterval(() => {
-      const idx = Math.floor(Math.random() * signals.length);
-      const isLong = Math.random() > 0.35;
+      // Sometimes fire multiple signals at once for excitement
+      const numSignals = Math.random() < 0.3 ? 2 : 1;
 
-      setSignals(prev => prev.map((s, i) =>
-        i === idx
-          ? {
-              ...s,
-              active: true,
-              type: isLong ? "long" : "short",
-              strength: 50 + Math.random() * 50,
-              timestamp: Date.now(),
-            }
-          : s
-      ));
+      for (let n = 0; n < numSignals; n++) {
+        const idx = Math.floor(Math.random() * signals.length);
+        const isLong = Math.random() > 0.35;
 
-      // Deactivate after animation
-      setTimeout(() => {
         setSignals(prev => prev.map((s, i) =>
-          i === idx ? { ...s, active: false, strength: 20 + Math.random() * 20 } : s
+          i === idx
+            ? {
+                ...s,
+                active: true,
+                type: isLong ? "long" : "short",
+                strength: 60 + Math.random() * 40, // Higher minimum strength
+                timestamp: Date.now(),
+              }
+            : s
         ));
-      }, 800);
-    }, 600);
+
+        // Deactivate after animation
+        setTimeout(() => {
+          setSignals(prev => prev.map((s, i) =>
+            i === idx ? { ...s, active: false, strength: 25 + Math.random() * 25 } : s
+          ));
+        }, 500);
+      }
+    }, 350); // Much faster: 350ms instead of 600ms
 
     return () => clearInterval(interval);
   }, [signals.length]);
@@ -522,12 +533,14 @@ export function MiniLineChart({ className }: MiniLineChartProps) {
     const interval = setInterval(() => {
       setPoints(prev => {
         const last = prev[prev.length - 1];
-        const trend = last > 60 ? -0.3 : last < 40 ? 0.3 : 0;
-        let newVal = last + trend + (Math.random() - 0.48) * 3;
-        newVal = Math.max(15, Math.min(85, newVal));
+        // Stronger trend momentum for more exciting movement
+        const trend = last > 65 ? -0.8 : last < 35 ? 0.8 : 0;
+        const momentum = Math.random() < 0.2 ? (Math.random() - 0.5) * 8 : 0; // Occasional jumps
+        let newVal = last + trend + (Math.random() - 0.48) * 4 + momentum;
+        newVal = Math.max(10, Math.min(90, newVal));
         return [...prev.slice(1), newVal];
       });
-    }, 400);
+    }, 150); // Much faster: 150ms instead of 400ms
 
     return () => clearInterval(interval);
   }, []);
