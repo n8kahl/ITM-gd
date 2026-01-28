@@ -1,273 +1,276 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   ResponsiveContainer,
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Cell,
   RadialBarChart,
   RadialBar,
   PolarAngleAxis,
 } from "recharts";
 
 // ============================================
-// COLOR PALETTE - TradingView/Bloomberg Professional
+// COLOR PALETTE - TradingView Professional
 // ============================================
 const COLORS = {
-  // Candlestick colors - Professional muted tones
-  bullish: "#0ccb80",        // Muted Mint (TradingView green)
-  bearish: "#f23645",        // Muted Red (TradingView red)
-  bullishDark: "#089968",    // Darker mint for depth
-  bearishDark: "#c42d3a",    // Darker red for depth
-
-  // Moving Average
-  sma: "#f0b90b",            // Gold/Yellow SMA line
-
-  // Volume
-  volumeBull: "rgba(12, 203, 128, 0.3)",
-  volumeBear: "rgba(242, 54, 69, 0.3)",
-
-  // UI Elements
-  gold: "#D4AF37",
+  bullish: "#26a69a",      // TradingView green
+  bearish: "#ef5350",      // TradingView red
+  sma: "#f7931a",          // Bitcoin orange / Gold
+  volume: {
+    bull: "rgba(38, 166, 154, 0.5)",
+    bear: "rgba(239, 83, 80, 0.5)",
+  },
+  grid: "rgba(255, 255, 255, 0.04)",
+  text: "rgba(255, 255, 255, 0.4)",
   champagne: "#E8E4D9",
-  gridLine: "rgba(255, 255, 255, 0.05)",
-  gridLineBright: "rgba(255, 255, 255, 0.08)",
 };
 
 // ============================================
-// CANDLESTICK CHART - Professional Trading Feed
+// REALISTIC CANDLESTICK CHART
 // ============================================
 
-interface CandleData {
-  time: number;
+interface Candle {
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-  sma: number;
 }
 
-// Simple Moving Average calculation
-function calculateSMA(data: CandleData[], period: number, index: number): number {
-  const start = Math.max(0, index - period + 1);
-  const slice = data.slice(start, index + 1);
-  const sum = slice.reduce((acc, c) => acc + c.close, 0);
-  return sum / slice.length;
-}
-
-// Generate a new random candle based on previous close
-function generateCandle(prevClose: number, index: number, prevVolume: number): Omit<CandleData, 'sma'> {
-  const volatility = 0.02;
-  const trend = Math.random() > 0.45 ? 1 : -1;
-
-  const change = prevClose * volatility * Math.random() * trend;
-  const open = prevClose;
-  const close = prevClose + change;
-
-  const highExtra = Math.abs(change) * Math.random() * 0.8;
-  const lowExtra = Math.abs(change) * Math.random() * 0.8;
-
-  const high = Math.max(open, close) + highExtra;
-  const low = Math.min(open, close) - lowExtra;
-
-  // Volume with some variation
-  const volumeChange = (Math.random() - 0.5) * 0.4;
-  const volume = Math.max(50, prevVolume * (1 + volumeChange));
-
-  return {
-    time: index,
-    open,
-    high,
-    low,
-    close,
-    volume,
-  };
-}
-
-// Generate initial candles with SMA
-function generateInitialCandles(count: number): CandleData[] {
-  const candles: CandleData[] = [];
+// Generate realistic market data with trends
+function generateRealisticCandles(count: number): Candle[] {
+  const candles: Candle[] = [];
   let price = 100;
-  let volume = 100;
+  let trend = 1;
+  let trendStrength = 0.6;
+  let volatility = 0.008;
 
   for (let i = 0; i < count; i++) {
-    const candle = generateCandle(price, i, volume);
-    candles.push({ ...candle, sma: 0 });
-    price = candle.close;
-    volume = candle.volume;
+    // Occasionally change trend
+    if (Math.random() < 0.08) {
+      trend *= -1;
+      trendStrength = 0.4 + Math.random() * 0.4;
+    }
+
+    // Vary volatility
+    if (Math.random() < 0.1) {
+      volatility = 0.005 + Math.random() * 0.015;
+    }
+
+    const trendBias = trend * trendStrength * volatility * price;
+    const noise = (Math.random() - 0.5) * volatility * price * 2;
+    const move = trendBias + noise;
+
+    const open = price;
+    const close = price + move;
+
+    // Generate realistic wicks
+    const bodySize = Math.abs(close - open);
+    const upperWick = Math.random() * bodySize * 1.5;
+    const lowerWick = Math.random() * bodySize * 1.5;
+
+    const high = Math.max(open, close) + upperWick;
+    const low = Math.min(open, close) - lowerWick;
+
+    // Volume correlates with volatility and trend changes
+    const baseVolume = 50 + Math.random() * 50;
+    const volumeSpike = Math.abs(move) > volatility * price ? 1.5 : 1;
+    const volume = baseVolume * volumeSpike;
+
+    candles.push({ open, high, low, close, volume });
+    price = close;
   }
 
-  // Calculate SMA for all candles
-  return candles.map((candle, index) => ({
-    ...candle,
-    sma: calculateSMA(candles, 7, index),
-  }));
+  return candles;
+}
+
+// Calculate SMA
+function calculateSMA(candles: Candle[], period: number): number[] {
+  const sma: number[] = [];
+  for (let i = 0; i < candles.length; i++) {
+    if (i < period - 1) {
+      sma.push(candles[i].close);
+    } else {
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) {
+        sum += candles[j].close;
+      }
+      sma.push(sum / period);
+    }
+  }
+  return sma;
 }
 
 interface CandlestickChartProps {
   className?: string;
-  candleCount?: number;
-  updateInterval?: number;
 }
 
-export function CandlestickChart({
-  className,
-  candleCount = 24,
-  updateInterval = 1500,
-}: CandlestickChartProps) {
-  const [candles, setCandles] = useState<CandleData[]>(() =>
-    generateInitialCandles(candleCount)
-  );
+export function CandlestickChart({ className }: CandlestickChartProps) {
+  const [candles, setCandles] = useState<Candle[]>(() => generateRealisticCandles(32));
+  const [, setTick] = useState(0);
 
+  // Add new candle periodically
   useEffect(() => {
     const interval = setInterval(() => {
-      setCandles((prev) => {
+      setCandles(prev => {
         const lastCandle = prev[prev.length - 1];
-        const newCandleBase = generateCandle(lastCandle.close, lastCandle.time + 1, lastCandle.volume);
-        const newCandles = [...prev.slice(1), { ...newCandleBase, sma: 0 }];
+        const price = lastCandle.close;
 
-        // Recalculate SMA for last candle
-        newCandles[newCandles.length - 1].sma = calculateSMA(newCandles, 7, newCandles.length - 1);
+        // Continue the trend with some randomness
+        const trend = lastCandle.close > lastCandle.open ? 1 : -1;
+        const continueTrend = Math.random() < 0.6;
+        const direction = continueTrend ? trend : -trend;
 
-        return newCandles;
+        const volatility = 0.008;
+        const move = direction * (Math.random() * volatility * price) + (Math.random() - 0.5) * volatility * price;
+
+        const open = price;
+        const close = price + move;
+        const bodySize = Math.abs(close - open);
+        const high = Math.max(open, close) + Math.random() * bodySize * 1.2;
+        const low = Math.min(open, close) - Math.random() * bodySize * 1.2;
+        const volume = 50 + Math.random() * 80;
+
+        return [...prev.slice(1), { open, high, low, close, volume }];
       });
-    }, updateInterval);
+      setTick(t => t + 1);
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, [updateInterval]);
+  }, []);
 
-  // Transform data for the chart
-  const chartData = useMemo(() => {
-    return candles.map((candle) => ({
-      time: candle.time,
-      bodyBottom: Math.min(candle.open, candle.close),
-      bodyHeight: Math.abs(candle.close - candle.open),
-      bullish: candle.close >= candle.open,
-      open: candle.open,
-      close: candle.close,
-      high: candle.high,
-      low: candle.low,
-      volume: candle.volume,
-      sma: candle.sma,
-    }));
-  }, [candles]);
+  const sma = useMemo(() => calculateSMA(candles, 7), [candles]);
 
-  const minPrice = Math.min(...candles.map(c => c.low)) * 0.995;
-  const maxPrice = Math.max(...candles.map(c => c.high)) * 1.005;
+  // Calculate chart bounds
+  const prices = candles.flatMap(c => [c.high, c.low]);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice;
+  const padding = priceRange * 0.1;
+  const chartMin = minPrice - padding;
+  const chartMax = maxPrice + padding;
+  const chartRange = chartMax - chartMin;
+
   const maxVolume = Math.max(...candles.map(c => c.volume));
 
+  // Convert price to Y coordinate (SVG coords: 0 at top)
+  const priceToY = useCallback((price: number, height: number) => {
+    return height - ((price - chartMin) / chartRange) * height;
+  }, [chartMin, chartRange]);
+
+  const candleWidth = 100 / candles.length;
+  const bodyWidth = candleWidth * 0.7;
+
   return (
-    <div className={className}>
-      {/* Subtle grid background */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
-          `,
-          backgroundSize: '20px 20px',
-        }}
-      />
+    <div className={`relative w-full h-full ${className}`}>
+      {/* Grid background */}
+      <svg className="absolute inset-0 w-full h-full">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke={COLORS.grid} strokeWidth="0.5" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+      </svg>
 
-      {/* Main chart area */}
-      <div className="absolute inset-0 bottom-[20%]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-            <XAxis dataKey="time" hide />
-            <YAxis domain={[minPrice, maxPrice]} hide />
+      {/* Main chart area (top 75%) */}
+      <svg className="absolute top-0 left-0 right-0" style={{ height: '75%' }} viewBox="0 0 100 100" preserveAspectRatio="none">
+        {/* SMA Line */}
+        <path
+          d={sma.map((val, i) => {
+            const x = (i + 0.5) * candleWidth;
+            const y = priceToY(val, 100);
+            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+          }).join(' ')}
+          fill="none"
+          stroke={COLORS.sma}
+          strokeWidth="0.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
 
-            {/* SMA Line - Gold moving average */}
-            <Line
-              type="monotone"
-              dataKey="sma"
-              stroke={COLORS.sma}
-              strokeWidth={1.5}
-              dot={false}
-              isAnimationActive={false}
+        {/* Candlesticks */}
+        {candles.map((candle, i) => {
+          const x = i * candleWidth + candleWidth / 2;
+          const isBullish = candle.close >= candle.open;
+          const color = isBullish ? COLORS.bullish : COLORS.bearish;
+
+          const bodyTop = priceToY(Math.max(candle.open, candle.close), 100);
+          const bodyBottom = priceToY(Math.min(candle.open, candle.close), 100);
+          const bodyHeight = Math.max(bodyBottom - bodyTop, 0.5);
+
+          const wickTop = priceToY(candle.high, 100);
+          const wickBottom = priceToY(candle.low, 100);
+
+          return (
+            <g key={i}>
+              {/* Wick */}
+              <line
+                x1={x}
+                y1={wickTop}
+                x2={x}
+                y2={wickBottom}
+                stroke={color}
+                strokeWidth="0.3"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Body */}
+              <rect
+                x={x - bodyWidth / 2}
+                y={bodyTop}
+                width={bodyWidth}
+                height={bodyHeight}
+                fill={isBullish ? color : color}
+                stroke={color}
+                strokeWidth="0.3"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Volume bars (bottom 20%) */}
+      <svg className="absolute bottom-0 left-0 right-0" style={{ height: '20%' }} viewBox="0 0 100 100" preserveAspectRatio="none">
+        {candles.map((candle, i) => {
+          const x = i * candleWidth + candleWidth / 2;
+          const isBullish = candle.close >= candle.open;
+          const height = (candle.volume / maxVolume) * 80;
+
+          return (
+            <rect
+              key={i}
+              x={x - bodyWidth / 2}
+              y={100 - height}
+              width={bodyWidth}
+              height={height}
+              fill={isBullish ? COLORS.volume.bull : COLORS.volume.bear}
             />
+          );
+        })}
+      </svg>
 
-            {/* Candle Bodies */}
-            <Bar
-              dataKey="bodyHeight"
-              barSize={8}
-              isAnimationActive={false}
-            >
-              {chartData.map((entry, index) => (
-                <Cell
-                  key={`body-${index}`}
-                  fill={entry.bullish ? COLORS.bullish : COLORS.bearish}
-                />
-              ))}
-            </Bar>
-          </ComposedChart>
-        </ResponsiveContainer>
-
-        {/* Custom wicks overlay */}
-        <div className="absolute inset-0 flex items-end justify-around pointer-events-none px-2">
-          {chartData.map((candle, i) => {
-            const range = maxPrice - minPrice;
-            const wickTopPercent = ((maxPrice - candle.high) / range) * 100;
-            const wickBottomPercent = ((candle.low - minPrice) / range) * 100;
-            const wickHeight = 100 - wickTopPercent - wickBottomPercent;
-
-            return (
-              <div
-                key={i}
-                className="relative h-full flex-1 flex justify-center"
-              >
-                <div
-                  className="absolute w-[1px]"
-                  style={{
-                    top: `${wickTopPercent}%`,
-                    height: `${wickHeight}%`,
-                    backgroundColor: candle.bullish ? COLORS.bullish : COLORS.bearish,
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
+      {/* Price labels */}
+      <div className="absolute top-1 right-1 text-[9px] font-mono text-white/30">
+        {chartMax.toFixed(2)}
       </div>
-
-      {/* Volume bars at bottom */}
-      <div className="absolute inset-x-0 bottom-0 h-[18%] flex items-end justify-around px-2 gap-[2px]">
-        {chartData.map((candle, i) => (
-          <div
-            key={`vol-${i}`}
-            className="flex-1 rounded-t-[1px]"
-            style={{
-              height: `${(candle.volume / maxVolume) * 100}%`,
-              backgroundColor: candle.bullish ? COLORS.volumeBull : COLORS.volumeBear,
-              minHeight: '2px',
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Price axis labels */}
-      <div className="absolute right-1 top-1 bottom-[22%] flex flex-col justify-between pointer-events-none">
-        <span className="text-[8px] font-mono text-white/30">{maxPrice.toFixed(2)}</span>
-        <span className="text-[8px] font-mono text-white/30">{minPrice.toFixed(2)}</span>
+      <div className="absolute right-1 text-[9px] font-mono text-white/30" style={{ top: '70%' }}>
+        {chartMin.toFixed(2)}
       </div>
 
       {/* Live indicator */}
       <div className="absolute top-2 left-2 flex items-center gap-1.5">
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: COLORS.bullish }}></span>
-          <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ backgroundColor: COLORS.bullish }}></span>
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#26a69a] opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#26a69a]"></span>
         </span>
-        <span className="text-[8px] font-mono text-white/40 uppercase tracking-wider">Live</span>
+        <span className="text-[9px] font-mono text-white/50 uppercase tracking-wider">Live</span>
       </div>
 
-      {/* Symbol label */}
-      <div className="absolute top-2 right-2">
-        <span className="text-[8px] font-mono text-white/30">SMA(7)</span>
+      {/* SMA indicator */}
+      <div className="absolute top-2 right-2 flex items-center gap-1">
+        <div className="w-3 h-[2px] rounded" style={{ backgroundColor: COLORS.sma }} />
+        <span className="text-[8px] font-mono text-white/30">SMA 7</span>
       </div>
     </div>
   );
@@ -275,55 +278,55 @@ export function CandlestickChart({
 
 
 // ============================================
-// WIN RATE DONUT CHART - Institutional Style
+// WIN RATE DONUT CHART
 // ============================================
 
 interface WinRateChartProps {
   percentage?: number;
   className?: string;
-  animationDuration?: number;
 }
 
-export function WinRateChart({
-  percentage = 87,
-  className,
-  animationDuration = 2000,
-}: WinRateChartProps) {
+export function WinRateChart({ percentage = 87, className }: WinRateChartProps) {
   const [currentValue, setCurrentValue] = useState(0);
+  const [hasAnimated, setHasAnimated] = useState(false);
 
   useEffect(() => {
+    if (hasAnimated) return;
+
+    const duration = 2000;
     const startTime = Date.now();
 
     const animate = () => {
       const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / animationDuration, 1);
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
 
       setCurrentValue(Math.round(eased * percentage));
 
       if (progress < 1) {
         requestAnimationFrame(animate);
+      } else {
+        setHasAnimated(true);
       }
     };
 
     requestAnimationFrame(animate);
-  }, [percentage, animationDuration]);
+  }, [percentage, hasAnimated]);
 
-  const data = [
-    { name: "Win Rate", value: currentValue, fill: COLORS.bullish },
-  ];
+  const data = [{ name: "Win Rate", value: currentValue, fill: COLORS.bullish }];
 
   return (
-    <div className={className}>
-      {/* Subtle grid background */}
+    <div className={`relative w-full h-full ${className}`}>
+      {/* Grid background */}
       <div
-        className="absolute inset-0 pointer-events-none rounded-lg"
+        className="absolute inset-0 opacity-50"
         style={{
           backgroundImage: `
-            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+            linear-gradient(${COLORS.grid} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.grid} 1px, transparent 1px)
           `,
-          backgroundSize: '24px 24px',
+          backgroundSize: '30px 30px',
         }}
       />
 
@@ -331,19 +334,13 @@ export function WinRateChart({
         <RadialBarChart
           cx="50%"
           cy="50%"
-          innerRadius="70%"
-          outerRadius="90%"
-          barSize={6}
+          innerRadius="65%"
+          outerRadius="85%"
+          barSize={8}
           data={data}
           startAngle={90}
           endAngle={-270}
         >
-          <defs>
-            <linearGradient id="winRateGradientPro" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={COLORS.bullish} />
-              <stop offset="100%" stopColor={COLORS.sma} />
-            </linearGradient>
-          </defs>
           <PolarAngleAxis
             type="number"
             domain={[0, 100]}
@@ -351,21 +348,24 @@ export function WinRateChart({
             tick={false}
           />
           <RadialBar
-            background={{ fill: "rgba(255,255,255,0.03)" }}
+            background={{ fill: "rgba(255,255,255,0.05)" }}
             dataKey="value"
-            cornerRadius={3}
+            cornerRadius={4}
             isAnimationActive={false}
-            fill="url(#winRateGradientPro)"
+            fill={COLORS.bullish}
           />
         </RadialBarChart>
       </ResponsiveContainer>
 
-      {/* Center label - Serif font for elegance */}
+      {/* Center content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl md:text-4xl font-serif font-medium text-champagne tracking-tight">
+        <span
+          className="text-4xl md:text-5xl font-serif font-medium tracking-tight"
+          style={{ color: COLORS.champagne }}
+        >
           {currentValue}%
         </span>
-        <span className="text-[9px] text-white/30 font-mono uppercase tracking-[0.2em] mt-1">
+        <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.25em] mt-1">
           Win Rate
         </span>
       </div>
@@ -375,91 +375,106 @@ export function WinRateChart({
 
 
 // ============================================
-// LIVE SIGNAL PULSE - Activity Indicator
+// LIVE SIGNAL PULSE
 // ============================================
+
+interface Signal {
+  id: number;
+  type: "long" | "short";
+  strength: number;
+  active: boolean;
+  timestamp: number;
+}
 
 interface SignalPulseProps {
   className?: string;
-  signalCount?: number;
 }
 
-export function SignalPulse({ className, signalCount = 5 }: SignalPulseProps) {
-  const [signals, setSignals] = useState<{ id: number; type: "long" | "short"; active: boolean }[]>(
-    Array.from({ length: signalCount }, (_, i) => ({
+export function SignalPulse({ className }: SignalPulseProps) {
+  const [signals, setSignals] = useState<Signal[]>(() =>
+    Array.from({ length: 8 }, (_, i) => ({
       id: i,
-      type: Math.random() > 0.4 ? "long" : "short",
+      type: Math.random() > 0.35 ? "long" : "short",
+      strength: 20 + Math.random() * 30,
       active: false,
+      timestamp: 0,
     }))
   );
 
   useEffect(() => {
+    // Fire signals randomly
     const interval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * signalCount);
+      const idx = Math.floor(Math.random() * signals.length);
+      const isLong = Math.random() > 0.35;
 
-      setSignals((prev) =>
-        prev.map((signal, i) =>
-          i === randomIndex
-            ? { ...signal, active: true, type: Math.random() > 0.4 ? "long" : "short" }
-            : signal
-        )
-      );
+      setSignals(prev => prev.map((s, i) =>
+        i === idx
+          ? {
+              ...s,
+              active: true,
+              type: isLong ? "long" : "short",
+              strength: 50 + Math.random() * 50,
+              timestamp: Date.now(),
+            }
+          : s
+      ));
 
+      // Deactivate after animation
       setTimeout(() => {
-        setSignals((prev) =>
-          prev.map((signal, i) =>
-            i === randomIndex ? { ...signal, active: false } : signal
-          )
-        );
-      }, 500);
-    }, 800);
+        setSignals(prev => prev.map((s, i) =>
+          i === idx ? { ...s, active: false, strength: 20 + Math.random() * 20 } : s
+        ));
+      }, 800);
+    }, 600);
 
     return () => clearInterval(interval);
-  }, [signalCount]);
+  }, [signals.length]);
 
   return (
-    <div className={className}>
+    <div className={`relative w-full h-full ${className}`}>
       {/* Grid background */}
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 opacity-50"
         style={{
           backgroundImage: `
-            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+            linear-gradient(${COLORS.grid} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.grid} 1px, transparent 1px)
           `,
-          backgroundSize: '16px 16px',
+          backgroundSize: '20px 20px',
         }}
       />
 
-      <div className="flex items-end justify-around h-full gap-2 px-4 pb-8">
+      {/* Signal bars */}
+      <div className="absolute inset-x-4 top-4 bottom-12 flex items-end justify-around gap-2">
         {signals.map((signal) => (
           <div
             key={signal.id}
-            className="flex-1 flex flex-col items-center justify-end gap-1.5"
+            className="flex-1 flex flex-col items-center justify-end h-full"
           >
-            {/* Signal bar */}
+            {/* Bar */}
             <div
-              className="w-full rounded-t transition-all duration-300"
+              className="w-full rounded-t transition-all duration-300 ease-out"
               style={{
-                height: signal.active ? `${40 + Math.random() * 50}%` : "20%",
+                height: `${signal.strength}%`,
                 backgroundColor: signal.active
-                  ? signal.type === "long"
-                    ? COLORS.bullish
-                    : COLORS.bearish
-                  : "rgba(255,255,255,0.05)",
+                  ? (signal.type === "long" ? COLORS.bullish : COLORS.bearish)
+                  : "rgba(255,255,255,0.08)",
                 boxShadow: signal.active
-                  ? `0 0 12px ${signal.type === "long" ? COLORS.bullish : COLORS.bearish}40`
+                  ? `0 0 20px ${signal.type === "long" ? COLORS.bullish : COLORS.bearish}60`
                   : "none",
+                transform: signal.active ? "scaleY(1)" : "scaleY(1)",
               }}
             />
             {/* Indicator dot */}
             <div
-              className="w-1.5 h-1.5 rounded-full transition-all duration-300"
+              className="w-2 h-2 rounded-full mt-2 transition-all duration-300"
               style={{
                 backgroundColor: signal.active
-                  ? signal.type === "long"
-                    ? COLORS.bullish
-                    : COLORS.bearish
+                  ? (signal.type === "long" ? COLORS.bullish : COLORS.bearish)
                   : "rgba(255,255,255,0.15)",
+                boxShadow: signal.active
+                  ? `0 0 8px ${signal.type === "long" ? COLORS.bullish : COLORS.bearish}`
+                  : "none",
               }}
             />
           </div>
@@ -467,14 +482,14 @@ export function SignalPulse({ className, signalCount = 5 }: SignalPulseProps) {
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-6 text-[8px] font-mono">
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: COLORS.bullish }} />
-          <span className="text-white/40 uppercase tracking-wider">Long</span>
+      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-6">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.bullish }} />
+          <span className="text-[9px] font-mono text-white/50 uppercase tracking-wider">Long</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: COLORS.bearish }} />
-          <span className="text-white/40 uppercase tracking-wider">Short</span>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.bearish }} />
+          <span className="text-[9px] font-mono text-white/50 uppercase tracking-wider">Short</span>
         </div>
       </div>
     </div>
@@ -483,24 +498,21 @@ export function SignalPulse({ className, signalCount = 5 }: SignalPulseProps) {
 
 
 // ============================================
-// MINI LINE CHART - For trends
+// MINI LINE CHART
 // ============================================
 
 interface MiniLineChartProps {
   className?: string;
-  pointCount?: number;
 }
 
-export function MiniLineChart({
-  className,
-  pointCount = 30,
-}: MiniLineChartProps) {
+export function MiniLineChart({ className }: MiniLineChartProps) {
   const [points, setPoints] = useState<number[]>(() => {
     const arr: number[] = [];
     let value = 50;
-    for (let i = 0; i < pointCount; i++) {
-      value += (Math.random() - 0.45) * 10;
-      value = Math.max(10, Math.min(90, value));
+    for (let i = 0; i < 40; i++) {
+      const trend = i < 15 ? 1 : i < 25 ? -0.5 : 0.8;
+      value += trend * 0.5 + (Math.random() - 0.5) * 4;
+      value = Math.max(15, Math.min(85, value));
       arr.push(value);
     }
     return arr;
@@ -508,85 +520,73 @@ export function MiniLineChart({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setPoints((prev) => {
-        const lastValue = prev[prev.length - 1];
-        let newValue = lastValue + (Math.random() - 0.45) * 8;
-        newValue = Math.max(10, Math.min(90, newValue));
-        return [...prev.slice(1), newValue];
+      setPoints(prev => {
+        const last = prev[prev.length - 1];
+        const trend = last > 60 ? -0.3 : last < 40 ? 0.3 : 0;
+        let newVal = last + trend + (Math.random() - 0.48) * 3;
+        newVal = Math.max(15, Math.min(85, newVal));
+        return [...prev.slice(1), newVal];
       });
-    }, 500);
+    }, 400);
 
     return () => clearInterval(interval);
   }, []);
 
   const pathD = useMemo(() => {
-    const width = 100;
-    const height = 100;
-    const stepX = width / (points.length - 1);
-
-    let d = `M 0 ${height - points[0]}`;
-
-    for (let i = 1; i < points.length; i++) {
-      const x = i * stepX;
-      const y = height - points[i];
-      d += ` L ${x} ${y}`;
-    }
-
-    return d;
+    return points.map((p, i) => {
+      const x = (i / (points.length - 1)) * 100;
+      const y = 100 - p;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
   }, [points]);
 
-  const areaD = useMemo(() => {
-    return `${pathD} L 100 100 L 0 100 Z`;
-  }, [pathD]);
-
+  const areaD = `${pathD} L 100 100 L 0 100 Z`;
   const isUp = points[points.length - 1] > points[0];
+  const color = isUp ? COLORS.bullish : COLORS.bearish;
 
   return (
-    <div className={className}>
-      {/* Grid background */}
+    <div className={`relative w-full h-full ${className}`}>
+      {/* Grid */}
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 opacity-50"
         style={{
           backgroundImage: `
-            linear-gradient(${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(90deg, ${COLORS.gridLine} 1px, transparent 1px)
+            linear-gradient(${COLORS.grid} 1px, transparent 1px),
+            linear-gradient(90deg, ${COLORS.grid} 1px, transparent 1px)
           `,
-          backgroundSize: '20px 20px',
+          backgroundSize: '25px 25px',
         }}
       />
 
-      <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        className="w-full h-full relative z-10"
-      >
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
         <defs>
-          <linearGradient id="lineAreaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={isUp ? COLORS.bullish : COLORS.bearish} stopOpacity="0.25" />
-            <stop offset="100%" stopColor={isUp ? COLORS.bullish : COLORS.bearish} stopOpacity="0" />
+          <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
 
         {/* Area fill */}
-        <path d={areaD} fill="url(#lineAreaGradient)" />
+        <path d={areaD} fill="url(#areaGradient)" />
 
-        {/* Main line */}
+        {/* Line */}
         <path
           d={pathD}
           fill="none"
-          stroke={isUp ? COLORS.bullish : COLORS.bearish}
-          strokeWidth="1.5"
+          stroke={color}
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
 
-        {/* Current value dot */}
+        {/* Current point */}
         <circle
           cx="100"
           cy={100 - points[points.length - 1]}
-          r="2"
-          fill={isUp ? COLORS.bullish : COLORS.bearish}
+          r="3"
+          fill={color}
+          className="animate-pulse"
         />
       </svg>
     </div>
