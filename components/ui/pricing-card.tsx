@@ -262,7 +262,7 @@ export function PricingCard({
     >
       {/* 3D Tilt Container */}
       <motion.div
-        className="relative h-full"
+        className="relative h-full [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
         style={{
           rotateX: isHovered ? rotateX : 0,
           rotateY: isHovered ? rotateY : 0,
@@ -450,21 +450,23 @@ export function PricingCard({
             </ul>
 
             {/* CTA Button */}
-            <div className="space-y-3 relative z-50 pointer-events-auto">
+            <div
+              className="space-y-3 relative z-50"
+              style={{ transform: "translateZ(0)" }}
+            >
               {isElite ? (
-                <Button
-                  asChild
-                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-500 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_40px_rgba(232,228,217,0.5)] hover:-translate-y-0.5 pointer-events-auto cursor-pointer"
+                <a
+                  href={whopLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(whopLink, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="flex items-center justify-center gap-2 font-mono tracking-wide w-full h-14 text-base font-bold rounded-xl transition-all duration-500 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_40px_rgba(232,228,217,0.5)] hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <a
-                    href={whopLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 font-mono tracking-wide pointer-events-auto cursor-pointer"
-                  >
-                    JOIN TODAY
-                  </a>
-                </Button>
+                  JOIN TODAY
+                </a>
               ) : (
                 <Button
                   className="w-full h-14 text-base font-medium rounded-xl bg-white/5 text-smoke/50 border border-white/10 hover:bg-white/10 hover:text-smoke/70 transition-all duration-300"
