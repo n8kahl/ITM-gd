@@ -110,7 +110,7 @@ export function BentoCard({
               src={image}
               alt={title}
               fill
-              className="object-contain drop-shadow-lg"
+              className="object-contain drop-shadow-lg grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500"
             />
           </div>
         ) : Icon ? (
