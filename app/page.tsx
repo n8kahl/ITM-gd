@@ -96,13 +96,13 @@ export default function Home() {
             >
               {/* Main Headline */}
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-ivory leading-tight">
-                <span className="text-gradient-champagne">3 Guaranteed 100%+ Trades</span>{" "}
+                <span className="text-gradient-champagne">3 High-Probability Trade Setups</span>{" "}
                 <span className="text-ivory/90">Every Week</span>
               </h1>
 
               {/* Supporting Copy */}
               <p className="text-sm sm:text-base md:text-lg text-platinum/70 max-w-xl mx-auto leading-relaxed">
-                Elite traders share their exact entries, exits & stop losses in real-time.
+                Targeting 100%+ returns per trade. Elite traders share their exact entries.
                 <span className="text-champagne/80"> No fluff. Just profits.</span>
               </p>
             </motion.div>
@@ -353,7 +353,7 @@ export default function Home() {
                 period="/month"
                 description="For traders who want guaranteed results"
                 features={[
-                  "3+ Guaranteed 100%+ Trades/Week",
+                  "3+ High-Probability Setups/Week",
                   "Personal Trading Coach",
                   "Exclusive Private Channel",
                   "Weekly Strategy Calls",
@@ -380,10 +380,10 @@ export default function Home() {
                   </div>
                   <div className="text-center sm:text-left">
                     <div className="text-lg font-bold text-emerald-400">
-                      100% Money-Back Guarantee
+                      Action-Based Money-Back Guarantee*
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Follow our signals, and we guarantee a profit within 30 days or your money back!
+                      Follow our signals for 30 days. If you don&apos;t see value, we&apos;ll refund you. *Terms apply.
                     </p>
                   </div>
                 </div>

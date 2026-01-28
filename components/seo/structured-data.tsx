@@ -9,7 +9,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     "@context": "https://schema.org",
     "@type": "Product",
     "name": "Elite Trading Membership",
-    "description": "Premium trading signals membership with 3 guaranteed 100%+ trades every week. Real-time alerts, expert education, and a proven track record from professional traders.",
+    "description": "Premium trading signals membership with 3 high-probability trade setups every week. Real-time alerts, expert education, and a proven track record from professional traders.",
     "brand": {
       "@type": "Brand",
       "name": "Trade In The Money"
@@ -18,7 +18,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
       "@type": "Offer",
       "url": `${baseUrl}/#pricing`,
       "priceCurrency": "USD",
-      "price": "99",
+      "price": "200.00",
       "priceValidUntil": "2026-12-31",
       "availability": "https://schema.org/InStock",
       "itemCondition": "https://schema.org/NewCondition"
@@ -28,8 +28,8 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
       "ratingValue": "4.8",
       "bestRating": "5",
       "worstRating": "1",
-      "ratingCount": "120",
-      "reviewCount": "120"
+      "ratingCount": "124",
+      "reviewCount": "124"
     },
     "image": `${baseUrl}/og-image.png`,
     "url": `${baseUrl}/#pricing`
@@ -50,7 +50,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     "@type": "WebSite",
     "name": "Trade In The Money",
     "url": baseUrl,
-    "description": "Premium Trading Signals & Education - 3 Guaranteed 100%+ Trades Every Week",
+    "description": "Premium Trading Signals & Education - 3 High-Probability Trade Setups Every Week",
     "potentialAction": {
       "@type": "SearchAction",
       "target": `${baseUrl}/?q={search_term_string}`,

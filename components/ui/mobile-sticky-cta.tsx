@@ -28,12 +28,11 @@ export function MobileStickyCtA() {
     }
 
     const handleScroll = () => {
-      // Show CTA after scrolling past hero section (approximately 100vh)
-      const heroHeight = window.innerHeight;
+      // Show CTA after scrolling past hero section (approximately 600px)
+      const scrollThreshold = 600;
       const scrollY = window.scrollY;
 
-      // Show when scrolled past 80% of hero section
-      setIsVisible(scrollY > heroHeight * 0.8);
+      setIsVisible(scrollY > scrollThreshold);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -58,19 +57,16 @@ export function MobileStickyCtA() {
             stiffness: 300,
             damping: 30,
           }}
-          className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+          className="fixed bottom-4 left-4 right-4 z-50 md:hidden"
         >
           {/* Glass card heavy background */}
-          <div className="glass-card-heavy mx-2 mb-2 rounded-xl">
+          <div className="glass-card-heavy rounded-xl">
             <div className="flex items-center justify-between px-4 py-3">
               {/* Left side - Text */}
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-champagne" />
                 <span className="text-sm font-medium text-ivory">
                   Join Elite
-                </span>
-                <span className="text-xs text-ivory/60">
-                  • 30-day guarantee
                 </span>
               </div>
 
@@ -82,14 +78,11 @@ export function MobileStickyCtA() {
                 className="rounded-lg px-4"
               >
                 <a href="#pricing">
-                  Get Started
+                  Join Now
                 </a>
               </Button>
             </div>
           </div>
-
-          {/* Safe area padding for devices with home indicator */}
-          <div className="h-safe-area-inset-bottom bg-transparent" />
         </motion.div>
       )}
     </AnimatePresence>
