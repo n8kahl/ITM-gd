@@ -105,13 +105,14 @@ export default function Home() {
             >
               {/* Main Headline */}
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-ivory leading-tight">
-                <span className="text-gradient-champagne">3 High-Probability Trade Setups</span>{" "}
-                <span className="text-ivory/90">Every Week</span>
+                <span className="text-gradient-champagne">High Quality Setups</span>{" "}
+                <span className="text-ivory/90">- Entries, Stop Loss, and Take Profits -</span>{" "}
+                <span className="text-gradient-champagne">Every Day</span>
               </h1>
 
               {/* Supporting Copy */}
               <p className="text-sm sm:text-base md:text-lg text-platinum/70 max-w-xl mx-auto leading-relaxed">
-                Targeting 100%+ returns per trade. Elite traders share their exact entries.
+                Targeting 100%+ returns per trade. Get exact entries, stop losses, and take profit levels.
                 <span className="text-champagne/80"> No fluff. Just profits.</span>
               </p>
             </motion.div>
@@ -605,7 +606,7 @@ export default function Home() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
                 </span>
                 <span className="text-sm text-red-400 font-medium">
-                  Only 7 Elite spots remaining this month
+                  Only 7 Execute Sniper spots remaining this month
                 </span>
               </div>
 
@@ -615,7 +616,7 @@ export default function Home() {
                 variant="luxury-champagne"
                 className="mt-6 rounded-sm min-w-[280px]"
               >
-                <a href="#pricing">Claim Your Spot Now →</a>
+                <a href="#pricing">Choose Your Plan →</a>
               </Button>
 
               <p className="text-xs text-muted-foreground/60 mt-4">

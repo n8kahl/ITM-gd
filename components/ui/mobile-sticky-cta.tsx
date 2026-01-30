@@ -66,7 +66,7 @@ export function MobileStickyCtA() {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-champagne" />
                 <span className="text-sm font-medium text-ivory">
-                  Join Elite
+                  Join Sniper
                 </span>
               </div>
 
