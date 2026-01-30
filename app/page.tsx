@@ -616,7 +616,7 @@ export default function Home() {
                 variant="luxury-champagne"
                 className="mt-6 rounded-sm min-w-[280px]"
               >
-                <a href="#pricing">Claim Your Spot Now →</a>
+                <a href="#pricing">Choose Your Plan →</a>
               </Button>
 
               <p className="text-xs text-muted-foreground/60 mt-4">
