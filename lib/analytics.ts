@@ -1,5 +1,5 @@
 import { trackPageView, trackClick, trackConversion, upsertSession } from './supabase'
-import UAParser from 'ua-parser-js'
+import { UAParser } from 'ua-parser-js'
 
 // ============================================
 // SESSION MANAGEMENT
