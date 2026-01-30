@@ -1,0 +1,485 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Users,
+  UserPlus,
+  Edit2,
+  Trash2,
+  Save,
+  X,
+  Circle,
+  Shield,
+  User,
+  Clock,
+  Mail,
+  AlertCircle
+} from 'lucide-react'
+
+interface TeamMember {
+  id: string
+  display_name: string
+  avatar_url: string | null
+  role: string
+  status: string
+  last_seen_at: string
+  created_at: string
+}
+
+export default function TeamMembersPage() {
+  const [members, setMembers] = useState<TeamMember[]>([])
+  const [isInviting, setIsInviting] = useState(false)
+  const [inviteForm, setInviteForm] = useState({
+    email: '',
+    displayName: '',
+    role: 'agent' as 'admin' | 'agent'
+  })
+  const [inviteStatus, setInviteStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+  const [stats, setStats] = useState({
+    total: 0,
+    online: 0,
+    admins: 0,
+    agents: 0
+  })
+
+  useEffect(() => {
+    loadMembers()
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel('team-members-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_members'
+      }, () => {
+        loadMembers()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  async function loadMembers() {
+    const { data } = await supabase
+      .from('team_members')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (data) {
+      setMembers(data)
+
+      setStats({
+        total: data.length,
+        online: data.filter(m => m.status === 'online').length,
+        admins: data.filter(m => m.role === 'admin').length,
+        agents: data.filter(m => m.role === 'agent').length
+      })
+    }
+  }
+
+  async function inviteMember() {
+    try {
+      setInviteStatus(null)
+
+      // Create auth user using admin API
+      // Note: This requires service_role key, which should be called from a secure Edge Function
+      // For now, we'll provide instructions to add manually
+
+      const authUserId = prompt(
+        'STEP 1: Go to Supabase Dashboard → Authentication → Users\n' +
+        'Click "Add User" and create a new user with email: ' + inviteForm.email + '\n\n' +
+        'STEP 2: Copy the User ID (UUID) from the newly created user\n' +
+        'Paste it here:'
+      )
+
+      if (!authUserId) {
+        setInviteStatus({
+          type: 'error',
+          message: 'User ID is required. Please create the user in Supabase Auth first.'
+        })
+        return
+      }
+
+      // Add to team_members table
+      const { error } = await supabase
+        .from('team_members')
+        .insert({
+          id: authUserId,
+          display_name: inviteForm.displayName || inviteForm.email,
+          role: inviteForm.role,
+          status: 'offline'
+        })
+
+      if (error) {
+        setInviteStatus({
+          type: 'error',
+          message: error.message
+        })
+      } else {
+        setInviteStatus({
+          type: 'success',
+          message: `Successfully added ${inviteForm.displayName || inviteForm.email} to the team!`
+        })
+        setIsInviting(false)
+        setInviteForm({ email: '', displayName: '', role: 'agent' })
+        loadMembers()
+      }
+    } catch (error: any) {
+      setInviteStatus({
+        type: 'error',
+        message: error.message
+      })
+    }
+  }
+
+  async function updateStatus(id: string, status: string) {
+    await supabase
+      .from('team_members')
+      .update({
+        status,
+        last_seen_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    loadMembers()
+  }
+
+  async function updateRole(id: string, role: string) {
+    await supabase
+      .from('team_members')
+      .update({ role })
+      .eq('id', id)
+
+    loadMembers()
+  }
+
+  async function deleteMember(id: string, displayName: string) {
+    if (!confirm(`Are you sure you want to remove ${displayName} from the team? This will not delete their auth account.`)) return
+
+    await supabase
+      .from('team_members')
+      .delete()
+      .eq('id', id)
+
+    loadMembers()
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gradient-champagne mb-2">
+            Team Members
+          </h1>
+          <p className="text-platinum/60">
+            Manage chat agents and administrators
+          </p>
+        </div>
+        <Button onClick={() => setIsInviting(true)} className="bg-gradient-to-r from-emerald-500 to-emerald-600">
+          <UserPlus className="w-4 h-4 mr-2" />
+          Add Team Member
+        </Button>
+      </div>
+
+      {/* Invite Modal */}
+      {isInviting && (
+        <Card className="glass-card-heavy border-emerald-500/30">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-400" />
+                Add New Team Member
+              </CardTitle>
+              <Button variant="outline" size="sm" onClick={() => {
+                setIsInviting(false)
+                setInviteStatus(null)
+              }}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {inviteStatus && (
+              <div className={`p-3 rounded-lg border ${
+                inviteStatus.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-red-500/10 border-red-500/30 text-red-400'
+              }`}>
+                {inviteStatus.message}
+              </div>
+            )}
+
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm text-blue-300">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold mb-1">Manual Setup Required</p>
+                  <p className="text-blue-300/80">
+                    Due to security restrictions, you need to create the user in Supabase Dashboard first, then add them here.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm text-platinum/60 block mb-1">Email Address *</label>
+                <Input
+                  type="email"
+                  placeholder="member@example.com"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                  className="bg-background/50 border-border/40"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-platinum/60 block mb-1">Display Name</label>
+                <Input
+                  type="text"
+                  placeholder="John Doe"
+                  value={inviteForm.displayName}
+                  onChange={(e) => setInviteForm({ ...inviteForm, displayName: e.target.value })}
+                  className="bg-background/50 border-border/40"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-platinum/60 block mb-1">Role</label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={inviteForm.role === 'agent' ? 'default' : 'outline'}
+                    onClick={() => setInviteForm({ ...inviteForm, role: 'agent' })}
+                    className="flex-1"
+                  >
+                    <User className="w-4 h-4 mr-2" />
+                    Agent
+                  </Button>
+                  <Button
+                    variant={inviteForm.role === 'admin' ? 'default' : 'outline'}
+                    onClick={() => setInviteForm({ ...inviteForm, role: 'admin' })}
+                    className="flex-1"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Admin
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              onClick={inviteMember}
+              disabled={!inviteForm.email}
+              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add Team Member
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="glass-card-heavy">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-platinum/60">
+              Total Members
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-ivory">{stats.total}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card-heavy">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
+              <Circle className="w-3 h-3 fill-emerald-500 text-emerald-500" />
+              Online
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-400">{stats.online}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card-heavy">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              Admins
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-champagne">{stats.admins}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card-heavy">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
+              <User className="w-3 h-3" />
+              Agents
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-400">{stats.agents}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Members List */}
+      <div className="space-y-4">
+        {members.map(member => (
+          <Card key={member.id} className="glass-card-heavy">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                {/* Member Info */}
+                <div className="flex items-center gap-4">
+                  {/* Avatar */}
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-champagne-500 flex items-center justify-center text-white font-bold">
+                    {member.display_name.charAt(0).toUpperCase()}
+                  </div>
+
+                  {/* Details */}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-ivory">
+                        {member.display_name}
+                      </h3>
+
+                      {/* Status Badge */}
+                      <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${
+                        member.status === 'online'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : member.status === 'away'
+                          ? 'bg-yellow-500/10 text-yellow-400'
+                          : 'bg-platinum/10 text-platinum/60'
+                      }`}>
+                        <Circle className={`w-2 h-2 ${
+                          member.status === 'online' ? 'fill-emerald-500' : ''
+                        }`} />
+                        {member.status}
+                      </span>
+
+                      {/* Role Badge */}
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        member.role === 'admin'
+                          ? 'bg-champagne/10 text-champagne'
+                          : 'bg-blue-500/10 text-blue-400'
+                      }`}>
+                        {member.role === 'admin' ? '👑 Admin' : '👤 Agent'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 mt-1 text-xs text-platinum/40">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Last seen: {new Date(member.last_seen_at).toLocaleString()}
+                      </span>
+                      <span>
+                        Joined: {new Date(member.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  {/* Status Buttons */}
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant={member.status === 'online' ? 'default' : 'outline'}
+                      onClick={() => updateStatus(member.id, 'online')}
+                      className="text-xs"
+                    >
+                      Online
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={member.status === 'away' ? 'default' : 'outline'}
+                      onClick={() => updateStatus(member.id, 'away')}
+                      className="text-xs"
+                    >
+                      Away
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={member.status === 'offline' ? 'default' : 'outline'}
+                      onClick={() => updateStatus(member.id, 'offline')}
+                      className="text-xs"
+                    >
+                      Offline
+                    </Button>
+                  </div>
+
+                  {/* Role Toggle */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => updateRole(member.id, member.role === 'admin' ? 'agent' : 'admin')}
+                    className="text-xs"
+                  >
+                    {member.role === 'admin' ? 'Make Agent' : 'Make Admin'}
+                  </Button>
+
+                  {/* Delete */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => deleteMember(member.id, member.display_name)}
+                  >
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {members.length === 0 && (
+          <Card className="glass-card-heavy">
+            <CardContent className="p-8 text-center">
+              <Users className="w-16 h-16 text-platinum/20 mx-auto mb-4" />
+              <p className="text-platinum/60 mb-4">
+                No team members yet. Click "Add Team Member" to invite your first member.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Activity Log */}
+      <Card className="glass-card-heavy">
+        <CardHeader>
+          <CardTitle className="text-sm">Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 text-sm text-platinum/60">
+            {members
+              .sort((a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime())
+              .slice(0, 5)
+              .map(member => (
+                <div key={member.id} className="flex items-center justify-between py-2 border-b border-border/20">
+                  <span>{member.display_name}</span>
+                  <span className="text-xs text-platinum/40">
+                    {new Date(member.last_seen_at).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

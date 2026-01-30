@@ -1,0 +1,713 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3 } from "lucide-react";
+import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
+import { AuroraBackground } from "@/components/ui/aurora-background";
+import { BentoCard } from "@/components/ui/bento-card";
+import { PricingCard } from "@/components/ui/pricing-card";
+import { FloatingNavbar } from "@/components/ui/floating-navbar";
+import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
+import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
+import { RibbonDivider } from "@/components/ui/ribbon-divider";
+import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
+import { DiscordMock } from "@/components/ui/discord-mock";
+import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
+import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
+import { SubscribeModal } from "@/components/ui/subscribe-modal";
+import { ContactModal } from "@/components/ui/contact-modal";
+import { AdminLoginModal } from "@/components/ui/admin-login-modal";
+import { ChatWidget } from "@/components/ui/chat-widget";
+import { Analytics } from "@/lib/analytics";
+
+export default function Home() {
+  const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // Initialize analytics tracking
+  useEffect(() => {
+    Analytics.initialize()
+    Analytics.trackPageView()
+  }, []);
+
+  // Auto-popup subscribe modal after 5 seconds (once per session)
+  useEffect(() => {
+    const hasSeenModal = sessionStorage.getItem('titm_modal_seen');
+
+    if (!hasSeenModal) {
+      const timer = setTimeout(() => {
+        setIsSubscribeModalOpen(true);
+        sessionStorage.setItem('titm_modal_seen', 'true');
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  return (
+    <main className="min-h-screen relative">
+      {/* Animated Gradient Mesh Background */}
+      <GradientMeshBackground />
+
+      {/* Floating Island Navbar */}
+      <FloatingNavbar onSubscribeClick={() => setIsSubscribeModalOpen(true)} />
+
+      {/* Subscribe Modal */}
+      <SubscribeModal
+        isOpen={isSubscribeModalOpen}
+        onClose={() => setIsSubscribeModalOpen(false)}
+      />
+
+      {/* Contact Modal */}
+      <ContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+      />
+
+      {/* Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+      />
+
+      {/* Mobile Sticky CTA - appears after scrolling past hero */}
+      <MobileStickyCtA />
+
+      {/* Hero Section - Cinematic Brand Reveal */}
+      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
+        {/* Aurora Liquid Light Background */}
+        <AuroraBackground />
+
+        {/* Main Content - Logo Centered */}
+        <div className="container mx-auto relative z-20">
+          <div className="flex flex-col items-center justify-center text-center space-y-10">
+            {/* Logo with Backlight Effect */}
+            <div className="relative">
+              {/* Pulsing Backlight Glow */}
+              <motion.div
+                className="absolute inset-0 -inset-x-20 -inset-y-10"
+                style={{
+                  background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.4) 0%, rgba(212, 175, 55, 0.2) 40%, transparent 70%)",
+                  filter: "blur(60px)",
+                }}
+                animate={{
+                  scale: [1, 1.15, 1],
+                  opacity: [0.6, 0.9, 0.6],
+                }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              />
+
+              {/* Floating Logo */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 1.2, ease: [0.25, 0.4, 0.25, 1] }}
+              >
+                <motion.div
+                  animate={{
+                    y: [0, -10, 0],
+                  }}
+                  transition={{
+                    duration: 6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <Image
+                    src="/hero-logo.png"
+                    alt="TradeITM"
+                    width={600}
+                    height={200}
+                    sizes="(max-width: 768px) 80vw, 600px"
+                    className="w-[80vw] md:w-[600px] h-auto object-contain drop-shadow-[0_0_40px_rgba(4,120,87,0.3)]"
+                    priority
+                  />
+                </motion.div>
+              </motion.div>
+            </div>
+
+            {/* Powerful Value Proposition */}
+            <motion.div
+              className="space-y-4 max-w-3xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              {/* Main Headline */}
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-ivory leading-tight">
+                <span className="text-gradient-champagne">High Quality Setups</span>{" "}
+                <span className="text-ivory/90">- Entries, Stop Loss, and Take Profits -</span>{" "}
+                <span className="text-gradient-champagne">Every Day</span>
+              </h1>
+
+              {/* Supporting Copy */}
+              <p className="text-sm sm:text-base md:text-lg text-platinum/70 max-w-xl mx-auto leading-relaxed">
+                Targeting 100%+ returns per trade. Get exact entries, stop losses, and take profit levels.
+                <span className="text-champagne/80"> No fluff. Just profits.</span>
+              </p>
+            </motion.div>
+
+            {/* Live Wins Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              <HeroWinsBadge />
+            </motion.div>
+
+            {/* CTA Button - Centered */}
+            <motion.div
+              className="pt-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.9, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              <motion.div
+                animate={{
+                  boxShadow: [
+                    "0 0 20px rgba(212, 175, 55, 0.3)",
+                    "0 0 50px rgba(212, 175, 55, 0.5)",
+                    "0 0 20px rgba(212, 175, 55, 0.3)",
+                  ],
+                }}
+                transition={{
+                  duration: 2.5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                className="rounded-sm"
+              >
+                <Button
+                  asChild
+                  size="xl"
+                  variant="luxury-champagne"
+                  className="min-w-[220px] rounded-sm font-medium tracking-widest text-sm"
+                >
+                  <a href="#pricing" onClick={() => Analytics.trackCTAClick('Hero Join Now')}>JOIN NOW</a>
+                </Button>
+              </motion.div>
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Subtle Scroll Indicator */}
+        <motion.div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, delay: 1.5 }}
+        >
+          <motion.div
+            className="w-[1px] h-20 bg-gradient-to-b from-transparent via-champagne/20 to-transparent"
+            animate={{ scaleY: [1, 1.3, 1] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </motion.div>
+      </section>
+
+      {/* Ribbon Divider */}
+      <RibbonDivider />
+
+      {/* Stats Section */}
+      <section className="container mx-auto px-4 py-12">
+        <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
+          {[
+            { label: "Win Rate", value: "87%", icon: "📈" },
+            { label: "Avg. Weekly Gain", value: "100%", icon: "💰" },
+            { label: "Prime Setups", value: "Daily", icon: "⚡" },
+            { label: "Years Experience", value: "8+", icon: "🏆" },
+          ].map((stat, idx) => (
+            <StaggerItem key={idx}>
+              <Card className="bg-card/50 backdrop-blur border-border/40 h-full hover:border-primary/30 transition-colors duration-300">
+                <CardContent className="pt-6 text-center">
+                  <div className="text-3xl md:text-4xl stat-value text-primary mb-2">{stat.value}</div>
+                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                </CardContent>
+              </Card>
+            </StaggerItem>
+          ))}
+        </StaggerContainer>
+      </section>
+
+      {/* Features Section - Bento Grid */}
+      <section id="features" className="container mx-auto px-4 py-16">
+        <div className="max-w-6xl mx-auto">
+          {/* Section Header */}
+          <div className="text-center mb-16 space-y-4">
+            <RevealHeading>
+              <h2 className="text-3xl md:text-5xl font-bold">
+                Everything You Need To{" "}
+                <span className="text-gradient-champagne">Succeed</span>
+              </h2>
+            </RevealHeading>
+            <RevealContent delay={0.2}>
+              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
+                Comprehensive tools and resources designed to transform your trading journey
+              </p>
+            </RevealContent>
+          </div>
+
+          {/* Bento Grid Layout - Clean 2x3 grid */}
+          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
+            {/* Row 1 */}
+            {/* Real-Time Trade Alerts with Live Candlestick */}
+            <StaggerItem>
+              <BentoCard
+                icon={TrendingUp}
+                title="Real-Time Trade Alerts"
+                description="Get instant trade alerts with detailed entry, exit, and stop-loss levels backed by proven strategies."
+                spotlight="emerald"
+                graphic={<CandlestickChart className="absolute inset-0" />}
+              />
+            </StaggerItem>
+
+            {/* 87% Success Rate with Win Rate Chart */}
+            <StaggerItem>
+              <BentoCard
+                icon={Target}
+                title="87% Success Rate"
+                description="Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
+                spotlight="emerald"
+                graphic={<WinRateChart className="absolute inset-0" percentage={87} />}
+              />
+            </StaggerItem>
+
+            {/* Active Community with Discord Mock */}
+            <StaggerItem>
+              <BentoCard
+                icon={Users}
+                title="Active Community"
+                description="Join thousands of traders sharing real-time wins in our exclusive Discord server."
+                spotlight="emerald"
+                graphic={<DiscordMock />}
+                graphicClassName="!bg-transparent !border-0"
+              />
+            </StaggerItem>
+
+            {/* Row 2 */}
+            {/* Educational Content */}
+            <StaggerItem>
+              <BentoCard
+                icon={BookOpen}
+                title="Educational Content"
+                description="Access exclusive courses, webinars, and tutorials from beginner basics to advanced strategies."
+                spotlight="gold"
+                image="/icon-education.png"
+              />
+            </StaggerItem>
+
+            {/* Lightning Fast */}
+            <StaggerItem>
+              <BentoCard
+                icon={Zap}
+                title="Lightning Fast"
+                description="Receive trade alerts instantly via Discord notifications so you never miss a profitable opportunity."
+                spotlight="emerald"
+                image="/icon-lightning.png"
+              />
+            </StaggerItem>
+
+            {/* Risk Management */}
+            <StaggerItem>
+              <BentoCard
+                icon={Shield}
+                title="Risk Management"
+                description="Learn proper position sizing, portfolio management, and strategies to protect your capital."
+                spotlight="gold"
+                image="/icon-shield.png"
+              />
+            </StaggerItem>
+          </StaggerContainer>
+        </div>
+      </section>
+
+      {/* Ribbon Divider */}
+      <RibbonDivider flip />
+
+      {/* Pricing Section - Membership Cards */}
+      <section id="pricing" className="container mx-auto px-4 py-16">
+        <div className="max-w-6xl mx-auto">
+          {/* Section Header */}
+          <div className="text-center mb-16 space-y-4">
+            <RevealHeading>
+              <h2 className="text-3xl md:text-5xl font-bold">
+                Choose Your{" "}
+                <span className="text-gradient-champagne">Plan</span>
+              </h2>
+            </RevealHeading>
+            <RevealContent delay={0.2}>
+              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
+                Select the plan that fits your trading goals and budget
+              </p>
+            </RevealContent>
+          </div>
+
+          {/* Pricing Cards Grid - Core → Pro → Execute */}
+          <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
+            {/* Core Sniper Card - $199/mo */}
+            <StaggerItem>
+              <PricingCard
+                name="Core Sniper"
+                price="$199"
+                period="/month"
+                description="For disciplined traders who want full market exposure"
+                features={[
+                  "👀 Morning Watchlist",
+                  "🎯 SPX day trade setups",
+                  "🔔 High-volume & momentum alerts",
+                  "🧠 Educational commentary & trade rationale",
+                ]}
+                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/"
+                tier="core"
+                tagline="Execution focused education"
+              />
+            </StaggerItem>
+
+            {/* Pro Sniper Card - $299/mo */}
+            <StaggerItem>
+              <PricingCard
+                name="Pro Sniper"
+                price="$299"
+                period="/month"
+                description="For traders scaling beyond day trades"
+                features={[
+                  "Everything in Core Sniper, plus:",
+                  "🧭 LEAPS",
+                  "📈 Advanced swing trade strategy",
+                  "🧠 Position building logic",
+                  "📊 Longer term market structure insight",
+                  "🎯 Capital allocation education",
+                ]}
+                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/"
+                tier="pro"
+                tagline="More patience & strategy, not just speed"
+              />
+            </StaggerItem>
+
+            {/* Execute Sniper Card - $499/mo */}
+            <StaggerItem>
+              <PricingCard
+                name="Execute Sniper"
+                price="$499"
+                period="/month"
+                description="For serious traders only"
+                features={[
+                  "Everything in Pro Sniper, plus:",
+                  "🔥 Advanced NDX real time alerts (entries & exits)",
+                  "🧭 High-conviction LEAPS framework",
+                  "🎯 Higher-level trade commentary",
+                  "🧠 Risk scaling & portfolio mindset",
+                ]}
+                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/"
+                tier="execute"
+                tagline="Maximum conviction, maximum execution"
+              />
+            </StaggerItem>
+          </StaggerContainer>
+
+          {/* Trust Badges & Guarantee */}
+          <RevealContent delay={0.5}>
+            <div className="mt-12 space-y-6">
+              {/* Main Guarantee */}
+              <div className="text-center">
+                <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-6 py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 backdrop-blur-sm">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                    <Shield className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <div className="text-lg font-bold text-emerald-400">
+                      Action-Based Money-Back Guarantee*
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Follow our trade alerts for 30 days. If you don&apos;t see value, we&apos;ll refund you. *Terms apply.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trust Badges */}
+              <div className="flex flex-wrap items-center justify-center gap-6 text-muted-foreground/60">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="text-xs">SSL Secured</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-xs">Powered by Stripe</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="text-xs">Secure Checkout</span>
+                </div>
+              </div>
+            </div>
+          </RevealContent>
+        </div>
+      </section>
+
+      {/* Testimonials Section - Infinite Marquee */}
+      <section id="testimonials" className="py-14 overflow-hidden">
+        <div className="container mx-auto px-4 mb-12">
+          <div className="text-center space-y-4">
+            <RevealHeading>
+              <h2 className="text-3xl md:text-5xl font-bold">
+                Trusted By Traders{" "}
+                <span className="text-gradient-champagne">Worldwide</span>
+              </h2>
+            </RevealHeading>
+            <RevealContent delay={0.2}>
+              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
+                See what our community members have to say about their success
+              </p>
+            </RevealContent>
+          </div>
+        </div>
+
+        {/* Marquee Row 1 - Left to Right */}
+        <TestimonialMarquee
+          testimonials={[
+            {
+              name: "Michael C.",
+              role: "Execute Sniper Member",
+              content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM alerts are the real deal.",
+              avatar: "MC"
+            },
+            {
+              name: "Sarah R.",
+              role: "Pro Sniper Member",
+              content: "Made back my entire membership cost in 2 days. Last week's TSLA play hit +156%. These guys know what they're doing.",
+              avatar: "SR"
+            },
+            {
+              name: "David P.",
+              role: "Execute Sniper Member",
+              content: "$8,400 profit this month following the trade alerts. My account has grown 180% in 6 months. Best investment I've ever made.",
+              avatar: "DP"
+            },
+            {
+              name: "Emily W.",
+              role: "Pro Sniper Member",
+              content: "Went from -$4k to +$12k in 3 months. The risk management education saved me from blowing up my account.",
+              avatar: "EW"
+            },
+            {
+              name: "James M.",
+              role: "Core Sniper Member",
+              content: "3 trades, $5,700 profit last week alone. The AMD call was +167%. This community delivers every single week.",
+              avatar: "JM"
+            },
+          ]}
+          direction="left"
+          speed={25}
+          className="mb-6"
+        />
+
+        {/* Marquee Row 2 - Right to Left */}
+        <TestimonialMarquee
+          testimonials={[
+            {
+              name: "Alex T.",
+              role: "Core Sniper Member",
+              content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These trade alerts fit around any schedule.",
+              avatar: "AT"
+            },
+            {
+              name: "Lisa K.",
+              role: "Execute Sniper Member",
+              content: "$15k account to $41k in 4 months. The 1-on-1 mentorship sessions are invaluable. Worth every penny.",
+              avatar: "LK"
+            },
+            {
+              name: "Robert G.",
+              role: "Execute Sniper Member",
+              content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of alerts is unmatched.",
+              avatar: "RG"
+            },
+            {
+              name: "Jennifer L.",
+              role: "Pro Sniper Member",
+              content: "Membership paid for itself in the first week with one trade. +142% on SPY calls. Now I'm up $7,800 total.",
+              avatar: "JL"
+            },
+            {
+              name: "Marcus B.",
+              role: "Core Sniper Member",
+              content: "Watch trades live, learn the strategy, bank profits. Simple. $4,200 last week following along. Life-changing.",
+              avatar: "MB"
+            },
+          ]}
+          direction="right"
+          speed={30}
+        />
+      </section>
+
+      {/* Ribbon Divider */}
+      <RibbonDivider />
+
+      {/* Post-Purchase Instructions Section */}
+      <section className="container mx-auto px-4 py-14">
+        <RevealContent>
+          <div className="max-w-3xl mx-auto">
+            <Card className="glass-card-heavy border-primary/30">
+              <CardHeader className="text-center pb-8">
+                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <BarChart3 className="h-8 w-8 text-primary" />
+                </div>
+                <CardTitle className="text-3xl mb-3">What Happens After Purchase?</CardTitle>
+                <CardDescription className="text-lg leading-relaxed">
+                  Getting started is quick and easy. Here&apos;s what to expect:
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <StaggerContainer className="space-y-6" staggerDelay={0.1} initialDelay={0.2}>
+                  {[
+                    {
+                      step: "1",
+                      title: "Complete Your Purchase",
+                      description: "Click any 'Get Started' button above to be redirected to our secure Whop checkout page."
+                    },
+                    {
+                      step: "2",
+                      title: "Receive Instant Access",
+                      description: "After payment, you'll immediately receive an email with your Discord invite link and login credentials."
+                    },
+                    {
+                      step: "3",
+                      title: "Join Our Discord Community",
+                      description: "Click the invite link to join our exclusive Discord server. Your role will be automatically assigned based on your plan."
+                    },
+                    {
+                      step: "4",
+                      title: "Start Trading",
+                      description: "Explore the channels, introduce yourself, and start receiving real-time trade alerts immediately!"
+                    }
+                  ].map((step, idx) => (
+                    <StaggerItem key={idx}>
+                      <div className="flex gap-4">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-wealth-emerald-dark flex items-center justify-center font-bold text-primary-foreground shrink-0">
+                          {step.step}
+                        </div>
+                        <div className="flex-1 pt-1">
+                          <h4 className="font-semibold text-lg mb-1">{step.title}</h4>
+                          <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+                        </div>
+                      </div>
+                    </StaggerItem>
+                  ))}
+                </StaggerContainer>
+                <div className="pt-6 border-t border-border/40">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Need help? <button onClick={() => setIsContactModalOpen(true)} className="text-primary hover:underline">Contact us</button>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </RevealContent>
+      </section>
+
+      {/* CTA Section */}
+      <section className="container mx-auto px-4 py-14">
+        <RevealContent>
+          <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-champagne-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
+            {/* Background gradient accent */}
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-champagne/5 pointer-events-none" />
+
+            <div className="relative z-10">
+              <h2 className="text-3xl md:text-5xl font-bold">
+                Stop Missing{" "}
+                <span className="text-gradient-champagne">Winning Trades</span>
+              </h2>
+              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
+                Every day you wait is another 100%+ trade you're missing. Get the exact entries elite traders use.
+              </p>
+
+              {/* Urgency Element */}
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
+                </span>
+                <span className="text-sm text-red-400 font-medium">
+                  Only 7 Execute Sniper spots remaining this month
+                </span>
+              </div>
+
+              <Button
+                asChild
+                size="xl"
+                variant="luxury-champagne"
+                className="mt-6 rounded-sm min-w-[280px]"
+              >
+                <a href="#pricing">Choose Your Plan →</a>
+              </Button>
+
+              <p className="text-xs text-muted-foreground/60 mt-4">
+                30-day money-back guarantee
+              </p>
+            </div>
+          </div>
+        </RevealContent>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-champagne/10 bg-[rgba(10,10,11,0.9)] backdrop-blur-xl">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-3">
+              {/* Typographic Logo in Footer */}
+              <div className="flex items-center gap-1">
+                <span className="font-serif text-xl tracking-tight font-semibold text-ivory">
+                  Trade
+                </span>
+                <span className="font-serif text-xl tracking-tight font-semibold text-champagne">
+                  ITM
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-wealth-emerald ml-0.5 mb-2" />
+              </div>
+              <div className="ml-2">
+                <div className="text-xs text-muted-foreground">© 2026 All rights reserved</div>
+              </div>
+            </div>
+            <div className="flex gap-6 text-sm text-muted-foreground">
+              <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
+              <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
+            </div>
+          </div>
+          <div className="mt-6 text-center text-xs text-muted-foreground">
+            <p>
+              Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.{" "}
+              <button
+                onClick={() => setIsAdminModalOpen(true)}
+                className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.6)] ml-1"
+                aria-label="Admin access"
+              >
+                ❤️‍🔥
+              </button>
+            </p>
+          </div>
+        </div>
+      </footer>
+
+      {/* AI Chat Widget */}
+      <ChatWidget />
+    </main>
+  );
+}
