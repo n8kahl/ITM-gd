@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, User, Phone, Instagram, CheckCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -160,6 +161,16 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                   <>
                     {/* Header */}
                     <div className="text-center mb-6">
+                      {/* Brand Logo */}
+                      <div className="flex justify-center mb-4">
+                        <Image
+                          src="/hero-logo.png"
+                          alt="TradeITM"
+                          width={180}
+                          height={60}
+                          className="h-12 w-auto object-contain"
+                        />
+                      </div>
                       <h2 className="text-2xl font-serif font-semibold text-ivory mb-2">
                         Subscribe for Updates
                       </h2>
@@ -281,6 +292,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                       <motion.button
                         type="submit"
                         disabled={isSubmitting}
+                        onClick={() => Analytics.trackCTAClick('Subscribe Modal Button')}
                         className={cn(
                           "w-full h-14 rounded-xl font-semibold text-base",
                           "bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light",
