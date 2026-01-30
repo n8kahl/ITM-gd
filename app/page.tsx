@@ -19,9 +19,11 @@ import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
+import { ContactModal } from "@/components/ui/contact-modal";
 
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   return (
     <main className="min-h-screen relative">
       {/* Animated Gradient Mesh Background */}
@@ -34,6 +36,12 @@ export default function Home() {
       <SubscribeModal
         isOpen={isSubscribeModalOpen}
         onClose={() => setIsSubscribeModalOpen(false)}
+      />
+
+      {/* Contact Modal */}
+      <ContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
       />
 
       {/* Mobile Sticky CTA - appears after scrolling past hero */}
@@ -328,7 +336,7 @@ export default function Home() {
                   "🔔 High-volume & momentum alerts",
                   "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink="#"
+                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/"
                 tier="core"
                 tagline="Execution focused education"
               />
@@ -349,7 +357,7 @@ export default function Home() {
                   "📊 Longer term market structure insight",
                   "🎯 Capital allocation education",
                 ]}
-                whopLink="#"
+                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/"
                 tier="pro"
                 tagline="More patience & strategy, not just speed"
               />
@@ -369,7 +377,7 @@ export default function Home() {
                   "🎯 Higher-level trade commentary",
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink="#"
+                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/"
                 tier="execute"
                 tagline="Maximum conviction, maximum execution"
               />
@@ -574,7 +582,7 @@ export default function Home() {
                 </StaggerContainer>
                 <div className="pt-6 border-t border-border/40">
                   <p className="text-sm text-muted-foreground text-center">
-                    Need help? Contact us at <a href="mailto:support@tradeinthemoney.com" className="text-primary hover:underline">support@tradeinthemoney.com</a>
+                    Need help? <button onClick={() => setIsContactModalOpen(true)} className="text-primary hover:underline">Contact us</button>
                   </p>
                 </div>
               </CardContent>
@@ -649,7 +657,7 @@ export default function Home() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
               <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
-              <a href="mailto:support@tradeinthemoney.com" className="hover:text-champagne transition-colors duration-300">Contact</a>
+              <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>
           </div>
           <div className="mt-6 text-center text-xs text-muted-foreground">

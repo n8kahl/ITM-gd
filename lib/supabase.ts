@@ -29,3 +29,28 @@ export async function addSubscriber(subscriber: Omit<Subscriber, 'id' | 'created
 
   return data
 }
+
+// Type for contact form data
+export interface ContactSubmission {
+  id?: string
+  name: string
+  email: string
+  phone?: string
+  message: string
+  created_at?: string
+}
+
+// Function to add a new contact submission
+export async function addContactSubmission(contact: Omit<ContactSubmission, 'id' | 'created_at'>) {
+  const { data, error } = await supabase
+    .from('contact_submissions')
+    .insert([contact])
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
