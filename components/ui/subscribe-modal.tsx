@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, User, Phone, Instagram, CheckCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { addSubscriber } from "@/lib/supabase";
+import { Analytics, getSessionId } from "@/lib/analytics";
 
 // Form validation schema
 const subscribeSchema = z.object({
@@ -38,9 +39,19 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
     resolver: zodResolver(subscribeSchema),
   });
 
+  // Track modal open/close
+  useEffect(() => {
+    if (isOpen) {
+      Analytics.trackModalOpen('Subscribe');
+    }
+  }, [isOpen]);
+
   const onSubmit = async (data: SubscribeFormData) => {
     setIsSubmitting(true);
     setError(null);
+
+    // Track form submission
+    Analytics.trackFormSubmit('Subscribe');
 
     try {
       await addSubscriber({
@@ -48,7 +59,12 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
         email: data.email,
         phone: data.phone || undefined,
         instagram_handle: data.instagram_handle || undefined,
+        session_id: getSessionId(),
       });
+
+      // Track successful subscription
+      Analytics.trackSubscribe();
+
       setIsSuccess(true);
       reset();
       // Auto close after success
@@ -69,6 +85,9 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
 
   const handleClose = () => {
     if (!isSubmitting) {
+      // Track modal close
+      Analytics.trackModalClose('Subscribe');
+
       onClose();
       setIsSuccess(false);
       setError(null);

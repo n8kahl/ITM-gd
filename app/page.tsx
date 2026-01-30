@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,19 @@ import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker"
 import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
 import { ContactModal } from "@/components/ui/contact-modal";
+import { AdminLoginModal } from "@/components/ui/admin-login-modal";
+import { Analytics } from "@/lib/analytics";
 
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // Initialize analytics tracking
+  useEffect(() => {
+    Analytics.initialize()
+    Analytics.trackPageView()
+  }, []);
   return (
     <main className="min-h-screen relative">
       {/* Animated Gradient Mesh Background */}
@@ -42,6 +51,12 @@ export default function Home() {
       <ContactModal
         isOpen={isContactModalOpen}
         onClose={() => setIsContactModalOpen(false)}
+      />
+
+      {/* Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
       />
 
       {/* Mobile Sticky CTA - appears after scrolling past hero */}
@@ -162,7 +177,7 @@ export default function Home() {
                   variant="luxury-champagne"
                   className="min-w-[220px] rounded-sm font-medium tracking-widest text-sm"
                 >
-                  <a href="#pricing">JOIN NOW</a>
+                  <a href="#pricing" onClick={() => Analytics.trackCTAClick('Hero Join Now')}>JOIN NOW</a>
                 </Button>
               </motion.div>
             </motion.div>
@@ -661,7 +676,16 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-6 text-center text-xs text-muted-foreground">
-            <p>Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.</p>
+            <p>
+              Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.{" "}
+              <button
+                onClick={() => setIsAdminModalOpen(true)}
+                className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.6)] ml-1"
+                aria-label="Admin access"
+              >
+                ❤️‍🔥
+              </button>
+            </p>
           </div>
         </div>
       </footer>

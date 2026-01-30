@@ -4,6 +4,7 @@ import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRef, useState, useEffect } from "react";
+import { Analytics } from "@/lib/analytics";
 
 // Detect touch devices to disable 3D tilt
 function useIsTouchDevice() {
@@ -220,6 +221,9 @@ export function PricingCard({
 
   // Handle card click - navigate to Whop
   const handleCardClick = () => {
+    // Track pricing card click
+    Analytics.trackPricingClick(name);
+
     if (whopLink && whopLink !== "#") {
       window.open(whopLink, '_blank', 'noopener,noreferrer');
     }
