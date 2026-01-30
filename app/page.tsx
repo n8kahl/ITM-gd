@@ -483,31 +483,31 @@ export default function Home() {
           testimonials={[
             {
               name: "Michael C.",
-              role: "Elite Member",
+              role: "Execute Sniper Member",
               content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM alerts are the real deal.",
               avatar: "MC"
             },
             {
               name: "Sarah R.",
-              role: "Elite Member",
+              role: "Pro Sniper Member",
               content: "Made back my entire membership cost in 2 days. Last week's TSLA play hit +156%. These guys know what they're doing.",
               avatar: "SR"
             },
             {
               name: "David P.",
-              role: "Elite Member",
+              role: "Execute Sniper Member",
               content: "$8,400 profit this month following the trade alerts. My account has grown 180% in 6 months. Best investment I've ever made.",
               avatar: "DP"
             },
             {
               name: "Emily W.",
-              role: "Elite Member",
+              role: "Pro Sniper Member",
               content: "Went from -$4k to +$12k in 3 months. The risk management education saved me from blowing up my account.",
               avatar: "EW"
             },
             {
               name: "James M.",
-              role: "Elite Member",
+              role: "Core Sniper Member",
               content: "3 trades, $5,700 profit last week alone. The AMD call was +167%. This community delivers every single week.",
               avatar: "JM"
             },
@@ -522,31 +522,31 @@ export default function Home() {
           testimonials={[
             {
               name: "Alex T.",
-              role: "Part-time Trader",
+              role: "Core Sniper Member",
               content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These trade alerts fit around any schedule.",
               avatar: "AT"
             },
             {
               name: "Lisa K.",
-              role: "Elite Member",
+              role: "Execute Sniper Member",
               content: "$15k account to $41k in 4 months. The 1-on-1 mentorship sessions are invaluable. Worth every penny.",
               avatar: "LK"
             },
             {
               name: "Robert G.",
-              role: "Elite Member",
+              role: "Execute Sniper Member",
               content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of alerts is unmatched.",
               avatar: "RG"
             },
             {
               name: "Jennifer L.",
-              role: "Elite Member",
+              role: "Pro Sniper Member",
               content: "Membership paid for itself in the first week with one trade. +142% on SPY calls. Now I'm up $7,800 total.",
               avatar: "JL"
             },
             {
               name: "Marcus B.",
-              role: "Elite Member",
+              role: "Core Sniper Member",
               content: "Watch trades live, learn the strategy, bank profits. Simple. $4,200 last week following along. Life-changing.",
               avatar: "MB"
             },
