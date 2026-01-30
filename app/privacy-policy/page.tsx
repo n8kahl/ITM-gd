@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
+import { ContactLink } from "@/components/ui/contact-link";
 
 export const metadata = {
   title: "Privacy Policy - Trade In The Money",
@@ -112,10 +113,8 @@ export default function PrivacyPolicy() {
               <section>
                 <h2 className="text-xl font-semibold text-ivory mb-3">11. Contact Us</h2>
                 <p>
-                  If you have questions about this Privacy Policy, please contact us at:{" "}
-                  <a href="mailto:support@tradeinthemoney.com" className="text-champagne hover:underline">
-                    support@tradeinthemoney.com
-                  </a>
+                  If you have questions about this Privacy Policy, please{" "}
+                  <ContactLink className="text-champagne hover:underline">contact us</ContactLink>.
                 </p>
               </section>
             </div>
@@ -140,7 +139,7 @@ export default function PrivacyPolicy() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <Link href="/privacy-policy" className="text-champagne transition-colors duration-300">Privacy Policy</Link>
               <Link href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</Link>
-              <a href="mailto:support@tradeinthemoney.com" className="hover:text-champagne transition-colors duration-300">Contact</a>
+              <ContactLink className="hover:text-champagne transition-colors duration-300">Contact</ContactLink>
             </div>
           </div>
         </div>

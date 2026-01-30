@@ -1,15 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { AuroraBackground } from "@/components/ui/aurora-background";
+import { ContactModal } from "@/components/ui/contact-modal";
 import { WifiOff, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 export default function NotFound() {
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   return (
     <main className="min-h-screen relative flex items-center justify-center px-4">
+      {/* Contact Modal */}
+      <ContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+      />
+
       {/* Animated Gradient Mesh Background */}
       <GradientMeshBackground />
 
@@ -95,13 +104,13 @@ export default function NotFound() {
             transition={{ delay: 0.7, duration: 0.5 }}
             className="text-xs text-muted-foreground/60"
           >
-            Need help? Contact{" "}
-            <a
-              href="mailto:support@tradeinthemoney.com"
+            Need help?{" "}
+            <button
+              onClick={() => setIsContactModalOpen(true)}
               className="text-champagne/80 hover:text-champagne transition-colors"
             >
-              support@tradeinthemoney.com
-            </a>
+              Contact us
+            </button>
           </motion.p>
         </div>
       </motion.div>
