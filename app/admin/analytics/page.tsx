@@ -393,9 +393,9 @@ export default function AnalyticsPage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Mail className="h-5 w-5" />
-                  Subscribers
+                  Subscribers ({data.subscribers.length})
                 </CardTitle>
-                <CardDescription>Recent email signups</CardDescription>
+                <CardDescription>All email signups</CardDescription>
               </div>
               <Button
                 variant="outline"
@@ -422,7 +422,7 @@ export default function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.subscribers.slice(0, 10).map((sub, idx) => (
+                  {data.subscribers.map((sub, idx) => (
                     <tr key={idx} className="border-b border-border/40 hover:bg-muted/5">
                       <td className="py-3 px-4">{sub.name}</td>
                       <td className="py-3 px-4">{sub.email}</td>
@@ -450,9 +450,9 @@ export default function AnalyticsPage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  Contact Submissions
+                  Contact Submissions ({data.contacts.length})
                 </CardTitle>
-                <CardDescription>Recent contact form messages</CardDescription>
+                <CardDescription>All contact form messages</CardDescription>
               </div>
               <Button
                 variant="outline"
@@ -477,7 +477,7 @@ export default function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.contacts.slice(0, 10).map((contact, idx) => (
+                  {data.contacts.map((contact, idx) => (
                     <tr key={idx} className="border-b border-border/40 hover:bg-muted/5">
                       <td className="py-3 px-4">{contact.name}</td>
                       <td className="py-3 px-4">{contact.email}</td>
