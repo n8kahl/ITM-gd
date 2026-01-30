@@ -33,6 +33,21 @@ export default function Home() {
     Analytics.initialize()
     Analytics.trackPageView()
   }, []);
+
+  // Auto-popup subscribe modal after 5 seconds (once per session)
+  useEffect(() => {
+    const hasSeenModal = sessionStorage.getItem('titm_modal_seen');
+
+    if (!hasSeenModal) {
+      const timer = setTimeout(() => {
+        setIsSubscribeModalOpen(true);
+        sessionStorage.setItem('titm_modal_seen', 'true');
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   return (
     <main className="min-h-screen relative">
       {/* Animated Gradient Mesh Background */}
@@ -208,7 +223,7 @@ export default function Home() {
           {[
             { label: "Win Rate", value: "87%", icon: "📈" },
             { label: "Avg. Weekly Gain", value: "100%", icon: "💰" },
-            { label: "Trade Alerts", value: "1+", icon: "⚡" },
+            { label: "Prime Setups", value: "Daily", icon: "⚡" },
             { label: "Years Experience", value: "8+", icon: "🏆" },
           ].map((stat, idx) => (
             <StaggerItem key={idx}>
