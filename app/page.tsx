@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -17,15 +18,23 @@ import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/min
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
+import { SubscribeModal } from "@/components/ui/subscribe-modal";
 
 export default function Home() {
+  const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   return (
     <main className="min-h-screen relative">
       {/* Animated Gradient Mesh Background */}
       <GradientMeshBackground />
 
       {/* Floating Island Navbar */}
-      <FloatingNavbar />
+      <FloatingNavbar onSubscribeClick={() => setIsSubscribeModalOpen(true)} />
+
+      {/* Subscribe Modal */}
+      <SubscribeModal
+        isOpen={isSubscribeModalOpen}
+        onClose={() => setIsSubscribeModalOpen(false)}
+      />
 
       {/* Mobile Sticky CTA - appears after scrolling past hero */}
       <MobileStickyCtA />
@@ -174,8 +183,8 @@ export default function Home() {
         <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
           {[
             { label: "Win Rate", value: "87%", icon: "📈" },
-            { label: "Avg. Weekly Gain", value: "127%", icon: "💰" },
-            { label: "Signals Daily", value: "15+", icon: "⚡" },
+            { label: "Avg. Weekly Gain", value: "100%", icon: "💰" },
+            { label: "Trade Alerts", value: "1+", icon: "⚡" },
             { label: "Years Experience", value: "8+", icon: "🏆" },
           ].map((stat, idx) => (
             <StaggerItem key={idx}>
@@ -211,11 +220,11 @@ export default function Home() {
           {/* Bento Grid Layout - Clean 2x3 grid */}
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
             {/* Row 1 */}
-            {/* Real-Time Signals with Live Candlestick */}
+            {/* Real-Time Trade Alerts with Live Candlestick */}
             <StaggerItem>
               <BentoCard
                 icon={TrendingUp}
-                title="Real-Time Signals"
+                title="Real-Time Trade Alerts"
                 description="Get instant trade alerts with detailed entry, exit, and stop-loss levels backed by proven strategies."
                 spotlight="emerald"
                 graphic={<CandlestickChart className="absolute inset-0" />}
@@ -262,7 +271,7 @@ export default function Home() {
               <BentoCard
                 icon={Zap}
                 title="Lightning Fast"
-                description="Receive signals instantly via Discord notifications so you never miss a profitable opportunity."
+                description="Receive trade alerts instantly via Discord notifications so you never miss a profitable opportunity."
                 spotlight="emerald"
                 image="/icon-lightning.png"
               />
@@ -293,7 +302,7 @@ export default function Home() {
             <RevealHeading>
               <h2 className="text-3xl md:text-5xl font-bold">
                 Choose Your{" "}
-                <span className="text-gradient-champagne">Membership</span>
+                <span className="text-gradient-champagne">Plan</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
@@ -303,73 +312,70 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Pricing Cards Grid - Ordered by price: Starter → Pro → Elite */}
+          {/* Pricing Cards Grid - Core → Pro → Execute */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
-            {/* Starter Card - $49/mo */}
+            {/* Core Sniper Card - $199/mo */}
             <StaggerItem>
               <PricingCard
-                name="Starter"
-                price="$49"
+                name="Core Sniper"
+                price="$199"
                 period="/month"
-                description="Perfect for beginners looking to get started"
+                description="For disciplined traders who want full market exposure"
                 features={[
-                  "5 Daily Signals",
-                  "Basic Market Analysis",
-                  "Community Access",
-                  "Email Support",
-                  "Educational Resources",
+                  "👀 Morning Watchlist",
+                  "🎯 SPX day trade setups",
+                  "🔔 High-volume & momentum alerts",
+                  "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink="https://whop.com/checkout/plan_starter"
-                tier="starter"
+                whopLink="#"
+                tier="core"
+                tagline="Execution focused education"
               />
             </StaggerItem>
 
-            {/* Pro Card - $99/mo */}
+            {/* Pro Sniper Card - $299/mo */}
             <StaggerItem>
               <PricingCard
-                name="Pro"
-                price="$99"
+                name="Pro Sniper"
+                price="$299"
                 period="/month"
-                description="Most popular choice for serious traders"
+                description="For traders scaling beyond day trades"
                 features={[
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support",
+                  "Everything in Core Sniper, plus:",
+                  "🧭 LEAPS",
+                  "📈 Advanced swing trade strategy",
+                  "🧠 Position building logic",
+                  "📊 Longer term market structure insight",
+                  "🎯 Capital allocation education",
                 ]}
-                whopLink="https://whop.com/checkout/plan_pro"
+                whopLink="#"
                 tier="pro"
+                tagline="More patience & strategy, not just speed"
               />
             </StaggerItem>
 
-            {/* Elite Card - $200/mo - The Premium Option */}
+            {/* Execute Sniper Card - $499/mo */}
             <StaggerItem>
               <PricingCard
-                name="Elite"
-                price="$200"
+                name="Execute Sniper"
+                price="$499"
                 period="/month"
-                description="For traders who want guaranteed results"
+                description="For serious traders only"
                 features={[
-                  "3+ High-Probability Setups/Week",
-                  "Personal Trading Coach",
-                  "Exclusive Private Channel",
-                  "Weekly Strategy Calls",
-                  "Exact Entry, Exit & Stop Loss",
-                  "Real-Time Mobile Alerts",
-                  "White Glove Support",
-                  "30-Day Money-Back Guarantee",
+                  "Everything in Pro Sniper, plus:",
+                  "🔥 Advanced NDX real time alerts (entries & exits)",
+                  "🧭 High-conviction LEAPS framework",
+                  "🎯 Higher-level trade commentary",
+                  "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink="https://whop.com/trade-in-the-money/itm-elite-access/"
-                tier="elite"
-                spotsLeft={7}
+                whopLink="#"
+                tier="execute"
+                tagline="Maximum conviction, maximum execution"
               />
             </StaggerItem>
           </StaggerContainer>
 
-          {/* Trust Signals & Guarantee */}
+          {/* Trust Badges & Guarantee */}
           <RevealContent delay={0.5}>
             <div className="mt-12 space-y-6">
               {/* Main Guarantee */}
@@ -383,7 +389,7 @@ export default function Home() {
                       Action-Based Money-Back Guarantee*
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Follow our signals for 30 days. If you don&apos;t see value, we&apos;ll refund you. *Terms apply.
+                      Follow our trade alerts for 30 days. If you don&apos;t see value, we&apos;ll refund you. *Terms apply.
                     </p>
                   </div>
                 </div>
@@ -405,9 +411,9 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
-                  <span className="text-xs">Cancel Anytime</span>
+                  <span className="text-xs">Secure Checkout</span>
                 </div>
               </div>
             </div>
@@ -439,7 +445,7 @@ export default function Home() {
             {
               name: "Michael C.",
               role: "Elite Member",
-              content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM signals are the real deal.",
+              content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM alerts are the real deal.",
               avatar: "MC"
             },
             {
@@ -451,7 +457,7 @@ export default function Home() {
             {
               name: "David P.",
               role: "Elite Member",
-              content: "$8,400 profit this month following the signals. My account has grown 180% in 6 months. Best investment I've ever made.",
+              content: "$8,400 profit this month following the trade alerts. My account has grown 180% in 6 months. Best investment I've ever made.",
               avatar: "DP"
             },
             {
@@ -478,7 +484,7 @@ export default function Home() {
             {
               name: "Alex T.",
               role: "Part-time Trader",
-              content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These signals fit around any schedule.",
+              content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These trade alerts fit around any schedule.",
               avatar: "AT"
             },
             {
@@ -490,7 +496,7 @@ export default function Home() {
             {
               name: "Robert G.",
               role: "Elite Member",
-              content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of signals is unmatched.",
+              content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of alerts is unmatched.",
               avatar: "RG"
             },
             {
@@ -549,7 +555,7 @@ export default function Home() {
                     {
                       step: "4",
                       title: "Start Trading",
-                      description: "Explore the channels, introduce yourself, and start receiving real-time trading signals immediately!"
+                      description: "Explore the channels, introduce yourself, and start receiving real-time trade alerts immediately!"
                     }
                   ].map((step, idx) => (
                     <StaggerItem key={idx}>
@@ -613,7 +619,7 @@ export default function Home() {
               </Button>
 
               <p className="text-xs text-muted-foreground/60 mt-4">
-                30-day money-back guarantee • Cancel anytime
+                30-day money-back guarantee
               </p>
             </div>
           </div>

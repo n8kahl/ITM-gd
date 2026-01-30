@@ -8,8 +8,8 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
-    "name": "Elite Trading Membership",
-    "description": "Premium trading signals membership with 3 high-probability trade setups every week. Real-time alerts, expert education, and a proven track record from professional traders.",
+    "name": "Core Sniper Trading Membership",
+    "description": "Premium trading membership with quality trade setups alerted daily. Real-time trade alerts, expert education, and a proven track record from professional traders.",
     "brand": {
       "@type": "Brand",
       "name": "Trade In The Money"
@@ -18,7 +18,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
       "@type": "Offer",
       "url": `${baseUrl}/#pricing`,
       "priceCurrency": "USD",
-      "price": "200.00",
+      "price": "199.00",
       "priceValidUntil": "2026-12-31",
       "availability": "https://schema.org/InStock",
       "itemCondition": "https://schema.org/NewCondition"
@@ -41,7 +41,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     "name": "Trade In The Money",
     "url": baseUrl,
     "logo": `${baseUrl}/hero-logo.png`,
-    "description": "Premium trading signals and education platform for serious traders.",
+    "description": "Premium trade alerts and education platform for serious traders.",
     "sameAs": []
   };
 
@@ -50,7 +50,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     "@type": "WebSite",
     "name": "Trade In The Money",
     "url": baseUrl,
-    "description": "Premium Trading Signals & Education - 3 High-Probability Trade Setups Every Week",
+    "description": "Premium Trade Alerts & Education - Quality Setups Alerted Daily",
     "potentialAction": {
       "@type": "SearchAction",
       "target": `${baseUrl}/?q={search_term_string}`,

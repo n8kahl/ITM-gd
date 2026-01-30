@@ -3,10 +3,14 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function FloatingNavbar() {
+interface FloatingNavbarProps {
+  onSubscribeClick?: () => void;
+}
+
+export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -88,8 +92,19 @@ export function FloatingNavbar() {
             ))}
           </div>
 
-          {/* Desktop CTA Button */}
-          <div className="hidden md:block">
+          {/* Desktop CTA Buttons */}
+          <div className="hidden md:flex items-center gap-3">
+            {onSubscribeClick && (
+              <Button
+                variant="ghost"
+                size="default"
+                className="rounded-sm text-ivory/70 hover:text-ivory hover:bg-white/5"
+                onClick={onSubscribeClick}
+              >
+                <Bell className="w-4 h-4 mr-2" />
+                Subscribe
+              </Button>
+            )}
             <Button
               asChild
               variant="luxury"
@@ -168,16 +183,46 @@ export function FloatingNavbar() {
               </motion.a>
             ))}
 
+            {/* Mobile Subscribe Button */}
+            {onSubscribeClick && (
+              <motion.div
+                className="pt-3"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{
+                  opacity: isMobileMenuOpen ? 1 : 0,
+                  y: isMobileMenuOpen ? 0 : 10,
+                }}
+                transition={{
+                  delay: isMobileMenuOpen ? navLinks.length * 0.05 : 0,
+                  duration: 0.25,
+                  ease: "easeOut",
+                }}
+              >
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-full rounded-sm h-12 text-ivory/70 hover:text-ivory hover:bg-white/5 justify-start"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onSubscribeClick();
+                  }}
+                >
+                  <Bell className="w-4 h-4 mr-2" />
+                  Subscribe for Updates
+                </Button>
+              </motion.div>
+            )}
+
             {/* Mobile CTA Button - Full Width */}
             <motion.div
-              className="pt-3"
+              className="pt-2"
               initial={{ opacity: 0, y: 10 }}
               animate={{
                 opacity: isMobileMenuOpen ? 1 : 0,
                 y: isMobileMenuOpen ? 0 : 10,
               }}
               transition={{
-                delay: isMobileMenuOpen ? navLinks.length * 0.05 : 0,
+                delay: isMobileMenuOpen ? (navLinks.length + 1) * 0.05 : 0,
                 duration: 0.25,
                 ease: "easeOut",
               }}

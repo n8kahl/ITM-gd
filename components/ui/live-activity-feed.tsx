@@ -14,13 +14,13 @@ interface Activity {
 
 const activities: Activity[] = [
   { id: 1, type: "join", user: "Michael T.", action: "joined Pro", time: "2m ago" },
-  { id: 2, type: "signal", user: "Signal Bot", action: "BTC Long +2.4%", time: "5m ago" },
+  { id: 2, type: "signal", user: "Alert Bot", action: "BTC Long +2.4%", time: "5m ago" },
   { id: 3, type: "win", user: "Sarah K.", action: "closed +$1,240", time: "8m ago" },
   { id: 4, type: "join", user: "David R.", action: "joined Elite", time: "12m ago" },
-  { id: 5, type: "signal", user: "Signal Bot", action: "ETH Short +1.8%", time: "15m ago" },
+  { id: 5, type: "signal", user: "Alert Bot", action: "ETH Short +1.8%", time: "15m ago" },
   { id: 6, type: "join", user: "Emma L.", action: "joined Pro", time: "18m ago" },
   { id: 7, type: "win", user: "James W.", action: "closed +$890", time: "22m ago" },
-  { id: 8, type: "signal", user: "Signal Bot", action: "SPX Call +3.2%", time: "25m ago" },
+  { id: 8, type: "signal", user: "Alert Bot", action: "SPX Call +3.2%", time: "25m ago" },
 ];
 
 const icons = {

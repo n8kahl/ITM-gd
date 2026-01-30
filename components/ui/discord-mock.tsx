@@ -17,9 +17,9 @@ const messages: DiscordMessage[] = [
   {
     id: 1,
     type: "bot",
-    username: "ITM Signals",
+    username: "ITM Alerts",
     avatar: "🤖",
-    content: "🚨 SIGNAL ALERT: buy NVDA 1000C @ 2.50",
+    content: "🚨 TRADE ALERT: buy NVDA 1000C @ 2.50",
     timestamp: "Today at 9:32 AM",
     highlight: true,
   },
@@ -42,7 +42,7 @@ const messages: DiscordMessage[] = [
   {
     id: 4,
     type: "bot",
-    username: "ITM Signals",
+    username: "ITM Alerts",
     avatar: "🤖",
     content: "✅ TARGET HIT: NVDA now 3.20 (+28%) 💰",
     timestamp: "Today at 10:45 AM",
@@ -82,7 +82,7 @@ export function DiscordMock({ className }: DiscordMockProps) {
         <span className="text-[#8e9297] text-sm font-medium">#</span>
         <span className="text-white text-sm font-semibold flex items-center gap-1.5">
           <span>🚀</span>
-          <span>winning-signals</span>
+          <span>winning-trades</span>
         </span>
         <div className="ml-auto flex items-center gap-1">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -168,7 +168,7 @@ export function DiscordMock({ className }: DiscordMockProps) {
           className="rounded px-3 py-1.5 text-[#72767d] text-[10px]"
           style={{ backgroundColor: "#40444b" }}
         >
-          Message #winning-signals
+          Message #winning-trades
         </div>
       </div>
     </div>

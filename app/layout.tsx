@@ -28,8 +28,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Trade In The Money - Premium Trading Signals & Education',
-  description: 'Join the elite trading community. Get real-time signals, expert education, and proven strategies from professional traders. 3 Guaranteed 100%+ Trades Every Week.',
+  title: 'Trade In The Money - Premium Trade Alerts & Education',
+  description: 'Join the elite trading community. Get real-time trade alerts, expert education, and proven strategies from professional traders. Quality setups alerted daily.',
   generator: 'v0.app',
   metadataBase: new URL('https://trade-itm-prod.up.railway.app'),
   icons: {
@@ -42,8 +42,8 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
   openGraph: {
-    title: 'Trade In The Money - Premium Trading Signals',
-    description: '3 Guaranteed 100%+ Trades Every Week. Join the elite trading community with real-time signals and expert education.',
+    title: 'Trade In The Money - Premium Trade Alerts',
+    description: 'Quality setups alerted daily. Join the elite trading community with real-time trade alerts and expert education.',
     siteName: 'Trade In The Money',
     locale: 'en_US',
     type: 'website',
@@ -52,14 +52,14 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Trade In The Money - Premium Trading Signals',
+        alt: 'Trade In The Money - Premium Trade Alerts',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Trade In The Money - Premium Trading Signals',
-    description: '3 Guaranteed 100%+ Trades Every Week. Join the elite trading community.',
+    title: 'Trade In The Money - Premium Trade Alerts',
+    description: 'Quality setups alerted daily. Join the elite trading community.',
     images: ['/og-image.png'],
   },
 }

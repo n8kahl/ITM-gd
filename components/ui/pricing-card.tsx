@@ -1,9 +1,8 @@
 "use client";
 
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { Check, Lock } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { useRef, useState, useEffect } from "react";
 
 // Detect touch devices to disable 3D tilt
@@ -32,100 +31,83 @@ interface PricingCardProps {
   features: string[];
   whopLink: string;
   popular?: boolean;
-  tier: "starter" | "pro" | "elite";
+  tier: "core" | "pro" | "execute";
   urgencyText?: string;
   spotsLeft?: number;
+  tagline?: string;
 }
 
-// CSS Credit Card Component
-function CreditCardVisual({ tier, isHovered }: { tier: "starter" | "pro" | "elite"; isHovered: boolean }) {
-  const isElite = tier === "elite";
-  const isPro = tier === "pro";
-  const isStarter = tier === "starter";
-  const isUnavailable = isPro || isStarter;
+// Tier Title Card Component - Premium Luxury Branding
+function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "execute"; name: string; isHovered: boolean }) {
+  // Premium tier colors using existing luxury palette
+  const tierColors = {
+    core: {
+      // Wealth Emerald - Growth & Prosperity
+      gradient: "from-[#065F46] via-[#047857] to-[#059669]",
+      accent: "#10B981",
+      glow: "rgba(16, 185, 129, 0.3)",
+      icon: "◆",
+    },
+    pro: {
+      // Champagne Gold - Premium & Value
+      gradient: "from-[#92702F] via-[#B8860B] to-[#D4AF37]",
+      accent: "#D4AF37",
+      glow: "rgba(212, 175, 55, 0.3)",
+      icon: "◆◆",
+    },
+    execute: {
+      // Platinum - Elite & Exclusive
+      gradient: "from-[#71717A] via-[#A1A1AA] to-[#E4E4E7]",
+      accent: "#E8E4D9",
+      glow: "rgba(232, 228, 217, 0.35)",
+      icon: "◆◆◆",
+    },
+  };
+
+  const colors = tierColors[tier];
 
   return (
     <div
       className={cn(
         "relative w-full overflow-hidden rounded-xl",
         "transition-transform duration-500",
-        isHovered && isElite && "scale-105"
+        isHovered && "scale-105"
       )}
       style={{
         aspectRatio: "1.586",
       }}
     >
-      {/* Card Background */}
+      {/* Card Background with tier gradient */}
       <div
         className={cn(
           "absolute inset-0 rounded-xl overflow-hidden",
-          // Starter - Frosted Glass
-          isStarter && "bg-gradient-to-br from-white/20 via-white/10 to-white/5 backdrop-blur-sm",
-          // Pro - Brushed Metal
-          isPro && "bg-gradient-to-br from-zinc-700 via-zinc-800 to-zinc-900",
-          // Elite - Black Card
-          isElite && "bg-gradient-to-br from-[#0a0a0a] via-[#111] to-[#0a0a0a]"
+          `bg-gradient-to-br ${colors.gradient}`
         )}
       >
-        {/* Starter - Glass refraction effect */}
-        {isStarter && (
-          <>
-            <div
-              className="absolute inset-0 opacity-30"
-              style={{
-                background: "linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%, rgba(255,255,255,0.1) 100%)",
-              }}
-            />
-            <div className="absolute inset-0 border border-white/20 rounded-xl" />
-          </>
-        )}
+        {/* Subtle inner glow */}
+        <div
+          className="absolute inset-0 opacity-40"
+          style={{
+            background: `radial-gradient(ellipse at 30% 20%, ${colors.glow} 0%, transparent 50%)`,
+          }}
+        />
 
-        {/* Pro - Brushed metal texture */}
-        {isPro && (
-          <>
-            <div
-              className="absolute inset-0 opacity-20"
-              style={{
-                backgroundImage: `repeating-linear-gradient(
-                  115deg,
-                  transparent,
-                  transparent 1px,
-                  rgba(255,255,255,0.03) 1px,
-                  rgba(255,255,255,0.03) 2px
-                )`,
-              }}
-            />
-            <div className="absolute inset-0 border border-zinc-600/50 rounded-xl" />
-          </>
-        )}
+        {/* Border with tier color */}
+        <div
+          className="absolute inset-0 rounded-xl"
+          style={{
+            border: `1.5px solid ${colors.accent}`,
+            boxShadow: `inset 0 0 20px ${colors.glow}`,
+          }}
+        />
 
-        {/* Elite - Premium black with gold border */}
-        {isElite && (
-          <>
-            {/* Subtle inner glow */}
-            <div
-              className="absolute inset-0 opacity-40"
-              style={{
-                background: "radial-gradient(ellipse at 30% 20%, rgba(212,175,55,0.1) 0%, transparent 50%)",
-              }}
-            />
-            {/* Gold border */}
-            <div
-              className="absolute inset-0 rounded-xl"
-              style={{
-                border: "1.5px solid rgba(212,175,55,0.5)",
-                boxShadow: "inset 0 0 20px rgba(212,175,55,0.1)",
-              }}
-            />
-            {/* Corner accents */}
-            <div className="absolute top-2 left-2 w-4 h-4 border-t border-l border-[#D4AF37]/60" />
-            <div className="absolute top-2 right-2 w-4 h-4 border-t border-r border-[#D4AF37]/60" />
-            <div className="absolute bottom-2 left-2 w-4 h-4 border-b border-l border-[#D4AF37]/60" />
-            <div className="absolute bottom-2 right-2 w-4 h-4 border-b border-r border-[#D4AF37]/60" />
-          </>
-        )}
+        {/* Corner accents */}
+        <div className="absolute top-2 left-2 w-4 h-4 border-t border-l" style={{ borderColor: `${colors.accent}99` }} />
+        <div className="absolute top-2 right-2 w-4 h-4 border-t border-r" style={{ borderColor: `${colors.accent}99` }} />
+        <div className="absolute bottom-2 left-2 w-4 h-4 border-b border-l" style={{ borderColor: `${colors.accent}99` }} />
+        <div className="absolute bottom-2 right-2 w-4 h-4 border-b border-r" style={{ borderColor: `${colors.accent}99` }} />
 
-        {/* Sheen animation - runs every 4 seconds */}
+        {/* Sheen animation */}
         <motion.div
           className="absolute inset-0 pointer-events-none"
           initial={{ x: "-100%" }}
@@ -140,62 +122,35 @@ function CreditCardVisual({ tier, isHovered }: { tier: "starter" | "pro" | "elit
             background: `linear-gradient(
               105deg,
               transparent 40%,
-              ${isElite ? "rgba(212,175,55,0.15)" : isPro ? "rgba(192,192,192,0.1)" : "rgba(255,255,255,0.2)"} 50%,
+              rgba(255,255,255,0.2) 50%,
               transparent 60%
             )`,
           }}
         />
 
-        {/* Card chip (Elite only) */}
-        {isElite && (
-          <div className="absolute top-4 left-4">
-            <div
-              className="w-8 h-6 rounded-sm"
-              style={{
-                background: "linear-gradient(135deg, #D4AF37 0%, #B8860B 50%, #D4AF37 100%)",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-              }}
-            >
-              <div className="absolute inset-[2px] rounded-[2px] opacity-50"
-                style={{
-                  background: "repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px)",
-                }}
-              />
-            </div>
-          </div>
-        )}
+        {/* Tier Icon - Top Left */}
+        <div
+          className="absolute top-4 left-4 text-sm font-medium tracking-widest"
+          style={{ color: colors.accent }}
+        >
+          {colors.icon}
+        </div>
 
         {/* Tier Name - Centered */}
         <div className="absolute inset-0 flex items-center justify-center">
           <span
-            className={cn(
-              "text-2xl md:text-3xl font-serif font-medium tracking-wide",
-              // Starter - Muted white
-              isStarter && "text-white/40",
-              // Pro - Silver stamping
-              isPro && "text-transparent bg-clip-text bg-gradient-to-b from-zinc-300 via-zinc-400 to-zinc-500",
-              // Elite - Gold foil
-              isElite && "text-transparent bg-clip-text bg-gradient-to-b from-[#E8E4D9] via-[#D4AF37] to-[#B8860B]",
-              isUnavailable && "grayscale"
-            )}
+            className="text-2xl md:text-3xl font-serif font-medium tracking-wide text-white drop-shadow-lg"
             style={{
-              textShadow: isElite ? "0 2px 4px rgba(0,0,0,0.5)" : undefined,
+              textShadow: "0 2px 4px rgba(0,0,0,0.5)",
             }}
           >
-            {tier.charAt(0).toUpperCase() + tier.slice(1)}
+            {name}
           </span>
         </div>
 
         {/* ITM Logo mark - Bottom right */}
         <div className="absolute bottom-3 right-4">
-          <span
-            className={cn(
-              "text-xs font-mono tracking-widest uppercase",
-              isStarter && "text-white/20",
-              isPro && "text-zinc-500",
-              isElite && "text-[#D4AF37]/60"
-            )}
-          >
+          <span className="text-xs font-mono tracking-widest uppercase text-white/60">
             ITM
           </span>
         </div>
@@ -208,11 +163,6 @@ function CreditCardVisual({ tier, isHovered }: { tier: "starter" | "pro" | "elit
           }}
         />
       </div>
-
-      {/* Grayscale overlay for unavailable */}
-      {isUnavailable && (
-        <div className="absolute inset-0 bg-black/20 rounded-xl" />
-      )}
     </div>
   );
 }
@@ -228,12 +178,11 @@ export function PricingCard({
   tier,
   urgencyText,
   spotsLeft,
+  tagline,
 }: PricingCardProps) {
-  const isElite = tier === "elite";
+  const isCore = tier === "core";
   const isPro = tier === "pro";
-  const isStarter = tier === "starter";
-  // Starter and Pro tiers are not yet available
-  const isUnavailable = isPro || isStarter;
+  const isExecute = tier === "execute";
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -269,20 +218,52 @@ export function PricingCard({
     setIsHovered(false);
   };
 
-  // Handle card click for Elite tier - navigate to Whop
+  // Handle card click - navigate to Whop
   const handleCardClick = () => {
-    if (isElite && whopLink) {
+    if (whopLink && whopLink !== "#") {
       window.open(whopLink, '_blank', 'noopener,noreferrer');
     }
   };
+
+  // Premium tier styling using luxury palette
+  const tierStyles = {
+    core: {
+      // Wealth Emerald - Growth & Prosperity
+      borderColor: "rgba(16, 185, 129, 0.25)",
+      glowColor: "rgba(16, 185, 129, 0.12)",
+      accentColor: "#10B981",
+      buttonGradient: "from-[#065F46] via-[#047857] to-[#059669]",
+      checkBg: "bg-emerald-500/10",
+      checkColor: "text-emerald-400",
+    },
+    pro: {
+      // Champagne Gold - Premium & Value
+      borderColor: "rgba(212, 175, 55, 0.3)",
+      glowColor: "rgba(212, 175, 55, 0.15)",
+      accentColor: "#D4AF37",
+      buttonGradient: "from-[#92702F] via-[#B8860B] to-[#D4AF37]",
+      checkBg: "bg-amber-500/10",
+      checkColor: "text-amber-400",
+    },
+    execute: {
+      // Platinum - Elite & Exclusive
+      borderColor: "rgba(232, 228, 217, 0.3)",
+      glowColor: "rgba(232, 228, 217, 0.15)",
+      accentColor: "#E8E4D9",
+      buttonGradient: "from-[#71717A] via-[#A1A1AA] to-[#E4E4E7]",
+      checkBg: "bg-zinc-400/10",
+      checkColor: "text-zinc-300",
+    },
+  };
+
+  const styles = tierStyles[tier];
 
   return (
     <motion.div
       ref={cardRef}
       className={cn(
-        "relative rounded-2xl overflow-visible h-full",
-        isElite && "lg:scale-105 z-10 cursor-pointer",
-        isUnavailable && "opacity-50"
+        "relative rounded-2xl overflow-visible h-full cursor-pointer",
+        isExecute && "lg:scale-105 z-10"
       )}
       style={{
         perspective: 1000,
@@ -301,169 +282,153 @@ export function PricingCard({
           rotateY: isHovered && !isTouchDevice ? rotateY : 0,
           transformStyle: "preserve-3d",
         }}
-        whileHover={isElite ? { y: -8, scale: 1.02 } : { y: -4, scale: 1.01 }}
+        whileHover={isExecute ? { y: -8, scale: 1.02 } : { y: -4, scale: 1.01 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        {/* Unavailable Cards - Subtle border */}
-        {isUnavailable && (
-          <div className="absolute -inset-[1px] rounded-2xl bg-white/5 -z-10" />
-        )}
+        {/* Border glow effect */}
+        <div
+          className="absolute -inset-[2px] rounded-2xl -z-10"
+          style={{
+            background: `linear-gradient(135deg, ${styles.borderColor} 0%, ${styles.accentColor}40 50%, ${styles.borderColor} 100%)`,
+          }}
+        />
 
-        {/* Elite Card - CSS Shimmer Border (more performant than Framer Motion) */}
-        {isElite && (
-          <>
-            {/* Base gradient border */}
-            <div
-              className="absolute -inset-[2px] rounded-2xl -z-10"
-              style={{
-                background: "linear-gradient(135deg, rgba(232,228,217,0.4) 0%, rgba(212,175,55,0.3) 25%, rgba(232,228,217,0.5) 50%, rgba(192,192,192,0.3) 75%, rgba(232,228,217,0.4) 100%)",
-              }}
-            />
-            {/* CSS Shimmer animation - uses GPU-accelerated transform */}
-            <div
-              className="absolute -inset-[2px] rounded-2xl -z-10 overflow-hidden"
-            >
-              <div
-                className="absolute inset-0 animate-shimmer"
-                style={{
-                  background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)",
-                  backgroundSize: "200% 100%",
-                }}
-              />
-            </div>
-            {/* Glow effect */}
-            <div
-              className={cn(
-                "absolute -inset-[2px] rounded-2xl -z-20 transition-all duration-500",
-                isHovered
-                  ? "shadow-[0_0_40px_rgba(232,228,217,0.4),0_0_80px_rgba(212,175,55,0.3)]"
-                  : "shadow-[0_0_20px_rgba(232,228,217,0.15),0_0_40px_rgba(212,175,55,0.1)]"
-              )}
-            />
-          </>
-        )}
+        {/* CSS Shimmer animation */}
+        <div className="absolute -inset-[2px] rounded-2xl -z-10 overflow-hidden">
+          <div
+            className="absolute inset-0 animate-shimmer"
+            style={{
+              background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
+              backgroundSize: "200% 100%",
+            }}
+          />
+        </div>
+
+        {/* Glow effect on hover */}
+        <div
+          className={cn(
+            "absolute -inset-[2px] rounded-2xl -z-20 transition-all duration-500"
+          )}
+          style={{
+            boxShadow: isHovered
+              ? `0 0 40px ${styles.glowColor}, 0 0 80px ${styles.glowColor}`
+              : `0 0 20px ${styles.glowColor}`,
+          }}
+        />
 
         {/* Card Container */}
         <div
-          className={cn(
-            "relative h-full p-6 md:p-8 rounded-2xl border overflow-hidden",
-            isUnavailable && "bg-[rgba(12,12,12,0.9)] backdrop-blur-xl border-white/5",
-            isElite && "bg-[rgba(8,8,8,0.95)] backdrop-blur-xl border-white/10"
-          )}
+          className="relative h-full p-6 md:p-8 rounded-2xl border overflow-hidden bg-[rgba(8,8,8,0.95)] backdrop-blur-xl"
+          style={{ borderColor: styles.borderColor }}
         >
-          {/* Elite - Premium Frosted glass overlay */}
-          {isElite && (
-            <div
-              className="absolute inset-0 opacity-60 pointer-events-none"
-              style={{
-                background:
-                  "radial-gradient(ellipse at 50% 0%, rgba(232,228,217,0.08) 0%, transparent 50%)",
-              }}
-            />
-          )}
+          {/* Premium Frosted glass overlay */}
+          <div
+            className="absolute inset-0 opacity-60 pointer-events-none"
+            style={{
+              background: `radial-gradient(ellipse at 50% 0%, ${styles.glowColor} 0%, transparent 50%)`,
+            }}
+          />
 
           {/* Card Content */}
           <div className="relative z-10 flex flex-col h-full">
-            {/* CSS Credit Card Visual */}
+            {/* Tier Title Card Visual */}
             <div className="relative w-full mb-6 flex items-center justify-center px-4">
-              <CreditCardVisual tier={tier} isHovered={isHovered} />
+              <TierTitleCard tier={tier} name={name} isHovered={isHovered} />
             </div>
 
             {/* Header */}
             <div className="text-center mb-6">
-              {/* Elite Tag - Primary Available Option */}
-              {isElite && (
-                <div className="space-y-3 mb-4">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
-                    </span>
-                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider font-mono">
-                      NOW AVAILABLE
-                    </span>
-                  </div>
-
-                  {/* Urgency/Scarcity Banner */}
-                  {(urgencyText || spotsLeft) && (
-                    <motion.div
-                      className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30"
-                      animate={{
-                        borderColor: ["rgba(239,68,68,0.3)", "rgba(239,68,68,0.6)", "rgba(239,68,68,0.3)"],
-                      }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    >
-                      {spotsLeft && (
-                        <span className="text-xs font-bold text-red-400 font-mono">
-                          ⚡ Only {spotsLeft} spots left this month
-                        </span>
-                      )}
-                      {urgencyText && !spotsLeft && (
-                        <span className="text-xs font-bold text-red-400">
-                          {urgencyText}
-                        </span>
-                      )}
-                    </motion.div>
-                  )}
+              {/* NOW AVAILABLE Tag */}
+              <div className="space-y-3 mb-4">
+                <div
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border"
+                  style={{
+                    backgroundColor: `${styles.accentColor}15`,
+                    borderColor: `${styles.accentColor}50`
+                  }}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span
+                      className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                      style={{ backgroundColor: styles.accentColor }}
+                    ></span>
+                    <span
+                      className="relative inline-flex rounded-full h-2 w-2"
+                      style={{ backgroundColor: styles.accentColor }}
+                    ></span>
+                  </span>
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wider font-mono"
+                    style={{ color: styles.accentColor }}
+                  >
+                    NOW AVAILABLE
+                  </span>
                 </div>
-              )}
 
-              {/* Plan Name with Lock for unavailable */}
-              <h3
-                className={cn(
-                  "text-2xl font-bold mb-2 flex items-center justify-center gap-2",
-                  isElite && "text-gradient-champagne",
-                  isUnavailable && "text-smoke/50"
+                {/* Urgency/Scarcity Banner */}
+                {(urgencyText || spotsLeft) && (
+                  <motion.div
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30"
+                    animate={{
+                      borderColor: ["rgba(239,68,68,0.3)", "rgba(239,68,68,0.6)", "rgba(239,68,68,0.3)"],
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {spotsLeft && (
+                      <span className="text-xs font-bold text-red-400 font-mono">
+                        ⚡ Only {spotsLeft} spots left this month
+                      </span>
+                    )}
+                    {urgencyText && !spotsLeft && (
+                      <span className="text-xs font-bold text-red-400">
+                        {urgencyText}
+                      </span>
+                    )}
+                  </motion.div>
                 )}
-              >
-                {isUnavailable && <Lock className="w-5 h-5 text-smoke/40" />}
-                {name}
-              </h3>
+              </div>
 
               {/* Price - Improved typography hierarchy */}
               <div className="mb-3 flex items-baseline justify-center gap-1">
                 {/* Currency symbol - smaller */}
                 <span
-                  className={cn(
-                    "text-2xl font-light align-top relative -top-3",
-                    isElite && "text-champagne/70",
-                    isUnavailable && "text-smoke/30"
-                  )}
+                  className="text-2xl font-light align-top relative -top-3"
+                  style={{ color: `${styles.accentColor}99` }}
                 >
                   $
                 </span>
                 {/* Price amount - larger, bolder */}
                 <span
-                  className={cn(
-                    "text-6xl md:text-7xl font-serif font-semibold tracking-tight",
-                    isElite && "text-champagne",
-                    isUnavailable && "text-smoke/40"
-                  )}
+                  className="text-6xl md:text-7xl font-serif font-semibold tracking-tight"
+                  style={{ color: styles.accentColor }}
                 >
                   {price.replace('$', '')}
                 </span>
                 {/* Period - smaller, muted */}
-                <span className={cn(
-                  "text-base ml-1",
-                  isElite ? "text-muted-foreground/70" : "text-muted-foreground/40"
-                )}>{period}</span>
+                <span className="text-base ml-1 text-muted-foreground/70">{period}</span>
               </div>
 
               {/* Description */}
-              <p className={cn(
-                "text-sm",
-                isElite ? "text-muted-foreground" : "text-muted-foreground/50"
-              )}>{description}</p>
+              <p className="text-sm text-muted-foreground">{description}</p>
             </div>
 
             {/* Divider */}
             <div
-              className={cn(
-                "h-px w-full mb-6",
-                isElite && "bg-gradient-to-r from-transparent via-champagne/30 to-transparent",
-                isUnavailable && "bg-gradient-to-r from-transparent via-white/10 to-transparent"
-              )}
+              className="h-px w-full mb-6"
+              style={{
+                background: `linear-gradient(to right, transparent, ${styles.accentColor}50, transparent)`,
+              }}
             />
+
+            {/* Tagline if present */}
+            {tagline && (
+              <p
+                className="text-xs text-center mb-4 italic"
+                style={{ color: `${styles.accentColor}99` }}
+              >
+                {tagline}
+              </p>
+            )}
 
             {/* Features List */}
             <ul className="space-y-3 flex-grow mb-8">
@@ -472,25 +437,12 @@ export function PricingCard({
                   <div
                     className={cn(
                       "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      isElite && "bg-champagne/10",
-                      isUnavailable && "bg-white/5"
+                      styles.checkBg
                     )}
                   >
-                    <Check
-                      className={cn(
-                        "w-3 h-3",
-                        isElite && "text-champagne",
-                        isUnavailable && "text-smoke/30"
-                      )}
-                    />
+                    <Check className={cn("w-3 h-3", styles.checkColor)} />
                   </div>
-                  <span
-                    className={cn(
-                      "text-sm leading-relaxed",
-                      isElite && "text-smoke/80",
-                      isUnavailable && "text-smoke/40"
-                    )}
-                  >
+                  <span className="text-sm leading-relaxed text-smoke/80">
                     {feature}
                   </span>
                 </li>
@@ -498,45 +450,49 @@ export function PricingCard({
             </ul>
 
             {/* CTA Button */}
-            <div
-              className="space-y-3 relative z-[100]"
-            >
-              {isElite ? (
-                <div
-                  className="w-full h-14 text-base font-bold rounded-xl transition-all duration-500 bg-gradient-to-r from-champagne-dark via-champagne to-champagne-light text-onyx hover:shadow-[0_0_40px_rgba(232,228,217,0.5)] hover:-translate-y-0.5 flex items-center justify-center gap-2 font-mono tracking-wide cursor-pointer"
-                >
-                  JOIN TODAY
-                </div>
-              ) : (
-                <Button
-                  disabled
-                  className="w-full h-14 text-base font-medium rounded-xl bg-white/5 text-smoke/40 border border-white/10 cursor-not-allowed"
-                >
-                  <Lock className="w-4 h-4 mr-2" />
-                  <span className="font-mono tracking-wide">COMING SOON</span>
-                </Button>
-              )}
+            <div className="space-y-3 relative z-[100]">
+              <div
+                className={cn(
+                  "w-full h-14 text-base font-bold rounded-xl transition-all duration-500",
+                  "bg-gradient-to-r hover:-translate-y-0.5",
+                  "flex items-center justify-center gap-2 font-mono tracking-wide cursor-pointer",
+                  styles.buttonGradient,
+                  // Execute tier has light platinum gradient, needs dark text
+                  isExecute ? "text-onyx" : "text-white"
+                )}
+                style={{
+                  boxShadow: isHovered ? `0 0 40px ${styles.glowColor}` : `0 0 20px ${styles.glowColor}`,
+                }}
+              >
+                GET STARTED
+              </div>
 
-              {/* Security Badge - Elite only */}
-              {isElite && (
-                <p className="text-center text-xs text-muted-foreground/60">
-                  Secure transaction powered by{" "}
-                  <span className="text-muted-foreground/80">Whop</span> &{" "}
-                  <span className="text-muted-foreground/80">Stripe</span>
-                </p>
-              )}
+              {/* Security Badge */}
+              <p className="text-center text-xs text-muted-foreground/60">
+                Secure transaction powered by{" "}
+                <span className="text-muted-foreground/80">Whop</span> &{" "}
+                <span className="text-muted-foreground/80">Stripe</span>
+              </p>
             </div>
           </div>
 
-          {/* Elite - Corner accents */}
-          {isElite && (
-            <>
-              <div className="absolute top-0 left-0 w-10 h-10 border-t-2 border-l-2 border-champagne/30 rounded-tl-2xl" />
-              <div className="absolute top-0 right-0 w-10 h-10 border-t-2 border-r-2 border-champagne/30 rounded-tr-2xl" />
-              <div className="absolute bottom-0 left-0 w-10 h-10 border-b-2 border-l-2 border-champagne/30 rounded-bl-2xl" />
-              <div className="absolute bottom-0 right-0 w-10 h-10 border-b-2 border-r-2 border-champagne/30 rounded-br-2xl" />
-            </>
-          )}
+          {/* Corner accents */}
+          <div
+            className="absolute top-0 left-0 w-10 h-10 border-t-2 border-l-2 rounded-tl-2xl"
+            style={{ borderColor: `${styles.accentColor}50` }}
+          />
+          <div
+            className="absolute top-0 right-0 w-10 h-10 border-t-2 border-r-2 rounded-tr-2xl"
+            style={{ borderColor: `${styles.accentColor}50` }}
+          />
+          <div
+            className="absolute bottom-0 left-0 w-10 h-10 border-b-2 border-l-2 rounded-bl-2xl"
+            style={{ borderColor: `${styles.accentColor}50` }}
+          />
+          <div
+            className="absolute bottom-0 right-0 w-10 h-10 border-b-2 border-r-2 rounded-br-2xl"
+            style={{ borderColor: `${styles.accentColor}50` }}
+          />
 
           {/* Noise texture for all cards */}
           <div
@@ -551,9 +507,7 @@ export function PricingCard({
         <motion.div
           className="absolute inset-x-4 -bottom-4 h-8 rounded-2xl -z-20"
           style={{
-            background: isElite
-              ? "radial-gradient(ellipse at center, rgba(232,228,217,0.2) 0%, transparent 70%)"
-              : "radial-gradient(ellipse at center, rgba(255, 255, 255, 0.03) 0%, transparent 70%)",
+            background: `radial-gradient(ellipse at center, ${styles.glowColor} 0%, transparent 70%)`,
             filter: "blur(12px)",
             opacity: isHovered ? 1 : 0.5,
             transition: "opacity 0.3s ease",
