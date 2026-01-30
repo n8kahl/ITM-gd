@@ -193,9 +193,8 @@ function DataPoints() {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          array={positions}
+          args={[positions, 3]}
           count={POINT_COUNT_DESKTOP}
-          itemSize={3}
         />
       </bufferGeometry>
       <pointsMaterial

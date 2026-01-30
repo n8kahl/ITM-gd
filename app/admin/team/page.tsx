@@ -8,16 +8,12 @@ import { Input } from '@/components/ui/input'
 import {
   Users,
   UserPlus,
-  Edit2,
   Trash2,
-  Save,
   X,
   Circle,
   Shield,
   User,
-  Clock,
-  Mail,
-  AlertCircle
+  Clock
 } from 'lucide-react'
 
 interface TeamMember {
@@ -36,8 +32,10 @@ export default function TeamMembersPage() {
   const [inviteForm, setInviteForm] = useState({
     email: '',
     displayName: '',
+    password: '',
     role: 'agent' as 'admin' | 'agent'
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [inviteStatus, setInviteStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [stats, setStats] = useState({
     total: 0,
@@ -87,55 +85,65 @@ export default function TeamMembersPage() {
   async function inviteMember() {
     try {
       setInviteStatus(null)
+      setIsSubmitting(true)
 
-      // Create auth user using admin API
-      // Note: This requires service_role key, which should be called from a secure Edge Function
-      // For now, we'll provide instructions to add manually
-
-      const authUserId = prompt(
-        'STEP 1: Go to Supabase Dashboard → Authentication → Users\n' +
-        'Click "Add User" and create a new user with email: ' + inviteForm.email + '\n\n' +
-        'STEP 2: Copy the User ID (UUID) from the newly created user\n' +
-        'Paste it here:'
-      )
-
-      if (!authUserId) {
+      // Validate form
+      if (!inviteForm.email || !inviteForm.password) {
         setInviteStatus({
           type: 'error',
-          message: 'User ID is required. Please create the user in Supabase Auth first.'
+          message: 'Email and password are required'
         })
         return
       }
 
-      // Add to team_members table
-      const { error } = await supabase
-        .from('team_members')
-        .insert({
-          id: authUserId,
-          display_name: inviteForm.displayName || inviteForm.email,
-          role: inviteForm.role,
-          status: 'offline'
-        })
-
-      if (error) {
+      if (inviteForm.password.length < 6) {
         setInviteStatus({
           type: 'error',
-          message: error.message
+          message: 'Password must be at least 6 characters'
+        })
+        return
+      }
+
+      // Call Edge Function to create auth user and team member
+      const functionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + '/functions/v1/create-team-member'
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          email: inviteForm.email,
+          password: inviteForm.password,
+          displayName: inviteForm.displayName || inviteForm.email.split('@')[0],
+          role: inviteForm.role
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || result.error) {
+        setInviteStatus({
+          type: 'error',
+          message: result.error || 'Failed to create team member'
         })
       } else {
         setInviteStatus({
           type: 'success',
-          message: `Successfully added ${inviteForm.displayName || inviteForm.email} to the team!`
+          message: `Successfully added ${inviteForm.displayName || inviteForm.email} to the team! They can now log in with their email and password.`
         })
         setIsInviting(false)
-        setInviteForm({ email: '', displayName: '', role: 'agent' })
+        setInviteForm({ email: '', displayName: '', password: '', role: 'agent' })
         loadMembers()
       }
     } catch (error: any) {
       setInviteStatus({
         type: 'error',
-        message: error.message
+        message: error.message || 'An error occurred'
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -217,18 +225,6 @@ export default function TeamMembersPage() {
               </div>
             )}
 
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm text-blue-300">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-semibold mb-1">Manual Setup Required</p>
-                  <p className="text-blue-300/80">
-                    Due to security restrictions, you need to create the user in Supabase Dashboard first, then add them here.
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="space-y-3">
               <div>
                 <label className="text-sm text-platinum/60 block mb-1">Email Address *</label>
@@ -238,6 +234,19 @@ export default function TeamMembersPage() {
                   value={inviteForm.email}
                   onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
                   className="bg-background/50 border-border/40"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-platinum/60 block mb-1">Password *</label>
+                <Input
+                  type="password"
+                  placeholder="Min 6 characters"
+                  value={inviteForm.password}
+                  onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
+                  className="bg-background/50 border-border/40"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -249,6 +258,7 @@ export default function TeamMembersPage() {
                   value={inviteForm.displayName}
                   onChange={(e) => setInviteForm({ ...inviteForm, displayName: e.target.value })}
                   className="bg-background/50 border-border/40"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -259,6 +269,7 @@ export default function TeamMembersPage() {
                     variant={inviteForm.role === 'agent' ? 'default' : 'outline'}
                     onClick={() => setInviteForm({ ...inviteForm, role: 'agent' })}
                     className="flex-1"
+                    disabled={isSubmitting}
                   >
                     <User className="w-4 h-4 mr-2" />
                     Agent
@@ -267,6 +278,7 @@ export default function TeamMembersPage() {
                     variant={inviteForm.role === 'admin' ? 'default' : 'outline'}
                     onClick={() => setInviteForm({ ...inviteForm, role: 'admin' })}
                     className="flex-1"
+                    disabled={isSubmitting}
                   >
                     <Shield className="w-4 h-4 mr-2" />
                     Admin
@@ -277,11 +289,20 @@ export default function TeamMembersPage() {
 
             <Button
               onClick={inviteMember}
-              disabled={!inviteForm.email}
+              disabled={!inviteForm.email || !inviteForm.password || isSubmitting}
               className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600"
             >
-              <UserPlus className="w-4 h-4 mr-2" />
-              Add Team Member
+              {isSubmitting ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Add Team Member
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>

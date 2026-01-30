@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   MessageSquare,
-  Users,
   Sparkles,
   User,
   X,
@@ -16,8 +16,70 @@ import {
   Clock,
   AlertCircle,
   CheckCircle2,
-  Filter
+  Bell,
+  BellOff,
+  Flame,
+  ChevronDown,
+  Zap,
+  Mail,
+  Loader2
 } from 'lucide-react'
+
+// Canned responses for quick replies
+const CANNED_RESPONSES = [
+  {
+    label: 'Pricing Overview',
+    shortcut: '/pricing',
+    text: `Our membership tiers:
+
+• **Core Sniper ($199/mo)**: SPX day trades, morning watchlist, high-volume alerts
+• **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades
+• **Execute Sniper ($499/mo)**: Everything in Pro + NDX alerts, high-conviction LEAPS
+
+All tiers include our 30-day money-back guarantee!`
+  },
+  {
+    label: 'Win Rate Stats',
+    shortcut: '/stats',
+    text: `Our verified performance:
+
+• 87% win rate over 8+ years
+• Target 100%+ returns per trade
+• 1-3 alerts daily during market hours (9:30am-4pm ET)
+• Exact entries, stop losses, and take profits on every alert`
+  },
+  {
+    label: 'How to Join',
+    shortcut: '/join',
+    text: `Here's how to get started:
+
+1. Choose your tier at tradeitm.com
+2. Complete checkout via Whop
+3. Join our Discord community (invite sent automatically)
+4. Start receiving alerts immediately!
+
+Questions about which tier is right for you?`
+  },
+  {
+    label: 'Money-Back Guarantee',
+    shortcut: '/guarantee',
+    text: `We stand behind our service with a 30-day action-based money-back guarantee.
+
+If you follow our alerts and don't see results within 30 days, we'll refund your membership - no questions asked. We're confident you'll see the value from day one.`
+  },
+  {
+    label: 'Execute Tier Details',
+    shortcut: '/execute',
+    text: `Execute Sniper ($499/mo) is our premium tier for serious traders:
+
+• Real-time NDX alerts (our highest-conviction setups)
+• High-conviction LEAPS positions
+• Advanced trade commentary & risk scaling education
+• Priority support from our team
+
+This tier is designed for traders with larger accounts looking to maximize returns.`
+  }
+]
 
 interface Conversation {
   id: string
@@ -59,33 +121,127 @@ export default function ChatManagementPage() {
     escalated: 0,
     highValue: 0
   })
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
+  const [showCannedResponses, setShowCannedResponses] = useState(false)
+  const [showResolveModal, setShowResolveModal] = useState(false)
+  const [sendingTranscript, setSendingTranscript] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const previousEscalatedIds = useRef<Set<string>>(new Set())
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const previousMessageCount = useRef(0)
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Check notification permission on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermission(Notification.permission)
+      setNotificationsEnabled(Notification.permission === 'granted')
+    }
+  }, [])
+
+  // Request notification permission
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert('Desktop notifications are not supported in this browser')
+      return
+    }
+
+    const permission = await Notification.requestPermission()
+    setNotificationPermission(permission)
+    setNotificationsEnabled(permission === 'granted')
+  }, [])
+
+  // Broadcast typing status to the visitor
+  const broadcastTypingStatus = useCallback(async (conversationId: string, isTyping: boolean) => {
+    try {
+      if (isTyping) {
+        // Insert or update typing indicator
+        await supabase
+          .from('team_typing_indicators')
+          .upsert({
+            conversation_id: conversationId,
+            user_id: '00000000-0000-0000-0000-000000000000', // Admin placeholder ID
+            user_name: 'TradeITM',
+            is_typing: true,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'conversation_id,user_id'
+          })
+      } else {
+        // Remove typing indicator
+        await supabase
+          .from('team_typing_indicators')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', '00000000-0000-0000-0000-000000000000')
+      }
+    } catch (error) {
+      console.warn('Failed to broadcast typing status:', error)
+    }
+  }, [])
+
+  // Show desktop notification for escalation
+  const showEscalationNotification = useCallback((conv: Conversation) => {
+    if (!notificationsEnabled || notificationPermission !== 'granted') return
+
+    const notification = new Notification('🔥 New Escalation!', {
+      body: `${conv.visitor_name || 'Visitor'}: ${conv.escalation_reason || 'Needs human assistance'}${conv.lead_score && conv.lead_score >= 7 ? ` (Lead Score: ${conv.lead_score})` : ''}`,
+      icon: '/hero-logo.png',
+      tag: `escalation-${conv.id}`,
+      requireInteraction: true
+    })
+
+    notification.onclick = () => {
+      window.focus()
+      setSelectedConv(conv)
+      notification.close()
+    }
+
+    // Auto-close after 10 seconds
+    setTimeout(() => notification.close(), 10000)
+  }, [notificationsEnabled, notificationPermission])
+
   // Load conversations
   useEffect(() => {
     loadConversations()
 
-    // Subscribe to new conversations
+    // Subscribe to new conversations and escalations
     const channel = supabase
       .channel('admin-conversations')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'chat_conversations'
-      }, () => {
+      }, (payload) => {
         loadConversations()
+
+        // Check for new escalations
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          const updated = payload.new as Conversation
+          if (updated.escalation_reason && !previousEscalatedIds.current.has(updated.id)) {
+            previousEscalatedIds.current.add(updated.id)
+            showEscalationNotification(updated)
+          }
+        }
+        if (payload.eventType === 'INSERT' && payload.new) {
+          const newConv = payload.new as Conversation
+          if (newConv.escalation_reason) {
+            previousEscalatedIds.current.add(newConv.id)
+            showEscalationNotification(newConv)
+          }
+        }
       })
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [showEscalationNotification])
 
   // Filter conversations
   useEffect(() => {
@@ -121,7 +277,13 @@ export default function ChatManagementPage() {
         table: 'chat_messages',
         filter: `conversation_id=eq.${selectedConv.id}`
       }, (payload) => {
-        setMessages(prev => [...prev, payload.new as Message])
+        const newMessage = payload.new as Message
+        setMessages(prev => [...prev, newMessage])
+
+        // Play sound for new visitor messages
+        if (newMessage.sender_type === 'visitor' && isSoundEnabled()) {
+          playLuxuryPlink()
+        }
       })
       .subscribe()
 
@@ -140,6 +302,13 @@ export default function ChatManagementPage() {
     if (data) {
       setConversations(data)
 
+      // Track existing escalated IDs to avoid duplicate notifications
+      data.forEach(conv => {
+        if (conv.escalation_reason) {
+          previousEscalatedIds.current.add(conv.id)
+        }
+      })
+
       // Calculate stats
       const stats = {
         total: data.length,
@@ -150,6 +319,11 @@ export default function ChatManagementPage() {
       }
       setStats(stats)
     }
+  }
+
+  function insertCannedResponse(text: string) {
+    setInputValue(text)
+    setShowCannedResponses(false)
   }
 
   async function loadMessages(conversationId: string) {
@@ -176,14 +350,53 @@ export default function ChatManagementPage() {
     loadConversations()
   }
 
-  async function resolveChat(convId: string) {
+  function handleResolveClick() {
+    setShowResolveModal(true)
+  }
+
+  async function resolveChat(sendTranscript: boolean) {
+    if (!selectedConv) return
+
+    // If sending transcript, do that first
+    if (sendTranscript && selectedConv.visitor_email) {
+      setSendingTranscript(true)
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-chat-transcript`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+            },
+            body: JSON.stringify({
+              conversationId: selectedConv.id,
+              recipientEmail: selectedConv.visitor_email
+            })
+          }
+        )
+
+        if (!response.ok) {
+          const error = await response.json()
+          console.error('Failed to send transcript:', error)
+          alert('Failed to send transcript. Resolving chat anyway.')
+        }
+      } catch (error) {
+        console.error('Failed to send transcript:', error)
+        alert('Failed to send transcript. Resolving chat anyway.')
+      }
+      setSendingTranscript(false)
+    }
+
+    // Mark conversation as resolved
     await supabase
       .from('chat_conversations')
       .update({
         status: 'resolved'
       })
-      .eq('id', convId)
+      .eq('id', selectedConv.id)
 
+    setShowResolveModal(false)
     loadConversations()
     setSelectedConv(null)
   }
@@ -191,6 +404,12 @@ export default function ChatManagementPage() {
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault()
     if (!inputValue.trim() || !selectedConv) return
+
+    // Clear typing indicator immediately
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    broadcastTypingStatus(selectedConv.id, false)
 
     const { error } = await supabase
       .from('chat_messages')
@@ -210,13 +429,34 @@ export default function ChatManagementPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gradient-champagne mb-2">
-          Chat Conversations
-        </h1>
-        <p className="text-platinum/60">
-          Manage visitor conversations and AI escalations
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gradient-champagne mb-2">
+            Chat Conversations
+          </h1>
+          <p className="text-platinum/60">
+            Manage visitor conversations and AI escalations
+          </p>
+        </div>
+
+        {/* Desktop Notifications Toggle */}
+        <Button
+          variant={notificationsEnabled ? 'default' : 'outline'}
+          onClick={notificationsEnabled ? () => setNotificationsEnabled(false) : requestNotificationPermission}
+          className={notificationsEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
+        >
+          {notificationsEnabled ? (
+            <>
+              <Bell className="w-4 h-4 mr-2" />
+              Notifications On
+            </>
+          ) : (
+            <>
+              <BellOff className="w-4 h-4 mr-2" />
+              Enable Notifications
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -379,10 +619,10 @@ export default function ChatManagementPage() {
                           </span>
                         </>
                       )}
-                      {selectedConv.lead_score && selectedConv.lead_score >= 7 && (
+                      {selectedConv.lead_score && selectedConv.lead_score > 0 && (
                         <>
                           <span className="text-platinum/40">•</span>
-                          <span className="text-champagne">🔥 Lead Score: {selectedConv.lead_score}</span>
+                          <LeadScoreFlames score={selectedConv.lead_score} />
                         </>
                       )}
                     </div>
@@ -391,7 +631,7 @@ export default function ChatManagementPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => resolveChat(selectedConv.id)}
+                      onClick={handleResolveClick}
                     >
                       <CheckCircle2 className="w-4 h-4 mr-1" />
                       Resolve
@@ -417,17 +657,83 @@ export default function ChatManagementPage() {
 
               {/* Input */}
               <div className="p-4 border-t border-border/40 bg-background/50">
+                {/* Canned Responses Dropdown */}
+                <div className="relative mb-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCannedResponses(!showCannedResponses)}
+                    className="text-xs"
+                  >
+                    <Zap className="w-3 h-3 mr-1" />
+                    Quick Responses
+                    <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${showCannedResponses ? 'rotate-180' : ''}`} />
+                  </Button>
+
+                  {showCannedResponses && (
+                    <div className="absolute bottom-full left-0 mb-2 w-72 bg-background/95 backdrop-blur border border-border/40 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                      {CANNED_RESPONSES.map((response, i) => (
+                        <button
+                          key={i}
+                          onClick={() => insertCannedResponse(response.text)}
+                          className="w-full text-left px-3 py-2 hover:bg-accent/10 border-b border-border/20 last:border-0 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-ivory">{response.label}</span>
+                            <span className="text-xs text-platinum/40 font-mono">{response.shortcut}</span>
+                          </div>
+                          <p className="text-xs text-platinum/60 mt-0.5 line-clamp-1">
+                            {response.text.slice(0, 60)}...
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <form onSubmit={sendMessage} className="flex gap-2">
                   <Input
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type your response..."
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setInputValue(val)
+                      // Check for canned response shortcuts
+                      const matchedResponse = CANNED_RESPONSES.find(r => val === r.shortcut)
+                      if (matchedResponse) {
+                        setInputValue(matchedResponse.text)
+                      }
+
+                      // Broadcast typing status with debounce
+                      if (selectedConv && val.trim()) {
+                        broadcastTypingStatus(selectedConv.id, true)
+
+                        // Clear previous timeout
+                        if (typingTimeoutRef.current) {
+                          clearTimeout(typingTimeoutRef.current)
+                        }
+
+                        // Stop typing indicator after 3 seconds of inactivity
+                        typingTimeoutRef.current = setTimeout(() => {
+                          if (selectedConv) {
+                            broadcastTypingStatus(selectedConv.id, false)
+                          }
+                        }, 3000)
+                      } else if (selectedConv && !val.trim()) {
+                        // Input cleared, stop typing indicator
+                        broadcastTypingStatus(selectedConv.id, false)
+                      }
+                    }}
+                    placeholder="Type your response or use /shortcut..."
                     className="flex-1"
                   />
-                  <Button type="submit">
+                  <Button type="submit" disabled={!inputValue.trim()}>
                     <Send className="w-4 h-4" />
                   </Button>
                 </form>
+                <p className="text-xs text-platinum/40 mt-1">
+                  Shortcuts: /pricing, /stats, /join, /guarantee, /execute
+                </p>
               </div>
             </Card>
           ) : (
@@ -440,6 +746,95 @@ export default function ChatManagementPage() {
           )}
         </div>
       </div>
+
+      {/* Resolve Chat Modal */}
+      {showResolveModal && selectedConv && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-background border border-border/40 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-ivory">Resolve Conversation</h3>
+              <button
+                onClick={() => setShowResolveModal(false)}
+                className="p-1 hover:bg-accent/10 rounded"
+              >
+                <X className="w-5 h-5 text-platinum/60" />
+              </button>
+            </div>
+
+            <p className="text-platinum/60 text-sm mb-6">
+              Would you like to send a transcript of this conversation to the visitor?
+            </p>
+
+            {selectedConv.visitor_email ? (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 mb-6">
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">Transcript will be sent to:</span>
+                </div>
+                <p className="text-ivory mt-1 font-medium">{selectedConv.visitor_email}</p>
+              </div>
+            ) : (
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mb-6">
+                <div className="flex items-center gap-2 text-sm text-orange-400">
+                  <AlertCircle className="w-4 h-4" />
+                  No email address available for this visitor
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => resolveChat(false)}
+                disabled={sendingTranscript}
+                className="flex-1"
+              >
+                Resolve Only
+              </Button>
+
+              {selectedConv.visitor_email && (
+                <Button
+                  onClick={() => resolveChat(true)}
+                  disabled={sendingTranscript}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {sendingTranscript ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 mr-2" />
+                      Send & Resolve
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Lead Score flame indicator component
+function LeadScoreFlames({ score }: { score: number }) {
+  // Show flames based on score: 1-3 = 1 flame, 4-6 = 2 flames, 7-9 = 3 flames, 10 = 4 flames
+  const flameCount = score >= 10 ? 4 : score >= 7 ? 3 : score >= 4 ? 2 : 1
+  const flameColor = score >= 7 ? 'text-orange-500' : score >= 4 ? 'text-yellow-500' : 'text-platinum/40'
+
+  return (
+    <div className="flex items-center gap-0.5" title={`Lead Score: ${score}/10`}>
+      {Array.from({ length: flameCount }).map((_, i) => (
+        <Flame
+          key={i}
+          className={`w-3.5 h-3.5 ${flameColor} ${score >= 7 ? 'animate-pulse' : ''}`}
+          fill={score >= 4 ? 'currentColor' : 'none'}
+        />
+      ))}
+      <span className={`text-xs ml-1 ${flameColor}`}>{score}</span>
     </div>
   )
 }
@@ -456,6 +851,7 @@ function ConversationItem({
   onTakeOver: () => void
 }) {
   const isEscalated = conversation.escalation_reason !== null
+  const leadScore = conversation.lead_score || 0
 
   return (
     <div
@@ -463,13 +859,18 @@ function ConversationItem({
       className={`p-3 border rounded-lg cursor-pointer transition-all ${
         isSelected
           ? 'bg-emerald-500/10 border-emerald-500/30'
+          : leadScore >= 7
+          ? 'bg-orange-500/5 border-orange-500/20 hover:bg-orange-500/10'
           : 'bg-background/50 border-border/40 hover:bg-accent/10'
       }`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-sm text-ivory truncate">
-          {conversation.visitor_name || conversation.visitor_id.slice(0, 20)}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-sm text-ivory truncate">
+            {conversation.visitor_name || conversation.visitor_id.slice(0, 20)}
+          </span>
+          {leadScore > 0 && <LeadScoreFlames score={leadScore} />}
+        </div>
 
         {conversation.ai_handled ? (
           <span className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded flex-shrink-0">
@@ -489,12 +890,6 @@ function ConversationItem({
       {isEscalated && (
         <div className="text-xs text-orange-400 mb-2 truncate">
           ⚠️ {conversation.escalation_reason}
-        </div>
-      )}
-
-      {conversation.lead_score && conversation.lead_score >= 7 && (
-        <div className="text-xs text-champagne mb-2">
-          🔥 High-value lead (Score: {conversation.lead_score})
         </div>
       )}
 

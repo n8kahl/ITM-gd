@@ -51,13 +51,40 @@ serve(async (req) => {
       conversation = data
     }
 
-    // 2. Save visitor message
-    const { data: savedMessage, error: messageSaveError } = await supabase
+    // 2. Extract visitor info (name/email) from message
+    const visitorInfo = extractVisitorInfo(visitorMessage)
+
+    // Update conversation with extracted name/email if found
+    if (visitorInfo.name || visitorInfo.email) {
+      const updateData: Record<string, string> = {}
+      if (visitorInfo.name && !conversation.visitor_name) {
+        updateData.visitor_name = visitorInfo.name
+      }
+      if (visitorInfo.email && !conversation.visitor_email) {
+        updateData.visitor_email = visitorInfo.email
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await supabase
+          .from('chat_conversations')
+          .update({
+            ...updateData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', conversation.id)
+
+        // Update local conversation object
+        Object.assign(conversation, updateData)
+      }
+    }
+
+    // 3. Save visitor message
+    const { error: messageSaveError } = await supabase
       .from('chat_messages')
       .insert({
         conversation_id: conversation.id,
         sender_type: 'visitor',
-        sender_name: conversation.visitor_name || 'Visitor',
+        sender_name: conversation.visitor_name || visitorInfo.name || 'Visitor',
         message_text: visitorMessage
       })
       .select()
@@ -65,7 +92,7 @@ serve(async (req) => {
 
     if (messageSaveError) throw messageSaveError
 
-    // 3. Get message history
+    // 4. Get message history
     const { data: messageHistory } = await supabase
       .from('chat_messages')
       .select('*')
@@ -73,7 +100,68 @@ serve(async (req) => {
       .order('created_at', { ascending: true })
       .limit(10)
 
-    // 4. Check if should escalate
+    // 5. Analyze sentiment using GPT-4o
+    const sentimentResult = await analyzeSentiment(
+      visitorMessage,
+      messageHistory || [],
+      openaiKey
+    )
+
+    // 5a. If frustrated or angry, escalate immediately
+    if (sentimentResult.sentiment === 'frustrated' || sentimentResult.sentiment === 'angry') {
+      await supabase
+        .from('chat_conversations')
+        .update({
+          ai_handled: false,
+          escalation_reason: `Sentiment detected: ${sentimentResult.sentiment} - ${sentimentResult.reasoning}`,
+          lead_score: sentimentResult.sentiment === 'angry' ? 8 : 7,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversation.id)
+
+      // Send empathetic handoff message
+      await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: conversation.id,
+          sender_type: 'system',
+          sender_name: 'TradeITM',
+          message_text: "I understand this is important to you. Let me connect you with one of our team members who can give you the personal attention you deserve. They'll be with you shortly.",
+          ai_generated: true,
+          ai_confidence: 1.0
+        })
+
+      // Notify team
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`
+          },
+          body: JSON.stringify({
+            conversationId: conversation.id,
+            reason: `Sentiment: ${sentimentResult.sentiment}`,
+            leadScore: sentimentResult.sentiment === 'angry' ? 8 : 7,
+            visitorId: conversation.visitor_id
+          })
+        })
+      } catch (err) {
+        console.error('Push notification failed:', err)
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          escalated: true,
+          conversationId: conversation.id,
+          reason: `Sentiment detected: ${sentimentResult.sentiment}`
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 6. Check other escalation triggers
     const escalationCheck = checkEscalationTriggers(
       visitorMessage,
       conversation,
@@ -158,25 +246,72 @@ serve(async (req) => {
       )
     }
 
-    // 5. Search knowledge base
-    const { data: kbEntries } = await supabase
-      .from('knowledge_base')
-      .select('*')
-      .eq('is_active', true)
-      .order('priority', { ascending: false })
+    // 7. Search knowledge base using PostgreSQL Full-Text Search
+    const relevantKnowledge = await searchKnowledgeBaseRPC(supabase, visitorMessage)
 
-    const relevantKnowledge = searchKnowledgeBase(visitorMessage, kbEntries || [])
-
-    // 6. Generate AI response
+    // 8. Generate AI response
     const aiResponse = await generateAIResponse(
       visitorMessage,
       messageHistory || [],
       relevantKnowledge,
-      conversation.metadata || {},
       openaiKey
     )
 
-    // 7. Save AI response
+    // 9. If low confidence, escalate instead of answering
+    if (aiResponse.confidence < 0.7) {
+      await supabase
+        .from('chat_conversations')
+        .update({
+          ai_handled: false,
+          escalation_reason: 'Low AI confidence - human verification needed',
+          lead_score: 6,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversation.id)
+
+      // Send human handoff message instead of uncertain AI response
+      await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: conversation.id,
+          sender_type: 'system',
+          sender_name: 'TradeITM',
+          message_text: "I'm not 100% sure about that, let me get a human expert to confirm for you. Someone from our team will be with you shortly!",
+          ai_generated: true,
+          ai_confidence: aiResponse.confidence
+        })
+
+      // Notify team
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`
+          },
+          body: JSON.stringify({
+            conversationId: conversation.id,
+            reason: 'Low AI confidence',
+            leadScore: 6,
+            visitorId: conversation.visitor_id
+          })
+        })
+      } catch (err) {
+        console.error('Push notification failed:', err)
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          escalated: true,
+          conversationId: conversation.id,
+          reason: 'Low AI confidence - human verification needed'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 10. Save AI response (only if confidence is high enough)
     const { data: aiMessage } = await supabase
       .from('chat_messages')
       .insert({
@@ -187,24 +322,10 @@ serve(async (req) => {
         image_url: aiResponse.imageUrl,
         ai_generated: true,
         ai_confidence: aiResponse.confidence,
-        knowledge_base_refs: relevantKnowledge.map(k => k.id)
+        knowledge_base_refs: relevantKnowledge.map((k: any) => k.id)
       })
       .select()
       .single()
-
-    // 8. Flag for review if low confidence
-    if (aiResponse.confidence < 0.7) {
-      await supabase
-        .from('chat_conversations')
-        .update({
-          metadata: {
-            ...(conversation.metadata || {}),
-            flagged_for_review: true,
-            flag_reason: 'Low AI confidence'
-          }
-        })
-        .eq('id', conversation.id)
-    }
 
     return new Response(
       JSON.stringify({
@@ -218,8 +339,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
@@ -228,6 +350,40 @@ serve(async (req) => {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+// Extract visitor name and email from message content
+function extractVisitorInfo(message: string): { name?: string; email?: string } {
+  const result: { name?: string; email?: string } = {}
+
+  // Email regex - standard email pattern
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g
+  const emailMatch = message.match(emailRegex)
+  if (emailMatch) {
+    result.email = emailMatch[0].toLowerCase()
+  }
+
+  // Name extraction patterns
+  const namePatterns = [
+    /(?:my name is|i'm|i am|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+    /(?:name[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+here/i,
+  ]
+
+  for (const pattern of namePatterns) {
+    const match = message.match(pattern)
+    if (match && match[1]) {
+      // Basic validation: name should be 2-50 chars, not common words
+      const potentialName = match[1].trim()
+      const commonWords = ['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one', 'our', 'out']
+      if (potentialName.length >= 2 && potentialName.length <= 50 && !commonWords.includes(potentialName.toLowerCase())) {
+        result.name = potentialName
+        break
+      }
+    }
+  }
+
+  return result
+}
 
 function checkEscalationTriggers(message: string, conversation: any, history: any[]) {
   const messageLower = message.toLowerCase()
@@ -287,38 +443,107 @@ function checkEscalationTriggers(message: string, conversation: any, history: an
   return { shouldEscalate, reason, leadScore }
 }
 
-function searchKnowledgeBase(query: string, kbEntries: any[]) {
-  const queryLower = query.toLowerCase()
-  const relevant: any[] = []
+// Search knowledge base using PostgreSQL Full-Text Search via RPC
+async function searchKnowledgeBaseRPC(supabase: any, query: string): Promise<any[]> {
+  // Try FTS search first
+  const { data: ftsResults, error: ftsError } = await supabase
+    .rpc('search_knowledge_base', {
+      search_query: query,
+      match_limit: 5
+    })
 
-  for (const entry of kbEntries) {
-    const questions = entry.question.toLowerCase().split('|').map((q: string) => q.trim())
-    const score = questions.reduce((max: number, q: string) => {
-      // Simple keyword matching
-      const keywords = q.split(' ').filter((w: string) => w.length > 3)
-      const matches = keywords.filter((kw: string) => queryLower.includes(kw)).length
-      return Math.max(max, matches)
-    }, 0)
-
-    if (score > 0) {
-      relevant.push({ ...entry, score })
-    }
+  if (!ftsError && ftsResults && ftsResults.length > 0) {
+    return ftsResults
   }
 
-  // Sort by score and priority, return top 3
-  return relevant
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      return b.priority - a.priority
+  // Fallback to keyword search if FTS returns no results
+  const { data: fallbackResults } = await supabase
+    .rpc('search_knowledge_base_fallback', {
+      search_query: query,
+      match_limit: 3
     })
-    .slice(0, 3)
+
+  if (fallbackResults && fallbackResults.length > 0) {
+    return fallbackResults
+  }
+
+  // Ultimate fallback: get top priority entries
+  const { data: defaultEntries } = await supabase
+    .from('knowledge_base')
+    .select('*')
+    .eq('is_active', true)
+    .order('priority', { ascending: false })
+    .limit(3)
+
+  return defaultEntries || []
+}
+
+// Analyze sentiment using GPT-4o
+async function analyzeSentiment(
+  message: string,
+  messageHistory: any[],
+  openaiKey: string
+): Promise<{ sentiment: 'positive' | 'neutral' | 'frustrated' | 'angry'; confidence: number; reasoning: string }> {
+  const historyContext = messageHistory
+    .slice(-4)
+    .map(m => `${m.sender_type}: ${m.message_text}`)
+    .join('\n')
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openaiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a sentiment analyzer. Analyze the visitor's message sentiment in the context of their conversation with a trading signals company.
+
+Classify the sentiment as ONE of:
+- "positive": Interested, excited, ready to buy, happy
+- "neutral": Asking questions, gathering information, undecided
+- "frustrated": Disappointed, annoyed, skeptical, expressing doubt
+- "angry": Very upset, using harsh language, threatening, accusing
+
+Respond in JSON format only:
+{"sentiment": "positive|neutral|frustrated|angry", "confidence": 0.0-1.0, "reasoning": "brief explanation"}`
+        },
+        {
+          role: 'user',
+          content: `Conversation history:\n${historyContext}\n\nLatest message to analyze:\n"${message}"`
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 150,
+      response_format: { type: 'json_object' }
+    })
+  })
+
+  if (!response.ok) {
+    // Default to neutral if analysis fails
+    return { sentiment: 'neutral', confidence: 0.5, reasoning: 'Analysis failed' }
+  }
+
+  const data = await response.json()
+  try {
+    const result = JSON.parse(data.choices[0].message.content)
+    return {
+      sentiment: result.sentiment || 'neutral',
+      confidence: result.confidence || 0.5,
+      reasoning: result.reasoning || ''
+    }
+  } catch {
+    return { sentiment: 'neutral', confidence: 0.5, reasoning: 'Parse error' }
+  }
 }
 
 async function generateAIResponse(
   visitorMessage: string,
   messageHistory: any[],
   knowledgeBase: any[],
-  visitorContext: any,
   openaiKey: string
 ) {
   const SYSTEM_PROMPT = `You are an AI assistant for TradeITM, a premium options trading signals service.
@@ -330,7 +555,21 @@ async function generateAIResponse(
 - Qualify leads and escalate high-value prospects to human team
 - Maintain a professional but friendly tone matching our luxury brand
 
-## Key Facts About TradeITM
+## CRITICAL: Data Integrity Rules
+**NEVER make up or fabricate:**
+- Win rates or success percentages
+- Specific trade results or P&L numbers
+- Member testimonials or reviews
+- Performance statistics of any kind
+- Number of members or subscribers
+
+**ONLY cite statistics that are:**
+1. Explicitly provided in the Knowledge Base below
+2. Part of the verified facts in this prompt
+
+If asked about specific performance data you don't have, say: "I'd want to give you accurate numbers - let me connect you with our team who can share the latest verified results."
+
+## Verified Facts About TradeITM (ONLY use these)
 - Win rate: 87% verified over 8+ years
 - Target: 100%+ returns per trade
 - Alerts: 1-3 daily during market hours (9:30am-4pm ET)
@@ -354,11 +593,17 @@ async function generateAIResponse(
 - Keep responses concise (2-3 short paragraphs max)
 - Use bullet points for clarity when listing features
 - Always mention the 30-day guarantee when discussing pricing
-- If you don't know something specific, acknowledge it
+- If you're not confident about something, acknowledge it and offer to connect them with a team member
 - Be direct and helpful
+- When citing any statistic, ensure it matches the Knowledge Base or Verified Facts above
 
-## Example Tone
-"Our Execute tier is designed for serious traders targeting maximum returns. You'll get real-time NDX alerts with our highest-conviction setups - the same trades our founder takes personally. Want to see some recent wins?"`
+## Confidence Signaling
+At the end of your response, include a confidence indicator in this exact format on a new line:
+[CONFIDENCE: HIGH/MEDIUM/LOW]
+
+Use HIGH only when you're directly citing Knowledge Base content or Verified Facts.
+Use MEDIUM when making reasonable inferences from available data.
+Use LOW when the question requires information not in your knowledge base.`
 
   // Build knowledge base context
   const kbContext = knowledgeBase.map(kb =>
@@ -414,10 +659,25 @@ async function generateAIResponse(
   }
 
   const data = await response.json()
-  const aiText = data.choices[0].message.content
+  let aiText = data.choices[0].message.content
 
-  // Calculate confidence
-  const confidence = data.choices[0].finish_reason === 'stop' ? 0.9 : 0.6
+  // Parse confidence from AI's self-reported indicator
+  let confidence = 0.8 // Default to medium-high
+  const confidenceMatch = aiText.match(/\[CONFIDENCE:\s*(HIGH|MEDIUM|LOW)\]/i)
+  if (confidenceMatch) {
+    const level = confidenceMatch[1].toUpperCase()
+    confidence = level === 'HIGH' ? 0.95 : level === 'MEDIUM' ? 0.75 : 0.5
+    // Remove the confidence tag from the response
+    aiText = aiText.replace(/\[CONFIDENCE:\s*(HIGH|MEDIUM|LOW)\]/gi, '').trim()
+  } else {
+    // Fallback: if no confidence tag, use completion status
+    confidence = data.choices[0].finish_reason === 'stop' ? 0.75 : 0.5
+  }
+
+  // Additional confidence reduction if knowledge base was empty
+  if (knowledgeBase.length === 0) {
+    confidence = Math.min(confidence, 0.6)
+  }
 
   // Extract image URL if AI referenced proof
   let imageUrl = null

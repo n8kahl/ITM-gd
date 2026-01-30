@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
-import { MessageCircle, X, Send, Loader2, User, Sparkles } from 'lucide-react'
+import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
+import { MessageCircle, X, Send, Loader2, User, Sparkles, Clock } from 'lucide-react'
 import { Button } from './button'
 
 interface Message {
@@ -16,13 +17,24 @@ interface Message {
   created_at: string
 }
 
+interface Conversation {
+  id: string
+  ai_handled: boolean
+  escalation_reason?: string
+  visitor_name?: string
+  visitor_email?: string
+}
+
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversation, setConversation] = useState<Conversation | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [teamOnline, setTeamOnline] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isEscalated, setIsEscalated] = useState(false)
+  const [teamTyping, setTeamTyping] = useState<string | null>(null)
   const [visitorId] = useState(() => {
     // Generate or retrieve visitor ID from localStorage
     if (typeof window !== 'undefined') {
@@ -37,18 +49,63 @@ export function ChatWidget() {
   })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const previousMessageCount = useRef(0)
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  // Auto-scroll to bottom when new messages arrive (with image loading support)
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    // Small delay to allow images to start loading
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior })
+    }, 50)
+  }, [])
 
-  // Initialize conversation when widget opens
   useEffect(() => {
-    if (isOpen && messages.length === 0) {
-      // Send initial greeting
+    // Only scroll and play sound if messages were added (not on initial load)
+    if (messages.length > previousMessageCount.current && previousMessageCount.current > 0) {
+      scrollToBottom()
+      // Play sound for non-visitor messages (team/system responses)
+      const lastMessage = messages[messages.length - 1]
+      if (lastMessage && lastMessage.sender_type !== 'visitor' && isSoundEnabled()) {
+        playLuxuryPlink()
+      }
+    }
+    previousMessageCount.current = messages.length
+  }, [messages, scrollToBottom])
+
+  // Load existing messages when conversation exists
+  const loadMessages = useCallback(async (convId: string) => {
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true })
+
+    if (data && data.length > 0) {
+      setMessages(data as Message[])
+    }
+  }, [])
+
+  // Load conversation state (for escalation tracking)
+  const loadConversation = useCallback(async (convId: string) => {
+    const { data } = await supabase
+      .from('chat_conversations')
+      .select('id, ai_handled, escalation_reason, visitor_name, visitor_email')
+      .eq('id', convId)
+      .single()
+
+    if (data) {
+      setConversation(data as Conversation)
+      setIsEscalated(!data.ai_handled)
+    }
+  }, [])
+
+  // Initialize: show greeting when widget opens (no conversation yet)
+  useEffect(() => {
+    if (isOpen && !conversationId && messages.length === 0) {
+      // Show local greeting - will be replaced by DB messages once conversation starts
       const initialMessage: Message = {
-        id: 'initial',
+        id: 'greeting',
         sender_type: 'team',
         sender_name: 'TradeITM',
         message_text: "Hi! 👋 I'm here to help answer your questions about our trading signals service. What brings you to TradeITM today?",
@@ -57,14 +114,20 @@ export function ChatWidget() {
       }
       setMessages([initialMessage])
     }
-  }, [isOpen])
+  }, [isOpen, conversationId, messages.length])
 
-  // Subscribe to real-time messages if conversation exists
+  // Subscribe to real-time messages, conversation changes, AND typing indicators
   useEffect(() => {
     if (!conversationId) return
 
+    // Load existing messages and conversation state
+    loadMessages(conversationId)
+    loadConversation(conversationId)
+
+    // Single channel for all real-time updates
     const channel = supabase
-      .channel(`conversation:${conversationId}`)
+      .channel(`chat:${conversationId}`)
+      // Listen to ALL message inserts (visitor, team, system)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -72,9 +135,43 @@ export function ChatWidget() {
         filter: `conversation_id=eq.${conversationId}`
       }, (payload) => {
         const newMessage = payload.new as Message
-        // Only add if it's not from the visitor (avoid duplicates)
-        if (newMessage.sender_type !== 'visitor') {
-          setMessages(prev => [...prev, newMessage])
+        // Add message if not already in state (dedupe by id)
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMessage.id)) {
+            return prev
+          }
+          return [...prev, newMessage]
+        })
+        // Clear typing indicator when message received
+        setTeamTyping(null)
+      })
+      // Listen to conversation updates (for escalation state)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_conversations',
+        filter: `id=eq.${conversationId}`
+      }, (payload) => {
+        const updated = payload.new as Conversation
+        setConversation(updated)
+        setIsEscalated(!updated.ai_handled)
+      })
+      // Listen to typing indicators
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_typing_indicators',
+        filter: `conversation_id=eq.${conversationId}`
+      }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          setTeamTyping(null)
+        } else if (payload.new) {
+          const indicator = payload.new as { user_name: string; is_typing: boolean }
+          if (indicator.is_typing) {
+            setTeamTyping(indicator.user_name)
+          } else {
+            setTeamTyping(null)
+          }
         }
       })
       .subscribe()
@@ -82,7 +179,7 @@ export function ChatWidget() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [conversationId])
+  }, [conversationId, loadMessages, loadConversation])
 
   // Check if team is online
   useEffect(() => {
@@ -111,19 +208,9 @@ export function ChatWidget() {
     setInputValue('')
     setIsLoading(true)
 
-    // Add message to UI immediately for responsive feel
-    const tempMessage: Message = {
-      id: `temp_${Date.now()}`,
-      sender_type: 'visitor',
-      sender_name: 'You',
-      message_text: messageText,
-      created_at: new Date().toISOString()
-    }
-    setMessages(prev => [...prev, tempMessage])
+    // No temp message - all messages come from Realtime subscription for data consistency
 
     try {
-      // Call Edge Function to handle message + AI response
-      const { data: supabaseUrlData } = await supabase.auth.getSession()
       const functionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + '/functions/v1/handle-chat-message'
 
       const response = await fetch(functionUrl, {
@@ -143,30 +230,23 @@ export function ChatWidget() {
 
       if (result.success) {
         // Set conversation ID if this was first message
+        // This triggers the useEffect to subscribe to Realtime
         if (!conversationId && result.conversationId) {
           setConversationId(result.conversationId)
+          // Clear the local greeting - DB messages will load via subscription
+          setMessages([])
         }
 
-        // AI response will come via real-time subscription or is already in result
-        if (result.message && !result.escalated) {
-          setMessages(prev => [...prev, result.message])
-        }
-
+        // Escalation state is handled via Realtime subscription on chat_conversations
         if (result.escalated) {
-          // Show escalation message
-          const escalationMsg: Message = {
-            id: `escalation_${Date.now()}`,
-            sender_type: 'system',
-            sender_name: 'TradeITM',
-            message_text: 'Connecting you with our team now...',
-            created_at: new Date().toISOString()
-          }
-          setMessages(prev => [...prev, escalationMsg])
+          setIsEscalated(true)
         }
+      } else {
+        throw new Error(result.error || 'Failed to send message')
       }
     } catch (error) {
       console.error('Error sending message:', error)
-      // Show error message
+      // Show error message locally (not persisted)
       const errorMsg: Message = {
         id: `error_${Date.now()}`,
         sender_type: 'system',
@@ -234,36 +314,87 @@ export function ChatWidget() {
           >
             <div className="bg-background/95 backdrop-blur-xl border border-emerald-500/30 rounded-2xl overflow-hidden flex flex-col h-full shadow-2xl">
               {/* Header */}
-              <div className="p-4 border-b border-border/40 bg-gradient-to-r from-emerald-500/10 to-champagne-500/10">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
-                      <Sparkles className="w-5 h-5 text-white" />
+              <div className="border-b border-border/40">
+                <div className="p-4 bg-gradient-to-r from-emerald-500/10 to-champagne-500/10">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-ivory">TradeITM Support</h3>
+                        <p className="text-xs text-platinum/60 flex items-center gap-1">
+                          <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                          {isEscalated ? 'Team notified' : 'AI + Team available'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-ivory">TradeITM Support</h3>
-                      <p className="text-xs text-platinum/60 flex items-center gap-1">
-                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                        AI + Team available
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => setIsOpen(false)}
+                      className="text-platinum/60 hover:text-ivory transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="text-platinum/60 hover:text-ivory transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
+
+                {/* Escalation Banner */}
+                <AnimatePresence>
+                  {isEscalated && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 py-2.5 bg-champagne/10 border-t border-champagne/20 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-champagne animate-pulse" />
+                        <span className="text-sm text-champagne font-medium">
+                          Waiting for Team Member...
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-background/50 to-background/80">
+              <div
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-background/50 to-background/80"
+              >
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} />
+                  <ChatMessage key={msg.id} message={msg} onImageLoad={scrollToBottom} />
                 ))}
 
-                {isLoading && (
+                {/* Typing Indicator */}
+                <AnimatePresence>
+                  {teamTyping && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="flex items-center gap-2"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm text-platinum/60">{teamTyping} is typing</span>
+                          <span className="flex gap-0.5">
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {isLoading && !teamTyping && (
                   <div className="flex items-center gap-2 text-platinum/60 text-sm">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Thinking...</span>
@@ -310,7 +441,7 @@ export function ChatWidget() {
 }
 
 // Individual message component
-function ChatMessage({ message }: { message: Message }) {
+function ChatMessage({ message, onImageLoad }: { message: Message; onImageLoad?: () => void }) {
   const isVisitor = message.sender_type === 'visitor'
   const isSystem = message.sender_type === 'system'
 
@@ -354,6 +485,7 @@ function ChatMessage({ message }: { message: Message }) {
                 src={message.image_url}
                 alt="Shared content"
                 className="mt-2 rounded-lg max-w-full"
+                onLoad={onImageLoad}
               />
             )}
           </div>
