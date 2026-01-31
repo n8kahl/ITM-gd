@@ -1019,7 +1019,8 @@ function ConversationItem({
   const isEscalated = conversation.escalation_reason !== null
   const leadScore = conversation.lead_score || 0
   const status = conversation.status || 'active'
-  const isHighPriority = status === 'active' && (isEscalated || leadScore >= 7)
+  const hasPendingEscalation = !!conversation.metadata?.pending_escalation
+  const isHighPriority = status === 'active' && (isEscalated || leadScore >= 7 || hasPendingEscalation)
   const isArchived = status === 'archived'
   const isResolved = status === 'resolved'
 
@@ -1058,6 +1059,10 @@ function ConversationItem({
           <span className="text-xs px-2 py-0.5 bg-platinum/10 text-platinum/40 rounded flex-shrink-0">
             📦 Archived
           </span>
+        ) : hasPendingEscalation ? (
+          <span className="text-xs px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded animate-pulse flex-shrink-0">
+            ✉️ Pending Email
+          </span>
         ) : conversation.ai_handled ? (
           <span className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded flex-shrink-0">
             🤖 AI
@@ -1076,6 +1081,12 @@ function ConversationItem({
       {isEscalated && status === 'active' && (
         <div className="text-xs text-orange-400 mb-2 truncate">
           ⚠️ {conversation.escalation_reason}
+        </div>
+      )}
+
+      {hasPendingEscalation && status === 'active' && (
+        <div className="text-xs text-yellow-400 mb-2 truncate">
+          ⏳ {conversation.metadata.pending_escalation.reason}
         </div>
       )}
 

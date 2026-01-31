@@ -65,13 +65,23 @@ serve(async (req) => {
         conversation.ai_handled = true
         conversation.escalation_reason = null
 
+        // Fetch message history for Discord notification
+        const { data: reopenHistory } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('conversation_id', conversation.id)
+          .order('created_at', { ascending: true })
+          .limit(10)
+
         // Notify team via Discord about reopened conversation
         await sendDiscordNotification(
           supabase,
           conversation.id,
           `Conversation reopened (was ${previousStatus})`,
           conversation.visitor_name,
-          5
+          5,
+          reopenHistory || [],
+          conversation.visitor_email
         )
       }
     } else {
@@ -132,10 +142,19 @@ serve(async (req) => {
 
     // 2a. Check if there's a pending escalation and email was just provided
     if (visitorInfo.email && conversation.metadata?.pending_escalation) {
+      // Fetch message history for Discord notification
+      const { data: pendingHistory } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', conversation.id)
+        .order('created_at', { ascending: true })
+        .limit(10)
+
       const escalationCompleted = await checkPendingEscalation(
         supabase,
         conversation,
-        visitorInfo.email
+        visitorInfo.email,
+        pendingHistory || []
       )
 
       if (escalationCompleted) {
@@ -197,7 +216,8 @@ serve(async (req) => {
         conversation,
         `Sentiment detected: ${sentimentResult.sentiment} - ${sentimentResult.reasoning}`,
         sentimentResult.sentiment === 'angry' ? 8 : 7,
-        "I understand this is important to you. Let me connect you with one of our team members who can give you the personal attention you deserve. They'll be with you shortly."
+        "I understand this is important to you. Let me connect you with one of our team members who can give you the personal attention you deserve. They'll be with you shortly.",
+        messageHistory || []
       )
 
       return new Response(
@@ -226,7 +246,8 @@ serve(async (req) => {
         conversation,
         escalationCheck.reason,
         escalationCheck.leadScore || 5,
-        'Let me connect you with someone from our team who can help you better. One moment...'
+        'Let me connect you with someone from our team who can help you better. One moment...',
+        messageHistory || []
       )
 
       return new Response(
@@ -259,7 +280,8 @@ serve(async (req) => {
         conversation,
         'Low AI confidence - human verification needed',
         6,
-        "I want to be 100% accurate for you—let me pull in a team member to confirm. Someone from our team will be with you shortly!"
+        "I want to be 100% accurate for you—let me pull in a team member to confirm. Someone from our team will be with you shortly!",
+        messageHistory || []
       )
 
       return new Response(
@@ -320,7 +342,9 @@ async function sendDiscordNotification(
   conversationId: string,
   reason: string,
   visitorName?: string,
-  leadScore?: number
+  leadScore?: number,
+  messageHistory?: any[],
+  visitorEmail?: string
 ): Promise<void> {
   try {
     // Get Discord webhook URL from app_settings
@@ -356,25 +380,57 @@ async function sendDiscordNotification(
       title = '👋 Chat Escalated'
     }
 
+    // Build description with visitor info and link
+    const chatUrl = `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}`
+    let description = `**${name}** - ${reason}`
+    if (visitorEmail) {
+      description += `\n📧 ${visitorEmail}`
+    }
+    description += `\n\n🔗 [**View & Respond**](${chatUrl})`
+
+    // Build fields array
+    const fields: { name: string; value: string; inline?: boolean }[] = []
+
+    // Add lead score if significant
+    if (leadScore && leadScore > 3) {
+      fields.push({ name: 'Lead Score', value: `${leadScore}/10`, inline: true })
+    }
+
+    // Generate conversation recap from last 4 messages (if available)
+    if (messageHistory && messageHistory.length > 0) {
+      const recentMessages = messageHistory
+        .filter(msg => msg.sender_type !== 'system') // Exclude system messages
+        .slice(-4) // Last 4 non-system messages
+        .map(msg => {
+          const sender = msg.sender_type === 'visitor' ? 'Visitor' : 'AI'
+          // Truncate long messages
+          const text = msg.message_text.length > 150
+            ? msg.message_text.substring(0, 147) + '...'
+            : msg.message_text
+          return `${sender}: ${text}`
+        })
+        .join('\n')
+
+      // Limit recap to 1024 characters for Discord embed field limits
+      const recap = recentMessages.length > 1024
+        ? recentMessages.substring(0, 1021) + '...'
+        : recentMessages
+
+      if (recap) {
+        fields.push({ name: '💬 Recent History', value: recap, inline: false })
+      }
+    }
+
     const payload = {
       embeds: [{
         title,
-        description: `**${name}** - ${reason}`,
+        description,
         color: embedColor,
-        fields: leadScore && leadScore > 3 ? [
-          { name: 'Lead Score', value: `${leadScore}/10`, inline: true }
-        ] : [],
+        fields,
         timestamp: new Date().toISOString()
-      }],
-      components: [{
-        type: 1,
-        components: [{
-          type: 2,
-          style: 5,
-          label: 'View & Respond',
-          url: `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}`
-        }]
       }]
+      // Note: Discord webhooks don't support interactive components (buttons)
+      // The link is included in the description instead
     }
 
     const response = await fetch(webhookUrl, {
@@ -400,7 +456,8 @@ async function handleGatedEscalation(
   conversation: any,
   reason: string,
   leadScore: number,
-  handoffMessage: string
+  handoffMessage: string,
+  messageHistory?: any[]
 ): Promise<{ handled: boolean; needsEmail: boolean }> {
   const hasEmail = !!conversation.visitor_email
 
@@ -483,7 +540,9 @@ async function handleGatedEscalation(
     conversation.id,
     reason,
     conversation.visitor_name,
-    leadScore
+    leadScore,
+    messageHistory,
+    conversation.visitor_email
   )
 
   return { handled: true, needsEmail: false }
@@ -493,7 +552,8 @@ async function handleGatedEscalation(
 async function checkPendingEscalation(
   supabase: any,
   conversation: any,
-  visitorEmail: string | null
+  visitorEmail: string | null,
+  messageHistory?: any[]
 ): Promise<boolean> {
   const pending = conversation.metadata?.pending_escalation
   if (!pending || !visitorEmail) return false
@@ -542,7 +602,9 @@ async function checkPendingEscalation(
     conversation.id,
     pending.reason,
     conversation.visitor_name,
-    pending.lead_score
+    pending.lead_score,
+    messageHistory,
+    visitorEmail || undefined
   )
 
   return true
@@ -795,6 +857,12 @@ If information is NOT in these sources, respond with: "I want to make sure you g
 - Be direct and helpful
 - ONLY cite statistics that EXACTLY match the Knowledge Base or Verified Facts
 - When uncertain, default to escalating rather than guessing
+
+## Handling Escalation Requests
+- If a user is frustrated or asks for a human, always be empathetic first
+- Acknowledge their feelings and validate their request before asking for anything
+- When connecting them with the team, warmly explain that you need their email so a member of our trade desk can follow up personally
+- Example tone: "I completely understand - let me get you connected with our team right away. To make sure someone can follow up with you directly, what's the best email to reach you at?"
 
 ## Knowledge Base Reference Tracking
 The Knowledge Base entries below are your authoritative source. When you use information from them:
