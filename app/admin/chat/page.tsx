@@ -35,7 +35,8 @@ import {
   Mail,
   Loader2,
   Archive,
-  Trash2
+  Trash2,
+  ArrowLeft
 } from 'lucide-react'
 
 // Canned responses for quick replies
@@ -142,10 +143,25 @@ export default function ChatManagementPage() {
   const [showArchiveDialog, setShowArchiveDialog] = useState(false)
   const [sendingTranscript, setSendingTranscript] = useState(false)
   const [archivingResolved, setArchivingResolved] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const previousEscalatedIds = useRef<Set<string>>(new Set())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousMessageCount = useRef(0)
+
+  // Detect mobile view (< 1024px)
+  useEffect(() => {
+    const checkMobileView = () => {
+      setIsMobileView(window.innerWidth < 1024)
+    }
+
+    // Check on mount
+    checkMobileView()
+
+    // Listen for resize
+    window.addEventListener('resize', checkMobileView)
+    return () => window.removeEventListener('resize', checkMobileView)
+  }, [])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -542,12 +558,12 @@ export default function ChatManagementPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gradient-champagne mb-2">
+          <h1 className="text-2xl lg:text-3xl font-bold text-gradient-champagne mb-1 lg:mb-2">
             Chat Conversations
           </h1>
-          <p className="text-platinum/60">
+          <p className="text-platinum/60 text-sm lg:text-base hidden sm:block">
             Manage visitor conversations and AI escalations
           </p>
         </div>
@@ -556,48 +572,61 @@ export default function ChatManagementPage() {
         <Button
           variant={notificationsEnabled ? 'default' : 'outline'}
           onClick={notificationsEnabled ? () => setNotificationsEnabled(false) : requestNotificationPermission}
-          className={notificationsEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
+          className={`flex-shrink-0 ${notificationsEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
+          size="sm"
         >
           {notificationsEnabled ? (
             <>
-              <Bell className="w-4 h-4 mr-2" />
-              Notifications On
+              <Bell className="w-4 h-4 lg:mr-2" />
+              <span className="hidden lg:inline">Notifications On</span>
             </>
           ) : (
             <>
-              <BellOff className="w-4 h-4 mr-2" />
-              Enable Notifications
+              <BellOff className="w-4 h-4 lg:mr-2" />
+              <span className="hidden lg:inline">Enable Notifications</span>
             </>
           )}
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* Stats Cards - Compact on mobile */}
+      <div className="grid grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-4">
         <Card className="glass-card-heavy">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-platinum/60">
-              Total Chats
+          <CardHeader className="p-2 lg:pb-2 lg:p-4">
+            <CardTitle className="text-xs lg:text-sm font-medium text-platinum/60">
+              Total
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-ivory">{stats.total}</div>
+          <CardContent className="p-2 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-xl lg:text-2xl font-bold text-ivory">{stats.total}</div>
           </CardContent>
         </Card>
 
         <Card className="glass-card-heavy">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" />
+          <CardHeader className="p-2 lg:pb-2 lg:p-4">
+            <CardTitle className="text-xs lg:text-sm font-medium text-platinum/60 flex items-center gap-1">
+              <MessageSquare className="w-3 h-3 hidden lg:block" />
               Active
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-400">{stats.active}</div>
+          <CardContent className="p-2 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-xl lg:text-2xl font-bold text-blue-400">{stats.active}</div>
           </CardContent>
         </Card>
 
         <Card className="glass-card-heavy">
+          <CardHeader className="p-2 lg:pb-2 lg:p-4">
+            <CardTitle className="text-xs lg:text-sm font-medium text-platinum/60 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3 hidden lg:block" />
+              Escalated
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-xl lg:text-2xl font-bold text-orange-400">{stats.escalated}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card-heavy hidden lg:block">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" />
@@ -609,7 +638,7 @@ export default function ChatManagementPage() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card-heavy">
+        <Card className="glass-card-heavy hidden lg:block">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
               <Archive className="w-3 h-3" />
@@ -620,24 +649,12 @@ export default function ChatManagementPage() {
             <div className="text-2xl font-bold text-platinum/40">{stats.archived}</div>
           </CardContent>
         </Card>
-
-        <Card className="glass-card-heavy">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              Escalated
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-400">{stats.escalated}</div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Chat Interface */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Conversations List */}
-        <div className="lg:col-span-1">
+        {/* Conversations List - Hidden on mobile when conversation is selected */}
+        <div className={`lg:col-span-1 ${isMobileView && selectedConv ? 'hidden' : ''}`}>
           <Card className="glass-card-heavy">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -700,7 +717,7 @@ export default function ChatManagementPage() {
             </CardHeader>
 
             <CardContent className="p-0">
-              <div className="space-y-2 max-h-[calc(100vh-450px)] overflow-y-auto p-4">
+              <div className="space-y-2 max-h-[calc(100vh-350px)] lg:max-h-[calc(100vh-450px)] overflow-y-auto p-3 lg:p-4">
                 {filteredConversations.map((conv) => (
                   <ConversationItem
                     key={conv.id}
@@ -721,18 +738,30 @@ export default function ChatManagementPage() {
           </Card>
         </div>
 
-        {/* Chat Window */}
-        <div className="lg:col-span-2">
+        {/* Chat Window - Full width on mobile when selected */}
+        <div className={`lg:col-span-2 ${isMobileView && !selectedConv ? 'hidden' : ''} ${isMobileView ? 'col-span-full' : ''}`}>
           {selectedConv ? (
-            <Card className="glass-card-heavy h-[calc(100vh-250px)] flex flex-col">
+            <Card className={`glass-card-heavy flex flex-col ${isMobileView ? 'h-[calc(100vh-180px)] fixed inset-x-0 bottom-0 top-[140px] z-40 rounded-none' : 'h-[calc(100vh-250px)]'}`}>
               {/* Header */}
-              <CardHeader className="border-b border-border/40">
+              <CardHeader className="border-b border-border/40 flex-shrink-0">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {selectedConv.visitor_name || 'Anonymous Visitor'}
-                    </CardTitle>
-                    <div className="flex items-center gap-2 text-xs text-platinum/60 mt-1">
+                  <div className="flex items-center gap-3">
+                    {/* Back button for mobile */}
+                    {isMobileView && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedConv(null)}
+                        className="mr-1 -ml-2"
+                      >
+                        <ArrowLeft className="w-5 h-5" />
+                      </Button>
+                    )}
+                    <div>
+                      <CardTitle className="text-lg">
+                        {selectedConv.visitor_name || 'Anonymous Visitor'}
+                      </CardTitle>
+                      <div className="flex items-center gap-2 text-xs text-platinum/60 mt-1 flex-wrap">
                       {selectedConv.ai_handled ? (
                         <span className="flex items-center gap-1 text-blue-400">
                           <Sparkles className="w-3 h-3" />
@@ -758,17 +787,19 @@ export default function ChatManagementPage() {
                           <LeadScoreFlames score={selectedConv.lead_score} />
                         </>
                       )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 lg:gap-2 flex-shrink-0">
                     {selectedConv.status !== 'resolved' && (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={handleResolveClick}
+                        className="px-2 lg:px-3"
                       >
-                        <CheckCircle2 className="w-4 h-4 mr-1" />
-                        Resolve
+                        <CheckCircle2 className="w-4 h-4 lg:mr-1" />
+                        <span className="hidden lg:inline">Resolve</span>
                       </Button>
                     )}
                     {selectedConv.status !== 'archived' && (
@@ -776,16 +807,18 @@ export default function ChatManagementPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => setShowArchiveDialog(true)}
-                        className="text-orange-400 border-orange-400/30 hover:bg-orange-400/10"
+                        className="text-orange-400 border-orange-400/30 hover:bg-orange-400/10 px-2 lg:px-3"
                       >
-                        <Archive className="w-4 h-4 mr-1" />
-                        Archive
+                        <Archive className="w-4 h-4 lg:mr-1" />
+                        <span className="hidden lg:inline">Archive</span>
                       </Button>
                     )}
+                    {/* Close button - hidden on mobile (use back button instead) */}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setSelectedConv(null)}
+                      className="hidden lg:flex"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -801,8 +834,8 @@ export default function ChatManagementPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input */}
-              <div className="p-4 border-t border-border/40 bg-background/50">
+              {/* Input - Sticky positioning for mobile keyboards */}
+              <div className="p-3 lg:p-4 border-t border-border/40 bg-background/95 backdrop-blur sticky bottom-0 flex-shrink-0">
                 {/* Canned Responses Dropdown */}
                 <div className="relative mb-2">
                   <Button
@@ -810,20 +843,20 @@ export default function ChatManagementPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowCannedResponses(!showCannedResponses)}
-                    className="text-xs"
+                    className="text-xs min-h-[44px] px-4"
                   >
-                    <Zap className="w-3 h-3 mr-1" />
+                    <Zap className="w-4 h-4 mr-2" />
                     Quick Responses
-                    <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${showCannedResponses ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showCannedResponses ? 'rotate-180' : ''}`} />
                   </Button>
 
                   {showCannedResponses && (
-                    <div className="absolute bottom-full left-0 mb-2 w-72 bg-background/95 backdrop-blur border border-border/40 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                    <div className="absolute bottom-full left-0 mb-2 w-72 lg:w-80 bg-background/95 backdrop-blur border border-border/40 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
                       {CANNED_RESPONSES.map((response, i) => (
                         <button
                           key={i}
                           onClick={() => insertCannedResponse(response.text)}
-                          className="w-full text-left px-3 py-2 hover:bg-accent/10 border-b border-border/20 last:border-0 transition-colors"
+                          className="w-full text-left px-4 py-3 hover:bg-accent/10 border-b border-border/20 last:border-0 transition-colors min-h-[56px] active:bg-accent/20"
                         >
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-ivory">{response.label}</span>
@@ -870,20 +903,25 @@ export default function ChatManagementPage() {
                         broadcastTypingStatus(selectedConv.id, false)
                       }
                     }}
-                    placeholder="Type your response or use /shortcut..."
-                    className="flex-1"
+                    placeholder="Type your response..."
+                    className="flex-1 min-h-[44px] text-base"
                   />
-                  <Button type="submit" disabled={!inputValue.trim()}>
-                    <Send className="w-4 h-4" />
+                  <Button
+                    type="submit"
+                    disabled={!inputValue.trim()}
+                    className="min-h-[44px] min-w-[44px] px-4"
+                  >
+                    <Send className="w-5 h-5" />
                   </Button>
                 </form>
-                <p className="text-xs text-platinum/40 mt-1">
+                <p className="text-xs text-platinum/40 mt-1 hidden lg:block">
                   Shortcuts: /pricing, /stats, /join, /guarantee, /execute
                 </p>
               </div>
             </Card>
           ) : (
-            <Card className="glass-card-heavy h-[calc(100vh-250px)] flex flex-col items-center justify-center">
+            /* Empty state - hidden on mobile since we show the list */
+            <Card className="glass-card-heavy h-[calc(100vh-250px)] hidden lg:flex flex-col items-center justify-center">
               <MessageSquare className="w-16 h-16 text-platinum/20 mb-4" />
               <p className="text-platinum/60">
                 Select a conversation to view messages
@@ -1032,7 +1070,7 @@ function ConversationItem({
   return (
     <div
       onClick={onClick}
-      className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+      className={`p-3 lg:p-3 border-2 rounded-lg cursor-pointer transition-all active:scale-[0.98] min-h-[72px] ${
         isSelected
           ? 'bg-emerald-500/10 border-emerald-500/50'
           : isArchived
