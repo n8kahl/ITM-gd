@@ -18,17 +18,20 @@ ON CONFLICT (key) DO NOTHING;
 -- RLS policies for app_settings
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 
--- Only authenticated users can read settings
-CREATE POLICY "Authenticated users can read settings"
+-- Allow anyone to read settings
+CREATE POLICY "Anyone can read settings"
   ON app_settings FOR SELECT
-  TO authenticated
   USING (true);
 
--- Only authenticated users can update settings
-CREATE POLICY "Authenticated users can update settings"
+-- Allow anyone to update settings (admin page handles auth)
+CREATE POLICY "Anyone can update settings"
   ON app_settings FOR UPDATE
-  TO authenticated
   USING (true);
 
--- Grant access
-GRANT SELECT, UPDATE ON app_settings TO authenticated;
+-- Allow anyone to insert settings
+CREATE POLICY "Anyone can insert settings"
+  ON app_settings FOR INSERT
+  WITH CHECK (true);
+
+-- Grant access to both anon and authenticated
+GRANT SELECT, UPDATE, INSERT ON app_settings TO anon, authenticated;
