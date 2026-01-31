@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
@@ -145,6 +145,7 @@ export default function ChatManagementPage() {
   const [archivingResolved, setArchivingResolved] = useState(false)
   const [isMobileView, setIsMobileView] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const conversationRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const previousEscalatedIds = useRef<Set<string>>(new Set())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousMessageCount = useRef(0)
@@ -326,6 +327,14 @@ export default function ChatManagementPage() {
           setStatusFilter(convStatus as 'active' | 'resolved' | 'archived')
         }
         setSelectedConv(match)
+
+        // Scroll the conversation into view after a short delay (allow DOM to update)
+        setTimeout(() => {
+          const ref = conversationRefs.current.get(match.id)
+          if (ref) {
+            ref.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 100)
       }
     }
   }, [searchParams, conversations, selectedConv, statusFilter])
@@ -725,6 +734,13 @@ export default function ChatManagementPage() {
                     isSelected={selectedConv?.id === conv.id}
                     onClick={() => setSelectedConv(conv)}
                     onTakeOver={() => takeOverChat(conv.id)}
+                    ref={(el) => {
+                      if (el) {
+                        conversationRefs.current.set(conv.id, el)
+                      } else {
+                        conversationRefs.current.delete(conv.id)
+                      }
+                    }}
                   />
                 ))}
 
@@ -1048,17 +1064,12 @@ function LeadScoreFlames({ score }: { score: number }) {
   )
 }
 
-function ConversationItem({
-  conversation,
-  isSelected,
-  onClick,
-  onTakeOver
-}: {
+const ConversationItem = forwardRef<HTMLDivElement, {
   conversation: Conversation
   isSelected: boolean
   onClick: () => void
   onTakeOver: () => void
-}) {
+}>(({ conversation, isSelected, onClick, onTakeOver }, ref) => {
   const isEscalated = conversation.escalation_reason !== null
   const leadScore = conversation.lead_score || 0
   const status = conversation.status || 'active'
@@ -1069,6 +1080,7 @@ function ConversationItem({
 
   return (
     <div
+      ref={ref}
       onClick={onClick}
       className={`p-3 lg:p-3 border-2 rounded-lg cursor-pointer transition-all active:scale-[0.98] min-h-[72px] ${
         isSelected
@@ -1153,7 +1165,9 @@ function ConversationItem({
       )}
     </div>
   )
-}
+})
+
+ConversationItem.displayName = 'ConversationItem'
 
 function MessageBubble({ message }: { message: Message }) {
   const isVisitor = message.sender_type === 'visitor'
