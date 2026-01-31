@@ -181,6 +181,13 @@ export default function LeadsPage() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => router.push('/admin/packages')}
+              >
+                Packages
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   document.cookie = 'titm_admin=; path=/; max-age=0'
                   router.push('/')
