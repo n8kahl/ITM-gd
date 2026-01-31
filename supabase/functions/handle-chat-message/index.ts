@@ -31,6 +31,49 @@ serve(async (req) => {
         .eq('id', conversationId)
         .single()
       conversation = data
+
+      // Check if conversation needs to be reopened
+      if (conversation && (conversation.status === 'resolved' || conversation.status === 'archived')) {
+        const previousStatus = conversation.status
+
+        // Reactivate the conversation
+        await supabase
+          .from('chat_conversations')
+          .update({
+            status: 'active',
+            ai_handled: true, // Reset to AI handling on reopen
+            escalation_reason: null, // Clear previous escalation
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', conversation.id)
+
+        // Add system message about reopening
+        await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: conversation.id,
+            sender_type: 'system',
+            sender_name: 'System',
+            message_text: previousStatus === 'archived'
+              ? 'Visitor returned. Conversation reactivated from archive.'
+              : 'Visitor reopened the conversation.',
+            ai_generated: false
+          })
+
+        // Update local conversation object
+        conversation.status = 'active'
+        conversation.ai_handled = true
+        conversation.escalation_reason = null
+
+        // Notify team via Discord about reopened conversation
+        await sendDiscordNotification(
+          supabase,
+          conversation.id,
+          `Conversation reopened (was ${previousStatus})`,
+          conversation.visitor_name,
+          5
+        )
+      }
     } else {
       // Create new conversation
       const { data, error } = await supabase
