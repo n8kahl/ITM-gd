@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, displayName, role } = await req.json()
+    const { email, password, displayName, role, phoneNumber } = await req.json()
 
     // Validate inputs
     if (!email || !password || !displayName) {
@@ -74,7 +74,8 @@ serve(async (req) => {
         id: authData.user.id,
         display_name: displayName,
         role: role || 'agent',
-        status: 'offline'
+        status: 'offline',
+        phone_number: phoneNumber || null
       })
       .select()
       .single()

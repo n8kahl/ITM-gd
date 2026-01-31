@@ -13,7 +13,10 @@ import {
   Circle,
   Shield,
   User,
-  Clock
+  Clock,
+  Phone,
+  Save,
+  Webhook
 } from 'lucide-react'
 
 interface TeamMember {
@@ -24,6 +27,7 @@ interface TeamMember {
   status: string
   last_seen_at: string
   created_at: string
+  phone_number: string | null
 }
 
 export default function TeamMembersPage() {
@@ -33,8 +37,12 @@ export default function TeamMembersPage() {
     email: '',
     displayName: '',
     password: '',
-    role: 'agent' as 'admin' | 'agent'
+    role: 'agent' as 'admin' | 'agent',
+    phoneNumber: ''
   })
+  const [zapierWebhook, setZapierWebhook] = useState('')
+  const [savingWebhook, setSavingWebhook] = useState(false)
+  const [webhookStatus, setWebhookStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [inviteStatus, setInviteStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [stats, setStats] = useState({
@@ -46,6 +54,7 @@ export default function TeamMembersPage() {
 
   useEffect(() => {
     loadMembers()
+    loadSettings()
 
     // Subscribe to changes
     const channel = supabase
@@ -63,6 +72,49 @@ export default function TeamMembersPage() {
       supabase.removeChannel(channel)
     }
   }, [])
+
+  async function loadSettings() {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'zapier_webhook_url')
+      .single()
+
+    if (data?.value) {
+      setZapierWebhook(data.value)
+    }
+  }
+
+  async function saveWebhook() {
+    setSavingWebhook(true)
+    setWebhookStatus(null)
+
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({
+        key: 'zapier_webhook_url',
+        value: zapierWebhook,
+        updated_at: new Date().toISOString()
+      })
+
+    if (error) {
+      setWebhookStatus({ type: 'error', message: 'Failed to save webhook URL' })
+    } else {
+      setWebhookStatus({ type: 'success', message: 'Webhook URL saved!' })
+      setTimeout(() => setWebhookStatus(null), 3000)
+    }
+
+    setSavingWebhook(false)
+  }
+
+  async function updatePhone(id: string, phone: string) {
+    await supabase
+      .from('team_members')
+      .update({ phone_number: phone || null })
+      .eq('id', id)
+
+    loadMembers()
+  }
 
   async function loadMembers() {
     const { data } = await supabase
@@ -117,7 +169,8 @@ export default function TeamMembersPage() {
           email: inviteForm.email,
           password: inviteForm.password,
           displayName: inviteForm.displayName || inviteForm.email.split('@')[0],
-          role: inviteForm.role
+          role: inviteForm.role,
+          phoneNumber: inviteForm.phoneNumber || null
         })
       })
 
@@ -134,7 +187,7 @@ export default function TeamMembersPage() {
           message: `Successfully added ${inviteForm.displayName || inviteForm.email} to the team! They can now log in with their email and password.`
         })
         setIsInviting(false)
-        setInviteForm({ email: '', displayName: '', password: '', role: 'agent' })
+        setInviteForm({ email: '', displayName: '', password: '', role: 'agent', phoneNumber: '' })
         loadMembers()
       }
     } catch (error: any) {
@@ -263,6 +316,21 @@ export default function TeamMembersPage() {
               </div>
 
               <div>
+                <label className="text-sm text-platinum/60 block mb-1">
+                  <Phone className="w-3 h-3 inline mr-1" />
+                  Phone Number (for SMS alerts)
+                </label>
+                <Input
+                  type="tel"
+                  placeholder="+1 555 123 4567"
+                  value={inviteForm.phoneNumber}
+                  onChange={(e) => setInviteForm({ ...inviteForm, phoneNumber: e.target.value })}
+                  className="bg-background/50 border-border/40"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
                 <label className="text-sm text-platinum/60 block mb-1">Role</label>
                 <div className="flex gap-2">
                   <Button
@@ -358,6 +426,52 @@ export default function TeamMembersPage() {
         </Card>
       </div>
 
+      {/* SMS Notification Settings */}
+      <Card className="glass-card-heavy border-champagne/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Webhook className="w-5 h-5 text-champagne" />
+            SMS Notifications (Zapier)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-platinum/60">
+            Enter your Zapier webhook URL to receive SMS alerts for new chats and escalations.
+            Team members with phone numbers will be included in the notification payload.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="url"
+              placeholder="https://hooks.zapier.com/hooks/catch/..."
+              value={zapierWebhook}
+              onChange={(e) => setZapierWebhook(e.target.value)}
+              className="bg-background/50 border-border/40 flex-1"
+            />
+            <Button
+              onClick={saveWebhook}
+              disabled={savingWebhook}
+              className="bg-gradient-to-r from-champagne to-champagne/80"
+            >
+              {savingWebhook ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save
+                </>
+              )}
+            </Button>
+          </div>
+          {webhookStatus && (
+            <div className={`text-sm ${
+              webhookStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'
+            }`}>
+              {webhookStatus.message}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Members List */}
       <div className="space-y-4">
         {members.map(member => (
@@ -410,6 +524,20 @@ export default function TeamMembersPage() {
                       <span>
                         Joined: {new Date(member.created_at).toLocaleDateString()}
                       </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Phone className="w-3 h-3 text-platinum/40" />
+                      <Input
+                        type="tel"
+                        placeholder="Add phone for SMS alerts"
+                        defaultValue={member.phone_number || ''}
+                        onBlur={(e) => {
+                          if (e.target.value !== (member.phone_number || '')) {
+                            updatePhone(member.id, e.target.value)
+                          }
+                        }}
+                        className="h-7 text-xs bg-background/30 border-border/30 w-48"
+                      />
                     </div>
                   </div>
                 </div>
