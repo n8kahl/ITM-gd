@@ -379,7 +379,7 @@ export function ChatWidget() {
                 className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-background/50 to-background/80"
               >
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} onImageLoad={scrollToBottom} />
+                  <ChatMessage key={msg.id} message={msg} onImageLoad={() => scrollToBottom('instant')} />
                 ))}
 
                 {/* Typing Indicator */}

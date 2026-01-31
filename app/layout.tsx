@@ -31,6 +31,12 @@ export const metadata: Metadata = {
   description: 'Join the elite trading community. Get real-time trade alerts, expert education, and proven strategies from professional traders. Quality setups alerted daily.',
   generator: 'v0.app',
   metadataBase: new URL('https://trade-itm-prod.up.railway.app'),
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'TradeITM',
+  },
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
