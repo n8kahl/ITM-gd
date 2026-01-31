@@ -6,13 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+interface ApplicationMetadata {
+  discord_handle?: string
+  experience_level?: string
+  account_size?: string
+  primary_struggle?: string
+  short_term_goal?: string
+  source?: string
+}
+
 interface NotificationPayload {
-  type: 'contact' | 'application'
+  type: 'contact' | 'application' | 'cohort_application'
   name: string
   email: string
   phone?: string
   message: string
   source?: string
+  metadata?: ApplicationMetadata
+  submission_id?: string
 }
 
 serve(async (req) => {
@@ -23,7 +34,7 @@ serve(async (req) => {
 
   try {
     const payload: NotificationPayload = await req.json()
-    const { type, name, email, phone, message, source } = payload
+    const { type, name, email, phone, message, source, metadata, submission_id } = payload
 
     // Validate required fields
     if (!type || !name || !email || !message) {
@@ -54,11 +65,13 @@ serve(async (req) => {
       )
     }
 
-    // Build Discord embed based on type
-    const isApplication = type === 'application'
+    // Determine notification type
+    const isCohortApplication = type === 'cohort_application'
+    const isLegacyApplication = type === 'application'
+    const isAnyApplication = isCohortApplication || isLegacyApplication
 
     // If this is a cohort application, also insert into cohort_applications table
-    if (isApplication) {
+    if (isAnyApplication) {
       const { error: insertError } = await supabase
         .from('cohort_applications')
         .insert({
@@ -67,6 +80,7 @@ serve(async (req) => {
           phone: phone || null,
           message,
           status: 'pending',
+          contact_submission_id: submission_id || null,
         })
 
       if (insertError) {
@@ -77,33 +91,62 @@ serve(async (req) => {
       }
     }
 
-    // Colors: Blue for contacts (#3B82F6 = 3899126), Gold/Champagne for applications (#E8E4D9 = 15262937)
-    const embedColor = isApplication ? 15262937 : 3899126
+    // Embed colors
+    // Gold (#D4AF37 = 13938487) for cohort applications
+    // Champagne (#E8E4D9 = 15262937) for legacy applications
+    // Blue (#3B82F6 = 3899126) for contacts
+    const embedColor = isCohortApplication ? 13938487 : (isLegacyApplication ? 15262937 : 3899126)
 
-    const title = isApplication
-      ? '🎯 New Precision Cohort Application'
-      : '📬 New Contact Form Submission'
+    const title = isCohortApplication
+      ? '🎯 Precision Cohort Application'
+      : isLegacyApplication
+        ? '🎯 New Precision Cohort Application'
+        : '📬 New Contact Inquiry'
 
-    const fields = [
+    const fields: Array<{ name: string; value: string; inline: boolean }> = [
       { name: '👤 Name', value: name, inline: true },
       { name: '📧 Email', value: email, inline: true },
     ]
 
-    if (phone) {
-      fields.push({ name: '📱 Phone', value: phone, inline: true })
+    // Add rich metadata fields for cohort applications
+    if (isCohortApplication && metadata) {
+      if (metadata.discord_handle) {
+        fields.push({ name: '💬 Discord', value: metadata.discord_handle, inline: true })
+      }
+      if (metadata.experience_level) {
+        fields.push({ name: '📊 Experience', value: metadata.experience_level, inline: true })
+      }
+      if (metadata.account_size) {
+        // Highlight high-value applicants
+        const isHighValue = metadata.account_size === '$25k+'
+        const valueDisplay = isHighValue ? `${metadata.account_size} 💰` : metadata.account_size
+        fields.push({ name: '💵 Capital', value: valueDisplay, inline: true })
+      }
+      if (metadata.primary_struggle) {
+        fields.push({ name: '🎯 Struggle', value: metadata.primary_struggle, inline: true })
+      }
+      if (metadata.short_term_goal) {
+        const truncatedGoal = metadata.short_term_goal.length > 500
+          ? metadata.short_term_goal.substring(0, 497) + '...'
+          : metadata.short_term_goal
+        fields.push({ name: '🏆 12-Month Goal', value: truncatedGoal, inline: false })
+      }
+    } else {
+      // Legacy format - add phone and source
+      if (phone) {
+        fields.push({ name: '📱 Phone', value: phone, inline: true })
+      }
+      if (source) {
+        fields.push({ name: '📍 Source', value: source, inline: true })
+      }
+      // Truncate message if too long (Discord limit is 1024 for field values)
+      const truncatedMessage = message.length > 800
+        ? message.substring(0, 797) + '...'
+        : message
+      fields.push({ name: '💬 Message', value: truncatedMessage, inline: false })
     }
 
-    if (source) {
-      fields.push({ name: '📍 Source', value: source, inline: true })
-    }
-
-    // Truncate message if too long (Discord limit is 1024 for field values)
-    const truncatedMessage = message.length > 1000
-      ? message.substring(0, 997) + '...'
-      : message
-
-    fields.push({ name: '💬 Message', value: truncatedMessage, inline: false })
-
+    // Build embed
     const embed: Record<string, unknown> = {
       title,
       color: embedColor,
@@ -111,9 +154,21 @@ serve(async (req) => {
       timestamp: new Date().toISOString(),
     }
 
-    // Add footer for applications to highlight urgency
-    if (isApplication) {
+    // Add footer based on type
+    if (isCohortApplication) {
+      const isHighValue = metadata?.account_size === '$25k+'
+      embed.footer = {
+        text: isHighValue
+          ? '🔥 Lead Score: HIGH (Application + $25k+) - Priority Response'
+          : '⭐ Lead Score: HIGH (Application) - Respond within 24 hours'
+      }
+    } else if (isLegacyApplication) {
       embed.footer = { text: '⭐ High-value lead - Respond within 24 hours' }
+    }
+
+    // Add magic link for quick review (admin panel)
+    if (submission_id) {
+      embed.description = `[📋 Quick Review in Admin Panel](https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id})`
     }
 
     const discordPayload = {

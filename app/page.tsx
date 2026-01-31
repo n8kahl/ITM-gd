@@ -22,6 +22,7 @@ import { PromoBanner } from "@/components/ui/promo-banner";
 import { CohortSection } from "@/components/ui/cohort-section";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
 import { ContactModal } from "@/components/ui/contact-modal";
+import { CohortApplicationModal } from "@/components/ui/cohort-application-modal";
 import { AdminLoginModal } from "@/components/ui/admin-login-modal";
 import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
@@ -30,10 +31,17 @@ export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
 
-  // Handler for Cohort application
+  // Handler for Cohort application - opens the multi-step wizard
   const handleCohortApply = () => {
+    setIsCohortApplicationOpen(true);
+    Analytics.trackCTAClick('Cohort Application Wizard');
+  };
+
+  // Legacy handler for contact modal with preset message (kept for fallback)
+  const handleCohortContactFallback = () => {
     setCohortModalMessage("I'm interested in the Precision Cohort annual mentorship program. Here's my trading background:");
     setIsContactModalOpen(true);
   };
@@ -89,6 +97,12 @@ export default function Home() {
       <AdminLoginModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
+      />
+
+      {/* Cohort Application Wizard */}
+      <CohortApplicationModal
+        isOpen={isCohortApplicationOpen}
+        onClose={() => setIsCohortApplicationOpen(false)}
       />
 
       {/* Mobile Sticky CTA - appears after scrolling past hero */}

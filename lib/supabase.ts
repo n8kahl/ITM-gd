@@ -28,7 +28,29 @@ export interface ContactSubmission {
   email: string
   message: string
   phone?: string
+  submission_type?: 'contact' | 'cohort_application' | 'general_inquiry'
+  metadata?: ApplicationMetadata
   created_at?: string
+}
+
+// Application-specific metadata for cohort applications
+export interface ApplicationMetadata {
+  discord_handle?: string
+  experience_level?: '< 1 Year' | '1-3 Years' | '3+ Years'
+  account_size?: 'Under $5k' | '$5k - $25k' | '$25k+'
+  primary_struggle?: 'Psychology' | 'Risk Management' | 'Strategy' | 'Consistency' | 'Other'
+  short_term_goal?: string
+  source?: string
+}
+
+// Extended interface for cohort applications
+export interface ApplicationData extends Omit<ContactSubmission, 'submission_type' | 'metadata'> {
+  submission_type: 'cohort_application'
+  discord_handle: string
+  experience_level: '< 1 Year' | '1-3 Years' | '3+ Years'
+  account_size: 'Under $5k' | '$5k - $25k' | '$25k+'
+  primary_struggle: 'Psychology' | 'Risk Management' | 'Strategy' | 'Consistency' | 'Other'
+  short_term_goal: string
 }
 
 export interface CohortApplication {
@@ -133,18 +155,28 @@ export async function getSubscribers(limit = 100, offset = 0) {
 // ============================================
 
 export async function addContactSubmission(contact: Omit<ContactSubmission, 'id' | 'created_at'>) {
+  // Prepare the insert data
+  const insertData = {
+    name: contact.name,
+    email: contact.email,
+    message: contact.message,
+    phone: contact.phone || null,
+    submission_type: contact.submission_type || 'contact',
+    metadata: contact.metadata || {},
+  }
+
   const { data, error } = await supabase
     .from('contact_submissions')
-    .insert([contact])
+    .insert([insertData])
     .select()
     .single()
 
   if (error) throw error
 
-  // Notify team via Discord
-  // Determine if this is a Precision Cohort application based on message content
-  const isApplication = contact.message?.toLowerCase().includes('precision cohort') ||
-                        contact.message?.toLowerCase().includes('annual mentorship')
+  // Determine notification type
+  const isCohortApplication = contact.submission_type === 'cohort_application'
+  const isLegacyApplication = contact.message?.toLowerCase().includes('precision cohort') ||
+                              contact.message?.toLowerCase().includes('annual mentorship')
 
   try {
     await fetch(`${supabaseUrl}/functions/v1/notify-team-lead`, {
@@ -154,12 +186,14 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
         'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
-        type: isApplication ? 'application' : 'contact',
+        type: isCohortApplication ? 'cohort_application' : (isLegacyApplication ? 'application' : 'contact'),
         name: contact.name,
         email: contact.email,
         phone: contact.phone,
         message: contact.message,
-        source: isApplication ? 'Cohort Apply Button' : 'Contact Form',
+        source: isCohortApplication ? 'Application Wizard' : (isLegacyApplication ? 'Cohort Apply Button' : 'Contact Form'),
+        metadata: contact.metadata,
+        submission_id: data.id,
       }),
     })
   } catch (notifyError) {
@@ -186,6 +220,7 @@ export async function getContactSubmissions(limit = 100, offset = 0) {
 // ============================================
 
 export async function getCohortApplications(limit = 100, offset = 0, status?: CohortApplication['status']) {
+  // First, get applications from cohort_applications table
   let query = supabase
     .from('cohort_applications')
     .select('*')
@@ -196,10 +231,44 @@ export async function getCohortApplications(limit = 100, offset = 0, status?: Co
     query = query.eq('status', status)
   }
 
-  const { data, error } = await query
+  const { data: applications, error } = await query
 
   if (error) throw error
-  return data as CohortApplication[]
+
+  // For applications with contact_submission_id, fetch the metadata
+  const enrichedApplications = await Promise.all(
+    (applications || []).map(async (app) => {
+      if (app.contact_submission_id) {
+        const { data: submission } = await supabase
+          .from('contact_submissions')
+          .select('metadata, submission_type')
+          .eq('id', app.contact_submission_id)
+          .single()
+
+        return {
+          ...app,
+          metadata: submission?.metadata || null,
+          submission_type: submission?.submission_type || null,
+        }
+      }
+      return app
+    })
+  )
+
+  return enrichedApplications as (CohortApplication & { metadata?: ApplicationMetadata; submission_type?: string })[]
+}
+
+// Get applications directly from contact_submissions with cohort_application type
+export async function getCohortApplicationsFromSubmissions(limit = 100, offset = 0) {
+  const { data, error } = await supabase
+    .from('contact_submissions')
+    .select('*')
+    .eq('submission_type', 'cohort_application')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error) throw error
+  return data
 }
 
 export async function updateCohortApplicationStatus(

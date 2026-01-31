@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,11 +14,20 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Filter
+  Filter,
+  TrendingUp,
+  DollarSign,
+  Target,
+  Sparkles
 } from "lucide-react"
-import { getCohortApplications, updateCohortApplicationStatus, CohortApplication } from "@/lib/supabase"
+import { getCohortApplications, updateCohortApplicationStatus, CohortApplication, ApplicationMetadata } from "@/lib/supabase"
 
 type StatusFilter = 'all' | CohortApplication['status']
+
+type EnrichedApplication = CohortApplication & {
+  metadata?: ApplicationMetadata
+  submission_type?: string
+}
 
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: Clock },
@@ -29,10 +38,13 @@ const STATUS_CONFIG = {
 
 export default function LeadsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const highlightId = searchParams.get('highlight')
+
   const [loading, setLoading] = useState(true)
-  const [applications, setApplications] = useState<CohortApplication[]>([])
+  const [applications, setApplications] = useState<EnrichedApplication[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(highlightId)
   const [updating, setUpdating] = useState<string | null>(null)
 
   // Check admin access
@@ -82,6 +94,11 @@ export default function LeadsPage() {
     }
   }
 
+  // Check if applicant is high value ($25k+)
+  const isHighValue = (app: EnrichedApplication) => {
+    return app.metadata?.account_size === '$25k+'
+  }
+
   // Calculate metrics
   const metrics = {
     total: applications.length,
@@ -89,14 +106,16 @@ export default function LeadsPage() {
     approved: applications.filter(a => a.status === 'approved').length,
     rejected: applications.filter(a => a.status === 'rejected').length,
     contacted: applications.filter(a => a.status === 'contacted').length,
+    highValue: applications.filter(a => isHighValue(a)).length,
   }
 
   // Export to CSV
   const exportToCSV = () => {
-    let csvContent = 'Name,Email,Phone,Status,Message,Created At,Reviewed At\n'
-    csvContent += applications.map(a =>
-      `"${a.name}","${a.email}","${a.phone || ''}","${a.status}","${a.message.replace(/"/g, '""')}","${a.created_at}","${a.reviewed_at || ''}"`
-    ).join('\n')
+    let csvContent = 'Name,Email,Phone,Discord,Experience,Account Size,Primary Struggle,Status,Goal,Created At,Reviewed At\n'
+    csvContent += applications.map(a => {
+      const m = a.metadata || {}
+      return `"${a.name}","${a.email}","${a.phone || ''}","${m.discord_handle || ''}","${m.experience_level || ''}","${m.account_size || ''}","${m.primary_struggle || ''}","${a.status}","${(m.short_term_goal || '').replace(/"/g, '""')}","${a.created_at}","${a.reviewed_at || ''}"`
+    }).join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = window.URL.createObjectURL(blob)
@@ -197,7 +216,7 @@ export default function LeadsPage() {
 
       <div className="container mx-auto px-4 py-8 space-y-8">
         {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           <Card className="glass-card border-primary/30">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Applications</CardTitle>
@@ -206,6 +225,18 @@ export default function LeadsPage() {
               <div className="flex items-center justify-between">
                 <div className="text-3xl font-bold text-champagne">{metrics.total}</div>
                 <Users className="h-8 w-8 text-champagne/50" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-[#D4AF37]/30">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">High Value ($25k+)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="text-3xl font-bold text-[#D4AF37]">{metrics.highValue}</div>
+                <Sparkles className="h-8 w-8 text-[#D4AF37]/50" />
               </div>
             </CardContent>
           </Card>
@@ -275,11 +306,19 @@ export default function LeadsPage() {
               {applications.map((app) => {
                 const isExpanded = expandedId === app.id
                 const StatusIcon = STATUS_CONFIG[app.status].icon
+                const highValue = isHighValue(app)
+                const hasMetadata = app.metadata && Object.keys(app.metadata).length > 0
 
                 return (
                   <div
                     key={app.id}
-                    className="border border-border/40 rounded-lg overflow-hidden hover:border-champagne/30 transition-colors"
+                    className={`border rounded-lg overflow-hidden transition-colors ${
+                      highlightId === app.id
+                        ? 'border-[#D4AF37]/50 bg-[#D4AF37]/5'
+                        : highValue
+                          ? 'border-[#D4AF37]/30 hover:border-[#D4AF37]/50'
+                          : 'border-border/40 hover:border-champagne/30'
+                    }`}
                   >
                     {/* Header Row */}
                     <div
@@ -291,12 +330,41 @@ export default function LeadsPage() {
                           <StatusIcon className="h-3 w-3 inline mr-1" />
                           {STATUS_CONFIG[app.status].label}
                         </div>
+
+                        {/* High Value Badge */}
+                        {highValue && (
+                          <div className="px-2.5 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            High Value
+                          </div>
+                        )}
+
                         <div>
-                          <div className="font-medium">{app.name}</div>
+                          <div className="font-medium flex items-center gap-2">
+                            {app.name}
+                            {hasMetadata && (
+                              <span className="text-xs text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded">
+                                Wizard
+                              </span>
+                            )}
+                          </div>
                           <div className="text-sm text-muted-foreground">{app.email}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
+                        {/* Quick metadata preview */}
+                        {app.metadata?.account_size && (
+                          <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
+                            <DollarSign className="h-3 w-3" />
+                            {app.metadata.account_size}
+                          </div>
+                        )}
+                        {app.metadata?.experience_level && (
+                          <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
+                            <TrendingUp className="h-3 w-3" />
+                            {app.metadata.experience_level}
+                          </div>
+                        )}
                         <div className="text-sm text-muted-foreground">
                           {app.created_at ? new Date(app.created_at).toLocaleDateString() : '-'}
                         </div>
@@ -311,6 +379,61 @@ export default function LeadsPage() {
                     {/* Expanded Content */}
                     {isExpanded && (
                       <div className="px-4 pb-4 space-y-4 border-t border-border/40 pt-4">
+                        {/* Application Metadata (if from wizard) */}
+                        {hasMetadata && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/5 rounded-lg border border-border/20">
+                            {app.metadata?.discord_handle && (
+                              <div>
+                                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                                  <MessageCircle className="h-3 w-3" />
+                                  Discord
+                                </div>
+                                <div className="font-medium">{app.metadata.discord_handle}</div>
+                              </div>
+                            )}
+                            {app.metadata?.experience_level && (
+                              <div>
+                                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                                  <TrendingUp className="h-3 w-3" />
+                                  Experience
+                                </div>
+                                <div className="font-medium">{app.metadata.experience_level}</div>
+                              </div>
+                            )}
+                            {app.metadata?.account_size && (
+                              <div>
+                                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  Account Size
+                                </div>
+                                <div className={`font-medium ${highValue ? 'text-[#D4AF37]' : ''}`}>
+                                  {app.metadata.account_size}
+                                  {highValue && <Sparkles className="h-3 w-3 inline ml-1" />}
+                                </div>
+                              </div>
+                            )}
+                            {app.metadata?.primary_struggle && (
+                              <div>
+                                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                                  <Target className="h-3 w-3" />
+                                  Primary Struggle
+                                </div>
+                                <div className="font-medium">{app.metadata.primary_struggle}</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 12-Month Goal */}
+                        {app.metadata?.short_term_goal && (
+                          <div>
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">12-Month Goal</div>
+                            <div className="bg-muted/10 rounded-lg p-4 whitespace-pre-wrap text-sm">
+                              {app.metadata.short_term_goal}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Contact Info */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
@@ -331,13 +454,17 @@ export default function LeadsPage() {
                           </div>
                         </div>
 
-                        {/* Message */}
-                        <div>
-                          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Message</div>
-                          <div className="bg-muted/10 rounded-lg p-4 whitespace-pre-wrap text-sm">
-                            {app.message}
+                        {/* Original Message (if not from wizard or as fallback) */}
+                        {(!hasMetadata || app.message) && (
+                          <div>
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                              {hasMetadata ? 'Full Application' : 'Message'}
+                            </div>
+                            <div className="bg-muted/10 rounded-lg p-4 whitespace-pre-wrap text-sm">
+                              {app.message}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Review Info */}
                         {app.reviewed_at && (
