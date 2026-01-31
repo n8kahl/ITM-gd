@@ -380,8 +380,20 @@ async function sendDiscordNotification(
       title = '👋 Chat Escalated'
     }
 
-    // Build description with visitor info and link
-    const chatUrl = `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}`
+    // Generate magic link token for one-click access
+    const token = crypto.randomUUID()
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
+
+    await supabase
+      .from('admin_access_tokens')
+      .insert({
+        token,
+        conversation_id: conversationId,
+        expires_at: expiresAt
+      })
+
+    // Build description with visitor info and magic link
+    const chatUrl = `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}&token=${token}`
     let description = `**${name}** - ${reason}`
     if (visitorEmail) {
       description += `\n📧 ${visitorEmail}`

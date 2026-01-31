@@ -304,10 +304,15 @@ export default function ChatManagementPage() {
     if (conversationId && conversations.length > 0 && !selectedConv) {
       const match = conversations.find(c => c.id === conversationId)
       if (match) {
+        // Auto-switch status filter to match the conversation's status
+        const convStatus = match.status || 'active'
+        if (convStatus !== statusFilter) {
+          setStatusFilter(convStatus as 'active' | 'resolved' | 'archived')
+        }
         setSelectedConv(match)
       }
     }
-  }, [searchParams, conversations, selectedConv])
+  }, [searchParams, conversations, selectedConv, statusFilter])
 
   // Filter conversations by status
   useEffect(() => {

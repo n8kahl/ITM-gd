@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
   BellOff
 } from 'lucide-react'
 import { subscribeToPush, unsubscribeFromPush, checkPushSubscription, isPushSupported } from '@/lib/notifications'
+import { supabase } from '@/lib/supabase'
 
 export default function AdminLayout({
   children,
@@ -22,15 +23,15 @@ export default function AdminLayout({
 }) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [pushSupported, setPushSupported] = useState(false)
 
-  // Check admin access using Supabase Auth
+  // Check admin access - supports cookie auth and magic link tokens
   useEffect(() => {
     const checkAuth = async () => {
-      // For now, allow access if user is in team_members table
-      // TODO: Implement proper Supabase Auth login flow
+      // Check existing cookie first
       const cookies = document.cookie.split(';')
       const adminCookie = cookies.find(c => c.trim().startsWith('titm_admin='))
 
@@ -39,12 +40,44 @@ export default function AdminLayout({
         return
       }
 
-      // If no cookie, redirect to home
+      // Check for magic link token from Discord
+      const token = searchParams.get('token')
+      if (token) {
+        // Verify token is valid (not expired, not used)
+        const { data: tokenData, error } = await supabase
+          .from('admin_access_tokens')
+          .select('*')
+          .eq('token', token)
+          .is('used_at', null)
+          .gt('expires_at', new Date().toISOString())
+          .single()
+
+        if (tokenData && !error) {
+          // Mark token as used
+          await supabase
+            .from('admin_access_tokens')
+            .update({ used_at: new Date().toISOString() })
+            .eq('id', tokenData.id)
+
+          // Set auth cookie (24 hours)
+          document.cookie = 'titm_admin=true; path=/; max-age=86400'
+          setIsAuthenticated(true)
+
+          // Remove token from URL for cleaner look (keep the id param)
+          const convId = searchParams.get('id')
+          if (convId) {
+            router.replace(`${pathname}?id=${convId}`)
+          }
+          return
+        }
+      }
+
+      // No valid auth, redirect to home
       router.push('/')
     }
 
     checkAuth()
-  }, [router])
+  }, [router, searchParams, pathname])
 
   // Check push notification support and status
   useEffect(() => {
