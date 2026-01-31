@@ -32,7 +32,8 @@ export function ChatWidget() {
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [teamOnline, setTeamOnline] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false)
   const [isEscalated, setIsEscalated] = useState(false)
   const [teamTyping, setTeamTyping] = useState<string | null>(null)
   const [visitorId] = useState(() => {
@@ -202,16 +203,17 @@ export function ChatWidget() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!inputValue.trim() || isLoading) return
+    if (!inputValue.trim() || isSending) return
 
     const messageText = inputValue.trim()
     setInputValue('')
-    setIsLoading(true)
-
-    // No temp message - all messages come from Realtime subscription for data consistency
+    setIsSending(true)
 
     try {
       const functionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + '/functions/v1/handle-chat-message'
+
+      // Show "Sending..." state, then "Thinking..." once message is sent
+      setIsWaitingForAI(false)
 
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -226,11 +228,14 @@ export function ChatWidget() {
         })
       })
 
+      // Message sent to server, now waiting for AI response
+      setIsWaitingForAI(true)
+
       const result = await response.json()
 
       if (result.success) {
         // Set conversation ID if this was first message
-        // This triggers the useEffect to subscribe to Realtime
+        // This triggers the useEffect to subscribe to Realtime and load messages
         if (!conversationId && result.conversationId) {
           setConversationId(result.conversationId)
           // Clear the local greeting - DB messages will load via subscription
@@ -256,7 +261,8 @@ export function ChatWidget() {
       }
       setMessages(prev => [...prev, errorMsg])
     } finally {
-      setIsLoading(false)
+      setIsSending(false)
+      setIsWaitingForAI(false)
     }
   }
 
@@ -394,10 +400,10 @@ export function ChatWidget() {
                   )}
                 </AnimatePresence>
 
-                {isLoading && !teamTyping && (
+                {(isSending || isWaitingForAI) && !teamTyping && (
                   <div className="flex items-center gap-2 text-platinum/60 text-sm">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Thinking...</span>
+                    <span>{isSending && !isWaitingForAI ? 'Sending...' : 'Thinking...'}</span>
                   </div>
                 )}
 
@@ -411,16 +417,16 @@ export function ChatWidget() {
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type your message..."
-                    disabled={isLoading}
+                    placeholder={isSending ? 'Sending...' : 'Type your message...'}
+                    disabled={isSending}
                     className="flex-1 bg-background/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm text-ivory placeholder:text-platinum/40 focus:outline-none focus:border-emerald-500/50 transition-colors disabled:opacity-50"
                   />
                   <Button
                     type="submit"
-                    disabled={!inputValue.trim() || isLoading}
+                    disabled={!inputValue.trim() || isSending}
                     className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white px-4 py-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? (
+                    {isSending ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       <Send className="w-5 h-5" />
