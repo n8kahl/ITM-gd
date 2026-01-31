@@ -8,6 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   MessageSquare,
   Sparkles,
   User,
@@ -129,6 +139,7 @@ export default function ChatManagementPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
   const [showCannedResponses, setShowCannedResponses] = useState(false)
   const [showResolveModal, setShowResolveModal] = useState(false)
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false)
   const [sendingTranscript, setSendingTranscript] = useState(false)
   const [archivingResolved, setArchivingResolved] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -471,6 +482,7 @@ export default function ChatManagementPage() {
       })
       .eq('id', selectedConv.id)
 
+    setShowArchiveDialog(false)
     loadConversations()
     setSelectedConv(null)
   }
@@ -758,7 +770,7 @@ export default function ChatManagementPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={archiveChat}
+                        onClick={() => setShowArchiveDialog(true)}
                         className="text-orange-400 border-orange-400/30 hover:bg-orange-400/10"
                       >
                         <Archive className="w-4 h-4 mr-1" />
@@ -944,6 +956,31 @@ export default function ChatManagementPage() {
           </div>
         </div>
       )}
+
+      {/* Archive Confirmation Dialog */}
+      <AlertDialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
+        <AlertDialogContent className="bg-background border-border/40">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-ivory">
+              <Archive className="w-5 h-5 text-orange-400" />
+              Archive Conversation
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-platinum/60">
+              This will move the conversation to the archives and hide it from your active list.
+              The visitor can still reopen the conversation by sending a new message.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border/40">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={archiveChat}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

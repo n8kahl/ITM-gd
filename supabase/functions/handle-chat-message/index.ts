@@ -92,6 +92,15 @@ serve(async (req) => {
 
       if (error) throw error
       conversation = data
+
+      // Notify team about new conversation
+      await sendDiscordNotification(
+        supabase,
+        conversation.id,
+        'New conversation started',
+        undefined, // Visitor name not known yet
+        3 // Lower priority for new conversations
+      )
     }
 
     // 2. Extract visitor info (name/email) from message
@@ -364,14 +373,30 @@ async function sendDiscordNotification(
 
     const name = visitorName || 'Visitor'
     const isHighValue = leadScore && leadScore >= 7
-    const embedColor = isHighValue ? 16744256 : 5763719 // Orange for high-value, green otherwise
+    const isNewConversation = reason.includes('New conversation')
+    const isReopened = reason.includes('reopened')
+
+    // Different colors: orange for high-value, blue for new, green for escalations
+    const embedColor = isHighValue ? 16744256 : isNewConversation ? 3447003 : 5763719
+
+    // Determine title based on notification type
+    let title: string
+    if (isHighValue) {
+      title = '🚨 High-Value Chat Escalated'
+    } else if (isNewConversation) {
+      title = '💬 New Chat Started'
+    } else if (isReopened) {
+      title = '🔄 Chat Reopened'
+    } else {
+      title = '👋 Chat Escalated'
+    }
 
     const payload = {
       embeds: [{
-        title: isHighValue ? '🚨 High-Value Chat Escalated' : '💬 Chat Escalated',
+        title,
         description: `**${name}** - ${reason}`,
         color: embedColor,
-        fields: leadScore ? [
+        fields: leadScore && leadScore > 3 ? [
           { name: 'Lead Score', value: `${leadScore}/10`, inline: true }
         ] : [],
         timestamp: new Date().toISOString()
