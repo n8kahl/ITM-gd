@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
-import { MessageCircle, X, Send, Loader2, User, Sparkles, Clock } from 'lucide-react'
+import { MessageCircle, X, Send, Loader2, User, Sparkles } from 'lucide-react'
 import { Button } from './button'
 
 interface Message {
@@ -344,21 +344,29 @@ export function ChatWidget() {
                   </div>
                 </div>
 
-                {/* Escalation Banner */}
+                {/* Escalation Status Banner */}
                 <AnimatePresence>
                   {isEscalated && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
+                      transition={{ duration: 0.3 }}
                       className="overflow-hidden"
                     >
-                      <div className="px-4 py-2.5 bg-champagne/10 border-t border-champagne/20 flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-champagne animate-pulse" />
-                        <span className="text-sm text-champagne font-medium">
-                          Waiting for Team Member...
-                        </span>
+                      <div className="px-4 py-3 bg-gradient-to-r from-champagne/15 to-emerald-500/10 border-t border-champagne/30 flex items-center gap-3">
+                        <div className="relative">
+                          <Sparkles className="w-5 h-5 text-champagne" />
+                          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm text-champagne font-semibold block">
+                            Connecting you with a TradeITM expert...
+                          </span>
+                          <span className="text-xs text-platinum/50">
+                            A team member will be with you shortly
+                          </span>
+                        </div>
                       </div>
                     </motion.div>
                   )}

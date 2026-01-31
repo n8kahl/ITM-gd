@@ -185,12 +185,21 @@ export default function ChatManagementPage() {
     }
   }, [])
 
-  // Show desktop notification for escalation
-  const showEscalationNotification = useCallback((conv: Conversation) => {
+  // Show desktop notification for escalation or high-value leads
+  const showEscalationNotification = useCallback((conv: Conversation, reason?: string) => {
     if (!notificationsEnabled || notificationPermission !== 'granted') return
 
-    const notification = new Notification('🔥 New Escalation!', {
-      body: `${conv.visitor_name || 'Visitor'}: ${conv.escalation_reason || 'Needs human assistance'}${conv.lead_score && conv.lead_score >= 7 ? ` (Lead Score: ${conv.lead_score})` : ''}`,
+    const isHighValue = conv.lead_score && conv.lead_score >= 7
+    const title = isHighValue && !conv.escalation_reason
+      ? '🔥 High-Value Lead!'
+      : '🚨 Chat Escalated!'
+
+    const body = conv.escalation_reason
+      ? `${conv.visitor_name || 'Visitor'}: ${conv.escalation_reason}${isHighValue ? ` • Lead Score: ${conv.lead_score}` : ''}`
+      : `${conv.visitor_name || 'Visitor'} ${reason || 'needs attention'}${isHighValue ? ` • Lead Score: ${conv.lead_score}` : ''}`
+
+    const notification = new Notification(title, {
+      body,
       icon: '/hero-logo.png',
       tag: `escalation-${conv.id}`,
       requireInteraction: true
@@ -202,9 +211,17 @@ export default function ChatManagementPage() {
       notification.close()
     }
 
-    // Auto-close after 10 seconds
-    setTimeout(() => notification.close(), 10000)
+    // Play sound alert
+    if (isSoundEnabled()) {
+      playLuxuryPlink()
+    }
+
+    // Auto-close after 15 seconds for high-priority
+    setTimeout(() => notification.close(), 15000)
   }, [notificationsEnabled, notificationPermission])
+
+  // Track notified high-value leads to avoid duplicate notifications
+  const previousHighValueIds = useRef<Set<string>>(new Set())
 
   // Load conversations
   useEffect(() => {
@@ -220,19 +237,41 @@ export default function ChatManagementPage() {
       }, (payload) => {
         loadConversations()
 
-        // Check for new escalations
+        // Check for escalations or high-value leads
         if (payload.eventType === 'UPDATE' && payload.new) {
           const updated = payload.new as Conversation
+
+          // Notify on escalation
           if (updated.escalation_reason && !previousEscalatedIds.current.has(updated.id)) {
             previousEscalatedIds.current.add(updated.id)
             showEscalationNotification(updated)
           }
+
+          // Notify on high lead score (>= 7) - separate from escalation
+          if (updated.lead_score && updated.lead_score >= 7 && !previousHighValueIds.current.has(updated.id)) {
+            previousHighValueIds.current.add(updated.id)
+            if (!updated.escalation_reason) {
+              // Only notify separately if not already escalated
+              showEscalationNotification(updated, 'is a high-value prospect')
+            }
+          }
         }
+
         if (payload.eventType === 'INSERT' && payload.new) {
           const newConv = payload.new as Conversation
+
+          // Track and notify on new escalated conversations
           if (newConv.escalation_reason) {
             previousEscalatedIds.current.add(newConv.id)
             showEscalationNotification(newConv)
+          }
+
+          // Track and notify on new high-value leads
+          if (newConv.lead_score && newConv.lead_score >= 7) {
+            previousHighValueIds.current.add(newConv.id)
+            if (!newConv.escalation_reason) {
+              showEscalationNotification(newConv, 'is a high-value prospect')
+            }
           }
         }
       })
@@ -302,10 +341,13 @@ export default function ChatManagementPage() {
     if (data) {
       setConversations(data)
 
-      // Track existing escalated IDs to avoid duplicate notifications
+      // Track existing escalated and high-value IDs to avoid duplicate notifications
       data.forEach(conv => {
         if (conv.escalation_reason) {
           previousEscalatedIds.current.add(conv.id)
+        }
+        if (conv.lead_score && conv.lead_score >= 7) {
+          previousHighValueIds.current.add(conv.id)
         }
       })
 
@@ -852,17 +894,22 @@ function ConversationItem({
 }) {
   const isEscalated = conversation.escalation_reason !== null
   const leadScore = conversation.lead_score || 0
+  const isHighPriority = isEscalated || leadScore >= 7
 
   return (
     <div
       onClick={onClick}
-      className={`p-3 border rounded-lg cursor-pointer transition-all ${
+      className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
         isSelected
-          ? 'bg-emerald-500/10 border-emerald-500/30'
-          : leadScore >= 7
-          ? 'bg-orange-500/5 border-orange-500/20 hover:bg-orange-500/10'
+          ? 'bg-emerald-500/10 border-emerald-500/50'
+          : isHighPriority
+          ? 'bg-orange-500/5 border-orange-500/40 hover:bg-orange-500/10 animate-pulse-border'
           : 'bg-background/50 border-border/40 hover:bg-accent/10'
       }`}
+      style={isHighPriority && !isSelected ? {
+        animation: 'pulse-border 2s ease-in-out infinite',
+        boxShadow: '0 0 0 0 rgba(249, 115, 22, 0.4)'
+      } : undefined}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
