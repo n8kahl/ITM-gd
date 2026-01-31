@@ -16,7 +16,8 @@ import {
   Clock,
   Phone,
   Save,
-  Webhook
+  Webhook,
+  Send
 } from 'lucide-react'
 
 interface TeamMember {
@@ -42,6 +43,7 @@ export default function TeamMembersPage() {
   })
   const [zapierWebhook, setZapierWebhook] = useState('')
   const [savingWebhook, setSavingWebhook] = useState(false)
+  const [testingWebhook, setTestingWebhook] = useState(false)
   const [webhookStatus, setWebhookStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [inviteStatus, setInviteStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
@@ -114,6 +116,49 @@ export default function TeamMembersPage() {
       .eq('id', id)
 
     loadMembers()
+  }
+
+  async function testWebhook() {
+    if (!zapierWebhook) {
+      setWebhookStatus({ type: 'error', message: 'Please enter a webhook URL first' })
+      return
+    }
+
+    setTestingWebhook(true)
+    setWebhookStatus(null)
+
+    try {
+      // Call the send-push-notification function with test data
+      const functionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + '/functions/v1/send-push-notification'
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          conversationId: 'test-' + Date.now(),
+          reason: 'Test notification from TradeITM admin',
+          leadScore: 8,
+          visitorName: 'Test Visitor',
+          visitorId: 'test-visitor',
+          isNewConversation: false
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setWebhookStatus({ type: 'success', message: `Test sent! Check Zapier for the webhook.` })
+      } else {
+        setWebhookStatus({ type: 'error', message: result.error || result.message || 'Test failed' })
+      }
+    } catch (error: any) {
+      setWebhookStatus({ type: 'error', message: error.message || 'Failed to send test' })
+    }
+
+    setTestingWebhook(false)
   }
 
   async function loadMembers() {
@@ -458,6 +503,21 @@ export default function TeamMembersPage() {
                 <>
                   <Save className="w-4 h-4 mr-2" />
                   Save
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={testWebhook}
+              disabled={testingWebhook || !zapierWebhook}
+              variant="outline"
+              className="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
+            >
+              {testingWebhook ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Test
                 </>
               )}
             </Button>
