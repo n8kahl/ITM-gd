@@ -31,6 +31,21 @@ export interface ContactSubmission {
   created_at?: string
 }
 
+export interface CohortApplication {
+  id?: string
+  contact_submission_id?: string
+  name: string
+  email: string
+  phone?: string
+  message: string
+  status: 'pending' | 'approved' | 'rejected' | 'contacted'
+  notes?: string
+  reviewed_by?: string
+  reviewed_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
 export interface PageView {
   id?: string
   session_id: string
@@ -125,6 +140,33 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
     .single()
 
   if (error) throw error
+
+  // Notify team via Discord
+  // Determine if this is a Precision Cohort application based on message content
+  const isApplication = contact.message?.toLowerCase().includes('precision cohort') ||
+                        contact.message?.toLowerCase().includes('annual mentorship')
+
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/notify-team-lead`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        type: isApplication ? 'application' : 'contact',
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+        message: contact.message,
+        source: isApplication ? 'Cohort Apply Button' : 'Contact Form',
+      }),
+    })
+  } catch (notifyError) {
+    // Don't throw - the submission was successful, notification is secondary
+    console.error('Failed to send Discord notification:', notifyError)
+  }
+
   return data
 }
 
@@ -137,6 +179,49 @@ export async function getContactSubmissions(limit = 100, offset = 0) {
 
   if (error) throw error
   return data
+}
+
+// ============================================
+// COHORT APPLICATION FUNCTIONS
+// ============================================
+
+export async function getCohortApplications(limit = 100, offset = 0, status?: CohortApplication['status']) {
+  let query = supabase
+    .from('cohort_applications')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw error
+  return data as CohortApplication[]
+}
+
+export async function updateCohortApplicationStatus(
+  id: string,
+  status: CohortApplication['status'],
+  notes?: string,
+  reviewedBy?: string
+) {
+  const { data, error } = await supabase
+    .from('cohort_applications')
+    .update({
+      status,
+      notes: notes || null,
+      reviewed_by: reviewedBy || null,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as CohortApplication
 }
 
 // ============================================

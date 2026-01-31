@@ -227,6 +227,13 @@ export default function AnalyticsPage() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => router.push('/admin/leads')}
+              >
+                Leads
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   document.cookie = 'titm_admin=; path=/; max-age=0'
                   router.push('/')
