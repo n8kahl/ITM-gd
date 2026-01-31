@@ -130,6 +130,37 @@ serve(async (req) => {
       }
     }
 
+    // 2a. Check if there's a pending escalation and email was just provided
+    if (visitorInfo.email && conversation.metadata?.pending_escalation) {
+      const escalationCompleted = await checkPendingEscalation(
+        supabase,
+        conversation,
+        visitorInfo.email
+      )
+
+      if (escalationCompleted) {
+        // Save the visitor message first
+        await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: conversation.id,
+            sender_type: 'visitor',
+            sender_name: conversation.visitor_name || visitorInfo.name || 'Visitor',
+            message_text: visitorMessage
+          })
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            escalated: true,
+            conversationId: conversation.id,
+            reason: conversation.metadata.pending_escalation.reason
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // 3. Save visitor message
     const { error: messageSaveError } = await supabase
       .from('chat_messages')
@@ -159,43 +190,21 @@ serve(async (req) => {
       openaiKey
     )
 
-    // 5a. If frustrated or angry, escalate immediately
+    // 5a. If frustrated or angry, escalate (gated by email)
     if (sentimentResult.sentiment === 'frustrated' || sentimentResult.sentiment === 'angry') {
-      await supabase
-        .from('chat_conversations')
-        .update({
-          ai_handled: false,
-          escalation_reason: `Sentiment detected: ${sentimentResult.sentiment} - ${sentimentResult.reasoning}`,
-          lead_score: sentimentResult.sentiment === 'angry' ? 8 : 7,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', conversation.id)
-
-      // Send empathetic handoff message
-      await supabase
-        .from('chat_messages')
-        .insert({
-          conversation_id: conversation.id,
-          sender_type: 'system',
-          sender_name: 'TradeITM',
-          message_text: "I understand this is important to you. Let me connect you with one of our team members who can give you the personal attention you deserve. They'll be with you shortly.",
-          ai_generated: true,
-          ai_confidence: 1.0
-        })
-
-      // Notify team via Discord
-      await sendDiscordNotification(
+      const escalationResult = await handleGatedEscalation(
         supabase,
-        conversation.id,
-        `Sentiment: ${sentimentResult.sentiment}`,
-        conversation.visitor_name,
-        sentimentResult.sentiment === 'angry' ? 8 : 7
+        conversation,
+        `Sentiment detected: ${sentimentResult.sentiment} - ${sentimentResult.reasoning}`,
+        sentimentResult.sentiment === 'angry' ? 8 : 7,
+        "I understand this is important to you. Let me connect you with one of our team members who can give you the personal attention you deserve. They'll be with you shortly."
       )
 
       return new Response(
         JSON.stringify({
           success: true,
-          escalated: true,
+          escalated: !escalationResult.needsEmail,
+          pendingEmail: escalationResult.needsEmail,
           conversationId: conversation.id,
           reason: `Sentiment detected: ${sentimentResult.sentiment}`
         }),
@@ -211,42 +220,20 @@ serve(async (req) => {
     )
 
     if (escalationCheck.shouldEscalate) {
-      // Escalate to human
-      await supabase
-        .from('chat_conversations')
-        .update({
-          ai_handled: false,
-          escalation_reason: escalationCheck.reason,
-          lead_score: escalationCheck.leadScore || 5,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', conversation.id)
-
-      // Send handoff message
-      await supabase
-        .from('chat_messages')
-        .insert({
-          conversation_id: conversation.id,
-          sender_type: 'system',
-          sender_name: 'TradeITM',
-          message_text: 'Let me connect you with someone from our team who can help you better. One moment...',
-          ai_generated: true,
-          ai_confidence: 1.0
-        })
-
-      // Notify team via Discord
-      await sendDiscordNotification(
+      // Escalate to human (gated by email)
+      const escalationResult = await handleGatedEscalation(
         supabase,
-        conversation.id,
+        conversation,
         escalationCheck.reason,
-        conversation.visitor_name,
-        escalationCheck.leadScore
+        escalationCheck.leadScore || 5,
+        'Let me connect you with someone from our team who can help you better. One moment...'
       )
 
       return new Response(
         JSON.stringify({
           success: true,
-          escalated: true,
+          escalated: !escalationResult.needsEmail,
+          pendingEmail: escalationResult.needsEmail,
           conversationId: conversation.id,
           reason: escalationCheck.reason
         }),
@@ -265,43 +252,21 @@ serve(async (req) => {
       openaiKey
     )
 
-    // 9. If low confidence, escalate instead of answering
+    // 9. If low confidence, escalate instead of answering (gated by email)
     if (aiResponse.confidence < 0.7) {
-      await supabase
-        .from('chat_conversations')
-        .update({
-          ai_handled: false,
-          escalation_reason: 'Low AI confidence - human verification needed',
-          lead_score: 6,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', conversation.id)
-
-      // Send human handoff message instead of uncertain AI response
-      await supabase
-        .from('chat_messages')
-        .insert({
-          conversation_id: conversation.id,
-          sender_type: 'system',
-          sender_name: 'TradeITM',
-          message_text: "I want to be 100% accurate for you—let me pull in a team member to confirm. Someone from our team will be with you shortly!",
-          ai_generated: true,
-          ai_confidence: aiResponse.confidence
-        })
-
-      // Notify team via Discord
-      await sendDiscordNotification(
+      const escalationResult = await handleGatedEscalation(
         supabase,
-        conversation.id,
+        conversation,
         'Low AI confidence - human verification needed',
-        conversation.visitor_name,
-        6
+        6,
+        "I want to be 100% accurate for you—let me pull in a team member to confirm. Someone from our team will be with you shortly!"
       )
 
       return new Response(
         JSON.stringify({
           success: true,
-          escalated: true,
+          escalated: !escalationResult.needsEmail,
+          pendingEmail: escalationResult.needsEmail,
           conversationId: conversation.id,
           reason: 'Low AI confidence - human verification needed'
         }),
@@ -426,6 +391,161 @@ async function sendDiscordNotification(
   } catch (error) {
     console.error('Discord notification error:', error)
   }
+}
+
+// Gated escalation: requires email before escalating to team
+// Returns true if escalation was handled (either completed or email requested)
+async function handleGatedEscalation(
+  supabase: any,
+  conversation: any,
+  reason: string,
+  leadScore: number,
+  handoffMessage: string
+): Promise<{ handled: boolean; needsEmail: boolean }> {
+  const hasEmail = !!conversation.visitor_email
+
+  if (!hasEmail) {
+    // Store pending escalation in metadata and ask for email
+    const currentMetadata = conversation.metadata || {}
+    await supabase
+      .from('chat_conversations')
+      .update({
+        metadata: {
+          ...currentMetadata,
+          pending_escalation: {
+            reason,
+            lead_score: leadScore,
+            handoff_message: handoffMessage,
+            requested_at: new Date().toISOString()
+          }
+        },
+        lead_score: leadScore,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', conversation.id)
+
+    // Ask for email instead of escalating
+    await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: conversation.id,
+        sender_type: 'team',
+        sender_name: 'TradeITM AI',
+        message_text: "I'd love to get a team member to help you with that. What's the best email address to reach you at in case we get disconnected?",
+        ai_generated: true,
+        ai_confidence: 1.0
+      })
+
+    return { handled: true, needsEmail: true }
+  }
+
+  // Email exists - proceed with full escalation
+  await supabase
+    .from('chat_conversations')
+    .update({
+      ai_handled: false,
+      escalation_reason: reason,
+      lead_score: leadScore,
+      metadata: {
+        ...(conversation.metadata || {}),
+        pending_escalation: null // Clear any pending escalation
+      },
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', conversation.id)
+
+  // Add system message about email-verified escalation
+  await supabase
+    .from('chat_messages')
+    .insert({
+      conversation_id: conversation.id,
+      sender_type: 'system',
+      sender_name: 'System',
+      message_text: 'Visitor provided email; escalating to team.',
+      ai_generated: false
+    })
+
+  // Send handoff message
+  await supabase
+    .from('chat_messages')
+    .insert({
+      conversation_id: conversation.id,
+      sender_type: 'system',
+      sender_name: 'TradeITM',
+      message_text: handoffMessage,
+      ai_generated: true,
+      ai_confidence: 1.0
+    })
+
+  // Notify team via Discord
+  await sendDiscordNotification(
+    supabase,
+    conversation.id,
+    reason,
+    conversation.visitor_name,
+    leadScore
+  )
+
+  return { handled: true, needsEmail: false }
+}
+
+// Check and complete pending escalation if email was just provided
+async function checkPendingEscalation(
+  supabase: any,
+  conversation: any,
+  visitorEmail: string | null
+): Promise<boolean> {
+  const pending = conversation.metadata?.pending_escalation
+  if (!pending || !visitorEmail) return false
+
+  // Email was just provided - complete the pending escalation
+  await supabase
+    .from('chat_conversations')
+    .update({
+      ai_handled: false,
+      escalation_reason: pending.reason,
+      lead_score: pending.lead_score,
+      metadata: {
+        ...(conversation.metadata || {}),
+        pending_escalation: null
+      },
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', conversation.id)
+
+  // Add system message
+  await supabase
+    .from('chat_messages')
+    .insert({
+      conversation_id: conversation.id,
+      sender_type: 'system',
+      sender_name: 'System',
+      message_text: 'Visitor provided email; escalating to team.',
+      ai_generated: false
+    })
+
+  // Send the original handoff message
+  await supabase
+    .from('chat_messages')
+    .insert({
+      conversation_id: conversation.id,
+      sender_type: 'system',
+      sender_name: 'TradeITM',
+      message_text: pending.handoff_message,
+      ai_generated: true,
+      ai_confidence: 1.0
+    })
+
+  // Notify team via Discord
+  await sendDiscordNotification(
+    supabase,
+    conversation.id,
+    pending.reason,
+    conversation.visitor_name,
+    pending.lead_score
+  )
+
+  return true
 }
 
 // Extract visitor name and email from message content
