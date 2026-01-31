@@ -344,9 +344,9 @@ export function ChatWidget() {
                   </div>
                 </div>
 
-                {/* Escalation Status Banner */}
+                {/* Escalation Status Banner - only show while waiting for team, hide once they respond */}
                 <AnimatePresence>
-                  {isEscalated && (
+                  {isEscalated && !messages.some(m => m.sender_type === 'team') && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
