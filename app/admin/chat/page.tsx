@@ -23,7 +23,9 @@ import {
   ChevronDown,
   Zap,
   Mail,
-  Loader2
+  Loader2,
+  Archive,
+  Trash2
 } from 'lucide-react'
 
 // Canned responses for quick replies
@@ -115,19 +117,20 @@ export default function ChatManagementPage() {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
-  const [filter, setFilter] = useState<'all' | 'ai' | 'human' | 'escalated'>('all')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'resolved' | 'archived'>('active')
   const [stats, setStats] = useState({
     total: 0,
-    aiHandled: 0,
-    humanHandled: 0,
-    escalated: 0,
-    highValue: 0
+    active: 0,
+    resolved: 0,
+    archived: 0,
+    escalated: 0
   })
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
   const [showCannedResponses, setShowCannedResponses] = useState(false)
   const [showResolveModal, setShowResolveModal] = useState(false)
   const [sendingTranscript, setSendingTranscript] = useState(false)
+  const [archivingResolved, setArchivingResolved] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const previousEscalatedIds = useRef<Set<string>>(new Set())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -295,24 +298,15 @@ export default function ChatManagementPage() {
     }
   }, [searchParams, conversations, selectedConv])
 
-  // Filter conversations
+  // Filter conversations by status
   useEffect(() => {
-    let filtered = conversations
-
-    switch (filter) {
-      case 'ai':
-        filtered = conversations.filter(c => c.ai_handled === true)
-        break
-      case 'human':
-        filtered = conversations.filter(c => c.ai_handled === false && !c.escalation_reason)
-        break
-      case 'escalated':
-        filtered = conversations.filter(c => c.escalation_reason !== null)
-        break
-    }
-
+    const filtered = conversations.filter(c => {
+      // Handle null/undefined status as 'active'
+      const status = c.status || 'active'
+      return status === statusFilter
+    })
     setFilteredConversations(filtered)
-  }, [conversations, filter])
+  }, [conversations, statusFilter])
 
   // Load messages for selected conversation
   useEffect(() => {
@@ -367,10 +361,10 @@ export default function ChatManagementPage() {
       // Calculate stats
       const stats = {
         total: data.length,
-        aiHandled: data.filter(c => c.ai_handled).length,
-        humanHandled: data.filter(c => !c.ai_handled && !c.escalation_reason).length,
-        escalated: data.filter(c => c.escalation_reason).length,
-        highValue: data.filter(c => c.lead_score && c.lead_score >= 7).length
+        active: data.filter(c => !c.status || c.status === 'active').length,
+        resolved: data.filter(c => c.status === 'resolved').length,
+        archived: data.filter(c => c.status === 'archived').length,
+        escalated: data.filter(c => c.escalation_reason && (!c.status || c.status === 'active')).length
       }
       setStats(stats)
     }
@@ -443,6 +437,17 @@ export default function ChatManagementPage() {
       setSendingTranscript(false)
     }
 
+    // Add system message
+    await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: selectedConv.id,
+        sender_type: 'system',
+        sender_name: 'System',
+        message_text: 'Conversation marked as resolved.',
+        ai_generated: false
+      })
+
     // Mark conversation as resolved
     await supabase
       .from('chat_conversations')
@@ -454,6 +459,42 @@ export default function ChatManagementPage() {
     setShowResolveModal(false)
     loadConversations()
     setSelectedConv(null)
+  }
+
+  async function archiveChat() {
+    if (!selectedConv) return
+
+    await supabase
+      .from('chat_conversations')
+      .update({
+        status: 'archived'
+      })
+      .eq('id', selectedConv.id)
+
+    loadConversations()
+    setSelectedConv(null)
+  }
+
+  async function clearResolvedChats() {
+    setArchivingResolved(true)
+
+    // Get all resolved conversations
+    const { data: resolvedConvs } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('status', 'resolved')
+
+    if (resolvedConvs && resolvedConvs.length > 0) {
+      // Archive all resolved conversations
+      await supabase
+        .from('chat_conversations')
+        .update({ status: 'archived' })
+        .in('id', resolvedConvs.map(c => c.id))
+
+      loadConversations()
+    }
+
+    setArchivingResolved(false)
   }
 
   async function sendMessage(e: React.FormEvent) {
@@ -530,27 +571,36 @@ export default function ChatManagementPage() {
         <Card className="glass-card-heavy">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
-              <Sparkles className="w-3 h-3" />
-              AI Handled
+              <MessageSquare className="w-3 h-3" />
+              Active
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-400">{stats.aiHandled}</div>
-            <p className="text-xs text-platinum/40 mt-1">
-              {stats.total > 0 ? Math.round((stats.aiHandled / stats.total) * 100) : 0}%
-            </p>
+            <div className="text-2xl font-bold text-blue-400">{stats.active}</div>
           </CardContent>
         </Card>
 
         <Card className="glass-card-heavy">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
-              <User className="w-3 h-3" />
-              Human
+              <CheckCircle2 className="w-3 h-3" />
+              Resolved
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-400">{stats.humanHandled}</div>
+            <div className="text-2xl font-bold text-emerald-400">{stats.resolved}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card-heavy">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
+              <Archive className="w-3 h-3" />
+              Archived
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-platinum/40">{stats.archived}</div>
           </CardContent>
         </Card>
 
@@ -563,18 +613,6 @@ export default function ChatManagementPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-400">{stats.escalated}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card-heavy">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-platinum/60 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" />
-              High Value
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-champagne">{stats.highValue}</div>
           </CardContent>
         </Card>
       </div>
@@ -592,33 +630,56 @@ export default function ChatManagementPage() {
                 </CardTitle>
               </div>
 
-              {/* Filter Buttons */}
+              {/* Status Filter Buttons */}
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
-                  variant={filter === 'all' ? 'default' : 'outline'}
-                  onClick={() => setFilter('all')}
+                  variant={statusFilter === 'active' ? 'default' : 'outline'}
+                  onClick={() => setStatusFilter('active')}
                   className="text-xs"
                 >
-                  All
+                  Active
                 </Button>
                 <Button
                   size="sm"
-                  variant={filter === 'ai' ? 'default' : 'outline'}
-                  onClick={() => setFilter('ai')}
+                  variant={statusFilter === 'resolved' ? 'default' : 'outline'}
+                  onClick={() => setStatusFilter('resolved')}
                   className="text-xs"
                 >
-                  AI
+                  Resolved
                 </Button>
                 <Button
                   size="sm"
-                  variant={filter === 'escalated' ? 'default' : 'outline'}
-                  onClick={() => setFilter('escalated')}
+                  variant={statusFilter === 'archived' ? 'default' : 'outline'}
+                  onClick={() => setStatusFilter('archived')}
                   className="text-xs"
                 >
-                  Escalated
+                  Archived
                 </Button>
               </div>
+
+              {/* Clear Resolved Button */}
+              {statusFilter === 'resolved' && filteredConversations.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={clearResolvedChats}
+                  disabled={archivingResolved}
+                  className="mt-3 w-full text-xs text-orange-400 border-orange-400/30 hover:bg-orange-400/10"
+                >
+                  {archivingResolved ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Archiving...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3 h-3 mr-1" />
+                      Archive All Resolved ({filteredConversations.length})
+                    </>
+                  )}
+                </Button>
+              )}
             </CardHeader>
 
             <CardContent className="p-0">
@@ -683,14 +744,27 @@ export default function ChatManagementPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleResolveClick}
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-1" />
-                      Resolve
-                    </Button>
+                    {selectedConv.status !== 'resolved' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResolveClick}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                        Resolve
+                      </Button>
+                    )}
+                    {selectedConv.status !== 'archived' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={archiveChat}
+                        className="text-orange-400 border-orange-400/30 hover:bg-orange-400/10"
+                      >
+                        <Archive className="w-4 h-4 mr-1" />
+                        Archive
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -907,7 +981,10 @@ function ConversationItem({
 }) {
   const isEscalated = conversation.escalation_reason !== null
   const leadScore = conversation.lead_score || 0
-  const isHighPriority = isEscalated || leadScore >= 7
+  const status = conversation.status || 'active'
+  const isHighPriority = status === 'active' && (isEscalated || leadScore >= 7)
+  const isArchived = status === 'archived'
+  const isResolved = status === 'resolved'
 
   return (
     <div
@@ -915,6 +992,10 @@ function ConversationItem({
       className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
         isSelected
           ? 'bg-emerald-500/10 border-emerald-500/50'
+          : isArchived
+          ? 'bg-background/30 border-border/20 opacity-60 hover:opacity-80'
+          : isResolved
+          ? 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10'
           : isHighPriority
           ? 'bg-orange-500/5 border-orange-500/40 hover:bg-orange-500/10 animate-pulse-border'
           : 'bg-background/50 border-border/40 hover:bg-accent/10'
@@ -926,13 +1007,21 @@ function ConversationItem({
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-medium text-sm text-ivory truncate">
+          <span className={`font-medium text-sm truncate ${isArchived ? 'text-platinum/50' : 'text-ivory'}`}>
             {conversation.visitor_name || conversation.visitor_id.slice(0, 20)}
           </span>
-          {leadScore > 0 && <LeadScoreFlames score={leadScore} />}
+          {leadScore > 0 && !isArchived && <LeadScoreFlames score={leadScore} />}
         </div>
 
-        {conversation.ai_handled ? (
+        {isResolved ? (
+          <span className="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded flex-shrink-0">
+            ✓ Resolved
+          </span>
+        ) : isArchived ? (
+          <span className="text-xs px-2 py-0.5 bg-platinum/10 text-platinum/40 rounded flex-shrink-0">
+            📦 Archived
+          </span>
+        ) : conversation.ai_handled ? (
           <span className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded flex-shrink-0">
             🤖 AI
           </span>
@@ -947,20 +1036,20 @@ function ConversationItem({
         )}
       </div>
 
-      {isEscalated && (
+      {isEscalated && status === 'active' && (
         <div className="text-xs text-orange-400 mb-2 truncate">
           ⚠️ {conversation.escalation_reason}
         </div>
       )}
 
       <div className="flex items-center gap-2">
-        <Clock className="w-3 h-3 text-platinum/40" />
-        <span className="text-xs text-platinum/60">
+        <Clock className={`w-3 h-3 ${isArchived ? 'text-platinum/30' : 'text-platinum/40'}`} />
+        <span className={`text-xs ${isArchived ? 'text-platinum/40' : 'text-platinum/60'}`}>
           {new Date(conversation.last_message_at).toLocaleString()}
         </span>
       </div>
 
-      {conversation.ai_handled && (
+      {conversation.ai_handled && status === 'active' && (
         <button
           onClick={(e) => {
             e.stopPropagation()
