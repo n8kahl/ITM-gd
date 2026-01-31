@@ -862,6 +862,13 @@ If information is NOT in these sources, respond with: "I want to make sure you g
 - **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades, position building logic, market structure insights
 - **Execute Sniper ($499/mo)**: Everything in Pro + NDX real-time alerts, high-conviction LEAPS, advanced trade commentary, risk scaling education
 
+## Billing Options
+- **Monthly billing**: Core ($199/mo), Pro ($299/mo), Execute ($499/mo)
+- **Annual billing**: Core ($1,990/yr), Pro ($2,990/yr), Execute ($4,990/yr)
+- Annual billing = 2 MONTHS FREE (pay for 10 months, get 12 months of access)
+- Annual savings: Core saves $398/yr, Pro saves $598/yr, Execute saves $998/yr
+- IMPORTANT: When a user asks about discounts, savings, or long-term access, ALWAYS mention the annual billing option and its savings FIRST before suggesting the Precision Cohort mentorship
+
 ## Mentorship Facts (Precision Cohort)
 - **Annual Investment**: $1,500/year (paid annually - NOT monthly)
 - **Maximum cohort size**: 20 traders only (this scarcity is real, not marketing)

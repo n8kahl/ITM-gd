@@ -26,6 +26,8 @@ import { CohortApplicationModal } from "@/components/ui/cohort-application-modal
 import { AdminLoginModal } from "@/components/ui/admin-login-modal";
 import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
+import { BillingToggle } from "@/components/ui/billing-toggle";
+import { getPricingTiers, PricingTier } from "@/lib/supabase";
 
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
@@ -33,6 +35,8 @@ export default function Home() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
 
   // Handler for Cohort application - opens the multi-step wizard
   const handleCohortApply = () => {
@@ -50,6 +54,16 @@ export default function Home() {
   useEffect(() => {
     Analytics.initialize()
     Analytics.trackPageView()
+  }, []);
+
+  // Fetch pricing tiers from database
+  useEffect(() => {
+    getPricingTiers()
+      .then(setPricingTiers)
+      .catch((error) => {
+        console.error('Failed to load pricing tiers:', error);
+        // Fallback is handled in the render - uses hardcoded values if empty
+      });
   }, []);
 
   // Auto-popup subscribe modal after 5 seconds (once per session)
@@ -382,35 +396,52 @@ export default function Home() {
             </RevealContent>
           </div>
 
+          {/* Billing Toggle */}
+          <RevealContent delay={0.3}>
+            <div className="flex justify-center mb-10">
+              <BillingToggle billingCycle={billingCycle} onChange={setBillingCycle} />
+            </div>
+          </RevealContent>
+
           {/* Pricing Cards Grid - Core → Pro → Execute */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
-            {/* Core Sniper Card - $199/mo */}
+            {/* Core Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name="Core Sniper"
-                price="$199"
-                period="/month"
-                description="For disciplined traders who want full market exposure"
-                features={[
+                name={pricingTiers.find(t => t.id === 'core')?.name || "Core Sniper"}
+                price={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'core')?.monthly_price || "$199")
+                  : (pricingTiers.find(t => t.id === 'core')?.yearly_price || "$1,990")
+                }
+                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                description={pricingTiers.find(t => t.id === 'core')?.description || "For disciplined traders who want full market exposure"}
+                features={pricingTiers.find(t => t.id === 'core')?.features || [
                   "👀 Morning Watchlist",
                   "🎯 SPX day trade setups",
                   "🔔 High-volume & momentum alerts",
                   "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/"
+                whopLink={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/")
+                  : (pricingTiers.find(t => t.id === 'core')?.yearly_link || pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/")
+                }
                 tier="core"
-                tagline="Execution focused education"
+                tagline={pricingTiers.find(t => t.id === 'core')?.tagline || "Execution focused education"}
+                isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
 
-            {/* Pro Sniper Card - $299/mo */}
+            {/* Pro Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name="Pro Sniper"
-                price="$299"
-                period="/month"
-                description="For traders scaling beyond day trades"
-                features={[
+                name={pricingTiers.find(t => t.id === 'pro')?.name || "Pro Sniper"}
+                price={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'pro')?.monthly_price || "$299")
+                  : (pricingTiers.find(t => t.id === 'pro')?.yearly_price || "$2,990")
+                }
+                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                description={pricingTiers.find(t => t.id === 'pro')?.description || "For traders scaling beyond day trades"}
+                features={pricingTiers.find(t => t.id === 'pro')?.features || [
                   "Everything in Core Sniper, plus:",
                   "🧭 LEAPS",
                   "📈 Advanced swing trade strategy",
@@ -418,29 +449,40 @@ export default function Home() {
                   "📊 Longer term market structure insight",
                   "🎯 Capital allocation education",
                 ]}
-                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/"
+                whopLink={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/")
+                  : (pricingTiers.find(t => t.id === 'pro')?.yearly_link || pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/")
+                }
                 tier="pro"
-                tagline="More patience & strategy, not just speed"
+                tagline={pricingTiers.find(t => t.id === 'pro')?.tagline || "More patience & strategy, not just speed"}
+                isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
 
-            {/* Execute Sniper Card - $499/mo */}
+            {/* Execute Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name="Execute Sniper"
-                price="$499"
-                period="/month"
-                description="For serious traders only"
-                features={[
+                name={pricingTiers.find(t => t.id === 'execute')?.name || "Execute Sniper"}
+                price={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'execute')?.monthly_price || "$499")
+                  : (pricingTiers.find(t => t.id === 'execute')?.yearly_price || "$4,990")
+                }
+                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                description={pricingTiers.find(t => t.id === 'execute')?.description || "For serious traders only"}
+                features={pricingTiers.find(t => t.id === 'execute')?.features || [
                   "Everything in Pro Sniper, plus:",
                   "🔥 Advanced NDX real time alerts (entries & exits)",
                   "🧭 High-conviction LEAPS framework",
                   "🎯 Higher-level trade commentary",
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink="https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/"
+                whopLink={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'execute')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/")
+                  : (pricingTiers.find(t => t.id === 'execute')?.yearly_link || pricingTiers.find(t => t.id === 'execute')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/")
+                }
                 tier="execute"
-                tagline="Maximum conviction, maximum execution"
+                tagline={pricingTiers.find(t => t.id === 'execute')?.tagline || "Maximum conviction, maximum execution"}
+                isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
           </StaggerContainer>

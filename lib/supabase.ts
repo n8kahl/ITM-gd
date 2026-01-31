@@ -415,3 +415,62 @@ export async function getBrowserBreakdown(days = 30) {
 
   return breakdown
 }
+
+// ============================================
+// PRICING TIER FUNCTIONS
+// ============================================
+
+export interface PricingTier {
+  id: string
+  name: string
+  description: string | null
+  tagline: string | null
+  features: string[]
+  monthly_price: string
+  yearly_price: string
+  monthly_link: string
+  yearly_link: string | null
+  display_order: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export async function getPricingTiers(): Promise<PricingTier[]> {
+  const { data, error } = await supabase
+    .from('pricing_tiers')
+    .select('*')
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (error) throw error
+  return data as PricingTier[]
+}
+
+export async function getAllPricingTiers(): Promise<PricingTier[]> {
+  const { data, error } = await supabase
+    .from('pricing_tiers')
+    .select('*')
+    .order('display_order', { ascending: true })
+
+  if (error) throw error
+  return data as PricingTier[]
+}
+
+export async function updatePricingTier(
+  id: string,
+  updates: Partial<Omit<PricingTier, 'id' | 'created_at' | 'updated_at'>>
+): Promise<PricingTier> {
+  const { data, error } = await supabase
+    .from('pricing_tiers')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as PricingTier
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "framer-motion";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRef, useState, useEffect } from "react";
@@ -36,6 +36,7 @@ interface PricingCardProps {
   urgencyText?: string;
   spotsLeft?: number;
   tagline?: string;
+  isYearly?: boolean;
 }
 
 // Tier Title Card Component - Premium Luxury Branding
@@ -180,6 +181,7 @@ export function PricingCard({
   urgencyText,
   spotsLeft,
   tagline,
+  isYearly = false,
 }: PricingCardProps) {
   const isCore = tier === "core";
   const isPro = tier === "pro";
@@ -392,7 +394,7 @@ export function PricingCard({
                 )}
               </div>
 
-              {/* Price - Improved typography hierarchy */}
+              {/* Price - Improved typography hierarchy with animation */}
               <div className="mb-3 flex items-baseline justify-center gap-1">
                 {/* Currency symbol - smaller */}
                 <span
@@ -401,16 +403,54 @@ export function PricingCard({
                 >
                   $
                 </span>
-                {/* Price amount - larger, bolder */}
-                <span
-                  className="text-6xl md:text-7xl font-serif font-semibold tracking-tight"
-                  style={{ color: styles.accentColor }}
-                >
-                  {price.replace('$', '')}
-                </span>
+                {/* Price amount - larger, bolder with animation */}
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={price}
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -20, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
+                    className="text-6xl md:text-7xl font-serif font-semibold tracking-tight"
+                    style={{ color: styles.accentColor }}
+                  >
+                    {price.replace('$', '')}
+                  </motion.span>
+                </AnimatePresence>
                 {/* Period - smaller, muted */}
-                <span className="text-base ml-1 text-muted-foreground/70">{period}</span>
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={period}
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -10, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="text-base ml-1 text-muted-foreground/70"
+                  >
+                    {period}
+                  </motion.span>
+                </AnimatePresence>
               </div>
+
+              {/* Yearly Savings Badge */}
+              <AnimatePresence>
+                {isYearly && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center justify-center mb-3"
+                  >
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-xs font-semibold text-emerald-400">
+                        Save 2 Months
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Description */}
               <p className="text-sm text-muted-foreground">{description}</p>
