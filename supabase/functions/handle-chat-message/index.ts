@@ -131,24 +131,14 @@ serve(async (req) => {
           ai_confidence: 1.0
         })
 
-      // Notify team
-      try {
-        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseKey}`
-          },
-          body: JSON.stringify({
-            conversationId: conversation.id,
-            reason: `Sentiment: ${sentimentResult.sentiment}`,
-            leadScore: sentimentResult.sentiment === 'angry' ? 8 : 7,
-            visitorId: conversation.visitor_id
-          })
-        })
-      } catch (err) {
-        console.error('Push notification failed:', err)
-      }
+      // Notify team via Discord
+      await sendDiscordNotification(
+        supabase,
+        conversation.id,
+        `Sentiment: ${sentimentResult.sentiment}`,
+        conversation.visitor_name,
+        sentimentResult.sentiment === 'angry' ? 8 : 7
+      )
 
       return new Response(
         JSON.stringify({
@@ -192,48 +182,14 @@ serve(async (req) => {
           ai_confidence: 1.0
         })
 
-      // Send push notifications
-      try {
-        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseKey}`
-          },
-          body: JSON.stringify({
-            conversationId: conversation.id,
-            reason: escalationCheck.reason,
-            leadScore: escalationCheck.leadScore,
-            visitorId: conversation.visitor_id
-          })
-        })
-      } catch (err) {
-        console.error('Push notification failed:', err)
-        // Don't fail the request if push fails
-      }
-
-      // Send notification webhook (optional - set NOTIFICATION_WEBHOOK_URL in secrets)
-      const webhookUrl = Deno.env.get('NOTIFICATION_WEBHOOK_URL')
-      if (webhookUrl) {
-        try {
-          await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'chat_escalated',
-              conversationId: conversation.id,
-              reason: escalationCheck.reason,
-              leadScore: escalationCheck.leadScore,
-              visitorId: conversation.visitor_id,
-              timestamp: new Date().toISOString(),
-              adminUrl: `${supabaseUrl.replace('.supabase.co', '.vercel.app')}/admin/chat?conversation=${conversation.id}`
-            })
-          })
-        } catch (err) {
-          console.error('Webhook notification failed:', err)
-          // Don't fail the request if webhook fails
-        }
-      }
+      // Notify team via Discord
+      await sendDiscordNotification(
+        supabase,
+        conversation.id,
+        escalationCheck.reason,
+        conversation.visitor_name,
+        escalationCheck.leadScore
+      )
 
       return new Response(
         JSON.stringify({
@@ -281,24 +237,14 @@ serve(async (req) => {
           ai_confidence: aiResponse.confidence
         })
 
-      // Notify team
-      try {
-        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseKey}`
-          },
-          body: JSON.stringify({
-            conversationId: conversation.id,
-            reason: 'Low AI confidence',
-            leadScore: 6,
-            visitorId: conversation.visitor_id
-          })
-        })
-      } catch (err) {
-        console.error('Push notification failed:', err)
-      }
+      // Notify team via Discord
+      await sendDiscordNotification(
+        supabase,
+        conversation.id,
+        'Low AI confidence - human verification needed',
+        conversation.visitor_name,
+        6
+      )
 
       return new Response(
         JSON.stringify({
@@ -350,6 +296,69 @@ serve(async (req) => {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+// Send Discord notification for escalations
+async function sendDiscordNotification(
+  supabase: any,
+  conversationId: string,
+  reason: string,
+  visitorName?: string,
+  leadScore?: number
+): Promise<void> {
+  try {
+    // Get Discord webhook URL from app_settings
+    const { data: setting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'discord_webhook_url')
+      .single()
+
+    const webhookUrl = setting?.value
+    if (!webhookUrl) {
+      console.log('Discord webhook URL not configured - skipping notification')
+      return
+    }
+
+    const name = visitorName || 'Visitor'
+    const isHighValue = leadScore && leadScore >= 7
+    const embedColor = isHighValue ? 16744256 : 5763719 // Orange for high-value, green otherwise
+
+    const payload = {
+      embeds: [{
+        title: isHighValue ? '🚨 High-Value Chat Escalated' : '💬 Chat Escalated',
+        description: `**${name}** - ${reason}`,
+        color: embedColor,
+        fields: leadScore ? [
+          { name: 'Lead Score', value: `${leadScore}/10`, inline: true }
+        ] : [],
+        timestamp: new Date().toISOString()
+      }],
+      components: [{
+        type: 1,
+        components: [{
+          type: 2,
+          style: 5,
+          label: 'View & Respond',
+          url: `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}`
+        }]
+      }]
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      console.error('Discord webhook failed:', await response.text())
+    } else {
+      console.log('Discord notification sent successfully')
+    }
+  } catch (error) {
+    console.error('Discord notification error:', error)
+  }
+}
 
 // Extract visitor name and email from message content
 function extractVisitorInfo(message: string): { name?: string; email?: string } {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -108,6 +109,7 @@ interface Message {
 }
 
 export default function ChatManagementPage() {
+  const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([])
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
@@ -281,6 +283,17 @@ export default function ChatManagementPage() {
       supabase.removeChannel(channel)
     }
   }, [showEscalationNotification])
+
+  // Handle query parameter to auto-select conversation from Discord link
+  useEffect(() => {
+    const conversationId = searchParams.get('id')
+    if (conversationId && conversations.length > 0 && !selectedConv) {
+      const match = conversations.find(c => c.id === conversationId)
+      if (match) {
+        setSelectedConv(match)
+      }
+    }
+  }, [searchParams, conversations, selectedConv])
 
   // Filter conversations
   useEffect(() => {

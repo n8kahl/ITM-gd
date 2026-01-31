@@ -41,7 +41,7 @@ export default function TeamMembersPage() {
     role: 'agent' as 'admin' | 'agent',
     phoneNumber: ''
   })
-  const [zapierWebhook, setZapierWebhook] = useState('')
+  const [discordWebhook, setDiscordWebhook] = useState('')
   const [savingWebhook, setSavingWebhook] = useState(false)
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [webhookStatus, setWebhookStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
@@ -79,11 +79,11 @@ export default function TeamMembersPage() {
     const { data } = await supabase
       .from('app_settings')
       .select('value')
-      .eq('key', 'zapier_webhook_url')
+      .eq('key', 'discord_webhook_url')
       .single()
 
     if (data?.value) {
-      setZapierWebhook(data.value)
+      setDiscordWebhook(data.value)
     }
   }
 
@@ -94,8 +94,8 @@ export default function TeamMembersPage() {
     const { error } = await supabase
       .from('app_settings')
       .upsert({
-        key: 'zapier_webhook_url',
-        value: zapierWebhook,
+        key: 'discord_webhook_url',
+        value: discordWebhook,
         updated_at: new Date().toISOString()
       })
 
@@ -119,7 +119,7 @@ export default function TeamMembersPage() {
   }
 
   async function testWebhook() {
-    if (!zapierWebhook) {
+    if (!discordWebhook) {
       setWebhookStatus({ type: 'error', message: 'Please enter a webhook URL first' })
       return
     }
@@ -128,31 +128,37 @@ export default function TeamMembersPage() {
     setWebhookStatus(null)
 
     try {
-      // Call the send-push-notification function with test data
-      const functionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + '/functions/v1/send-push-notification'
-
-      const response = await fetch(functionUrl, {
+      // Send test message directly to Discord webhook
+      const response = await fetch(discordWebhook, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversationId: 'test-' + Date.now(),
-          reason: 'Test notification from TradeITM admin',
-          leadScore: 8,
-          visitorName: 'Test Visitor',
-          visitorId: 'test-visitor',
-          isNewConversation: false
+          embeds: [{
+            title: '🧪 Test Notification',
+            description: 'This is a test notification from TradeITM Admin.',
+            color: 5763719, // Green
+            fields: [
+              { name: 'Status', value: 'Webhook is working!', inline: true }
+            ],
+            timestamp: new Date().toISOString()
+          }],
+          components: [{
+            type: 1,
+            components: [{
+              type: 2,
+              style: 5,
+              label: 'View & Respond',
+              url: 'https://trade-itm-prod.up.railway.app/admin/chat'
+            }]
+          }]
         })
       })
 
-      const result = await response.json()
-
-      if (response.ok && result.success) {
-        setWebhookStatus({ type: 'success', message: `Test sent! Check Zapier for the webhook.` })
+      if (response.ok) {
+        setWebhookStatus({ type: 'success', message: 'Test sent! Check your Discord channel.' })
       } else {
-        setWebhookStatus({ type: 'error', message: result.error || result.message || 'Test failed' })
+        const text = await response.text()
+        setWebhookStatus({ type: 'error', message: `Discord error: ${text || response.statusText}` })
       }
     } catch (error: any) {
       setWebhookStatus({ type: 'error', message: error.message || 'Failed to send test' })
@@ -471,25 +477,25 @@ export default function TeamMembersPage() {
         </Card>
       </div>
 
-      {/* SMS Notification Settings */}
+      {/* Discord Notification Settings */}
       <Card className="glass-card-heavy border-champagne/20">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Webhook className="w-5 h-5 text-champagne" />
-            SMS Notifications (Zapier)
+            Discord Notifications
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-platinum/60">
-            Enter your Zapier webhook URL to receive SMS alerts for new chats and escalations.
-            Team members with phone numbers will be included in the notification payload.
+            Enter your Discord webhook URL to receive alerts for new chats and escalations.
+            Click the notification to jump directly to the conversation.
           </p>
           <div className="flex gap-2">
             <Input
               type="url"
-              placeholder="https://hooks.zapier.com/hooks/catch/..."
-              value={zapierWebhook}
-              onChange={(e) => setZapierWebhook(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/..."
+              value={discordWebhook}
+              onChange={(e) => setDiscordWebhook(e.target.value)}
               className="bg-background/50 border-border/40 flex-1"
             />
             <Button
@@ -508,7 +514,7 @@ export default function TeamMembersPage() {
             </Button>
             <Button
               onClick={testWebhook}
-              disabled={testingWebhook || !zapierWebhook}
+              disabled={testingWebhook || !discordWebhook}
               variant="outline"
               className="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
             >
