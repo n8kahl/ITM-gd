@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -16,7 +16,8 @@ import {
 import { subscribeToPush, unsubscribeFromPush, checkPushSubscription, isPushSupported } from '@/lib/notifications'
 import { supabase } from '@/lib/supabase'
 
-export default function AdminLayout({
+// Inner component that uses useSearchParams
+function AdminLayoutInner({
   children,
 }: {
   children: React.ReactNode
@@ -232,5 +233,18 @@ export default function AdminLayout({
         {children}
       </main>
     </div>
+  )
+}
+
+// Outer layout with Suspense boundary for useSearchParams
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <Suspense fallback={null}>
+      <AdminLayoutInner>{children}</AdminLayoutInner>
+    </Suspense>
   )
 }
