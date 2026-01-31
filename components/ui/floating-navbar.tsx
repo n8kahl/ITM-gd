@@ -38,6 +38,7 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
   const navLinks = [
     { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
+    { href: "#cohort", label: "Annual Mentorship" },
     { href: "#testimonials", label: "Reviews" },
   ];
 

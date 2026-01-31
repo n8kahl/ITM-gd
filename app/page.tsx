@@ -18,6 +18,8 @@ import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/min
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
+import { PromoBanner } from "@/components/ui/promo-banner";
+import { CohortSection } from "@/components/ui/cohort-section";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
 import { ContactModal } from "@/components/ui/contact-modal";
 import { AdminLoginModal } from "@/components/ui/admin-login-modal";
@@ -28,6 +30,13 @@ export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
+
+  // Handler for Cohort application
+  const handleCohortApply = () => {
+    setCohortModalMessage("I'm interested in the Precision Cohort annual mentorship program. Here's my trading background:");
+    setIsContactModalOpen(true);
+  };
 
   // Initialize analytics tracking
   useEffect(() => {
@@ -57,6 +66,9 @@ export default function Home() {
       {/* Floating Island Navbar */}
       <FloatingNavbar onSubscribeClick={() => setIsSubscribeModalOpen(true)} />
 
+      {/* Promo Banner - Fixed below navbar */}
+      <PromoBanner />
+
       {/* Subscribe Modal */}
       <SubscribeModal
         isOpen={isSubscribeModalOpen}
@@ -66,7 +78,11 @@ export default function Home() {
       {/* Contact Modal */}
       <ContactModal
         isOpen={isContactModalOpen}
-        onClose={() => setIsContactModalOpen(false)}
+        onClose={() => {
+          setIsContactModalOpen(false);
+          setCohortModalMessage(undefined);
+        }}
+        presetMessage={cohortModalMessage}
       />
 
       {/* Admin Login Modal */}
@@ -460,6 +476,9 @@ export default function Home() {
           </RevealContent>
         </div>
       </section>
+
+      {/* Precision Cohort Section - Annual Mentorship */}
+      <CohortSection onApplyClick={handleCohortApply} />
 
       {/* Testimonials Section - Infinite Marquee */}
       <section id="testimonials" className="py-14 overflow-hidden">

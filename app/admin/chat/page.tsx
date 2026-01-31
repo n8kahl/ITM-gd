@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -539,6 +540,33 @@ export default function ChatManagementPage() {
     setArchivingResolved(false)
   }
 
+  // Quick resolve for swipe gesture (no transcript)
+  async function quickResolveChat(conversationId: string) {
+    // Add system message
+    await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_type: 'system',
+        sender_name: 'System',
+        message_text: 'Conversation marked as resolved.',
+        ai_generated: false
+      })
+
+    // Mark conversation as resolved
+    await supabase
+      .from('chat_conversations')
+      .update({ status: 'resolved' })
+      .eq('id', conversationId)
+
+    // If this was the selected conversation, deselect it
+    if (selectedConv?.id === conversationId) {
+      setSelectedConv(null)
+    }
+
+    loadConversations()
+  }
+
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault()
     if (!inputValue.trim() || !selectedConv) return
@@ -734,6 +762,8 @@ export default function ChatManagementPage() {
                     isSelected={selectedConv?.id === conv.id}
                     onClick={() => setSelectedConv(conv)}
                     onTakeOver={() => takeOverChat(conv.id)}
+                    onResolve={() => quickResolveChat(conv.id)}
+                    isMobile={isMobileView}
                     ref={(el) => {
                       if (el) {
                         conversationRefs.current.set(conv.id, el)
@@ -1069,7 +1099,9 @@ const ConversationItem = forwardRef<HTMLDivElement, {
   isSelected: boolean
   onClick: () => void
   onTakeOver: () => void
-}>(({ conversation, isSelected, onClick, onTakeOver }, ref) => {
+  onResolve?: () => void
+  isMobile?: boolean
+}>(({ conversation, isSelected, onClick, onTakeOver, onResolve, isMobile }, ref) => {
   const isEscalated = conversation.escalation_reason !== null
   const leadScore = conversation.lead_score || 0
   const status = conversation.status || 'active'
@@ -1078,11 +1110,28 @@ const ConversationItem = forwardRef<HTMLDivElement, {
   const isArchived = status === 'archived'
   const isResolved = status === 'resolved'
 
-  return (
+  // Swipe gesture state
+  const x = useMotionValue(0)
+  const background = useTransform(
+    x,
+    [-150, -80, 0],
+    ['rgba(16, 185, 129, 0.3)', 'rgba(16, 185, 129, 0.15)', 'rgba(0, 0, 0, 0)']
+  )
+  const resolveOpacity = useTransform(x, [-120, -60], [1, 0])
+
+  const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    // If swiped left past threshold, trigger resolve
+    if (info.offset.x < -100 && onResolve && status === 'active') {
+      onResolve()
+    }
+  }
+
+  // Only enable swipe on mobile for active conversations
+  const canSwipe = isMobile && status === 'active' && onResolve
+
+  const cardContent = (
     <div
-      ref={ref}
-      onClick={onClick}
-      className={`p-3 lg:p-3 border-2 rounded-lg cursor-pointer transition-all active:scale-[0.98] min-h-[72px] ${
+      className={`p-3 lg:p-3 border-2 rounded-lg cursor-pointer transition-all min-h-[72px] ${
         isSelected
           ? 'bg-emerald-500/10 border-emerald-500/50'
           : isArchived
@@ -1163,6 +1212,47 @@ const ConversationItem = forwardRef<HTMLDivElement, {
           Take over this chat
         </button>
       )}
+    </div>
+  )
+
+  // Wrap with motion for swipe gesture on mobile
+  if (canSwipe) {
+    return (
+      <div ref={ref} className="relative overflow-hidden rounded-lg">
+        {/* Swipe reveal background */}
+        <motion.div
+          className="absolute inset-0 flex items-center justify-end pr-4 rounded-lg"
+          style={{ background }}
+        >
+          <motion.div
+            className="flex items-center gap-2 text-emerald-400"
+            style={{ opacity: resolveOpacity }}
+          >
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="text-sm font-medium">Resolve</span>
+          </motion.div>
+        </motion.div>
+
+        {/* Draggable card */}
+        <motion.div
+          drag="x"
+          dragConstraints={{ left: -150, right: 0 }}
+          dragElastic={0.1}
+          onDragEnd={handleDragEnd}
+          onClick={onClick}
+          style={{ x }}
+          whileTap={{ cursor: 'grabbing' }}
+        >
+          {cardContent}
+        </motion.div>
+      </div>
+    )
+  }
+
+  // Non-swipeable version for desktop/non-active
+  return (
+    <div ref={ref} onClick={onClick}>
+      {cardContent}
     </div>
   )
 })

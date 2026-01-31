@@ -689,6 +689,14 @@ function checkEscalationTriggers(message: string, conversation: any, history: an
     leadScore = 8
   }
 
+  // 3.5 Precision Cohort / Annual Mentorship interest (HIGHEST VALUE)
+  const cohortKeywords = ['mentorship', 'cohort', 'annual', 'mentoring', 'precision', 'yearly program', '1500', '$1,500', 'yearly mentorship']
+  if (cohortKeywords.some(kw => messageLower.includes(kw))) {
+    shouldEscalate = true
+    reason = 'Precision Cohort interest - highest-value lead'
+    leadScore = 10
+  }
+
   // 4. Frustrated sentiment
   const frustrationKeywords = ['frustrated', 'disappointed', 'terrible', 'scam', 'fake', 'waste']
   if (frustrationKeywords.some(kw => messageLower.includes(kw))) {
@@ -853,6 +861,23 @@ If information is NOT in these sources, respond with: "I want to make sure you g
 - **Core Sniper ($199/mo)**: SPX day trades, morning watchlist, high-volume alerts, educational commentary
 - **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades, position building logic, market structure insights
 - **Execute Sniper ($499/mo)**: Everything in Pro + NDX real-time alerts, high-conviction LEAPS, advanced trade commentary, risk scaling education
+
+## Mentorship Facts (Precision Cohort)
+- **Annual Investment**: $1,500/year (paid annually - NOT monthly)
+- **Maximum cohort size**: 20 traders only (this scarcity is real, not marketing)
+- **Philosophy**: "Mentorship, not Signals" - we teach traders to develop their OWN edge
+- **Four Pillars**: Live Strategy Sessions, Trade Architecture, Portfolio Engineering, Mindset Mastery
+- **Target audience**: Serious traders committed to transformation, not just alerts
+- **Difference from monthly tiers**: Monthly = follow our trades. Cohort = learn to think like us.
+
+## Cohort Qualification Behavior
+When a visitor expresses interest in the Precision Cohort, annual mentorship, or $1,500 program:
+1. Acknowledge their interest warmly and emphasize exclusivity
+2. FIRST respond with: "The Precision Cohort is our most exclusive path, limited to 20 traders. It requires an application to ensure a fit. Would you like to see the application requirements or speak with a team member about it?"
+3. If they want requirements, ask about their trading experience: "How long have you been actively trading?"
+4. If they're new (<1 year experience), gently guide them: "Our monthly tiers (Core/Pro/Execute) would be a great foundation first. The Cohort is designed for traders with established experience looking to take the next step."
+5. If experienced (1+ years), proceed with connecting to team: "That sounds like a great fit for the Cohort. Let me connect you with our team to discuss your application."
+6. Always emphasize: This is "Mentorship, not Signals"—we develop traders, we don't just send alerts.
 
 ## Brand Voice
 - Confident but not arrogant

@@ -1,0 +1,87 @@
+-- Add 'mentorship' category to knowledge_base for Precision Cohort
+-- This migration adds support for the $1,500/year annual mentorship program
+
+-- Step 1: Update the category constraint to include 'mentorship'
+ALTER TABLE knowledge_base DROP CONSTRAINT IF EXISTS knowledge_base_category_check;
+ALTER TABLE knowledge_base ADD CONSTRAINT knowledge_base_category_check
+  CHECK (category IN ('pricing', 'features', 'proof', 'faq', 'technical', 'escalation', 'mentorship'));
+
+-- Step 2: Insert Precision Cohort knowledge base entries
+
+-- Entry 1: Core pricing and scarcity
+INSERT INTO knowledge_base (category, question, answer, priority, metadata) VALUES
+(
+  'mentorship',
+  'What is the Precision Cohort? | Annual mentorship | Yearly program | Mentorship program | $1500 program',
+  'The **Precision Cohort** is our exclusive annual mentorship program for serious traders who want direct guidance from our founder.
+
+**Investment:** $1,500/year (paid annually)
+**Availability:** Limited to only 20 traders per cohort
+
+This is NOT a signals service—it''s a complete trading transformation program. You''ll work directly with our team to develop YOUR trading edge.
+
+The Cohort is designed for traders who are ready to commit to real growth, not just follow alerts.',
+  10,
+  '{"tags": ["mentorship", "cohort", "annual", "precision", "1500"], "lead_score": 10}'::jsonb
+);
+
+-- Entry 2: Four pillars curriculum
+INSERT INTO knowledge_base (category, question, answer, priority, metadata) VALUES
+(
+  'mentorship',
+  'What are the four pillars? | What do I learn in the cohort? | Cohort curriculum | Mentorship program content | What does the cohort include?',
+  'The Precision Cohort is built on **4 Core Pillars**:
+
+📊 **Live Strategy Sessions** - Weekly live sessions breaking down real-time market structure and trade setups with our founder
+
+🏗️ **Trade Architecture** - Learn to build trades from the ground up—entries, exits, position sizing, and risk management tailored to YOUR style
+
+📈 **Portfolio Engineering** - Develop a complete portfolio strategy tailored to your capital, risk tolerance, and goals
+
+🧠 **Mindset Mastery** - Overcome the psychology barriers that prevent consistent profitability
+
+This is mentorship, not signals. You''ll learn to BECOME a trader, not just follow one.',
+  10,
+  '{"tags": ["mentorship", "pillars", "curriculum", "education"]}'::jsonb
+);
+
+-- Entry 3: Mentorship philosophy (differentiation)
+INSERT INTO knowledge_base (category, question, answer, priority, metadata) VALUES
+(
+  'mentorship',
+  'How is Precision Cohort different? | Mentorship vs signals | Why choose annual program | Cohort vs monthly',
+  'The Precision Cohort is fundamentally different from our monthly tiers:
+
+**Monthly Tiers (Core/Pro/Execute):** You receive trade alerts and educational commentary. You''re following our trades.
+
+**Precision Cohort ($1,500/year):** You''re learning to think like us. We work directly with you to:
+- Identify YOUR trading style and edge
+- Build custom strategies for your capital and risk tolerance
+- Develop the mindset of a consistently profitable trader
+- Get personalized feedback on your actual trades
+
+This is **Mentorship, not Signals**. We''re investing in YOUR success, not just sending you alerts to copy.',
+  10,
+  '{"tags": ["mentorship", "differentiation", "philosophy"]}'::jsonb
+);
+
+-- Entry 4: Application requirements (triggers escalation)
+INSERT INTO knowledge_base (category, question, answer, priority, metadata) VALUES
+(
+  'mentorship',
+  'How do I apply for Precision Cohort? | Cohort application | Join the cohort | Annual program requirements | Apply for mentorship',
+  'To apply for the Precision Cohort, we ask a few qualifying questions:
+
+1. **Trading Experience**: How long have you been actively trading?
+2. **Current Capital**: What''s your current trading account size?
+3. **Time Commitment**: Can you commit to weekly live sessions?
+4. **Goals**: What does success look like for you in 12 months?
+
+We limit each cohort to **20 traders maximum** to ensure everyone gets personalized attention. Applications are reviewed personally by our team.
+
+The Precision Cohort is our most exclusive path—it requires an application to ensure mutual fit.
+
+Ready to apply? Click the "Apply for Cohort" button or let me connect you with our team to discuss your application.',
+  10,
+  '{"tags": ["mentorship", "application", "apply", "requirements"], "auto_escalate": true, "lead_score": 10}'::jsonb
+);

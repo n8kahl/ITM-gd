@@ -1,4 +1,98 @@
-// Service Worker for Push Notifications
+// Service Worker for Push Notifications and Caching
+const CACHE_NAME = 'tradeitm-admin-v1'
+const STATIC_ASSETS = [
+  '/admin/chat',
+  '/icon-192x192.png',
+  '/icon-512x512.png',
+  '/badge-72x72.png',
+  '/manifest.json'
+]
+
+// Cache static assets on install
+self.addEventListener('install', function(event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(function(cache) {
+        return cache.addAll(STATIC_ASSETS)
+      })
+      .then(function() {
+        return self.skipWaiting()
+      })
+  )
+})
+
+// Clean old caches on activate
+self.addEventListener('activate', function(event) {
+  event.waitUntil(
+    caches.keys().then(function(cacheNames) {
+      return Promise.all(
+        cacheNames.filter(function(cacheName) {
+          return cacheName !== CACHE_NAME
+        }).map(function(cacheName) {
+          return caches.delete(cacheName)
+        })
+      )
+    }).then(function() {
+      return clients.claim()
+    })
+  )
+})
+
+// Network-first strategy for HTML, cache-first for assets
+self.addEventListener('fetch', function(event) {
+  const url = new URL(event.request.url)
+
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return
+
+  // Skip API calls and external requests
+  if (url.pathname.startsWith('/api/') || url.origin !== location.origin) return
+
+  // For admin routes: network-first with cache fallback
+  if (url.pathname.startsWith('/admin')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(function(response) {
+          // Clone and cache successful responses
+          if (response.ok) {
+            const responseClone = response.clone()
+            caches.open(CACHE_NAME).then(function(cache) {
+              cache.put(event.request, responseClone)
+            })
+          }
+          return response
+        })
+        .catch(function() {
+          // Fallback to cache when offline
+          return caches.match(event.request)
+        })
+    )
+    return
+  }
+
+  // For static assets (images, fonts, etc.): cache-first
+  if (url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot)$/)) {
+    event.respondWith(
+      caches.match(event.request)
+        .then(function(response) {
+          if (response) return response
+
+          return fetch(event.request).then(function(response) {
+            if (response.ok) {
+              const responseClone = response.clone()
+              caches.open(CACHE_NAME).then(function(cache) {
+                cache.put(event.request, responseClone)
+              })
+            }
+            return response
+          })
+        })
+    )
+    return
+  }
+})
+
+// Push notification handling
 self.addEventListener('push', function(event) {
   if (event.data) {
     const data = event.data.json()
@@ -55,12 +149,4 @@ self.addEventListener('notificationclick', function(event) {
         })
     )
   }
-})
-
-self.addEventListener('install', function(event) {
-  self.skipWaiting()
-})
-
-self.addEventListener('activate', function(event) {
-  event.waitUntil(clients.claim())
 })

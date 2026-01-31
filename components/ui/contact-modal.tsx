@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, User, Phone, MessageSquare, CheckCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -22,9 +22,10 @@ type ContactFormData = z.infer<typeof contactSchema>;
 interface ContactModalProps {
   isOpen: boolean;
   onClose: () => void;
+  presetMessage?: string;
 }
 
-export function ContactModal({ isOpen, onClose }: ContactModalProps) {
+export function ContactModal({ isOpen, onClose, presetMessage }: ContactModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +35,17 @@ export function ContactModal({ isOpen, onClose }: ContactModalProps) {
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
   } = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
   });
+
+  // Set preset message when provided (e.g., from Cohort application)
+  useEffect(() => {
+    if (presetMessage && isOpen) {
+      setValue('message', presetMessage);
+    }
+  }, [presetMessage, isOpen, setValue]);
 
   const onSubmit = async (data: ContactFormData) => {
     setIsSubmitting(true);
