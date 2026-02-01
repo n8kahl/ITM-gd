@@ -21,6 +21,7 @@ import {
   Sparkles
 } from "lucide-react"
 import { CohortApplication, ApplicationMetadata } from "@/lib/supabase"
+import { formatDate, formatDateTime } from "@/lib/formatting"
 
 type StatusFilter = 'all' | CohortApplication['status']
 
@@ -390,7 +391,7 @@ export default function LeadsPage() {
                           </div>
                         )}
                         <div className="text-sm text-muted-foreground">
-                          {app.created_at ? new Date(app.created_at).toLocaleDateString() : '-'}
+                          {formatDate(app.created_at, { format: 'short' })}
                         </div>
                         {isExpanded ? (
                           <ChevronUp className="h-5 w-5 text-muted-foreground" />
@@ -473,7 +474,7 @@ export default function LeadsPage() {
                           <div>
                             <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Applied</div>
                             <div>
-                              {app.created_at ? new Date(app.created_at).toLocaleString() : '-'}
+                              {formatDateTime(app.created_at)}
                             </div>
                           </div>
                         </div>
@@ -493,7 +494,7 @@ export default function LeadsPage() {
                         {/* Review Info */}
                         {app.reviewed_at && (
                           <div className="text-sm text-muted-foreground">
-                            Last reviewed: {new Date(app.reviewed_at).toLocaleString()}
+                            Last reviewed: {formatDateTime(app.reviewed_at)}
                             {app.reviewed_by && ` by ${app.reviewed_by}`}
                           </div>
                         )}

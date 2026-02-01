@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { JournalPageSkeleton } from '@/components/ui/skeleton-loader'
 import { cn } from '@/lib/utils'
+import { formatDate, formatUSD } from '@/lib/formatting'
 
 interface JournalEntry {
   id: string
@@ -382,7 +383,7 @@ export default function JournalPage() {
                       </div>
                     )}
                     <div className="text-xs text-white/40">
-                      {new Date(entry.trade_date).toLocaleDateString()}
+                      {formatDate(entry.trade_date, { format: 'short' })}
                     </div>
                   </div>
 
@@ -917,7 +918,7 @@ function EntryDetailModal({
         <div className="sticky top-0 bg-[#0a0a0b] border-b border-white/10 p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-white">
-              {entry.symbol || 'Trade'} - {new Date(entry.trade_date).toLocaleDateString()}
+              {entry.symbol || 'Trade'} - {formatDate(entry.trade_date, { format: 'short' })}
             </h2>
             {entry.is_winner === true && (
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-sm">

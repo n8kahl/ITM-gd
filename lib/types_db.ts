@@ -1,7 +1,146 @@
 // ============================================
-// DATABASE TYPES - Auto-generated from schema
+// DATABASE TYPES - Centralized type definitions
 // ============================================
 
+// ============================================
+// Subscriber & Contact Types
+// ============================================
+
+export interface Subscriber {
+  id?: string
+  name: string
+  email: string
+  phone?: string
+  instagram_handle?: string
+  twitter_handle?: string
+  referral_source?: string
+  session_id?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ContactSubmission {
+  id?: string
+  name: string
+  email: string
+  message: string
+  phone?: string
+  submission_type?: 'contact' | 'cohort_application' | 'general_inquiry'
+  metadata?: ApplicationMetadata
+  created_at?: string
+}
+
+export interface ApplicationMetadata {
+  discord_handle?: string
+  experience_level?: '< 1 Year' | '1-3 Years' | '3+ Years'
+  account_size?: 'Under $5k' | '$5k - $25k' | '$25k+'
+  primary_struggle?: 'Psychology' | 'Risk Management' | 'Strategy' | 'Consistency' | 'Other'
+  short_term_goal?: string
+  source?: string
+}
+
+export interface ApplicationData extends Omit<ContactSubmission, 'submission_type' | 'metadata'> {
+  submission_type: 'cohort_application'
+  discord_handle: string
+  experience_level: '< 1 Year' | '1-3 Years' | '3+ Years'
+  account_size: 'Under $5k' | '$5k - $25k' | '$25k+'
+  primary_struggle: 'Psychology' | 'Risk Management' | 'Strategy' | 'Consistency' | 'Other'
+  short_term_goal: string
+}
+
+export interface CohortApplication {
+  id?: string
+  contact_submission_id?: string
+  name: string
+  email: string
+  phone?: string
+  message: string
+  status: 'pending' | 'approved' | 'rejected' | 'contacted'
+  notes?: string
+  reviewed_by?: string
+  reviewed_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+// ============================================
+// Analytics Types
+// ============================================
+
+export interface PageView {
+  id?: string
+  session_id: string
+  page_path: string
+  referrer?: string
+  user_agent?: string
+  device_type?: string
+  browser?: string
+  os?: string
+  screen_width?: number
+  screen_height?: number
+  country?: string
+  city?: string
+  ip_address?: string
+  created_at?: string
+}
+
+export interface ClickEvent {
+  id?: string
+  session_id: string
+  element_type: string
+  element_label?: string
+  element_value?: string
+  page_path: string
+  created_at?: string
+}
+
+export interface AnalyticsSession {
+  id?: string
+  session_id: string
+  first_seen?: string
+  last_seen?: string
+  page_views_count?: number
+  is_returning?: boolean
+}
+
+export interface ConversionEvent {
+  id?: string
+  session_id: string
+  event_type: string
+  event_value?: string
+  created_at?: string
+}
+
+export interface AnalyticsSummary {
+  total_page_views: number
+  unique_visitors: number
+  total_subscribers: number
+  total_contacts: number
+  total_clicks: number
+  device_breakdown: Record<string, number>
+}
+
+// ============================================
+// Pricing Types
+// ============================================
+
+export interface PricingTier {
+  id: string
+  name: string
+  description: string | null
+  tagline: string | null
+  features: string[]
+  monthly_price: string
+  yearly_price: string
+  monthly_link: string
+  yearly_link: string | null
+  display_order: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+// ============================================
 // RBAC Permission Types
 // ============================================
 
