@@ -111,17 +111,19 @@ function LoginContent() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-8 h-8 text-black" />
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center mx-auto mb-4 animate-pulse-subtle">
+              <Sparkles className="w-10 h-10 text-black" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Welcome to TradeITM</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#D4AF37] to-[#F1E5AC] bg-clip-text text-transparent mb-2">
+              Welcome Back
+            </h1>
             <p className="text-white/60 mt-2">
               Sign in with Discord to access your member dashboard
             </p>
           </div>
 
-          {/* Login Card */}
-          <div className="glass-card-heavy border-champagne-glow rounded-2xl p-6">
+          {/* Login Card - Holographic Border */}
+          <div className="glass-card-heavy border-holo rounded-2xl p-6">
             {/* Error Alert */}
             {error && (
               <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">

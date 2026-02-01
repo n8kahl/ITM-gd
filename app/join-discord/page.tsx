@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, RefreshCw, ShieldX, LogOut, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
+import { AuroraBackground } from '@/components/ui/aurora-background'
 
 export default function JoinDiscordPage() {
   const router = useRouter()
@@ -27,9 +28,12 @@ export default function JoinDiscordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f10] flex flex-col">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Aurora Background */}
+      <AuroraBackground />
+
       {/* Header */}
-      <header className="p-6">
+      <header className="p-6 relative z-10">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors"
@@ -40,21 +44,23 @@ export default function JoinDiscordPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-6">
+      <main className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md">
-          {/* Icon & Headline */}
+          {/* Icon & Headline - Enhanced with design system */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center mx-auto mb-4">
-              <ShieldX className="w-8 h-8 text-white" />
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center mx-auto mb-4 animate-pulse-subtle">
+              <ShieldX className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Active Membership Required</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#D4AF37] to-[#F1E5AC] bg-clip-text text-transparent mb-2">
+              Active Membership Required
+            </h1>
             <p className="text-white/60 mt-2">
               We could not verify your access. You must purchase a TradeITM Sniper membership to access this terminal and the Discord server.
             </p>
           </div>
 
-          {/* Card */}
-          <div className="bg-[#0a0a0b] border border-white/10 rounded-2xl p-6">
+          {/* Card - Holographic Border (design system enhancement) */}
+          <div className="glass-card-heavy border-holo rounded-2xl p-6">
             {/* Warning Message */}
             <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
               <div className="flex items-start gap-3">

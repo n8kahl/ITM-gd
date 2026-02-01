@@ -4,23 +4,20 @@ import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
   BookOpen,
   Notebook,
-  Trophy,
   User,
-  Settings,
   LogOut,
-  Menu,
-  X,
-  ChevronRight,
   Sparkles,
   RefreshCw,
   AlertCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MemberAuthProvider, useMemberAuth, SYNC_ERROR_CODES } from '@/contexts/MemberAuthContext'
+import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
+import { MobileBottomNav } from '@/components/ui/mobile-bottom-nav'
 
 // ============================================
 // NAVIGATION CONFIG
@@ -36,11 +33,17 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/members', icon: LayoutDashboard },
-  { name: 'Course Library', href: '/members/library', icon: BookOpen, permission: 'view_courses' },
-  { name: 'Trade Journal', href: '/members/journal', icon: Notebook, badge: 'New' },
-  { name: 'Achievements', href: '/members/achievements', icon: Trophy, badge: 'Soon' },
+  { name: 'Library', href: '/members/library', icon: BookOpen, permission: 'view_courses' },
+  { name: 'Journal', href: '/members/journal', icon: Notebook, badge: 'New' },
   { name: 'Profile', href: '/members/profile', icon: User },
-  { name: 'Settings', href: '/members/settings', icon: Settings },
+]
+
+// Mobile nav items (subset for bottom bar)
+const mobileNavItems = [
+  { name: 'Dashboard', href: '/members', icon: LayoutDashboard },
+  { name: 'Library', href: '/members/library', icon: BookOpen },
+  { name: 'Journal', href: '/members/journal', icon: Notebook },
+  { name: 'Profile', href: '/members/profile', icon: User },
 ]
 
 // ============================================
@@ -66,7 +69,6 @@ export default function MembersLayout({
 function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const {
     user,
@@ -75,7 +77,6 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     isLoading,
     isAuthenticated,
     error,
-    errorCode,
     isNotMember,
     signOut,
     syncDiscordRoles,
@@ -102,10 +103,17 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     return hasPermission(item.permission)
   })
 
+  // Filter mobile nav based on permissions
+  const filteredMobileNav = mobileNavItems.filter(item => {
+    const navItem = navigation.find(n => n.href === item.href)
+    if (!navItem?.permission) return true
+    return hasPermission(navItem.permission)
+  })
+
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center">
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="text-center">
           <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
           <p className="text-white/60">Loading your dashboard...</p>
@@ -118,7 +126,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   // Not authenticated (will redirect)
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center">
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="text-center">
           <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
           <p className="text-white/60">Redirecting to login...</p>
@@ -130,7 +138,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   // Not a member of the Discord server (will redirect)
   if (isNotMember) {
     return (
-      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center">
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
           <p className="text-white/60">Redirecting to join Discord...</p>
@@ -143,9 +151,9 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const showError = error && !profile?.discord_user_id
 
   return (
-    <div className="min-h-screen bg-[#0f0f10] flex">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col bg-[#0a0a0b] border-r border-white/5">
+    <div className="min-h-screen bg-[#050505] flex">
+      {/* Desktop Sidebar - Now with Glass Effect */}
+      <aside className="hidden lg:flex w-64 flex-col bg-[#0F0F10]/60 backdrop-blur-xl border-r border-white/5">
         {/* Logo */}
         <div className="p-6 border-b border-white/5">
           <Link href="/members" className="flex items-center gap-3">
@@ -239,7 +247,6 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
                     {item.badge}
                   </span>
                 )}
-                {isActive && <ChevronRight className="w-4 h-4 text-[#D4AF37]/60" />}
               </Link>
             )
           })}
@@ -271,124 +278,29 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-[#0a0a0b] border-r border-white/5 flex flex-col">
-            {/* Header */}
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
-              <Link href="/members" className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-black" />
-                </div>
-                <span className="text-lg font-bold text-[#D4AF37]">TradeITM</span>
-              </Link>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-2 text-white/60 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* User Card */}
-            {profile && (
-              <div className="p-4 mx-4 mt-4 rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#D4AF37]/20 flex items-center justify-center overflow-hidden">
-                    {profile.discord_avatar ? (
-                      <img
-                        src={`https://cdn.discordapp.com/avatars/${profile.discord_user_id}/${profile.discord_avatar}.png`}
-                        alt={profile.discord_username || 'User'}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <User className="w-5 h-5 text-[#D4AF37]" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-white">
-                      {profile.discord_username || profile.email || 'Member'}
-                    </p>
-                    <p className="text-xs text-[#D4AF37] capitalize">
-                      {profile.membership_tier || 'Free'} Member
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Navigation */}
-            <nav className="flex-1 p-4 space-y-1">
-              {filteredNavigation.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href
-
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                      isActive
-                        ? 'bg-[#D4AF37]/10 text-[#D4AF37]'
-                        : 'text-white/60 hover:text-white hover:bg-white/5'
-                    )}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="flex-1">{item.name}</span>
-                    {item.badge && (
-                      <span className={cn(
-                        'px-2 py-0.5 text-xs rounded-full',
-                        item.badge === 'New'
-                          ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
-                          : 'bg-white/5 text-white/40'
-                      )}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
-            </nav>
-
-            {/* Logout */}
-            <div className="p-4 border-t border-white/5">
-              <button
-                onClick={signOut}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-red-400 w-full"
-              >
-                <LogOut className="w-5 h-5" />
-                <span>Logout</span>
-              </button>
-            </div>
-          </aside>
-        </div>
-      )}
-
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen">
-        {/* Mobile Header */}
-        <header className="lg:hidden h-16 border-b border-white/5 bg-[#0a0a0b] flex items-center justify-between px-4">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 text-white/60 hover:text-white"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
-          <span className="text-lg font-bold text-[#D4AF37]">TradeITM</span>
-          <div className="w-10" /> {/* Spacer for centering */}
-        </header>
-
-        {/* Page Content */}
-        <main className="flex-1 p-4 lg:p-8">
-          {children}
+        {/* Page Content with Page Transitions */}
+        <main className="flex-1 p-4 lg:p-8 pb-24 lg:pb-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={pathname}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 30
+              }}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
         </main>
+
+        {/* Mobile Bottom Navigation */}
+        <MobileBottomNav items={filteredMobileNav} />
       </div>
     </div>
   )
