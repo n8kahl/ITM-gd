@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Bell } from "lucide-react";
+import { Menu, X, Bell, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface FloatingNavbarProps {
   onSubscribeClick?: () => void;
@@ -95,6 +96,17 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
 
           {/* Desktop CTA Buttons */}
           <div className="hidden md:flex items-center gap-3">
+            <Button
+              asChild
+              variant="ghost"
+              size="default"
+              className="rounded-sm text-white hover:text-champagne hover:bg-white/5"
+            >
+              <Link href="/login">
+                <Lock className="w-3.5 h-3.5 mr-2" />
+                Member Access
+              </Link>
+            </Button>
             {onSubscribeClick && (
               <Button
                 variant="ghost"
@@ -158,6 +170,35 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
           className="md:hidden overflow-hidden"
         >
           <div className="py-4 space-y-1 border-t border-white/[0.08]">
+            {/* Mobile Member Access Link */}
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{
+                opacity: isMobileMenuOpen ? 1 : 0,
+                x: isMobileMenuOpen ? 0 : -10,
+              }}
+              transition={{
+                delay: isMobileMenuOpen ? 0 : 0,
+                duration: 0.2,
+                ease: "easeOut",
+              }}
+            >
+              <Link
+                href="/login"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={cn(
+                  "flex items-center h-12 px-2",
+                  "text-base font-light tracking-wide",
+                  "text-champagne/80 hover:text-champagne hover:bg-white/5",
+                  "rounded-sm transition-colors duration-300"
+                )}
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Member Access
+              </Link>
+            </motion.div>
+
+            {/* Navigation Links */}
             {navLinks.map((link, index) => (
               <motion.a
                 key={link.href}
@@ -194,7 +235,7 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
                   y: isMobileMenuOpen ? 0 : 10,
                 }}
                 transition={{
-                  delay: isMobileMenuOpen ? navLinks.length * 0.05 : 0,
+                  delay: isMobileMenuOpen ? (navLinks.length + 1) * 0.05 : 0,
                   duration: 0.25,
                   ease: "easeOut",
                 }}
@@ -223,7 +264,7 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
                 y: isMobileMenuOpen ? 0 : 10,
               }}
               transition={{
-                delay: isMobileMenuOpen ? (navLinks.length + 1) * 0.05 : 0,
+                delay: isMobileMenuOpen ? (navLinks.length + 2) * 0.05 : 0,
                 duration: 0.25,
                 ease: "easeOut",
               }}
