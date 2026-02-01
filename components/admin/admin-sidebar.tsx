@@ -12,10 +12,11 @@ import {
   GraduationCap,
   Notebook,
   // System
-  Shield,
-  Settings,
+  ShieldAlert,
+  Sliders,
   BarChart3,
   Tag,
+  Activity,
   LayoutDashboard,
   ChevronRight
 } from 'lucide-react'
@@ -50,12 +51,13 @@ const navigation: NavGroup[] = [
     ],
   },
   {
-    name: 'System',
+    name: 'System & Config',
     items: [
       { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+      { name: 'Role Mapping', href: '/admin/roles', icon: ShieldAlert },
       { name: 'Packages', href: '/admin/packages', icon: Tag },
-      { name: 'Roles', href: '/admin/roles', icon: Shield },
-      { name: 'Settings', href: '/admin/settings', icon: Settings },
+      { name: 'Settings', href: '/admin/settings', icon: Sliders },
+      { name: 'System Status', href: '/admin/system', icon: Activity },
     ],
   },
 ]
