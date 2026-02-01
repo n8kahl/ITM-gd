@@ -16,6 +16,7 @@ import {
   Settings,
   BarChart3,
   Tag,
+  Activity,
   LayoutDashboard,
   ChevronRight
 } from 'lucide-react'
@@ -56,6 +57,7 @@ const navigation: NavGroup[] = [
       { name: 'Packages', href: '/admin/packages', icon: Tag },
       { name: 'Roles', href: '/admin/roles', icon: Shield },
       { name: 'Settings', href: '/admin/settings', icon: Settings },
+      { name: 'System Status', href: '/admin/system', icon: Activity },
     ],
   },
 ]
