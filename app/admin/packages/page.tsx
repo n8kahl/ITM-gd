@@ -18,7 +18,7 @@ import {
   Calendar,
   Check
 } from "lucide-react"
-import { getAllPricingTiers, updatePricingTier, PricingTier } from "@/lib/supabase"
+import { getAllPricingTiers, PricingTier } from "@/lib/supabase"
 
 export default function PackagesPage() {
   const router = useRouter()
@@ -85,17 +85,27 @@ export default function PackagesPage() {
     setEditForm({})
   }
 
-  // Save changes
+  // Save changes via API route (uses service role for RLS bypass)
   const saveChanges = async (id: string) => {
     setSaving(id)
     try {
-      await updatePricingTier(id, {
-        monthly_price: editForm.monthly_price,
-        yearly_price: editForm.yearly_price,
-        monthly_link: editForm.monthly_link,
-        yearly_link: editForm.yearly_link || null,
-        is_active: editForm.is_active,
+      const response = await fetch('/api/admin/packages', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          monthly_price: editForm.monthly_price,
+          yearly_price: editForm.yearly_price,
+          monthly_link: editForm.monthly_link,
+          yearly_link: editForm.yearly_link || null,
+          is_active: editForm.is_active,
+        }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update')
+      }
 
       // Update local state
       setTiers(prev => prev.map(tier =>
