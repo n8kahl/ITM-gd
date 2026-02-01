@@ -136,6 +136,8 @@ export interface PricingTier {
   yearly_link: string | null
   display_order: number
   is_active: boolean
+  discord_role_id?: string | null
+  discord_role_name?: string | null
   created_at?: string
   updated_at?: string
 }

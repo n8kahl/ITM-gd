@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { DiscordRolePicker } from '@/components/admin/discord-role-picker'
 
 interface AppPermission {
   id: string
@@ -355,47 +356,33 @@ export default function RolesPage() {
                 >
                   {/* Role Header */}
                   <div className="flex flex-col lg:flex-row lg:items-center gap-4 mb-4">
-                    {/* Role ID Input */}
+                    {/* Discord Role Picker */}
                     <div className="flex-1">
                       <label className="block text-xs text-white/40 mb-1">
-                        Discord Role ID
+                        Discord Role
                       </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={role.discord_role_id}
-                          onChange={(e) => updateRole(index, 'discord_role_id', e.target.value)}
-                          placeholder="e.g., 1234567890123456789"
-                          disabled={!role.isNew}
-                          className={cn(
-                            'flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none text-sm font-mono',
-                            !role.isNew && 'opacity-60 cursor-not-allowed'
-                          )}
-                        />
-                        {!role.isNew && (
+                      <DiscordRolePicker
+                        value={role.discord_role_id}
+                        onChange={(id, name) => {
+                          updateRole(index, 'discord_role_id', id)
+                          updateRole(index, 'discord_role_name', name)
+                        }}
+                        disabled={!role.isNew}
+                      />
+                      {!role.isNew && role.discord_role_id && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <code className="text-xs text-white/40 font-mono">
+                            ID: {role.discord_role_id}
+                          </code>
                           <button
                             onClick={() => copyToClipboard(role.discord_role_id)}
-                            className="p-2 text-white/40 hover:text-white"
+                            className="p-1 text-white/40 hover:text-white"
                             title="Copy Role ID"
                           >
-                            <Copy className="w-4 h-4" />
+                            <Copy className="w-3 h-3" />
                           </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Role Name Input */}
-                    <div className="flex-1">
-                      <label className="block text-xs text-white/40 mb-1">
-                        Role Name (for display)
-                      </label>
-                      <input
-                        type="text"
-                        value={role.discord_role_name || ''}
-                        onChange={(e) => updateRole(index, 'discord_role_name', e.target.value)}
-                        placeholder="e.g., Execute Sniper"
-                        className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none text-sm"
-                      />
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
