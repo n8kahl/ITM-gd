@@ -267,7 +267,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         .from('user_discord_profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (discordProfile) {
         const profile: MemberProfile = {
