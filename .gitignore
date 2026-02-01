@@ -28,3 +28,8 @@ next-env.d.ts.pnpm-store
 .pnpm-store
 .pnpm-store
 .git.backup
+
+# playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
