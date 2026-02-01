@@ -52,9 +52,9 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
     },
     pro: {
       // Champagne Gold - Premium & Value
-      gradient: "from-[#047857] via-[#059669] to-[#10B981]",
-      accent: "#10B981",
-      glow: "rgba(16, 185, 129, 0.3)",
+      gradient: "from-[#C9A227] via-[#D4AF37] to-[#F3E5AB]",
+      accent: "#F3E5AB",
+      glow: "rgba(243, 229, 171, 0.3)",
       icon: "◆◆",
     },
     execute: {
@@ -244,10 +244,10 @@ export function PricingCard({
     },
     pro: {
       // Champagne Gold - Premium & Value
-      borderColor: "rgba(16, 185, 129, 0.3)",
-      glowColor: "rgba(16, 185, 129, 0.15)",
-      accentColor: "#10B981",
-      buttonGradient: "from-[#047857] via-[#059669] to-[#10B981]",
+      borderColor: "rgba(243, 229, 171, 0.3)",
+      glowColor: "rgba(243, 229, 171, 0.15)",
+      accentColor: "#F3E5AB",
+      buttonGradient: "from-[#C9A227] via-[#D4AF37] to-[#F3E5AB]",
       checkBg: "bg-amber-500/10",
       checkColor: "text-amber-400",
     },

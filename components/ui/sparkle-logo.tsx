@@ -1,8 +1,24 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
+
+// Hook to detect mobile devices for performance optimization
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || window.matchMedia('(pointer: coarse)').matches)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
 
 interface SparkleProps {
   x: number
@@ -67,6 +83,13 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
   className = '',
   priority = false,
 }) => {
+  const isMobile = useIsMobile()
+
+  // Reduce sparkle count on mobile for performance (0 = disabled entirely on mobile)
+  const effectiveSparkleCount = isMobile ? 0 : sparkleCount
+  // Disable glow backdrop animation on mobile
+  const effectiveEnableGlow = isMobile ? false : enableGlow
+
   // Generate random sparkle positions and properties
   const sparkles = useMemo(() => {
     const colors = [
@@ -76,7 +99,7 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
       'rgba(244, 228, 193, 0.5)', // Champagne
     ]
 
-    return Array.from({ length: sparkleCount }, (_, i) => ({
+    return Array.from({ length: effectiveSparkleCount }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
       y: Math.random() * 100,
@@ -85,7 +108,7 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
       duration: Math.random() * 2 + 2, // 2-4s
       color: colors[Math.floor(Math.random() * colors.length)],
     }))
-  }, [sparkleCount])
+  }, [effectiveSparkleCount])
 
   // Glow intensity settings
   const glowStyles = {
@@ -96,8 +119,8 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
 
   return (
     <div className={`relative inline-block ${className}`}>
-      {/* Radial gradient glow backdrop */}
-      {enableGlow && (
+      {/* Radial gradient glow backdrop - disabled on mobile */}
+      {effectiveEnableGlow && (
         <motion.div
           className="absolute inset-0 -z-10"
           style={{
@@ -131,17 +154,17 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
         ))}
       </div>
 
-      {/* Logo image with optional floating animation */}
+      {/* Logo image with optional floating animation - disabled on mobile */}
       <motion.div
         animate={
-          enableFloat
+          enableFloat && !isMobile
             ? {
                 y: [0, -10, 0],
               }
             : {}
         }
         transition={
-          enableFloat
+          enableFloat && !isMobile
             ? {
                 duration: 6,
                 repeat: Infinity,
@@ -149,7 +172,7 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
               }
             : {}
         }
-        className={enableGlow ? glowStyles[glowIntensity] : ''}
+        className={enableGlow && !isMobile ? glowStyles[glowIntensity] : ''}
       >
         <Image
           src={src}

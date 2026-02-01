@@ -227,6 +227,13 @@
     opacity: 0.3;
   }
 
+  /* Hide grid overlay on mobile for performance */
+  @media (max-width: 767px), (pointer: coarse) {
+    body::after {
+      display: none;
+    }
+  }
+
   /* Subtle Noise Texture Overlay */
   body::before {
     content: '';
@@ -336,6 +343,24 @@
     background: rgba(232, 228, 217, 0.05);
     border-color: rgba(232, 228, 217, 0.15);
     transform: translateY(-2px);
+  }
+
+  /* Mobile Performance: Reduced blur for glass cards */
+  @media (max-width: 767px), (pointer: coarse) {
+    .glass-card {
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .glass-card-heavy {
+      backdrop-filter: blur(20px) saturate(110%);
+      -webkit-backdrop-filter: blur(20px) saturate(110%);
+    }
+
+    .glass-card-platinum {
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
   }
 
   /* ============================================

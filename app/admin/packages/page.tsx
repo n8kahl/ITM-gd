@@ -143,7 +143,7 @@ export default function PackagesPage() {
       case 'core':
         return { accent: '#10B981', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
       case 'pro':
-        return { accent: '#10B981', bg: 'bg-amber-500/10', border: 'border-amber-500/30' }
+        return { accent: '#F3E5AB', bg: 'bg-amber-500/10', border: 'border-amber-500/30' }
       case 'execute':
         return { accent: '#E8E4D9', bg: 'bg-zinc-400/10', border: 'border-zinc-400/30' }
       default:
