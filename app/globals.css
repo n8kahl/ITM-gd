@@ -16,12 +16,12 @@
   --card-foreground: #F5F5F0;
   --popover: rgba(18, 18, 20, 0.95);
   --popover-foreground: #F5F5F0;
-  --primary: #059669;
+  --primary: #047857;
   --primary-foreground: #F5F5F0;
   --secondary: #141416;
   --secondary-foreground: #F5F5F0;
   --muted: #141416;
-  --muted-foreground: #B8B8B8;
+  --muted-foreground: #9A9A9A;
   --accent: #E8E4D9;
   --accent-foreground: #0A0A0B;
   --destructive: #991B1B;
@@ -44,16 +44,12 @@
   --sidebar-border: rgba(255, 255, 255, 0.10);
   --sidebar-ring: #E8E4D9;
 
-  /* Luxury Color Palette - Updated Gold Champagne */
-  --champagne: #D4AF37;
-  --champagne-light: #F1E5AC;
-  --champagne-dark: #B8962E;
-  --obsidian: #050505;
-  --obsidian-card: #0F0F10;
-  --platinum: #E5E4E2;
-  --emerald-glow: #10B981;
-  --wealth-emerald: #059669;
-  --wealth-emerald-light: #10B981;
+  /* Luxury Color Palette */
+  --champagne: #E8E4D9;
+  --champagne-light: #F5F3ED;
+  --champagne-dark: #B8B5AD;
+  --wealth-emerald: #047857;
+  --wealth-emerald-light: #059669;
   --wealth-emerald-dark: #065F46;
   --onyx: #0A0A0B;
   --onyx-light: #141416;
@@ -62,6 +58,9 @@
   --subtle-line: rgba(255, 255, 255, 0.04);
 
   /* Legacy mappings for compatibility */
+  --platinum: #E8E4D9;
+  --platinum-light: #F5F3ED;
+  --platinum-dark: #B8B5AD;
   --signal-green: #047857;
   --signal-green-light: #059669;
   --signal-green-dark: #065F46;
@@ -85,12 +84,12 @@
   --card-foreground: #F5F5F0;
   --popover: rgba(18, 18, 20, 0.95);
   --popover-foreground: #F5F5F0;
-  --primary: #059669;
+  --primary: #047857;
   --primary-foreground: #F5F5F0;
   --secondary: #141416;
   --secondary-foreground: #F5F5F0;
   --muted: #141416;
-  --muted-foreground: #B8B8B8;
+  --muted-foreground: #9A9A9A;
   --accent: #E8E4D9;
   --accent-foreground: #0A0A0B;
   --destructive: #991B1B;
@@ -192,7 +191,7 @@
 
   body {
     @apply bg-background text-foreground;
-    background-color: #050505;
+    background-color: #0A0A0B;
     min-height: 100vh;
     position: relative;
   }
@@ -277,7 +276,6 @@
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--radius);
     transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    will-change: transform, opacity;
   }
 
   .glass-card:hover {
@@ -296,7 +294,6 @@
       0 8px 32px rgba(0, 0, 0, 0.4),
       inset 0 1px 0 rgba(255, 255, 255, 0.02);
     transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    will-change: transform, opacity;
   }
 
   .glass-card-heavy:hover {
@@ -319,7 +316,6 @@
       0 8px 32px rgba(0, 0, 0, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.02);
     transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    will-change: transform, opacity;
   }
 
   .glass-card-platinum:hover {
@@ -390,37 +386,36 @@
     background-clip: text;
   }
 
-  /* Champagne Gradient (True Gold) */
+  /* Champagne Gradient (warm platinum) */
   .gradient-champagne {
-    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
+    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
   }
 
   .text-gradient-champagne {
-    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
+    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Platinum Gradient (Silver/White) */
+  /* Legacy platinum/gold gradients - map to champagne */
   .gradient-platinum {
-    background: linear-gradient(135deg, #B8B8B8 0%, #E5E4E2 50%, #F5F5F0 100%);
+    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
   }
 
   .text-gradient-platinum {
-    background: linear-gradient(135deg, #B8B8B8 0%, #E5E4E2 50%, #F5F5F0 100%);
+    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Legacy gold gradient - maps to champagne */
   .gradient-gold {
-    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
+    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
   }
 
   .text-gradient-gold {
-    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
+    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -535,63 +530,62 @@
       0 0 60px rgba(4, 120, 87, 0.1);
   }
 
-  /* Champagne Accent Border (True Gold) */
+  /* Champagne Accent Border */
   .border-champagne-glow {
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(232, 228, 217, 0.15);
     transition: border-color 0.5s ease;
   }
 
   .border-champagne-glow:hover {
-    border-color: rgba(212, 175, 55, 0.25);
+    border-color: rgba(232, 228, 217, 0.25);
   }
 
-  /* Platinum Border (Silver/White) */
+  /* Legacy platinum/gold borders - map to champagne */
   .border-platinum-glow {
-    border: 1px solid rgba(229, 228, 226, 0.15);
+    border: 1px solid rgba(232, 228, 217, 0.15);
     transition: border-color 0.5s ease;
   }
 
-  /* Legacy gold border - maps to champagne */
   .border-gold-glow {
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(232, 228, 217, 0.15);
     transition: border-color 0.5s ease;
   }
 
   /* Section Divider - Refined */
   .divider-champagne {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(232, 228, 217, 0.3), transparent);
   }
 
   .divider-platinum {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(229, 228, 226, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(232, 228, 217, 0.3), transparent);
   }
 
   .divider-gold {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(232, 228, 217, 0.3), transparent);
   }
 
   /* Subtle Glow Effects */
   .glow-emerald {
-    box-shadow: 0 0 60px rgba(16, 185, 129, 0.12);
+    box-shadow: 0 0 60px rgba(4, 120, 87, 0.12);
   }
 
   .glow-green {
-    box-shadow: 0 0 60px rgba(16, 185, 129, 0.12);
+    box-shadow: 0 0 60px rgba(4, 120, 87, 0.12);
   }
 
   .glow-champagne {
-    box-shadow: 0 0 60px rgba(212, 175, 55, 0.08);
+    box-shadow: 0 0 60px rgba(232, 228, 217, 0.08);
   }
 
   .glow-platinum {
-    box-shadow: 0 0 60px rgba(229, 228, 226, 0.08);
+    box-shadow: 0 0 60px rgba(232, 228, 217, 0.08);
   }
 
   .glow-gold {
-    box-shadow: 0 0 60px rgba(212, 175, 55, 0.08);
+    box-shadow: 0 0 60px rgba(232, 228, 217, 0.08);
   }
 
   /* Premium Card Hover Effect - Slow Lift */
@@ -728,20 +722,6 @@
     }
   }
 
-  /* Animated shimmer for pricing card border */
-  .animate-shimmer {
-    animation: shimmer-sweep 3s linear infinite;
-  }
-
-  @keyframes shimmer-sweep {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(200%);
-    }
-  }
-
   /* Subtle pulse animation - Luxury */
   .animate-pulse-subtle {
     animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -771,22 +751,6 @@
     }
     50% {
       box-shadow: 0 0 50px rgba(4, 120, 87, 0.2);
-    }
-  }
-
-  /* Orange pulse border for escalated/high-priority chats */
-  .animate-pulse-border {
-    animation: pulse-border 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse-border {
-    0%, 100% {
-      border-color: rgba(249, 115, 22, 0.4);
-      box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
-    }
-    50% {
-      border-color: rgba(249, 115, 22, 0.8);
-      box-shadow: 0 0 12px 2px rgba(249, 115, 22, 0.3);
     }
   }
 
@@ -871,118 +835,5 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-  }
-}
-
-/* ============================================
-   MOBILE PERFORMANCE OPTIMIZATIONS
-   Reduces GPU-intensive effects on mobile devices
-   ============================================ */
-@media (max-width: 767px) {
-  /* Reduce backdrop-filter blur significantly on mobile */
-  .glass-card {
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    background: rgba(18, 18, 20, 0.85);
-  }
-
-  .glass-card-heavy {
-    backdrop-filter: blur(12px) saturate(100%);
-    -webkit-backdrop-filter: blur(12px) saturate(100%);
-    background: rgba(18, 18, 20, 0.9);
-  }
-
-  .glass-card-platinum {
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    background: rgba(18, 18, 20, 0.88);
-  }
-
-  /* Disable hover transforms on touch devices */
-  .glass-card:hover,
-  .glass-card-heavy:hover,
-  .glass-card-platinum:hover,
-  .card-hover-premium:hover {
-    transform: none;
-  }
-
-  /* Simplify body background effects */
-  body::after {
-    opacity: 0.15;
-    background-size: 100px 100px;
-  }
-
-  /* Reduce noise texture impact */
-  body::before {
-    opacity: 0.015;
-  }
-
-  /* Disable complex animations on mobile */
-  .animate-pulse-subtle,
-  .animate-pulse-emerald,
-  .animate-pulse-green {
-    animation: none;
-  }
-
-  /* Simplify shimmer animation */
-  .shimmer {
-    animation-duration: 4s;
-  }
-
-  /* Reduce data-stream animation complexity */
-  .data-stream {
-    animation-duration: 6s;
-  }
-
-  /* Faster, simpler fade animations */
-  .fade-in-up {
-    animation-duration: 0.5s;
-  }
-
-  .reveal-slow {
-    animation-duration: 0.8s;
-  }
-
-  /* Disable animated borders on mobile */
-  .animated-border::before {
-    animation: none;
-    opacity: 0.4;
-  }
-}
-
-/* Tablet optimizations (slightly less aggressive) */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .glass-card {
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-  }
-
-  .glass-card-heavy {
-    backdrop-filter: blur(35px) saturate(110%);
-    -webkit-backdrop-filter: blur(35px) saturate(110%);
-  }
-
-  .glass-card-platinum {
-    backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
-  }
-}
-
-/* Respect reduced motion preferences */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-
-  .shimmer,
-  .data-stream,
-  .animate-pulse-subtle,
-  .animate-pulse-emerald,
-  .animate-pulse-green {
-    animation: none !important;
   }
 }
