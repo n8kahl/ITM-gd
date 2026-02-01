@@ -4,13 +4,14 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Sparkles, AlertCircle, CheckCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { getSafeRedirect } from '@/lib/safe-redirect'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/members'
+  const redirectTo = getSafeRedirect(searchParams.get('redirect'))
 
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
   const [message, setMessage] = useState('Processing authentication...')

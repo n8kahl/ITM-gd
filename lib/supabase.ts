@@ -31,8 +31,12 @@ import type {
 // Legacy alias for backwards compatibility
 export type Session = AnalyticsSession
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kzgzcqkyuaqcoosrrphq.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Z3pjcWt5dWFxY29vc3JycGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NjY3MDcsImV4cCI6MjA4NTE0MjcwN30.nvmXXLPZaAflW99wDxgZ2rCmNNPTQQowURwGkjt6Ou4'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set')
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 

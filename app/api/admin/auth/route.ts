@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     cookieStore.set('titm_admin', 'true', {
       path: '/',
       maxAge: 86400, // 24 hours
-      httpOnly: false, // Needs to be readable by client-side JS
+      httpOnly: true, // Secure - not readable by JavaScript (verified by middleware)
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
     })
