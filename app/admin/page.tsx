@@ -4,9 +4,9 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import {
-  Users, DollarSign, Activity, MessageSquare,
-  ArrowUpRight, ArrowDownRight, MoreHorizontal,
-  CheckCircle2, AlertTriangle, XCircle, RefreshCw
+  Users, Activity, MessageSquare,
+  CheckCircle2, AlertTriangle, XCircle, RefreshCw,
+  GraduationCap, FileText, Clock
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -17,15 +17,25 @@ interface SystemDiagnostic {
   latency?: number
 }
 
+interface RecentLead {
+  id: string
+  full_name: string
+  status: string
+  created_at: string
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     users: 0,
-    revenue: 0,
     chats: 0,
+    courses: 0,
+    pendingApplications: 0,
     systemHealth: '—'
   })
   const [systemStatus, setSystemStatus] = useState<SystemDiagnostic[]>([])
   const [systemLoading, setSystemLoading] = useState(true)
+  const [recentLeads, setRecentLeads] = useState<RecentLead[]>([])
+  const [leadsLoading, setLeadsLoading] = useState(true)
 
   // Load data from Supabase
   useEffect(() => {
@@ -34,17 +44,25 @@ export default function AdminDashboard() {
         const [
           membersResult,
           chatsResult,
+          coursesResult,
+          applicationsResult,
         ] = await Promise.all([
           supabase.from('subscribers').select('id', { count: 'exact', head: true }),
           supabase.from('chat_conversations')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'active'),
+          supabase.from('courses').select('id', { count: 'exact', head: true }),
+          supabase.from('cohort_applications')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending'),
         ])
 
         setStats(prev => ({
           ...prev,
           users: membersResult.count || 0,
           chats: chatsResult.count || 0,
+          courses: coursesResult.count || 0,
+          pendingApplications: applicationsResult.count || 0,
         }))
       } catch (error) {
         console.error('Failed to load dashboard metrics:', error)
@@ -52,6 +70,29 @@ export default function AdminDashboard() {
     }
 
     loadMetrics()
+  }, [])
+
+  // Load recent leads
+  useEffect(() => {
+    const loadRecentLeads = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('cohort_applications')
+          .select('id, full_name, status, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (!error && data) {
+          setRecentLeads(data)
+        }
+      } catch (error) {
+        console.error('Failed to load recent leads:', error)
+      } finally {
+        setLeadsLoading(false)
+      }
+    }
+
+    loadRecentLeads()
   }, [])
 
   // Load system status from API
@@ -109,110 +150,133 @@ export default function AdminDashboard() {
     }
   }
 
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    return `${diffDays}d ago`
+  }
+
   return (
     <div className="space-y-6">
       {/* Quick Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardMetric
-          label="Total Revenue"
-          value="$15,400"
-          change="+12.5%"
-          trend="up"
-          icon={DollarSign}
+          label="Total Members"
+          value={stats.users.toLocaleString()}
+          icon={Users}
           color="gold"
         />
         <DashboardMetric
-          label="Active Users"
-          value={stats.users.toLocaleString()}
-          change="+3.2%"
-          trend="up"
-          icon={Users}
-          color="emerald"
-        />
-        <DashboardMetric
-          label="Live Chats"
+          label="Active Chats"
           value={stats.chats.toString()}
-          change={stats.chats > 0 ? `${stats.chats} active` : 'None'}
-          trend="neutral"
           icon={MessageSquare}
           color="blue"
         />
         <DashboardMetric
+          label="Courses"
+          value={stats.courses.toString()}
+          icon={GraduationCap}
+          color="emerald"
+        />
+        <DashboardMetric
           label="System Health"
           value={stats.systemHealth}
-          change="Live"
-          trend="neutral"
           icon={Activity}
           color="purple"
         />
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Main Chart / Activity Area (2/3 width) */}
+        {/* Left Column - 2/3 width */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="glass-card-heavy p-6 min-h-[400px] border-white/5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-serif font-medium text-white">Revenue Overview</h3>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 text-xs font-medium bg-white/10 rounded-lg text-white">Weekly</button>
-                <button className="px-3 py-1 text-xs font-medium hover:bg-white/5 rounded-lg text-white/40">Monthly</button>
-              </div>
-            </div>
-
-            {/* Placeholder for Chart */}
-            <div className="w-full h-[300px] flex items-end gap-2 px-2">
-              {[40, 65, 50, 80, 55, 90, 70, 85, 60, 95, 75, 100].map((h, i) => (
-                <div key={i} className="flex-1 bg-gradient-to-t from-emerald-500/10 to-emerald-500/40 rounded-t-sm relative group" style={{ height: `${h}%` }}>
-                    <div className="absolute inset-x-0 top-0 h-[2px] bg-emerald-400/50" />
-                    <div className="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 px-2 py-1 rounded text-[10px] text-white whitespace-nowrap border border-white/10">
-                        ${h * 150}
-                    </div>
+          {/* Pending Applications */}
+          {stats.pendingApplications > 0 && (
+            <Card className="glass-card-heavy p-6 border-amber-500/20 bg-amber-500/5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/20">
+                  <Clock className="w-5 h-5 text-amber-400" />
                 </div>
-              ))}
+                <div>
+                  <h3 className="text-white font-medium">
+                    {stats.pendingApplications} Pending Application{stats.pendingApplications !== 1 ? 's' : ''}
+                  </h3>
+                  <p className="text-sm text-white/50">Cohort applications awaiting review</p>
+                </div>
+                <a
+                  href="/admin/leads"
+                  className="ml-auto px-4 py-2 text-sm font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
+                >
+                  Review
+                </a>
+              </div>
+            </Card>
+          )}
+
+          {/* Recent Leads */}
+          <Card className="glass-card-heavy p-6 border-white/5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-white/80">Recent Applications</h3>
+              <a href="/admin/leads" className="text-xs text-[#D4AF37] hover:underline">
+                View all
+              </a>
+            </div>
+            <div className="space-y-3">
+              {leadsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 bg-white/5 animate-pulse rounded-lg" />
+                  ))}
+                </div>
+              ) : recentLeads.length > 0 ? (
+                recentLeads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] text-xs font-medium">
+                        {lead.full_name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <div className="text-sm text-white">{lead.full_name}</div>
+                        <div className="text-xs text-white/40">{formatTimeAgo(lead.created_at)}</div>
+                      </div>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      lead.status === 'pending' ? 'bg-amber-500/20 text-amber-400' :
+                      lead.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
+                      'bg-white/10 text-white/60'
+                    }`}>
+                      {lead.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-white/40 text-sm text-center py-4">No applications yet</p>
+              )}
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <Card className="glass-card-heavy p-6 border-white/5">
-                <h3 className="text-sm font-medium text-white/80 mb-4">Recent Sales</h3>
-                <div className="space-y-4">
-                  {[1,2,3].map((_, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
-                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs">$</div>
-                         <div>
-                            <div className="text-sm text-white">Pro Sniper</div>
-                            <div className="text-xs text-white/40">2 mins ago</div>
-                         </div>
-                       </div>
-                       <div className="text-sm font-mono text-emerald-400">+$299</div>
-                    </div>
-                  ))}
-                </div>
-             </Card>
-             <Card className="glass-card-heavy p-6 border-white/5">
-                <h3 className="text-sm font-medium text-white/80 mb-4">New Leads</h3>
-                <div className="space-y-4">
-                  {[1,2,3].map((_, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
-                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] text-xs">U</div>
-                         <div>
-                            <div className="text-sm text-white">John Doe</div>
-                            <div className="text-xs text-white/40">Applied for Cohort</div>
-                         </div>
-                       </div>
-                       <div className="text-xs px-2 py-1 rounded bg-white/5 text-white/60">Review</div>
-                    </div>
-                  ))}
-                </div>
-             </Card>
+          {/* Quick Links */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <QuickLink href="/admin/courses" icon={GraduationCap} label="Courses" color="emerald" />
+            <QuickLink href="/admin/leads" icon={FileText} label="Leads" color="gold" />
+            <QuickLink href="/admin/chat" icon={MessageSquare} label="Chat" color="blue" />
+            <QuickLink href="/admin/settings" icon={Activity} label="Settings" color="purple" />
           </div>
         </div>
 
-        {/* Side Panel (1/3 width) */}
+        {/* Right Column - 1/3 width */}
         <div className="space-y-6">
           {/* System Status Card */}
           <Card className="glass-card-heavy p-6 border-white/5">
@@ -250,44 +314,18 @@ export default function AdminDashboard() {
               )}
             </div>
           </Card>
-
-          {/* Activity Timeline */}
-          <Card className="glass-card-heavy p-6 border-white/5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-sm font-medium text-white/80">Live Activity</h3>
-              <MoreHorizontal className="w-4 h-4 text-white/40" />
-            </div>
-            <div className="relative pl-4 space-y-6">
-              {/* Activity Timeline Line */}
-              <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-white/10" />
-
-              {[
-                { text: "New user joined Discord", time: "1m ago", color: "emerald" },
-                { text: "Server CPU spike detected", time: "15m ago", color: "red" },
-                { text: "Backup completed", time: "1h ago", color: "blue" },
-                { text: "Daily signals posted", time: "4h ago", color: "gold" },
-                { text: "Admin logged in", time: "5h ago", color: "gray" },
-              ].map((item, i) => (
-                <div key={i} className="relative">
-                  <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0A0A0B] ${
-                    item.color === 'emerald' ? 'bg-emerald-500' :
-                    item.color === 'red' ? 'bg-red-500' :
-                    item.color === 'blue' ? 'bg-blue-500' :
-                    item.color === 'gold' ? 'bg-[#D4AF37]' : 'bg-white/40'
-                  }`} />
-                  <p className="text-sm text-white/90">{item.text}</p>
-                  <p className="text-xs text-white/40 font-mono mt-1">{item.time}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
         </div>
       </div>
     </div>
   )
 }
 
-function DashboardMetric({ label, value, change, trend, icon: Icon, color }: any) {
+function DashboardMetric({ label, value, icon: Icon, color }: {
+  label: string
+  value: string
+  icon: any
+  color: 'gold' | 'emerald' | 'blue' | 'purple'
+}) {
   const colors = {
     gold: "text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/20",
     emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -296,20 +334,46 @@ function DashboardMetric({ label, value, change, trend, icon: Icon, color }: any
   }
 
   return (
-    <div className={`p-4 rounded-xl border backdrop-blur-md ${colors[color as keyof typeof colors]} transition-all duration-300 hover:scale-[1.02]`}>
-       <div className="flex justify-between items-start mb-2">
-         <div className="p-2 rounded-lg bg-black/20">
-            <Icon className="w-5 h-5" />
-         </div>
-         <span className={`flex items-center text-xs font-medium ${trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-white/40'}`}>
-            {change}
-            {trend === 'up' && <ArrowUpRight className="w-3 h-3 ml-0.5" />}
-            {trend === 'down' && <ArrowDownRight className="w-3 h-3 ml-0.5" />}
-         </span>
-       </div>
-       <div className="text-2xl font-bold text-white tracking-tight">{value}</div>
-       <div className="text-xs text-white/50 mt-1">{label}</div>
+    <div className={`p-4 rounded-xl border backdrop-blur-md ${colors[color]} transition-all duration-300 hover:scale-[1.02]`}>
+      <div className="flex justify-between items-start mb-2">
+        <div className="p-2 rounded-lg bg-black/20">
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+      <div className="text-2xl font-bold text-white tracking-tight">{value}</div>
+      <div className="text-xs text-white/50 mt-1">{label}</div>
     </div>
+  )
+}
+
+function QuickLink({ href, icon: Icon, label, color }: {
+  href: string
+  icon: any
+  label: string
+  color: 'gold' | 'emerald' | 'blue' | 'purple'
+}) {
+  const colors = {
+    gold: "hover:border-[#D4AF37]/30 hover:bg-[#D4AF37]/5",
+    emerald: "hover:border-emerald-500/30 hover:bg-emerald-500/5",
+    blue: "hover:border-blue-500/30 hover:bg-blue-500/5",
+    purple: "hover:border-purple-500/30 hover:bg-purple-500/5",
+  }
+
+  const iconColors = {
+    gold: "text-[#D4AF37]",
+    emerald: "text-emerald-400",
+    blue: "text-blue-400",
+    purple: "text-purple-400",
+  }
+
+  return (
+    <a
+      href={href}
+      className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/10 bg-white/5 ${colors[color]} transition-all`}
+    >
+      <Icon className={`w-5 h-5 ${iconColors[color]} mb-2`} />
+      <span className="text-xs text-white/70">{label}</span>
+    </a>
   )
 }
 
@@ -327,17 +391,14 @@ function SystemStatusRow({
     pass: {
       icon: CheckCircle2,
       color: 'text-emerald-400',
-      label: 'OK',
     },
     warning: {
       icon: AlertTriangle,
       color: 'text-amber-400',
-      label: 'Warn',
     },
     fail: {
       icon: XCircle,
       color: 'text-red-400',
-      label: 'Down',
     },
   }
 
