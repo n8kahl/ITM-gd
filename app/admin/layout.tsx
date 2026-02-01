@@ -2,83 +2,29 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { LogOut, Bell, Menu, X, Search, Command } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-import { AdminSidebar, AdminMobileNav } from '@/components/admin/admin-sidebar'
+import { useRouter, usePathname } from 'next/navigation'
+import { Bell, Menu, X, Search, Command } from 'lucide-react'
+import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { cn } from '@/lib/utils'
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Check admin access - supports cookie auth and magic link tokens
-  useEffect(() => {
-    const checkAuth = async () => {
-      // Skip auth check for login page
-      if (pathname === '/admin/login') {
-        setIsAuthenticated(true) // Let login page render
-        return
-      }
-
-      // Check existing cookie first
-      const cookies = document.cookie.split(';')
-      const adminCookie = cookies.find(c => c.trim().startsWith('titm_admin='))
-
-      if (adminCookie?.includes('true')) {
-        setIsAuthenticated(true)
-        return
-      }
-
-      // Check for magic link token from Discord
-      const token = searchParams.get('token')
-      if (token) {
-        // Verify token is valid (not expired, not used)
-        const { data: tokenData, error } = await supabase
-          .from('admin_access_tokens')
-          .select('*')
-          .eq('token', token)
-          .is('used_at', null)
-          .gt('expires_at', new Date().toISOString())
-          .single()
-
-        if (tokenData && !error) {
-          // Mark token as used
-          await supabase
-            .from('admin_access_tokens')
-            .update({ used_at: new Date().toISOString() })
-            .eq('id', tokenData.id)
-
-          // Set auth cookie (24 hours)
-          document.cookie = 'titm_admin=true; path=/; max-age=86400'
-          setIsAuthenticated(true)
-
-          // Remove token from URL for cleaner look (keep the id param)
-          const convId = searchParams.get('id')
-          if (convId) {
-            router.replace(`${pathname}?id=${convId}`)
-          } else {
-            router.replace(pathname)
-          }
-          return
-        }
-      }
-
-      // No valid auth, redirect to login page
-      router.push('/admin/login')
-    }
-
-    checkAuth()
-  }, [router, searchParams, pathname])
-
+  // Auth is now handled by middleware - if we render, user is authenticated
   // Close mobile menu on route change
   useEffect(() => setMobileMenuOpen(false), [pathname])
 
-  if (!isAuthenticated) {
-    return null
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' })
+      router.push('/')
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: redirect anyway
+      router.push('/')
+    }
   }
 
   return (
@@ -149,10 +95,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
              <div className="h-8 w-[1px] bg-white/10 mx-1" />
 
              <button
-               onClick={() => {
-                 document.cookie = 'titm_admin=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-                 router.push('/')
-               }}
+               onClick={handleLogout}
                className="text-xs font-medium text-white/60 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/5 transition-all"
              >
                Exit

@@ -11,29 +11,70 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-// Get user ID from request (in production, verify with Discord OAuth)
-function getUserId(request: NextRequest): string {
-  // For demo, check cookie or use default
-  const cookies = request.cookies
-  const memberCookie = cookies.get('titm_member')
+/**
+ * Get authenticated user ID from Supabase session
+ * Returns null if not authenticated
+ */
+async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (memberCookie) {
-    try {
-      const session = JSON.parse(memberCookie.value)
-      return session.id
-    } catch {
-      // Fall through
+  if (!url || !anonKey) {
+    console.error('Missing Supabase environment variables')
+    return null
+  }
+
+  // Get the access token from Authorization header or cookies
+  const authHeader = request.headers.get('authorization')
+  let accessToken: string | null = null
+
+  if (authHeader?.startsWith('Bearer ')) {
+    accessToken = authHeader.substring(7)
+  } else {
+    // Try to get from Supabase auth cookie
+    const cookies = request.cookies.getAll()
+    const authCookie = cookies.find(c => c.name.includes('-auth-token'))
+    if (authCookie) {
+      try {
+        const parsed = JSON.parse(authCookie.value)
+        accessToken = parsed[0] || parsed.access_token
+      } catch {
+        // Cookie might be in different format
+      }
     }
   }
 
-  // Default demo user
-  return 'demo_user'
+  if (!accessToken) {
+    return null
+  }
+
+  // Verify the token with Supabase
+  const supabase = createClient(url, anonKey, {
+    global: {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  })
+
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    return null
+  }
+
+  return user.id
 }
 
 // GET - Fetch journal entries for user
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const userId = await getAuthenticatedUserId(request)
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized - please log in' },
+        { status: 401 }
+      )
+    }
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
@@ -89,7 +130,14 @@ export async function GET(request: NextRequest) {
 // POST - Create new journal entry
 export async function POST(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const userId = await getAuthenticatedUserId(request)
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized - please log in' },
+        { status: 401 }
+      )
+    }
     const body = await request.json()
 
     const {
@@ -154,7 +202,15 @@ export async function POST(request: NextRequest) {
 // PATCH - Update journal entry
 export async function PATCH(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const userId = await getAuthenticatedUserId(request)
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized - please log in' },
+        { status: 401 }
+      )
+    }
+
     const body = await request.json()
     const { id, ...updates } = body
 
@@ -190,7 +246,15 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete journal entry
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const userId = await getAuthenticatedUserId(request)
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized - please log in' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 

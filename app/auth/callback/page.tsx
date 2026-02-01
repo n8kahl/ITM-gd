@@ -4,23 +4,28 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Sparkles, AlertCircle, CheckCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { getSafeRedirect } from '@/lib/safe-redirect'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/members'
+  const redirectTo = getSafeRedirect(searchParams.get('redirect'))
 
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
   const [message, setMessage] = useState('Processing authentication...')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let isMounted = true
+
     const handleCallback = async () => {
       try {
         // Get the session from the URL hash (Supabase handles this)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+        if (!isMounted) return
 
         if (sessionError) {
           throw sessionError
@@ -32,12 +37,16 @@ function AuthCallbackContent() {
             window.location.href.split('?')[1] || ''
           )
 
+          if (!isMounted) return
+
           if (exchangeError) {
             throw exchangeError
           }
 
           // Get the new session
           const { data: { session: newSession }, error: newSessionError } = await supabase.auth.getSession()
+
+          if (!isMounted) return
 
           if (newSessionError || !newSession) {
             throw newSessionError || new Error('Failed to create session')
@@ -49,17 +58,32 @@ function AuthCallbackContent() {
 
         // Redirect after a short delay
         setTimeout(() => {
-          router.push(redirectTo)
+          if (isMounted) {
+            router.push(redirectTo)
+          }
         }, 1500)
       } catch (err) {
+        // Ignore AbortError - this happens when component unmounts during auth
+        // or when Supabase's internal lock is interrupted (benign)
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.log('Auth callback aborted (component unmounted or navigation)')
+          return
+        }
+
         console.error('Auth callback error:', err)
-        setStatus('error')
-        setError(err instanceof Error ? err.message : 'Authentication failed')
-        setMessage('Something went wrong during authentication')
+        if (isMounted) {
+          setStatus('error')
+          setError(err instanceof Error ? err.message : 'Authentication failed')
+          setMessage('Something went wrong during authentication')
+        }
       }
     }
 
     handleCallback()
+
+    return () => {
+      isMounted = false
+    }
   }, [router, redirectTo])
 
   return (

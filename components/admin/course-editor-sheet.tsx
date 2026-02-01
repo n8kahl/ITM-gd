@@ -272,7 +272,6 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                   </button>
                 ))}
               </div>
->>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
             </div>
 
             {/* Published Toggle */}

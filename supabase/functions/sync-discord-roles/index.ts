@@ -272,16 +272,27 @@ serve(async (req) => {
       }
 
       // Clean up permissions that are no longer granted by current roles
+      // Use filter to exclude current permissions (avoids SQL injection from string interpolation)
       const currentPermissionIds = permissionsToSync.map(p => p.permission_id)
-      const { error: cleanupError } = await supabaseAdmin
-        .from('user_permissions')
-        .delete()
-        .eq('user_id', user.id)
-        .not('permission_id', 'in', `(${currentPermissionIds.join(',')})`)
 
-      if (cleanupError) {
-        console.error('Error cleaning up old permissions:', cleanupError)
-        // Non-fatal: continue with response
+      // Supabase's .not().in() syntax requires parentheses for the filter value
+      // We validate UUIDs first to ensure safety
+      const validUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const sanitizedIds = currentPermissionIds.filter(id => validUuidRegex.test(id))
+
+      if (sanitizedIds.length !== currentPermissionIds.length) {
+        console.error('Invalid permission IDs detected, skipping cleanup')
+      } else if (sanitizedIds.length > 0) {
+        const { error: cleanupError } = await supabaseAdmin
+          .from('user_permissions')
+          .delete()
+          .eq('user_id', user.id)
+          .not('permission_id', 'in', `(${sanitizedIds.join(',')})`)
+
+        if (cleanupError) {
+          console.error('Error cleaning up old permissions:', cleanupError)
+          // Non-fatal: continue with response
+        }
       }
     } else {
       // No permissions to sync - remove all existing permissions for this user

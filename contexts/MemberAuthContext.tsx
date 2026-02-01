@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   type ReactNode
 } from 'react'
 import { useRouter } from 'next/navigation'
@@ -85,6 +86,34 @@ const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'execute'> = {
 // Rate limiting for sync operations
 const SYNC_COOLDOWN_MS = 30000 // 30 seconds
 
+// Request timeout for auth operations (15 seconds)
+const REQUEST_TIMEOUT_MS = 15000
+
+// Cross-tab sync channel name
+const AUTH_CHANNEL_NAME = 'titm-auth-sync'
+
+/**
+ * Helper to fetch with timeout
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+    return response
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
@@ -101,8 +130,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // Dynamic role mapping fetched from config API (role ID -> tier)
   const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'execute'>>(DEFAULT_ROLE_MAPPING)
 
-  // Rate limiting state for sync operations
-  const [lastSyncTime, setLastSyncTime] = useState(0)
+  // Rate limiting using ref (not state) to avoid race conditions
+  const lastSyncTimeRef = useRef(0)
+  const isSyncingRef = useRef(false)
+
+  // Cross-tab sync channel
+  const authChannelRef = useRef<BroadcastChannel | null>(null)
 
   // Fetch role mapping from config API on mount
   useEffect(() => {
@@ -135,23 +168,33 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return null
   }, [roleMapping])
 
-  // Sync Discord roles via Edge Function (with rate limiting)
+  // Sync Discord roles via Edge Function (with rate limiting and timeout)
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
-    // Rate limiting: prevent rapid sync calls
     const now = Date.now()
-    if (now - lastSyncTime < SYNC_COOLDOWN_MS) {
-      console.log('Sync cooldown active, skipping (wait', Math.ceil((SYNC_COOLDOWN_MS - (now - lastSyncTime)) / 1000), 'seconds)')
+
+    // Atomic check: if already syncing or in cooldown, skip
+    if (isSyncingRef.current) {
+      console.log('Sync already in progress, skipping')
       return null
     }
-    setLastSyncTime(now)
+
+    if (now - lastSyncTimeRef.current < SYNC_COOLDOWN_MS) {
+      console.log('Sync cooldown active, skipping (wait', Math.ceil((SYNC_COOLDOWN_MS - (now - lastSyncTimeRef.current)) / 1000), 'seconds)')
+      return null
+    }
+
+    // Set flags atomically before async operation
+    isSyncingRef.current = true
+    lastSyncTimeRef.current = now
 
     if (!state.session) {
       console.log('No session available for Discord sync')
+      isSyncingRef.current = false
       return null
     }
 
     try {
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`,
         {
           method: 'POST',
@@ -203,17 +246,32 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         errorCode: null,
       }))
 
+      // Notify other tabs of auth change
+      authChannelRef.current?.postMessage({ type: 'SYNC_COMPLETE', profile })
+
       return result as DiscordSyncResult
     } catch (error) {
-      console.error('Discord sync error:', error)
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to sync Discord roles',
-        errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
-      }))
+      // Handle timeout specifically
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('Discord sync timed out')
+        setState(prev => ({
+          ...prev,
+          error: 'Discord sync timed out. Please try again.',
+          errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
+        }))
+      } else {
+        console.error('Discord sync error:', error)
+        setState(prev => ({
+          ...prev,
+          error: error instanceof Error ? error.message : 'Failed to sync Discord roles',
+          errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
+        }))
+      }
       return null
+    } finally {
+      isSyncingRef.current = false
     }
-  }, [state.session, state.user, getMembershipTier, lastSyncTime])
+  }, [state.session, state.user, getMembershipTier])
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
@@ -393,10 +451,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [syncDiscordRoles, getMembershipTier])
 
-  // Sign out
+  // Sign out with full cleanup
   const signOut = useCallback(async () => {
     try {
       await supabase.auth.signOut()
+
+      // Clear all auth-related state
       setState({
         user: null,
         session: null,
@@ -407,9 +467,28 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         error: null,
         errorCode: null,
       })
+
+      // Clear any cached data from storage
+      try {
+        // Clear localStorage items (analytics session, etc.)
+        const keysToRemove = ['titm_session', 'titm_analytics', 'titm_user']
+        keysToRemove.forEach(key => localStorage.removeItem(key))
+
+        // Clear sessionStorage
+        sessionStorage.clear()
+      } catch (storageError) {
+        // Storage might not be available in some contexts
+        console.warn('Could not clear storage:', storageError)
+      }
+
+      // Notify other tabs of sign out
+      authChannelRef.current?.postMessage({ type: 'SIGNED_OUT' })
+
       router.push('/')
     } catch (error) {
       console.error('Sign out error:', error)
+      // Still redirect on error
+      router.push('/')
     }
   }, [router])
 
@@ -457,6 +536,51 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe()
     }
   }, [initializeAuth])
+
+  // Cross-tab session sync using BroadcastChannel
+  useEffect(() => {
+    // BroadcastChannel is not available in all environments (e.g., SSR)
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
+      return
+    }
+
+    const channel = new BroadcastChannel(AUTH_CHANNEL_NAME)
+    authChannelRef.current = channel
+
+    channel.onmessage = (event) => {
+      const { type, profile } = event.data
+
+      switch (type) {
+        case 'SIGNED_OUT':
+          // Another tab signed out, update this tab's state
+          console.log('Received SIGNED_OUT from another tab')
+          setState({
+            user: null,
+            session: null,
+            profile: null,
+            permissions: [],
+            isLoading: false,
+            isAuthenticated: false,
+            error: null,
+            errorCode: null,
+          })
+          break
+
+        case 'SYNC_COMPLETE':
+          // Another tab completed a sync, update profile
+          if (profile && state.isAuthenticated) {
+            console.log('Received SYNC_COMPLETE from another tab')
+            setState(prev => ({ ...prev, profile }))
+          }
+          break
+      }
+    }
+
+    return () => {
+      channel.close()
+      authChannelRef.current = null
+    }
+  }, [state.isAuthenticated])
 
   // Computed flag for NOT_MEMBER error
   const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
