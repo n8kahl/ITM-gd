@@ -6,10 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// TODO: Fetch GUILD_ID from app_settings table instead of hardcoding
-// For now, use environment variable or placeholder
-const DISCORD_GUILD_ID = Deno.env.get('DISCORD_GUILD_ID') || 'YOUR_GUILD_ID_HERE'
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
+
+// Error codes for specific error handling on frontend
+const ERROR_CODES = {
+  NOT_MEMBER: 'NOT_MEMBER',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  MISSING_TOKEN: 'MISSING_TOKEN',
+  INVALID_SESSION: 'INVALID_SESSION',
+  GUILD_NOT_CONFIGURED: 'GUILD_NOT_CONFIGURED',
+  SYNC_FAILED: 'SYNC_FAILED',
+} as const
 
 interface DiscordMember {
   user: {
@@ -21,13 +28,6 @@ interface DiscordMember {
   roles: string[]
   nick: string | null
   joined_at: string
-}
-
-interface DiscordRolePermission {
-  id: string
-  discord_role_id: string
-  discord_role_name: string | null
-  permission_id: string
 }
 
 interface AppPermission {
@@ -53,6 +53,12 @@ interface SyncResult {
   synced_at: string
 }
 
+interface SyncError {
+  success: false
+  error: string
+  code: string
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -67,7 +73,7 @@ serve(async (req) => {
     // Get the authorization header (user's JWT)
     const authHeader = req.headers.get('authorization')
     if (!authHeader) {
-      throw new Error('Missing authorization header')
+      return errorResponse('Missing authorization header', ERROR_CODES.INVALID_SESSION, 401)
     }
 
     // Create a client with the user's JWT to verify and get user info
@@ -80,32 +86,51 @@ serve(async (req) => {
     // Verify the JWT and get user
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
     if (userError || !user) {
-      throw new Error('Invalid or expired token')
+      return errorResponse('Invalid or expired token', ERROR_CODES.INVALID_SESSION, 401)
     }
 
     // Get the user's session to retrieve the provider token (Discord access token)
     const { data: { session }, error: sessionError } = await supabaseUser.auth.getSession()
     if (sessionError || !session) {
-      throw new Error('No active session found')
+      return errorResponse('No active session found', ERROR_CODES.INVALID_SESSION, 401)
     }
 
     const discordAccessToken = session.provider_token
     if (!discordAccessToken) {
-      throw new Error('Discord access token not found. Please re-authenticate with Discord.')
+      return errorResponse(
+        'Discord access token not found. Please re-authenticate with Discord.',
+        ERROR_CODES.MISSING_TOKEN,
+        401
+      )
     }
 
     // Create admin client for database operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // TODO: Optionally fetch GUILD_ID from app_settings
-    // const { data: guildSetting } = await supabaseAdmin
-    //   .from('app_settings')
-    //   .select('value')
-    //   .eq('key', 'discord_guild_id')
-    //   .single()
-    // const guildId = guildSetting?.value || DISCORD_GUILD_ID
+    // Fetch discord_guild_id from app_settings table
+    const { data: guildSetting, error: settingError } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'discord_guild_id')
+      .single()
 
-    const guildId = DISCORD_GUILD_ID
+    if (settingError || !guildSetting?.value) {
+      // Fallback to environment variable if not in database
+      const envGuildId = Deno.env.get('DISCORD_GUILD_ID')
+      if (!envGuildId) {
+        console.error('Discord Guild ID not configured in app_settings or environment')
+        return errorResponse(
+          'Discord server not configured. Please contact support.',
+          ERROR_CODES.GUILD_NOT_CONFIGURED,
+          500
+        )
+      }
+      console.log('Using DISCORD_GUILD_ID from environment variable')
+      var guildId = envGuildId
+    } else {
+      console.log('Using discord_guild_id from app_settings')
+      var guildId = guildSetting.value
+    }
 
     // Call Discord API to get user's guild member info
     const discordResponse = await fetch(
@@ -122,12 +147,27 @@ serve(async (req) => {
       console.error('Discord API error:', discordResponse.status, errorText)
 
       if (discordResponse.status === 401) {
-        throw new Error('Discord token expired. Please re-authenticate.')
+        return errorResponse(
+          'Discord token expired. Please re-authenticate.',
+          ERROR_CODES.TOKEN_EXPIRED,
+          401
+        )
       }
+
       if (discordResponse.status === 404) {
-        throw new Error('User is not a member of the TradeITM Discord server.')
+        // User is NOT a member of the Discord server
+        return errorResponse(
+          'You must be a member of the TradeITM Discord server to access this area.',
+          ERROR_CODES.NOT_MEMBER,
+          403
+        )
       }
-      throw new Error(`Discord API error: ${discordResponse.status}`)
+
+      return errorResponse(
+        `Discord API error: ${discordResponse.status}`,
+        ERROR_CODES.SYNC_FAILED,
+        500
+      )
     }
 
     const memberData: DiscordMember = await discordResponse.json()
@@ -156,7 +196,7 @@ serve(async (req) => {
 
     if (rpError) {
       console.error('Error fetching role permissions:', rpError)
-      throw new Error('Failed to fetch role permissions')
+      return errorResponse('Failed to fetch role permissions', ERROR_CODES.SYNC_FAILED, 500)
     }
 
     // Build a map of permission_id -> role info (for deduplication)
@@ -224,7 +264,7 @@ serve(async (req) => {
 
       if (insertError) {
         console.error('Error inserting permissions:', insertError)
-        throw new Error('Failed to update user permissions')
+        return errorResponse('Failed to update user permissions', ERROR_CODES.SYNC_FAILED, 500)
       }
     }
 
@@ -264,15 +304,22 @@ serve(async (req) => {
   } catch (error) {
     console.error('Sync error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: errorMessage,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
-    )
+    return errorResponse(errorMessage, ERROR_CODES.SYNC_FAILED, 500)
   }
 })
+
+// Helper function to return consistent error responses
+function errorResponse(message: string, code: string, status: number): Response {
+  const error: SyncError = {
+    success: false,
+    error: message,
+    code,
+  }
+  return new Response(
+    JSON.stringify(error),
+    {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status,
+    }
+  )
+}

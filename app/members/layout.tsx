@@ -20,7 +20,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
+import { MemberAuthProvider, useMemberAuth, SYNC_ERROR_CODES } from '@/contexts/MemberAuthContext'
 
 // ============================================
 // NAVIGATION CONFIG
@@ -75,6 +75,8 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     isLoading,
     isAuthenticated,
     error,
+    errorCode,
+    isNotMember,
     signOut,
     syncDiscordRoles,
     hasPermission,
@@ -86,6 +88,13 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       router.push('/login?redirect=/members')
     }
   }, [isLoading, isAuthenticated, router])
+
+  // Redirect to join-discord page if user is not a member of the Discord server
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && isNotMember) {
+      router.push('/join-discord')
+    }
+  }, [isLoading, isAuthenticated, isNotMember, router])
 
   // Filter navigation based on permissions
   const filteredNavigation = navigation.filter(item => {
@@ -113,6 +122,18 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
         <div className="text-center">
           <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
           <p className="text-white/60">Redirecting to login...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Not a member of the Discord server (will redirect)
+  if (isNotMember) {
+    return (
+      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <p className="text-white/60">Redirecting to join Discord...</p>
         </div>
       </div>
     )

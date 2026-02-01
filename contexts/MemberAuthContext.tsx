@@ -34,6 +34,18 @@ export interface MemberProfile {
   membership_tier: 'core' | 'pro' | 'execute' | null
 }
 
+// Error codes from sync-discord-roles edge function
+export const SYNC_ERROR_CODES = {
+  NOT_MEMBER: 'NOT_MEMBER',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  MISSING_TOKEN: 'MISSING_TOKEN',
+  INVALID_SESSION: 'INVALID_SESSION',
+  GUILD_NOT_CONFIGURED: 'GUILD_NOT_CONFIGURED',
+  SYNC_FAILED: 'SYNC_FAILED',
+} as const
+
+export type SyncErrorCode = typeof SYNC_ERROR_CODES[keyof typeof SYNC_ERROR_CODES]
+
 interface MemberAuthState {
   user: User | null
   session: Session | null
@@ -42,6 +54,7 @@ interface MemberAuthState {
   isLoading: boolean
   isAuthenticated: boolean
   error: string | null
+  errorCode: SyncErrorCode | null
 }
 
 interface MemberAuthContextValue extends MemberAuthState {
@@ -49,6 +62,7 @@ interface MemberAuthContextValue extends MemberAuthState {
   syncDiscordRoles: () => Promise<DiscordSyncResult | null>
   hasPermission: (permissionName: string) => boolean
   refresh: () => Promise<void>
+  isNotMember: boolean
 }
 
 // ============================================
@@ -71,6 +85,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
     isAuthenticated: false,
     error: null,
+    errorCode: null,
   })
 
   // Derive membership tier from Discord roles
@@ -115,8 +130,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       const result = await response.json()
 
       if (!result.success) {
-        console.error('Discord sync failed:', result.error)
-        setState(prev => ({ ...prev, error: result.error }))
+        console.error('Discord sync failed:', result.error, 'Code:', result.code)
+        setState(prev => ({
+          ...prev,
+          error: result.error,
+          errorCode: result.code || null,
+        }))
         return null
       }
 
@@ -146,6 +165,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         profile,
         permissions,
         error: null,
+        errorCode: null,
       }))
 
       return result as DiscordSyncResult
@@ -154,6 +174,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to sync Discord roles',
+        errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
       }))
       return null
     }
@@ -322,6 +343,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             profile,
             isLoading: false,
             error: result.error || 'Failed to sync Discord roles',
+            errorCode: result.code || null,
           }))
         }
       }
@@ -347,6 +369,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         isLoading: false,
         isAuthenticated: false,
         error: null,
+        errorCode: null,
       })
       router.push('/')
     } catch (error) {
@@ -383,6 +406,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             isLoading: false,
             isAuthenticated: false,
             error: null,
+            errorCode: null,
           })
         } else if (event === 'SIGNED_IN' && session) {
           // Re-initialize auth
@@ -398,12 +422,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [initializeAuth])
 
+  // Computed flag for NOT_MEMBER error
+  const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
+
   const value: MemberAuthContextValue = {
     ...state,
     signOut,
     syncDiscordRoles,
     hasPermission,
     refresh,
+    isNotMember,
   }
 
   return (
