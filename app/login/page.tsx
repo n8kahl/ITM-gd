@@ -239,11 +239,11 @@ function LoginContent() {
             {/* Legal Links */}
             <p className="text-center text-white/40 text-xs">
               By continuing, you agree to our{' '}
-              <Link href="/terms" className="text-emerald-500 hover:underline">
+              <Link href="/terms-of-service" className="text-emerald-500 hover:underline">
                 Terms of Service
               </Link>
               {' '}and{' '}
-              <Link href="/privacy" className="text-emerald-500 hover:underline">
+              <Link href="/privacy-policy" className="text-emerald-500 hover:underline">
                 Privacy Policy
               </Link>
             </p>
