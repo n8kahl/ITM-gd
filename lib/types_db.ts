@@ -88,3 +88,80 @@ export type DiscordRolePermissionInsert = Omit<DiscordRolePermission, 'id' | 'cr
 
 export type CourseUpdate = Partial<CourseInsert>
 export type LessonUpdate = Partial<LessonInsert>
+
+// Trading Journal Types
+// ============================================
+
+export interface TradingJournalEntry {
+  id: string
+  user_id: string
+  trade_date: string
+  symbol: string | null
+  trade_type: string | null
+  entry_price: number | null
+  exit_price: number | null
+  position_size: number | null
+  profit_loss: number | null
+  profit_loss_percent: number | null
+  screenshot_url: string | null
+  screenshot_thumbnail_url: string | null
+  ai_analysis: AITradeAnalysis | null
+  setup_notes: string | null
+  execution_notes: string | null
+  lessons_learned: string | null
+  tags: string[]
+  rating: number | null
+  is_winner: boolean | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AITradeAnalysis {
+  summary: string
+  trend_analysis?: {
+    direction: 'bullish' | 'bearish' | 'sideways'
+    strength: 'strong' | 'moderate' | 'weak'
+    notes: string
+  }
+  entry_analysis?: {
+    quality: 'excellent' | 'good' | 'fair' | 'poor'
+    observations: string[]
+    improvements: string[]
+  }
+  exit_analysis?: {
+    quality: 'excellent' | 'good' | 'fair' | 'poor'
+    observations: string[]
+    improvements: string[]
+  }
+  risk_management?: {
+    score: number
+    observations: string[]
+    suggestions: string[]
+  }
+  market_structure?: {
+    key_levels: string[]
+    patterns: string[]
+    notes: string
+  }
+  coaching_notes: string
+  grade: string
+  tags: string[]
+  analyzed_at: string
+  model: string
+}
+
+export interface JournalStreak {
+  id: string
+  user_id: string
+  current_streak: number
+  longest_streak: number
+  last_entry_date: string | null
+  total_entries: number
+  total_winners: number
+  total_losers: number
+  created_at: string
+  updated_at: string
+}
+
+export type TradingJournalEntryInsert = Omit<TradingJournalEntry, 'id' | 'created_at' | 'updated_at'>
+export type TradingJournalEntryUpdate = Partial<TradingJournalEntryInsert>

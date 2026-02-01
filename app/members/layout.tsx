@@ -28,7 +28,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/members', icon: LayoutDashboard },
   { name: 'Course Library', href: '/members/library', icon: BookOpen },
-  { name: 'Trade Journal', href: '/members/journal', icon: Notebook, badge: 'Soon' },
+  { name: 'Trade Journal', href: '/members/journal', icon: Notebook, badge: 'New' },
   { name: 'Achievements', href: '/members/achievements', icon: Trophy, badge: 'Soon' },
   { name: 'Profile', href: '/members/profile', icon: User },
   { name: 'Settings', href: '/members/settings', icon: Settings },
