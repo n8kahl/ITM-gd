@@ -184,7 +184,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
               <div
                 className="absolute -inset-[1px] rounded-2xl pointer-events-none"
                 style={{
-                  background: "linear-gradient(135deg, rgba(212,175,55,0.4) 0%, rgba(232,228,217,0.3) 50%, rgba(212,175,55,0.4) 100%)",
+                  background: "linear-gradient(135deg, rgba(16, 185, 129,0.4) 0%, rgba(232,228,217,0.3) 50%, rgba(16, 185, 129,0.4) 100%)",
                 }}
               />
 
@@ -239,7 +239,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                           transition={{ type: "spring", stiffness: 300, damping: 20 }}
                           className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4"
                         >
-                          <CheckCircle className="w-8 h-8 text-[#D4AF37]" />
+                          <CheckCircle className="w-8 h-8 text-[#10B981]" />
                         </motion.div>
                         <h3 className="text-xl font-semibold text-ivory mb-2">You&apos;re In The Running!</h3>
                         <p className="text-ivory/60 text-sm max-w-sm mx-auto">
@@ -338,8 +338,8 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                           type="submit"
                           className={cn(
                             "w-full h-12 rounded-lg font-semibold",
-                            "bg-gradient-to-r from-[#D4AF37] to-champagne",
-                            "text-onyx hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]",
+                            "bg-gradient-to-r from-[#10B981] to-champagne",
+                            "text-onyx hover:shadow-[0_0_20px_rgba(16, 185, 129,0.3)]",
                             "flex items-center justify-center gap-2",
                             "transition-all duration-300"
                           )}
@@ -371,7 +371,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 className={cn(
                                   "p-4 rounded-xl border text-center transition-all duration-300",
                                   step2Form.watch("experience_level") === option.value
-                                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
+                                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(16, 185, 129,0.2)]"
                                     : "bg-white/5 border-white/10 hover:border-white/20"
                                 )}
                               >
@@ -399,7 +399,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 className={cn(
                                   "p-4 rounded-xl border text-center transition-all duration-300",
                                   step2Form.watch("account_size") === option.value
-                                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
+                                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(16, 185, 129,0.2)]"
                                     : "bg-white/5 border-white/10 hover:border-white/20"
                                 )}
                               >
@@ -427,8 +427,8 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                             type="submit"
                             className={cn(
                               "flex-1 h-12 rounded-lg font-semibold",
-                              "bg-gradient-to-r from-[#D4AF37] to-champagne",
-                              "text-onyx hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]",
+                              "bg-gradient-to-r from-[#10B981] to-champagne",
+                              "text-onyx hover:shadow-[0_0_20px_rgba(16, 185, 129,0.3)]",
                               "flex items-center justify-center gap-2",
                               "transition-all duration-300"
                             )}
@@ -517,8 +517,8 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                             disabled={isSubmitting}
                             className={cn(
                               "flex-1 h-12 rounded-lg font-semibold",
-                              "bg-gradient-to-r from-[#D4AF37] to-champagne",
-                              "text-onyx hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]",
+                              "bg-gradient-to-r from-[#10B981] to-champagne",
+                              "text-onyx hover:shadow-[0_0_20px_rgba(16, 185, 129,0.3)]",
                               "flex items-center justify-center gap-2",
                               "transition-all duration-300",
                               "disabled:opacity-50 disabled:cursor-not-allowed"
