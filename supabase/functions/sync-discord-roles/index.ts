@@ -115,22 +115,16 @@ serve(async (req) => {
       .single()
 
     if (settingError || !guildSetting?.value) {
-      // Fallback to environment variable if not in database
-      const envGuildId = Deno.env.get('DISCORD_GUILD_ID')
-      if (!envGuildId) {
-        console.error('Discord Guild ID not configured in app_settings or environment')
-        return errorResponse(
-          'Discord server not configured. Please contact support.',
-          ERROR_CODES.GUILD_NOT_CONFIGURED,
-          500
-        )
-      }
-      console.log('Using DISCORD_GUILD_ID from environment variable')
-      var guildId = envGuildId
-    } else {
-      console.log('Using discord_guild_id from app_settings')
-      var guildId = guildSetting.value
+      console.error('Discord Guild ID not configured in app_settings')
+      return errorResponse(
+        'System Configuration Error: Discord Guild ID not set.',
+        ERROR_CODES.GUILD_NOT_CONFIGURED,
+        500
+      )
     }
+
+    const guildId = guildSetting.value
+    console.log('Using discord_guild_id from app_settings')
 
     // Call Discord API to get user's guild member info
     const discordResponse = await fetch(

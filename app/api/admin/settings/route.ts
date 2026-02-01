@@ -21,10 +21,7 @@ async function isAdmin(): Promise<boolean> {
 // Sensitive keys that should be masked
 const SENSITIVE_KEYS = [
   'discord_bot_token',
-  'telegram_bot_token',
-  'openai_api_key',
-  'stripe_secret_key',
-  'webhook_secret',
+  'discord_client_secret',
 ]
 
 // GET - Fetch all settings
