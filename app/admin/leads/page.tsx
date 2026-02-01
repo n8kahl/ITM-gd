@@ -20,7 +20,7 @@ import {
   Target,
   Sparkles
 } from "lucide-react"
-import { getCohortApplications, updateCohortApplicationStatus, CohortApplication, ApplicationMetadata } from "@/lib/supabase"
+import { CohortApplication, ApplicationMetadata } from "@/lib/supabase"
 
 type StatusFilter = 'all' | CohortApplication['status']
 
@@ -61,12 +61,21 @@ export default function LeadsPage() {
     checkAuth()
   }, [router])
 
-  // Load applications
+  // Load applications via API route (uses service role for RLS bypass)
   const loadData = async () => {
     setLoading(true)
     try {
-      const data = await getCohortApplications(1000, 0, statusFilter === 'all' ? undefined : statusFilter)
-      setApplications(data || [])
+      const params = new URLSearchParams()
+      if (statusFilter !== 'all') {
+        params.set('status', statusFilter)
+      }
+      const response = await fetch(`/api/admin/leads?${params.toString()}`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load applications')
+      }
+      const result = await response.json()
+      setApplications(result.data || [])
     } catch (error) {
       console.error('Failed to load applications:', error)
     } finally {
@@ -78,11 +87,19 @@ export default function LeadsPage() {
     loadData()
   }, [statusFilter])
 
-  // Update application status
+  // Update application status via API route
   const handleStatusUpdate = async (id: string, newStatus: CohortApplication['status']) => {
     setUpdating(id)
     try {
-      await updateCohortApplicationStatus(id, newStatus, undefined, 'Admin')
+      const response = await fetch('/api/admin/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: newStatus, reviewed_by: 'Admin' }),
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update status')
+      }
       // Update local state
       setApplications(prev => prev.map(app =>
         app.id === id ? { ...app, status: newStatus, reviewed_at: new Date().toISOString() } : app
