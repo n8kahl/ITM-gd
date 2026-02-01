@@ -8,6 +8,7 @@ import { ArrowLeft, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 import { AuroraBackground } from '@/components/ui/aurora-background'
+import SparkleLog from '@/components/ui/sparkle-logo'
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -84,8 +85,17 @@ function LoginContent() {
       <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center relative overflow-hidden">
         <AuroraBackground />
         <div className="text-center relative z-10">
-          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]" />
+          <div className="mx-auto mb-4">
+            <SparkleLog
+              src="/logo.png"
+              alt="TradeITM"
+              width={48}
+              height={48}
+              sparkleCount={8}
+              enableFloat={false}
+              enableGlow={true}
+              glowIntensity="medium"
+            />
           </div>
           <p className="text-white/60">Checking authentication...</p>
         </div>
@@ -114,12 +124,16 @@ function LoginContent() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="relative w-20 h-20 mx-auto mb-4 animate-pulse-subtle">
-              <Image
+            <div className="mx-auto mb-4 flex justify-center">
+              <SparkleLog
                 src="/logo.png"
                 alt="TradeITM"
-                fill
-                className="object-contain drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+                width={80}
+                height={80}
+                sparkleCount={12}
+                enableFloat={true}
+                enableGlow={true}
+                glowIntensity="medium"
               />
             </div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent mb-2">
@@ -245,8 +259,17 @@ export default function LoginPage() {
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <AuroraBackground />
         <div className="text-center relative z-10">
-          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]" />
+          <div className="mx-auto mb-4">
+            <SparkleLog
+              src="/logo.png"
+              alt="TradeITM"
+              width={48}
+              height={48}
+              sparkleCount={8}
+              enableFloat={false}
+              enableGlow={true}
+              glowIntensity="medium"
+            />
           </div>
           <p className="text-white/60">Loading...</p>
         </div>

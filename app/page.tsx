@@ -28,6 +28,7 @@ import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
 import { BillingToggle } from "@/components/ui/billing-toggle";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
+import SparkleLog from "@/components/ui/sparkle-logo";
 
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
@@ -124,54 +125,25 @@ export default function Home() {
         {/* Main Content - Logo Centered */}
         <div className="container mx-auto relative z-20">
           <div className="flex flex-col items-center justify-center text-center space-y-10">
-            {/* Logo with Backlight Effect */}
-            <div className="relative">
-              {/* Pulsing Backlight Glow */}
-              <motion.div
-                className="absolute inset-0 -inset-x-20 -inset-y-10"
-                style={{
-                  background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.4) 0%, rgba(212, 175, 55, 0.2) 40%, transparent 70%)",
-                  filter: "blur(60px)",
-                }}
-                animate={{
-                  scale: [1, 1.15, 1],
-                  opacity: [0.6, 0.9, 0.6],
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
+            {/* Logo with Sparkle Effects */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1.2, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              <SparkleLog
+                src="/hero-logo.png"
+                alt="TradeITM"
+                width={600}
+                height={200}
+                sparkleCount={20}
+                enableFloat={true}
+                enableGlow={true}
+                glowIntensity="high"
+                className="w-[80vw] md:w-[600px]"
+                priority
               />
-
-              {/* Floating Logo */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 1.2, ease: [0.25, 0.4, 0.25, 1] }}
-              >
-                <motion.div
-                  animate={{
-                    y: [0, -10, 0],
-                  }}
-                  transition={{
-                    duration: 6,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                >
-                  <Image
-                    src="/hero-logo.png"
-                    alt="TradeITM"
-                    width={600}
-                    height={200}
-                    sizes="(max-width: 768px) 80vw, 600px"
-                    className="w-[80vw] md:w-[600px] h-auto object-contain drop-shadow-[0_0_40px_rgba(4,120,87,0.3)]"
-                    priority
-                  />
-                </motion.div>
-              </motion.div>
-            </div>
+            </motion.div>
 
             {/* Powerful Value Proposition */}
             <motion.div
