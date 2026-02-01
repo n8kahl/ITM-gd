@@ -28,9 +28,9 @@ export async function GET() {
     sameSite: 'lax',
   })
 
-  // Use request URL origin in production, never localhost
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
+  // Use Railway production URL or localhost for dev
+  const origin = process.env.NODE_ENV === 'production'
+    ? 'https://trade-itm-prod.up.railway.app'
     : 'http://localhost:3000'
   return NextResponse.redirect(new URL('/', origin))
 }
