@@ -4,7 +4,7 @@
  */
 
 // Whitelist of allowed redirect path prefixes
-const ALLOWED_PREFIXES = ['/members', '/admin', '/login', '/']
+const ALLOWED_PREFIXES = ['/members', '/admin', '/login', '/join-discord', '/']
 
 /**
  * Validates a redirect URL and returns a safe version.

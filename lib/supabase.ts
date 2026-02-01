@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserSupabase } from './supabase-browser'
 
 // Re-export types from centralized types_db.ts
 export type {
@@ -40,10 +40,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 /**
  * Client-side Supabase client for browser operations.
- * Note: OAuth code exchange is handled server-side via /auth/callback route
- * to ensure cookies are set correctly for middleware authentication.
+ *
+ * IMPORTANT: This now uses @supabase/ssr browser client which automatically syncs
+ * auth sessions to httpOnly cookies, making them accessible to middleware and server components.
+ *
+ * OAuth code exchange is handled server-side via /api/auth/callback route to ensure
+ * cookies are set correctly before any client-side redirects.
+ *
+ * @deprecated For new code, prefer importing { createBrowserSupabase } from '@/lib/supabase-browser'
+ * and calling createBrowserSupabase() to get a fresh client instance. This singleton is kept
+ * for backwards compatibility with existing utility functions.
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createBrowserSupabase()
 
 // ============================================
 // SUBSCRIBER FUNCTIONS

@@ -90,6 +90,22 @@ export async function middleware(request: NextRequest) {
   }
 
   // ============================================
+  // JOIN DISCORD PAGE - ALLOW AUTHENTICATED USERS
+  // ============================================
+  if (pathname === '/join-discord') {
+    // This page is for authenticated users who are NOT Discord members
+    // Allow access if authenticated, redirect to login if not
+    if (!isAuthenticated) {
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirect', pathname)
+      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+    }
+
+    // Authenticated users can access this page (even if not Discord members)
+    return addSecurityHeaders(response)
+  }
+
+  // ============================================
   // LOGIN PAGE - REDIRECT IF ALREADY AUTHENTICATED
   // ============================================
   if (pathname === '/login') {
@@ -124,9 +140,13 @@ export const config = {
     '/admin/:path*',
     // Members routes - protected by authentication
     '/members/:path*',
+    // Join Discord page - for authenticated non-members
+    '/join-discord',
     // Login page - redirect if already authenticated
     '/login',
     // Auth callback - needs session refresh
     '/auth/callback',
+    // API auth callback - server-side OAuth handling
+    '/api/auth/callback',
   ],
 }
