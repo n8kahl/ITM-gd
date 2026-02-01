@@ -139,7 +139,7 @@ function LoginContent() {
             <Button
               onClick={handleDiscordLogin}
               disabled={isLoading}
-              className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-7 text-lg font-semibold shadow-lg shadow-[#5865F2]/20"
+              className="w-full h-14 bg-[#5865F2] hover:bg-[#4752C4] text-white text-lg font-semibold shadow-[0_0_30px_-10px_#5865F2]"
             >
               {isLoading ? (
                 <>
@@ -202,16 +202,27 @@ function LoginContent() {
           </div>
 
           {/* Footer */}
-          <p className="text-center text-white/40 text-xs mt-6">
-            By continuing, you agree to our{' '}
-            <Link href="/terms" className="text-[#D4AF37] hover:underline">
-              Terms of Service
-            </Link>
-            {' '}and{' '}
-            <Link href="/privacy" className="text-[#D4AF37] hover:underline">
-              Privacy Policy
-            </Link>
-          </p>
+          <div className="mt-6 space-y-3">
+            {/* System Status */}
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-emerald-500/50 text-[10px] font-medium tracking-wider uppercase">
+                All Systems Operational
+              </p>
+            </div>
+
+            {/* Legal Links */}
+            <p className="text-center text-white/40 text-xs">
+              By continuing, you agree to our{' '}
+              <Link href="/terms" className="text-[#D4AF37] hover:underline">
+                Terms of Service
+              </Link>
+              {' '}and{' '}
+              <Link href="/privacy" className="text-[#D4AF37] hover:underline">
+                Privacy Policy
+              </Link>
+            </p>
+          </div>
         </div>
       </main>
     </div>

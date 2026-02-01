@@ -245,10 +245,10 @@ export default function Home() {
               {/* Member Login Link */}
               <Link
                 href="/login"
-                className="text-xs text-white/40 hover:text-white transition-colors cursor-pointer"
+                className="mt-4 text-xs text-white/30 hover:text-white transition-colors cursor-pointer"
                 onClick={() => Analytics.trackCTAClick('Hero Member Login')}
               >
-                Already trading? Enter Terminal →
+                Already inside? Enter Terminal
               </Link>
             </motion.div>
           </div>
