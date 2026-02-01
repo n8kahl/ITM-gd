@@ -28,5 +28,9 @@ export async function GET() {
     sameSite: 'lax',
   })
 
-  return NextResponse.redirect(new URL('/', process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
+  // Use request URL origin in production, never localhost
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000'
+  return NextResponse.redirect(new URL('/', origin))
 }

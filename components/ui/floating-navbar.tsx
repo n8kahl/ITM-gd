@@ -82,7 +82,7 @@ export function FloatingNavbar() {
           <div className="hidden md:flex items-center gap-4">
             {/* Member Login */}
             <Link
-              href="/login"
+              href="/login?redirect=/members"
               className={cn(
                 "flex items-center gap-2 px-3 py-2 rounded-sm",
                 "text-sm font-light tracking-wide",
@@ -158,7 +158,7 @@ export function FloatingNavbar() {
 
             {/* Member Login Link */}
             <Link
-              href="/login"
+              href="/login?redirect=/members"
               onClick={() => setIsMobileMenuOpen(false)}
               className={cn(
                 "flex items-center gap-3 h-12 px-2",
