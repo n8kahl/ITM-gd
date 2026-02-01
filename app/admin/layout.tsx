@@ -18,6 +18,12 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   // Check admin access - supports cookie auth and magic link tokens
   useEffect(() => {
     const checkAuth = async () => {
+      // Skip auth check for login page
+      if (pathname === '/admin/login') {
+        setIsAuthenticated(true) // Let login page render
+        return
+      }
+
       // Check existing cookie first
       const cookies = document.cookie.split(';')
       const adminCookie = cookies.find(c => c.trim().startsWith('titm_admin='))
@@ -61,8 +67,8 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // No valid auth, redirect to home
-      router.push('/')
+      // No valid auth, redirect to login page
+      router.push('/admin/login')
     }
 
     checkAuth()
