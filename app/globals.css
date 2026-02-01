@@ -45,9 +45,10 @@
   --sidebar-ring: #E8E4D9;
 
   /* Luxury Color Palette */
-  --champagne: #E8E4D9;
+  --champagne: #F3E5AB;        /* Updated to warmer champagne accent */
   --champagne-light: #F5F3ED;
   --champagne-dark: #B8B5AD;
+  --emerald-elite: #10B981;    /* New brighter emerald primary */
   --wealth-emerald: #047857;
   --wealth-emerald-light: #059669;
   --wealth-emerald-dark: #065F46;
@@ -158,6 +159,7 @@
   --color-champagne: var(--champagne);
   --color-champagne-light: var(--champagne-light);
   --color-champagne-dark: var(--champagne-dark);
+  --color-emerald-elite: var(--emerald-elite);
   --color-wealth-emerald: var(--wealth-emerald);
   --color-wealth-emerald-light: var(--wealth-emerald-light);
   --color-wealth-emerald-dark: var(--wealth-emerald-dark);
@@ -630,13 +632,13 @@
 
 /* Utility Layer */
 @layer utilities {
-  /* Selection styling - Luxury */
+  /* Selection styling - Emerald Elite */
   ::selection {
-    background: rgba(4, 120, 87, 0.25);
-    color: #F5F5F0;
+    background: rgba(16, 185, 129, 0.3); /* Emerald Elite */
+    color: #fff;
   }
 
-  /* Scrollbar styling - Minimal Luxury */
+  /* Scrollbar styling - Emerald Luxury */
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
@@ -647,12 +649,12 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(232, 228, 217, 0.15);
+    background: rgba(16, 185, 129, 0.2); /* Emerald Elite */
     border-radius: 2px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(232, 228, 217, 0.25);
+    background: rgba(16, 185, 129, 0.5);
   }
 
   /* Focus visible styling */
@@ -837,11 +839,28 @@
     background-clip: text;
   }
 
+  /* Emerald Elite & Champagne Accent Utilities */
+  .text-emerald-elite {
+    color: #10B981;
+  }
+
+  .bg-emerald-elite {
+    background-color: #10B981;
+  }
+
+  .text-champagne {
+    color: #F3E5AB;
+  }
+
+  .border-champagne {
+    border-color: #F3E5AB;
+  }
+
   /* ============================================
      ADMIN PANEL - LUXURY SCROLLBAR & UTILITIES
      ============================================ */
 
-  /* Luxury Scrollbar for Admin */
+  /* Emerald Scrollbar for Admin */
   .admin-content-area::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -852,12 +871,12 @@
   }
 
   .admin-content-area::-webkit-scrollbar-thumb {
-    background: rgba(212, 175, 55, 0.2);
+    background: rgba(16, 185, 129, 0.2); /* Emerald Elite */
     border-radius: 10px;
   }
 
   .admin-content-area::-webkit-scrollbar-thumb:hover {
-    background: rgba(212, 175, 55, 0.4);
+    background: rgba(16, 185, 129, 0.5);
   }
 
   /* Admin Dashboard Content Area */
