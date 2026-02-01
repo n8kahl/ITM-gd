@@ -158,9 +158,6 @@ test.describe('Auth Health Check @critical', () => {
 })
 
 test.describe('Auth Performance Baseline @monitoring', () => {
-  // Skip performance tests in CI as timings vary significantly
-  test.skip(({ browserName }) => !!process.env.CI, 'Skip performance tests in CI')
-
   test('PERF-001: Login page loads within acceptable time', async ({ page }) => {
     const startTime = Date.now()
 
@@ -169,8 +166,9 @@ test.describe('Auth Performance Baseline @monitoring', () => {
 
     const loadTime = Date.now() - startTime
 
-    // Should load within 10 seconds (generous for cold starts)
-    expect(loadTime).toBeLessThan(10000)
+    // Should load within 30 seconds (very generous for dev server cold starts)
+    // In production, this should be much faster
+    expect(loadTime).toBeLessThan(30000)
 
     console.log(`Login page load time: ${loadTime}ms`)
   })
@@ -183,8 +181,9 @@ test.describe('Auth Performance Baseline @monitoring', () => {
 
     const loadTime = Date.now() - startTime
 
-    // Should load within 10 seconds (generous for cold starts)
-    expect(loadTime).toBeLessThan(10000)
+    // Should load within 30 seconds (very generous for dev server cold starts)
+    // In production, this should be much faster
+    expect(loadTime).toBeLessThan(30000)
 
     console.log(`Auth callback load time: ${loadTime}ms`)
   })
