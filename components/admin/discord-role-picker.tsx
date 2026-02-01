@@ -31,13 +31,21 @@ export function DiscordRolePicker({ value, onChange, disabled }: DiscordRolePick
     try {
       const res = await fetch('/api/admin/discord/roles')
       const data = await res.json()
+
+      console.log('Discord roles API response:', data)
+
       if (data.success) {
-        setRoles(data.roles)
+        setRoles(data.roles || [])
+        console.log('Loaded Discord roles:', data.roles?.length || 0)
       } else {
-        setError(data.error)
+        const errorMsg = data.error || 'Unknown error'
+        console.error('Discord roles API error:', errorMsg)
+        setError(errorMsg)
       }
     } catch (e) {
-      setError('Failed to load roles')
+      const errorMsg = e instanceof Error ? e.message : 'Failed to load roles'
+      console.error('Discord roles fetch error:', e)
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }
@@ -115,15 +123,22 @@ export function DiscordRolePicker({ value, onChange, disabled }: DiscordRolePick
                 Fetching from Discord...
               </div>
             ) : error ? (
-              <div className="flex flex-col items-center justify-center p-4 text-red-400">
-                <span className="text-xs mb-2">{error}</span>
-                <Button size="sm" variant="ghost" onClick={fetchRoles}>
+              <div className="flex flex-col items-center justify-center p-4 space-y-2">
+                <div className="text-xs text-red-400 text-center max-w-xs">
+                  {error}
+                </div>
+                {error.includes('configuration missing') && (
+                  <div className="text-xs text-white/40 text-center max-w-xs">
+                    Go to Admin → Settings → Discord to configure bot token and guild ID
+                  </div>
+                )}
+                <Button size="sm" variant="ghost" onClick={fetchRoles} className="text-red-400 hover:text-red-300">
                   Retry
                 </Button>
               </div>
             ) : filteredRoles.length === 0 ? (
               <div className="p-4 text-center text-white/40 text-sm">
-                No role found.
+                {roles.length === 0 ? 'No Discord roles found' : 'No matching roles'}
               </div>
             ) : (
               <div>

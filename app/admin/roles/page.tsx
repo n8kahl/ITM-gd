@@ -469,7 +469,12 @@ export default function RolesPage() {
           <div className="grid sm:grid-cols-3 gap-4">
             <TemplateCard
               name="Core Sniper"
-              permissions={['view_courses']}
+              permissions={[
+                'access_core_content',
+                'access_trading_journal',
+                'access_course_library',
+                'access_live_alerts'
+              ]}
               allPermissions={permissions}
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
@@ -485,7 +490,16 @@ export default function RolesPage() {
             />
             <TemplateCard
               name="Pro Sniper"
-              permissions={['view_courses', 'view_premium_content']}
+              permissions={[
+                'access_core_content',
+                'access_pro_content',
+                'access_trading_journal',
+                'access_ai_analysis',
+                'access_course_library',
+                'access_live_alerts',
+                'access_position_builder',
+                'access_community_chat'
+              ]}
               allPermissions={permissions}
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
@@ -501,7 +515,19 @@ export default function RolesPage() {
             />
             <TemplateCard
               name="Execute Sniper"
-              permissions={['view_courses', 'view_premium_content']}
+              permissions={[
+                'access_core_content',
+                'access_pro_content',
+                'access_execute_content',
+                'access_trading_journal',
+                'access_ai_analysis',
+                'access_course_library',
+                'access_live_alerts',
+                'access_position_builder',
+                'access_market_structure',
+                'access_premium_tools',
+                'access_community_chat'
+              ]}
               allPermissions={permissions}
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
