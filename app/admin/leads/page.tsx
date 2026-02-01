@@ -171,11 +171,23 @@ function LeadsContent() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Primary Actions - Always Visible */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadData()}
+                className="gap-2 min-h-[44px]"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+
+              {/* Secondary Actions - Hidden on Mobile */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={exportToCSV}
-                className="gap-2"
+                className="gap-2 hidden md:flex"
               >
                 <Download className="h-4 w-4" />
                 Export
@@ -183,16 +195,8 @@ function LeadsContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => loadData()}
-                className="gap-2"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={() => router.push('/admin/analytics')}
+                className="hidden md:inline-flex"
               >
                 Analytics
               </Button>
@@ -200,9 +204,12 @@ function LeadsContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => router.push('/admin/packages')}
+                className="hidden md:inline-flex"
               >
                 Packages
               </Button>
+
+              {/* Logout - Always Visible */}
               <Button
                 variant="outline"
                 size="sm"
@@ -210,14 +217,16 @@ function LeadsContent() {
                   document.cookie = 'titm_admin=; path=/; max-age=0'
                   router.push('/')
                 }}
+                className="min-h-[44px]"
               >
-                Logout
+                <span className="hidden sm:inline">Logout</span>
+                <span className="sm:hidden">Exit</span>
               </Button>
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex gap-2 mt-4">
+          {/* Filter Tabs - Horizontal Scroll on Mobile */}
+          <div className="flex gap-2 mt-4 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
             {(['all', 'pending', 'approved', 'rejected', 'contacted'] as const).map(filter => {
               const count = filter === 'all' ? metrics.total : metrics[filter]
               return (
@@ -226,7 +235,7 @@ function LeadsContent() {
                   variant={statusFilter === filter ? 'luxury-champagne' : 'outline'}
                   size="sm"
                   onClick={() => setStatusFilter(filter)}
-                  className="gap-2"
+                  className="gap-2 whitespace-nowrap flex-shrink-0"
                 >
                   {filter === 'all' ? 'All' : STATUS_CONFIG[filter].label}
                   <span className="px-1.5 py-0.5 rounded text-xs bg-white/10">
@@ -345,59 +354,72 @@ function LeadsContent() {
                           : 'border-border/40 hover:border-champagne/30'
                     }`}
                   >
-                    {/* Header Row */}
+                    {/* Header Row - Mobile Optimized */}
                     <div
-                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/5"
+                      className="flex flex-col md:flex-row md:items-center justify-between p-4 cursor-pointer hover:bg-muted/5 gap-3"
                       onClick={() => setExpandedId(isExpanded ? null : app.id!)}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className={`px-2.5 py-1 rounded-full text-xs font-medium border ${STATUS_CONFIG[app.status].color}`}>
-                          <StatusIcon className="h-3 w-3 inline mr-1" />
-                          {STATUS_CONFIG[app.status].label}
+                      {/* Left Side - Name, Status, Badges */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 min-w-0">
+                        {/* Status and Badges Row */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className={`px-2.5 py-1 rounded-full text-xs font-medium border ${STATUS_CONFIG[app.status].color}`}>
+                            <StatusIcon className="h-3 w-3 inline mr-1" />
+                            {STATUS_CONFIG[app.status].label}
+                          </div>
+
+                          {/* High Value Badge */}
+                          {highValue && (
+                            <div className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              High Value
+                            </div>
+                          )}
                         </div>
 
-                        {/* High Value Badge */}
-                        {highValue && (
-                          <div className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            High Value
-                          </div>
-                        )}
-
-                        <div>
-                          <div className="font-medium flex items-center gap-2">
-                            {app.name}
+                        {/* Name and Email */}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium flex items-center gap-2 flex-wrap">
+                            <span className="truncate">{app.name}</span>
                             {hasMetadata && (
-                              <span className="text-xs text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded">
+                              <span className="text-xs text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded whitespace-nowrap">
                                 Wizard
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-muted-foreground">{app.email}</div>
+                          <div className="text-sm text-muted-foreground truncate">{app.email}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {/* Quick metadata preview */}
-                        {app.metadata?.account_size && (
-                          <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
-                            <DollarSign className="h-3 w-3" />
-                            {app.metadata.account_size}
-                          </div>
-                        )}
-                        {app.metadata?.experience_level && (
-                          <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
-                            <TrendingUp className="h-3 w-3" />
-                            {app.metadata.experience_level}
-                          </div>
-                        )}
-                        <div className="text-sm text-muted-foreground">
-                          {formatDate(app.created_at, { format: 'short' })}
+
+                      {/* Right Side - Metadata and Date */}
+                      <div className="flex items-center gap-3 justify-between md:justify-end flex-shrink-0">
+                        {/* Quick metadata preview - Hidden on mobile */}
+                        <div className="hidden md:flex items-center gap-3">
+                          {app.metadata?.account_size && (
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <DollarSign className="h-3 w-3" />
+                              {app.metadata.account_size}
+                            </div>
+                          )}
+                          {app.metadata?.experience_level && (
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <TrendingUp className="h-3 w-3" />
+                              {app.metadata.experience_level}
+                            </div>
+                          )}
                         </div>
-                        {isExpanded ? (
-                          <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                        )}
+
+                        {/* Date and Chevron */}
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm text-muted-foreground whitespace-nowrap">
+                            {formatDate(app.created_at, { format: 'short' })}
+                          </div>
+                          {isExpanded ? (
+                            <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -499,13 +521,13 @@ function LeadsContent() {
                           </div>
                         )}
 
-                        {/* Action Buttons */}
-                        <div className="flex gap-2 pt-2">
+                        {/* Action Buttons - Touch-Friendly */}
+                        <div className="flex flex-wrap gap-2 pt-2">
                           {app.status !== 'approved' && (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                              className="border-green-500/30 text-green-400 hover:bg-green-500/10 min-h-[44px]"
                               onClick={() => handleStatusUpdate(app.id!, 'approved')}
                               disabled={updating === app.id}
                             >
@@ -521,7 +543,7 @@ function LeadsContent() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                              className="border-red-500/30 text-red-400 hover:bg-red-500/10 min-h-[44px]"
                               onClick={() => handleStatusUpdate(app.id!, 'rejected')}
                               disabled={updating === app.id}
                             >
@@ -537,7 +559,7 @@ function LeadsContent() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                              className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 min-h-[44px]"
                               onClick={() => handleStatusUpdate(app.id!, 'contacted')}
                               disabled={updating === app.id}
                             >
@@ -552,6 +574,7 @@ function LeadsContent() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className="min-h-[44px]"
                             asChild
                           >
                             <a href={`mailto:${app.email}?subject=TradeITM Precision Cohort Application`}>
