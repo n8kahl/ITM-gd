@@ -150,7 +150,19 @@ serve(async (req) => {
 
     // Add magic link for quick review (admin panel)
     if (submission_id) {
-      embed.description = `[📋 Quick Review in Admin Panel](https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id})`
+      // Generate magic link token for one-click access (same pattern as chat escalation)
+      const token = crypto.randomUUID()
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
+
+      await supabase
+        .from('admin_access_tokens')
+        .insert({
+          token,
+          expires_at: expiresAt
+        })
+
+      const leadsUrl = `https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id}&token=${token}`
+      embed.description = `[📋 Quick Review in Admin Panel](${leadsUrl})`
     }
 
     const discordPayload = {

@@ -57,9 +57,11 @@ function AuthCallbackContent() {
         setMessage('Authentication successful! Redirecting...')
 
         // Redirect after a short delay
+        // Use window.location.href instead of router.push() to force a full page navigation
+        // This ensures cookies are properly sent to middleware on the next request
         setTimeout(() => {
           if (isMounted) {
-            router.push(redirectTo)
+            window.location.href = redirectTo
           }
         }, 1500)
       } catch (err) {
