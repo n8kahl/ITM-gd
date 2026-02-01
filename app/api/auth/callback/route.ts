@@ -97,6 +97,13 @@ export async function GET(request: NextRequest) {
       if (syncResponse.ok) {
         syncResult = await syncResponse.json()
         console.log('✓ Discord sync completed:', syncResult?.success ? 'success' : 'failed')
+
+        // Log sync details for debugging
+        if (syncResult?.permissions) {
+          const permissionNames = syncResult.permissions.map((p: any) => p.name)
+          console.log('Synced permissions:', permissionNames)
+          console.log('Has admin_dashboard permission:', permissionNames.includes('admin_dashboard'))
+        }
       } else {
         const errorData = await syncResponse.json().catch(() => ({}))
         syncResult = errorData as any
@@ -107,7 +114,13 @@ export async function GET(request: NextRequest) {
       // Continue with redirect - sync is best-effort
     }
 
-    // STEP 3: Refresh session to get updated app_metadata claims
+    // STEP 3: Wait briefly for app_metadata update to propagate
+    // The Edge Function updates auth.users.raw_app_meta_data, but Supabase's
+    // internal caches may need a moment to propagate the changes
+    console.log('Waiting for metadata propagation...')
+    await new Promise(resolve => setTimeout(resolve, 1500)) // 1.5 second delay
+
+    // STEP 4: Refresh session to get updated app_metadata claims
     // The database trigger should have updated auth.users.raw_app_meta_data
     // Refreshing the session ensures the JWT contains the latest claims
     console.log('Refreshing session to get updated claims...')
@@ -123,14 +136,34 @@ export async function GET(request: NextRequest) {
     // Use refreshed session for metadata checks, fallback to original
     const currentSession = refreshedSession || session
     const appMetadata = currentSession.user.app_metadata || {}
-    const isAdmin = appMetadata.is_admin === true
-    const isMember = appMetadata.is_member === true
+    let isAdmin = appMetadata.is_admin === true
+    let isMember = appMetadata.is_member === true
+
+    // FALLBACK: If session refresh didn't pick up the claims, use sync result
+    // This handles race conditions where the JWT refresh happens before metadata propagation
+    if (syncResult?.success && syncResult.permissions) {
+      const hasAdminPerm = syncResult.permissions.some((p: any) => p.name === 'admin_dashboard')
+      const hasMemberPerm = syncResult.permissions.length > 0
+
+      // Override with sync result if it's more permissive (handles race condition)
+      if (hasAdminPerm && !isAdmin) {
+        console.warn('⚠️  JWT claims not updated yet, using sync result for admin status')
+        isAdmin = true
+      }
+      if (hasMemberPerm && !isMember) {
+        console.warn('⚠️  JWT claims not updated yet, using sync result for member status')
+        isMember = true
+      }
+    }
 
     console.log('User metadata:', {
       isAdmin,
       isMember,
       userId: currentSession.user.id,
-      email: currentSession.user.email
+      email: currentSession.user.email,
+      source: (isAdmin !== appMetadata.is_admin || isMember !== appMetadata.is_member)
+        ? 'sync_result_fallback'
+        : 'jwt_claims'
     })
 
     // STEP 4: Determine redirect destination
