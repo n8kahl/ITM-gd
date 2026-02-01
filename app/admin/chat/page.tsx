@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
+import { Suspense, useState, useEffect, useRef, useCallback, forwardRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
@@ -37,7 +37,8 @@ import {
   Loader2,
   Archive,
   Trash2,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react'
 
 // Canned responses for quick replies
@@ -122,7 +123,7 @@ interface Message {
   created_at: string
 }
 
-export default function ChatManagementPage() {
+function ChatManagementContent() {
   const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([])
@@ -1071,6 +1072,21 @@ export default function ChatManagementPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function ChatManagementPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="h-12 w-12 animate-spin text-champagne mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading conversations...</p>
+        </div>
+      </div>
+    }>
+      <ChatManagementContent />
+    </Suspense>
   )
 }
 
