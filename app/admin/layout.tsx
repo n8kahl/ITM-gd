@@ -1,31 +1,18 @@
+/* app/admin/layout.tsx */
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import {
-  LogOut,
-  Bell,
-  BellOff,
-  Menu,
-  X
-} from 'lucide-react'
-import { subscribeToPush, unsubscribeFromPush, checkPushSubscription, isPushSupported } from '@/lib/notifications'
+import { LogOut, Bell, Menu, X, Search, Command } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { AdminSidebar, AdminMobileNav } from '@/components/admin/admin-sidebar'
 import { cn } from '@/lib/utils'
 
-// Inner component that uses useSearchParams
-function AdminLayoutInner({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [pushSupported, setPushSupported] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Check admin access - supports cookie auth and magic link tokens
@@ -67,6 +54,8 @@ function AdminLayoutInner({
           const convId = searchParams.get('id')
           if (convId) {
             router.replace(`${pathname}?id=${convId}`)
+          } else {
+            router.replace(pathname)
           }
           return
         }
@@ -79,140 +68,107 @@ function AdminLayoutInner({
     checkAuth()
   }, [router, searchParams, pathname])
 
-  // Check push notification support and status
-  useEffect(() => {
-    const checkPushStatus = async () => {
-      const supported = await isPushSupported()
-      setPushSupported(supported)
-
-      if (supported) {
-        const enabled = await checkPushSubscription()
-        setNotificationsEnabled(enabled)
-      }
-    }
-
-    checkPushStatus()
-  }, [])
-
-  const handleLogout = () => {
-    document.cookie = 'titm_admin=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    router.push('/')
-  }
-
-  const toggleNotifications = async () => {
-    try {
-      if (notificationsEnabled) {
-        await unsubscribeFromPush('admin')
-        setNotificationsEnabled(false)
-      } else {
-        const success = await subscribeToPush('admin')
-        if (success) {
-          setNotificationsEnabled(true)
-        }
-      }
-    } catch (error) {
-      console.error('Notification toggle error:', error)
-    }
-  }
+  // Close mobile menu on route change
+  useEffect(() => setMobileMenuOpen(false), [pathname])
 
   if (!isAuthenticated) {
     return null
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f10] flex">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
+    <div className="flex h-screen w-full bg-[#050505] text-ivory overflow-hidden">
+      {/* 1. Desktop Sidebar (Fixed) */}
+      <aside className="hidden lg:flex w-72 flex-col border-r border-white/5 bg-[#0A0A0B]/95 backdrop-blur-xl relative z-20">
         <AdminSidebar />
-      </div>
+      </aside>
 
-      {/* Mobile Sidebar Overlay */}
+      {/* 2. Mobile Sidebar (Drawer) */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="fixed left-0 top-0 bottom-0 w-64 z-50">
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-[#0A0A0B] border-r border-white/10 shadow-2xl transform transition-transform duration-300">
+            <div className="flex justify-end p-4">
+              <button onClick={() => setMobileMenuOpen(false)} className="text-white/40 hover:text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
             <AdminSidebar />
           </div>
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen">
-        {/* Top Header Bar */}
-        <header className="h-16 border-b border-white/5 bg-[#0a0a0b]/95 backdrop-blur sticky top-0 z-40 flex items-center justify-between px-4 lg:px-6">
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/5"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+      {/* 3. Main Application Area */}
+      <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-br from-[#050505] to-[#0A0A0B]">
 
-          {/* Page Title - derived from pathname */}
-          <div className="hidden lg:block">
-            <h1 className="text-lg font-semibold text-white/90">
-              {pathname === '/admin' ? 'Dashboard' :
-               pathname.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-            </h1>
-          </div>
-
-          {/* Mobile Logo */}
-          <div className="lg:hidden text-lg font-bold text-[#D4AF37]">
-            TradeITM
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            {pushSupported && (
-              <button
-                onClick={toggleNotifications}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all',
-                  notificationsEnabled
-                    ? 'bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30'
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                )}
-                title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
-              >
-                {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
-                <span className="hidden sm:inline">
-                  {notificationsEnabled ? 'On' : 'Off'}
-                </span>
-              </button>
-            )}
+        {/* Header - Fixed Height */}
+        <header className="h-16 flex-none border-b border-white/5 px-6 flex items-center justify-between bg-[#0A0A0B]/50 backdrop-blur-md z-10">
+          <div className="flex items-center gap-4">
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white/60 hover:text-red-400 hover:bg-red-500/10 transition-all"
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 -ml-2 text-white/60 hover:text-white"
             >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
+              <Menu className="w-6 h-6" />
             </button>
+
+            {/* Breadcrumb / Page Title */}
+            <div className="flex items-center gap-2">
+              <span className="text-white/40 font-mono text-xs uppercase tracking-widest hidden sm:inline">Admin /</span>
+              <h1 className="text-lg font-semibold text-white tracking-tight">
+                {pathname === '/admin' ? 'Command Center' :
+                 pathname.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+             {/* Global Search Mockup */}
+             <div className="hidden md:flex items-center px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-white/40 w-64 hover:border-white/20 transition-colors cursor-pointer">
+                <Search className="w-3.5 h-3.5 mr-2" />
+                <span>Search...</span>
+                <span className="ml-auto flex items-center gap-1">
+                  <Command className="w-3 h-3" />
+                  <span>K</span>
+                </span>
+             </div>
+
+             {/* Actions */}
+             <button className="relative p-2 text-white/40 hover:text-[#D4AF37] transition-colors">
+               <Bell className="w-5 h-5" />
+               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+             </button>
+
+             <div className="h-8 w-[1px] bg-white/10 mx-1" />
+
+             <button
+               onClick={() => {
+                 document.cookie = 'titm_admin=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+                 router.push('/')
+               }}
+               className="text-xs font-medium text-white/60 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/5 transition-all"
+             >
+               Exit
+             </button>
           </div>
         </header>
 
-        {/* Mobile Navigation */}
-        <div className="lg:hidden">
-          <AdminMobileNav />
-        </div>
+        {/* Content - Scrollable Viewport */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 lg:p-8 scroll-smooth admin-content-area relative">
+          {/* Subtle Grid Background */}
+          <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[url('/grid-pattern.svg')] bg-center [mask-image:linear-gradient(to_bottom,transparent,black)]" />
 
-        {/* Main Content */}
-        <main className="flex-1 p-4 lg:p-8">
-          {children}
+          <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+            {children}
+          </div>
         </main>
       </div>
     </div>
   )
 }
 
-// Outer layout with Suspense boundary for useSearchParams
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={null}>
       <AdminLayoutInner>{children}</AdminLayoutInner>
