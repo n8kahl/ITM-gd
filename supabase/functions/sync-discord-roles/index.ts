@@ -306,6 +306,40 @@ serve(async (req) => {
       }
     }
 
+    // CRITICAL: Update auth.users.raw_app_meta_data with permission claims
+    // This ensures the JWT includes the latest role information immediately after sync
+    // The database trigger also does this, but we update directly here for immediate effect
+    const hasAdminPermission = Array.from(permissionMap.values()).some(
+      ({ permission }) => permission.name === 'admin_dashboard'
+    )
+    const hasMemberPermission = permissionMap.size > 0 // Any permission = member
+
+    console.log(`Updating auth claims: is_admin=${hasAdminPermission}, is_member=${hasMemberPermission}`)
+
+    try {
+      // Update app_metadata directly using admin client
+      const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
+        user.id,
+        {
+          app_metadata: {
+            ...user.app_metadata,
+            is_admin: hasAdminPermission,
+            is_member: hasMemberPermission,
+          }
+        }
+      )
+
+      if (metadataError) {
+        console.error('Error updating user app_metadata:', metadataError)
+        // Non-fatal - trigger will update it eventually
+      } else {
+        console.log('✓ Updated auth.users.raw_app_meta_data with claims')
+      }
+    } catch (metaErr) {
+      console.error('Exception updating app_metadata:', metaErr)
+      // Continue - non-fatal
+    }
+
     // Build response with role and permission details
     const roleDetails = discordRoles.map(roleId => {
       const rp = (rolePermissions || []).find(r => r.discord_role_id === roleId)
