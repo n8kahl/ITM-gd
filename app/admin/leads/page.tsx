@@ -254,14 +254,14 @@ function LeadsContent() {
             </CardContent>
           </Card>
 
-          <Card className="glass-card border-[#D4AF37]/30">
+          <Card className="glass-card border-emerald-500/30">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">High Value ($25k+)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <div className="text-3xl font-bold text-[#D4AF37]">{metrics.highValue}</div>
-                <Sparkles className="h-8 w-8 text-[#D4AF37]/50" />
+                <div className="text-3xl font-bold text-emerald-500">{metrics.highValue}</div>
+                <Sparkles className="h-8 w-8 text-emerald-500/50" />
               </div>
             </CardContent>
           </Card>
@@ -339,9 +339,9 @@ function LeadsContent() {
                     key={app.id}
                     className={`border rounded-lg overflow-hidden transition-colors ${
                       highlightId === app.id
-                        ? 'border-[#D4AF37]/50 bg-[#D4AF37]/5'
+                        ? 'border-emerald-500/50 bg-emerald-500/5'
                         : highValue
-                          ? 'border-[#D4AF37]/30 hover:border-[#D4AF37]/50'
+                          ? 'border-emerald-500/30 hover:border-emerald-500/50'
                           : 'border-border/40 hover:border-champagne/30'
                     }`}
                   >
@@ -358,7 +358,7 @@ function LeadsContent() {
 
                         {/* High Value Badge */}
                         {highValue && (
-                          <div className="px-2.5 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 flex items-center gap-1">
+                          <div className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 flex items-center gap-1">
                             <Sparkles className="h-3 w-3" />
                             High Value
                           </div>
@@ -431,7 +431,7 @@ function LeadsContent() {
                                   <DollarSign className="h-3 w-3" />
                                   Account Size
                                 </div>
-                                <div className={`font-medium ${highValue ? 'text-[#D4AF37]' : ''}`}>
+                                <div className={`font-medium ${highValue ? 'text-emerald-500' : ''}`}>
                                   {app.metadata.account_size}
                                   {highValue && <Sparkles className="h-3 w-3 inline ml-1" />}
                                 </div>

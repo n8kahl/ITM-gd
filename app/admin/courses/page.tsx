@@ -102,7 +102,7 @@ export default function CoursesPage() {
           </Button>
           <Button
             onClick={() => setIsCreating(true)}
-            className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+            className="bg-emerald-500 hover:bg-[emerald-600] text-black"
           >
             <Plus className="w-4 h-4 mr-2" />
             New Course
@@ -113,7 +113,7 @@ export default function CoursesPage() {
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <RefreshCw className="w-8 h-8 animate-spin text-[#D4AF37]" />
+          <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
         </div>
       )}
 

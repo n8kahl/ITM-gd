@@ -221,7 +221,7 @@ export default function RolesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto mb-4" />
+          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
           <p className="text-white/60">Loading role mappings...</p>
         </div>
       </div>
@@ -234,7 +234,7 @@ export default function RolesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-white flex items-center gap-3">
-            <Shield className="w-8 h-8 text-[#D4AF37]" />
+            <Shield className="w-8 h-8 text-emerald-500" />
             Discord Role Mapping
           </h1>
           <p className="text-white/60 mt-1">
@@ -252,7 +252,7 @@ export default function RolesPage() {
           </Button>
           <Button
             onClick={handleAddRole}
-            className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+            className="bg-emerald-500 hover:bg-[emerald-600] text-black"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add New Mapping
@@ -282,7 +282,7 @@ export default function RolesPage() {
       )}
 
       {/* Instructions Card */}
-      <Card className="bg-gradient-to-br from-[#D4AF37]/10 to-transparent border-[#D4AF37]/20">
+      <Card className="bg-gradient-to-br from-emerald-500/10 to-transparent border-emerald-500/20">
         <CardContent className="pt-6">
           <h3 className="font-medium text-white mb-2">How to Get Discord Role IDs</h3>
           <ol className="text-sm text-white/70 space-y-1 list-decimal list-inside">
@@ -295,7 +295,7 @@ export default function RolesPage() {
             href="https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[#D4AF37] text-sm mt-3 hover:underline"
+            className="inline-flex items-center gap-1 text-emerald-500 text-sm mt-3 hover:underline"
           >
             Learn more about Discord IDs
             <ExternalLink className="w-3 h-3" />
@@ -338,7 +338,7 @@ export default function RolesPage() {
               <p className="text-white/60 mb-4">No role mappings configured yet</p>
               <Button
                 onClick={handleAddRole}
-                className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+                className="bg-emerald-500 hover:bg-[emerald-600] text-black"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add First Mapping
@@ -352,7 +352,7 @@ export default function RolesPage() {
                   className={cn(
                     'p-4 rounded-xl border transition-all',
                     role.isNew || role.hasChanges
-                      ? 'bg-[#D4AF37]/5 border-[#D4AF37]/30'
+                      ? 'bg-emerald-500/5 border-emerald-500/30'
                       : 'bg-white/5 border-white/10'
                   )}
                 >
@@ -397,7 +397,7 @@ export default function RolesPage() {
                           <Button
                             onClick={() => handleSaveRole(index)}
                             disabled={saving === role.discord_role_id || !role.discord_role_id}
-                            className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+                            className="bg-emerald-500 hover:bg-emerald-600 text-black"
                           >
                             {saving === role.discord_role_id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -450,7 +450,7 @@ export default function RolesPage() {
                             className={cn(
                               'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
                               isSelected
-                                ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/50'
+                                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/50'
                                 : 'bg-white/5 text-white/60 border border-white/10 hover:border-white/30 hover:text-white'
                             )}
                             title={perm.description || undefined}

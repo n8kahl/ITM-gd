@@ -141,7 +141,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
              </div>
 
              {/* Actions */}
-             <button className="relative p-2 text-white/40 hover:text-[#D4AF37] transition-colors">
+             <button className="relative p-2 text-white/40 hover:text-emerald-500 transition-colors">
                <Bell className="w-5 h-5" />
                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
              </button>

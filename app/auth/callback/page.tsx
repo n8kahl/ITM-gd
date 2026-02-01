@@ -66,7 +66,7 @@ function AuthCallbackContent() {
     <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center">
         {/* Logo */}
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center mx-auto mb-6">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mx-auto mb-6">
           <Sparkles className="w-8 h-8 text-black" />
         </div>
 
@@ -74,8 +74,8 @@ function AuthCallbackContent() {
         {status === 'processing' && (
           <>
             <div className="relative w-20 h-20 mx-auto mb-6">
-              <div className="absolute inset-0 rounded-full border-4 border-[#D4AF37]/20" />
-              <div className="absolute inset-0 rounded-full border-4 border-[#D4AF37] border-t-transparent animate-spin" />
+              <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />
+              <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
             </div>
             <h1 className="text-xl font-bold text-white mb-2">Authenticating</h1>
             <p className="text-white/60">{message}</p>
@@ -108,7 +108,7 @@ function AuthCallbackContent() {
               <p className="text-red-400/70 text-sm mb-6">{error}</p>
             )}
             <div className="flex flex-col gap-3">
-              <Button asChild className="bg-[#D4AF37] hover:bg-[#B8962E] text-black">
+              <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-black">
                 <Link href="/login">Try Again</Link>
               </Button>
               <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/5">
@@ -127,12 +127,12 @@ export default function AuthCallbackPage() {
     <Suspense fallback={
       <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center mx-auto mb-6">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mx-auto mb-6">
             <Sparkles className="w-8 h-8 text-black" />
           </div>
           <div className="relative w-20 h-20 mx-auto mb-6">
-            <div className="absolute inset-0 rounded-full border-4 border-[#D4AF37]/20" />
-            <div className="absolute inset-0 rounded-full border-4 border-[#D4AF37] border-t-transparent animate-spin" />
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
           </div>
           <h1 className="text-xl font-bold text-white mb-2">Loading</h1>
           <p className="text-white/60">Preparing authentication...</p>

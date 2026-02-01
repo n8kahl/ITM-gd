@@ -194,7 +194,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="A brief description of what students will learn..."
                 rows={4}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-md text-white placeholder:text-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/50"
+                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-md text-white placeholder:text-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
             </div>
 
@@ -241,7 +241,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                       className={cn(
                         'p-3 rounded-lg border text-left text-sm transition-colors',
                         form.discord_role_required === role.id
-                          ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30 text-[#D4AF37]'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
                           : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/20'
                       )}
                     >
@@ -255,6 +255,24 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                   No Discord roles configured. Add roles in Settings → Role Mapping.
                 </p>
               )}
+              <div className="grid grid-cols-2 gap-2">
+                {DISCORD_ROLES.map((role) => (
+                  <button
+                    key={role.id || 'public'}
+                    type="button"
+                    onClick={() => setForm({ ...form, discord_role_required: role.id })}
+                    className={cn(
+                      'p-3 rounded-lg border text-left text-sm transition-colors',
+                      form.discord_role_required === role.id
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
+                        : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/20'
+                    )}
+                  >
+                    {role.name}
+                  </button>
+                ))}
+              </div>
+>>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
             </div>
 
             {/* Published Toggle */}
@@ -296,7 +314,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
             <Button
               type="submit"
               disabled={saving}
-              className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+              className="bg-[#D4AF37] hover:bg-emerald-600 text-black"
             >
               {saving ? (
                 <>

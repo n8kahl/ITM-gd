@@ -193,7 +193,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                 {/* Progress bar */}
                 <div className="h-1 bg-white/5">
                   <motion.div
-                    className="h-full bg-gradient-to-r from-champagne via-[#D4AF37] to-champagne"
+                    className="h-full bg-gradient-to-r from-champagne via-emerald-500 to-champagne"
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.3, ease: "easeOut" }}
@@ -237,7 +237,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                           initial={{ scale: 0 }}
                           animate={{ scale: 1 }}
                           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                          className="w-16 h-16 rounded-full bg-[#D4AF37]/20 flex items-center justify-center mx-auto mb-4"
+                          className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4"
                         >
                           <CheckCircle className="w-8 h-8 text-[#D4AF37]" />
                         </motion.div>
@@ -270,7 +270,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 "w-full h-12 pl-10 pr-4 rounded-lg",
                                 "bg-white/5 border border-white/10",
                                 "text-ivory placeholder:text-ivory/30",
-                                "focus:outline-none focus:border-[#D4AF37]/50 focus:ring-1 focus:ring-[#D4AF37]/30",
+                                "focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30",
                                 "transition-all duration-300",
                                 step1Form.formState.errors.name && "border-red-500/50"
                               )}
@@ -296,7 +296,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 "w-full h-12 pl-10 pr-4 rounded-lg",
                                 "bg-white/5 border border-white/10",
                                 "text-ivory placeholder:text-ivory/30",
-                                "focus:outline-none focus:border-[#D4AF37]/50 focus:ring-1 focus:ring-[#D4AF37]/30",
+                                "focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30",
                                 "transition-all duration-300",
                                 step1Form.formState.errors.email && "border-red-500/50"
                               )}
@@ -322,7 +322,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 "w-full h-12 pl-8 pr-4 rounded-lg",
                                 "bg-white/5 border border-white/10",
                                 "text-ivory placeholder:text-ivory/30",
-                                "focus:outline-none focus:border-[#D4AF37]/50 focus:ring-1 focus:ring-[#D4AF37]/30",
+                                "focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30",
                                 "transition-all duration-300",
                                 step1Form.formState.errors.discord_handle && "border-red-500/50"
                               )}
@@ -371,7 +371,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 className={cn(
                                   "p-4 rounded-xl border text-center transition-all duration-300",
                                   step2Form.watch("experience_level") === option.value
-                                    ? "bg-[#D4AF37]/10 border-[#D4AF37]/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
+                                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
                                     : "bg-white/5 border-white/10 hover:border-white/20"
                                 )}
                               >
@@ -399,7 +399,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 className={cn(
                                   "p-4 rounded-xl border text-center transition-all duration-300",
                                   step2Form.watch("account_size") === option.value
-                                    ? "bg-[#D4AF37]/10 border-[#D4AF37]/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
+                                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
                                     : "bg-white/5 border-white/10 hover:border-white/20"
                                 )}
                               >
@@ -458,7 +458,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                               "w-full h-12 px-4 rounded-lg appearance-none",
                               "bg-white/5 border border-white/10",
                               "text-ivory",
-                              "focus:outline-none focus:border-[#D4AF37]/50 focus:ring-1 focus:ring-[#D4AF37]/30",
+                              "focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30",
                               "transition-all duration-300",
                               step3Form.formState.errors.primary_struggle && "border-red-500/50"
                             )}
@@ -490,7 +490,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                                 "w-full pl-10 pr-4 py-3 rounded-lg resize-none",
                                 "bg-white/5 border border-white/10",
                                 "text-ivory placeholder:text-ivory/30",
-                                "focus:outline-none focus:border-[#D4AF37]/50 focus:ring-1 focus:ring-[#D4AF37]/30",
+                                "focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30",
                                 "transition-all duration-300",
                                 step3Form.formState.errors.short_term_goal && "border-red-500/50"
                               )}
