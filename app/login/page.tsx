@@ -134,20 +134,25 @@ export default function LoginPage() {
             <Button
               onClick={handleDiscordLogin}
               disabled={isLoading}
-              className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-6 text-base"
+              className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-7 text-lg font-semibold shadow-lg shadow-[#5865F2]/20"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-6 h-6 mr-3 animate-spin" />
                   Connecting to Discord...
                 </>
               ) : (
                 <>
-                  <DiscordIcon className="w-5 h-5 mr-2" />
-                  Continue with Discord
+                  <DiscordIcon className="w-6 h-6 mr-3" />
+                  Log in with Discord
                 </>
               )}
             </Button>
+
+            {/* Discord Server Requirement */}
+            <p className="text-center text-white/50 text-sm mt-4">
+              Must be a member of the TradeITM Discord Server to access.
+            </p>
 
             {/* Info */}
             <div className="mt-6 space-y-3">
