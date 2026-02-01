@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { supabase } from '@/lib/supabase'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { getSafeRedirect } from '@/lib/safe-redirect'
 import { AuroraBackground } from '@/components/ui/aurora-background'
 import SparkleLog from '@/components/ui/sparkle-logo'
@@ -33,6 +33,7 @@ function LoginContent() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        const supabase = createBrowserSupabase()
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
           // Already logged in - determine appropriate redirect
@@ -72,6 +73,7 @@ function LoginContent() {
     setError(null)
 
     try {
+      const supabase = createBrowserSupabase()
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'discord',
         options: {
