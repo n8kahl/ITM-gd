@@ -94,7 +94,7 @@ export default function SystemPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-white flex items-center gap-3">
-            <Activity className="w-8 h-8 text-[#D4AF37]" />
+            <Activity className="w-8 h-8 text-emerald-500" />
             System Status
           </h1>
           <p className="text-white/60 mt-1">
@@ -114,7 +114,7 @@ export default function SystemPage() {
           <Button
             onClick={runDiagnostics}
             disabled={loading}
-            className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+            className="bg-emerald-500 hover:bg-[emerald-600] text-black"
           >
             {loading ? (
               <>

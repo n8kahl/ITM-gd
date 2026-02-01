@@ -51,7 +51,7 @@ export default function JoinDiscordPage() {
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center mx-auto mb-4 animate-pulse-subtle">
               <ShieldX className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#D4AF37] to-[#F1E5AC] bg-clip-text text-transparent mb-2">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-500 to-[#F1E5AC] bg-clip-text text-transparent mb-2">
               Active Membership Required
             </h1>
             <p className="text-white/60 mt-2">
@@ -78,7 +78,7 @@ export default function JoinDiscordPage() {
             {/* View Membership Plans Button */}
             <Button
               asChild
-              className="w-full bg-gradient-to-r from-[#D4AF37] to-[#B8962E] hover:from-[#E5C048] hover:to-[#C9A73F] text-black py-7 text-lg font-semibold shadow-lg shadow-[#D4AF37]/20"
+              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-600 text-black py-7 text-lg font-semibold shadow-lg shadow-emerald-500/20"
             >
               <Link href="/#pricing">
                 <CreditCard className="w-6 h-6 mr-3" />
@@ -103,7 +103,7 @@ export default function JoinDiscordPage() {
               onClick={handleRefreshAccess}
               disabled={isRefreshing}
               variant="outline"
-              className="w-full border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/10 py-6"
+              className="w-full border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 py-6"
             >
               {isRefreshing ? (
                 <>
@@ -136,7 +136,7 @@ export default function JoinDiscordPage() {
           {/* Footer */}
           <p className="text-center text-white/40 text-xs mt-6">
             Need help?{' '}
-            <a href="mailto:support@tradeitm.com" className="text-[#D4AF37] hover:underline">
+            <a href="mailto:support@tradeitm.com" className="text-emerald-500 hover:underline">
               Contact Support
             </a>
           </p>

@@ -172,7 +172,7 @@ export default function AdminDashboard() {
           label="Total Members"
           value={stats.users.toLocaleString()}
           icon={Users}
-          color="gold"
+          color="emerald"
         />
         <DashboardMetric
           label="Active Chats"
@@ -270,9 +270,45 @@ export default function AdminDashboard() {
           {/* Quick Links */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <QuickLink href="/admin/courses" icon={GraduationCap} label="Courses" color="emerald" />
-            <QuickLink href="/admin/leads" icon={FileText} label="Leads" color="gold" />
+            <QuickLink href="/admin/leads" icon={FileText} label="Leads" color="emerald" />
             <QuickLink href="/admin/chat" icon={MessageSquare} label="Chat" color="blue" />
             <QuickLink href="/admin/settings" icon={Activity} label="Settings" color="purple" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <Card className="glass-card-heavy p-6 border-white/5">
+                <h3 className="text-sm font-medium text-white/80 mb-4">Recent Sales</h3>
+                <div className="space-y-4">
+                  {[1,2,3].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
+                       <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs">$</div>
+                         <div>
+                            <div className="text-sm text-white">Pro Sniper</div>
+                            <div className="text-xs text-white/40">2 mins ago</div>
+                         </div>
+                       </div>
+                       <div className="text-sm font-mono text-emerald-400">+$299</div>
+                    </div>
+                  ))}
+                </div>
+             </Card>
+             <Card className="glass-card-heavy p-6 border-white/5">
+                <h3 className="text-sm font-medium text-white/80 mb-4">New Leads</h3>
+                <div className="space-y-4">
+                  {[1,2,3].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
+                       <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500 text-xs">U</div>
+                         <div>
+                            <div className="text-sm text-white">John Doe</div>
+                            <div className="text-xs text-white/40">Applied for Cohort</div>
+                         </div>
+                       </div>
+                       <div className="text-xs px-2 py-1 rounded bg-white/5 text-white/60">Review</div>
+                    </div>
+                  ))}
+                </div>
+             </Card>
+>>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
           </div>
         </div>
 
@@ -298,22 +334,31 @@ export default function AdminDashboard() {
                     <div key={i} className="h-5 bg-white/5 animate-pulse rounded" />
                   ))}
                 </div>
-              ) : systemStatus.length > 0 ? (
-                systemStatus.map((diagnostic) => (
-                  <SystemStatusRow
-                    key={diagnostic.name}
-                    label={diagnostic.name}
-                    status={diagnostic.status}
-                    latency={diagnostic.latency}
-                  />
-                ))
-              ) : (
-                <p className="text-white/40 text-xs text-center py-2">
-                  Unable to load status
-                </p>
-              )}
-            </div>
-          </Card>
+                <div className="relative pl-4 space-y-6">
+                    {/* Activity Timeline Line */}
+                    <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-white/10" />
+
+                    {[
+                        { text: "New user joined Discord", time: "1m ago", color: "emerald" },
+                        { text: "Server CPU spike detected", time: "15m ago", color: "red" },
+                        { text: "Backup completed", time: "1h ago", color: "blue" },
+                        { text: "Daily signals posted", time: "4h ago", color: "gold" },
+                        { text: "Admin logged in", time: "5h ago", color: "gray" },
+                    ].map((item, i) => (
+                        <div key={i} className="relative">
+                            <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0A0A0B] ${
+                                item.color === 'emerald' ? 'bg-emerald-500' :
+                                item.color === 'red' ? 'bg-red-500' :
+                                item.color === 'blue' ? 'bg-blue-500' :
+                                item.color === 'gold' ? 'bg-emerald-500' : 'bg-white/40'
+                            }`} />
+                            <p className="text-sm text-white/90">{item.text}</p>
+                            <p className="text-xs text-white/40 font-mono mt-1">{item.time}</p>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+>>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
         </div>
       </div>
     </div>
@@ -327,7 +372,7 @@ function DashboardMetric({ label, value, icon: Icon, color }: {
   color: 'gold' | 'emerald' | 'blue' | 'purple'
 }) {
   const colors = {
-    gold: "text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/20",
+    gold: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
     emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
     blue: "text-blue-400 bg-blue-500/10 border-blue-500/20",
     purple: "text-purple-400 bg-purple-500/10 border-purple-500/20",

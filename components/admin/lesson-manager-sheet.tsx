@@ -234,7 +234,7 @@ export function LessonManagerSheet({ open, onClose, course, onSave }: LessonMana
                       className={cn(
                         'flex items-center gap-3 p-4 rounded-lg border transition-colors',
                         draggedId === lesson.id
-                          ? 'border-[#D4AF37]/50 bg-[#D4AF37]/5'
+                          ? 'border-emerald-500/50 bg-emerald-500/5'
                           : 'border-white/5 bg-white/[0.02] hover:border-white/10'
                       )}
                     >
@@ -411,7 +411,7 @@ function LessonEditForm({
           onChange={(e) => setForm({ ...form, content_markdown: e.target.value })}
           placeholder="Lesson content in markdown format..."
           rows={8}
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-md text-white placeholder:text-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/50 font-mono text-sm"
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-md text-white placeholder:text-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-mono text-sm"
         />
       </div>
 
@@ -453,7 +453,7 @@ function LessonEditForm({
         <Button
           type="submit"
           disabled={saving}
-          className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
+          className="bg-[#D4AF37] hover:bg-emerald-600 text-black"
         >
           {saving ? (
             <>

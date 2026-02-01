@@ -276,7 +276,7 @@ export default function SettingsPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto mb-4" />
+          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
           <p className="text-white/60">Loading configuration...</p>
         </div>
       </div>
@@ -289,7 +289,7 @@ export default function SettingsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-white flex items-center gap-3">
-            <Settings className="w-8 h-8 text-[#D4AF37]" />
+            <Settings className="w-8 h-8 text-emerald-500" />
             Discord Configuration
           </h1>
           <p className="text-white/60 mt-1">
@@ -328,10 +328,10 @@ export default function SettingsPage() {
       )}
 
       {/* Security Notice */}
-      <Card className="bg-gradient-to-br from-[#D4AF37]/10 to-transparent border-[#D4AF37]/20">
+      <Card className="bg-gradient-to-br from-emerald-500/10 to-transparent border-emerald-500/20">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <Shield className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+            <Shield className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
             <div>
               <h3 className="font-medium text-white mb-1">Security Notice</h3>
               <p className="text-sm text-white/60">
@@ -378,7 +378,7 @@ export default function SettingsPage() {
                       }))}
                       placeholder={field.placeholder}
                       className={cn(
-                        'flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none font-mono text-sm'
+                        'flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-emerald-500 focus:outline-none font-mono text-sm'
                       )}
                     />
 
@@ -403,7 +403,7 @@ export default function SettingsPage() {
             <Button
               onClick={saveConfiguration}
               disabled={saving}
-              className="flex-1 bg-[#D4AF37] hover:bg-[#B8962E] text-black font-medium h-12"
+              className="flex-1 bg-emerald-500 hover:bg-[emerald-600] text-black font-medium h-12"
             >
               {saving ? (
                 <>
@@ -444,7 +444,7 @@ export default function SettingsPage() {
       <Card className="glass-card-heavy border-white/10">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
-            <Crown className="w-5 h-5 text-[#D4AF37]" />
+            <Crown className="w-5 h-5 text-emerald-500" />
             Membership Tier Mapping
           </CardTitle>
           <p className="text-sm text-white/60">
@@ -473,7 +473,7 @@ export default function SettingsPage() {
                     <span className="text-white/40">→</span>
                     <span className={cn(
                       'px-3 py-1 rounded-full text-sm font-medium capitalize',
-                      tier === 'execute' && 'bg-[#D4AF37]/20 text-[#D4AF37]',
+                      tier === 'execute' && 'bg-emerald-500/20 text-emerald-500',
                       tier === 'pro' && 'bg-blue-500/20 text-blue-400',
                       tier === 'core' && 'bg-emerald-500/20 text-emerald-400'
                     )}>
@@ -501,12 +501,12 @@ export default function SettingsPage() {
                 value={newRoleId}
                 onChange={(e) => setNewRoleId(e.target.value)}
                 placeholder="Discord Role ID (e.g., 1234567890123456789)"
-                className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none font-mono text-sm"
+                className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-emerald-500 focus:outline-none font-mono text-sm"
               />
               <select
                 value={newTier}
                 onChange={(e) => setNewTier(e.target.value as MembershipTier)}
-                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:border-[#D4AF37] focus:outline-none"
+                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:border-emerald-500 focus:outline-none"
               >
                 <option value="core" className="bg-[#0a0a0b]">Core</option>
                 <option value="pro" className="bg-[#0a0a0b]">Pro</option>
@@ -515,7 +515,7 @@ export default function SettingsPage() {
               <Button
                 onClick={addTierMapping}
                 variant="outline"
-                className="border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+                className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add
@@ -527,7 +527,7 @@ export default function SettingsPage() {
           <Button
             onClick={saveTierMapping}
             disabled={savingTiers}
-            className="w-full bg-[#D4AF37] hover:bg-[#B8962E] text-black font-medium h-12"
+            className="w-full bg-emerald-500 hover:bg-[emerald-600] text-black font-medium h-12"
           >
             {savingTiers ? (
               <>

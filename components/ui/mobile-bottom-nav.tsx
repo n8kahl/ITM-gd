@@ -37,7 +37,7 @@ export function MobileBottomNav({ items }: MobileBottomNavProps) {
                 {isActive && (
                   <motion.div
                     layoutId="activeTab"
-                    className="absolute inset-0 bg-[#D4AF37]/10 rounded-full"
+                    className="absolute inset-0 bg-emerald-500/10 rounded-full"
                     initial={false}
                     transition={{
                       type: "spring",

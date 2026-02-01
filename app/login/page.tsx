@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Sparkles, ArrowLeft, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
+import Image from 'next/image'
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 import { AuroraBackground } from '@/components/ui/aurora-background'
@@ -83,7 +84,9 @@ function LoginContent() {
       <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center relative overflow-hidden">
         <AuroraBackground />
         <div className="text-center relative z-10">
-          <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
+          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
+            <Image src="/logo.png" alt="TradeITM" fill className="object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]" />
+          </div>
           <p className="text-white/60">Checking authentication...</p>
         </div>
       </div>
@@ -111,10 +114,15 @@ function LoginContent() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center mx-auto mb-4 animate-pulse-subtle">
-              <Sparkles className="w-10 h-10 text-black" />
+            <div className="relative w-20 h-20 mx-auto mb-4 animate-pulse-subtle">
+              <Image
+                src="/logo.png"
+                alt="TradeITM"
+                fill
+                className="object-contain drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+              />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#D4AF37] to-[#F1E5AC] bg-clip-text text-transparent mb-2">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent mb-2">
               Welcome Back
             </h1>
             <p className="text-white/60 mt-2">
@@ -216,11 +224,11 @@ function LoginContent() {
             {/* Legal Links */}
             <p className="text-center text-white/40 text-xs">
               By continuing, you agree to our{' '}
-              <Link href="/terms" className="text-[#D4AF37] hover:underline">
+              <Link href="/terms" className="text-emerald-500 hover:underline">
                 Terms of Service
               </Link>
               {' '}and{' '}
-              <Link href="/privacy" className="text-[#D4AF37] hover:underline">
+              <Link href="/privacy" className="text-emerald-500 hover:underline">
                 Privacy Policy
               </Link>
             </p>
@@ -237,7 +245,9 @@ export default function LoginPage() {
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <AuroraBackground />
         <div className="text-center relative z-10">
-          <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
+          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
+            <Image src="/logo.png" alt="TradeITM" fill className="object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]" />
+          </div>
           <p className="text-white/60">Loading...</p>
         </div>
       </div>

@@ -152,7 +152,7 @@ export function BentoCard({
               <defs>
                 <linearGradient id="icon-gradient-gold" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#E8E4D9" />
-                  <stop offset="50%" stopColor="#D4AF37" />
+                  <stop offset="50%" stopColor="#10B981" />
                   <stop offset="100%" stopColor="#B8B5AD" />
                 </linearGradient>
                 <linearGradient id="icon-gradient-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
