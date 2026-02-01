@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,15 +16,112 @@ import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/c
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
+import { DiscordMock } from "@/components/ui/discord-mock";
+import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
+import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
+import { PromoBanner } from "@/components/ui/promo-banner";
+import { CohortSection } from "@/components/ui/cohort-section";
+import { SubscribeModal } from "@/components/ui/subscribe-modal";
+import { ContactModal } from "@/components/ui/contact-modal";
+import { CohortApplicationModal } from "@/components/ui/cohort-application-modal";
+import { AdminLoginModal } from "@/components/ui/admin-login-modal";
+import { ChatWidget } from "@/components/ui/chat-widget";
+import { Analytics } from "@/lib/analytics";
+import { BillingToggle } from "@/components/ui/billing-toggle";
+import { getPricingTiers, PricingTier } from "@/lib/supabase";
 
 export default function Home() {
+  const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
+  const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
+
+  // Handler for Cohort application - opens the multi-step wizard
+  const handleCohortApply = () => {
+    setIsCohortApplicationOpen(true);
+    Analytics.trackCTAClick('Cohort Application Wizard');
+  };
+
+  // Legacy handler for contact modal with preset message (kept for fallback)
+  const handleCohortContactFallback = () => {
+    setCohortModalMessage("I'm interested in the Precision Cohort annual mentorship program. Here's my trading background:");
+    setIsContactModalOpen(true);
+  };
+
+  // Initialize analytics tracking
+  useEffect(() => {
+    Analytics.initialize()
+    Analytics.trackPageView()
+  }, []);
+
+  // Fetch pricing tiers from database
+  useEffect(() => {
+    getPricingTiers()
+      .then(setPricingTiers)
+      .catch((error) => {
+        console.error('Failed to load pricing tiers:', error);
+        // Fallback is handled in the render - uses hardcoded values if empty
+      });
+  }, []);
+
+  // Auto-popup subscribe modal after 5 seconds (once per session)
+  useEffect(() => {
+    const hasSeenModal = sessionStorage.getItem('titm_modal_seen');
+
+    if (!hasSeenModal) {
+      const timer = setTimeout(() => {
+        setIsSubscribeModalOpen(true);
+        sessionStorage.setItem('titm_modal_seen', 'true');
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   return (
     <main className="min-h-screen relative">
       {/* Animated Gradient Mesh Background */}
       <GradientMeshBackground />
 
       {/* Floating Island Navbar */}
-      <FloatingNavbar />
+      <FloatingNavbar onSubscribeClick={() => setIsSubscribeModalOpen(true)} />
+
+      {/* Promo Banner - Fixed below navbar */}
+      <PromoBanner />
+
+      {/* Subscribe Modal */}
+      <SubscribeModal
+        isOpen={isSubscribeModalOpen}
+        onClose={() => setIsSubscribeModalOpen(false)}
+      />
+
+      {/* Contact Modal */}
+      <ContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => {
+          setIsContactModalOpen(false);
+          setCohortModalMessage(undefined);
+        }}
+        presetMessage={cohortModalMessage}
+      />
+
+      {/* Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+      />
+
+      {/* Cohort Application Wizard */}
+      <CohortApplicationModal
+        isOpen={isCohortApplicationOpen}
+        onClose={() => setIsCohortApplicationOpen(false)}
+      />
+
+      {/* Mobile Sticky CTA - appears after scrolling past hero */}
+      <MobileStickyCtA />
 
       {/* Hero Section - Cinematic Brand Reveal */}
       <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
@@ -73,6 +172,7 @@ export default function Home() {
                     alt="TradeITM"
                     width={600}
                     height={200}
+                    sizes="(max-width: 768px) 80vw, 600px"
                     className="w-[80vw] md:w-[600px] h-auto object-contain drop-shadow-[0_0_40px_rgba(4,120,87,0.3)]"
                     priority
                   />
@@ -80,19 +180,39 @@ export default function Home() {
               </motion.div>
             </div>
 
-            {/* Subheadline - High Tracking */}
-            <motion.p
-              className="text-xs sm:text-sm md:text-base font-light tracking-[0.3em] uppercase text-platinum/60"
+            {/* Powerful Value Proposition */}
+            <motion.div
+              className="space-y-4 max-w-3xl"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             >
-              Institutional Grade Intelligence
-            </motion.p>
+              {/* Main Headline */}
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-ivory leading-tight">
+                <span className="text-gradient-champagne">High Quality Setups</span>{" "}
+                <span className="text-ivory/90">- Entries, Stop Loss, and Take Profits -</span>{" "}
+                <span className="text-gradient-champagne">Every Day</span>
+              </h1>
+
+              {/* Supporting Copy */}
+              <p className="text-sm sm:text-base md:text-lg text-platinum/70 max-w-xl mx-auto leading-relaxed">
+                Targeting 100%+ returns per trade. Get exact entries, stop losses, and take profit levels.
+                <span className="text-champagne/80"> No fluff. Just profits.</span>
+              </p>
+            </motion.div>
+
+            {/* Live Wins Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              <HeroWinsBadge />
+            </motion.div>
 
             {/* CTA Button - Centered */}
             <motion.div
-              className="pt-4"
+              className="pt-4 flex flex-col items-center gap-3"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.9, ease: [0.25, 0.4, 0.25, 1] }}
@@ -118,9 +238,18 @@ export default function Home() {
                   variant="luxury-champagne"
                   className="min-w-[220px] rounded-sm font-medium tracking-widest text-sm"
                 >
-                  <a href="#pricing">JOIN NOW</a>
+                  <a href="#pricing" onClick={() => Analytics.trackCTAClick('Hero Join Now')}>JOIN NOW</a>
                 </Button>
               </motion.div>
+
+              {/* Member Login Link */}
+              <Link
+                href="/login"
+                className="mt-4 text-xs text-white/30 hover:text-white transition-colors cursor-pointer"
+                onClick={() => Analytics.trackCTAClick('Hero Member Login')}
+              >
+                Already inside? Enter Terminal
+              </Link>
             </motion.div>
           </div>
         </div>
@@ -144,16 +273,16 @@ export default function Home() {
       <RibbonDivider />
 
       {/* Stats Section */}
-      <section className="container mx-auto px-4 py-16">
+      <section className="container mx-auto px-4 py-12">
         <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
           {[
-            { label: "Active Members", value: "10,000+" },
-            { label: "Success Rate", value: "87%" },
-            { label: "Signals Daily", value: "15+" },
-            { label: "Years Experience", value: "8+" },
+            { label: "Win Rate", value: "87%", icon: "📈" },
+            { label: "Avg. Weekly Gain", value: "100%", icon: "💰" },
+            { label: "Prime Setups", value: "Daily", icon: "⚡" },
+            { label: "Years Experience", value: "8+", icon: "🏆" },
           ].map((stat, idx) => (
             <StaggerItem key={idx}>
-              <Card className="bg-card/50 backdrop-blur border-border/40 h-full">
+              <Card className="bg-card/50 backdrop-blur border-border/40 h-full hover:border-primary/30 transition-colors duration-300">
                 <CardContent className="pt-6 text-center">
                   <div className="text-3xl md:text-4xl stat-value text-primary mb-2">{stat.value}</div>
                   <div className="text-sm text-muted-foreground">{stat.label}</div>
@@ -165,7 +294,7 @@ export default function Home() {
       </section>
 
       {/* Features Section - Bento Grid */}
-      <section id="features" className="container mx-auto px-4 py-20">
+      <section id="features" className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16 space-y-4">
@@ -182,43 +311,21 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Bento Grid Layout */}
+          {/* Bento Grid Layout - Clean 2x3 grid */}
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
-            {/* Real-Time Signals - Wide Card (2 columns) with Live Candlestick */}
-            <StaggerItem className="md:col-span-2 lg:col-span-2">
+            {/* Row 1 */}
+            {/* Real-Time Trade Alerts with Live Candlestick */}
+            <StaggerItem>
               <BentoCard
                 icon={TrendingUp}
-                title="Real-Time Signals"
-                description="Get instant trade alerts from experienced traders with detailed entry, exit, and stop-loss levels. Our signals are backed by years of market analysis and proven strategies that consistently deliver results."
+                title="Real-Time Trade Alerts"
+                description="Get instant trade alerts with detailed entry, exit, and stop-loss levels backed by proven strategies."
                 spotlight="emerald"
                 graphic={<CandlestickChart className="absolute inset-0" />}
               />
             </StaggerItem>
 
-            {/* Educational Content - Tall Card (2 rows) */}
-            <StaggerItem className="md:row-span-2">
-              <BentoCard
-                icon={BookOpen}
-                title="Educational Content"
-                description="Access exclusive courses, webinars, and tutorials covering technical analysis, fundamental analysis, and risk management. From beginner basics to advanced strategies, we provide the knowledge you need to become a confident trader."
-                className="h-full"
-                spotlight="gold"
-                image="/icon-education.png"
-              />
-            </StaggerItem>
-
-            {/* Active Community with Signal Pulse */}
-            <StaggerItem>
-              <BentoCard
-                icon={Users}
-                title="Live Signal Feed"
-                description="Network with thousands of like-minded traders, share insights, and learn from collective experience."
-                spotlight="emerald"
-                graphic={<SignalPulse className="absolute inset-0 p-4" signalCount={8} />}
-              />
-            </StaggerItem>
-
-            {/* Precise Analysis with Win Rate Chart */}
+            {/* 87% Success Rate with Win Rate Chart */}
             <StaggerItem>
               <BentoCard
                 icon={Target}
@@ -229,12 +336,36 @@ export default function Home() {
               />
             </StaggerItem>
 
+            {/* Active Community with Discord Mock */}
+            <StaggerItem>
+              <BentoCard
+                icon={Users}
+                title="Active Community"
+                description="Join thousands of traders sharing real-time wins in our exclusive Discord server."
+                spotlight="emerald"
+                graphic={<DiscordMock />}
+                graphicClassName="!bg-transparent !border-0"
+              />
+            </StaggerItem>
+
+            {/* Row 2 */}
+            {/* Educational Content */}
+            <StaggerItem>
+              <BentoCard
+                icon={BookOpen}
+                title="Educational Content"
+                description="Access exclusive courses, webinars, and tutorials from beginner basics to advanced strategies."
+                spotlight="gold"
+                image="/icon-education.png"
+              />
+            </StaggerItem>
+
             {/* Lightning Fast */}
             <StaggerItem>
               <BentoCard
                 icon={Zap}
                 title="Lightning Fast"
-                description="Receive signals instantly via Discord notifications so you never miss a profitable opportunity."
+                description="Receive trade alerts instantly via Discord notifications so you never miss a profitable opportunity."
                 spotlight="emerald"
                 image="/icon-lightning.png"
               />
@@ -258,14 +389,14 @@ export default function Home() {
       <RibbonDivider flip />
 
       {/* Pricing Section - Membership Cards */}
-      <section id="pricing" className="container mx-auto px-4 py-20">
+      <section id="pricing" className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16 space-y-4">
             <RevealHeading>
               <h2 className="text-3xl md:text-5xl font-bold">
                 Choose Your{" "}
-                <span className="text-gradient-champagne">Membership</span>
+                <span className="text-gradient-champagne">Plan</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
@@ -275,87 +406,148 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Pricing Cards Grid - Ordered by price: Starter → Pro → Elite */}
+          {/* Billing Toggle */}
+          <RevealContent delay={0.3}>
+            <div className="flex justify-center mb-10">
+              <BillingToggle billingCycle={billingCycle} onChange={setBillingCycle} />
+            </div>
+          </RevealContent>
+
+          {/* Pricing Cards Grid - Core → Pro → Execute */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
-            {/* Starter Card - $49/mo */}
+            {/* Core Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name="Starter"
-                price="$49"
-                period="/month"
-                description="Perfect for beginners looking to get started"
-                features={[
-                  "5 Daily Signals",
-                  "Basic Market Analysis",
-                  "Community Access",
-                  "Email Support",
-                  "Educational Resources",
+                name={pricingTiers.find(t => t.id === 'core')?.name || "Core Sniper"}
+                price={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'core')?.monthly_price || "$199")
+                  : (pricingTiers.find(t => t.id === 'core')?.yearly_price || "$1,990")
+                }
+                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                description={pricingTiers.find(t => t.id === 'core')?.description || "For disciplined traders who want full market exposure"}
+                features={pricingTiers.find(t => t.id === 'core')?.features || [
+                  "👀 Morning Watchlist",
+                  "🎯 SPX day trade setups",
+                  "🔔 High-volume & momentum alerts",
+                  "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink="https://whop.com/checkout/plan_starter"
-                tier="starter"
+                whopLink={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/")
+                  : (pricingTiers.find(t => t.id === 'core')?.yearly_link || pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/")
+                }
+                tier="core"
+                tagline={pricingTiers.find(t => t.id === 'core')?.tagline || "Execution focused education"}
+                isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
 
-            {/* Pro Card - $99/mo */}
+            {/* Pro Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name="Pro"
-                price="$99"
-                period="/month"
-                description="Most popular choice for serious traders"
-                features={[
-                  "15+ Daily Signals",
-                  "Advanced Technical Analysis",
-                  "Priority Discord Access",
-                  "Live Trading Sessions",
-                  "1-on-1 Mentorship (Monthly)",
-                  "Risk Management Tools",
-                  "24/7 Priority Support",
+                name={pricingTiers.find(t => t.id === 'pro')?.name || "Pro Sniper"}
+                price={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'pro')?.monthly_price || "$299")
+                  : (pricingTiers.find(t => t.id === 'pro')?.yearly_price || "$2,990")
+                }
+                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                description={pricingTiers.find(t => t.id === 'pro')?.description || "For traders scaling beyond day trades"}
+                features={pricingTiers.find(t => t.id === 'pro')?.features || [
+                  "Everything in Core Sniper, plus:",
+                  "🧭 LEAPS",
+                  "📈 Advanced swing trade strategy",
+                  "🧠 Position building logic",
+                  "📊 Longer term market structure insight",
+                  "🎯 Capital allocation education",
                 ]}
-                whopLink="https://whop.com/checkout/plan_pro"
+                whopLink={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/")
+                  : (pricingTiers.find(t => t.id === 'pro')?.yearly_link || pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/")
+                }
                 tier="pro"
+                tagline={pricingTiers.find(t => t.id === 'pro')?.tagline || "More patience & strategy, not just speed"}
+                isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
 
-            {/* Elite Card - $200/mo - The Premium Option */}
+            {/* Execute Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name="Elite"
-                price="$200"
-                period="/month"
-                description="For professional traders seeking maximum edge"
-                features={[
-                  "Unlimited Premium Signals",
-                  "Personal Trading Coach",
-                  "Exclusive Private Channel",
-                  "Weekly Strategy Calls",
-                  "Custom Analysis Requests",
-                  "API Access",
-                  "White Glove Support",
-                  "Early Access to New Features",
+                name={pricingTiers.find(t => t.id === 'execute')?.name || "Execute Sniper"}
+                price={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'execute')?.monthly_price || "$499")
+                  : (pricingTiers.find(t => t.id === 'execute')?.yearly_price || "$4,990")
+                }
+                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                description={pricingTiers.find(t => t.id === 'execute')?.description || "For serious traders only"}
+                features={pricingTiers.find(t => t.id === 'execute')?.features || [
+                  "Everything in Pro Sniper, plus:",
+                  "🔥 Advanced NDX real time alerts (entries & exits)",
+                  "🧭 High-conviction LEAPS framework",
+                  "🎯 Higher-level trade commentary",
+                  "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink="https://whop.com/trade-in-the-money/itm-elite-access/"
-                tier="elite"
+                whopLink={billingCycle === 'monthly'
+                  ? (pricingTiers.find(t => t.id === 'execute')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/")
+                  : (pricingTiers.find(t => t.id === 'execute')?.yearly_link || pricingTiers.find(t => t.id === 'execute')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/")
+                }
+                tier="execute"
+                tagline={pricingTiers.find(t => t.id === 'execute')?.tagline || "Maximum conviction, maximum execution"}
+                isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
           </StaggerContainer>
 
-          {/* Money-back Guarantee */}
+          {/* Trust Badges & Guarantee */}
           <RevealContent delay={0.5}>
-            <div className="mt-12 text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/5">
-                <Shield className="w-4 h-4 text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  30-day money-back guarantee on all plans
-                </span>
+            <div className="mt-12 space-y-6">
+              {/* Main Guarantee */}
+              <div className="text-center">
+                <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-6 py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 backdrop-blur-sm">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                    <Shield className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <div className="text-lg font-bold text-emerald-400">
+                      Action-Based Money-Back Guarantee*
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Follow our trade alerts for 30 days. If you don&apos;t see value, we&apos;ll refund you. *Terms apply.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trust Badges */}
+              <div className="flex flex-wrap items-center justify-center gap-6 text-muted-foreground/60">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="text-xs">SSL Secured</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-xs">Powered by Stripe</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="text-xs">Secure Checkout</span>
+                </div>
               </div>
             </div>
           </RevealContent>
         </div>
       </section>
 
+      {/* Precision Cohort Section - Annual Mentorship */}
+      <CohortSection onApplyClick={handleCohortApply} />
+
       {/* Testimonials Section - Infinite Marquee */}
-      <section id="testimonials" className="py-20 overflow-hidden">
+      <section id="testimonials" className="py-14 overflow-hidden">
         <div className="container mx-auto px-4 mb-12">
           <div className="text-center space-y-4">
             <RevealHeading>
@@ -376,33 +568,33 @@ export default function Home() {
         <TestimonialMarquee
           testimonials={[
             {
-              name: "Michael Chen",
-              role: "Day Trader",
-              content: "TITM transformed my trading completely. The signals are incredibly accurate and the community support is unmatched. I've seen consistent profits since joining.",
+              name: "Michael C.",
+              role: "Execute Sniper Member",
+              content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM alerts are the real deal.",
               avatar: "MC"
             },
             {
-              name: "Sarah Rodriguez",
-              role: "Swing Trader",
-              content: "Best investment I've made in my trading career. The education alone is worth 10x the price. The mentors genuinely care about your success.",
+              name: "Sarah R.",
+              role: "Pro Sniper Member",
+              content: "Made back my entire membership cost in 2 days. Last week's TSLA play hit +156%. These guys know what they're doing.",
               avatar: "SR"
             },
             {
-              name: "David Park",
-              role: "Options Trader",
-              content: "The real-time signals and analysis have given me the confidence to make better trading decisions. My account has grown 180% in 6 months.",
+              name: "David P.",
+              role: "Execute Sniper Member",
+              content: "$8,400 profit this month following the trade alerts. My account has grown 180% in 6 months. Best investment I've ever made.",
               avatar: "DP"
             },
             {
-              name: "Emily Watson",
-              role: "Forex Trader",
-              content: "The community is incredibly supportive. I went from losing money to consistently profitable in just 3 months. Can't recommend TITM enough!",
+              name: "Emily W.",
+              role: "Pro Sniper Member",
+              content: "Went from -$4k to +$12k in 3 months. The risk management education saved me from blowing up my account.",
               avatar: "EW"
             },
             {
-              name: "James Miller",
-              role: "Crypto Trader",
-              content: "The risk management education alone saved my portfolio. Now I trade with confidence and proper position sizing. Life-changing experience.",
+              name: "James M.",
+              role: "Core Sniper Member",
+              content: "3 trades, $5,700 profit last week alone. The AMD call was +167%. This community delivers every single week.",
               avatar: "JM"
             },
           ]}
@@ -415,33 +607,33 @@ export default function Home() {
         <TestimonialMarquee
           testimonials={[
             {
-              name: "Alex Thompson",
-              role: "Part-time Trader",
-              content: "As someone with a full-time job, the signal alerts are perfect. I can trade on my schedule and still catch great opportunities.",
+              name: "Alex T.",
+              role: "Core Sniper Member",
+              content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These trade alerts fit around any schedule.",
               avatar: "AT"
             },
             {
-              name: "Lisa Kim",
-              role: "Stock Trader",
-              content: "The 1-on-1 mentorship sessions are invaluable. Having a personal coach review my trades has accelerated my learning tremendously.",
+              name: "Lisa K.",
+              role: "Execute Sniper Member",
+              content: "$15k account to $41k in 4 months. The 1-on-1 mentorship sessions are invaluable. Worth every penny.",
               avatar: "LK"
             },
             {
-              name: "Robert Garcia",
-              role: "Day Trader",
-              content: "I've tried many trading communities, but TITM is on another level. The quality of analysis and the speed of signals is unmatched.",
+              name: "Robert G.",
+              role: "Execute Sniper Member",
+              content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of alerts is unmatched.",
               avatar: "RG"
             },
             {
-              name: "Jennifer Lee",
-              role: "Swing Trader",
-              content: "Finally found a community that actually delivers results. The Pro membership paid for itself in the first week!",
+              name: "Jennifer L.",
+              role: "Pro Sniper Member",
+              content: "Membership paid for itself in the first week with one trade. +142% on SPY calls. Now I'm up $7,800 total.",
               avatar: "JL"
             },
             {
-              name: "Marcus Brown",
-              role: "Options Trader",
-              content: "The live trading sessions are incredible. Watching experienced traders in real-time has taught me more than any course ever could.",
+              name: "Marcus B.",
+              role: "Core Sniper Member",
+              content: "Watch trades live, learn the strategy, bank profits. Simple. $4,200 last week following along. Life-changing.",
               avatar: "MB"
             },
           ]}
@@ -454,7 +646,7 @@ export default function Home() {
       <RibbonDivider />
 
       {/* Post-Purchase Instructions Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-14">
         <RevealContent>
           <div className="max-w-3xl mx-auto">
             <Card className="glass-card-heavy border-primary/30">
@@ -488,7 +680,7 @@ export default function Home() {
                     {
                       step: "4",
                       title: "Start Trading",
-                      description: "Explore the channels, introduce yourself, and start receiving real-time trading signals immediately!"
+                      description: "Explore the channels, introduce yourself, and start receiving real-time trade alerts immediately!"
                     }
                   ].map((step, idx) => (
                     <StaggerItem key={idx}>
@@ -506,7 +698,7 @@ export default function Home() {
                 </StaggerContainer>
                 <div className="pt-6 border-t border-border/40">
                   <p className="text-sm text-muted-foreground text-center">
-                    Need help? Contact us at <a href="mailto:support@tradeinthemoney.com" className="text-primary hover:underline">support@tradeinthemoney.com</a>
+                    Need help? <button onClick={() => setIsContactModalOpen(true)} className="text-primary hover:underline">Contact us</button>
                   </p>
                 </div>
               </CardContent>
@@ -516,7 +708,7 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-14">
         <RevealContent>
           <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-champagne-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
             {/* Background gradient accent */}
@@ -524,20 +716,36 @@ export default function Home() {
 
             <div className="relative z-10">
               <h2 className="text-3xl md:text-5xl font-bold">
-                Ready To Elevate Your{" "}
-                <span className="text-gradient-champagne">Trading?</span>
+                Stop Missing{" "}
+                <span className="text-gradient-champagne">Winning Trades</span>
               </h2>
               <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
-                Join thousands of successful traders who trust Trade In The Money for premium signals and education.
+                Every day you wait is another 100%+ trade you're missing. Get the exact entries elite traders use.
               </p>
+
+              {/* Urgency Element */}
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
+                </span>
+                <span className="text-sm text-red-400 font-medium">
+                  Only 7 Execute Sniper spots remaining this month
+                </span>
+              </div>
+
               <Button
                 asChild
                 size="xl"
                 variant="luxury-champagne"
-                className="mt-8 rounded-sm min-w-[240px]"
+                className="mt-6 rounded-sm min-w-[280px]"
               >
-                <a href="#pricing">Start Trading Smarter Today</a>
+                <a href="#pricing">Choose Your Plan →</a>
               </Button>
+
+              <p className="text-xs text-muted-foreground/60 mt-4">
+                30-day money-back guarantee
+              </p>
             </div>
           </div>
         </RevealContent>
@@ -563,16 +771,28 @@ export default function Home() {
               </div>
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
-              <a href="#" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
-              <a href="mailto:support@tradeinthemoney.com" className="hover:text-champagne transition-colors duration-300">Contact</a>
+              <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
+              <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>
           </div>
           <div className="mt-6 text-center text-xs text-muted-foreground">
-            <p>Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.</p>
+            <p>
+              Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.{" "}
+              <button
+                onClick={() => setIsAdminModalOpen(true)}
+                className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.6)] ml-1"
+                aria-label="Admin access"
+              >
+                ❤️‍🔥
+              </button>
+            </p>
           </div>
         </div>
       </footer>
+
+      {/* AI Chat Widget */}
+      <ChatWidget />
     </main>
   );
 }
