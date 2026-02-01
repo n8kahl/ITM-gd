@@ -226,7 +226,7 @@ export default function AdminDashboard() {
           <Card className="glass-card-heavy p-6 border-white/5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-white/80">Recent Applications</h3>
-              <a href="/admin/leads" className="text-xs text-[#D4AF37] hover:underline">
+              <a href="/admin/leads" className="text-xs text-[#10B981] hover:underline">
                 View all
               </a>
             </div>
@@ -244,7 +244,7 @@ export default function AdminDashboard() {
                     className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] text-xs font-medium">
+                      <div className="w-8 h-8 rounded-full bg-[#10B981]/20 flex items-center justify-center text-[#10B981] text-xs font-medium">
                         {lead.full_name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div>
@@ -398,14 +398,14 @@ function QuickLink({ href, icon: Icon, label, color }: {
   color: 'gold' | 'emerald' | 'blue' | 'purple'
 }) {
   const colors = {
-    gold: "hover:border-[#D4AF37]/30 hover:bg-[#D4AF37]/5",
+    gold: "hover:border-[#10B981]/30 hover:bg-[#10B981]/5",
     emerald: "hover:border-emerald-500/30 hover:bg-emerald-500/5",
     blue: "hover:border-blue-500/30 hover:bg-blue-500/5",
     purple: "hover:border-purple-500/30 hover:bg-purple-500/5",
   }
 
   const iconColors = {
-    gold: "text-[#D4AF37]",
+    gold: "text-[#10B981]",
     emerald: "text-emerald-400",
     blue: "text-blue-400",
     purple: "text-purple-400",

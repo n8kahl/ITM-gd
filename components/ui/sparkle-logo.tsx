@@ -72,7 +72,7 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
     const colors = [
       'rgba(16, 185, 129, 0.8)', // Emerald
       'rgba(4, 120, 87, 0.7)',   // Dark emerald
-      'rgba(212, 175, 55, 0.6)', // Gold
+      'rgba(16, 185, 129, 0.6)', // Gold
       'rgba(244, 228, 193, 0.5)', // Champagne
     ]
 
@@ -101,7 +101,7 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
         <motion.div
           className="absolute inset-0 -z-10"
           style={{
-            background: 'radial-gradient(circle, rgba(4,120,87,0.4) 0%, rgba(212,175,55,0.2) 50%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(4,120,87,0.4) 0%, rgba(16, 185, 129,0.2) 50%, transparent 70%)',
             filter: 'blur(60px)',
           }}
           animate={{

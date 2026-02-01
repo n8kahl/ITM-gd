@@ -44,7 +44,7 @@ interface AnalyticsData {
 
 const COLORS = {
   desktop: '#047857', // emerald
-  mobile: '#d4af37', // champagne
+  mobile: '#10b981', // champagne
   tablet: '#6366f1', // indigo
   chrome: '#4285f4',
   safari: '#000000',
@@ -388,7 +388,7 @@ export default function AnalyticsPage() {
                     <XAxis dataKey="name" tick={{ fill: '#999', fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
                     <YAxis tick={{ fill: '#999' }} />
                     <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }} />
-                    <Bar dataKey="value" fill="#d4af37" />
+                    <Bar dataKey="value" fill="#10b981" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (

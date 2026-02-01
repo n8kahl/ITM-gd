@@ -44,7 +44,7 @@ export function BentoCard({
   // Refined, subtle spotlight colors
   const spotlightColor =
     spotlight === "gold"
-      ? "rgba(212, 175, 55, 0.08)"
+      ? "rgba(16, 185, 129, 0.08)"
       : "rgba(4, 120, 87, 0.10)";
 
   const borderColor =

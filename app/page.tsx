@@ -185,9 +185,9 @@ export default function Home() {
               <motion.div
                 animate={{
                   boxShadow: [
-                    "0 0 20px rgba(212, 175, 55, 0.3)",
-                    "0 0 50px rgba(212, 175, 55, 0.5)",
-                    "0 0 20px rgba(212, 175, 55, 0.3)",
+                    "0 0 20px rgba(16, 185, 129, 0.3)",
+                    "0 0 50px rgba(16, 185, 129, 0.5)",
+                    "0 0 20px rgba(16, 185, 129, 0.3)",
                   ],
                 }}
                 transition={{
@@ -746,7 +746,7 @@ export default function Home() {
               Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.{" "}
               <Link
                 href="/admin"
-                className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.6)] ml-1"
+                className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(16, 185, 129,0.6)] ml-1"
                 aria-label="Admin access"
               >
                 ❤️‍🔥
