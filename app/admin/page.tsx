@@ -273,42 +273,6 @@ export default function AdminDashboard() {
             <QuickLink href="/admin/leads" icon={FileText} label="Leads" color="emerald" />
             <QuickLink href="/admin/chat" icon={MessageSquare} label="Chat" color="blue" />
             <QuickLink href="/admin/settings" icon={Activity} label="Settings" color="purple" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <Card className="glass-card-heavy p-6 border-white/5">
-                <h3 className="text-sm font-medium text-white/80 mb-4">Recent Sales</h3>
-                <div className="space-y-4">
-                  {[1,2,3].map((_, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
-                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs">$</div>
-                         <div>
-                            <div className="text-sm text-white">Pro Sniper</div>
-                            <div className="text-xs text-white/40">2 mins ago</div>
-                         </div>
-                       </div>
-                       <div className="text-sm font-mono text-emerald-400">+$299</div>
-                    </div>
-                  ))}
-                </div>
-             </Card>
-             <Card className="glass-card-heavy p-6 border-white/5">
-                <h3 className="text-sm font-medium text-white/80 mb-4">New Leads</h3>
-                <div className="space-y-4">
-                  {[1,2,3].map((_, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
-                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500 text-xs">U</div>
-                         <div>
-                            <div className="text-sm text-white">John Doe</div>
-                            <div className="text-xs text-white/40">Applied for Cohort</div>
-                         </div>
-                       </div>
-                       <div className="text-xs px-2 py-1 rounded bg-white/5 text-white/60">Review</div>
-                    </div>
-                  ))}
-                </div>
-             </Card>
->>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
           </div>
         </div>
 
