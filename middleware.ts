@@ -35,10 +35,14 @@ export function middleware(request: NextRequest) {
           verifyUrl.searchParams.set('token', token)
           verifyUrl.searchParams.set('redirect', pathname)
 
-          // Preserve other query params like conversation ID
+          // Preserve other query params like conversation ID and highlight
           const id = request.nextUrl.searchParams.get('id')
           if (id) {
             verifyUrl.searchParams.set('id', id)
+          }
+          const highlight = request.nextUrl.searchParams.get('highlight')
+          if (highlight) {
+            verifyUrl.searchParams.set('highlight', highlight)
           }
 
           response = NextResponse.redirect(verifyUrl)
@@ -52,24 +56,9 @@ export function middleware(request: NextRequest) {
       }
     }
   }
-  // Members route - check for Supabase session cookie
-  else if (pathname.startsWith('/members')) {
-    // Supabase stores session in cookies with prefix 'sb-'
-    // We check for any Supabase auth cookie
-    const cookies = request.cookies.getAll()
-    const hasSupabaseSession = cookies.some(
-      cookie => cookie.name.includes('-auth-token') || cookie.name.includes('sb-')
-    )
-
-    if (!hasSupabaseSession) {
-      const loginUrl = new URL('/login', request.url)
-      loginUrl.searchParams.set('redirect', pathname)
-      response = NextResponse.redirect(loginUrl)
-    } else {
-      response = NextResponse.next()
-    }
-  }
-  // All other routes
+  // All other routes (including /members - protected client-side by MemberAuthContext)
+  // Note: /members uses Supabase auth which stores sessions in localStorage, not cookies
+  // Middleware can't access localStorage, so we rely on client-side protection
   else {
     response = NextResponse.next()
   }
@@ -85,11 +74,9 @@ export function middleware(request: NextRequest) {
 // Configure which routes the middleware runs on
 export const config = {
   matcher: [
-    // Match all admin routes
+    // Match all admin routes (protected by httpOnly cookie)
     '/admin/:path*',
-    // Match all members routes
-    '/members/:path*',
-    // Match API routes that need protection (optional, for CSRF later)
-    // '/api/admin/:path*',
+    // Note: /members is NOT in middleware - it uses localStorage-based Supabase auth
+    // which is protected client-side by MemberAuthContext
   ],
 }

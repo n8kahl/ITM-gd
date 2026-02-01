@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')
   const redirect = request.nextUrl.searchParams.get('redirect') || '/admin'
   const conversationId = request.nextUrl.searchParams.get('id')
+  const highlight = request.nextUrl.searchParams.get('highlight')
 
   if (!token) {
     return NextResponse.redirect(new URL('/admin/login?error=missing_token', request.url))
@@ -44,10 +45,13 @@ export async function GET(request: NextRequest) {
       sameSite: 'lax',
     })
 
-    // Build redirect URL
+    // Build redirect URL with preserved query params
     let redirectUrl = new URL(redirect, request.url)
     if (conversationId) {
       redirectUrl.searchParams.set('id', conversationId)
+    }
+    if (highlight) {
+      redirectUrl.searchParams.set('highlight', highlight)
     }
 
     return NextResponse.redirect(redirectUrl)
