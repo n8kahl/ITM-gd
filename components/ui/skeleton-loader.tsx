@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 import type { CSSProperties } from 'react'
+import SparkleLog from './sparkle-logo'
 
 // Base Skeleton component with shimmer animation
 interface SkeletonProps {
@@ -22,14 +23,16 @@ export function Skeleton({
   if (variant === 'screen') {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050505]">
-        <div className="relative w-24 h-24 animate-pulse">
-          <Image
-            src="/logo.png"
-            alt="Loading..."
-            fill
-            className="object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-          />
-        </div>
+        <SparkleLog
+          src="/logo.png"
+          alt="Loading..."
+          width={96}
+          height={96}
+          sparkleCount={15}
+          enableFloat={true}
+          enableGlow={true}
+          glowIntensity="high"
+        />
         <div className="mt-8 flex flex-col items-center gap-2">
           <div className="h-1 w-32 bg-white/10 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 w-1/2 animate-[shimmer_1.5s_infinite]" />
