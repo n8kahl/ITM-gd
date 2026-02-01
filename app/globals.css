@@ -836,4 +836,34 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+
+  /* ============================================
+     ADMIN PANEL - LUXURY SCROLLBAR & UTILITIES
+     ============================================ */
+
+  /* Luxury Scrollbar for Admin */
+  .admin-content-area::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .admin-content-area::-webkit-scrollbar-track {
+    background: rgba(10, 10, 11, 0.5);
+  }
+
+  .admin-content-area::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.2);
+    border-radius: 10px;
+  }
+
+  .admin-content-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.4);
+  }
+
+  /* Admin Dashboard Content Area */
+  .admin-content-area {
+    height: calc(100vh - 64px);
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
 }
