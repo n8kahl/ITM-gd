@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Shield } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export function FloatingNavbar() {
@@ -77,8 +78,24 @@ export function FloatingNavbar() {
             ))}
           </div>
 
-          {/* Desktop CTA Button */}
-          <div className="hidden md:block">
+          {/* Desktop CTA Buttons */}
+          <div className="hidden md:flex items-center gap-4">
+            {/* Member Login */}
+            <Link
+              href="/login"
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-sm",
+                "text-sm font-light tracking-wide",
+                "text-ivory/60 hover:text-ivory",
+                "hover:bg-white/5",
+                "transition-all duration-300"
+              )}
+            >
+              <Shield className="w-4 h-4" />
+              <span>Members</span>
+            </Link>
+
+            {/* Join Now CTA */}
             <Button
               asChild
               variant="luxury"
@@ -138,6 +155,21 @@ export function FloatingNavbar() {
                 {link.label}
               </a>
             ))}
+
+            {/* Member Login Link */}
+            <Link
+              href="/login"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-3 h-12 px-2",
+                "text-base font-light tracking-wide",
+                "text-champagne/80 hover:text-champagne hover:bg-white/5",
+                "rounded-sm transition-colors duration-300"
+              )}
+            >
+              <Shield className="w-5 h-5" />
+              Member Login
+            </Link>
 
             {/* Mobile CTA Button - Full Width */}
             <div className="pt-3">

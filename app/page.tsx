@@ -24,7 +24,6 @@ import { CohortSection } from "@/components/ui/cohort-section";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
 import { ContactModal } from "@/components/ui/contact-modal";
 import { CohortApplicationModal } from "@/components/ui/cohort-application-modal";
-import { AdminLoginModal } from "@/components/ui/admin-login-modal";
 import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
 import { BillingToggle } from "@/components/ui/billing-toggle";
@@ -33,8 +32,7 @@ import { getPricingTiers, PricingTier } from "@/lib/supabase";
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
-  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
+    const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
@@ -108,11 +106,6 @@ export default function Home() {
         presetMessage={cohortModalMessage}
       />
 
-      {/* Admin Login Modal */}
-      <AdminLoginModal
-        isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
-      />
 
       {/* Cohort Application Wizard */}
       <CohortApplicationModal
@@ -779,13 +772,13 @@ export default function Home() {
           <div className="mt-6 text-center text-xs text-muted-foreground">
             <p>
               Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.{" "}
-              <button
-                onClick={() => setIsAdminModalOpen(true)}
+              <Link
+                href="/admin"
                 className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.6)] ml-1"
                 aria-label="Admin access"
               >
                 ❤️‍🔥
-              </button>
+              </Link>
             </p>
           </div>
         </div>

@@ -24,6 +24,42 @@ async function isAdmin(): Promise<boolean> {
   return adminCookie?.value === 'true'
 }
 
+// GET - Fetch all pricing tiers
+export async function GET() {
+  if (!await isAdmin()) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    let supabaseAdmin
+    try {
+      supabaseAdmin = getSupabaseAdmin()
+    } catch (envError) {
+      console.error('Environment error:', envError)
+      return NextResponse.json({
+        error: envError instanceof Error ? envError.message : 'Missing environment variables'
+      }, { status: 500 })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('pricing_tiers')
+      .select('*')
+      .order('monthly_price', { ascending: true })
+
+    if (error) {
+      console.error('Failed to fetch pricing tiers:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, tiers: data || [] })
+  } catch (error) {
+    console.error('Error fetching pricing tiers:', error)
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Internal server error'
+    }, { status: 500 })
+  }
+}
+
 // PATCH - Update a pricing tier
 export async function PATCH(request: NextRequest) {
   // Check admin auth

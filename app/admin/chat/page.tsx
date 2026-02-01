@@ -41,8 +41,14 @@ import {
   RefreshCw
 } from 'lucide-react'
 
-// Canned responses for quick replies
-const CANNED_RESPONSES = [
+// Default canned responses - can be overridden via app_settings
+interface CannedResponse {
+  label: string
+  shortcut: string
+  text: string
+}
+
+const DEFAULT_CANNED_RESPONSES: CannedResponse[] = [
   {
     label: 'Pricing Overview',
     shortcut: '/pricing',
@@ -123,6 +129,20 @@ interface Message {
   created_at: string
 }
 
+// Generate a stable admin session ID for typing indicators
+function getAdminSessionId(): string {
+  if (typeof window === 'undefined') return 'admin-ssr'
+
+  // Check sessionStorage for existing ID
+  let sessionId = sessionStorage.getItem('admin_session_id')
+  if (!sessionId) {
+    // Generate a UUID v4 for this admin session
+    sessionId = crypto.randomUUID()
+    sessionStorage.setItem('admin_session_id', sessionId)
+  }
+  return sessionId
+}
+
 function ChatManagementContent() {
   const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -146,11 +166,41 @@ function ChatManagementContent() {
   const [sendingTranscript, setSendingTranscript] = useState(false)
   const [archivingResolved, setArchivingResolved] = useState(false)
   const [isMobileView, setIsMobileView] = useState(false)
+  const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>(DEFAULT_CANNED_RESPONSES)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const conversationRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const previousEscalatedIds = useRef<Set<string>>(new Set())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousMessageCount = useRef(0)
+  const adminSessionId = useRef<string>(getAdminSessionId())
+
+  // Fetch canned responses from app_settings (if configured)
+  useEffect(() => {
+    const fetchCannedResponses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'chat_canned_responses')
+          .single()
+
+        if (!error && data?.value) {
+          try {
+            const parsed = JSON.parse(data.value)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCannedResponses(parsed)
+            }
+          } catch {
+            // Invalid JSON, use defaults
+          }
+        }
+      } catch {
+        // Use default canned responses on error
+      }
+    }
+
+    fetchCannedResponses()
+  }, [])
 
   // Detect mobile view (< 1024px)
   useEffect(() => {
@@ -200,7 +250,7 @@ function ChatManagementContent() {
           .from('team_typing_indicators')
           .upsert({
             conversation_id: conversationId,
-            user_id: '00000000-0000-0000-0000-000000000000', // Admin placeholder ID
+            user_id: adminSessionId.current,
             user_name: 'TradeITM',
             is_typing: true,
             updated_at: new Date().toISOString()
@@ -213,7 +263,7 @@ function ChatManagementContent() {
           .from('team_typing_indicators')
           .delete()
           .eq('conversation_id', conversationId)
-          .eq('user_id', '00000000-0000-0000-0000-000000000000')
+          .eq('user_id', adminSessionId.current)
       }
     } catch (error) {
       console.warn('Failed to broadcast typing status:', error)
@@ -899,7 +949,7 @@ function ChatManagementContent() {
 
                   {showCannedResponses && (
                     <div className="absolute bottom-full left-0 mb-2 w-72 lg:w-80 bg-background/95 backdrop-blur border border-border/40 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                      {CANNED_RESPONSES.map((response, i) => (
+                      {cannedResponses.map((response, i) => (
                         <button
                           key={i}
                           onClick={() => insertCannedResponse(response.text)}
@@ -925,7 +975,7 @@ function ChatManagementContent() {
                       const val = e.target.value
                       setInputValue(val)
                       // Check for canned response shortcuts
-                      const matchedResponse = CANNED_RESPONSES.find(r => val === r.shortcut)
+                      const matchedResponse = cannedResponses.find(r => val === r.shortcut)
                       if (matchedResponse) {
                         setInputValue(matchedResponse.text)
                       }

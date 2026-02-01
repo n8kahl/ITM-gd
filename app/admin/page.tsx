@@ -5,17 +5,27 @@ import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import {
   Users, DollarSign, Activity, MessageSquare,
-  ArrowUpRight, ArrowDownRight, MoreHorizontal
+  ArrowUpRight, ArrowDownRight, MoreHorizontal,
+  CheckCircle2, AlertTriangle, XCircle, RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+
+interface SystemDiagnostic {
+  name: string
+  status: 'pass' | 'fail' | 'warning'
+  message: string
+  latency?: number
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     users: 0,
     revenue: 0,
     chats: 0,
-    active: 0
+    systemHealth: '—'
   })
+  const [systemStatus, setSystemStatus] = useState<SystemDiagnostic[]>([])
+  const [systemLoading, setSystemLoading] = useState(true)
 
   // Load data from Supabase
   useEffect(() => {
@@ -31,21 +41,73 @@ export default function AdminDashboard() {
             .eq('status', 'active'),
         ])
 
-        setStats({
+        setStats(prev => ({
+          ...prev,
           users: membersResult.count || 0,
-          revenue: 15400, // Mock data - replace with real revenue tracking
           chats: chatsResult.count || 0,
-          active: 85 // Mock data - replace with real active user tracking
-        })
+        }))
       } catch (error) {
         console.error('Failed to load dashboard metrics:', error)
-        // Fallback to mock data
-        setStats({ users: 1248, revenue: 15400, chats: 12, active: 85 })
       }
     }
 
     loadMetrics()
   }, [])
+
+  // Load system status from API
+  useEffect(() => {
+    const loadSystemStatus = async () => {
+      try {
+        const response = await fetch('/api/admin/system')
+        if (response.ok) {
+          const data = await response.json()
+          const results = data.results || []
+          setSystemStatus(results)
+
+          // Calculate system health percentage
+          if (results.length > 0) {
+            const passCount = results.filter((r: SystemDiagnostic) => r.status === 'pass').length
+            const percentage = Math.round((passCount / results.length) * 100)
+            setStats(prev => ({
+              ...prev,
+              systemHealth: `${percentage}%`
+            }))
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load system status:', error)
+      } finally {
+        setSystemLoading(false)
+      }
+    }
+
+    loadSystemStatus()
+  }, [])
+
+  const refreshSystemStatus = async () => {
+    setSystemLoading(true)
+    try {
+      const response = await fetch('/api/admin/system')
+      if (response.ok) {
+        const data = await response.json()
+        const results = data.results || []
+        setSystemStatus(results)
+
+        if (results.length > 0) {
+          const passCount = results.filter((r: SystemDiagnostic) => r.status === 'pass').length
+          const percentage = Math.round((passCount / results.length) * 100)
+          setStats(prev => ({
+            ...prev,
+            systemHealth: `${percentage}%`
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh system status:', error)
+    } finally {
+      setSystemLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -70,15 +132,15 @@ export default function AdminDashboard() {
         <DashboardMetric
           label="Live Chats"
           value={stats.chats.toString()}
-          change="-2"
-          trend="down"
+          change={stats.chats > 0 ? `${stats.chats} active` : 'None'}
+          trend="neutral"
           icon={MessageSquare}
           color="blue"
         />
         <DashboardMetric
           label="System Health"
-          value="99.9%"
-          change="Stable"
+          value={stats.systemHealth}
+          change="Live"
           trend="neutral"
           icon={Activity}
           color="purple"
@@ -152,35 +214,73 @@ export default function AdminDashboard() {
 
         {/* Side Panel (1/3 width) */}
         <div className="space-y-6">
-            <Card className="glass-card-heavy p-6 border-white/5 h-full">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-serif font-medium text-white">Live Activity</h3>
-                    <MoreHorizontal className="w-4 h-4 text-white/40" />
+          {/* System Status Card */}
+          <Card className="glass-card-heavy p-6 border-white/5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-white/80">System Status</h3>
+              <button
+                onClick={refreshSystemStatus}
+                disabled={systemLoading}
+                className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+                title="Refresh status"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${systemLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {systemLoading && systemStatus.length === 0 ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-5 bg-white/5 animate-pulse rounded" />
+                  ))}
                 </div>
-                <div className="relative pl-4 space-y-6">
-                    {/* Activity Timeline Line */}
-                    <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-white/10" />
+              ) : systemStatus.length > 0 ? (
+                systemStatus.map((diagnostic) => (
+                  <SystemStatusRow
+                    key={diagnostic.name}
+                    label={diagnostic.name}
+                    status={diagnostic.status}
+                    latency={diagnostic.latency}
+                  />
+                ))
+              ) : (
+                <p className="text-white/40 text-xs text-center py-2">
+                  Unable to load status
+                </p>
+              )}
+            </div>
+          </Card>
 
-                    {[
-                        { text: "New user joined Discord", time: "1m ago", color: "emerald" },
-                        { text: "Server CPU spike detected", time: "15m ago", color: "red" },
-                        { text: "Backup completed", time: "1h ago", color: "blue" },
-                        { text: "Daily signals posted", time: "4h ago", color: "gold" },
-                        { text: "Admin logged in", time: "5h ago", color: "gray" },
-                    ].map((item, i) => (
-                        <div key={i} className="relative">
-                            <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0A0A0B] ${
-                                item.color === 'emerald' ? 'bg-emerald-500' :
-                                item.color === 'red' ? 'bg-red-500' :
-                                item.color === 'blue' ? 'bg-blue-500' :
-                                item.color === 'gold' ? 'bg-[#D4AF37]' : 'bg-white/40'
-                            }`} />
-                            <p className="text-sm text-white/90">{item.text}</p>
-                            <p className="text-xs text-white/40 font-mono mt-1">{item.time}</p>
-                        </div>
-                    ))}
+          {/* Activity Timeline */}
+          <Card className="glass-card-heavy p-6 border-white/5">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-sm font-medium text-white/80">Live Activity</h3>
+              <MoreHorizontal className="w-4 h-4 text-white/40" />
+            </div>
+            <div className="relative pl-4 space-y-6">
+              {/* Activity Timeline Line */}
+              <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-white/10" />
+
+              {[
+                { text: "New user joined Discord", time: "1m ago", color: "emerald" },
+                { text: "Server CPU spike detected", time: "15m ago", color: "red" },
+                { text: "Backup completed", time: "1h ago", color: "blue" },
+                { text: "Daily signals posted", time: "4h ago", color: "gold" },
+                { text: "Admin logged in", time: "5h ago", color: "gray" },
+              ].map((item, i) => (
+                <div key={i} className="relative">
+                  <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0A0A0B] ${
+                    item.color === 'emerald' ? 'bg-emerald-500' :
+                    item.color === 'red' ? 'bg-red-500' :
+                    item.color === 'blue' ? 'bg-blue-500' :
+                    item.color === 'gold' ? 'bg-[#D4AF37]' : 'bg-white/40'
+                  }`} />
+                  <p className="text-sm text-white/90">{item.text}</p>
+                  <p className="text-xs text-white/40 font-mono mt-1">{item.time}</p>
                 </div>
-            </Card>
+              ))}
+            </div>
+          </Card>
         </div>
       </div>
     </div>
@@ -209,6 +309,50 @@ function DashboardMetric({ label, value, change, trend, icon: Icon, color }: any
        </div>
        <div className="text-2xl font-bold text-white tracking-tight">{value}</div>
        <div className="text-xs text-white/50 mt-1">{label}</div>
+    </div>
+  )
+}
+
+// System Status Row Component
+function SystemStatusRow({
+  label,
+  status,
+  latency,
+}: {
+  label: string
+  status: 'pass' | 'fail' | 'warning'
+  latency?: number
+}) {
+  const statusConfig = {
+    pass: {
+      icon: CheckCircle2,
+      color: 'text-emerald-400',
+      label: 'OK',
+    },
+    warning: {
+      icon: AlertTriangle,
+      color: 'text-amber-400',
+      label: 'Warn',
+    },
+    fail: {
+      icon: XCircle,
+      color: 'text-red-400',
+      label: 'Down',
+    },
+  }
+
+  const config = statusConfig[status]
+  const StatusIcon = config.icon
+
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-white/60">{label}</span>
+      <div className="flex items-center gap-2">
+        {latency !== undefined && (
+          <span className="text-xs text-white/30">{latency}ms</span>
+        )}
+        <StatusIcon className={`w-3.5 h-3.5 ${config.color}`} />
+      </div>
     </div>
   )
 }

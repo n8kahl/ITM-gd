@@ -90,16 +90,11 @@ serve(async (req) => {
       return errorResponse('Invalid or expired token', ERROR_CODES.INVALID_SESSION, 401)
     }
 
-    // Get the user's session to retrieve the provider token (Discord access token)
-    const { data: { session }, error: sessionError } = await supabaseUser.auth.getSession()
-    if (sessionError || !session) {
-      return errorResponse('No active session found', ERROR_CODES.INVALID_SESSION, 401)
-    }
-
-    const discordAccessToken = session.provider_token
-    if (!discordAccessToken) {
+    // Get Discord user ID from Supabase user metadata (stored during OAuth)
+    const discordUserId = user.user_metadata?.provider_id || user.user_metadata?.sub
+    if (!discordUserId) {
       return errorResponse(
-        'Discord access token not found. Please re-authenticate with Discord.',
+        'Discord user ID not found. Please re-authenticate with Discord.',
         ERROR_CODES.MISSING_TOKEN,
         401
       )
@@ -108,14 +103,26 @@ serve(async (req) => {
     // Create admin client for database operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Fetch discord_guild_id from app_settings table
-    const { data: guildSetting, error: settingError } = await supabaseAdmin
+    // Fetch discord_guild_id and discord_bot_token from app_settings table
+    const { data: settings, error: settingError } = await supabaseAdmin
       .from('app_settings')
-      .select('value')
-      .eq('key', 'discord_guild_id')
-      .single()
+      .select('key, value')
+      .in('key', ['discord_guild_id', 'discord_bot_token'])
 
-    if (settingError || !guildSetting?.value) {
+    if (settingError) {
+      console.error('Error fetching app_settings:', settingError)
+      return errorResponse(
+        'System Configuration Error: Failed to fetch settings.',
+        ERROR_CODES.GUILD_NOT_CONFIGURED,
+        500
+      )
+    }
+
+    const settingsMap = Object.fromEntries((settings || []).map(s => [s.key, s.value]))
+    const guildId = settingsMap['discord_guild_id']
+    const botToken = settingsMap['discord_bot_token']
+
+    if (!guildId) {
       console.error('Discord Guild ID not configured in app_settings')
       return errorResponse(
         'System Configuration Error: Discord Guild ID not set.',
@@ -124,15 +131,23 @@ serve(async (req) => {
       )
     }
 
-    const guildId = guildSetting.value
-    console.log('Using discord_guild_id from app_settings')
+    if (!botToken) {
+      console.error('Discord Bot Token not configured in app_settings')
+      return errorResponse(
+        'System Configuration Error: Discord Bot Token not set.',
+        ERROR_CODES.GUILD_NOT_CONFIGURED,
+        500
+      )
+    }
 
-    // Call Discord API to get user's guild member info
+    console.log('Using discord_guild_id and bot token from app_settings')
+
+    // Call Discord API using Bot token to get user's guild member info
     const discordResponse = await fetch(
-      `${DISCORD_API_BASE}/users/@me/guilds/${guildId}/member`,
+      `${DISCORD_API_BASE}/guilds/${guildId}/members/${discordUserId}`,
       {
         headers: {
-          Authorization: `Bearer ${discordAccessToken}`,
+          Authorization: `Bot ${botToken}`,
         },
       }
     )
@@ -141,11 +156,11 @@ serve(async (req) => {
       const errorText = await discordResponse.text()
       console.error('Discord API error:', discordResponse.status, errorText)
 
-      if (discordResponse.status === 401) {
+      if (discordResponse.status === 401 || discordResponse.status === 403) {
         return errorResponse(
-          'Discord token expired. Please re-authenticate.',
-          ERROR_CODES.TOKEN_EXPIRED,
-          401
+          'Bot token invalid or missing permissions. Please check Discord configuration.',
+          ERROR_CODES.GUILD_NOT_CONFIGURED,
+          500
         )
       }
 
@@ -166,8 +181,8 @@ serve(async (req) => {
     }
 
     const memberData: DiscordMember = await discordResponse.json()
-    const discordUserId = memberData.user.id
-    const discordUsername = memberData.user.username
+    // Note: discordUserId already set from user metadata above
+    const discordUsername = memberData.user?.username || memberData.nick || 'Unknown'
     const discordRoles = memberData.roles
 
     console.log(`Syncing roles for Discord user ${discordUsername} (${discordUserId})`)
@@ -219,8 +234,8 @@ serve(async (req) => {
         user_id: user.id,
         discord_user_id: discordUserId,
         discord_username: discordUsername,
-        discord_discriminator: memberData.user.discriminator,
-        discord_avatar: memberData.user.avatar,
+        discord_discriminator: memberData.user?.discriminator || '0',
+        discord_avatar: memberData.user?.avatar || null,
         discord_roles: discordRoles,
         last_synced_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -300,7 +315,7 @@ serve(async (req) => {
       success: true,
       discord_user_id: discordUserId,
       discord_username: discordUsername,
-      discord_avatar: memberData.user.avatar,
+      discord_avatar: memberData.user?.avatar || null,
       roles: roleDetails,
       permissions: permissionDetails,
       synced_at: new Date().toISOString(),

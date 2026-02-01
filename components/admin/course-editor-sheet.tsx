@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { X, Save, Loader2, Image as ImageIcon } from 'lucide-react'
+import { X, Save, Loader2 } from 'lucide-react'
 import { Course } from '@/lib/types_db'
 import { cn } from '@/lib/utils'
 
@@ -15,13 +15,10 @@ interface CourseEditorSheetProps {
   onSave: () => void
 }
 
-// Discord roles - in a real app, these would come from the Discord API
-const DISCORD_ROLES = [
-  { id: null, name: 'Public (No Role Required)' },
-  { id: 'core_sniper', name: 'Core Sniper' },
-  { id: 'pro_sniper', name: 'Pro Sniper' },
-  { id: 'execute_sniper', name: 'Execute Sniper' },
-]
+interface DiscordRole {
+  discord_role_id: string
+  discord_role_name: string | null
+}
 
 export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEditorSheetProps) {
   const [form, setForm] = useState({
@@ -34,6 +31,29 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [discordRoles, setDiscordRoles] = useState<DiscordRole[]>([])
+  const [rolesLoading, setRolesLoading] = useState(true)
+
+  // Fetch Discord roles from API
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const response = await fetch('/api/admin/roles')
+        if (response.ok) {
+          const data = await response.json()
+          setDiscordRoles(data.roles || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch Discord roles:', err)
+      } finally {
+        setRolesLoading(false)
+      }
+    }
+
+    if (open) {
+      fetchRoles()
+    }
+  }, [open])
 
   // Reset form when course changes
   useEffect(() => {
@@ -94,6 +114,15 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
   }
 
   if (!open) return null
+
+  // Build the role options array with "Public" as first option
+  const roleOptions = [
+    { id: null, name: 'Public (No Role Required)' },
+    ...discordRoles.map(role => ({
+      id: role.discord_role_id,
+      name: role.discord_role_name || role.discord_role_id
+    }))
+  ]
 
   return (
     <div className="fixed inset-0 z-50">
@@ -198,23 +227,34 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
               <p className="text-xs text-white/40 mb-2">
                 Only members with this role can access the course
               </p>
-              <div className="grid grid-cols-2 gap-2">
-                {DISCORD_ROLES.map((role) => (
-                  <button
-                    key={role.id || 'public'}
-                    type="button"
-                    onClick={() => setForm({ ...form, discord_role_required: role.id })}
-                    className={cn(
-                      'p-3 rounded-lg border text-left text-sm transition-colors',
-                      form.discord_role_required === role.id
-                        ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30 text-[#D4AF37]'
-                        : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/20'
-                    )}
-                  >
-                    {role.name}
-                  </button>
-                ))}
-              </div>
+              {rolesLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 text-white/40 animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {roleOptions.map((role) => (
+                    <button
+                      key={role.id || 'public'}
+                      type="button"
+                      onClick={() => setForm({ ...form, discord_role_required: role.id })}
+                      className={cn(
+                        'p-3 rounded-lg border text-left text-sm transition-colors',
+                        form.discord_role_required === role.id
+                          ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30 text-[#D4AF37]'
+                          : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/20'
+                      )}
+                    >
+                      {role.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!rolesLoading && discordRoles.length === 0 && (
+                <p className="text-xs text-amber-400 mt-2">
+                  No Discord roles configured. Add roles in Settings → Role Mapping.
+                </p>
+              )}
             </div>
 
             {/* Published Toggle */}
