@@ -114,54 +114,80 @@ export async function GET(request: NextRequest) {
       // Continue with redirect - sync is best-effort
     }
 
-    // STEP 3: Wait briefly for app_metadata update to propagate
+    // STEP 3: Poll for JWT claims to propagate
     // The Edge Function updates auth.users.raw_app_meta_data, but Supabase's
-    // internal caches may need a moment to propagate the changes
-    console.log('Waiting for metadata propagation...')
-    await new Promise(resolve => setTimeout(resolve, 1500)) // 1.5 second delay
+    // internal caches may need time to propagate the changes
+    console.log('Polling for metadata propagation...')
 
-    // STEP 4: Refresh session to get updated app_metadata claims
-    // The database trigger should have updated auth.users.raw_app_meta_data
-    // Refreshing the session ensures the JWT contains the latest claims
-    console.log('Refreshing session to get updated claims...')
-    const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+    let currentSession = session
+    let isAdmin = false
+    let isMember = false
+    const maxAttempts = 5
+    const pollInterval = 500 // 500ms between attempts
 
-    if (refreshError) {
-      console.warn('Session refresh error (non-fatal):', refreshError)
-      // Continue with original session
-    } else if (refreshedSession) {
-      console.log('✓ Session refreshed with updated claims')
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Wait before each attempt (except first)
+      if (attempt > 1) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval))
+      }
+
+      // Refresh session to get updated claims
+      const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+
+      if (refreshError) {
+        console.warn(`Attempt ${attempt}: Session refresh error:`, refreshError.message)
+        continue
+      }
+
+      if (refreshedSession) {
+        currentSession = refreshedSession
+        const appMetadata = refreshedSession.user.app_metadata || {}
+        isAdmin = appMetadata.is_admin === true
+        isMember = appMetadata.is_member === true
+
+        // If we got the claims we expected from sync, we're done
+        if (syncResult?.success && syncResult.permissions) {
+          const expectedAdmin = syncResult.permissions.some((p: any) => p.name === 'admin_dashboard')
+          const expectedMember = syncResult.permissions.length > 0
+
+          if ((!expectedAdmin || isAdmin) && (!expectedMember || isMember)) {
+            console.log(`✓ Claims propagated on attempt ${attempt}`)
+            break
+          }
+        } else if (isAdmin || isMember) {
+          // No sync result to compare, but we got some claims
+          console.log(`✓ Claims found on attempt ${attempt}`)
+          break
+        }
+      }
+
+      console.log(`Attempt ${attempt}/${maxAttempts}: Claims not ready yet (isAdmin=${isAdmin}, isMember=${isMember})`)
     }
 
-    // Use refreshed session for metadata checks, fallback to original
-    const currentSession = refreshedSession || session
-    const appMetadata = currentSession.user.app_metadata || {}
-    let isAdmin = appMetadata.is_admin === true
-    let isMember = appMetadata.is_member === true
-
-    // FALLBACK: If session refresh didn't pick up the claims, use sync result
-    // This handles race conditions where the JWT refresh happens before metadata propagation
+    // FALLBACK: If polling didn't pick up the claims, use sync result
+    // This handles cases where database is slow or claims don't propagate
     if (syncResult?.success && syncResult.permissions) {
       const hasAdminPerm = syncResult.permissions.some((p: any) => p.name === 'admin_dashboard')
       const hasMemberPerm = syncResult.permissions.length > 0
 
-      // Override with sync result if it's more permissive (handles race condition)
+      // Override with sync result if it's more permissive
       if (hasAdminPerm && !isAdmin) {
-        console.warn('⚠️  JWT claims not updated yet, using sync result for admin status')
+        console.warn('⚠️  Using sync result for admin status (claims did not propagate)')
         isAdmin = true
       }
       if (hasMemberPerm && !isMember) {
-        console.warn('⚠️  JWT claims not updated yet, using sync result for member status')
+        console.warn('⚠️  Using sync result for member status (claims did not propagate)')
         isMember = true
       }
     }
 
+    const appMetadata = currentSession.user.app_metadata || {}
     console.log('User metadata:', {
       isAdmin,
       isMember,
       userId: currentSession.user.id,
       email: currentSession.user.email,
-      source: (isAdmin !== appMetadata.is_admin || isMember !== appMetadata.is_member)
+      source: (isAdmin !== (appMetadata.is_admin === true) || isMember !== (appMetadata.is_member === true))
         ? 'sync_result_fallback'
         : 'jwt_claims'
     })
