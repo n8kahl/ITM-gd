@@ -163,11 +163,27 @@ export interface DiscordRolePermission {
 
 // Permission names enum for type safety
 export type PermissionName =
-  | 'view_courses'
-  | 'view_premium_content'
+  // Tier-based content access
+  | 'access_core_content'
+  | 'access_pro_content'
+  | 'access_execute_content'
+  // Feature-specific permissions
+  | 'access_trading_journal'
+  | 'access_ai_analysis'
+  | 'access_course_library'
+  | 'access_live_alerts'
+  | 'access_community_chat'
+  // Premium features
+  | 'access_premium_tools'
+  | 'access_position_builder'
+  | 'access_market_structure'
+  // Admin permissions
   | 'admin_dashboard'
   | 'manage_courses'
   | 'manage_members'
+  | 'manage_settings'
+  | 'manage_journal_entries'
+  | 'manage_discord_config'
 
 // Course & Lesson Types
 // ============================================
