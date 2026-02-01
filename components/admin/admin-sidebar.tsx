@@ -84,6 +84,10 @@ export function AdminSidebar() {
       <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
         {navigation.map((group) => (
           <div key={group.name}>
+            {/* Separator before System & Config section */}
+            {group.name === 'System & Config' && (
+              <div className="my-4 border-t border-white/10" />
+            )}
             {/* Group Label */}
             <h3 className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-white/30">
               {group.name}

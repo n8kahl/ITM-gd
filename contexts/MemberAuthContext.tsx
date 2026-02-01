@@ -75,6 +75,13 @@ const MemberAuthContext = createContext<MemberAuthContextValue | null>(null)
 // PROVIDER
 // ============================================
 
+// Default role mapping fallback (can be configured in Admin > Settings)
+const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'execute'> = {
+  'execute_sniper': 'execute',
+  'pro_sniper': 'pro',
+  'core_sniper': 'core',
+}
+
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
@@ -88,25 +95,38 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     errorCode: null,
   })
 
-  // Derive membership tier from Discord roles
-  const getMembershipTier = (roles: string[]): 'core' | 'pro' | 'execute' | null => {
-    // Role IDs should be configured - these are placeholders
-    // TODO: Fetch from app_settings or use environment variables
-    const roleMap: Record<string, 'core' | 'pro' | 'execute'> = {
-      'execute_sniper': 'execute',
-      'pro_sniper': 'pro',
-      'core_sniper': 'core',
-    }
+  // Dynamic role mapping fetched from config API
+  const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'execute'>>(DEFAULT_ROLE_MAPPING)
 
-    // Check in order of highest tier
-    for (const [roleId, tier] of Object.entries(roleMap)) {
-      if (roles.includes(roleId)) {
-        return tier
+  // Fetch role mapping from config API on mount
+  useEffect(() => {
+    fetch('/api/config/roles')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data === 'object') {
+          setRoleMapping(data)
+        }
+      })
+      .catch(() => {
+        // Keep default mapping on error
+      })
+  }, [])
+
+  // Derive membership tier from Discord roles using dynamic mapping
+  const getMembershipTier = useCallback((roles: string[]): 'core' | 'pro' | 'execute' | null => {
+    // Check in order of highest tier (execute > pro > core)
+    const tierOrder: Array<'execute' | 'pro' | 'core'> = ['execute', 'pro', 'core']
+
+    for (const tier of tierOrder) {
+      for (const [roleName, mappedTier] of Object.entries(roleMapping)) {
+        if (mappedTier === tier && roles.includes(roleName)) {
+          return tier
+        }
       }
     }
 
     return null
-  }
+  }, [roleMapping])
 
   // Sync Discord roles via Edge Function
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
@@ -178,7 +198,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
       return null
     }
-  }, [state.session, state.user])
+  }, [state.session, state.user, getMembershipTier])
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
@@ -355,7 +375,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         error: error instanceof Error ? error.message : 'Authentication failed',
       }))
     }
-  }, [syncDiscordRoles])
+  }, [syncDiscordRoles, getMembershipTier])
 
   // Sign out
   const signOut = useCallback(async () => {

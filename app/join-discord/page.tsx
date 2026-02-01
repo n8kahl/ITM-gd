@@ -16,12 +16,27 @@ function DiscordIcon({ className }: { className?: string }) {
   )
 }
 
-// Discord server invite link - this should be stored in app_settings
-const DISCORD_INVITE_URL = 'https://discord.gg/tradeitm'
+// Fallback Discord invite URL
+const DEFAULT_DISCORD_INVITE_URL = 'https://discord.gg/tradeitm'
 
 export default function JoinDiscordPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [discordInviteUrl, setDiscordInviteUrl] = useState(DEFAULT_DISCORD_INVITE_URL)
+
+  // Fetch dynamic Discord invite URL from config
+  useEffect(() => {
+    fetch('/api/public/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.discord_invite_url) {
+          setDiscordInviteUrl(data.discord_invite_url)
+        }
+      })
+      .catch(() => {
+        // Keep fallback URL on error
+      })
+  }, [])
 
   const handleTryAgain = async () => {
     setIsLoading(true)
@@ -93,7 +108,7 @@ export default function JoinDiscordPage() {
               asChild
               className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-7 text-lg font-semibold shadow-lg shadow-[#5865F2]/20"
             >
-              <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">
+              <a href={discordInviteUrl} target="_blank" rel="noopener noreferrer">
                 <DiscordIcon className="w-6 h-6 mr-3" />
                 Join TradeITM Discord
                 <ExternalLink className="w-4 h-4 ml-2 opacity-60" />

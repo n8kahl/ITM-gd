@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Bell, Lock } from "lucide-react";
+import { Menu, X, Bell, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
@@ -103,7 +103,7 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
               className="rounded-sm text-white hover:text-champagne hover:bg-white/5"
             >
               <Link href="/login">
-                <Lock className="w-3.5 h-3.5 mr-2" />
+                <Shield className="w-3.5 h-3.5 mr-2" />
                 Member Access
               </Link>
             </Button>
@@ -193,7 +193,7 @@ export function FloatingNavbar({ onSubscribeClick }: FloatingNavbarProps) {
                   "rounded-sm transition-colors duration-300"
                 )}
               >
-                <Lock className="w-4 h-4 mr-2" />
+                <Shield className="w-4 h-4 mr-2" />
                 Member Access
               </Link>
             </motion.div>

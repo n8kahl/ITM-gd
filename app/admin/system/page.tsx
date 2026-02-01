@@ -70,9 +70,16 @@ export default function SystemPage() {
     }
   }, [])
 
-  // Run diagnostics on mount
+  // Run diagnostics on mount and auto-refresh every 30 seconds
   useEffect(() => {
     runDiagnostics()
+
+    // Set up auto-refresh interval
+    const interval = setInterval(() => {
+      runDiagnostics()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
   }, [runDiagnostics])
 
   // Calculate stats
@@ -96,10 +103,13 @@ export default function SystemPage() {
         </div>
         <div className="flex items-center gap-3">
           {lastRun && (
-            <span className="text-sm text-white/40 flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Last run: {lastRun.toLocaleTimeString()}
-            </span>
+            <div className="flex flex-col items-end">
+              <span className="text-sm text-white/40 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Last run: {lastRun.toLocaleTimeString()}
+              </span>
+              <span className="text-xs text-white/30">Auto-refreshes every 30s</span>
+            </div>
           )}
           <Button
             onClick={runDiagnostics}

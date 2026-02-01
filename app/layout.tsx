@@ -3,6 +3,8 @@ import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { Geist_Mono } from 'next/font/google'
 import { StructuredData } from '@/components/seo/structured-data'
+import Link from 'next/link'
+import { User } from 'lucide-react'
 import './globals.css'
 
 // Body font - clean, modern sans-serif
@@ -80,6 +82,14 @@ export default function RootLayout({
         <StructuredData />
       </head>
       <body className={`${inter.variable} ${playfair.variable} ${geistMono.variable} font-sans antialiased`}>
+        {/* Mobile Header Login Icon - visible only on mobile, hidden when navbar is present */}
+        <Link
+          href="/login"
+          className="fixed top-4 right-4 z-40 md:hidden bg-white/5 border border-white/10 rounded-full p-2 flex items-center justify-center hover:bg-white/10 transition-colors"
+          aria-label="Member Login"
+        >
+          <User className="w-5 h-5 text-ivory/80" />
+        </Link>
         {children}
       </body>
     </html>
