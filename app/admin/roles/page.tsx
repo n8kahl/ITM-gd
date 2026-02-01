@@ -31,7 +31,6 @@ interface RoleMapping {
   permission_ids: string[]
   mapping_ids: string[]
   isNew?: boolean
-  isEditing?: boolean
   hasChanges?: boolean
 }
 
@@ -76,20 +75,22 @@ export default function RolesPage() {
       permission_ids: [],
       mapping_ids: [],
       isNew: true,
-      isEditing: true,
+      hasChanges: true,
     }
     setRoles([...roles, newRole])
   }
 
-  // Update role field
-  const updateRole = (index: number, field: keyof RoleMapping, value: any) => {
-    const updated = [...roles]
-    updated[index] = {
-      ...updated[index],
-      [field]: value,
-      hasChanges: true,
-    }
-    setRoles(updated)
+  // Update role - handles multiple fields at once to avoid state race conditions
+  const updateRole = (index: number, updates: Partial<RoleMapping>) => {
+    setRoles(prev => {
+      const updated = [...prev]
+      updated[index] = {
+        ...updated[index],
+        ...updates,
+        hasChanges: true,
+      }
+      return updated
+    })
   }
 
   // Toggle permission for a role
@@ -99,7 +100,7 @@ export default function RolesPage() {
       ? role.permission_ids.filter(id => id !== permissionId)
       : [...role.permission_ids, permissionId]
 
-    updateRole(roleIndex, 'permission_ids', newPermissions)
+    updateRole(roleIndex, { permission_ids: newPermissions })
   }
 
   // Save role
@@ -138,14 +139,15 @@ export default function RolesPage() {
         setTimeout(() => setSuccess(null), 3000)
 
         // Update role state
-        const updated = [...roles]
-        updated[index] = {
-          ...updated[index],
-          isNew: false,
-          isEditing: false,
-          hasChanges: false,
-        }
-        setRoles(updated)
+        setRoles(prev => {
+          const updated = [...prev]
+          updated[index] = {
+            ...updated[index],
+            isNew: false,
+            hasChanges: false,
+          }
+          return updated
+        })
       } else {
         setError(data.error || 'Failed to save role')
       }
@@ -364,8 +366,11 @@ export default function RolesPage() {
                       <DiscordRolePicker
                         value={role.discord_role_id}
                         onChange={(id, name) => {
-                          updateRole(index, 'discord_role_id', id)
-                          updateRole(index, 'discord_role_name', name)
+                          // Update both fields at once to avoid race condition
+                          updateRole(index, {
+                            discord_role_id: id,
+                            discord_role_name: name,
+                          })
                         }}
                         disabled={!role.isNew}
                       />
@@ -391,7 +396,7 @@ export default function RolesPage() {
                         <>
                           <Button
                             onClick={() => handleSaveRole(index)}
-                            disabled={saving === role.discord_role_id}
+                            disabled={saving === role.discord_role_id || !role.discord_role_id}
                             className="bg-[#D4AF37] hover:bg-[#B8962E] text-black"
                           >
                             {saving === role.discord_role_id ? (
@@ -420,6 +425,15 @@ export default function RolesPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Selected Role Display */}
+                  {role.discord_role_id && role.discord_role_name && (
+                    <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
+                      <span className="text-sm text-white/60">Selected: </span>
+                      <span className="text-sm text-white font-medium">{role.discord_role_name}</span>
+                      <span className="text-xs text-white/40 ml-2">({role.discord_role_id})</span>
+                    </div>
+                  )}
 
                   {/* Permission Badges */}
                   <div>
@@ -483,7 +497,7 @@ export default function RolesPage() {
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,
-                  isEditing: true,
+                  hasChanges: true,
                 }
                 setRoles([...roles, newRole])
               }}
@@ -508,7 +522,7 @@ export default function RolesPage() {
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,
-                  isEditing: true,
+                  hasChanges: true,
                 }
                 setRoles([...roles, newRole])
               }}
@@ -536,7 +550,7 @@ export default function RolesPage() {
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,
-                  isEditing: true,
+                  hasChanges: true,
                 }
                 setRoles([...roles, newRole])
               }}
