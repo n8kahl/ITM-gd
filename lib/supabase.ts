@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 // Re-export types from centralized types_db.ts
 export type {
@@ -38,7 +38,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+/**
+ * Browser-side Supabase client that properly syncs sessions to cookies.
+ * This is critical for middleware authentication - the middleware reads
+ * session from cookies, so we must use createBrowserClient from @supabase/ssr
+ * instead of createClient from @supabase/supabase-js.
+ */
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
 
 // ============================================
 // SUBSCRIBER FUNCTIONS
