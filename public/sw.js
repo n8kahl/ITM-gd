@@ -1,19 +1,25 @@
 // Service Worker for Push Notifications and Caching
-const CACHE_NAME = 'tradeitm-admin-v1'
+const CACHE_NAME = 'tradeitm-admin-v2'
 const STATIC_ASSETS = [
   '/admin/chat',
-  '/icon-192x192.png',
-  '/icon-512x512.png',
-  '/badge-72x72.png',
+  '/logo.png',
+  '/favicon.png',
   '/manifest.json'
 ]
 
-// Cache static assets on install
+// Cache static assets on install (gracefully handle missing files)
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(function(cache) {
-        return cache.addAll(STATIC_ASSETS)
+        // Cache each asset individually, ignoring failures
+        return Promise.allSettled(
+          STATIC_ASSETS.map(function(url) {
+            return cache.add(url).catch(function(err) {
+              console.warn('Failed to cache:', url, err)
+            })
+          })
+        )
       })
       .then(function() {
         return self.skipWaiting()
@@ -99,8 +105,8 @@ self.addEventListener('push', function(event) {
 
     const options = {
       body: data.body || 'New chat escalation',
-      icon: '/icon-192x192.png',
-      badge: '/badge-72x72.png',
+      icon: '/logo.png',
+      badge: '/favicon.png',
       tag: data.conversationId || 'chat-notification',
       data: {
         url: data.url || '/admin/chat',
