@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { isAdminUser } from '@/lib/supabase-server'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -12,15 +12,9 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-async function isAdmin(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const adminCookie = cookieStore.get('titm_admin')
-  return adminCookie?.value === 'true'
-}
-
 // GET - Fetch all Discord role permission mappings and app permissions
 export async function GET() {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -88,7 +82,7 @@ export async function GET() {
 
 // POST - Create new role permission mapping(s)
 export async function POST(request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -138,7 +132,7 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update role permission mappings (replace all permissions for a role)
 export async function PUT(request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -193,7 +187,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete all permission mappings for a role
 export async function DELETE(request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

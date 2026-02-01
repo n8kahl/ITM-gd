@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { isAdminUser } from '@/lib/supabase-server'
 
 // Create admin client lazily
 function getSupabaseAdmin() {
@@ -13,13 +13,6 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-// Verify admin cookie
-async function isAdmin(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const adminCookie = cookieStore.get('titm_admin')
-  return adminCookie?.value === 'true'
-}
-
 interface DiagnosticResult {
   name: string
   status: 'pass' | 'fail' | 'warning'
@@ -30,7 +23,7 @@ interface DiagnosticResult {
 
 // GET - Run system diagnostics
 export async function GET(_request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

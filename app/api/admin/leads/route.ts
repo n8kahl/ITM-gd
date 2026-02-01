@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { isAdminUser } from '@/lib/supabase-server'
 
 // Create admin client lazily to avoid build-time errors
 function getSupabaseAdmin() {
@@ -17,17 +17,10 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-// Verify admin cookie
-async function isAdmin(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const adminCookie = cookieStore.get('titm_admin')
-  return adminCookie?.value === 'true'
-}
-
 // GET - Fetch cohort applications
 export async function GET(request: NextRequest) {
   // Check admin auth
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -76,7 +69,7 @@ export async function GET(request: NextRequest) {
 // PATCH - Update application status
 export async function PATCH(request: NextRequest) {
   // Check admin auth
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

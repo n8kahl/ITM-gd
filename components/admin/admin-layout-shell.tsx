@@ -1,10 +1,10 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Bell, Menu, X, Search, Command } from 'lucide-react'
+import { Bell, Menu, X, Search, Command, LogOut } from 'lucide-react'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
-import { cn } from '@/lib/utils'
+import { createBrowserClient } from '@supabase/ssr'
 
 interface AdminLayoutShellProps {
   children: React.ReactNode
@@ -20,7 +20,16 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
 
   const handleLogout = async () => {
     try {
+      // Clear magic link cookie
       await fetch('/api/admin/logout', { method: 'POST' })
+
+      // Also sign out of Supabase session
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      await supabase.auth.signOut()
+
       router.push('/')
     } catch (error) {
       console.error('Logout error:', error)
@@ -97,9 +106,10 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
 
              <button
                onClick={handleLogout}
-               className="text-xs font-medium text-white/60 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/5 transition-all"
+               className="flex items-center gap-1.5 text-xs font-medium text-white/60 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/5 transition-all"
              >
-               Exit
+               <LogOut className="w-3.5 h-3.5" />
+               Logout
              </button>
           </div>
         </header>

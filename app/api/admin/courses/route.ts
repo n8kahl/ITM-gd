@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { isAdminUser } from '@/lib/supabase-server'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -12,15 +12,9 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-async function isAdmin(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const adminCookie = cookieStore.get('titm_admin')
-  return adminCookie?.value === 'true'
-}
-
 // GET - Fetch all courses with lesson count
 export async function GET() {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -52,7 +46,7 @@ export async function GET() {
 
 // POST - Create a new course
 export async function POST(request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -102,7 +96,7 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Update a course
 export async function PATCH(request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -140,7 +134,7 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE - Delete a course
 export async function DELETE(request: NextRequest) {
-  if (!await isAdmin()) {
+  if (!await isAdminUser()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { getDiscordGuildRoles } from '@/lib/discord-admin'
+import { isAdminUser } from '@/lib/supabase-server'
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const adminCookie = cookieStore.get('titm_admin')
+  const hasAccess = await isAdminUser()
 
-  if (adminCookie?.value !== 'true') {
+  if (!hasAccess) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
