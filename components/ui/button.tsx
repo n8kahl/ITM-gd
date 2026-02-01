@@ -12,9 +12,9 @@ const buttonVariants = cva(
         default:
           'bg-primary text-primary-foreground border border-white/10 hover:bg-primary/90 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(4,120,87,0.2),inset_0_1px_0_rgba(255,255,255,0.1)] active:shadow-[0_2px_10px_rgba(4,120,87,0.15)]',
         destructive:
-          'bg-destructive text-white border border-white/10 hover:bg-destructive/90 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+          'bg-destructive text-white border border-red-500/20 hover:bg-destructive/90 hover:-translate-y-0.5 hover:shadow-[0_0_30px_-10px_rgba(220,38,38,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:
-          'border border-[rgba(232,228,217,0.25)] bg-transparent text-[#E8E4D9] hover:bg-[rgba(232,228,217,0.05)] hover:border-[rgba(232,228,217,0.40)] hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(232,228,217,0.08)]',
+          'border border-[rgba(212,175,55,0.25)] bg-transparent text-[#E5E4E2] hover:bg-[rgba(212,175,55,0.05)] hover:border-[rgba(212,175,55,0.40)] hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(212,175,55,0.08)]',
         secondary:
           'bg-secondary text-secondary-foreground border border-white/10 hover:bg-secondary/80 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]',
         ghost:
@@ -24,19 +24,19 @@ const buttonVariants = cva(
         luxury:
           'bg-primary text-primary-foreground border border-white/10 hover:bg-[#059669] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(4,120,87,0.25),inset_0_1px_0_rgba(255,255,255,0.15),inset_0_-1px_0_rgba(0,0,0,0.1)] active:shadow-[0_2px_10px_rgba(4,120,87,0.2),inset_0_2px_4px_rgba(0,0,0,0.15)]',
         'luxury-outline':
-          'border border-[rgba(232,228,217,0.25)] bg-transparent text-[#E8E4D9] hover:bg-[rgba(232,228,217,0.05)] hover:border-[rgba(232,228,217,0.40)] hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(232,228,217,0.1)]',
+          'border border-[rgba(212,175,55,0.25)] bg-transparent text-[#E5E4E2] hover:bg-[rgba(212,175,55,0.05)] hover:border-[rgba(212,175,55,0.40)] hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(212,175,55,0.1)]',
         'luxury-glass':
-          'bg-[rgba(255,255,255,0.03)] backdrop-blur-[40px] border border-[rgba(255,255,255,0.10)] text-[#F5F5F0] hover:bg-[rgba(255,255,255,0.05)] hover:border-[rgba(255,255,255,0.15)] hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]',
+          'bg-[rgba(255,255,255,0.03)] backdrop-blur-[40px] border border-[rgba(255,255,255,0.10)] text-[#E5E4E2] hover:bg-[rgba(255,255,255,0.05)] hover:border-[rgba(255,255,255,0.15)] hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]',
         'luxury-champagne':
-          'bg-[#E8E4D9] text-[#0A0A0B] border border-[rgba(232,228,217,0.25)] hover:bg-[#F5F3ED] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(232,228,217,0.15),inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_0_rgba(0,0,0,0.05)] active:shadow-[0_2px_8px_rgba(232,228,217,0.1),inset_0_2px_4px_rgba(0,0,0,0.08)]',
+          'bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#050505] font-semibold border border-[rgba(212,175,55,0.25)] hover:shadow-[0_0_30px_-10px_rgba(212,175,55,0.6),inset_0_1px_0_rgba(255,255,255,0.3),inset_0_-1px_0_rgba(0,0,0,0.1)] hover:-translate-y-0.5 active:shadow-[0_2px_8px_rgba(212,175,55,0.1),inset_0_2px_4px_rgba(0,0,0,0.15)]',
       },
       size: {
-        default: 'h-10 px-5 py-2.5 has-[>svg]:px-4',
-        sm: 'h-9 rounded-md gap-1.5 px-4 has-[>svg]:px-3',
+        default: 'h-11 px-5 py-2.5 has-[>svg]:px-4',
+        sm: 'h-10 rounded-md gap-1.5 px-4 has-[>svg]:px-3',
         lg: 'h-12 rounded-md px-8 has-[>svg]:px-5 text-base tracking-wide',
         xl: 'h-14 rounded-md px-10 has-[>svg]:px-6 text-base tracking-wide',
-        icon: 'size-10',
-        'icon-sm': 'size-9',
+        icon: 'size-11',
+        'icon-sm': 'size-10',
         'icon-lg': 'size-12',
       },
     },

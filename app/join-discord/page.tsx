@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Sparkles, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, LogOut } from 'lucide-react'
+import { Sparkles, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, LogOut, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
+import { AuroraBackground } from '@/components/ui/aurora-background'
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -61,9 +62,12 @@ export default function JoinDiscordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f10] flex flex-col">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Aurora Background */}
+      <AuroraBackground />
+
       {/* Header */}
-      <header className="p-6">
+      <header className="p-6 relative z-10">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors"
@@ -74,21 +78,23 @@ export default function JoinDiscordPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-6">
+      <main className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="w-8 h-8 text-black" />
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center mx-auto mb-4 animate-pulse-subtle">
+              <Lock className="w-10 h-10 text-black" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Join Our Discord Server</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#D4AF37] to-[#F1E5AC] bg-clip-text text-transparent mb-2">
+              Membership Required
+            </h1>
             <p className="text-white/60 mt-2">
               You must be a member of the TradeITM Discord server to access the member area.
             </p>
           </div>
 
-          {/* Card */}
-          <div className="bg-[#0a0a0b] border border-white/10 rounded-2xl p-6">
+          {/* Card - Holographic Border */}
+          <div className="glass-card-heavy border-holo rounded-2xl p-6">
             {/* Warning Message */}
             <div className="mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <div className="flex items-start gap-3">

@@ -44,10 +44,14 @@
   --sidebar-border: rgba(255, 255, 255, 0.10);
   --sidebar-ring: #E8E4D9;
 
-  /* Luxury Color Palette */
-  --champagne: #E8E4D9;
-  --champagne-light: #F5F3ED;
-  --champagne-dark: #B8B5AD;
+  /* Luxury Color Palette - Updated Gold Champagne */
+  --champagne: #D4AF37;
+  --champagne-light: #F1E5AC;
+  --champagne-dark: #B8962E;
+  --obsidian: #050505;
+  --obsidian-card: #0F0F10;
+  --platinum: #E5E4E2;
+  --emerald-glow: #10B981;
   --wealth-emerald: #059669;
   --wealth-emerald-light: #10B981;
   --wealth-emerald-dark: #065F46;
@@ -58,9 +62,6 @@
   --subtle-line: rgba(255, 255, 255, 0.04);
 
   /* Legacy mappings for compatibility */
-  --platinum: #E8E4D9;
-  --platinum-light: #F5F3ED;
-  --platinum-dark: #B8B5AD;
   --signal-green: #047857;
   --signal-green-light: #059669;
   --signal-green-dark: #065F46;
@@ -191,7 +192,7 @@
 
   body {
     @apply bg-background text-foreground;
-    background-color: #0A0A0B;
+    background-color: #050505;
     min-height: 100vh;
     position: relative;
   }
@@ -389,36 +390,37 @@
     background-clip: text;
   }
 
-  /* Champagne Gradient (warm platinum) */
+  /* Champagne Gradient (True Gold) */
   .gradient-champagne {
-    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
+    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
   }
 
   .text-gradient-champagne {
-    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
+    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Legacy platinum/gold gradients - map to champagne */
+  /* Platinum Gradient (Silver/White) */
   .gradient-platinum {
-    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
+    background: linear-gradient(135deg, #B8B8B8 0%, #E5E4E2 50%, #F5F5F0 100%);
   }
 
   .text-gradient-platinum {
-    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
+    background: linear-gradient(135deg, #B8B8B8 0%, #E5E4E2 50%, #F5F5F0 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
+  /* Legacy gold gradient - maps to champagne */
   .gradient-gold {
-    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
+    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
   }
 
   .text-gradient-gold {
-    background: linear-gradient(135deg, #B8B5AD 0%, #E8E4D9 50%, #F5F3ED 100%);
+    background: linear-gradient(135deg, #B8962E 0%, #D4AF37 50%, #F1E5AC 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -533,62 +535,63 @@
       0 0 60px rgba(4, 120, 87, 0.1);
   }
 
-  /* Champagne Accent Border */
+  /* Champagne Accent Border (True Gold) */
   .border-champagne-glow {
-    border: 1px solid rgba(232, 228, 217, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.15);
     transition: border-color 0.5s ease;
   }
 
   .border-champagne-glow:hover {
-    border-color: rgba(232, 228, 217, 0.25);
+    border-color: rgba(212, 175, 55, 0.25);
   }
 
-  /* Legacy platinum/gold borders - map to champagne */
+  /* Platinum Border (Silver/White) */
   .border-platinum-glow {
-    border: 1px solid rgba(232, 228, 217, 0.15);
+    border: 1px solid rgba(229, 228, 226, 0.15);
     transition: border-color 0.5s ease;
   }
 
+  /* Legacy gold border - maps to champagne */
   .border-gold-glow {
-    border: 1px solid rgba(232, 228, 217, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.15);
     transition: border-color 0.5s ease;
   }
 
   /* Section Divider - Refined */
   .divider-champagne {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(232, 228, 217, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
   }
 
   .divider-platinum {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(232, 228, 217, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(229, 228, 226, 0.3), transparent);
   }
 
   .divider-gold {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(232, 228, 217, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
   }
 
   /* Subtle Glow Effects */
   .glow-emerald {
-    box-shadow: 0 0 60px rgba(4, 120, 87, 0.12);
+    box-shadow: 0 0 60px rgba(16, 185, 129, 0.12);
   }
 
   .glow-green {
-    box-shadow: 0 0 60px rgba(4, 120, 87, 0.12);
+    box-shadow: 0 0 60px rgba(16, 185, 129, 0.12);
   }
 
   .glow-champagne {
-    box-shadow: 0 0 60px rgba(232, 228, 217, 0.08);
+    box-shadow: 0 0 60px rgba(212, 175, 55, 0.08);
   }
 
   .glow-platinum {
-    box-shadow: 0 0 60px rgba(232, 228, 217, 0.08);
+    box-shadow: 0 0 60px rgba(229, 228, 226, 0.08);
   }
 
   .glow-gold {
-    box-shadow: 0 0 60px rgba(232, 228, 217, 0.08);
+    box-shadow: 0 0 60px rgba(212, 175, 55, 0.08);
   }
 
   /* Premium Card Hover Effect - Slow Lift */
