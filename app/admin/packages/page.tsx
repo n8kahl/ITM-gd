@@ -19,6 +19,7 @@ import {
   Check
 } from "lucide-react"
 import { getAllPricingTiers, PricingTier } from "@/lib/supabase"
+import { DiscordRolePicker } from "@/components/admin/discord-role-picker"
 
 export default function PackagesPage() {
   const router = useRouter()
@@ -76,6 +77,8 @@ export default function PackagesPage() {
       monthly_link: tier.monthly_link,
       yearly_link: tier.yearly_link || '',
       is_active: tier.is_active,
+      discord_role_id: tier.discord_role_id || '',
+      discord_role_name: tier.discord_role_name || '',
     })
   }
 
@@ -99,6 +102,8 @@ export default function PackagesPage() {
           monthly_link: editForm.monthly_link,
           yearly_link: editForm.yearly_link || null,
           is_active: editForm.is_active,
+          discord_role_id: editForm.discord_role_id || null,
+          discord_role_name: editForm.discord_role_name || null,
         }),
       })
 
@@ -390,6 +395,27 @@ export default function PackagesPage() {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Discord Role Linking */}
+                    <div className="space-y-1 pt-2 border-t border-white/10">
+                      <Label className="text-xs text-muted-foreground">Linked Discord Role</Label>
+                      {isEditing ? (
+                        <DiscordRolePicker
+                          value={editForm.discord_role_id || ''}
+                          onChange={(id, name) => setEditForm({
+                            ...editForm,
+                            discord_role_id: id,
+                            discord_role_name: name
+                          })}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono text-white/60">
+                            {tier.discord_role_name || tier.discord_role_id || 'No role linked'}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Active Toggle */}
