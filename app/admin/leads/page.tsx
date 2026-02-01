@@ -48,20 +48,6 @@ function LeadsContent() {
   const [expandedId, setExpandedId] = useState<string | null>(highlightId)
   const [updating, setUpdating] = useState<string | null>(null)
 
-  // Check admin access
-  useEffect(() => {
-    const checkAuth = () => {
-      const cookies = document.cookie.split(';')
-      const adminCookie = cookies.find(c => c.trim().startsWith('titm_admin='))
-
-      if (!adminCookie || !adminCookie.includes('true')) {
-        router.push('/')
-      }
-    }
-
-    checkAuth()
-  }, [router])
-
   // Load applications via API route (uses service role for RLS bypass)
   const loadData = async () => {
     setLoading(true)

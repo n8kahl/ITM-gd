@@ -674,18 +674,18 @@ function checkEscalationTriggers(message: string, conversation: any, history: an
   }
 
   // 2. High-value indicators
-  const highValueKeywords = ['execute tier', '$499', 'ready to join', 'sign up now', 'how do i start', 'want to buy', 'ready to subscribe']
+  const highValueKeywords = ['executive tier', '$499', 'ready to join', 'sign up now', 'how do i start', 'want to buy', 'ready to subscribe']
   if (highValueKeywords.some(kw => messageLower.includes(kw))) {
     shouldEscalate = true
     reason = 'High-value lead ready to purchase'
     leadScore = 9
   }
 
-  // 3. Execute tier interest
-  const executeKeywords = ['execute', 'serious trader', '6 figure', 'large account', 'professional']
-  if (executeKeywords.some(kw => messageLower.includes(kw))) {
+  // 3. Executive tier interest
+  const executiveKeywords = ['executive', 'serious trader', '6 figure', 'large account', 'professional']
+  if (executiveKeywords.some(kw => messageLower.includes(kw))) {
     shouldEscalate = true
-    reason = 'Execute tier interest - high-value lead'
+    reason = 'Executive tier interest - high-value lead'
     leadScore = 8
   }
 
@@ -854,19 +854,19 @@ If information is NOT in these sources, respond with: "I want to make sure you g
 - Target: 100%+ returns per trade
 - Alerts: 1-3 daily during market hours (9:30am-4pm ET)
 - Delivery: Instant Discord notifications with exact entries, stop losses, and take profits
-- Tiers: Core ($199/mo), Pro ($299/mo), Execute ($499/mo)
+- Tiers: Core ($199/mo), Pro ($299/mo), Executive ($499/mo)
 - Guarantee: 30-day action-based money-back guarantee
 
 ## Pricing Tiers (use exact amounts)
 - **Core Sniper ($199/mo)**: SPX day trades, morning watchlist, high-volume alerts, educational commentary
 - **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades, position building logic, market structure insights
-- **Execute Sniper ($499/mo)**: Everything in Pro + NDX real-time alerts, high-conviction LEAPS, advanced trade commentary, risk scaling education
+- **Executive Sniper ($499/mo)**: Everything in Pro + NDX real-time alerts, high-conviction LEAPS, advanced trade commentary, risk scaling education
 
 ## Billing Options
-- **Monthly billing**: Core ($199/mo), Pro ($299/mo), Execute ($499/mo)
-- **Annual billing**: Core ($1,990/yr), Pro ($2,990/yr), Execute ($4,990/yr)
+- **Monthly billing**: Core ($199/mo), Pro ($299/mo), Executive ($499/mo)
+- **Annual billing**: Core ($1,990/yr), Pro ($2,990/yr), Executive ($4,990/yr)
 - Annual billing = 2 MONTHS FREE (pay for 10 months, get 12 months of access)
-- Annual savings: Core saves $398/yr, Pro saves $598/yr, Execute saves $998/yr
+- Annual savings: Core saves $398/yr, Pro saves $598/yr, Executive saves $998/yr
 - IMPORTANT: When a user asks about discounts, savings, or long-term access, ALWAYS mention the annual billing option and its savings FIRST before suggesting the Precision Cohort mentorship
 
 ## Mentorship Facts (Precision Cohort)
@@ -882,7 +882,7 @@ When a visitor expresses interest in the Precision Cohort, annual mentorship, or
 1. Acknowledge their interest warmly and emphasize exclusivity
 2. FIRST respond with: "The Precision Cohort is our most exclusive path, limited to 20 traders. It requires an application to ensure a fit. Would you like to see the application requirements or speak with a team member about it?"
 3. If they want requirements, ask about their trading experience: "How long have you been actively trading?"
-4. If they're new (<1 year experience), gently guide them: "Our monthly tiers (Core/Pro/Execute) would be a great foundation first. The Cohort is designed for traders with established experience looking to take the next step."
+4. If they're new (<1 year experience), gently guide them: "Our monthly tiers (Core/Pro/Executive) would be a great foundation first. The Cohort is designed for traders with established experience looking to take the next step."
 5. If experienced (1+ years), proceed with connecting to team: "That sounds like a great fit for the Cohort. Let me connect you with our team to discuss your application."
 6. Always emphasize: This is "Mentorship, not Signals"—we develop traders, we don't just send alerts.
 

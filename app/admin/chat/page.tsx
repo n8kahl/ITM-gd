@@ -56,7 +56,7 @@ const DEFAULT_CANNED_RESPONSES: CannedResponse[] = [
 
 • **Core Sniper ($199/mo)**: SPX day trades, morning watchlist, high-volume alerts
 • **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades
-• **Execute Sniper ($499/mo)**: Everything in Pro + NDX alerts, high-conviction LEAPS
+• **Executive Sniper ($499/mo)**: Everything in Pro + NDX alerts, high-conviction LEAPS
 
 All tiers include our 30-day money-back guarantee!`
   },
@@ -90,9 +90,9 @@ Questions about which tier is right for you?`
 If you follow our alerts and don't see results within 30 days, we'll refund your membership - no questions asked. We're confident you'll see the value from day one.`
   },
   {
-    label: 'Execute Tier Details',
-    shortcut: '/execute',
-    text: `Execute Sniper ($499/mo) is our premium tier for serious traders:
+    label: 'Executive Tier Details',
+    shortcut: '/executive',
+    text: `Executive Sniper ($499/mo) is our premium tier for serious traders:
 
 • Real-time NDX alerts (our highest-conviction setups)
 • High-conviction LEAPS positions
@@ -1012,7 +1012,7 @@ function ChatManagementContent() {
                   </Button>
                 </form>
                 <p className="text-xs text-platinum/40 mt-1 hidden lg:block">
-                  Shortcuts: /pricing, /stats, /join, /guarantee, /execute
+                  Shortcuts: /pricing, /stats, /join, /guarantee, /executive
                 </p>
               </div>
             </Card>

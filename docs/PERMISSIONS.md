@@ -4,7 +4,7 @@ This document outlines the permission structure for Trade In The Money (TITM) pl
 
 ## Overview
 
-The permission system is designed to align with the three-tier pricing model (Core, Pro, Execute) and provide granular control over feature access.
+The permission system is designed to align with the three-tier pricing model (Core, Pro, Executive) and provide granular control over feature access.
 
 ## Permission Categories
 
@@ -16,12 +16,12 @@ These permissions control access to tier-specific content:
 |-----------|-------------|------|
 | `access_core_content` | Watchlists, day trade setups, alerts, basic education | Core Sniper |
 | `access_pro_content` | LEAPS, swing trades, position building, advanced strategy | Pro Sniper |
-| `access_execute_content` | Full library, premium tools, maximum insights | Execute Sniper |
+| `access_executive_content` | Full library, premium tools, maximum insights | Executive Sniper |
 
 **Implementation:**
 - Core users get `access_core_content` only
 - Pro users get `access_core_content` + `access_pro_content`
-- Execute users get all three
+- Executive users get all three
 
 ### 📊 Feature-Specific Permissions
 
@@ -88,12 +88,12 @@ Platform administration:
 
 **Value Proposition:** Scaling beyond day trades with patience and strategy
 
-### Execute Sniper Package
+### Executive Sniper Package
 ```json
 [
   "access_core_content",
   "access_pro_content",
-  "access_execute_content",
+  "access_executive_content",
   "access_trading_journal",
   "access_ai_analysis",
   "access_course_library",

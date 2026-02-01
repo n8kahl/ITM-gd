@@ -13,10 +13,9 @@ export default function ProfilePage() {
     permissions,
     signOut,
     syncDiscordRoles,
-    getMembershipTier,
   } = useMemberAuth()
 
-  const tier = getMembershipTier()
+  const tier = profile?.membership_tier
   const tierColors = {
     core: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
     pro: 'text-[#F3E5AB] bg-[#F3E5AB]/10 border-[#F3E5AB]/30',

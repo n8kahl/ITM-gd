@@ -94,7 +94,7 @@ npm run dev
 # Test these queries:
 # 1. "What's your win rate?" (AI should respond)
 # 2. "I want to speak to a person" (should escalate)
-# 3. "Ready to buy Execute tier" (should escalate with high lead score)
+# 3. "Ready to buy Executive tier" (should escalate with high lead score)
 
 # Open /team/chat to see team dashboard
 ```
@@ -113,7 +113,7 @@ npm run dev
 ### Escalates to Human:
 - "Speak to a person" → Manual request
 - "Ready to join" / "Sign up now" → High-value lead (score 9)
-- "Execute tier" / "$499" → Execute interest (score 8)
+- "Executive tier" / "$499" → Executive interest (score 8)
 - "Refund" / "Cancel" → Billing concern
 - 5+ messages back and forth → Extended conversation
 

@@ -434,17 +434,17 @@ export default function Home() {
               />
             </StaggerItem>
 
-            {/* Execute Sniper Card */}
+            {/* Executive Sniper Card */}
             <StaggerItem>
               <PricingCard
-                name={pricingTiers.find(t => t.id === 'execute')?.name || "Execute Sniper"}
+                name={pricingTiers.find(t => t.id === 'executive')?.name || "Executive Sniper"}
                 price={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'execute')?.monthly_price || "$499")
-                  : (pricingTiers.find(t => t.id === 'execute')?.yearly_price || "$4,990")
+                  ? (pricingTiers.find(t => t.id === 'executive')?.monthly_price || "$499")
+                  : (pricingTiers.find(t => t.id === 'executive')?.yearly_price || "$4,990")
                 }
                 period={billingCycle === 'monthly' ? "/month" : "/year"}
-                description={pricingTiers.find(t => t.id === 'execute')?.description || "For serious traders only"}
-                features={pricingTiers.find(t => t.id === 'execute')?.features || [
+                description={pricingTiers.find(t => t.id === 'executive')?.description || "For serious traders only"}
+                features={pricingTiers.find(t => t.id === 'executive')?.features || [
                   "Everything in Pro Sniper, plus:",
                   "🔥 Advanced NDX real time alerts (entries & exits)",
                   "🧭 High-conviction LEAPS framework",
@@ -452,11 +452,11 @@ export default function Home() {
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
                 whopLink={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'execute')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/")
-                  : (pricingTiers.find(t => t.id === 'execute')?.yearly_link || pricingTiers.find(t => t.id === 'execute')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-execute-sniper-access-0AoRousnaGeJzN/app/")
+                  ? (pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-executive-sniper-access-0AoRousnaGeJzN/app/")
+                  : (pricingTiers.find(t => t.id === 'executive')?.yearly_link || pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-executive-sniper-access-0AoRousnaGeJzN/app/")
                 }
-                tier="execute"
-                tagline={pricingTiers.find(t => t.id === 'execute')?.tagline || "Maximum conviction, maximum execution"}
+                tier="executive"
+                tagline={pricingTiers.find(t => t.id === 'executive')?.tagline || "Maximum conviction, maximum execution"}
                 isYearly={billingCycle === 'yearly'}
               />
             </StaggerItem>
@@ -534,7 +534,7 @@ export default function Home() {
           testimonials={[
             {
               name: "Michael C.",
-              role: "Execute Sniper Member",
+              role: "Executive Sniper Member",
               content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM alerts are the real deal.",
               avatar: "MC"
             },
@@ -546,7 +546,7 @@ export default function Home() {
             },
             {
               name: "David P.",
-              role: "Execute Sniper Member",
+              role: "Executive Sniper Member",
               content: "$8,400 profit this month following the trade alerts. My account has grown 180% in 6 months. Best investment I've ever made.",
               avatar: "DP"
             },
@@ -579,13 +579,13 @@ export default function Home() {
             },
             {
               name: "Lisa K.",
-              role: "Execute Sniper Member",
+              role: "Executive Sniper Member",
               content: "$15k account to $41k in 4 months. The 1-on-1 mentorship sessions are invaluable. Worth every penny.",
               avatar: "LK"
             },
             {
               name: "Robert G.",
-              role: "Execute Sniper Member",
+              role: "Executive Sniper Member",
               content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of alerts is unmatched.",
               avatar: "RG"
             },
@@ -695,7 +695,7 @@ export default function Home() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
                 </span>
                 <span className="text-sm text-red-400 font-medium">
-                  Only 7 Execute Sniper spots remaining this month
+                  Only 7 Executive Sniper spots remaining this month
                 </span>
               </div>
 

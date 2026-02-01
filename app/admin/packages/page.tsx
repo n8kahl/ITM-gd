@@ -30,20 +30,6 @@ export default function PackagesPage() {
   const [editForm, setEditForm] = useState<Partial<PricingTier>>({})
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
-  // Check admin access
-  useEffect(() => {
-    const checkAuth = () => {
-      const cookies = document.cookie.split(';')
-      const adminCookie = cookies.find(c => c.trim().startsWith('titm_admin='))
-
-      if (!adminCookie || !adminCookie.includes('true')) {
-        router.push('/')
-      }
-    }
-
-    checkAuth()
-  }, [router])
-
   // Load pricing tiers
   const loadData = async () => {
     setLoading(true)
@@ -144,7 +130,7 @@ export default function PackagesPage() {
         return { accent: '#10B981', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
       case 'pro':
         return { accent: '#F3E5AB', bg: 'bg-amber-500/10', border: 'border-amber-500/30' }
-      case 'execute':
+      case 'executive':
         return { accent: '#E8E4D9', bg: 'bg-zinc-400/10', border: 'border-zinc-400/30' }
       default:
         return { accent: '#9CA3AF', bg: 'bg-gray-500/10', border: 'border-gray-500/30' }

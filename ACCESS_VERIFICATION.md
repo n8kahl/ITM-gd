@@ -65,7 +65,7 @@
    - Hero section with animated logo and Aurora effects
    - Statistics display (win rate, gains, alerts)
    - Feature grid with 6 interactive cards
-   - 3-tier pricing (Core/Pro/Execute Sniper)
+   - 3-tier pricing (Core/Pro/Executive Sniper)
    - Testimonial carousel
    - Post-purchase onboarding flow
 

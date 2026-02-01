@@ -36,7 +36,7 @@ export function generateMockCourse() {
 export function generateMockRoleMapping() {
   return {
     discord_role_id: faker.string.numeric(18),
-    discord_role_name: faker.helpers.arrayElement(['Core Sniper', 'Pro Sniper', 'Execute Sniper']),
+    discord_role_name: faker.helpers.arrayElement(['Core Sniper', 'Pro Sniper', 'Executive Sniper']),
     permission_ids: [faker.string.uuid()],
     mapping_ids: [faker.string.uuid()],
   }

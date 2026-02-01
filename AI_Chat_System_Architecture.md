@@ -103,8 +103,8 @@ create index idx_kb_question_search on knowledge_base
 insert into knowledge_base (category, question, answer, image_urls) values
 (
   'pricing',
-  'What is the difference between Core, Pro, and Execute tiers?',
-  'Core ($199/mo) includes SPX day trade setups and morning watchlist. Pro ($299/mo) adds LEAPS and swing trades with position building logic. Execute ($499/mo) includes everything plus NDX real-time alerts and high-conviction LEAPS framework. Most serious traders choose Execute for maximum edge.',
+  'What is the difference between Core, Pro, and Executive tiers?',
+  'Core ($199/mo) includes SPX day trade setups and morning watchlist. Pro ($299/mo) adds LEAPS and swing trades with position building logic. Executive ($499/mo) includes everything plus NDX real-time alerts and high-conviction LEAPS framework. Most serious traders choose Executive for maximum edge.',
   null
 ),
 (
@@ -260,13 +260,13 @@ const SYSTEM_PROMPT = `You are an AI assistant for TradeITM, a premium options t
 - Target: 100%+ returns per trade
 - Alerts: 1-3 daily during market hours (9:30am-4pm ET)
 - Delivery: Instant Discord notifications with exact entries, stop losses, and take profits
-- Tiers: Core ($199), Pro ($299), Execute ($499)
+- Tiers: Core ($199), Pro ($299), Executive ($499)
 - Guarantee: 30-day action-based money-back guarantee
 
 ## Pricing Tiers
 - **Core Sniper ($199/mo)**: SPX day trades, morning watchlist, high-volume alerts, educational commentary
 - **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades, position building logic, market structure insights
-- **Execute Sniper ($499/mo)**: Everything in Pro + NDX real-time alerts, high-conviction LEAPS, advanced trade commentary, risk scaling education
+- **Executive Sniper ($499/mo)**: Everything in Pro + NDX real-time alerts, high-conviction LEAPS, advanced trade commentary, risk scaling education
 
 ## Brand Voice
 - Confident but not arrogant
@@ -279,7 +279,7 @@ const SYSTEM_PROMPT = `You are an AI assistant for TradeITM, a premium options t
 1. Visitor explicitly asks to speak with a person
 2. Questions about very specific trades or technical analysis beyond your knowledge
 3. Complaints or concerns about the service
-4. High-value indicators (mentions large account size, serious about Execute tier, ready to buy)
+4. High-value indicators (mentions large account size, serious about Executive tier, ready to buy)
 5. Complex questions requiring nuanced human judgment
 
 ## Response Guidelines
@@ -290,7 +290,7 @@ const SYSTEM_PROMPT = `You are an AI assistant for TradeITM, a premium options t
 - If you don't know something specific, say so and offer to connect them with the team
 
 ## Example Tone
-"Our Execute tier is designed for serious traders targeting maximum returns. You'll get real-time NDX alerts with our highest-conviction setups - the same trades our founder takes personally. Here's what one member said: 'Turned $2,500 into $11,200 in my first month.' Want to see some recent wins from this week?"
+"Our Executive tier is designed for serious traders targeting maximum returns. You'll get real-time NDX alerts with our highest-conviction setups - the same trades our founder takes personally. Here's what one member said: 'Turned $2,500 into $11,200 in my first month.' Want to see some recent wins from this week?"
 `
 
 async function generateAIResponse(
@@ -376,7 +376,7 @@ async function checkEscalationTriggers(
   }
 
   // 3. High-value indicators
-  const valueKeywords = ['execute tier', '$499', 'ready to join', 'sign up now', '6 figure', 'serious trader']
+  const valueKeywords = ['executive tier', '$499', 'ready to join', 'sign up now', '6 figure', 'serious trader']
   if (valueKeywords.some(kw => message.toLowerCase().includes(kw))) {
     triggers.push('High-value lead detected')
   }
@@ -767,7 +767,7 @@ insert into knowledge_base (category, question, answer) values
 (
   'pricing',
   'How much does it cost? | What are your prices? | Pricing? | Monthly cost?',
-  'We offer three tiers: Core Sniper ($199/mo) for SPX day trades and watchlist. Pro Sniper ($299/mo) adds LEAPS and swing trades. Execute Sniper ($499/mo) includes everything plus NDX real-time alerts and our highest-conviction setups. All tiers include our 30-day action-based money-back guarantee.',
+  'We offer three tiers: Core Sniper ($199/mo) for SPX day trades and watchlist. Pro Sniper ($299/mo) adds LEAPS and swing trades. Executive Sniper ($499/mo) includes everything plus NDX real-time alerts and our highest-conviction setups. All tiers include our 30-day action-based money-back guarantee.',
   null
 );
 
@@ -776,7 +776,7 @@ insert into knowledge_base (category, question, answer, image_urls) values
 (
   'proof',
   'Show me proof | Recent wins | Do you have results? | Track record?',
-  'Absolutely! Our verified win rate is 87% over 8+ years. Here are some recent wins from our Execute tier members:',
+  'Absolutely! Our verified win rate is 87% over 8+ years. Here are some recent wins from our Executive tier members:',
   ARRAY[
     'https://tradeitm.com/wins/nvda-203.jpg',
     'https://tradeitm.com/wins/tsla-156.jpg',

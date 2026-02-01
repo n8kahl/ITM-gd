@@ -528,11 +528,11 @@ export default function RolesPage() {
               }}
             />
             <TemplateCard
-              name="Execute Sniper"
+              name="Executive Sniper"
               permissions={[
                 'access_core_content',
                 'access_pro_content',
-                'access_execute_content',
+                'access_executive_content',
                 'access_trading_journal',
                 'access_ai_analysis',
                 'access_course_library',
@@ -546,7 +546,7 @@ export default function RolesPage() {
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
                   discord_role_id: '',
-                  discord_role_name: 'Execute Sniper',
+                  discord_role_name: 'Executive Sniper',
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,

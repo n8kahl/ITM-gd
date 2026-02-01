@@ -168,7 +168,7 @@ Try these questions in the chat widget:
 4. **"I want to speak to a person"**
    → Should escalate to admin (check `/admin/chat`)
 
-5. **"Ready to join Execute tier"**
+5. **"Ready to join Executive tier"**
    → Should escalate with high lead score (9)
 
 ---

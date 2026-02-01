@@ -207,7 +207,7 @@ Visitor gets human response in real-time
 
 ### What Gets Escalated
 🚨 "Speak to a person"
-🚨 "Ready to buy Execute tier"
+🚨 "Ready to buy Executive tier"
 🚨 Frustrated sentiment
 🚨 Complex technical questions
 🚨 Billing/refund issues
@@ -314,7 +314,7 @@ Your KB is pre-loaded with:
 **Escalation (3 entries)**
 - Human request triggers
 - High-value lead detection
-- Execute tier interest
+- Executive tier interest
 
 ---
 
@@ -334,7 +334,7 @@ Try these in the chat to verify it works:
 4. **"I want to speak to a person"**
    → Escalates to `/admin/chat`
 
-5. **"Ready to join Execute tier"**
+5. **"Ready to join Executive tier"**
    → Escalates with lead_score = 8
 
 ---

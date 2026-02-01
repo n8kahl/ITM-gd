@@ -32,7 +32,7 @@ interface PricingCardProps {
   features: string[];
   whopLink: string;
   popular?: boolean;
-  tier: "core" | "pro" | "execute";
+  tier: "core" | "pro" | "executive";
   urgencyText?: string;
   spotsLeft?: number;
   tagline?: string;
@@ -40,7 +40,7 @@ interface PricingCardProps {
 }
 
 // Tier Title Card Component - Premium Luxury Branding
-function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "execute"; name: string; isHovered: boolean }) {
+function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "executive"; name: string; isHovered: boolean }) {
   // Premium tier colors using existing luxury palette
   const tierColors = {
     core: {
@@ -57,7 +57,7 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
       glow: "rgba(243, 229, 171, 0.3)",
       icon: "◆◆",
     },
-    execute: {
+    executive: {
       // Platinum - Elite & Exclusive
       gradient: "from-[#71717A] via-[#A1A1AA] to-[#E4E4E7]",
       accent: "#E8E4D9",
@@ -185,7 +185,7 @@ export function PricingCard({
 }: PricingCardProps) {
   const isCore = tier === "core";
   const isPro = tier === "pro";
-  const isExecute = tier === "execute";
+  const isExecutive = tier === "executive";
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -251,7 +251,7 @@ export function PricingCard({
       checkBg: "bg-amber-500/10",
       checkColor: "text-amber-400",
     },
-    execute: {
+    executive: {
       // Platinum - Elite & Exclusive
       borderColor: "rgba(232, 228, 217, 0.3)",
       glowColor: "rgba(232, 228, 217, 0.15)",
@@ -269,7 +269,7 @@ export function PricingCard({
       ref={cardRef}
       className={cn(
         "relative rounded-2xl overflow-visible h-full cursor-pointer",
-        isExecute && "lg:scale-105 z-10"
+        isExecutive && "lg:scale-105 z-10"
       )}
       style={{
         perspective: 1000,
@@ -288,7 +288,7 @@ export function PricingCard({
           rotateY: isHovered && !isTouchDevice ? rotateY : 0,
           transformStyle: "preserve-3d",
         }}
-        whileHover={isExecute ? { y: -8, scale: 1.02 } : { y: -4, scale: 1.01 }}
+        whileHover={isExecutive ? { y: -8, scale: 1.02 } : { y: -4, scale: 1.01 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
         {/* Border glow effect */}
@@ -501,8 +501,8 @@ export function PricingCard({
                   "bg-gradient-to-r hover:-translate-y-0.5",
                   "flex items-center justify-center gap-2 font-mono tracking-wide cursor-pointer",
                   styles.buttonGradient,
-                  // Execute tier has light platinum gradient, needs dark text
-                  isExecute ? "text-onyx" : "text-white"
+                  // Executive tier has light platinum gradient, needs dark text
+                  isExecutive ? "text-onyx" : "text-white"
                 )}
                 style={{
                   boxShadow: isHovered ? `0 0 40px ${styles.glowColor}` : `0 0 20px ${styles.glowColor}`,

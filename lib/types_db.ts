@@ -166,7 +166,7 @@ export type PermissionName =
   // Tier-based content access
   | 'access_core_content'
   | 'access_pro_content'
-  | 'access_execute_content'
+  | 'access_executive_content'
   // Feature-specific permissions
   | 'access_trading_journal'
   | 'access_ai_analysis'

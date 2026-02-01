@@ -623,7 +623,7 @@ order by count desc;
 
 4. **A/B Test**: Try different AI prompts and track conversion rates
 
-5. **High-Value Alerts**: Set up notifications (email/SMS) when Execute tier leads arrive
+5. **High-Value Alerts**: Set up notifications (email/SMS) when Executive tier leads arrive
 
 ---
 

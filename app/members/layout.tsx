@@ -32,10 +32,10 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/members', icon: LayoutDashboard },
-  { name: 'Library', href: '/members/library', icon: BookOpen, permission: 'view_courses' },
-  { name: 'Journal', href: '/members/journal', icon: Notebook, badge: 'New' },
-  { name: 'Profile', href: '/members/profile', icon: User },
+  { name: 'Dashboard', href: '/members', icon: LayoutDashboard, permission: 'access_core_content' },
+  { name: 'Library', href: '/members/library', icon: BookOpen, permission: 'access_course_library' },
+  { name: 'Journal', href: '/members/journal', icon: Notebook, badge: 'New', permission: 'access_trading_journal' },
+  { name: 'Profile', href: '/members/profile', icon: User, permission: 'access_core_content' },
 ]
 
 // Mobile nav items (subset for bottom bar)

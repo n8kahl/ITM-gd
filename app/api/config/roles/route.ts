@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 
 // Default role mapping fallback (Discord role ID -> tier)
 // NOTE: These are placeholder IDs. Configure actual Discord role IDs in app_settings.
-// To configure: INSERT INTO app_settings (key, value) VALUES ('role_tier_mapping', '{"YOUR_ROLE_ID": "execute", ...}')
-const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'execute'> = {
+// To configure: INSERT INTO app_settings (key, value) VALUES ('role_tier_mapping', '{"YOUR_ROLE_ID": "executive", ...}')
+const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'executive'> = {
   // Empty by default - must be configured in database with actual Discord role IDs
-  // Example: '1234567890123456789': 'execute'
+  // Example: '1234567890123456789': 'executive'
 }
 
 // Public endpoint to fetch role-to-tier mappings (Discord role ID -> tier)

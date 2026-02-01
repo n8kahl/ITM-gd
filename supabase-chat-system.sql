@@ -271,25 +271,25 @@ insert into knowledge_base (category, question, answer, priority, metadata) valu
 
 • **Pro Sniper ($299/mo)** - Everything in Core PLUS LEAPS, advanced swing trades, position building logic, and market structure insights
 
-• **Execute Sniper ($499/mo)** - Everything in Pro PLUS NDX real-time alerts, high-conviction LEAPS framework, and advanced risk scaling education
+• **Executive Sniper ($499/mo)** - Everything in Pro PLUS NDX real-time alerts, high-conviction LEAPS framework, and advanced risk scaling education
 
-All tiers include our 30-day action-based money-back guarantee. Most serious traders choose Execute for maximum edge.',
+All tiers include our 30-day action-based money-back guarantee. Most serious traders choose Executive for maximum edge.',
   10,
   '{"tags": ["pricing", "tiers", "guarantee"]}'::jsonb
 ),
 
 (
   'pricing',
-  'What is the difference between Core, Pro, and Execute? | Which tier should I choose? | Core vs Pro vs Execute',
+  'What is the difference between Core, Pro, and Executive? | Which tier should I choose? | Core vs Pro vs Executive',
   'Here''s the breakdown:
 
 **Core Sniper ($199)** is for disciplined traders who want full market exposure with SPX day trades and morning watchlists.
 
 **Pro Sniper ($299)** adds LEAPS and swing trade strategies for traders scaling beyond day trades - more patience and strategy, not just speed.
 
-**Execute Sniper ($499)** is for serious traders only. You get advanced NDX real-time alerts, high-conviction LEAPS, and maximum execution edge.
+**Executive Sniper ($499)** is for serious traders only. You get advanced NDX real-time alerts, high-conviction LEAPS, and maximum execution edge.
 
-Think of it as: Core = Foundation, Pro = Advanced Strategy, Execute = Maximum Conviction.
+Think of it as: Core = Foundation, Pro = Advanced Strategy, Executive = Maximum Conviction.
 
 Which tier sounds right for your trading goals?',
   10,
@@ -344,7 +344,7 @@ You''re not just getting signals - you''re learning a proven strategy from trade
 
 **2. Verified Results** - 87% win rate over 8+ years, averaging 100%+ returns per trade. No fluff, just documented wins.
 
-**3. Selective Community** - We limit Execute tier to serious traders only. You''re joining a community of disciplined traders, not hype-chasers.
+**3. Selective Community** - We limit Executive tier to serious traders only. You''re joining a community of disciplined traders, not hype-chasers.
 
 Most services sell dreams. We teach edge.',
   8,
@@ -381,7 +381,7 @@ We focus on quality over quantity. Every alert is a setup our founder would take
 
 **Core tier**: SPX day trades
 **Pro tier**: SPX + LEAPS + swing trades
-**Execute tier**: SPX + LEAPS + NDX real-time alerts
+**Executive tier**: SPX + LEAPS + NDX real-time alerts
 
 Alerts come via instant Discord notifications, so you never miss an opportunity.',
   8,
@@ -411,7 +411,7 @@ Remember: Risk management is MORE important than the signals themselves. We''ll 
 
 **Beginners**: You''ll learn from day one with our educational commentary explaining every setup. We teach position sizing, risk management, and market structure.
 
-**Experienced traders**: You''ll appreciate our high-conviction setups and advanced analysis in Pro/Execute tiers.
+**Experienced traders**: You''ll appreciate our high-conviction setups and advanced analysis in Pro/Executive tiers.
 
 The key is discipline. We provide the edge, you need the discipline to follow the plan.',
   7,
@@ -444,11 +444,11 @@ insert into knowledge_base (category, question, answer, priority, metadata) valu
   'What do members say? | Testimonials? | Reviews? | Success stories?',
   'Here''s what our members are saying:
 
-**Michael C.** (Execute tier): "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%."
+**Michael C.** (Executive tier): "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%."
 
 **Sarah R.** (Pro tier): "Made back my entire membership cost in 2 days. Last week''s TSLA play hit +156%."
 
-**David P.** (Execute tier): "$8,400 profit this month. My account has grown 180% in 6 months. Best investment I''ve made."
+**David P.** (Executive tier): "$8,400 profit this month. My account has grown 180% in 6 months. Best investment I''ve made."
 
 These aren''t cherry-picked wins - our 87% win rate is verified across 8+ years.',
   8,
@@ -475,8 +475,8 @@ insert into knowledge_base (category, question, answer, priority, metadata) valu
 
 (
   'escalation',
-  'execute tier | $499 | serious trader | 6 figure | large account | professional trader',
-  '[ESCALATE] High-value Execute tier interest detected.',
+  'executive tier | $499 | serious trader | 6 figure | large account | professional trader',
+  '[ESCALATE] High-value Executive tier interest detected.',
   10,
   '{"auto_escalate": true, "lead_score": 8}'::jsonb
 );

@@ -32,7 +32,7 @@ export interface MemberProfile {
   discord_username: string | null
   discord_avatar: string | null
   discord_roles: string[]
-  membership_tier: 'core' | 'pro' | 'execute' | null
+  membership_tier: 'core' | 'pro' | 'executive' | null
 }
 
 // Error codes from sync-discord-roles edge function
@@ -78,8 +78,8 @@ const MemberAuthContext = createContext<MemberAuthContextValue | null>(null)
 
 // Default role mapping fallback (Discord role ID -> tier)
 // Configure actual Discord role IDs in Admin > Settings or via app_settings table
-// Example: { "1234567890123456789": "execute", "9876543210987654321": "pro" }
-const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'execute'> = {
+// Example: { "1234567890123456789": "executive", "9876543210987654321": "pro" }
+const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'executive'> = {
   // Empty by default - must be configured with actual Discord role IDs
 }
 
@@ -128,7 +128,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   })
 
   // Dynamic role mapping fetched from config API (role ID -> tier)
-  const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'execute'>>(DEFAULT_ROLE_MAPPING)
+  const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'executive'>>(DEFAULT_ROLE_MAPPING)
 
   // Rate limiting using ref (not state) to avoid race conditions
   const lastSyncTimeRef = useRef(0)
@@ -153,9 +153,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Derive membership tier from Discord role IDs using dynamic mapping
   // roleMapping keys are Discord role IDs, values are tier names
-  const getMembershipTier = useCallback((roleIds: string[]): 'core' | 'pro' | 'execute' | null => {
-    // Check in order of highest tier (execute > pro > core)
-    const tierOrder: Array<'execute' | 'pro' | 'core'> = ['execute', 'pro', 'core']
+  const getMembershipTier = useCallback((roleIds: string[]): 'core' | 'pro' | 'executive' | null => {
+    // Check in order of highest tier (executive > pro > core)
+    const tierOrder: Array<'executive' | 'pro' | 'core'> = ['executive', 'pro', 'core']
 
     for (const tier of tierOrder) {
       for (const [roleId, mappedTier] of Object.entries(roleMapping)) {

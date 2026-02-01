@@ -81,7 +81,7 @@ const DISCORD_FIELDS = [
 ]
 
 // Tier types
-type MembershipTier = 'core' | 'pro' | 'execute'
+type MembershipTier = 'core' | 'pro' | 'executive'
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<DiscordConfig>({
@@ -476,7 +476,7 @@ export default function SettingsPage() {
                     <span className="text-white/40">→</span>
                     <span className={cn(
                       'px-3 py-1 rounded-full text-sm font-medium capitalize',
-                      tier === 'execute' && 'bg-emerald-500/20 text-emerald-500',
+                      tier === 'executive' && 'bg-emerald-500/20 text-emerald-500',
                       tier === 'pro' && 'bg-blue-500/20 text-blue-400',
                       tier === 'core' && 'bg-emerald-500/20 text-emerald-400'
                     )}>
@@ -513,7 +513,7 @@ export default function SettingsPage() {
               >
                 <option value="core" className="bg-[#0a0a0b]">Core</option>
                 <option value="pro" className="bg-[#0a0a0b]">Pro</option>
-                <option value="execute" className="bg-[#0a0a0b]">Execute</option>
+                <option value="executive" className="bg-[#0a0a0b]">Executive</option>
               </select>
               <Button
                 onClick={addTierMapping}

@@ -718,10 +718,10 @@ View 2: Chat Window
 │                       │
 │  Visitor: What's the  │
 │  difference between   │
-│  Pro and Execute?     │
+│  Pro and Executive?   │
 │                       │
 │  You: Great question! │
-│  Execute tier gets... │
+│  Executive tier gets..│
 │                       │
 ├───────────────────────┤
 │  [Type message...]    │
@@ -807,7 +807,7 @@ Show team members:
 │    → Landing page               │
 │    → Pricing (spent 2m here)    │
 │    → Testimonials               │
-│ 💰 Interested in: Execute tier │
+│ 💰 Interested in: Executive tier│
 │ ❓ Pre-qual: "Want to see proof"│
 └─────────────────────────────────┘
 ```

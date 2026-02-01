@@ -66,20 +66,6 @@ export default function AnalyticsPage() {
     browserBreakdown: {}
   })
 
-  // Check admin access
-  useEffect(() => {
-    const checkAuth = () => {
-      const cookies = document.cookie.split(';')
-      const adminCookie = cookies.find(c => c.trim().startsWith('titm_admin='))
-
-      if (!adminCookie || !adminCookie.includes('true')) {
-        router.push('/')
-      }
-    }
-
-    checkAuth()
-  }, [router])
-
   // Load analytics data
   const loadData = async () => {
     setLoading(true)

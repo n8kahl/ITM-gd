@@ -136,7 +136,7 @@ npm run dev
 - **Response time**: < 1 second
 - **Escalates when**:
   - Visitor asks for human
-  - High-value lead detected ("ready to buy", "Execute tier")
+  - High-value lead detected ("ready to buy", "Executive tier")
   - Frustrated sentiment
   - Complex question AI can't answer
 
