@@ -165,3 +165,58 @@ export interface JournalStreak {
 
 export type TradingJournalEntryInsert = Omit<TradingJournalEntry, 'id' | 'created_at' | 'updated_at'>
 export type TradingJournalEntryUpdate = Partial<TradingJournalEntryInsert>
+
+// User Permissions Types (Discord Role Sync)
+// ============================================
+
+export interface UserPermission {
+  id: string
+  user_id: string
+  discord_user_id: string | null
+  permission_id: string
+  granted_by_role_id: string | null
+  granted_by_role_name: string | null
+  expires_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserDiscordProfile {
+  id: string
+  user_id: string
+  discord_user_id: string
+  discord_username: string | null
+  discord_discriminator: string | null
+  discord_avatar: string | null
+  discord_roles: string[]
+  last_synced_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface UserPermissionWithDetails extends UserPermission {
+  app_permissions: AppPermission
+}
+
+// Discord Sync Response Types
+export interface DiscordSyncResult {
+  success: boolean
+  discord_user_id: string
+  discord_username: string
+  roles: Array<{
+    id: string
+    name: string | null
+  }>
+  permissions: Array<{
+    id: string
+    name: string
+    description: string | null
+    granted_by_role: string | null
+  }>
+  synced_at: string
+}
+
+export interface DiscordSyncError {
+  success: false
+  error: string
+}
