@@ -16,8 +16,8 @@
   --card-foreground: #F5F5F0;
   --popover: rgba(18, 18, 20, 0.95);
   --popover-foreground: #F5F5F0;
-  --primary: #047857;
-  --primary-foreground: #F5F5F0;
+  --primary: 6 95 70;                    /* Emerald-800 equivalent for solid backgrounds */
+  --primary-foreground: 255 255 255;     /* White text on emerald */
   --secondary: #141416;
   --secondary-foreground: #F5F5F0;
   --muted: #141416;
@@ -28,7 +28,7 @@
   --destructive-foreground: #F5F5F0;
   --border: rgba(255, 255, 255, 0.12);
   --input: rgba(255, 255, 255, 0.05);
-  --ring: #E8E4D9;
+  --ring: 16 185 129;                    /* Focus rings now Emerald Elite */
   --chart-1: #047857;
   --chart-2: #065F46;
   --chart-3: #064E3B;
@@ -45,12 +45,20 @@
   --sidebar-ring: #E8E4D9;
 
   /* Luxury Color Palette - Emerald & Champagne System */
-  --champagne: #F3E5AB;        /* Warm champagne accent */
+  /* EMERALD ELITE - Primary Brand Colors */
+  --emerald-elite: 16 185 129;  /* #10B981 - Primary Brand (RGB for Tailwind) */
+  --emerald-deep: 6 78 59;      /* #064E3B - Darker backgrounds (RGB) */
+  --emerald-elite-hex: #10B981; /* HEX version for direct use */
+  --emerald-deep-hex: #064E3B;  /* HEX version for direct use */
+
+  /* CHAMPAGNE - Accent Colors */
+  --champagne: 243 229 171;     /* #F3E5AB - Text/Border Accents (RGB) */
+  --champagne-hex: #F3E5AB;     /* HEX version - Warm champagne accent */
   --champagne-light: #F5F3ED;
   --champagne-dark: #B8B5AD;
-  --champagne-gold: #D4AF37;   /* Subtle metallic accent */
-  --emerald-elite: #10B981;    /* Primary brand color - bright emerald */
-  --emerald-deep: #064E3B;     /* Darker emerald for backgrounds */
+  --champagne-gold: #F3E5AB;    /* UPDATED: Use champagne instead of old gold */
+
+  /* Wealth Emerald Variants */
   --wealth-emerald: #047857;
   --wealth-emerald-light: #059669;
   --wealth-emerald-dark: #065F46;
@@ -87,8 +95,8 @@
   --card-foreground: #F5F5F0;
   --popover: rgba(18, 18, 20, 0.95);
   --popover-foreground: #F5F5F0;
-  --primary: #047857;
-  --primary-foreground: #F5F5F0;
+  --primary: 6 95 70;                    /* Emerald-800 equivalent for solid backgrounds */
+  --primary-foreground: 255 255 255;     /* White text on emerald */
   --secondary: #141416;
   --secondary-foreground: #F5F5F0;
   --muted: #141416;
@@ -99,7 +107,7 @@
   --destructive-foreground: #F5F5F0;
   --border: rgba(255, 255, 255, 0.12);
   --input: rgba(255, 255, 255, 0.05);
-  --ring: #E8E4D9;
+  --ring: 16 185 129;                    /* Focus rings now Emerald Elite */
   --chart-1: #047857;
   --chart-2: #065F46;
   --chart-3: #064E3B;
@@ -861,7 +869,7 @@
   }
 
   .text-champagne-gold {
-    color: #D4AF37;
+    color: #F3E5AB;  /* Updated to use champagne instead of old gold */
   }
 
   .border-champagne {
@@ -869,7 +877,7 @@
   }
 
   .border-champagne-gold {
-    border-color: #D4AF37;
+    border-color: #F3E5AB;  /* Updated to use champagne instead of old gold */
   }
 
   /* ============================================

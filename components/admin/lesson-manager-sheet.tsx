@@ -194,7 +194,7 @@ export function LessonManagerSheet({ open, onClose, course, onSave }: LessonMana
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-[#D4AF37]" />
+              <Loader2 className="w-8 h-8 animate-spin text-[#10B981]" />
             </div>
           ) : editingLesson ? (
             // Lesson Edit Form
@@ -453,7 +453,7 @@ function LessonEditForm({
         <Button
           type="submit"
           disabled={saving}
-          className="bg-[#D4AF37] hover:bg-emerald-600 text-black"
+          className="bg-[#10B981] hover:bg-emerald-600 text-black"
         >
           {saving ? (
             <>

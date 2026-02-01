@@ -42,7 +42,7 @@ export function AuroraBackground() {
       <motion.div
         className="absolute w-[70vw] h-[70vh] rounded-full"
         style={{
-          background: "radial-gradient(ellipse at center, rgba(212, 175, 55, 0.25) 0%, rgba(212, 175, 55, 0.05) 50%, transparent 70%)",
+          background: "radial-gradient(ellipse at center, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.05) 50%, transparent 70%)",
           filter: "blur(100px)",
           right: "-20%",
           bottom: "-20%",
@@ -84,7 +84,7 @@ export function AuroraBackground() {
       <motion.div
         className="absolute w-[120vw] h-[300px] -left-[10vw]"
         style={{
-          background: "linear-gradient(180deg, transparent 0%, rgba(212, 175, 55, 0.08) 50%, transparent 100%)",
+          background: "linear-gradient(180deg, transparent 0%, rgba(16, 185, 129, 0.08) 50%, transparent 100%)",
           filter: "blur(40px)",
           top: "30%",
         }}
@@ -104,7 +104,7 @@ export function AuroraBackground() {
       <motion.div
         className="absolute w-[60vw] h-[60vh] rounded-full"
         style={{
-          background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.15) 0%, rgba(212, 175, 55, 0.05) 30%, transparent 60%)",
+          background: "radial-gradient(ellipse at center, rgba(4, 120, 87, 0.15) 0%, rgba(16, 185, 129, 0.05) 30%, transparent 60%)",
           filter: "blur(60px)",
           left: "50%",
           top: "50%",
@@ -125,7 +125,7 @@ export function AuroraBackground() {
       <motion.div
         className="absolute w-[150vw] h-[1px] -left-[25vw]"
         style={{
-          background: "linear-gradient(90deg, transparent 0%, rgba(232, 228, 217, 0.1) 20%, rgba(212, 175, 55, 0.15) 50%, rgba(232, 228, 217, 0.1) 80%, transparent 100%)",
+          background: "linear-gradient(90deg, transparent 0%, rgba(232, 228, 217, 0.1) 20%, rgba(16, 185, 129, 0.15) 50%, rgba(232, 228, 217, 0.1) 80%, transparent 100%)",
           top: "35%",
         }}
         animate={{

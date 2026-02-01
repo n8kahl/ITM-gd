@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Check } from 'lucide-react'
 
-const PROMO_CODE = 'snipers'
+const PROMO_CODE = 'SNIPERS'
 const STORAGE_KEY = 'titm_promo_dismissed'
 
 export function PromoBanner() {

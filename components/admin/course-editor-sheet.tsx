@@ -287,7 +287,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                 onClick={() => setForm({ ...form, is_published: !form.is_published })}
                 className={cn(
                   'relative w-12 h-6 rounded-full transition-colors',
-                  form.is_published ? 'bg-[#D4AF37]' : 'bg-white/20'
+                  form.is_published ? 'bg-[#10B981]' : 'bg-white/20'
                 )}
               >
                 <span
@@ -313,7 +313,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
             <Button
               type="submit"
               disabled={saving}
-              className="bg-[#D4AF37] hover:bg-emerald-600 text-black"
+              className="bg-[#10B981] hover:bg-emerald-600 text-black"
             >
               {saving ? (
                 <>

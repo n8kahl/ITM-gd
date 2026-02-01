@@ -62,7 +62,7 @@ export function MobileBottomNav({ items }: MobileBottomNavProps) {
                     className={cn(
                       'w-6 h-6 transition-colors',
                       isActive
-                        ? 'text-[#D4AF37]'
+                        ? 'text-[#10B981]'
                         : 'text-white/40 group-hover:text-white/60'
                     )}
                   />
@@ -73,7 +73,7 @@ export function MobileBottomNav({ items }: MobileBottomNavProps) {
                   <motion.span
                     initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="text-[10px] font-medium text-[#D4AF37] mt-1 absolute -bottom-5"
+                    className="text-[10px] font-medium text-[#10B981] mt-1 absolute -bottom-5"
                   >
                     {item.name}
                   </motion.span>
@@ -83,7 +83,7 @@ export function MobileBottomNav({ items }: MobileBottomNavProps) {
                 {isActive && (
                   <motion.div
                     layoutId="activeDot"
-                    className="absolute -top-1 w-1.5 h-1.5 bg-[#D4AF37] rounded-full"
+                    className="absolute -top-1 w-1.5 h-1.5 bg-[#10B981] rounded-full"
                     initial={false}
                   />
                 )}

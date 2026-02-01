@@ -42,8 +42,8 @@ export default function AdminLoginPage() {
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#D4AF37]/10 flex items-center justify-center">
-            <Shield className="w-8 h-8 text-[#D4AF37]" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/10 flex items-center justify-center">
+            <Shield className="w-8 h-8 text-emerald-500" />
           </div>
           <h1 className="text-2xl font-bold text-white">Admin Access</h1>
           <p className="text-white/60 mt-2">Enter your admin password to continue</p>
@@ -63,13 +63,13 @@ export default function AdminLoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
             autoFocus
-            className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:border-[#D4AF37] focus:outline-none"
+            className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:border-emerald-500 focus:outline-none"
           />
 
           <Button
             type="submit"
             disabled={loading || !password}
-            className="w-full bg-[#D4AF37] hover:bg-[#B8962E] text-black h-12"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12"
           >
             {loading ? (
               <>
