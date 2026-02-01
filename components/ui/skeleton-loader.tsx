@@ -1,12 +1,13 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import Image from 'next/image'
 import type { CSSProperties } from 'react'
 
 // Base Skeleton component with shimmer animation
 interface SkeletonProps {
   className?: string
-  variant?: 'default' | 'circular' | 'rounded'
+  variant?: 'default' | 'circular' | 'rounded' | 'screen'
   animation?: 'shimmer' | 'pulse' | 'none'
   style?: CSSProperties
 }
@@ -17,6 +18,31 @@ export function Skeleton({
   animation = 'shimmer',
   style,
 }: SkeletonProps) {
+  // Full Screen Loading State - "White Glove" Experience
+  if (variant === 'screen') {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050505]">
+        <div className="relative w-24 h-24 animate-pulse">
+          <Image
+            src="/logo.png"
+            alt="Loading..."
+            fill
+            className="object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+          />
+        </div>
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <div className="h-1 w-32 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 w-1/2 animate-[shimmer_1.5s_infinite]" />
+          </div>
+          <span className="text-xs font-mono text-emerald-500/60 tracking-widest uppercase">
+            Initializing Terminal
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Standard Skeleton for cards/content
   return (
     <div
       style={style}
