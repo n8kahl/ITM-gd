@@ -2,11 +2,12 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
   BookOpen, Notebook, ShieldAlert, Tag, Sliders, Activity,
-  ChevronRight, LogOut, Sparkles
+  ChevronRight, LogOut
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -43,28 +44,33 @@ export function AdminSidebar() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Brand Header */}
+      {/* Brand Header - UPDATED WITH LOGO */}
       <div className="h-16 flex items-center px-6 border-b border-white/5">
         <div className="flex items-center gap-3">
-           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#8a7020] flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.3)]">
-             <Sparkles className="w-4 h-4 text-[#0A0A0B]" />
+           <div className="relative w-10 h-10">
+             <Image
+               src="/logo.png"
+               alt="TradeITM Logo"
+               fill
+               className="object-contain"
+             />
            </div>
            <div>
              <span className="text-base font-bold text-white tracking-tight">TradeITM</span>
-             <span className="text-[10px] text-[#D4AF37] block font-mono tracking-widest uppercase">Nexus Terminal</span>
+             <span className="text-[10px] text-emerald-500 block font-mono tracking-widest uppercase">
+               Admin Terminal
+             </span>
            </div>
         </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Dashboard Link */}
         <NavItem
           item={navigation[0]}
           isActive={pathname === navigation[0].href}
         />
 
-        {/* Groups */}
         {navigation.slice(1).map((group: any) => (
           <div key={group.group}>
             <h3 className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/20 font-mono">
@@ -86,7 +92,7 @@ export function AdminSidebar() {
       {/* Footer User Profile */}
       <div className="p-4 border-t border-white/5">
         <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 border border-white/5">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-xs font-bold text-white">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center text-xs font-bold text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]">
             A
           </div>
           <div className="flex-1 min-w-0">
@@ -114,14 +120,15 @@ function NavItem({ item, isActive }: { item: any, isActive: boolean }) {
           : 'text-white/50 hover:text-white hover:bg-white/5'
       )}
     >
-      {/* Active Indicator Line */}
+      {/* Active Indicator Line - UPDATED TO CHAMPAGNE */}
       {isActive && (
-        <div className="absolute left-0 top-1 bottom-1 w-1 rounded-r-full bg-[#D4AF37] shadow-[0_0_10px_rgba(212,175,55,0.5)]" />
+        <div className="absolute left-0 top-1 bottom-1 w-1 rounded-r-full bg-[#F3E5AB] shadow-[0_0_10px_rgba(243,229,171,0.5)]" />
       )}
 
+      {/* Icon Color - UPDATED TO EMERALD */}
       <Icon className={cn(
         "w-4 h-4 transition-colors",
-        isActive ? "text-[#D4AF37]" : "text-white/40 group-hover:text-white/60"
+        isActive ? "text-emerald-400" : "text-white/40 group-hover:text-white/60"
       )} />
 
       <span className="flex-1">{item.name}</span>

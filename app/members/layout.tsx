@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -11,7 +12,6 @@ import {
   Notebook,
   User,
   LogOut,
-  Sparkles,
   RefreshCw,
   AlertCircle
 } from 'lucide-react'
@@ -115,7 +115,9 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="text-center">
-          <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
+          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
+            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+          </div>
           <p className="text-white/60">Loading your dashboard...</p>
           <p className="text-white/40 text-sm mt-2">Syncing Discord roles...</p>
         </div>
@@ -128,7 +130,9 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="text-center">
-          <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
+          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
+            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+          </div>
           <p className="text-white/60">Redirecting to login...</p>
         </div>
       </div>
@@ -157,11 +161,11 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="p-6 border-b border-white/5">
           <Link href="/members" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#B8962E] flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-black" />
+            <div className="relative w-10 h-10">
+              <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
             </div>
             <div>
-              <span className="text-lg font-bold text-[#D4AF37]">TradeITM</span>
+              <span className="text-lg font-bold text-emerald-500">TradeITM</span>
               <span className="text-xs text-white/40 block">Member Area</span>
             </div>
           </Link>
@@ -169,9 +173,9 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
 
         {/* User Card */}
         {profile && (
-          <div className="p-4 mx-4 mt-4 rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20">
+          <div className="p-4 mx-4 mt-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#D4AF37]/20 flex items-center justify-center overflow-hidden">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center overflow-hidden">
                 {profile.discord_avatar ? (
                   <img
                     src={`https://cdn.discordapp.com/avatars/${profile.discord_user_id}/${profile.discord_avatar}.png`}
@@ -179,14 +183,14 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <User className="w-5 h-5 text-[#D4AF37]" />
+                  <User className="w-5 h-5 text-emerald-500" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-white truncate">
                   {profile.discord_username || profile.email || 'Member'}
                 </p>
-                <p className="text-xs text-[#D4AF37] capitalize">
+                <p className="text-xs text-emerald-500 capitalize">
                   {profile.membership_tier || 'Free'} Member
                 </p>
               </div>
@@ -228,20 +232,20 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group',
                   isActive
-                    ? 'bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30'
+                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
                     : 'text-white/60 hover:text-white hover:bg-white/5'
                 )}
               >
                 <Icon className={cn(
                   'w-5 h-5 transition-colors',
-                  isActive ? 'text-[#D4AF37]' : 'text-white/40 group-hover:text-white/60'
+                  isActive ? 'text-emerald-500' : 'text-white/40 group-hover:text-white/60'
                 )} />
                 <span className="flex-1">{item.name}</span>
                 {item.badge && (
                   <span className={cn(
                     'px-2 py-0.5 text-xs rounded-full',
                     item.badge === 'New'
-                      ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
+                      ? 'bg-emerald-500/20 text-emerald-500'
                       : 'bg-white/5 text-white/40'
                   )}>
                     {item.badge}
