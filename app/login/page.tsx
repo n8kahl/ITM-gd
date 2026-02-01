@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Sparkles, ArrowLeft, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
+import { AuroraBackground } from '@/components/ui/aurora-background'
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -16,20 +17,7 @@ function DiscordIcon({ className }: { className?: string }) {
   )
 }
 
-// Loading fallback for Suspense
-function LoginLoading() {
-  return (
-    <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center">
-      <div className="text-center">
-        <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
-        <p className="text-white/60">Loading...</p>
-      </div>
-    </div>
-  )
-}
-
-// Inner component that uses useSearchParams
-function LoginPageInner() {
+function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect') || '/members'
@@ -92,8 +80,9 @@ function LoginPageInner() {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center relative overflow-hidden">
+        <AuroraBackground />
+        <div className="text-center relative z-10">
           <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
           <p className="text-white/60">Checking authentication...</p>
         </div>
@@ -102,9 +91,12 @@ function LoginPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f10] flex flex-col">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Aurora Background */}
+      <AuroraBackground />
+
       {/* Header */}
-      <header className="p-6">
+      <header className="p-6 relative z-10">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors"
@@ -115,7 +107,7 @@ function LoginPageInner() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-6">
+      <main className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
@@ -129,7 +121,7 @@ function LoginPageInner() {
           </div>
 
           {/* Login Card */}
-          <div className="bg-[#0a0a0b] border border-white/10 rounded-2xl p-6">
+          <div className="glass-card-heavy border-champagne-glow rounded-2xl p-6">
             {/* Error Alert */}
             {error && (
               <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
@@ -226,11 +218,18 @@ function LoginPageInner() {
   )
 }
 
-// Main export with Suspense boundary
 export default function LoginPage() {
   return (
-    <Suspense fallback={<LoginLoading />}>
-      <LoginPageInner />
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+        <AuroraBackground />
+        <div className="text-center relative z-10">
+          <Sparkles className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 animate-pulse" />
+          <p className="text-white/60">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LoginContent />
     </Suspense>
   )
 }

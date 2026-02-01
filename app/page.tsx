@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -211,7 +212,7 @@ export default function Home() {
 
             {/* CTA Button - Centered */}
             <motion.div
-              className="pt-4"
+              className="pt-4 flex flex-col items-center gap-3"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.9, ease: [0.25, 0.4, 0.25, 1] }}
@@ -240,6 +241,15 @@ export default function Home() {
                   <a href="#pricing" onClick={() => Analytics.trackCTAClick('Hero Join Now')}>JOIN NOW</a>
                 </Button>
               </motion.div>
+
+              {/* Member Login Link */}
+              <Link
+                href="/login"
+                className="text-xs text-white/40 hover:text-white transition-colors cursor-pointer"
+                onClick={() => Analytics.trackCTAClick('Hero Member Login')}
+              >
+                Already trading? Enter Terminal →
+              </Link>
             </motion.div>
           </div>
         </div>

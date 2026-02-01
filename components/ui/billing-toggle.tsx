@@ -56,7 +56,7 @@ export function BillingToggle({ billingCycle, onChange }: BillingToggleProps) {
           }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
           className={cn(
-            'relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+            'relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap',
             'text-emerald-400 bg-emerald-400/10 border border-emerald-400/30'
           )}
         >

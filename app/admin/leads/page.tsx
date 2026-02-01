@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -37,7 +37,7 @@ const STATUS_CONFIG = {
   contacted: { label: 'Contacted', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: MessageCircle },
 }
 
-export default function LeadsPage() {
+function LeadsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const highlightId = searchParams.get('highlight')
@@ -579,5 +579,20 @@ export default function LeadsPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="h-12 w-12 animate-spin text-champagne mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading applications...</p>
+        </div>
+      </div>
+    }>
+      <LeadsContent />
+    </Suspense>
   )
 }
