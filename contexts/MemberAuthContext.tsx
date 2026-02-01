@@ -75,12 +75,15 @@ const MemberAuthContext = createContext<MemberAuthContextValue | null>(null)
 // PROVIDER
 // ============================================
 
-// Default role mapping fallback (can be configured in Admin > Settings)
+// Default role mapping fallback (Discord role ID -> tier)
+// Configure actual Discord role IDs in Admin > Settings or via app_settings table
+// Example: { "1234567890123456789": "execute", "9876543210987654321": "pro" }
 const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'execute'> = {
-  'execute_sniper': 'execute',
-  'pro_sniper': 'pro',
-  'core_sniper': 'core',
+  // Empty by default - must be configured with actual Discord role IDs
 }
+
+// Rate limiting for sync operations
+const SYNC_COOLDOWN_MS = 30000 // 30 seconds
 
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
@@ -95,8 +98,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     errorCode: null,
   })
 
-  // Dynamic role mapping fetched from config API
+  // Dynamic role mapping fetched from config API (role ID -> tier)
   const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'execute'>>(DEFAULT_ROLE_MAPPING)
+
+  // Rate limiting state for sync operations
+  const [lastSyncTime, setLastSyncTime] = useState(0)
 
   // Fetch role mapping from config API on mount
   useEffect(() => {
@@ -112,14 +118,15 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       })
   }, [])
 
-  // Derive membership tier from Discord roles using dynamic mapping
-  const getMembershipTier = useCallback((roles: string[]): 'core' | 'pro' | 'execute' | null => {
+  // Derive membership tier from Discord role IDs using dynamic mapping
+  // roleMapping keys are Discord role IDs, values are tier names
+  const getMembershipTier = useCallback((roleIds: string[]): 'core' | 'pro' | 'execute' | null => {
     // Check in order of highest tier (execute > pro > core)
     const tierOrder: Array<'execute' | 'pro' | 'core'> = ['execute', 'pro', 'core']
 
     for (const tier of tierOrder) {
-      for (const [roleName, mappedTier] of Object.entries(roleMapping)) {
-        if (mappedTier === tier && roles.includes(roleName)) {
+      for (const [roleId, mappedTier] of Object.entries(roleMapping)) {
+        if (mappedTier === tier && roleIds.includes(roleId)) {
           return tier
         }
       }
@@ -128,8 +135,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return null
   }, [roleMapping])
 
-  // Sync Discord roles via Edge Function
+  // Sync Discord roles via Edge Function (with rate limiting)
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
+    // Rate limiting: prevent rapid sync calls
+    const now = Date.now()
+    if (now - lastSyncTime < SYNC_COOLDOWN_MS) {
+      console.log('Sync cooldown active, skipping (wait', Math.ceil((SYNC_COOLDOWN_MS - (now - lastSyncTime)) / 1000), 'seconds)')
+      return null
+    }
+    setLastSyncTime(now)
+
     if (!state.session) {
       console.log('No session available for Discord sync')
       return null
@@ -159,8 +174,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         return null
       }
 
-      // Extract role names for tier determination
-      const roleNames = result.roles.map((r: { id: string; name: string | null }) => r.name || r.id)
+      // Extract role IDs for tier determination (not names)
+      const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
 
       // Update state with sync results
       const profile: MemberProfile = {
@@ -168,9 +183,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         email: state.user?.email || null,
         discord_user_id: result.discord_user_id,
         discord_username: result.discord_username,
-        discord_avatar: null, // Can be fetched separately if needed
-        discord_roles: roleNames,
-        membership_tier: getMembershipTier(roleNames),
+        discord_avatar: result.discord_avatar || null, // Store avatar from sync result
+        discord_roles: roleIds,
+        membership_tier: getMembershipTier(roleIds),
       }
 
       const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -198,7 +213,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
       return null
     }
-  }, [state.session, state.user, getMembershipTier])
+  }, [state.session, state.user, getMembershipTier, lastSyncTime])
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
@@ -320,16 +335,17 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         const result = await response.json()
 
         if (result.success) {
-          const roleNames = result.roles.map((r: { id: string; name: string | null }) => r.name || r.id)
+          // Use role IDs for tier determination
+          const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
 
           const profile: MemberProfile = {
             id: user.id,
             email: user.email || null,
             discord_user_id: result.discord_user_id,
             discord_username: result.discord_username,
-            discord_avatar: null,
-            discord_roles: roleNames,
-            membership_tier: getMembershipTier(roleNames),
+            discord_avatar: result.discord_avatar || null,
+            discord_roles: roleIds,
+            membership_tier: getMembershipTier(roleIds),
           }
 
           const permissions: MemberPermission[] = result.permissions.map((p: any) => ({

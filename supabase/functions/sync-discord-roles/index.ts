@@ -40,6 +40,7 @@ interface SyncResult {
   success: boolean
   discord_user_id: string
   discord_username: string
+  discord_avatar: string | null
   roles: Array<{
     id: string
     name: string | null
@@ -232,18 +233,8 @@ serve(async (req) => {
       // Don't throw, continue with permission sync
     }
 
-    // Delete existing permissions for this user (full sync)
-    const { error: deleteError } = await supabaseAdmin
-      .from('user_permissions')
-      .delete()
-      .eq('user_id', user.id)
-
-    if (deleteError) {
-      console.error('Error deleting existing permissions:', deleteError)
-    }
-
-    // Insert new permissions
-    const permissionsToInsert = Array.from(permissionMap.values()).map(({ permission, grantedByRoleId, grantedByRoleName }) => ({
+    // Build permissions to sync
+    const permissionsToSync = Array.from(permissionMap.values()).map(({ permission, grantedByRoleId, grantedByRoleName }) => ({
       user_id: user.id,
       discord_user_id: discordUserId,
       permission_id: permission.id,
@@ -251,14 +242,41 @@ serve(async (req) => {
       granted_by_role_name: grantedByRoleName,
     }))
 
-    if (permissionsToInsert.length > 0) {
-      const { error: insertError } = await supabaseAdmin
+    // Use upsert for atomic permission sync (safer than delete+insert)
+    if (permissionsToSync.length > 0) {
+      const { error: upsertError } = await supabaseAdmin
         .from('user_permissions')
-        .insert(permissionsToInsert)
+        .upsert(permissionsToSync, {
+          onConflict: 'user_id,permission_id',
+          ignoreDuplicates: false,
+        })
 
-      if (insertError) {
-        console.error('Error inserting permissions:', insertError)
+      if (upsertError) {
+        console.error('Error upserting permissions:', upsertError)
         return errorResponse('Failed to update user permissions', ERROR_CODES.SYNC_FAILED, 500)
+      }
+
+      // Clean up permissions that are no longer granted by current roles
+      const currentPermissionIds = permissionsToSync.map(p => p.permission_id)
+      const { error: cleanupError } = await supabaseAdmin
+        .from('user_permissions')
+        .delete()
+        .eq('user_id', user.id)
+        .not('permission_id', 'in', `(${currentPermissionIds.join(',')})`)
+
+      if (cleanupError) {
+        console.error('Error cleaning up old permissions:', cleanupError)
+        // Non-fatal: continue with response
+      }
+    } else {
+      // No permissions to sync - remove all existing permissions for this user
+      const { error: deleteError } = await supabaseAdmin
+        .from('user_permissions')
+        .delete()
+        .eq('user_id', user.id)
+
+      if (deleteError) {
+        console.error('Error clearing permissions:', deleteError)
       }
     }
 
@@ -282,6 +300,7 @@ serve(async (req) => {
       success: true,
       discord_user_id: discordUserId,
       discord_username: discordUsername,
+      discord_avatar: memberData.user.avatar,
       roles: roleDetails,
       permissions: permissionDetails,
       synced_at: new Date().toISOString(),

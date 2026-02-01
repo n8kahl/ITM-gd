@@ -16,19 +16,27 @@ import { LibraryPageSkeleton } from '@/components/ui/skeleton-loader'
 import { Course } from '@/lib/types_db'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
-// Role hierarchy for access checking
-const ROLE_HIERARCHY: Record<string, number> = {
-  'core_sniper': 1,
-  'pro_sniper': 2,
-  'execute_sniper': 3,
+// Tier hierarchy for access checking (higher = more access)
+const TIER_HIERARCHY: Record<string, number> = {
+  'core': 1,
+  'pro': 2,
+  'execute': 3,
 }
 
-// Map role IDs to display names
-const ROLE_NAMES: Record<string, string> = {
-  'core_sniper': 'Core Sniper',
-  'pro_sniper': 'Pro Sniper',
-  'execute_sniper': 'Execute Sniper',
+// Map course discord_role_required field to tier names
+const COURSE_TIER_MAP: Record<string, string> = {
+  'core_sniper': 'core',
+  'pro_sniper': 'pro',
+  'execute_sniper': 'execute',
+}
+
+// Display names for tiers
+const TIER_DISPLAY_NAMES: Record<string, string> = {
+  'core': 'Core',
+  'pro': 'Pro',
+  'execute': 'Execute',
 }
 
 interface CourseWithMeta extends Course {
@@ -37,13 +45,12 @@ interface CourseWithMeta extends Course {
 }
 
 export default function LibraryPage() {
+  const { profile, isLoading: authLoading } = useMemberAuth()
   const [courses, setCourses] = useState<CourseWithMeta[]>([])
   const [loading, setLoading] = useState(true)
-  const [userRoles, setUserRoles] = useState<string[]>(['core_sniper']) // Demo: core member
 
   useEffect(() => {
     loadCourses()
-    loadUserRoles()
   }, [])
 
   const loadCourses = async () => {
@@ -75,40 +82,31 @@ export default function LibraryPage() {
     }
   }
 
-  const loadUserRoles = () => {
-    // In real app: fetch from Discord OAuth session or API
-    // For demo, read from cookie or use default
-    try {
-      const cookies = document.cookie.split(';')
-      const memberCookie = cookies.find(c => c.trim().startsWith('titm_member='))
-      if (memberCookie) {
-        const sessionData = JSON.parse(decodeURIComponent(memberCookie.split('=')[1]))
-        setUserRoles(sessionData.discord_roles || ['core_sniper'])
-      }
-    } catch {
-      setUserRoles(['core_sniper'])
-    }
-  }
-
-  // Check if user has access to a course
+  // Check if user has access to a course based on membership tier
   const hasAccess = (course: Course): boolean => {
     // Public course - no role required
     if (!course.discord_role_required) return true
 
-    // Check if user has the required role or higher
-    const requiredLevel = ROLE_HIERARCHY[course.discord_role_required] || 0
-    const userMaxLevel = Math.max(...userRoles.map(r => ROLE_HIERARCHY[r] || 0))
+    // Get user's tier level
+    const userTier = profile?.membership_tier || null
+    const userLevel = userTier ? TIER_HIERARCHY[userTier] || 0 : 0
 
-    return userMaxLevel >= requiredLevel
+    // Get required tier level for this course
+    const requiredTier = COURSE_TIER_MAP[course.discord_role_required]
+    const requiredLevel = requiredTier ? TIER_HIERARCHY[requiredTier] || 0 : 0
+
+    // User has access if their tier level >= required level
+    return userLevel >= requiredLevel
   }
 
-  // Get the required tier name
-  const getRequiredTier = (roleId: string | null): string => {
-    if (!roleId) return 'Free'
-    return ROLE_NAMES[roleId] || roleId
+  // Get the display name for the required tier
+  const getRequiredTierDisplay = (roleRequired: string | null): string => {
+    if (!roleRequired) return 'Free'
+    const tier = COURSE_TIER_MAP[roleRequired]
+    return tier ? TIER_DISPLAY_NAMES[tier] || tier : roleRequired
   }
 
-  if (loading) {
+  if (loading || authLoading) {
     return <LibraryPageSkeleton />
   }
 
@@ -141,7 +139,7 @@ export default function LibraryPage() {
                 key={course.id}
                 course={course}
                 canAccess={canAccess}
-                requiredTier={getRequiredTier(course.discord_role_required)}
+                requiredTier={getRequiredTierDisplay(course.discord_role_required)}
               />
             )
           })

@@ -14,6 +14,9 @@ import {
   Shield,
   MessageSquare,
   TestTube2,
+  Crown,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,6 +77,9 @@ const DISCORD_FIELDS = [
   },
 ]
 
+// Tier types
+type MembershipTier = 'core' | 'pro' | 'execute'
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<DiscordConfig>({
     discord_client_id: '',
@@ -89,8 +95,15 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
+  // Tier mapping state
+  const [tierMapping, setTierMapping] = useState<Record<string, MembershipTier>>({})
+  const [newRoleId, setNewRoleId] = useState('')
+  const [newTier, setNewTier] = useState<MembershipTier>('core')
+  const [savingTiers, setSavingTiers] = useState(false)
+
   useEffect(() => {
     loadSettings()
+    loadTierMapping()
   }, [])
 
   const loadSettings = async () => {
@@ -117,6 +130,70 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadTierMapping = async () => {
+    try {
+      const response = await fetch('/api/config/roles')
+      const data = await response.json()
+      if (data && typeof data === 'object') {
+        setTierMapping(data)
+      }
+    } catch (err) {
+      console.error('Failed to load tier mapping:', err)
+    }
+  }
+
+  const saveTierMapping = async () => {
+    setSavingTiers(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'role_tier_mapping',
+          value: JSON.stringify(tierMapping),
+        }),
+      })
+
+      if (response.ok) {
+        setSuccess('Tier mapping saved successfully')
+        setTimeout(() => setSuccess(null), 3000)
+      } else {
+        setError('Failed to save tier mapping')
+      }
+    } catch (err) {
+      setError('Failed to save tier mapping')
+    } finally {
+      setSavingTiers(false)
+    }
+  }
+
+  const addTierMapping = () => {
+    if (!newRoleId.trim()) {
+      setError('Role ID is required')
+      return
+    }
+    if (tierMapping[newRoleId.trim()]) {
+      setError('This role ID is already mapped')
+      return
+    }
+    setTierMapping(prev => ({
+      ...prev,
+      [newRoleId.trim()]: newTier,
+    }))
+    setNewRoleId('')
+    setError(null)
+  }
+
+  const removeTierMapping = (roleId: string) => {
+    setTierMapping(prev => {
+      const next = { ...prev }
+      delete next[roleId]
+      return next
+    })
   }
 
   const toggleReveal = (key: string) => {
@@ -360,6 +437,110 @@ export default function SettingsPage() {
               )}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Tier Mapping Card */}
+      <Card className="glass-card-heavy border-white/10">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Crown className="w-5 h-5 text-[#D4AF37]" />
+            Membership Tier Mapping
+          </CardTitle>
+          <p className="text-sm text-white/60">
+            Map Discord role IDs to membership tiers. Copy role IDs from Discord (Developer Mode → Right-click role → Copy ID).
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Existing Mappings */}
+          {Object.keys(tierMapping).length === 0 ? (
+            <div className="p-6 rounded-lg bg-white/5 border border-white/10 text-center">
+              <Crown className="w-10 h-10 text-white/20 mx-auto mb-2" />
+              <p className="text-white/40 text-sm">No tier mappings configured</p>
+              <p className="text-white/30 text-xs mt-1">Add mappings below to enable tier-based access</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(tierMapping).map(([roleId, tier]) => (
+                <div
+                  key={roleId}
+                  className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+                >
+                  <div className="flex items-center gap-4">
+                    <code className="text-sm text-white/80 font-mono bg-white/5 px-2 py-1 rounded">
+                      {roleId}
+                    </code>
+                    <span className="text-white/40">→</span>
+                    <span className={cn(
+                      'px-3 py-1 rounded-full text-sm font-medium capitalize',
+                      tier === 'execute' && 'bg-[#D4AF37]/20 text-[#D4AF37]',
+                      tier === 'pro' && 'bg-blue-500/20 text-blue-400',
+                      tier === 'core' && 'bg-emerald-500/20 text-emerald-400'
+                    )}>
+                      {tier}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => removeTierMapping(roleId)}
+                    className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                    title="Remove mapping"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add New Mapping */}
+          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+            <h4 className="text-sm font-medium text-white mb-3">Add New Mapping</h4>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={newRoleId}
+                onChange={(e) => setNewRoleId(e.target.value)}
+                placeholder="Discord Role ID (e.g., 1234567890123456789)"
+                className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none font-mono text-sm"
+              />
+              <select
+                value={newTier}
+                onChange={(e) => setNewTier(e.target.value as MembershipTier)}
+                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:border-[#D4AF37] focus:outline-none"
+              >
+                <option value="core" className="bg-[#0a0a0b]">Core</option>
+                <option value="pro" className="bg-[#0a0a0b]">Pro</option>
+                <option value="execute" className="bg-[#0a0a0b]">Execute</option>
+              </select>
+              <Button
+                onClick={addTierMapping}
+                variant="outline"
+                className="border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Save Tier Mapping */}
+          <Button
+            onClick={saveTierMapping}
+            disabled={savingTiers}
+            className="w-full bg-[#D4AF37] hover:bg-[#B8962E] text-black font-medium h-12"
+          >
+            {savingTiers ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Tier Mapping
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
     </div>

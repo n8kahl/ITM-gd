@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Default role mapping fallback (Discord role name -> tier)
+// Default role mapping fallback (Discord role ID -> tier)
+// NOTE: These are placeholder IDs. Configure actual Discord role IDs in app_settings.
+// To configure: INSERT INTO app_settings (key, value) VALUES ('role_tier_mapping', '{"YOUR_ROLE_ID": "execute", ...}')
 const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'execute'> = {
-  'execute_sniper': 'execute',
-  'pro_sniper': 'pro',
-  'core_sniper': 'core',
+  // Empty by default - must be configured in database with actual Discord role IDs
+  // Example: '1234567890123456789': 'execute'
 }
 
-// Public endpoint to fetch role-to-tier mappings
+// Public endpoint to fetch role-to-tier mappings (Discord role ID -> tier)
 // This allows the mapping to be configured in admin without redeploying
 export async function GET() {
   try {
