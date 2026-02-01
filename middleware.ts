@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
 
 // Security headers to add to all responses
 const securityHeaders = {
@@ -10,73 +11,122 @@ const securityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 }
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
-
-  // Create response (will be modified as needed)
-  let response: NextResponse
-
-  // Admin route protection
-  if (pathname.startsWith('/admin')) {
-    // Allow access to login page without auth
-    if (pathname === '/admin/login') {
-      response = NextResponse.next()
-    } else {
-      // Check for admin cookie
-      const adminCookie = request.cookies.get('titm_admin')
-
-      if (adminCookie?.value !== 'true') {
-        // Check for magic link token in URL
-        const token = request.nextUrl.searchParams.get('token')
-
-        if (token) {
-          // Redirect to API route to verify token and set cookie
-          const verifyUrl = new URL('/api/admin/verify-token', request.url)
-          verifyUrl.searchParams.set('token', token)
-          verifyUrl.searchParams.set('redirect', pathname)
-
-          // Preserve other query params like conversation ID and highlight
-          const id = request.nextUrl.searchParams.get('id')
-          if (id) {
-            verifyUrl.searchParams.set('id', id)
-          }
-          const highlight = request.nextUrl.searchParams.get('highlight')
-          if (highlight) {
-            verifyUrl.searchParams.set('highlight', highlight)
-          }
-
-          response = NextResponse.redirect(verifyUrl)
-        } else {
-          // No auth, redirect to login
-          const loginUrl = new URL('/admin/login', request.url)
-          response = NextResponse.redirect(loginUrl)
-        }
-      } else {
-        response = NextResponse.next()
-      }
-    }
-  }
-  // All other routes (including /members - protected client-side by MemberAuthContext)
-  // Note: /members uses Supabase auth which stores sessions in localStorage, not cookies
-  // Middleware can't access localStorage, so we rely on client-side protection
-  else {
-    response = NextResponse.next()
-  }
-
-  // Add security headers to all responses
+/**
+ * Adds security headers to a response
+ */
+function addSecurityHeaders(response: NextResponse): NextResponse {
   Object.entries(securityHeaders).forEach(([key, value]) => {
     response.headers.set(key, value)
   })
-
   return response
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Create Supabase middleware client to handle session refresh
+  const { supabase, response } = createMiddlewareClient(request)
+
+  // Refresh session if expired - required for Server Components
+  // This call also updates cookies if the session was refreshed
+  const { data: { session }, error } = await supabase.auth.getSession()
+
+  // Extract app_metadata from session (contains RBAC claims)
+  const appMetadata = (session?.user?.app_metadata || {}) as AppMetadata
+  const isAdmin = appMetadata.is_admin === true
+  const isAuthenticated = !!session?.user
+
+  // ============================================
+  // ADMIN ROUTES PROTECTION
+  // ============================================
+  if (pathname.startsWith('/admin')) {
+    // Check for magic link token in URL (backup access method)
+    const token = request.nextUrl.searchParams.get('token')
+
+    if (token) {
+      // Redirect to API route to verify token and set cookie
+      const verifyUrl = new URL('/api/admin/verify-token', request.url)
+      verifyUrl.searchParams.set('token', token)
+      verifyUrl.searchParams.set('redirect', pathname)
+
+      // Preserve other query params
+      const id = request.nextUrl.searchParams.get('id')
+      if (id) verifyUrl.searchParams.set('id', id)
+      const highlight = request.nextUrl.searchParams.get('highlight')
+      if (highlight) verifyUrl.searchParams.set('highlight', highlight)
+
+      return addSecurityHeaders(NextResponse.redirect(verifyUrl))
+    }
+
+    // Check for magic link cookie (set by verify-token)
+    const adminCookie = request.cookies.get('titm_admin')
+    const hasValidMagicLink = adminCookie?.value === 'true'
+
+    // Allow access if user has admin claim OR valid magic link
+    if (!isAdmin && !hasValidMagicLink) {
+      // Not authorized - redirect to login
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirect', pathname)
+      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+    }
+
+    // Admin authorized - proceed
+    return addSecurityHeaders(response)
+  }
+
+  // ============================================
+  // MEMBERS ROUTES PROTECTION
+  // ============================================
+  if (pathname.startsWith('/members')) {
+    if (!isAuthenticated) {
+      // Not logged in - redirect to login
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirect', pathname)
+      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+    }
+
+    // User is authenticated - proceed
+    return addSecurityHeaders(response)
+  }
+
+  // ============================================
+  // LOGIN PAGE - REDIRECT IF ALREADY AUTHENTICATED
+  // ============================================
+  if (pathname === '/login') {
+    if (isAuthenticated) {
+      // User is already logged in
+      // Check redirect param, or send to appropriate dashboard
+      const redirectParam = request.nextUrl.searchParams.get('redirect')
+
+      if (redirectParam) {
+        return addSecurityHeaders(NextResponse.redirect(new URL(redirectParam, request.url)))
+      }
+
+      // Default: send admins to /admin, members to /members
+      const defaultRedirect = isAdmin ? '/admin' : '/members'
+      return addSecurityHeaders(NextResponse.redirect(new URL(defaultRedirect, request.url)))
+    }
+
+    // Not authenticated - allow access to login page
+    return addSecurityHeaders(response)
+  }
+
+  // ============================================
+  // ALL OTHER ROUTES
+  // ============================================
+  return addSecurityHeaders(response)
 }
 
 // Configure which routes the middleware runs on
 export const config = {
   matcher: [
-    // Match all admin routes (protected by httpOnly cookie)
+    // Admin routes - protected by RBAC (is_admin claim) or magic link
     '/admin/:path*',
-    // Note: /members is NOT in middleware - it uses localStorage-based Supabase auth
-    // which is protected client-side by MemberAuthContext
+    // Members routes - protected by authentication
+    '/members/:path*',
+    // Login page - redirect if already authenticated
+    '/login',
+    // Auth callback - needs session refresh
+    '/auth/callback',
   ],
 }

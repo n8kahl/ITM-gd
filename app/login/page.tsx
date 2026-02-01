@@ -35,8 +35,19 @@ function LoginContent() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          // Already logged in, redirect
-          router.push(redirectTo)
+          // Already logged in - determine appropriate redirect
+          // Check if user has admin access via app_metadata
+          const isAdmin = session.user?.app_metadata?.is_admin === true
+
+          // If explicit redirect is provided (not default /members), use it
+          // Otherwise, route based on admin status
+          const explicitRedirect = searchParams.get('redirect')
+          if (explicitRedirect) {
+            router.push(redirectTo)
+          } else {
+            // No explicit redirect - send admins to /admin, others to /members
+            router.push(isAdmin ? '/admin' : '/members')
+          }
         }
       } catch (err) {
         console.error('Auth check error:', err)
@@ -46,7 +57,7 @@ function LoginContent() {
     }
 
     checkAuth()
-  }, [router, redirectTo])
+  }, [router, redirectTo, searchParams])
 
   // Handle OAuth callback errors
   useEffect(() => {

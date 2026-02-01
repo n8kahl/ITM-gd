@@ -2,11 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 
-// Use service role key for server-side token verification
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+/**
+ * Magic Link Token Verification Route
+ *
+ * This route verifies magic link tokens for backup admin access.
+ * Tokens are generated and stored in admin_access_tokens table,
+ * typically sent via Discord webhook notifications.
+ */
+
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceKey) {
+    throw new Error('Missing Supabase configuration')
+  }
+
+  return createClient(url, serviceKey)
+}
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')
@@ -15,10 +28,13 @@ export async function GET(request: NextRequest) {
   const highlight = request.nextUrl.searchParams.get('highlight')
 
   if (!token) {
-    return NextResponse.redirect(new URL('/admin/login?error=missing_token', request.url))
+    // Redirect to main login with error
+    return NextResponse.redirect(new URL('/login?error=missing_token', request.url))
   }
 
   try {
+    const supabase = getSupabaseClient()
+
     // Atomic operation: verify AND mark as used in single query
     // This prevents race condition where token could be used twice
     const { data: tokenData, error } = await supabase
@@ -32,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     if (error || !tokenData) {
       console.error('Token verification failed:', error?.message || 'Token not found or expired')
-      return NextResponse.redirect(new URL('/admin/login?error=invalid_token', request.url))
+      return NextResponse.redirect(new URL('/login?error=invalid_token', request.url))
     }
 
     // Set httpOnly auth cookie (24 hours)
@@ -40,13 +56,13 @@ export async function GET(request: NextRequest) {
     cookieStore.set('titm_admin', 'true', {
       path: '/',
       maxAge: 86400, // 24 hours
-      httpOnly: true, // Now secure - not readable by JavaScript
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
     })
 
     // Build redirect URL with preserved query params
-    let redirectUrl = new URL(redirect, request.url)
+    const redirectUrl = new URL(redirect, request.url)
     if (conversationId) {
       redirectUrl.searchParams.set('id', conversationId)
     }
@@ -57,6 +73,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   } catch (error) {
     console.error('Token verification error:', error)
-    return NextResponse.redirect(new URL('/admin/login?error=verification_failed', request.url))
+    return NextResponse.redirect(new URL('/login?error=verification_failed', request.url))
   }
 }
