@@ -23,8 +23,57 @@ Claude Code is responsible for:
 - **Error Handling**: Comprehensive error handling with user-friendly messages
 - **Accessibility**: WCAG 2.1 AA compliance where applicable
 - **Type Safety**: Strict TypeScript usage, no `any` types without justification
+- **Design Consistency**: Maintain "Emerald Standard" brand guidelines (see `docs/BRAND_GUIDELINES.md`)
 
-### 2. Dependency Management & Impact Analysis
+### 2. Design & Brand Standards
+Claude Code MUST follow the **"Emerald Standard"** design system:
+
+#### Required Reading
+- **`CLAUDE.md`** - Quick reference for design rules and coding conventions
+- **`docs/BRAND_GUIDELINES.md`** - Complete brand and design guidelines
+
+#### Core Design Principles
+**Philosophy**: "Private Equity Terminal" — Quiet Luxury, High Density, Professional Stability
+
+**Color Palette**:
+- **Primary**: Emerald Elite `#10B981` (emerald-500)
+- **Accent**: Champagne `#F3E5AB` (use sparingly)
+- **Background**: Onyx `#0A0A0B` (never pure black)
+- **🚫 FORBIDDEN**: Old Gold `#D4AF37` - MUST be refactored to Emerald
+
+**Typography**:
+- Headings: `Playfair Display` (Serif)
+- Body: `Inter` (Sans)
+- Data/Terminal: `Geist Mono`
+
+**UI Patterns**:
+- **Cards**: Use `glass-card-heavy` class (`bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5`)
+- **Borders**: Standard `border-white/5`, Active `border-emerald-500/50`, Premium `border-champagne/30`
+- **Branding**: Always use `public/logo.png`, NEVER `<Sparkles />` as logo substitute
+- **Icons**: Lucide React with stroke width `1.5`
+- **Loading States**: Use pulsing logo pattern, never generic spinners
+
+**Mobile Requirements**:
+- Mobile-first approach
+- Navigation: Bottom sheet or Hamburger menu
+- Data tables: Convert to card lists on mobile
+- Touch targets: Minimum 44px height
+
+**Prohibited Styles** ("The Ban List"):
+- ❌ Hex `#D4AF37` (old gold)
+- ❌ Yellow spinners
+- ❌ Pure white backgrounds
+- ❌ Skeuomorphic buttons with 3D bevels
+
+#### Design Change Protocol
+When modifying UI components:
+1. **Verify brand compliance** against `docs/BRAND_GUIDELINES.md`
+2. **Use existing patterns** from similar components
+3. **Test mobile responsiveness** (use `hidden md:flex` patterns)
+4. **Maintain glassmorphism** aesthetic
+5. **Check color usage** - no deprecated colors
+
+### 3. Dependency Management & Impact Analysis
 Before making ANY change, Claude Code MUST:
 
 #### Analyze Repository-Wide Implications
@@ -58,7 +107,7 @@ When changes have significant implications, Claude Code MUST:
    - User data handling changes
 5. **Provide rollback plan** if things go wrong
 
-### 3. Proactive Issue Detection
+### 4. Proactive Issue Detection
 Claude Code should actively identify and alert on:
 - Security vulnerabilities
 - Performance bottlenecks
@@ -380,6 +429,12 @@ supabase functions deploy # Deploy edge functions
 ## 📚 Additional Resources
 
 ### Documentation Files in Repo
+
+#### Critical References (Read First)
+- **`CLAUDE.md`** - Quick AI instructions, design rules, coding conventions
+- **`docs/BRAND_GUIDELINES.md`** - Complete Emerald Standard design system
+
+#### Feature Documentation
 - `ADMIN_SETUP_COMPLETE.md` - Admin panel setup guide
 - `AI_Chat_System_Architecture.md` - Chat system details
 - `ANALYTICS_SETUP_GUIDE.md` - Analytics implementation
@@ -412,6 +467,7 @@ Since the human has minimal development knowledge, Claude Code should:
 | Date | Change | Reason |
 |------|--------|--------|
 | 2026-02-01 | Initial creation | Establish Claude Code guidelines and Supabase MCP documentation |
+| 2026-02-01 | Add Emerald Standard design system | Integrate brand guidelines and enforce "Private Equity Terminal" aesthetic |
 
 ---
 
