@@ -9,10 +9,10 @@ import {
   Clock,
   ChevronRight,
   Sparkles,
-  Crown,
-  RefreshCw
+  Crown
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { LibraryPageSkeleton } from '@/components/ui/skeleton-loader'
 import { Course } from '@/lib/types_db'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -108,6 +108,10 @@ export default function LibraryPage() {
     return ROLE_NAMES[roleId] || roleId
   }
 
+  if (loading) {
+    return <LibraryPageSkeleton />
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -120,41 +124,32 @@ export default function LibraryPage() {
         </p>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center py-20">
-          <RefreshCw className="w-8 h-8 animate-spin text-[#D4AF37]" />
-        </div>
-      )}
-
       {/* Course Grid */}
-      {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.length === 0 ? (
-            <div className="col-span-full text-center py-20">
-              <BookOpen className="w-16 h-16 mx-auto mb-4 text-white/20" />
-              <h3 className="text-xl font-medium text-white/60">No courses available yet</h3>
-              <p className="text-white/40 mt-2">Check back soon for new content!</p>
-            </div>
-          ) : (
-            courses.map((course) => {
-              const canAccess = hasAccess(course)
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {courses.length === 0 ? (
+          <div className="col-span-full text-center py-20">
+            <BookOpen className="w-16 h-16 mx-auto mb-4 text-white/20" />
+            <h3 className="text-xl font-medium text-white/60">No courses available yet</h3>
+            <p className="text-white/40 mt-2">Check back soon for new content!</p>
+          </div>
+        ) : (
+          courses.map((course) => {
+            const canAccess = hasAccess(course)
 
-              return (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  canAccess={canAccess}
-                  requiredTier={getRequiredTier(course.discord_role_required)}
-                />
-              )
-            })
-          )}
-        </div>
-      )}
+            return (
+              <CourseCard
+                key={course.id}
+                course={course}
+                canAccess={canAccess}
+                requiredTier={getRequiredTier(course.discord_role_required)}
+              />
+            )
+          })
+        )}
+      </div>
 
       {/* Upgrade CTA for locked courses */}
-      {!loading && courses.some(c => !hasAccess(c)) && (
+      {courses.some(c => !hasAccess(c)) && (
         <div className="mt-12 p-6 rounded-2xl bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20">
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="w-16 h-16 rounded-2xl bg-[#D4AF37]/20 flex items-center justify-center">

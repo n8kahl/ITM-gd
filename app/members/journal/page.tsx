@@ -14,13 +14,14 @@ import {
   X,
   Upload,
   Image as ImageIcon,
-  Loader2,
+  Loader2, // Still used in NewEntryModal
   Sparkles,
   FileText,
   Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { JournalPageSkeleton } from '@/components/ui/skeleton-loader'
 import { cn } from '@/lib/utils'
 
 interface JournalEntry {
@@ -134,14 +135,7 @@ export default function JournalPage() {
     : 0
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto mb-4" />
-          <p className="text-white/60">Loading your journal...</p>
-        </div>
-      </div>
-    )
+    return <JournalPageSkeleton />
   }
 
   return (
