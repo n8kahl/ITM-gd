@@ -1,4 +1,4 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 
 // Re-export types from centralized types_db.ts
 export type {
@@ -39,12 +39,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Browser-side Supabase client that properly syncs sessions to cookies.
- * This is critical for middleware authentication - the middleware reads
- * session from cookies, so we must use createBrowserClient from @supabase/ssr
- * instead of createClient from @supabase/supabase-js.
+ * Client-side Supabase client for browser operations.
+ * Note: OAuth code exchange is handled server-side via /auth/callback route
+ * to ensure cookies are set correctly for middleware authentication.
  */
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // ============================================
 // SUBSCRIBER FUNCTIONS
