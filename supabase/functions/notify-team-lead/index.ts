@@ -70,26 +70,8 @@ serve(async (req) => {
     const isLegacyApplication = type === 'application'
     const isAnyApplication = isCohortApplication || isLegacyApplication
 
-    // If this is a cohort application, also insert into cohort_applications table
-    if (isAnyApplication) {
-      const { error: insertError } = await supabase
-        .from('cohort_applications')
-        .insert({
-          name,
-          email,
-          phone: phone || null,
-          message,
-          status: 'pending',
-          contact_submission_id: submission_id || null,
-        })
-
-      if (insertError) {
-        console.error('Failed to insert cohort application:', insertError)
-        // Continue with notification even if insert fails
-      } else {
-        console.log(`Cohort application recorded for ${email}`)
-      }
-    }
+    // Note: cohort_applications insert is now handled directly in addContactSubmission()
+    // This function only handles Discord notifications
 
     // Embed colors
     // Gold (#D4AF37 = 13938487) for cohort applications

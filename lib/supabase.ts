@@ -178,6 +178,26 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
   const isLegacyApplication = contact.message?.toLowerCase().includes('precision cohort') ||
                               contact.message?.toLowerCase().includes('annual mentorship')
 
+  // If this is a cohort application, insert directly into cohort_applications
+  // This ensures the record exists even if the Edge Function fails
+  if (isCohortApplication || isLegacyApplication) {
+    const { error: cohortError } = await supabase
+      .from('cohort_applications')
+      .insert({
+        contact_submission_id: data.id,
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone || null,
+        message: contact.message,
+        status: 'pending',
+      })
+
+    if (cohortError) {
+      // Don't throw - log the error but continue (contact submission succeeded)
+      console.error('Failed to create cohort application record:', cohortError)
+    }
+  }
+
   try {
     await fetch(`${supabaseUrl}/functions/v1/notify-team-lead`, {
       method: 'POST',
