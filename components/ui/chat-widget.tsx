@@ -200,6 +200,13 @@ export function ChatWidget() {
     return () => clearInterval(interval)
   }, [])
 
+  // Listen for external open trigger (from mobile sticky CTA)
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true)
+    window.addEventListener('open-chat-widget', handleOpen)
+    return () => window.removeEventListener('open-chat-widget', handleOpen)
+  }, [])
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -277,7 +284,7 @@ export function ChatWidget() {
             exit={{ scale: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 group"
+            className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 group"
           >
             {/* Glass-morphism bubble matching TradeITM design */}
             <div className="relative">
@@ -316,7 +323,7 @@ export function ChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
-            className="fixed bottom-6 right-6 w-[90vw] sm:w-[400px] h-[600px] sm:h-[650px] z-50"
+            className="fixed bottom-24 md:bottom-6 right-4 md:right-6 w-[90vw] sm:w-[400px] h-[600px] sm:h-[650px] z-50"
           >
             <div className="bg-background/95 backdrop-blur-xl border border-emerald-500/30 rounded-2xl overflow-hidden flex flex-col h-full shadow-2xl">
               {/* Header */}

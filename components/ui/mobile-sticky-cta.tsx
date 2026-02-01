@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Sparkles, MessageCircle } from "lucide-react";
 
 export function MobileStickyCtA() {
   const [isVisible, setIsVisible] = useState(false);
@@ -70,17 +70,29 @@ export function MobileStickyCtA() {
                 </span>
               </div>
 
-              {/* Right side - CTA Button */}
-              <Button
-                asChild
-                variant="luxury"
-                size="sm"
-                className="rounded-lg px-4"
-              >
-                <a href="#pricing">
-                  Join Now
-                </a>
-              </Button>
+              {/* Right side - Chat + CTA Button */}
+              <div className="flex items-center gap-2">
+                {/* Chat button */}
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('open-chat-widget'))}
+                  className="size-10 flex items-center justify-center rounded-full bg-background/20 backdrop-blur border border-white/10 hover:bg-white/10 transition-colors"
+                  aria-label="Chat with us"
+                >
+                  <MessageCircle className="w-5 h-5 text-champagne" />
+                </button>
+
+                {/* Join CTA */}
+                <Button
+                  asChild
+                  variant="luxury"
+                  size="sm"
+                  className="rounded-lg px-4"
+                >
+                  <a href="#pricing">
+                    Join Now
+                  </a>
+                </Button>
+              </div>
             </div>
           </div>
         </motion.div>
