@@ -378,19 +378,20 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         console.log('No cached Discord profile, syncing...')
         setState(prev => ({ ...prev, session, user }))
 
-        // Need to sync after state is updated
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        )
+        // Need to sync after state is updated - USE TIMEOUT to prevent infinite loading
+        try {
+          const response = await fetchWithTimeout(
+            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          )
 
-        const result = await response.json()
+          const result = await response.json()
 
         if (result.success) {
           // Use role IDs for tier determination
@@ -438,6 +439,32 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             isLoading: false,
             error: result.error || 'Failed to sync Discord roles',
             errorCode: result.code || null,
+          }))
+        }
+        } catch (syncError) {
+          // Handle timeout or network errors during initial sync
+          console.error('Initial Discord sync failed:', syncError)
+          const isTimeout = syncError instanceof Error && syncError.name === 'AbortError'
+
+          // Create basic profile from Supabase user so user isn't stuck
+          const fallbackProfile: MemberProfile = {
+            id: user.id,
+            email: user.email || null,
+            discord_user_id: null,
+            discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
+            discord_avatar: user.user_metadata?.avatar_url || null,
+            discord_roles: [],
+            membership_tier: null,
+          }
+
+          setState(prev => ({
+            ...prev,
+            profile: fallbackProfile,
+            isLoading: false,
+            error: isTimeout
+              ? 'Discord sync timed out. Your roles will sync in the background.'
+              : 'Failed to sync Discord roles. Please try refreshing.',
+            errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
           }))
         }
       }
