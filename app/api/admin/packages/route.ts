@@ -7,8 +7,11 @@ function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!url || !key) {
-    throw new Error('Missing Supabase environment variables')
+  if (!url) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  }
+  if (!key) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY - add it to Railway environment variables')
   }
 
   return createClient(url, key)
@@ -36,7 +39,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Missing tier ID' }, { status: 400 })
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
+    let supabaseAdmin
+    try {
+      supabaseAdmin = getSupabaseAdmin()
+    } catch (envError) {
+      console.error('Environment error:', envError)
+      return NextResponse.json({
+        error: envError instanceof Error ? envError.message : 'Missing environment variables'
+      }, { status: 500 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('pricing_tiers')
       .update({
@@ -45,16 +57,21 @@ export async function PATCH(request: NextRequest) {
       })
       .eq('id', id)
       .select()
-      .single()
 
     if (error) {
       console.error('Failed to update pricing tier:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: `Tier '${id}' not found` }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, data: data[0] })
   } catch (error) {
     console.error('Error updating pricing tier:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Internal server error'
+    }, { status: 500 })
   }
 }
