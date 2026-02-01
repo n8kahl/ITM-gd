@@ -273,6 +273,8 @@ export default function AdminDashboard() {
             <QuickLink href="/admin/leads" icon={FileText} label="Leads" color="emerald" />
             <QuickLink href="/admin/chat" icon={MessageSquare} label="Chat" color="blue" />
             <QuickLink href="/admin/settings" icon={Activity} label="Settings" color="purple" />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <Card className="glass-card-heavy p-6 border-white/5">
                 <h3 className="text-sm font-medium text-white/80 mb-4">Recent Sales</h3>
@@ -308,7 +310,6 @@ export default function AdminDashboard() {
                   ))}
                 </div>
              </Card>
->>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
           </div>
         </div>
 
@@ -334,31 +335,20 @@ export default function AdminDashboard() {
                     <div key={i} className="h-5 bg-white/5 animate-pulse rounded" />
                   ))}
                 </div>
-                <div className="relative pl-4 space-y-6">
-                    {/* Activity Timeline Line */}
-                    <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-white/10" />
-
-                    {[
-                        { text: "New user joined Discord", time: "1m ago", color: "emerald" },
-                        { text: "Server CPU spike detected", time: "15m ago", color: "red" },
-                        { text: "Backup completed", time: "1h ago", color: "blue" },
-                        { text: "Daily signals posted", time: "4h ago", color: "gold" },
-                        { text: "Admin logged in", time: "5h ago", color: "gray" },
-                    ].map((item, i) => (
-                        <div key={i} className="relative">
-                            <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0A0A0B] ${
-                                item.color === 'emerald' ? 'bg-emerald-500' :
-                                item.color === 'red' ? 'bg-red-500' :
-                                item.color === 'blue' ? 'bg-blue-500' :
-                                item.color === 'gold' ? 'bg-emerald-500' : 'bg-white/40'
-                            }`} />
-                            <p className="text-sm text-white/90">{item.text}</p>
-                            <p className="text-xs text-white/40 font-mono mt-1">{item.time}</p>
-                        </div>
-                    ))}
-                </div>
-            </Card>
->>>>>>> 6c5a005 (Complete platform-wide "De-Golding": Replace 129 gold instances with Emerald)
+              ) : (
+                <>
+                  {systemStatus.map((item, i) => (
+                    <SystemStatusRow
+                      key={i}
+                      label={item.name}
+                      status={item.status}
+                      latency={item.latency}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+          </Card>
         </div>
       </div>
     </div>
