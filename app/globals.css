@@ -44,11 +44,13 @@
   --sidebar-border: rgba(255, 255, 255, 0.10);
   --sidebar-ring: #E8E4D9;
 
-  /* Luxury Color Palette */
-  --champagne: #F3E5AB;        /* Updated to warmer champagne accent */
+  /* Luxury Color Palette - Emerald & Champagne System */
+  --champagne: #F3E5AB;        /* Warm champagne accent */
   --champagne-light: #F5F3ED;
   --champagne-dark: #B8B5AD;
-  --emerald-elite: #10B981;    /* New brighter emerald primary */
+  --champagne-gold: #D4AF37;   /* Subtle metallic accent */
+  --emerald-elite: #10B981;    /* Primary brand color - bright emerald */
+  --emerald-deep: #064E3B;     /* Darker emerald for backgrounds */
   --wealth-emerald: #047857;
   --wealth-emerald-light: #059669;
   --wealth-emerald-dark: #065F46;
@@ -159,7 +161,9 @@
   --color-champagne: var(--champagne);
   --color-champagne-light: var(--champagne-light);
   --color-champagne-dark: var(--champagne-dark);
+  --color-champagne-gold: var(--champagne-gold);
   --color-emerald-elite: var(--emerald-elite);
+  --color-emerald-deep: var(--emerald-deep);
   --color-wealth-emerald: var(--wealth-emerald);
   --color-wealth-emerald-light: var(--wealth-emerald-light);
   --color-wealth-emerald-dark: var(--wealth-emerald-dark);
@@ -848,12 +852,24 @@
     background-color: #10B981;
   }
 
+  .bg-emerald-deep {
+    background-color: #064E3B;
+  }
+
   .text-champagne {
     color: #F3E5AB;
   }
 
+  .text-champagne-gold {
+    color: #D4AF37;
+  }
+
   .border-champagne {
     border-color: #F3E5AB;
+  }
+
+  .border-champagne-gold {
+    border-color: #D4AF37;
   }
 
   /* ============================================
