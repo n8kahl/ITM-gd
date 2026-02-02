@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
-  BookOpen, Notebook, ShieldAlert, Tag, Sliders, Activity,
+  BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity,
   ChevronRight, LogOut, Wand2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
