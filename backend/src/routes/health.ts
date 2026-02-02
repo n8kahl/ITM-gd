@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { testDatabaseConnection } from '../config/database';
 import { testRedisConnection } from '../config/redis';
 import { testMassiveConnection } from '../config/massive';
+import { testOpenAIConnection } from '../config/openai';
 
 const router = Router();
 
@@ -18,24 +19,27 @@ router.get('/detailed', async (req: Request, res: Response) => {
     services: {
       database: false,
       redis: false,
-      massive: false
+      massive: false,
+      openai: false
     }
   };
 
   try {
     // Test all connections in parallel
-    const [dbOk, redisOk, massiveOk] = await Promise.all([
+    const [dbOk, redisOk, massiveOk, openaiOk] = await Promise.all([
       testDatabaseConnection(),
       testRedisConnection(),
-      testMassiveConnection()
+      testMassiveConnection(),
+      testOpenAIConnection()
     ]);
 
     checks.services.database = dbOk;
     checks.services.redis = redisOk;
     checks.services.massive = massiveOk;
+    checks.services.openai = openaiOk;
 
     // Overall status is ok only if all services are ok
-    const allOk = dbOk && redisOk && massiveOk;
+    const allOk = dbOk && redisOk && massiveOk && openaiOk;
     checks.status = allOk ? 'ok' : 'degraded';
 
     const statusCode = allOk ? 200 : 503;
