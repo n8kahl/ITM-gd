@@ -114,7 +114,7 @@ export function RecentEntries() {
               >
                 <div className="flex items-center gap-4 flex-1">
                   {/* Date */}
-                  <div className="text-sm text-white/60 min-w-[60px]">
+                  <div className="text-sm text-white/60 min-w-[60px]" suppressHydrationWarning>
                     {formatDate(entry.trade_date)}
                   </div>
 
@@ -152,10 +152,11 @@ export function RecentEntries() {
                         ? 'text-red-500'
                         : 'text-white/60'
                     }`}
+                    suppressHydrationWarning
                   >
                     {formatCurrency(entry.pnl)}
                   </div>
-                  <div className="text-xs text-white/60">
+                  <div className="text-xs text-white/60" suppressHydrationWarning>
                     {formatPercentage(entry.pnl_percentage)}
                   </div>
                 </div>
