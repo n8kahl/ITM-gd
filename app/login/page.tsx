@@ -4,12 +4,13 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle, ExternalLink, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { getSafeRedirect } from '@/lib/safe-redirect'
 import { AuroraBackground } from '@/components/ui/aurora-background'
 import SparkleLog from '@/components/ui/sparkle-logo'
+import { isIOSStandalone } from '@/lib/pwa-utils'
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -28,6 +29,13 @@ function LoginContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [isStandalone, setIsStandalone] = useState(false)
+  const [showIOSInfo, setShowIOSInfo] = useState(false)
+
+  // Detect standalone mode on mount
+  useEffect(() => {
+    setIsStandalone(isIOSStandalone())
+  }, [])
 
   // Check if user is already logged in
   useEffect(() => {
@@ -74,19 +82,45 @@ function LoginContent() {
 
     try {
       const supabase = createBrowserSupabase()
-      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: 'discord',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
-          scopes: 'identify email guilds guilds.members.read',
-        },
-      })
 
-      if (signInError) {
-        throw signInError
+      // For iOS standalone mode, we need to open in Safari
+      if (isStandalone) {
+        const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+          provider: 'discord',
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+            scopes: 'identify email guilds guilds.members.read',
+            skipBrowserRedirect: true, // Get the URL instead of auto-redirecting
+          },
+        })
+
+        if (signInError) {
+          throw signInError
+        }
+
+        if (data?.url) {
+          // Open in Safari explicitly (opens in default browser, not standalone app)
+          window.location.href = data.url
+
+          // Show info message to user
+          setShowIOSInfo(true)
+        }
+      } else {
+        // Normal flow for browser
+        const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+          provider: 'discord',
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+            scopes: 'identify email guilds guilds.members.read',
+          },
+        })
+
+        if (signInError) {
+          throw signInError
+        }
+
+        // User will be redirected to Discord
       }
-
-      // User will be redirected to Discord
     } catch (err) {
       console.error('Discord login error:', err)
       setError(err instanceof Error ? err.message : 'Failed to connect to Discord')
@@ -160,6 +194,22 @@ function LoginContent() {
 
           {/* Login Card - Holographic Border */}
           <div className="glass-card-heavy border-holo rounded-2xl p-6">
+            {/* iOS Standalone Info */}
+            {showIOSInfo && (
+              <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-start gap-3">
+                  <Smartphone className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-blue-400 font-medium">Opening in Safari</p>
+                    <p className="text-sm text-blue-400/70 mt-1">
+                      After authorizing Discord, you'll see a notification to return to TradeITM.
+                      Tap it, or manually switch back to the app.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Error Alert */}
             {error && (
               <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
@@ -169,6 +219,18 @@ function LoginContent() {
                     <p className="text-sm text-red-400 font-medium">Authentication Failed</p>
                     <p className="text-sm text-red-400/70 mt-1">{error}</p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* iOS Standalone Notice */}
+            {isStandalone && !showIOSInfo && (
+              <div className="mb-4 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <div className="flex items-start gap-2">
+                  <Smartphone className="w-4 h-4 text-blue-400/60 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-400/60">
+                    Login will open in Safari. Return here after authorizing.
+                  </p>
                 </div>
               </div>
             )}
