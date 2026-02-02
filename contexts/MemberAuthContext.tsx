@@ -87,8 +87,8 @@ const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'executive'> = {
 // Rate limiting for sync operations
 const SYNC_COOLDOWN_MS = 30000 // 30 seconds
 
-// Request timeout for auth operations (15 seconds)
-const REQUEST_TIMEOUT_MS = 15000
+// Request timeout for auth operations (10 seconds - faster fallback)
+const REQUEST_TIMEOUT_MS = 10000
 
 // Cross-tab sync channel name
 const AUTH_CHANNEL_NAME = 'titm-auth-sync'
@@ -303,6 +303,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
+    console.log('[MemberAuth] initializeAuth started')
     try {
       // Get current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -410,10 +411,19 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         console.log('No cached Discord profile, syncing...')
         setState(prev => ({ ...prev, session, user }))
 
+        // Validate Supabase URL is configured
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+          console.error('NEXT_PUBLIC_SUPABASE_URL is not configured')
+          throw new Error('Supabase URL not configured')
+        }
+
         // Need to sync after state is updated - USE TIMEOUT to prevent infinite loading
         try {
+          const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
+          console.log('Calling Discord sync edge function:', edgeFunctionUrl)
+
           const response = await fetchWithTimeout(
-            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`,
+            edgeFunctionUrl,
             {
               method: 'POST',
               headers: {
@@ -479,8 +489,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }
         } catch (syncError) {
           // Handle timeout or network errors during initial sync
-          console.error('Initial Discord sync failed:', syncError)
           const isTimeout = syncError instanceof Error && syncError.name === 'AbortError'
+          console.error('[MemberAuth] Initial Discord sync failed:', {
+            error: syncError,
+            isTimeout,
+            message: syncError instanceof Error ? syncError.message : 'Unknown error'
+          })
 
           // Create basic profile from Supabase user so user isn't stuck
           const fallbackProfile: MemberProfile = {
@@ -505,12 +519,22 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Auth initialization error:', error)
+      console.error('[MemberAuth] Auth initialization error:', error)
       setState(prev => ({
         ...prev,
         isLoading: false,
         error: error instanceof Error ? error.message : 'Authentication failed',
       }))
+    } finally {
+      // Safety net: ensure loading is always set to false
+      console.log('[MemberAuth] initializeAuth completed')
+      setState(prev => {
+        if (prev.isLoading) {
+          console.warn('[MemberAuth] isLoading was still true after initialization, forcing to false')
+          return { ...prev, isLoading: false }
+        }
+        return prev
+      })
     }
   }, [syncDiscordRoles, getMembershipTier, fetchAllowedTabs])
 
