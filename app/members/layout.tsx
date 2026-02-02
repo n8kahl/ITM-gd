@@ -13,7 +13,8 @@ import {
   User,
   LogOut,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Wand2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -32,17 +33,18 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/members', icon: LayoutDashboard, permission: 'dashboard' },
-  { name: 'Library', href: '/members/library', icon: BookOpen, permission: 'library' },
-  { name: 'Journal', href: '/members/journal', icon: Notebook, badge: 'New', permission: 'journal' },
-  { name: 'Profile', href: '/members/profile', icon: User, permission: 'profile' },
+  { name: 'Dashboard', href: '/members', icon: LayoutDashboard, permission: 'access_core_content' },
+  { name: 'Library', href: '/members/library', icon: BookOpen, permission: 'access_course_library' },
+  { name: 'Journal', href: '/members/journal', icon: Notebook, badge: 'New', permission: 'access_trading_journal' },
+  { name: 'Studio', href: '/members/studio', icon: Wand2, permission: 'access_core_content' },
+  { name: 'Profile', href: '/members/profile', icon: User, permission: 'access_core_content' },
 ]
 
 // Mobile nav items (subset for bottom bar)
 const mobileNavItems = [
   { name: 'Dashboard', href: '/members', icon: LayoutDashboard },
   { name: 'Library', href: '/members/library', icon: BookOpen },
-  { name: 'Journal', href: '/members/journal', icon: Notebook },
+  { name: 'Studio', href: '/members/studio', icon: Wand2 },
   { name: 'Profile', href: '/members/profile', icon: User },
 ]
 

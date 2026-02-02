@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
   BookOpen, Notebook, ShieldAlert, Tag, Sliders, Activity,
-  ChevronRight, LogOut, Shield
+  ChevronRight, LogOut, Wand2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +27,7 @@ const navigation = [
       { name: 'Course Library', href: '/admin/courses', icon: GraduationCap },
       { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen },
       { name: 'Journal Config', href: '/admin/journal', icon: Notebook },
+      { name: 'Studio Hub', href: '/admin/studio', icon: Wand2 },
     ]
   },
   {
