@@ -109,6 +109,116 @@ export async function getMinuteAggregates(
   return response.results || [];
 }
 
+// Options-related types
+export interface OptionsContract {
+  ticker: string;
+  underlying_ticker: string;
+  strike_price: number;
+  expiration_date: string;
+  contract_type: 'call' | 'put';
+}
+
+export interface OptionsContractsResponse {
+  results: OptionsContract[];
+  status: string;
+  count: number;
+  next_url?: string;
+}
+
+export interface OptionsSnapshot {
+  ticker: string;
+  day: {
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    vwap?: number;
+  };
+  last_quote: {
+    bid: number;
+    ask: number;
+    bid_size: number;
+    ask_size: number;
+    last_updated: number;
+  };
+  greeks?: {
+    delta: number;
+    gamma: number;
+    theta: number;
+    vega: number;
+  };
+  implied_volatility?: number;
+  open_interest?: number;
+}
+
+export interface OptionsSnapshotResponse {
+  status: string;
+  results: OptionsSnapshot[];
+}
+
+// Get options contracts for an underlying symbol
+export async function getOptionsContracts(
+  underlyingTicker: string,
+  expirationDate?: string,
+  limit: number = 250
+): Promise<OptionsContract[]> {
+  try {
+    const params: any = {
+      underlying_ticker: underlyingTicker,
+      limit,
+      sort: 'strike_price'
+    };
+
+    if (expirationDate) {
+      params.expiration_date = expirationDate;
+    }
+
+    const response = await massiveClient.get<OptionsContractsResponse>(
+      '/v3/reference/options/contracts',
+      { params }
+    );
+
+    return response.data.results || [];
+  } catch (error: any) {
+    console.error(`Failed to fetch options contracts for ${underlyingTicker}:`, error.message);
+    throw error;
+  }
+}
+
+// Get options snapshot (price, Greeks, IV)
+export async function getOptionsSnapshot(
+  underlyingTicker: string,
+  optionTicker?: string
+): Promise<OptionsSnapshot[]> {
+  try {
+    const url = optionTicker
+      ? `/v3/snapshot/options/${underlyingTicker}/${optionTicker}`
+      : `/v3/snapshot/options/${underlyingTicker}`;
+
+    const response = await massiveClient.get<OptionsSnapshotResponse>(url);
+    return response.data.results || [];
+  } catch (error: any) {
+    console.error(`Failed to fetch options snapshot for ${underlyingTicker}:`, error.message);
+    throw error;
+  }
+}
+
+// Get available expiration dates for an underlying
+export async function getOptionsExpirations(
+  underlyingTicker: string
+): Promise<string[]> {
+  try {
+    // Fetch contracts and extract unique expiration dates
+    const contracts = await getOptionsContracts(underlyingTicker);
+    const expirations = [...new Set(contracts.map(c => c.expiration_date))];
+    return expirations.sort();
+  } catch (error: any) {
+    console.error(`Failed to fetch expirations for ${underlyingTicker}:`, error.message);
+    throw error;
+  }
+}
+
 // Test Massive.com API connection
 export async function testMassiveConnection(): Promise<boolean> {
   try {

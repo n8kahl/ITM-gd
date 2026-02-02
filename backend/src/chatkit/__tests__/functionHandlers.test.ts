@@ -9,11 +9,25 @@ jest.mock('../../services/levels/fetcher', () => ({
   fetchIntradayData: jest.fn()
 }));
 
+jest.mock('../../services/options/optionsChainFetcher', () => ({
+  fetchOptionsChain: jest.fn()
+}));
+
+jest.mock('../../services/options/positionAnalyzer', () => ({
+  analyzePosition: jest.fn(),
+  analyzePortfolio: jest.fn()
+}));
+
 import { calculateLevels } from '../../services/levels';
 import { fetchIntradayData } from '../../services/levels/fetcher';
+import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
+import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
 const mockFetchIntradayData = fetchIntradayData as jest.MockedFunction<typeof fetchIntradayData>;
+const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
+const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
+const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 
 describe('Function Handlers', () => {
   beforeEach(() => {
@@ -147,6 +161,253 @@ describe('Function Handlers', () => {
       expect(result).toHaveProperty('message');
       // Status should be one of: closed, pre-market, open, after-hours
       expect(['closed', 'pre-market', 'open', 'after-hours']).toContain(result.status);
+    });
+  });
+
+  describe('get_options_chain', () => {
+    it('should return options chain', async () => {
+      mockFetchOptionsChain.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 5900,
+        expiry: '2026-02-28',
+        daysToExpiry: 26,
+        ivRank: 25,
+        options: {
+          calls: [
+            {
+              symbol: 'SPX',
+              strike: 5900,
+              expiry: '2026-02-28',
+              type: 'call',
+              last: 50,
+              bid: 49,
+              ask: 51,
+              volume: 1000,
+              openInterest: 5000,
+              impliedVolatility: 0.15,
+              delta: 0.5,
+              gamma: 0.001,
+              theta: -2.5,
+              vega: 12,
+              rho: 5,
+              inTheMoney: false,
+              intrinsicValue: 0,
+              extrinsicValue: 50
+            }
+          ],
+          puts: [
+            {
+              symbol: 'SPX',
+              strike: 5900,
+              expiry: '2026-02-28',
+              type: 'put',
+              last: 45,
+              bid: 44,
+              ask: 46,
+              volume: 800,
+              openInterest: 4500,
+              impliedVolatility: 0.16,
+              delta: -0.5,
+              gamma: 0.001,
+              theta: -2.3,
+              vega: 11,
+              rho: -4,
+              inTheMoney: false,
+              intrinsicValue: 0,
+              extrinsicValue: 45
+            }
+          ]
+        }
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_options_chain',
+        arguments: JSON.stringify({ symbol: 'SPX', strikeRange: 10 })
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('currentPrice', 5900);
+      expect(result).toHaveProperty('calls');
+      expect(result).toHaveProperty('puts');
+      expect(result.calls).toHaveLength(1);
+      expect(result.puts).toHaveLength(1);
+      expect(result.calls[0]).toHaveProperty('strike', 5900);
+      expect(result.calls[0]).toHaveProperty('delta');
+      expect(result.calls[0]).toHaveProperty('iv');
+      expect(mockFetchOptionsChain).toHaveBeenCalledWith('SPX', undefined, 10);
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockFetchOptionsChain.mockRejectedValue(new Error('No options found'));
+
+      const result = await executeFunctionCall({
+        name: 'get_options_chain',
+        arguments: JSON.stringify({ symbol: 'SPX' })
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to fetch options chain');
+      expect(result).toHaveProperty('message', 'No options found');
+    });
+  });
+
+  describe('analyze_position', () => {
+    it('should analyze a single position', async () => {
+      mockAnalyzePosition.mockResolvedValue({
+        position: {
+          symbol: 'SPX',
+          type: 'call',
+          strike: 5900,
+          expiry: '2026-02-28',
+          quantity: 2,
+          entryPrice: 30,
+          entryDate: '2026-02-01'
+        },
+        currentValue: 10000,
+        costBasis: 6000,
+        pnl: 4000,
+        pnlPct: 66.67,
+        daysHeld: 1,
+        daysToExpiry: 27,
+        breakeven: 5930,
+        maxGain: 'unlimited',
+        maxLoss: 6000,
+        riskRewardRatio: undefined,
+        greeks: {
+          delta: 100,
+          gamma: 0.2,
+          theta: -5,
+          vega: 24,
+          rho: 10
+        }
+      });
+
+      const result = await executeFunctionCall({
+        name: 'analyze_position',
+        arguments: JSON.stringify({
+          position: {
+            symbol: 'SPX',
+            type: 'call',
+            strike: 5900,
+            expiry: '2026-02-28',
+            quantity: 2,
+            entryPrice: 30,
+            entryDate: '2026-02-01'
+          }
+        })
+      });
+
+      expect(result).toHaveProperty('position');
+      expect(result).toHaveProperty('currentValue', '$10000.00');
+      expect(result).toHaveProperty('costBasis', '$6000.00');
+      expect(result).toHaveProperty('pnl', '$4000.00');
+      expect(result).toHaveProperty('pnlPct', '66.67%');
+      expect(result).toHaveProperty('maxGain', 'unlimited');
+      expect(result).toHaveProperty('maxLoss', '$6000.00');
+      expect(result).toHaveProperty('greeks');
+      expect(mockAnalyzePosition).toHaveBeenCalled();
+    });
+
+    it('should analyze a portfolio', async () => {
+      mockAnalyzePortfolio.mockResolvedValue({
+        positions: [
+          {
+            position: {
+              symbol: 'SPX',
+              type: 'call',
+              strike: 5900,
+              expiry: '2026-02-28',
+              quantity: 1,
+              entryPrice: 30,
+              entryDate: '2026-02-01'
+            },
+            currentValue: 5000,
+            costBasis: 3000,
+            pnl: 2000,
+            pnlPct: 66.67,
+            daysHeld: 1,
+            daysToExpiry: 27,
+            breakeven: 5930,
+            maxGain: 'unlimited',
+            maxLoss: 3000,
+            riskRewardRatio: undefined,
+            greeks: {
+              delta: 50,
+              gamma: 0.1,
+              theta: -2.5,
+              vega: 12
+            }
+          }
+        ],
+        portfolio: {
+          totalValue: 5000,
+          totalCostBasis: 3000,
+          totalPnl: 2000,
+          totalPnlPct: 66.67,
+          portfolioGreeks: {
+            delta: 50,
+            gamma: 0.1,
+            theta: -2.5,
+            vega: 12
+          },
+          risk: {
+            maxLoss: 'unlimited',
+            maxGain: 3000,
+            buyingPowerUsed: 3000
+          },
+          riskAssessment: {
+            overall: 'moderate',
+            warnings: ['1 position(s) with unlimited risk']
+          }
+        }
+      });
+
+      const result = await executeFunctionCall({
+        name: 'analyze_position',
+        arguments: JSON.stringify({
+          positions: [
+            {
+              symbol: 'SPX',
+              type: 'call',
+              strike: 5900,
+              expiry: '2026-02-28',
+              quantity: 1,
+              entryPrice: 30,
+              entryDate: '2026-02-01'
+            }
+          ]
+        })
+      });
+
+      expect(result).toHaveProperty('positionCount', 1);
+      expect(result).toHaveProperty('portfolio');
+      expect(result.portfolio).toHaveProperty('totalValue', '$5000.00');
+      expect(result.portfolio).toHaveProperty('totalPnl', '$2000.00');
+      expect(result.portfolio).toHaveProperty('portfolioGreeks');
+      expect(result.portfolio).toHaveProperty('riskAssessment');
+      expect(result.portfolio.riskAssessment).toHaveProperty('level', 'moderate');
+      expect(mockAnalyzePortfolio).toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockAnalyzePosition.mockRejectedValue(new Error('Failed to fetch data'));
+
+      const result = await executeFunctionCall({
+        name: 'analyze_position',
+        arguments: JSON.stringify({
+          position: {
+            symbol: 'SPX',
+            type: 'call',
+            strike: 5900,
+            expiry: '2026-02-28',
+            quantity: 1,
+            entryPrice: 30,
+            entryDate: '2026-02-01'
+          }
+        })
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to analyze position');
+      expect(result).toHaveProperty('message', 'Failed to fetch data');
     });
   });
 

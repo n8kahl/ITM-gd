@@ -1,5 +1,8 @@
 import { calculateLevels } from '../services/levels';
 import { fetchIntradayData } from '../services/levels/fetcher';
+import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
+import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
+import { Position } from '../services/options/types';
 
 /**
  * Function handlers - these execute when the AI calls a function
@@ -24,6 +27,12 @@ export async function executeFunctionCall(functionCall: FunctionCall): Promise<a
 
     case 'get_market_status':
       return await handleGetMarketStatus(args);
+
+    case 'get_options_chain':
+      return await handleGetOptionsChain(args);
+
+    case 'analyze_position':
+      return await handleAnalyzePosition(args);
 
     default:
       throw new Error(`Unknown function: ${name}`);
@@ -103,7 +112,7 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
  * Handler: get_market_status
  * Determines if market is open, pre-market, after-hours, or closed
  */
-async function handleGetMarketStatus(args: any) {
+async function handleGetMarketStatus(_args: any) {
   const now = new Date();
   const hour = now.getUTCHours() - 5; // Convert to ET (simplified, no DST)
   const minute = now.getUTCMinutes();
@@ -164,4 +173,155 @@ async function handleGetMarketStatus(args: any) {
     nextOpen: 'Tomorrow 4:00 AM ET (pre-market)',
     message: 'Markets are closed'
   };
+}
+
+/**
+ * Handler: get_options_chain
+ * Fetches options chain with Greeks and IV
+ */
+async function handleGetOptionsChain(args: {
+  symbol: string;
+  expiry?: string;
+  strikeRange?: number;
+}) {
+  const { symbol, expiry, strikeRange = 10 } = args;
+
+  try {
+    const chain = await fetchOptionsChain(symbol, expiry, strikeRange);
+
+    // Simplify for AI - return only most relevant data
+    return {
+      symbol: chain.symbol,
+      currentPrice: chain.currentPrice,
+      expiry: chain.expiry,
+      daysToExpiry: chain.daysToExpiry,
+      ivRank: chain.ivRank,
+      calls: chain.options.calls.map(c => ({
+        strike: c.strike,
+        last: c.last,
+        bid: c.bid,
+        ask: c.ask,
+        volume: c.volume,
+        openInterest: c.openInterest,
+        iv: (c.impliedVolatility * 100).toFixed(1) + '%',
+        delta: c.delta?.toFixed(2),
+        gamma: c.gamma?.toFixed(4),
+        theta: c.theta?.toFixed(2),
+        vega: c.vega?.toFixed(2),
+        inTheMoney: c.inTheMoney
+      })),
+      puts: chain.options.puts.map(p => ({
+        strike: p.strike,
+        last: p.last,
+        bid: p.bid,
+        ask: p.ask,
+        volume: p.volume,
+        openInterest: p.openInterest,
+        iv: (p.impliedVolatility * 100).toFixed(1) + '%',
+        delta: p.delta?.toFixed(2),
+        gamma: p.gamma?.toFixed(4),
+        theta: p.theta?.toFixed(2),
+        vega: p.vega?.toFixed(2),
+        inTheMoney: p.inTheMoney
+      }))
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch options chain',
+      message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: analyze_position
+ * Analyzes position(s) for P&L, Greeks, and risk
+ */
+async function handleAnalyzePosition(args: {
+  position?: Position;
+  positions?: Position[];
+}) {
+  const { position, positions } = args;
+
+  try {
+    // Single position analysis
+    if (position) {
+      const analysis = await analyzePosition(position);
+
+      return {
+        position: {
+          symbol: analysis.position.symbol,
+          type: analysis.position.type,
+          strike: analysis.position.strike,
+          expiry: analysis.position.expiry,
+          quantity: analysis.position.quantity,
+          entryPrice: analysis.position.entryPrice,
+          entryDate: analysis.position.entryDate
+        },
+        currentValue: `$${analysis.currentValue.toFixed(2)}`,
+        costBasis: `$${analysis.costBasis.toFixed(2)}`,
+        pnl: `$${analysis.pnl.toFixed(2)}`,
+        pnlPct: `${analysis.pnlPct.toFixed(2)}%`,
+        daysHeld: analysis.daysHeld,
+        daysToExpiry: analysis.daysToExpiry,
+        breakeven: analysis.breakeven,
+        maxGain: typeof analysis.maxGain === 'number'
+          ? `$${analysis.maxGain.toFixed(2)}`
+          : analysis.maxGain,
+        maxLoss: typeof analysis.maxLoss === 'number'
+          ? `$${analysis.maxLoss.toFixed(2)}`
+          : analysis.maxLoss,
+        riskRewardRatio: analysis.riskRewardRatio?.toFixed(2),
+        greeks: analysis.greeks
+      };
+    }
+
+    // Portfolio analysis
+    if (positions && positions.length > 0) {
+      const analysis = await analyzePortfolio(positions);
+
+      return {
+        positionCount: analysis.positions.length,
+        portfolio: {
+          totalValue: `$${analysis.portfolio.totalValue.toFixed(2)}`,
+          totalCostBasis: `$${analysis.portfolio.totalCostBasis.toFixed(2)}`,
+          totalPnl: `$${analysis.portfolio.totalPnl.toFixed(2)}`,
+          totalPnlPct: `${analysis.portfolio.totalPnlPct.toFixed(2)}%`,
+          portfolioGreeks: {
+            delta: analysis.portfolio.portfolioGreeks.delta,
+            gamma: analysis.portfolio.portfolioGreeks.gamma,
+            theta: analysis.portfolio.portfolioGreeks.theta,
+            vega: analysis.portfolio.portfolioGreeks.vega
+          },
+          risk: {
+            maxLoss: typeof analysis.portfolio.risk.maxLoss === 'number'
+              ? `$${analysis.portfolio.risk.maxLoss.toFixed(2)}`
+              : analysis.portfolio.risk.maxLoss,
+            maxGain: typeof analysis.portfolio.risk.maxGain === 'number'
+              ? `$${analysis.portfolio.risk.maxGain.toFixed(2)}`
+              : analysis.portfolio.risk.maxGain
+          },
+          riskAssessment: {
+            level: analysis.portfolio.riskAssessment.overall,
+            warnings: analysis.portfolio.riskAssessment.warnings
+          }
+        },
+        positions: analysis.positions.map(p => ({
+          symbol: p.position.symbol,
+          type: p.position.type,
+          pnl: `$${p.pnl.toFixed(2)}`,
+          pnlPct: `${p.pnlPct.toFixed(2)}%`
+        }))
+      };
+    }
+
+    return {
+      error: 'No position or positions provided'
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to analyze position',
+      message: error.message
+    };
+  }
 }

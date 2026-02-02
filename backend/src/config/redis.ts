@@ -52,7 +52,7 @@ export async function cacheSet(key: string, value: any, ttlSeconds: number): Pro
   }
 }
 
-export async function cacheGet(key: string): Promise<any | null> {
+export async function cacheGet<T = any>(key: string): Promise<T | null> {
   try {
     const value = await redisClient.get(key);
     return value ? JSON.parse(value) : null;

@@ -7,6 +7,7 @@ import { connectRedis } from './config/redis';
 import healthRouter from './routes/health';
 import levelsRouter from './routes/levels';
 import chatRouter from './routes/chat';
+import optionsRouter from './routes/options';
 
 dotenv.config();
 
@@ -24,6 +25,8 @@ app.use(morgan('dev')); // HTTP request logging
 app.use('/health', healthRouter);
 app.use('/api/levels', levelsRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/options', optionsRouter);
+app.use('/api/positions', optionsRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
@@ -36,7 +39,10 @@ app.get('/', (req: Request, res: Response) => {
       healthDetailed: '/health/detailed',
       levels: '/api/levels/:symbol',
       chat: '/api/chat/message',
-      sessions: '/api/chat/sessions'
+      sessions: '/api/chat/sessions',
+      optionsChain: '/api/options/:symbol/chain',
+      optionsExpirations: '/api/options/:symbol/expirations',
+      positionsAnalyze: '/api/positions/analyze'
     }
   });
 });
