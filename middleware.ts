@@ -40,30 +40,9 @@ export async function middleware(request: NextRequest) {
   // ADMIN ROUTES PROTECTION
   // ============================================
   if (pathname.startsWith('/admin')) {
-    // Check for magic link token in URL (backup access method)
-    const token = request.nextUrl.searchParams.get('token')
-
-    if (token) {
-      // Redirect to API route to verify token and set cookie
-      const verifyUrl = new URL('/api/admin/verify-token', request.url)
-      verifyUrl.searchParams.set('token', token)
-      verifyUrl.searchParams.set('redirect', pathname)
-
-      // Preserve other query params
-      const id = request.nextUrl.searchParams.get('id')
-      if (id) verifyUrl.searchParams.set('id', id)
-      const highlight = request.nextUrl.searchParams.get('highlight')
-      if (highlight) verifyUrl.searchParams.set('highlight', highlight)
-
-      return addSecurityHeaders(NextResponse.redirect(verifyUrl))
-    }
-
-    // Check for magic link cookie (set by verify-token)
-    const adminCookie = request.cookies.get('titm_admin')
-    const hasValidMagicLink = adminCookie?.value === 'true'
-
-    // Allow access if user has admin claim OR valid magic link
-    if (!isAdmin && !hasValidMagicLink) {
+    // Strict Discord-only authentication
+    // Only users with is_admin claim (from Discord roles) can access
+    if (!isAdmin) {
       // Not authorized - redirect to login
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
@@ -136,7 +115,7 @@ export async function middleware(request: NextRequest) {
 // Configure which routes the middleware runs on
 export const config = {
   matcher: [
-    // Admin routes - protected by RBAC (is_admin claim) or magic link
+    // Admin routes - protected by RBAC (is_admin claim from Discord roles)
     '/admin/:path*',
     // Members routes - protected by authentication
     '/members/:path*',

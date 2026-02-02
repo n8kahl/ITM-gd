@@ -52,6 +52,7 @@ interface MemberAuthState {
   session: Session | null
   profile: MemberProfile | null
   permissions: MemberPermission[]
+  allowedTabs: string[] // Simple RBAC: tabs user can access
   isLoading: boolean
   isAuthenticated: boolean
   error: string | null
@@ -121,6 +122,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     session: null,
     profile: null,
     permissions: [],
+    allowedTabs: [],
     isLoading: true,
     isAuthenticated: false,
     error: null,
@@ -167,6 +169,25 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
     return null
   }, [roleMapping])
+
+  // Fetch allowed tabs from the database (Simple RBAC)
+  const fetchAllowedTabs = useCallback(async (userId: string): Promise<string[]> => {
+    try {
+      const { data, error } = await supabase.rpc('get_user_allowed_tabs', {
+        user_id: userId
+      })
+
+      if (error) {
+        console.error('Error fetching allowed tabs:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('fetchAllowedTabs error:', error)
+      return []
+    }
+  }, [])
 
   // Sync Discord roles via Edge Function (with rate limiting and timeout)
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
@@ -238,10 +259,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         granted_by_role: p.granted_by_role,
       }))
 
+      // Fetch allowed tabs for Simple RBAC
+      const allowedTabs = await fetchAllowedTabs(state.user?.id || '')
+
       setState(prev => ({
         ...prev,
         profile,
         permissions,
+        allowedTabs,
         error: null,
         errorCode: null,
       }))
@@ -271,7 +296,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     } finally {
       isSyncingRef.current = false
     }
-  }, [state.session, state.user, getMembershipTier])
+  }, [state.session, state.user, getMembershipTier, fetchAllowedTabs])
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
@@ -359,10 +384,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           granted_by_role: up.granted_by_role_name,
         }))
 
+        // Fetch allowed tabs for Simple RBAC
+        const allowedTabs = await fetchAllowedTabs(user.id)
+
         setState(prev => ({
           ...prev,
           profile,
           permissions,
+          allowedTabs,
           isLoading: false,
         }))
 
@@ -414,10 +443,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             granted_by_role: p.granted_by_role,
           }))
 
+          // Fetch allowed tabs for Simple RBAC
+          const allowedTabs = await fetchAllowedTabs(user.id)
+
           setState(prev => ({
             ...prev,
             profile,
             permissions,
+            allowedTabs,
             isLoading: false,
           }))
         } else {
@@ -476,7 +509,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         error: error instanceof Error ? error.message : 'Authentication failed',
       }))
     }
-  }, [syncDiscordRoles, getMembershipTier])
+  }, [syncDiscordRoles, getMembershipTier, fetchAllowedTabs])
 
   // Sign out with full cleanup
   const signOut = useCallback(async () => {
@@ -489,6 +522,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         session: null,
         profile: null,
         permissions: [],
+        allowedTabs: [],
         isLoading: false,
         isAuthenticated: false,
         error: null,
@@ -520,9 +554,19 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   }, [router])
 
   // Check if user has a specific permission
+  // Supports both:
+  // 1. Simple RBAC tab IDs: 'dashboard', 'journal', 'library', 'profile'
+  // 2. Legacy permission names: 'access_trading_journal', etc.
   const hasPermission = useCallback((permissionName: string): boolean => {
+    // Check if it's a tab ID (Simple RBAC)
+    const tabIds = ['dashboard', 'journal', 'library', 'profile']
+    if (tabIds.includes(permissionName)) {
+      return state.allowedTabs.includes(permissionName)
+    }
+
+    // Fall back to legacy permission system
     return state.permissions.some(p => p.name === permissionName)
-  }, [state.permissions])
+  }, [state.permissions, state.allowedTabs])
 
   // Refresh auth state
   const refresh = useCallback(async () => {
@@ -545,6 +589,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             session: null,
             profile: null,
             permissions: [],
+            allowedTabs: [],
             isLoading: false,
             isAuthenticated: false,
             error: null,
@@ -586,6 +631,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             session: null,
             profile: null,
             permissions: [],
+            allowedTabs: [],
             isLoading: false,
             isAuthenticated: false,
             error: null,

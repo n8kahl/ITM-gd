@@ -148,20 +148,9 @@ serve(async (req) => {
       embed.footer = { text: '⭐ High-value lead - Respond within 24 hours' }
     }
 
-    // Add magic link for quick review (admin panel)
+    // Add admin panel link (admin must be logged in via Discord OAuth)
     if (submission_id) {
-      // Generate magic link token for one-click access (same pattern as chat escalation)
-      const token = crypto.randomUUID()
-      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
-
-      await supabase
-        .from('admin_access_tokens')
-        .insert({
-          token,
-          expires_at: expiresAt
-        })
-
-      const leadsUrl = `https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id}&token=${token}`
+      const leadsUrl = `https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id}`
       embed.description = `[📋 Quick Review in Admin Panel](${leadsUrl})`
     }
 
