@@ -333,10 +333,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     console.log('[MemberAuth] initializeAuth started')
     try {
       // Get current session
+      console.log('[MemberAuth] 1️⃣ Calling getSession()...')
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      console.log('[MemberAuth] 1️⃣ getSession() complete:', { hasSession: !!session, error: sessionError })
 
       if (sessionError) {
-        console.error('Session error:', sessionError)
+        console.error('[MemberAuth] Session error:', sessionError)
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -347,6 +349,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
       if (!session) {
         // No session - user needs to log in
+        console.log('[MemberAuth] No session, marking as unauthenticated')
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -356,10 +359,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Get user
+      console.log('[MemberAuth] 2️⃣ Calling getUser()...')
       const { data: { user }, error: userError } = await supabase.auth.getUser()
+      console.log('[MemberAuth] 2️⃣ getUser() complete:', { hasUser: !!user, error: userError })
 
       if (userError || !user) {
-        console.error('User error:', userError)
+        console.error('[MemberAuth] User error:', userError)
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -369,6 +374,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Update state with user and session
+      console.log('[MemberAuth] 3️⃣ Updating state with user and session')
       setState(prev => ({
         ...prev,
         user,
@@ -377,13 +383,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
 
       // Try to get cached Discord profile first
+      console.log('[MemberAuth] 4️⃣ Fetching cached Discord profile...')
       const { data: discordProfile } = await supabase
         .from('user_discord_profiles')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle()
+      console.log('[MemberAuth] 4️⃣ Discord profile fetch complete:', { hasProfile: !!discordProfile })
 
       if (discordProfile) {
+        console.log('[MemberAuth] 5️⃣ Found cached profile, building member profile...')
         const profile: MemberProfile = {
           id: user.id,
           email: user.email || null,
@@ -395,6 +404,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Get cached permissions
+        console.log('[MemberAuth] 6️⃣ Fetching user permissions...')
         const { data: userPermissions } = await supabase
           .from('user_permissions')
           .select(`
@@ -408,6 +418,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           `)
           .eq('user_id', user.id)
 
+        console.log('[MemberAuth] 6️⃣ Permissions fetch complete, processing...')
         const permissions: MemberPermission[] = (userPermissions || []).map((up: any) => ({
           id: up.app_permissions?.id || up.permission_id,
           name: up.app_permissions?.name || '',
@@ -416,8 +427,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }))
 
         // Get allowed tabs based on membership tier
+        console.log('[MemberAuth] 7️⃣ Calling fetchAllowedTabs...')
         const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
+        console.log('[MemberAuth] 7️⃣ fetchAllowedTabs complete:', allowedTabs)
 
+        console.log('[MemberAuth] 8️⃣ Setting final state with profile')
         setState(prev => ({
           ...prev,
           profile,
@@ -425,13 +439,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           allowedTabs,
           isLoading: false,
         }))
+        console.log('[MemberAuth] ✅ State updated, isLoading now false')
 
         // Sync Discord roles in background if profile is stale (> 5 minutes)
         const lastSynced = new Date(discordProfile.last_synced_at).getTime()
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
         if (lastSynced < fiveMinutesAgo) {
-          console.log('Discord profile stale, syncing in background...')
+          console.log('[MemberAuth] 🔄 Discord profile stale, syncing in background...')
           syncDiscordRoles()
+        } else {
+          console.log('[MemberAuth] ✅ Profile is fresh, no sync needed')
         }
       } else {
         // No cached profile - sync Discord roles immediately
