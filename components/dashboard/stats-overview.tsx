@@ -125,7 +125,7 @@ export function StatsOverview() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${stat.color}`}>
+                <div className={`text-2xl font-bold ${stat.color}`} suppressHydrationWarning>
                   {stat.value}
                 </div>
                 {stat.subtitle && (
@@ -147,7 +147,7 @@ export function StatsOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-emerald-500">
+            <div className="text-xl font-bold text-emerald-500" suppressHydrationWarning>
               {formatCurrency(stats.best_trade)}
             </div>
           </CardContent>
@@ -161,7 +161,7 @@ export function StatsOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-red-500">
+            <div className="text-xl font-bold text-red-500" suppressHydrationWarning>
               {formatCurrency(stats.worst_trade)}
             </div>
           </CardContent>
@@ -175,7 +175,7 @@ export function StatsOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-white">
+            <div className="text-xl font-bold text-white" suppressHydrationWarning>
               {formatDate(stats.last_trade_date)}
             </div>
             <p className="text-xs text-white/60 mt-1">
