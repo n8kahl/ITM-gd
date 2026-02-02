@@ -1,7 +1,7 @@
 'use server'
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getDiscordRoles } from '@/lib/discord-admin'
+import { getDiscordGuildRoles } from '@/lib/discord-admin'
 import { RolePermission, MemberTab } from '@/lib/types_db'
 import { revalidatePath } from 'next/cache'
 
@@ -24,7 +24,7 @@ export async function syncDiscordRoles(): Promise<{
     }
 
     // Fetch roles from Discord API
-    const discordRoles = await getDiscordRoles()
+    const discordRoles = await getDiscordGuildRoles()
 
     if (!discordRoles || discordRoles.length === 0) {
       return { success: false, error: 'No Discord roles found' }
