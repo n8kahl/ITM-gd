@@ -207,7 +207,7 @@ export default function Home() {
                 </Button>
               </motion.div>
 
-              {/* Member Login Link */}
+              {/* Member Login Link - Hidden for now
               <Link
                 href="/login"
                 className="mt-4 text-xs text-white/30 hover:text-white transition-colors cursor-pointer"
@@ -215,6 +215,7 @@ export default function Home() {
               >
                 Already inside? Enter Terminal
               </Link>
+              */}
             </motion.div>
           </div>
         </div>

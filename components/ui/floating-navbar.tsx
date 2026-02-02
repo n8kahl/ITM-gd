@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Shield } from "lucide-react";
-import Link from "next/link";
+import { Menu, X } from "lucide-react";
+// import Link from "next/link"; // Hidden for now - member login disabled
+// import { Shield } from "lucide-react"; // Hidden for now - member login disabled
 import { cn } from "@/lib/utils";
 
 export function FloatingNavbar() {
@@ -80,7 +81,7 @@ export function FloatingNavbar() {
 
           {/* Desktop CTA Buttons */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Member Login */}
+            {/* Member Login - Hidden for now
             <Link
               href="/login?redirect=/members"
               className={cn(
@@ -94,6 +95,7 @@ export function FloatingNavbar() {
               <Shield className="w-4 h-4" />
               <span>Members</span>
             </Link>
+            */}
 
             {/* Join Now CTA */}
             <Button
@@ -156,7 +158,7 @@ export function FloatingNavbar() {
               </a>
             ))}
 
-            {/* Member Login Link */}
+            {/* Member Login Link - Hidden for now
             <Link
               href="/login?redirect=/members"
               onClick={() => setIsMobileMenuOpen(false)}
@@ -170,6 +172,7 @@ export function FloatingNavbar() {
               <Shield className="w-5 h-5" />
               Member Login
             </Link>
+            */}
 
             {/* Mobile CTA Button - Full Width */}
             <div className="pt-3">
