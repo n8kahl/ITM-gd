@@ -116,6 +116,9 @@ async function fetchWithTimeout(
 }
 
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
+  // IMMEDIATE logging - if you don't see this, provider isn't mounting
+  console.log('🚀 MemberAuthProvider mounting')
+
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
     user: null,
@@ -128,6 +131,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     error: null,
     errorCode: null,
   })
+
+  console.log('📊 MemberAuthProvider initial state:', { isLoading: state.isLoading })
 
   // Dynamic role mapping fetched from config API (role ID -> tier)
   const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'executive'>>(DEFAULT_ROLE_MAPPING)
@@ -625,12 +630,13 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize on mount
   useEffect(() => {
+    console.log('⚡ useEffect running - calling initializeAuth()')
     initializeAuth()
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event)
+        console.log('🔄 Auth state changed:', event)
 
         if (event === 'SIGNED_OUT') {
           isAuthenticatedRef.current = false

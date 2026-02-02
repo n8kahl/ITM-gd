@@ -30,7 +30,30 @@ export async function middleware(request: NextRequest) {
 
   // CRITICAL: Use getUser() instead of getSession() for authorization
   // getUser() validates the JWT with the server, preventing spoofing
-  const { data: { user }, error } = await supabase.auth.getUser()
+  // Add timeout to prevent hanging (5 seconds max)
+  const getUserWithTimeout = async () => {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('getUser timeout')), 5000)
+    )
+    return Promise.race([
+      supabase.auth.getUser(),
+      timeout
+    ]) as Promise<{ data: { user: any }, error: any }>
+  }
+
+  let user = null
+  let authError = null
+
+  try {
+    const result = await getUserWithTimeout()
+    user = result.data.user
+    authError = result.error
+  } catch (err) {
+    console.error('[Middleware] getUser() failed or timed out:', err)
+    // On timeout/error, allow page to load but mark as unauthenticated
+    user = null
+    authError = err
+  }
 
   // Extract app_metadata from user (contains RBAC claims)
   const appMetadata = (user?.app_metadata || {}) as AppMetadata
