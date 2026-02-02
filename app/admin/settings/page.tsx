@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle,
   X,
+  Shield,
   MessageSquare,
   TestTube2,
   Crown,
