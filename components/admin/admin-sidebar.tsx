@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
   BookOpen, Notebook, ShieldAlert, Tag, Sliders, Activity,
-  ChevronRight, LogOut
+  ChevronRight, LogOut, Shield
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -33,6 +33,7 @@ const navigation = [
     group: 'System',
     items: [
       { name: 'Analytics', href: '/admin/analytics', icon: Activity },
+      { name: 'Permissions', href: '/admin/permissions', icon: Shield },
       { name: 'RBAC & Roles', href: '/admin/roles', icon: ShieldAlert },
       { name: 'Settings', href: '/admin/settings', icon: Sliders },
     ]

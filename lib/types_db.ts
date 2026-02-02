@@ -146,6 +146,19 @@ export interface PricingTier {
 // RBAC Permission Types
 // ============================================
 
+// Simple RBAC: Discord Role → Tabs mapping
+export interface RolePermission {
+  discord_role_id: string
+  role_name: string
+  role_color?: string | null
+  allowed_tabs: string[]
+  created_at: string
+  updated_at: string
+}
+
+// Tab IDs for type safety
+export type MemberTab = 'dashboard' | 'journal' | 'library' | 'profile'
+
 export interface AppPermission {
   id: string
   name: string

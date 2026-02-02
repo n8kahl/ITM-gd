@@ -61,18 +61,10 @@ export async function getServerUser() {
 
 /**
  * Checks if the current user has admin access.
- * Returns true if user has is_admin=true in app_metadata OR valid magic link cookie.
+ * Returns true if user has is_admin=true in app_metadata (set by Discord role sync).
  */
 export async function isAdminUser(): Promise<boolean> {
-  const cookieStore = await cookies()
-
-  // Check magic link cookie first (backup access)
-  const adminCookie = cookieStore.get('titm_admin')
-  if (adminCookie?.value === 'true') {
-    return true
-  }
-
-  // Check RBAC claim
+  // Check RBAC claim from Discord OAuth
   const user = await getServerUser()
   return user?.appMetadata?.is_admin === true
 }

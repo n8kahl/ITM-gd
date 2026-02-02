@@ -20,10 +20,10 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
 
   const handleLogout = async () => {
     try {
-      // Clear magic link cookie
+      // Clear admin session cookies
       await fetch('/api/admin/logout', { method: 'POST' })
 
-      // Also sign out of Supabase session
+      // Sign out of Supabase session (Discord OAuth)
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
