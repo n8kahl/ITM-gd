@@ -406,7 +406,7 @@ export default function SettingsPage() {
             <Button
               onClick={saveConfiguration}
               disabled={saving}
-              className="flex-1 bg-emerald-500 hover:bg-[emerald-600] text-black font-medium h-12"
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-black font-medium h-12"
             >
               {saving ? (
                 <>
@@ -530,7 +530,7 @@ export default function SettingsPage() {
           <Button
             onClick={saveTierMapping}
             disabled={savingTiers}
-            className="w-full bg-emerald-500 hover:bg-[emerald-600] text-black font-medium h-12"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-medium h-12"
           >
             {savingTiers ? (
               <>
