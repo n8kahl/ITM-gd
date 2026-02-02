@@ -252,7 +252,7 @@ export default function RolesPage() {
           </Button>
           <Button
             onClick={handleAddRole}
-            className="bg-emerald-500 hover:bg-[emerald-600] text-black"
+            className="bg-emerald-500 hover:bg-emerald-600 text-black"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add New Mapping
@@ -338,7 +338,7 @@ export default function RolesPage() {
               <p className="text-white/60 mb-4">No role mappings configured yet</p>
               <Button
                 onClick={handleAddRole}
-                className="bg-emerald-500 hover:bg-[emerald-600] text-black"
+                className="bg-emerald-500 hover:bg-emerald-600 text-black"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add First Mapping
