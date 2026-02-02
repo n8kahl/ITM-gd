@@ -380,20 +380,8 @@ async function sendDiscordNotification(
       title = '👋 Chat Escalated'
     }
 
-    // Generate magic link token for one-click access
-    const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
-
-    await supabase
-      .from('admin_access_tokens')
-      .insert({
-        token,
-        conversation_id: conversationId,
-        expires_at: expiresAt
-      })
-
-    // Build description with visitor info and magic link
-    const chatUrl = `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}&token=${token}`
+    // Build chat URL (admin must be logged in via Discord OAuth)
+    const chatUrl = `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}`
     let description = `**${name}** - ${reason}`
     if (visitorEmail) {
       description += `\n📧 ${visitorEmail}`

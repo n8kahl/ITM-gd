@@ -76,6 +76,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     user,
     profile,
     permissions,
+    allowedTabs,
     isLoading,
     isAuthenticated,
     error,
@@ -258,17 +259,35 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Permissions Debug (only in dev) */}
-        {process.env.NODE_ENV === 'development' && permissions.length > 0 && (
-          <div className="mx-4 mb-4 p-3 rounded-lg bg-white/5 text-xs">
-            <p className="text-white/40 mb-2">Permissions:</p>
-            <div className="flex flex-wrap gap-1">
-              {permissions.map(p => (
-                <span key={p.id} className="px-2 py-0.5 rounded bg-white/10 text-white/60">
-                  {p.name}
-                </span>
-              ))}
+        {/* Allowed Tabs Debug (only in dev) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mx-4 mb-4 p-3 rounded-lg bg-white/5 text-xs space-y-3">
+            <div>
+              <p className="text-white/40 mb-2">My Allowed Tabs:</p>
+              <div className="flex flex-wrap gap-1">
+                {allowedTabs.length > 0 ? (
+                  allowedTabs.map(tab => (
+                    <span key={tab} className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-500">
+                      {tab}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-white/40">No tabs assigned</span>
+                )}
+              </div>
             </div>
+            {permissions.length > 0 && (
+              <div>
+                <p className="text-white/40 mb-2">Legacy Permissions:</p>
+                <div className="flex flex-wrap gap-1">
+                  {permissions.map(p => (
+                    <span key={p.id} className="px-2 py-0.5 rounded bg-white/10 text-white/60 text-[10px]">
+                      {p.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

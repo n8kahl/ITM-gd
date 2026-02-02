@@ -12,7 +12,6 @@ import { AdminLayoutShell } from '@/components/admin/admin-layout-shell'
  *
  * Access is granted if:
  * 1. User has is_admin=true in their JWT app_metadata (set by Discord role sync)
- * 2. User has a valid magic link cookie (backup access method)
  */
 export default async function AdminLayout({
   children,
