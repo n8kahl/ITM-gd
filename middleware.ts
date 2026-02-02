@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
+import { getAbsoluteUrl } from '@/lib/url-helpers'
 
 // Security headers to add to all responses
 const securityHeaders = {
@@ -19,20 +20,6 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
     response.headers.set(key, value)
   })
   return response
-}
-
-/**
- * Helper to construct URLs safely, using the correct origin
- * Fixes Railway proxy issues where request.url may have wrong origin
- */
-function getAbsoluteUrl(path: string, request: NextRequest): URL {
-  // Use the host header if available (set by Railway proxy)
-  const host = request.headers.get('host') || request.nextUrl.host
-
-  // Determine protocol: use https in production, http for localhost
-  const protocol = host.includes('localhost') ? 'http' : 'https'
-
-  return new URL(path, `${protocol}://${host}`)
 }
 
 export async function middleware(request: NextRequest) {
