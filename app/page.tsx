@@ -744,14 +744,7 @@ export default function Home() {
           </div>
           <div className="mt-6 text-center text-xs text-muted-foreground">
             <p>
-              Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.{" "}
-              <Link
-                href="/admin"
-                className="inline-block cursor-pointer hover:scale-125 transition-all duration-300 hover:drop-shadow-[0_0_8px_rgba(16, 185, 129,0.6)] ml-1"
-                aria-label="Admin access"
-              >
-                ❤️‍🔥
-              </Link>
+              Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.
             </p>
           </div>
         </div>
