@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import {
   Settings,
   Save,
@@ -12,14 +11,11 @@ import {
   AlertCircle,
   CheckCircle,
   X,
-  Shield,
   MessageSquare,
   TestTube2,
   Crown,
   Plus,
   Trash2,
-  ShieldCheck,
-  ArrowRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -547,29 +543,33 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Role Permissions Link Card */}
-      <Card className="glass-card-heavy border-white/10">
+      {/* Info Card */}
+      <Card className="glass-card-heavy border-emerald-500/20">
         <CardContent className="pt-6">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <ShieldCheck className="w-6 h-6 text-emerald-500" />
+              <CheckCircle className="w-6 h-6 text-emerald-500" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-white mb-1">Role Permissions</h3>
-              <p className="text-sm text-white/60 mb-4">
-                Configure which Discord roles have access to specific app features like admin dashboard,
-                course management, and member tools. This is separate from tier-based content access.
-              </p>
-              <Link href="/admin/roles">
-                <Button
-                  variant="outline"
-                  className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
-                >
-                  <Shield className="w-4 h-4 mr-2" />
-                  Manage Role Permissions
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </Link>
+              <h3 className="font-semibold text-white mb-2">How Tier-Based Access Works</h3>
+              <ul className="text-sm text-white/60 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-emerald-500 mt-0.5">•</span>
+                  <span><strong>Core Tier:</strong> Access to Dashboard, Journal, and Profile</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-emerald-500 mt-0.5">•</span>
+                  <span><strong>Pro Tier:</strong> Core + Library access</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-emerald-500 mt-0.5">•</span>
+                  <span><strong>Executive Tier:</strong> All features unlocked</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-emerald-500 mt-0.5">•</span>
+                  <span>Members automatically inherit access from their Discord roles</span>
+                </li>
+              </ul>
             </div>
           </div>
         </CardContent>
