@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
+import { getAbsoluteUrl } from '@/lib/url-helpers'
 
 // Security headers to add to all responses
 const securityHeaders = {
@@ -44,7 +45,7 @@ export async function middleware(request: NextRequest) {
     // Only users with is_admin claim (from Discord roles) can access
     if (!isAdmin) {
       // Not authorized - redirect to login
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
       return addSecurityHeaders(NextResponse.redirect(loginUrl))
     }
@@ -59,7 +60,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/members')) {
     if (!isAuthenticated) {
       // Not logged in - redirect to login
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
       return addSecurityHeaders(NextResponse.redirect(loginUrl))
     }
@@ -75,7 +76,7 @@ export async function middleware(request: NextRequest) {
     // This page is for authenticated users who are NOT Discord members
     // Allow access if authenticated, redirect to login if not
     if (!isAuthenticated) {
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
       return addSecurityHeaders(NextResponse.redirect(loginUrl))
     }
@@ -94,12 +95,12 @@ export async function middleware(request: NextRequest) {
       const redirectParam = request.nextUrl.searchParams.get('redirect')
 
       if (redirectParam) {
-        return addSecurityHeaders(NextResponse.redirect(new URL(redirectParam, request.url)))
+        return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(redirectParam, request)))
       }
 
       // Default: send admins to /admin, members to /members
       const defaultRedirect = isAdmin ? '/admin' : '/members'
-      return addSecurityHeaders(NextResponse.redirect(new URL(defaultRedirect, request.url)))
+      return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(defaultRedirect, request)))
     }
 
     // Not authenticated - allow access to login page

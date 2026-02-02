@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getSafeRedirect } from '@/lib/safe-redirect'
+import { getAbsoluteUrl } from '@/lib/url-helpers'
 
 /**
  * Server-side OAuth callback handler
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   // Handle OAuth errors from provider
   if (error) {
     console.error('OAuth error:', error, errorDescription)
-    const loginUrl = new URL('/login', request.url)
+    const loginUrl = getAbsoluteUrl('/login', request)
     loginUrl.searchParams.set('error', 'oauth')
     loginUrl.searchParams.set('message', errorDescription || error)
     return NextResponse.redirect(loginUrl)
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   // Code is required for PKCE flow
   if (!code) {
     console.error('No code provided in OAuth callback')
-    const loginUrl = new URL('/login', request.url)
+    const loginUrl = getAbsoluteUrl('/login', request)
     loginUrl.searchParams.set('error', 'oauth')
     loginUrl.searchParams.set('message', 'No authorization code received')
     return NextResponse.redirect(loginUrl)
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     if (exchangeError || !session) {
       console.error('Code exchange error:', exchangeError)
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('error', 'oauth')
       loginUrl.searchParams.set('message', exchangeError?.message || 'Failed to exchange authorization code')
       return NextResponse.redirect(loginUrl)
@@ -222,11 +223,11 @@ export async function GET(request: NextRequest) {
       redirectUrl = '/members'
     }
 
-    return NextResponse.redirect(new URL(redirectUrl, request.url))
+    return NextResponse.redirect(getAbsoluteUrl(redirectUrl, request))
 
   } catch (error) {
     console.error('Unexpected error in OAuth callback:', error)
-    const loginUrl = new URL('/login', request.url)
+    const loginUrl = getAbsoluteUrl('/login', request)
     loginUrl.searchParams.set('error', 'server')
     loginUrl.searchParams.set('message', 'An unexpected error occurred during authentication')
     return NextResponse.redirect(loginUrl)

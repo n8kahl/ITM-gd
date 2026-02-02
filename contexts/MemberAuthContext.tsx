@@ -136,6 +136,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const lastSyncTimeRef = useRef(0)
   const isSyncingRef = useRef(false)
 
+  // Track authentication status to prevent re-initialization on navigation
+  const isAuthenticatedRef = useRef(false)
+
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
 
@@ -606,6 +609,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         console.log('Auth state changed:', event)
 
         if (event === 'SIGNED_OUT') {
+          isAuthenticatedRef.current = false
           setState({
             user: null,
             session: null,
@@ -618,9 +622,17 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             errorCode: null,
           })
         } else if (event === 'SIGNED_IN' && session) {
-          // Re-initialize auth
-          await initializeAuth()
+          // Only re-initialize if not already authenticated
+          // This prevents the loading screen on navigation/tab switching
+          if (!isAuthenticatedRef.current) {
+            // First sign in - full initialization needed
+            await initializeAuth()
+          } else {
+            // Already signed in, just update session without loading screen
+            setState(prev => ({ ...prev, session }))
+          }
         } else if (event === 'TOKEN_REFRESHED' && session) {
+          // Just update session, don't show loading screen
           setState(prev => ({ ...prev, session }))
         }
       }
@@ -630,6 +642,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe()
     }
   }, [initializeAuth])
+
+  // Keep authentication ref in sync with state
+  useEffect(() => {
+    isAuthenticatedRef.current = state.isAuthenticated
+  }, [state.isAuthenticated])
 
   // Cross-tab session sync using BroadcastChannel
   useEffect(() => {
