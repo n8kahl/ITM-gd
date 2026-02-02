@@ -332,9 +332,21 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const initializeAuth = useCallback(async () => {
     console.log('[MemberAuth] initializeAuth started')
     try {
-      // Get current session
+      // Get current session with timeout wrapper
       console.log('[MemberAuth] 1️⃣ Calling getSession()...')
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      // Add 8-second timeout to prevent hanging
+      const getSessionWithTimeout = async () => {
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getSession timeout after 8 seconds')), 8000)
+        )
+        return Promise.race([
+          supabase.auth.getSession(),
+          timeout
+        ])
+      }
+
+      const { data: { session }, error: sessionError } = await getSessionWithTimeout() as any
       console.log('[MemberAuth] 1️⃣ getSession() complete:', { hasSession: !!session, error: sessionError })
 
       if (sessionError) {
@@ -563,11 +575,20 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('[MemberAuth] Auth initialization error:', error)
+      const isTimeout = error instanceof Error && error.message.includes('timeout')
+      console.error('[MemberAuth] Auth initialization error:', {
+        error,
+        isTimeout,
+        message: error instanceof Error ? error.message : 'Unknown'
+      })
+
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Authentication failed',
+        error: isTimeout
+          ? 'Authentication check timed out. Please refresh the page or check your connection.'
+          : (error instanceof Error ? error.message : 'Authentication failed'),
+        errorCode: isTimeout ? SYNC_ERROR_CODES.SYNC_FAILED : null,
       }))
     } finally {
       // Safety net: ensure loading is always set to false
