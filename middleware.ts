@@ -28,14 +28,14 @@ export async function middleware(request: NextRequest) {
   // Create Supabase middleware client to handle session refresh
   const { supabase, response } = createMiddlewareClient(request)
 
-  // Refresh session if expired - required for Server Components
-  // This call also updates cookies if the session was refreshed
-  const { data: { session }, error } = await supabase.auth.getSession()
+  // CRITICAL: Use getUser() instead of getSession() for authorization
+  // getUser() validates the JWT with the server, preventing spoofing
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  // Extract app_metadata from session (contains RBAC claims)
-  const appMetadata = (session?.user?.app_metadata || {}) as AppMetadata
+  // Extract app_metadata from user (contains RBAC claims)
+  const appMetadata = (user?.app_metadata || {}) as AppMetadata
   const isAdmin = appMetadata.is_admin === true
-  const isAuthenticated = !!session?.user
+  const isAuthenticated = !!user
 
   // ============================================
   // ADMIN ROUTES PROTECTION

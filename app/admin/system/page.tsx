@@ -114,7 +114,7 @@ export default function SystemPage() {
           <Button
             onClick={runDiagnostics}
             disabled={loading}
-            className="bg-emerald-500 hover:bg-[emerald-600] text-black"
+            className="bg-emerald-500 hover:bg-emerald-600 text-black"
           >
             {loading ? (
               <>
