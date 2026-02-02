@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 interface DiscordRole {
@@ -44,11 +44,6 @@ export default function ProfilePage() {
       }
 
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const { data, error } = await supabase
           .schema('app_config')
           .from('role_permissions')
@@ -225,7 +220,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex justify-between items-center py-3 border-b border-white/5">
             <span className="text-white/60">Member Since</span>
-            <span className="text-white font-medium flex items-center gap-2">
+            <span className="text-white font-medium flex items-center gap-2" suppressHydrationWarning>
               <Calendar className="w-4 h-4 text-white/40" />
               {user?.created_at
                 ? new Date(user.created_at).toLocaleDateString('en-US', {

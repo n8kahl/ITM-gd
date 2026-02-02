@@ -170,8 +170,30 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return null
   }, [roleMapping])
 
-  // Fetch allowed tabs from the database (Simple RBAC)
-  const fetchAllowedTabs = useCallback(async (userId: string): Promise<string[]> => {
+  // Get allowed tabs based on membership tier
+  const getAllowedTabsForTier = useCallback((tier: 'core' | 'pro' | 'executive' | null): string[] => {
+    if (!tier) return ['dashboard', 'profile'] // Free users get minimal access
+
+    switch (tier) {
+      case 'executive':
+        return ['dashboard', 'journal', 'library', 'profile'] // All access
+      case 'pro':
+        return ['dashboard', 'journal', 'library', 'profile'] // Same as executive for now
+      case 'core':
+        return ['dashboard', 'journal', 'profile'] // No library access
+      default:
+        return ['dashboard', 'profile']
+    }
+  }, [])
+
+  // Fetch allowed tabs (now based on tier, not database)
+  const fetchAllowedTabs = useCallback(async (userId: string, tier?: 'core' | 'pro' | 'executive' | null): Promise<string[]> => {
+    // If tier is provided, use it directly
+    if (tier !== undefined) {
+      return getAllowedTabsForTier(tier)
+    }
+
+    // Otherwise, this is a fallback - shouldn't happen in normal flow
     try {
       const { data, error } = await supabase.rpc('get_user_allowed_tabs', {
         user_id: userId
@@ -259,8 +281,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         granted_by_role: p.granted_by_role,
       }))
 
-      // Fetch allowed tabs for Simple RBAC
-      const allowedTabs = await fetchAllowedTabs(state.user?.id || '')
+      // Get allowed tabs based on membership tier
+      const allowedTabs = await fetchAllowedTabs(state.user?.id || '', profile.membership_tier)
 
       setState(prev => ({
         ...prev,
@@ -384,8 +406,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           granted_by_role: up.granted_by_role_name,
         }))
 
-        // Fetch allowed tabs for Simple RBAC
-        const allowedTabs = await fetchAllowedTabs(user.id)
+        // Get allowed tabs based on membership tier
+        const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
 
         setState(prev => ({
           ...prev,
@@ -443,8 +465,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             granted_by_role: p.granted_by_role,
           }))
 
-          // Fetch allowed tabs for Simple RBAC
-          const allowedTabs = await fetchAllowedTabs(user.id)
+          // Get allowed tabs based on membership tier
+          const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
 
           setState(prev => ({
             ...prev,
