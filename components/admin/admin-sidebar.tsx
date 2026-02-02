@@ -33,8 +33,6 @@ const navigation = [
     group: 'System',
     items: [
       { name: 'Analytics', href: '/admin/analytics', icon: Activity },
-      { name: 'Permissions', href: '/admin/permissions', icon: Shield },
-      { name: 'RBAC & Roles', href: '/admin/roles', icon: ShieldAlert },
       { name: 'Settings', href: '/admin/settings', icon: Sliders },
     ]
   },
