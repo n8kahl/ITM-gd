@@ -6,6 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// FEATURE FLAG: Disable automatic escalations
+// Set to true to re-enable automatic escalation triggers
+const ENABLE_AUTO_ESCALATIONS = false
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -209,8 +213,8 @@ serve(async (req) => {
       openaiKey
     )
 
-    // 5a. If frustrated or angry, escalate (gated by email)
-    if (sentimentResult.sentiment === 'frustrated' || sentimentResult.sentiment === 'angry') {
+    // 5a. If frustrated or angry, escalate (gated by email) - DISABLED
+    if (ENABLE_AUTO_ESCALATIONS && (sentimentResult.sentiment === 'frustrated' || sentimentResult.sentiment === 'angry')) {
       const escalationResult = await handleGatedEscalation(
         supabase,
         conversation,
@@ -232,34 +236,36 @@ serve(async (req) => {
       )
     }
 
-    // 6. Check other escalation triggers
-    const escalationCheck = checkEscalationTriggers(
-      visitorMessage,
-      conversation,
-      messageHistory || []
-    )
-
-    if (escalationCheck.shouldEscalate) {
-      // Escalate to human (gated by email)
-      const escalationResult = await handleGatedEscalation(
-        supabase,
+    // 6. Check other escalation triggers - DISABLED
+    if (ENABLE_AUTO_ESCALATIONS) {
+      const escalationCheck = checkEscalationTriggers(
+        visitorMessage,
         conversation,
-        escalationCheck.reason,
-        escalationCheck.leadScore || 5,
-        'Let me connect you with someone from our team who can help you better. One moment...',
         messageHistory || []
       )
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          escalated: !escalationResult.needsEmail,
-          pendingEmail: escalationResult.needsEmail,
-          conversationId: conversation.id,
-          reason: escalationCheck.reason
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      if (escalationCheck.shouldEscalate) {
+        // Escalate to human (gated by email)
+        const escalationResult = await handleGatedEscalation(
+          supabase,
+          conversation,
+          escalationCheck.reason,
+          escalationCheck.leadScore || 5,
+          'Let me connect you with someone from our team who can help you better. One moment...',
+          messageHistory || []
+        )
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            escalated: !escalationResult.needsEmail,
+            pendingEmail: escalationResult.needsEmail,
+            conversationId: conversation.id,
+            reason: escalationCheck.reason
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // 7. Search knowledge base using PostgreSQL Full-Text Search
@@ -273,8 +279,8 @@ serve(async (req) => {
       openaiKey
     )
 
-    // 9. If low confidence, escalate instead of answering (gated by email)
-    if (aiResponse.confidence < 0.7) {
+    // 9. If low confidence, escalate instead of answering (gated by email) - DISABLED
+    if (ENABLE_AUTO_ESCALATIONS && aiResponse.confidence < 0.7) {
       const escalationResult = await handleGatedEscalation(
         supabase,
         conversation,
@@ -296,7 +302,7 @@ serve(async (req) => {
       )
     }
 
-    // 10. Save AI response (only if confidence is high enough)
+    // 10. Save AI response (escalations disabled, AI responds regardless of confidence)
     const { data: aiMessage } = await supabase
       .from('chat_messages')
       .insert({
