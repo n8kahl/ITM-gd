@@ -17,6 +17,8 @@ import {
   Crown,
   Plus,
   Trash2,
+  Bot,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -101,9 +103,14 @@ export default function SettingsPage() {
   const [newTier, setNewTier] = useState<MembershipTier>('core')
   const [savingTiers, setSavingTiers] = useState(false)
 
+  // AI Prompt state
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [savingPrompt, setSavingPrompt] = useState(false)
+
   useEffect(() => {
     loadSettings()
     loadTierMapping()
+    loadAIPrompt()
   }, [])
 
   const loadSettings = async () => {
@@ -141,6 +148,48 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error('Failed to load tier mapping:', err)
+    }
+  }
+
+  const loadAIPrompt = async () => {
+    try {
+      const response = await fetch('/api/admin/settings')
+      const data = await response.json()
+      if (data.success) {
+        const promptSetting = data.data.find((s: AppSetting) => s.key === 'ai_system_prompt')
+        if (promptSetting) {
+          setAiPrompt(promptSetting.value || '')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load AI prompt:', err)
+    }
+  }
+
+  const saveAIPrompt = async () => {
+    setSavingPrompt(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'ai_system_prompt',
+          value: aiPrompt,
+        }),
+      })
+
+      if (response.ok) {
+        setSuccess('AI system prompt saved successfully')
+        setTimeout(() => setSuccess(null), 3000)
+      } else {
+        setError('Failed to save AI prompt')
+      }
+    } catch (err) {
+      setError('Failed to save AI prompt')
+    } finally {
+      setSavingPrompt(false)
     }
   }
 
@@ -437,6 +486,55 @@ export default function SettingsPage() {
               )}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI System Prompt Card */}
+      <Card className="glass-card-heavy border-white/10">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Bot className="w-5 h-5 text-emerald-500" />
+            AI System Prompt
+          </CardTitle>
+          <p className="text-sm text-white/60">
+            Edit the master prompt that controls how the AI assistant responds to visitors. Changes take effect immediately for new conversations.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="w-4 h-4 text-emerald-500" />
+              <h4 className="text-sm font-medium text-white">System Prompt Content</h4>
+            </div>
+            <textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="Enter the AI system prompt..."
+              rows={20}
+              className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-emerald-500 focus:outline-none font-mono text-sm resize-y"
+            />
+            <p className="text-xs text-white/40 mt-2">
+              Tip: Use Markdown formatting. The Knowledge Base entries and conversation history are automatically injected.
+            </p>
+          </div>
+
+          <Button
+            onClick={saveAIPrompt}
+            disabled={savingPrompt || !aiPrompt.trim()}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-medium h-12"
+          >
+            {savingPrompt ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save AI Prompt
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
