@@ -33,6 +33,9 @@ type Step3Data = z.infer<typeof step3Schema>;
 interface CohortApplicationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  redirectUrl?: string;
+  programType?: 'cohort' | 'mentorship';
+  submissionType?: string;
 }
 
 const STEPS = [
@@ -61,7 +64,13 @@ const STRUGGLE_OPTIONS = [
   { value: "Other", label: "Other" },
 ] as const;
 
-export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationModalProps) {
+export function CohortApplicationModal({
+  isOpen,
+  onClose,
+  redirectUrl = 'https://whop.com/checkout/plan_T4Ymve5JhqpY7',
+  programType = 'cohort',
+  submissionType = 'cohort_application'
+}: CohortApplicationModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -109,18 +118,23 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
         source: 'Application Wizard',
       };
 
+      const programName = programType === 'cohort' ? 'Precision Cohort' : '1 on 1 Precision Mentorship';
+
       await addContactSubmission({
         name: fullData.name!,
         email: fullData.email!,
-        message: `Precision Cohort Application\n\nDiscord: ${fullData.discord_handle}\nExperience: ${fullData.experience_level}\nAccount Size: ${fullData.account_size}\nPrimary Struggle: ${fullData.primary_struggle}\n\nShort-term Goal:\n${fullData.short_term_goal}`,
-        submission_type: 'cohort_application',
-        metadata,
+        message: `${programName} Application\n\nDiscord: ${fullData.discord_handle}\nExperience: ${fullData.experience_level}\nAccount Size: ${fullData.account_size}\nPrimary Struggle: ${fullData.primary_struggle}\n\nShort-term Goal:\n${fullData.short_term_goal}`,
+        submission_type: submissionType,
+        metadata: {
+          ...metadata,
+          program_type: programType,
+        },
       });
 
       setIsSuccess(true);
       // Redirect to Whop checkout after brief success message
       setTimeout(() => {
-        window.location.href = 'https://whop.com/checkout/plan_T4Ymve5JhqpY7';
+        window.location.href = redirectUrl;
       }, 2000);
     } catch (error) {
       console.error('Application submission failed:', error);
@@ -538,7 +552,9 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                 {!isSuccess && (
                   <div className="px-6 pb-6">
                     <p className="text-xs text-center text-ivory/40">
-                      Limited to 20 traders per cohort. Applications reviewed within 24-48 hours.
+                      {programType === 'cohort'
+                        ? 'Limited to 20 traders per cohort. Applications reviewed within 24-48 hours.'
+                        : 'Limited spots available. Applications reviewed within 24-48 hours.'}
                     </p>
                   </div>
                 )}
