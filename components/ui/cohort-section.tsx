@@ -121,7 +121,7 @@ export function CohortSection({ onApplyClick }: CohortSectionProps) {
               {/* Subtitle */}
               <RevealContent delay={0.1}>
                 <p className="text-lg text-ivory/70 leading-relaxed max-w-md">
-                  Our exclusive annual mentorship program for traders ready to
+                  The Next Cohort is starting soon! Our exclusive annual mentorship program for traders ready to
                   <span className="text-champagne"> develop their own edge</span>.
                 </p>
               </RevealContent>
@@ -169,7 +169,7 @@ export function CohortSection({ onApplyClick }: CohortSectionProps) {
                       size="xl"
                       className="rounded-sm min-w-[200px]"
                     >
-                      Apply for Cohort
+                      Join Today
                     </Button>
                   </motion.div>
                 </motion.div>
