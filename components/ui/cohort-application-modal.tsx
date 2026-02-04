@@ -118,18 +118,10 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
       });
 
       setIsSuccess(true);
+      // Redirect to Whop checkout after brief success message
       setTimeout(() => {
-        onClose();
-        // Reset state after close animation
-        setTimeout(() => {
-          setIsSuccess(false);
-          setCurrentStep(0);
-          setFormData({});
-          step1Form.reset();
-          step2Form.reset();
-          step3Form.reset();
-        }, 300);
-      }, 2500);
+        window.location.href = 'https://whop.com/checkout/plan_T4Ymve5JhqpY7';
+      }, 2000);
     } catch (error) {
       console.error('Application submission failed:', error);
     } finally {
@@ -531,7 +523,7 @@ export function CohortApplicationModal({ isOpen, onClose }: CohortApplicationMod
                               </>
                             ) : (
                               <>
-                                Submit Application
+                                Get Started
                                 <CheckCircle className="w-4 h-4" />
                               </>
                             )}
