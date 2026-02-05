@@ -495,6 +495,36 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Affiliate Banner - Subtle CTA */}
+      <section className="container mx-auto px-4 py-8">
+        <RevealContent>
+          <div className="max-w-2xl mx-auto">
+            <a
+              href="https://whop.com/trade-in-the-money/affiliates"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center justify-center gap-3 py-4 px-6 rounded-lg border border-champagne/20 bg-champagne/[0.03] hover:bg-champagne/[0.06] hover:border-champagne/30 transition-all duration-300"
+            >
+              <span className="text-sm text-platinum/70 group-hover:text-platinum/90 transition-colors">
+                Have an audience?
+              </span>
+              <span className="text-sm font-medium text-champagne group-hover:text-champagne/90 transition-colors">
+                Become a TITM Affiliate and earn 20%
+              </span>
+              <svg
+                className="w-4 h-4 text-champagne/60 group-hover:text-champagne group-hover:translate-x-0.5 transition-all duration-300"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </a>
+          </div>
+        </RevealContent>
+      </section>
+
       {/* Precision Cohort Section - Annual Mentorship */}
       <CohortSection />
 
@@ -731,6 +761,7 @@ export default function Home() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
               <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <a href="https://whop.com/trade-in-the-money/affiliates" target="_blank" rel="noopener noreferrer" className="hover:text-champagne transition-colors duration-300">Affiliates</a>
               <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>
           </div>
