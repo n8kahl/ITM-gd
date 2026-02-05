@@ -4,57 +4,11 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Video, Target, TrendingUp, Brain, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Video, CheckCircle2, Calendar, MessageCircle, Target, TrendingUp, Shield } from "lucide-react";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { Analytics } from "@/lib/analytics";
 
-interface MentorshipSectionProps {
-  // No props needed - using direct link
-}
-
-const problems = [
-  "You enter too early or too late",
-  "You cut winners short and let losers run",
-  "You overtrade and revenge trade",
-  "You struggle with consistency",
-  "You do not trust your own execution",
-];
-
-const includes = [
-  "Weekly private one on one calls",
-  "Live chart breakdowns",
-  "Personalized entry and exit rules",
-  "Contract selection guidance",
-  "Position sizing framework",
-  "Risk management system",
-  "Trade review and correction",
-  "Psychology and discipline coaching",
-  "Journaling system",
-  "Private Discord access",
-];
-
-const results = [
-  "What to trade",
-  "When to trade",
-  "When NOT to trade",
-  "How to manage trades",
-  "How to stay disciplined",
-];
-
-const forWho = [
-  { text: "Traders already trading live", isFor: true },
-  { text: "Traders willing to be coached", isFor: true },
-  { text: "Traders who want structure", isFor: true },
-  { text: "Traders who take this seriously", isFor: true },
-];
-
-const notFor = [
-  { text: "People who cut corners", isFor: false },
-  { text: "People who aren't coachable", isFor: false },
-  { text: "People looking for guarantees", isFor: false },
-];
-
-export function MentorshipSection({}: MentorshipSectionProps = {}) {
+export function MentorshipSection() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -114,202 +68,170 @@ export function MentorshipSection({}: MentorshipSectionProps = {}) {
         <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-champagne/10 rounded-full blur-[100px] pointer-events-none" />
 
         <div className="relative z-10 p-8 md:p-12 lg:p-16">
-          {/* Header Section */}
+          {/* Header Section - Badge + Title Only */}
           <div className="text-center mb-12 space-y-6">
-            {/* Badge */}
             <RevealContent>
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-champagne/30 bg-champagne/5">
                 <Video className="w-4 h-4 text-champagne" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-champagne">
-                  One on One Coaching
+                  Private 1-on-1 Coaching
                 </span>
               </div>
             </RevealContent>
 
-            {/* Title */}
             <RevealHeading>
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-semibold">
-                <span className="text-ivory">TradeITM 1 on 1</span>{" "}
+                <span className="text-ivory">TradeITM</span>{" "}
                 <span className="text-gradient-champagne">Precision Mentorship</span>
               </h2>
             </RevealHeading>
 
-            {/* Price Display */}
             <RevealContent delay={0.1}>
-              <div className="space-y-2">
-                <div className="flex items-baseline justify-center gap-2">
+              <p className="text-lg text-ivory/70 max-w-2xl mx-auto">
+                8 weeks of direct, personal coaching to transform how you trade forever.
+              </p>
+            </RevealContent>
+          </div>
+
+          {/* HERO: The Transformation Promise */}
+          <RevealContent delay={0.2}>
+            <div className="relative mb-12 p-8 md:p-10 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-[rgba(10,10,11,0.6)] to-emerald-950/30 border border-emerald-500/30">
+              {/* Glow effect */}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
+
+              <div className="relative text-center space-y-6">
+                <div className="inline-flex items-center gap-2 text-emerald-400 mb-2">
+                  <TrendingUp className="w-5 h-5" />
+                  <span className="text-sm font-semibold uppercase tracking-wider">The Transformation</span>
+                </div>
+
+                <h3 className="text-2xl md:text-3xl font-serif font-semibold text-ivory">
+                  After 8 Weeks, You Will Know:
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4 max-w-4xl mx-auto pt-4">
+                  {[
+                    { text: "What to trade", icon: "🎯" },
+                    { text: "When to trade", icon: "⏰" },
+                    { text: "When NOT to trade", icon: "🛑" },
+                    { text: "How to manage", icon: "📊" },
+                    { text: "How to stay disciplined", icon: "🧠" },
+                  ].map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+                    >
+                      <span className="text-2xl">{item.icon}</span>
+                      <span className="text-sm text-ivory/80 font-medium text-center">{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-champagne font-semibold text-lg pt-2">
+                  No more guessing. No more emotional trading. No more blown accounts.
+                </p>
+              </div>
+            </div>
+          </RevealContent>
+
+          {/* Two Column: Problems + What You Get */}
+          <div className="grid lg:grid-cols-2 gap-6 mb-12">
+            {/* Sound Familiar? */}
+            <RevealContent delay={0.3}>
+              <div className="h-full p-6 rounded-xl bg-[rgba(10,10,11,0.5)] border border-red-500/20">
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="text-xl">🚨</span>
+                  <h3 className="text-lg font-semibold text-ivory">Sound Familiar?</h3>
+                </div>
+                <ul className="space-y-3">
+                  {[
+                    "You enter too early or too late",
+                    "You cut winners short, let losers run",
+                    "You overtrade and revenge trade",
+                    "You struggle with consistency",
+                    "You don't trust your own execution",
+                  ].map((problem, idx) => (
+                    <li key={idx} className="flex items-start gap-3 text-ivory/70">
+                      <span className="text-red-400/80 mt-0.5">✗</span>
+                      <span>{problem}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-5 text-sm text-ivory/50 italic border-t border-white/[0.06] pt-4">
+                  If you nodded at any of these, this mentorship was built for you.
+                </p>
+              </div>
+            </RevealContent>
+
+            {/* What's Included */}
+            <RevealContent delay={0.4}>
+              <div className="h-full p-6 rounded-xl bg-[rgba(10,10,11,0.5)] border border-champagne/20">
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="text-xl">📦</span>
+                  <h3 className="text-lg font-semibold text-ivory">What's Included</h3>
+                </div>
+
+                <div className="space-y-4">
+                  {[
+                    { icon: Calendar, text: "Weekly private 1-on-1 video calls", highlight: true },
+                    { icon: Target, text: "Personalized entry, exit & risk rules" },
+                    { icon: MessageCircle, text: "Direct Discord access to me" },
+                    { icon: TrendingUp, text: "Live chart breakdowns & trade reviews" },
+                    { icon: Shield, text: "Position sizing & risk framework" },
+                  ].map((item, idx) => (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "flex items-center gap-3",
+                        item.highlight && "text-champagne"
+                      )}
+                    >
+                      <item.icon className={cn(
+                        "w-5 h-5 shrink-0",
+                        item.highlight ? "text-champagne" : "text-emerald-400/80"
+                      )} />
+                      <span className={item.highlight ? "font-medium" : "text-ivory/70"}>
+                        {item.text}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-white/[0.06]">
+                  <p className="text-xs text-ivory/50">
+                    Plus: Journaling system, psychology coaching, contract selection guidance — all tailored to your account size and goals.
+                  </p>
+                </div>
+              </div>
+            </RevealContent>
+          </div>
+
+          {/* Price + CTA Section */}
+          <RevealContent delay={0.5}>
+            <div className="text-center space-y-8 pt-4">
+              {/* Price Display */}
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-center gap-3">
                   <span className="text-5xl md:text-6xl font-serif font-bold text-champagne">
                     $2,500
                   </span>
                 </div>
-                <p className="text-sm text-ivory/60 italic text-center">
-                  8-Week Program
-                </p>
-              </div>
-            </RevealContent>
-
-            {/* Main Description */}
-            <RevealContent delay={0.2}>
-              <div className="max-w-3xl mx-auto space-y-4">
-                <p className="text-lg text-ivory/80 leading-relaxed">
-                  This is a private, <span className="text-champagne font-semibold">8-week</span> one on one mentorship for traders who are tired of guessing,
-                  tired of inconsistency, and ready to trade with{" "}
-                  <span className="text-champagne font-semibold">structure, confidence, and discipline</span>.
-                </p>
-                <div className="flex flex-col gap-2 text-sm text-ivory/60 italic">
-                  <p>This is not signals access.</p>
-                  <p>This is not a course.</p>
-                  <p className="text-champagne">This is direct coaching, execution refinement, and personal accountability.</p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-ivory/60">
+                  <span>8-Week Program</span>
+                  <span className="hidden sm:inline text-ivory/30">•</span>
+                  <span className="text-emerald-400/80">~$312/week of direct coaching</span>
                 </div>
               </div>
-            </RevealContent>
-          </div>
 
-          {/* Main Content Grid */}
-          <div className="grid lg:grid-cols-2 gap-8 mb-12">
-            {/* Left Column - Problems & What You Get */}
-            <div className="space-y-8">
-              {/* 5 Biggest Problems */}
-              <RevealContent delay={0.3}>
-                <div className={cn(
-                  "p-6 rounded-xl",
-                  "bg-[rgba(10,10,11,0.5)] border border-red-500/20"
-                )}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-2xl">🚨</span>
-                    <h3 className="text-xl font-semibold text-ivory">The 5 Biggest Problems This Solves</h3>
-                  </div>
-                  <ul className="space-y-3">
-                    {problems.map((problem, idx) => (
-                      <li key={idx} className="flex items-start gap-3 text-ivory/70">
-                        <span className="text-red-400 mt-1">•</span>
-                        <span>{problem}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-4 text-sm text-champagne italic">
-                    If any of those sound familiar, this mentorship was built for you.
-                  </p>
-                </div>
-              </RevealContent>
-
-              {/* What You Get */}
-              <RevealContent delay={0.4}>
-                <div className={cn(
-                  "p-6 rounded-xl",
-                  "bg-[rgba(10,10,11,0.5)] border border-emerald-500/20"
-                )}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-2xl">🎯</span>
-                    <h3 className="text-xl font-semibold text-ivory">What You Get</h3>
-                  </div>
-                  <ul className="space-y-2">
-                    {includes.map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-3 text-ivory/70">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-1 shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-4 text-sm text-champagne italic">
-                    Everything is tailored to you, your account size, and your goals.
-                  </p>
-                </div>
-              </RevealContent>
-            </div>
-
-            {/* Right Column - Results & Who It's For */}
-            <div className="space-y-8">
-              {/* The Result */}
-              <RevealContent delay={0.5}>
-                <div className={cn(
-                  "p-6 rounded-xl",
-                  "bg-[rgba(10,10,11,0.5)] border border-champagne/20"
-                )}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-2xl">🔥</span>
-                    <h3 className="text-xl font-semibold text-ivory">The Result</h3>
-                  </div>
-                  <p className="text-ivory/70 mb-4">You will know:</p>
-                  <ul className="space-y-2 mb-4">
-                    {results.map((result, idx) => (
-                      <li key={idx} className="flex items-start gap-3 text-ivory/70">
-                        <span className="text-champagne">•</span>
-                        <span>{result}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="space-y-1 text-sm text-ivory/60">
-                    <p>No more guessing.</p>
-                    <p>No more emotional clicking.</p>
-                    <p className="text-champagne font-semibold">No more blowing accounts.</p>
-                  </div>
-                </div>
-              </RevealContent>
-
-              {/* Who This Is For */}
-              <RevealContent delay={0.6}>
-                <div className={cn(
-                  "p-6 rounded-xl",
-                  "bg-[rgba(10,10,11,0.5)] border border-white/10"
-                )}>
-                  <div className="space-y-6">
-                    {/* For */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xl">🔒</span>
-                        <h4 className="text-lg font-semibold text-ivory">Who This Is For</h4>
-                      </div>
-                      <ul className="space-y-2">
-                        {forWho.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-ivory/70">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-1 shrink-0" />
-                            <span>{item.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Not For */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xl">❌</span>
-                        <h4 className="text-lg font-semibold text-ivory">Not For</h4>
-                      </div>
-                      <ul className="space-y-2">
-                        {notFor.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-ivory/70">
-                            <XCircle className="w-4 h-4 text-red-400 mt-1 shrink-0" />
-                            <span>{item.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </RevealContent>
-            </div>
-          </div>
-
-          {/* CTA Section */}
-          <div className="text-center space-y-6">
-            {/* Limited Spots Message */}
-            <RevealContent delay={0.7}>
-              <div className="space-y-2">
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-2xl">⚡</span>
-                  <h3 className="text-2xl font-semibold text-ivory">Limited Spots</h3>
-                </div>
-                <p className="text-ivory/70">This is one on one.</p>
-                <p className="text-champagne font-semibold">Seats are extremely limited.</p>
-                <p className="text-sm text-ivory/60 max-w-xl mx-auto mt-4">
-                  If you are ready to operate at a higher level, apply now.
+              {/* Qualifier */}
+              <div className="max-w-xl mx-auto">
+                <p className="text-ivory/60 text-sm leading-relaxed">
+                  This is for <span className="text-ivory">serious traders</span> who are already trading live,
+                  willing to be coached, and ready to commit to real transformation.
                 </p>
               </div>
-            </RevealContent>
 
-            {/* CTA Button */}
-            <RevealContent delay={0.8}>
+              {/* CTA Button */}
               <motion.div
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -334,25 +256,23 @@ export function MentorshipSection({}: MentorshipSectionProps = {}) {
                     onClick={handleApplyClick}
                     variant="luxury-champagne"
                     size="xl"
-                    className="rounded-sm min-w-[200px]"
+                    className="rounded-sm min-w-[220px]"
                   >
-                    Get Started
+                    Apply Now
                   </Button>
                 </motion.div>
               </motion.div>
-            </RevealContent>
 
-            {/* Scarcity indicator */}
-            <RevealContent delay={0.9}>
-              <div className="flex items-center justify-center gap-2 text-sm text-red-400">
+              {/* Scarcity */}
+              <div className="flex items-center justify-center gap-2 text-sm text-red-400/90">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
                 </span>
-                <span>Applications reviewed personally - Serious applicants only</span>
+                <span>Limited spots — applications reviewed personally</span>
               </div>
-            </RevealContent>
-          </div>
+            </div>
+          </RevealContent>
         </div>
 
         {/* Noise texture overlay */}
