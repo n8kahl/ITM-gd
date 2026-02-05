@@ -142,6 +142,9 @@ export function MentorshipSection({}: MentorshipSectionProps = {}) {
                     $2,500
                   </span>
                 </div>
+                <p className="text-sm text-ivory/60 italic text-center">
+                  8-Week Program
+                </p>
               </div>
             </RevealContent>
 
@@ -149,7 +152,7 @@ export function MentorshipSection({}: MentorshipSectionProps = {}) {
             <RevealContent delay={0.2}>
               <div className="max-w-3xl mx-auto space-y-4">
                 <p className="text-lg text-ivory/80 leading-relaxed">
-                  This is a private, one on one mentorship for traders who are tired of guessing,
+                  This is a private, <span className="text-champagne font-semibold">8-week</span> one on one mentorship for traders who are tired of guessing,
                   tired of inconsistency, and ready to trade with{" "}
                   <span className="text-champagne font-semibold">structure, confidence, and discipline</span>.
                 </p>
