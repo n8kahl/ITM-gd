@@ -336,7 +336,7 @@ export function MentorshipSection({}: MentorshipSectionProps = {}) {
                     size="xl"
                     className="rounded-sm min-w-[200px]"
                   >
-                    Apply Now
+                    Get Started
                   </Button>
                 </motion.div>
               </motion.div>
