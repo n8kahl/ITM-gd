@@ -24,7 +24,6 @@ import { CohortSection } from "@/components/ui/cohort-section";
 import { MentorshipSection } from "@/components/ui/mentorship-section";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
 import { ContactModal } from "@/components/ui/contact-modal";
-import { CohortApplicationModal } from "@/components/ui/cohort-application-modal";
 import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
 import { BillingToggle } from "@/components/ui/billing-toggle";
@@ -34,41 +33,9 @@ import SparkleLog from "@/components/ui/sparkle-logo";
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
-  const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
-  const [applicationConfig, setApplicationConfig] = useState<{
-    redirectUrl: string;
-    programType: 'cohort' | 'mentorship';
-    submissionType: string;
-  }>({
-    redirectUrl: 'https://whop.com/checkout/plan_T4Ymve5JhqpY7',
-    programType: 'cohort',
-    submissionType: 'cohort_application',
-  });
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
-
-  // Handler for Cohort application - opens the multi-step wizard
-  const handleCohortApply = () => {
-    setApplicationConfig({
-      redirectUrl: 'https://whop.com/checkout/plan_T4Ymve5JhqpY7',
-      programType: 'cohort',
-      submissionType: 'cohort_application',
-    });
-    setIsCohortApplicationOpen(true);
-    Analytics.trackCTAClick('Cohort Application Wizard');
-  };
-
-  // Handler for Mentorship application - opens the multi-step wizard
-  const handleMentorshipApply = () => {
-    setApplicationConfig({
-      redirectUrl: 'https://whop.com/checkout/plan_W5Jebtb1V478b',
-      programType: 'mentorship',
-      submissionType: 'mentorship_application',
-    });
-    setIsCohortApplicationOpen(true);
-    Analytics.trackCTAClick('Mentorship Application Wizard');
-  };
 
   // Legacy handler for contact modal with preset message (kept for fallback)
   const handleCohortContactFallback = () => {
@@ -131,16 +98,6 @@ export default function Home() {
           setCohortModalMessage(undefined);
         }}
         presetMessage={cohortModalMessage}
-      />
-
-
-      {/* Cohort/Mentorship Application Wizard */}
-      <CohortApplicationModal
-        isOpen={isCohortApplicationOpen}
-        onClose={() => setIsCohortApplicationOpen(false)}
-        redirectUrl={applicationConfig.redirectUrl}
-        programType={applicationConfig.programType}
-        submissionType={applicationConfig.submissionType}
       />
 
       {/* Mobile Sticky CTA - appears after scrolling past hero */}
@@ -539,13 +496,13 @@ export default function Home() {
       </section>
 
       {/* Precision Cohort Section - Annual Mentorship */}
-      <CohortSection onApplyClick={handleCohortApply} />
+      <CohortSection />
 
       {/* Ribbon Divider */}
       <RibbonDivider flip />
 
       {/* 1 on 1 Mentorship Section */}
-      <MentorshipSection onApplyClick={handleMentorshipApply} />
+      <MentorshipSection />
 
       {/* Testimonials Section - Infinite Marquee */}
       <section id="testimonials" className="py-14 overflow-hidden">
