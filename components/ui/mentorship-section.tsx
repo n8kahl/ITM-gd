@@ -9,7 +9,7 @@ import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/c
 import { Analytics } from "@/lib/analytics";
 
 interface MentorshipSectionProps {
-  onApplyClick: () => void;
+  // No props needed - using direct link
 }
 
 const problems = [
@@ -54,7 +54,7 @@ const notFor = [
   { text: "People looking for guarantees", isFor: false },
 ];
 
-export function MentorshipSection({ onApplyClick }: MentorshipSectionProps) {
+export function MentorshipSection({}: MentorshipSectionProps = {}) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -69,8 +69,8 @@ export function MentorshipSection({ onApplyClick }: MentorshipSectionProps) {
   };
 
   const handleApplyClick = () => {
-    Analytics.trackCTAClick('Mentorship Apply');
-    onApplyClick();
+    Analytics.trackCTAClick('Mentorship Apply Now');
+    window.location.href = 'https://whop.com/checkout/plan_W5Jebtb1V478b';
   };
 
   return (
