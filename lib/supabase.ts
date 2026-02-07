@@ -31,12 +31,11 @@ import type {
 // Legacy alias for backwards compatibility
 export type Session = AnalyticsSession
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set')
-}
+// Non-throwing env var reads — these may not be available at build time (e.g. Railway)
+// but will be available at runtime. Throwing at module evaluation time prevents
+// Next.js from collecting page data during builds.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 /**
  * Client-side Supabase client for browser operations.
