@@ -33,6 +33,26 @@ export interface ChatSession {
   updated_at: string
 }
 
+export type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
+
+export interface ChartBar {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface ChartDataResponse {
+  symbol: string
+  timeframe: ChartTimeframe
+  bars: ChartBar[]
+  count: number
+  timestamp: string
+  cached: boolean
+}
+
 export interface APIError {
   error: string
   message: string
@@ -111,6 +131,34 @@ export async function deleteSession(
       'Authorization': `Bearer ${token}`,
     },
   })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get chart OHLCV data for a symbol
+ */
+export async function getChartData(
+  symbol: string,
+  timeframe: ChartTimeframe,
+  token: string
+): Promise<ChartDataResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/chart/${symbol}?timeframe=${timeframe}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({

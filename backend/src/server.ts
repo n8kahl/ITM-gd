@@ -8,6 +8,7 @@ import healthRouter from './routes/health';
 import levelsRouter from './routes/levels';
 import chatRouter from './routes/chat';
 import optionsRouter from './routes/options';
+import chartRouter from './routes/chart';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use('/api/levels', levelsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
+app.use('/api/chart', chartRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
@@ -42,7 +44,8 @@ app.get('/', (req: Request, res: Response) => {
       sessions: '/api/chat/sessions',
       optionsChain: '/api/options/:symbol/chain',
       optionsExpirations: '/api/options/:symbol/expirations',
-      positionsAnalyze: '/api/positions/analyze'
+      positionsAnalyze: '/api/positions/analyze',
+      chart: '/api/chart/:symbol'
     }
   });
 });

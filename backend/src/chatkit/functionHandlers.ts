@@ -34,6 +34,9 @@ export async function executeFunctionCall(functionCall: FunctionCall): Promise<a
     case 'analyze_position':
       return await handleAnalyzePosition(args);
 
+    case 'show_chart':
+      return await handleShowChart(args);
+
     default:
       throw new Error(`Unknown function: ${name}`);
   }
@@ -322,6 +325,41 @@ async function handleAnalyzePosition(args: {
     return {
       error: 'Failed to analyze position',
       message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: show_chart
+ * Returns chart configuration for the frontend to render.
+ * Also fetches current levels so they can be annotated on the chart.
+ */
+async function handleShowChart(args: { symbol: string; timeframe?: string }) {
+  const { symbol, timeframe = '1D' } = args;
+
+  try {
+    // Fetch levels to include as annotations
+    const levels = await calculateLevels(symbol, 'intraday');
+
+    return {
+      action: 'show_chart',
+      symbol,
+      timeframe,
+      currentPrice: levels.currentPrice,
+      levels: {
+        resistance: levels.levels.resistance.slice(0, 5),
+        support: levels.levels.support.slice(0, 5),
+        indicators: levels.levels.indicators
+      },
+      message: `Displaying ${symbol} chart (${timeframe}) with key levels in the center panel.`
+    };
+  } catch (error: any) {
+    return {
+      action: 'show_chart',
+      symbol,
+      timeframe,
+      error: 'Could not fetch levels for chart annotations',
+      message: `Displaying ${symbol} chart (${timeframe}) in the center panel.`
     };
   }
 }

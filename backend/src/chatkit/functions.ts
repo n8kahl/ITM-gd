@@ -156,5 +156,29 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         }
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'show_chart',
+      description: 'Display a candlestick chart with key levels for a symbol in the center panel. Use this when the user asks to see a chart, visualize price action, or view levels on a chart.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            enum: ['SPX', 'NDX'],
+            description: 'The symbol to chart'
+          },
+          timeframe: {
+            type: 'string',
+            enum: ['1m', '5m', '15m', '1h', '4h', '1D'],
+            description: 'Chart timeframe (default: 1D for daily)',
+            default: '1D'
+          }
+        },
+        required: ['symbol']
+      }
+    }
   }
 ];

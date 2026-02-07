@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
-import { BrainCircuit, MessageSquare, BarChart3 } from 'lucide-react'
+import { BrainCircuit, MessageSquare, CandlestickChart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAICoachChat } from '@/hooks/use-ai-coach-chat'
 import { ChatPanel } from '@/components/ai-coach/chat-panel'
@@ -59,8 +59,8 @@ export default function AICoachPage() {
               : 'text-white/60 hover:text-white'
           )}
         >
-          <BarChart3 className="w-4 h-4" />
-          Center
+          <CandlestickChart className="w-4 h-4" />
+          Chart
         </button>
       </div>
 
@@ -95,7 +95,7 @@ export default function AICoachPage() {
 
             {/* Right Panel: Center (70%) */}
             <Panel defaultSize={70} minSize={40}>
-              <CenterPanel onSendPrompt={handleSendPrompt} />
+              <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
             </Panel>
           </PanelGroup>
         </div>
@@ -119,7 +119,7 @@ export default function AICoachPage() {
               onClearError={chat.clearError}
             />
           ) : (
-            <CenterPanel onSendPrompt={handleSendPrompt} />
+            <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
           )}
         </div>
       </div>

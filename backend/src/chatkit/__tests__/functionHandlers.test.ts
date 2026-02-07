@@ -411,6 +411,69 @@ describe('Function Handlers', () => {
     });
   });
 
+  describe('show_chart', () => {
+    it('should return chart config with levels', async () => {
+      mockCalculateLevels.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 5950,
+        timestamp: '2026-02-07T15:30:00Z',
+        levels: {
+          resistance: [
+            { name: 'PDH', price: 5960, distance: '+$10' },
+            { name: 'R1', price: 5975, distance: '+$25' }
+          ],
+          support: [
+            { name: 'PDL', price: 5920, distance: '-$30' },
+            { name: 'S1', price: 5910, distance: '-$40' }
+          ],
+          pivots: { standard: {} },
+          indicators: { vwap: 5945, atr14: 25 }
+        },
+        marketContext: { marketStatus: 'open', sessionType: 'regular', timeSinceOpen: '6h 0m' },
+        cached: false
+      } as any);
+
+      const result = await executeFunctionCall({
+        name: 'show_chart',
+        arguments: JSON.stringify({ symbol: 'SPX', timeframe: '1D' })
+      });
+
+      expect(result).toHaveProperty('action', 'show_chart');
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('timeframe', '1D');
+      expect(result).toHaveProperty('currentPrice', 5950);
+      expect(result.levels.resistance).toHaveLength(2);
+      expect(result.levels.support).toHaveLength(2);
+      expect(result.levels.indicators).toHaveProperty('vwap', 5945);
+      expect(mockCalculateLevels).toHaveBeenCalledWith('SPX', 'intraday');
+    });
+
+    it('should handle levels fetch error gracefully', async () => {
+      mockCalculateLevels.mockRejectedValue(new Error('API unavailable'));
+
+      const result = await executeFunctionCall({
+        name: 'show_chart',
+        arguments: JSON.stringify({ symbol: 'NDX' })
+      });
+
+      expect(result).toHaveProperty('action', 'show_chart');
+      expect(result).toHaveProperty('symbol', 'NDX');
+      expect(result).toHaveProperty('timeframe', '1D');
+      expect(result).toHaveProperty('error');
+    });
+
+    it('should default timeframe to 1D', async () => {
+      mockCalculateLevels.mockRejectedValue(new Error('test'));
+
+      const result = await executeFunctionCall({
+        name: 'show_chart',
+        arguments: JSON.stringify({ symbol: 'SPX' })
+      });
+
+      expect(result.timeframe).toBe('1D');
+    });
+  });
+
   describe('unknown function', () => {
     it('should throw error for unknown function', async () => {
       await expect(

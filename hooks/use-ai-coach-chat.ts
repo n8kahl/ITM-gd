@@ -9,7 +9,9 @@ import {
   AICoachAPIError,
   type ChatMessageResponse,
   type ChatSession,
+  type ChartTimeframe,
 } from '@/lib/api/ai-coach'
+import type { ChartRequest } from '@/components/ai-coach/center-panel'
 
 // ============================================
 // TYPES
@@ -37,6 +39,7 @@ interface AICoachChatState {
     queryLimit?: number
     resetDate?: string
   } | null
+  chartRequest: ChartRequest | null
 }
 
 // ============================================
@@ -55,6 +58,7 @@ export function useAICoachChat() {
     isLoadingMessages: false,
     error: null,
     rateLimitInfo: null,
+    chartRequest: null,
   })
 
   // Ref to prevent double-sends
@@ -148,6 +152,30 @@ export function useAICoachChat() {
         functionCalls: response.functionCalls,
       }
 
+      // Check if AI called show_chart function
+      let newChartRequest: ChartRequest | null = null
+      if (response.functionCalls) {
+        const showChartCall = response.functionCalls.find(fc => fc.function === 'show_chart')
+        if (showChartCall) {
+          const args = showChartCall.arguments as { symbol?: string; timeframe?: string }
+          const result = showChartCall.result as {
+            symbol?: string
+            timeframe?: string
+            levels?: {
+              resistance?: Array<{ name: string; price: number; distance?: string }>
+              support?: Array<{ name: string; price: number; distance?: string }>
+              indicators?: { vwap?: number; atr14?: number }
+            }
+          } | undefined
+
+          newChartRequest = {
+            symbol: args.symbol || 'SPX',
+            timeframe: (args.timeframe || '1D') as ChartTimeframe,
+            levels: result?.levels,
+          }
+        }
+      }
+
       setState(prev => ({
         ...prev,
         messages: [
@@ -156,6 +184,7 @@ export function useAICoachChat() {
           assistantMessage,
         ],
         isSending: false,
+        ...(newChartRequest ? { chartRequest: newChartRequest } : {}),
       }))
 
       // Refresh sessions list to get updated titles/counts
@@ -269,6 +298,7 @@ export function useAICoachChat() {
     isLoadingMessages: state.isLoadingMessages,
     error: state.error,
     rateLimitInfo: state.rateLimitInfo,
+    chartRequest: state.chartRequest,
 
     // Actions
     sendMessage,
