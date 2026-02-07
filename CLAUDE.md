@@ -26,8 +26,15 @@
 * Use `var(--champagne)` for subtle accents.
 * Use `glass-card-heavy` for containers.
 
+## Market Data API: Massive.com
+* **CRITICAL:** The market data provider is **Massive.com**. NEVER refer to it as "Polygon.io" or "Polygon" — that name is deprecated and causes significant issues.
+* **API Base URL:** `https://api.massive.com`
+* **Env Var:** `MASSIVE_API_KEY`
+* **Usage:** Options, Stocks, Indices data for the AI Coach backend (`backend/src/config/massive.ts`)
+
 ## Development Context
 * **Full Documentation:** See `claude.md` for comprehensive development guidelines
 * **Brand Guidelines:** See `docs/BRAND_GUIDELINES.md` for complete design system
+* **AI Coach Docs:** See `docs/ai-coach/` for implementation specs and roadmap
 * **Supabase MCP:** Fully configured - see architecture section in `claude.md`
 * **AI-Maintained:** This project is built and maintained by Claude Code with minimal developer intervention
