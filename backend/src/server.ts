@@ -8,6 +8,7 @@ import healthRouter from './routes/health';
 import levelsRouter from './routes/levels';
 import chatRouter from './routes/chat';
 import optionsRouter from './routes/options';
+import testAuthRouter from './routes/test-auth';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use('/api/levels', levelsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
+app.use('/api/test-auth', testAuthRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
