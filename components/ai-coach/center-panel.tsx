@@ -11,7 +11,13 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { TradingChart, type LevelAnnotation } from './trading-chart'
+import dynamic from 'next/dynamic'
+import type { LevelAnnotation } from './trading-chart'
+
+const TradingChart = dynamic(
+  () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
+  { ssr: false }
+)
 import { ChartToolbar } from './chart-toolbar'
 import {
   getChartData,
