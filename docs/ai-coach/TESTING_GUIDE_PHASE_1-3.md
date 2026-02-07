@@ -477,10 +477,10 @@ docker run -d -p 6379:6379 redis:alpine
 ### Issue: "Massive.com API returns 401"
 **Solution**:
 - Check `MASSIVE_API_KEY` in `.env.local`
-- Verify subscription: https://polygon.io/dashboard
+- Verify subscription at https://massive.com/dashboard
 - Test API key:
 ```bash
-curl "https://api.polygon.io/v2/aggs/ticker/I:SPX/range/1/day/2024-01-01/2024-01-31?apiKey=YOUR_KEY"
+curl "https://api.massive.com/v2/aggs/ticker/I:SPX/range/1/day/2024-01-01/2024-01-31?apiKey=YOUR_KEY"
 ```
 
 ### Issue: "Database connection failed"

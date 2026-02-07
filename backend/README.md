@@ -6,7 +6,7 @@ Backend server for the TITM AI Coach trading platform, providing real-time marke
 
 - **Key Levels Calculation**: PDH/PDL/PDC, PMH/PML, Standard Pivots, Camarilla Pivots, Fibonacci Pivots
 - **Technical Indicators**: VWAP, ATR(7), ATR(14)
-- **Market Data Integration**: Massive.com (Polygon.io) API for historical and real-time data
+- **Market Data Integration**: Massive.com API for historical and real-time data
 - **Redis Caching**: High-performance caching for frequently accessed data
 - **Supabase Integration**: PostgreSQL database with Row Level Security
 - **JWT Authentication**: Secure API endpoints with Supabase Auth
@@ -39,8 +39,8 @@ Backend server for the TITM AI Coach trading platform, providing real-time marke
 
    Edit `.env.local` with your credentials:
    ```bash
-   # Massive.com API (Polygon.io)
-   MASSIVE_API_KEY=your_polygon_api_key
+   # Massive.com API
+   MASSIVE_API_KEY=your_massive_api_key
 
    # Supabase (from existing TITM project)
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -302,10 +302,10 @@ Make sure to set all variables from `.env.example` in your production environmen
 
 ### "Massive.com API returns 401"
 - Check your API key in `.env.local`
-- Verify your Massive.com (Polygon.io) subscription is active
+- Verify your Massive.com subscription is active
 - Test the API key directly with curl:
   ```bash
-  curl "https://api.polygon.io/v2/aggs/ticker/I:SPX/range/1/day/2024-01-01/2024-01-31?apiKey=YOUR_KEY"
+  curl "https://api.massive.com/v2/aggs/ticker/I:SPX/range/1/day/2024-01-01/2024-01-31?apiKey=YOUR_KEY"
   ```
 
 ### "Redis connection failed"

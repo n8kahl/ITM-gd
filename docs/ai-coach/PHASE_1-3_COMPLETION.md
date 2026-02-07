@@ -226,7 +226,7 @@ Phase 1-3 of the AI Coach implementation has been **completed autonomously** fol
 - **`fetchPreMarketData()`** - Extended hours 4am-9:30am ET
 - **`fetchIntradayData()`** - Regular hours 9:30am-4pm ET
 - **`getPreviousTradingDay()`** - Handles weekends and holidays
-- Symbol normalization (SPX → I:SPX for Polygon.io)
+- Symbol normalization (SPX → I:SPX for Massive.com)
 
 ### Caching Layer (`cache.ts`)
 
@@ -335,7 +335,7 @@ backend/
     ├── server.ts                          # Express app
     ├── config/
     │   ├── database.ts                    # Supabase client
-    │   ├── massive.ts                     # Polygon.io client
+    │   ├── massive.ts                     # Massive.com client
     │   └── redis.ts                       # Redis client
     ├── middleware/
     │   └── auth.ts                        # JWT auth + query limits
@@ -541,7 +541,7 @@ To be completed after environment setup:
 - Matches TradingView calculations
 - Less sensitive to outliers than simple moving average
 
-### Why Polygon.io (Massive.com)?
+### Why Massive.com?
 
 - Most comprehensive options data
 - Historical and real-time data in one API

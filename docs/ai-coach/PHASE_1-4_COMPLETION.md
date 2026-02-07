@@ -29,7 +29,7 @@ Phase 1-4 of the AI Coach implementation has been **completed autonomously** in 
 - Express.js backend server with TypeScript
 - Supabase database connection (service role)
 - Redis caching layer with reconnection
-- Massive.com (Polygon.io) API client
+- Massive.com API client
 - OpenAI GPT-4 API client
 - Health check endpoints with service monitoring
 
@@ -279,7 +279,7 @@ backend/
 ├── src/
 │   ├── config/
 │   │   ├── database.ts          # Supabase client
-│   │   ├── massive.ts           # Polygon.io client
+│   │   ├── massive.ts           # Massive.com client
 │   │   ├── redis.ts             # Redis client
 │   │   └── openai.ts            # OpenAI client
 │   ├── services/
@@ -738,7 +738,7 @@ Complex Query (with function calls):
 
 ### API Costs (Monthly Estimates)
 
-**Massive.com (Polygon.io)**:
+**Massive.com**:
 - Subscription: $597/month (flat rate)
 - Unlimited API calls
 - Historical + Real-time data
@@ -786,7 +786,7 @@ docker run -d -p 6379:6379 redis:alpine
 
 **3. "Massive.com API returns 401"**
 - Check MASSIVE_API_KEY in `.env.local`
-- Verify subscription at https://polygon.io/dashboard
+- Verify subscription at https://massive.com/dashboard
 - Test with curl
 
 **4. "Database connection failed"**

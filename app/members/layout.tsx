@@ -14,7 +14,8 @@ import {
   LogOut,
   RefreshCw,
   AlertCircle,
-  Wand2
+  Wand2,
+  BrainCircuit,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -34,6 +35,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/members', icon: LayoutDashboard, permission: 'access_core_content' },
+  { name: 'AI Coach', href: '/members/ai-coach', icon: BrainCircuit, badge: 'Beta', permission: 'access_ai_coach' },
   { name: 'Library', href: '/members/library', icon: BookOpen, permission: 'access_course_library' },
   { name: 'Journal', href: '/members/journal', icon: Notebook, badge: 'New', permission: 'access_trading_journal' },
   { name: 'Studio', href: '/members/studio', icon: Wand2, permission: 'access_core_content' },
@@ -43,6 +45,7 @@ const navigation: NavItem[] = [
 // Mobile nav items (subset for bottom bar)
 const mobileNavItems = [
   { name: 'Dashboard', href: '/members', icon: LayoutDashboard },
+  { name: 'AI Coach', href: '/members/ai-coach', icon: BrainCircuit },
   { name: 'Library', href: '/members/library', icon: BookOpen },
   { name: 'Studio', href: '/members/studio', icon: Wand2 },
   { name: 'Profile', href: '/members/profile', icon: User },

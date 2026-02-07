@@ -27,6 +27,6 @@ export async function testOpenAIConnection(): Promise<boolean> {
 }
 
 // Model configuration
-export const CHAT_MODEL = 'gpt-4-turbo-preview';
+export const CHAT_MODEL = 'gpt-4o';
 export const MAX_TOKENS = 1000;
 export const TEMPERATURE = 0.7;

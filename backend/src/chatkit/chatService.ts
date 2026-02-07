@@ -70,9 +70,25 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     const functionCalls: any[] = [];
     let assistantMessage = completion.choices[0].message;
 
-    // Handle function calling loop
+    // Handle function calling loop (max 5 iterations to prevent runaway costs)
+    const MAX_FUNCTION_CALL_ITERATIONS = 5;
+    let iterations = 0;
+
     while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-      // Execute all function calls
+      iterations++;
+      if (iterations > MAX_FUNCTION_CALL_ITERATIONS) {
+        console.warn(`Function calling loop exceeded ${MAX_FUNCTION_CALL_ITERATIONS} iterations, breaking`);
+        break;
+      }
+
+      // Push assistant message with tool_calls ONCE before processing results
+      messages.push({
+        role: 'assistant',
+        content: assistantMessage.content || '',
+        tool_calls: assistantMessage.tool_calls
+      });
+
+      // Execute all function calls and push tool results
       for (const toolCall of assistantMessage.tool_calls) {
         const functionName = toolCall.function.name;
         const functionArgs = toolCall.function.arguments;
@@ -80,7 +96,8 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
         console.log(`Executing function: ${functionName}`, functionArgs);
 
         try {
-          // Execute the function
+          const args = JSON.parse(functionArgs);
+
           const functionResult = await executeFunctionCall({
             name: functionName,
             arguments: functionArgs
@@ -88,15 +105,8 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
           functionCalls.push({
             function: functionName,
-            arguments: JSON.parse(functionArgs),
+            arguments: args,
             result: functionResult
-          });
-
-          // Add function result to messages
-          messages.push({
-            role: 'assistant',
-            content: assistantMessage.content || '',
-            tool_calls: assistantMessage.tool_calls
           });
 
           messages.push({
@@ -107,7 +117,6 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
         } catch (error: any) {
           console.error(`Function ${functionName} failed:`, error);
 
-          // Add error result
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,

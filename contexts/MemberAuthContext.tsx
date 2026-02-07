@@ -184,11 +184,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
     switch (tier) {
       case 'executive':
-        return ['dashboard', 'journal', 'library', 'profile'] // All access
+        return ['dashboard', 'ai-coach', 'journal', 'library', 'profile'] // All access
       case 'pro':
-        return ['dashboard', 'journal', 'library', 'profile'] // Same as executive for now
+        return ['dashboard', 'ai-coach', 'journal', 'library', 'profile'] // Same as executive for now
       case 'core':
-        return ['dashboard', 'journal', 'profile'] // No library access
+        return ['dashboard', 'ai-coach', 'journal', 'profile'] // No library access
       default:
         return ['dashboard', 'profile']
     }
@@ -651,9 +651,17 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // 2. Legacy permission names: 'access_trading_journal', etc.
   const hasPermission = useCallback((permissionName: string): boolean => {
     // Check if it's a tab ID (Simple RBAC)
-    const tabIds = ['dashboard', 'journal', 'library', 'profile']
+    const tabIds = ['dashboard', 'journal', 'library', 'profile', 'ai-coach']
     if (tabIds.includes(permissionName)) {
       return state.allowedTabs.includes(permissionName)
+    }
+
+    // Map permission names to tab IDs for nav items
+    const permissionToTab: Record<string, string> = {
+      'access_ai_coach': 'ai-coach',
+    }
+    if (permissionToTab[permissionName]) {
+      return state.allowedTabs.includes(permissionToTab[permissionName])
     }
 
     // Fall back to legacy permission system

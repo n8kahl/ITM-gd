@@ -21,7 +21,7 @@ import {
 /**
  * Options Chain Fetcher
  *
- * Fetches options chain data from Polygon.io (Massive.com)
+ * Fetches options chain data from Massive.com
  * Calculates Greeks using Black-Scholes model
  * Caches results for performance
  */
@@ -134,7 +134,7 @@ function calculateContractGreeks(
 }
 
 /**
- * Convert Polygon.io snapshot to our OptionContract format
+ * Convert Massive.com snapshot to our OptionContract format
  */
 function convertToOptionContract(
   massiveContract: MassiveOptionsContract,
@@ -153,7 +153,7 @@ function convertToOptionContract(
   const last = day.close || 0;
   const extrinsicValue = Math.max(0, last - intrinsicValue);
 
-  // Use Polygon's Greeks if available, otherwise calculate with Black-Scholes
+  // Use Massive.com Greeks if available, otherwise calculate with Black-Scholes
   let contractGreeks: { delta: number; gamma: number; theta: number; vega: number; rho: number };
 
   if (greeks && implied_volatility) {
@@ -162,7 +162,7 @@ function convertToOptionContract(
       gamma: greeks.gamma,
       theta: greeks.theta,
       vega: greeks.vega,
-      rho: 0 // Polygon doesn't provide rho
+      rho: 0 // Massive.com doesn't provide rho
     };
   } else if (implied_volatility) {
     // Calculate Greeks using Black-Scholes

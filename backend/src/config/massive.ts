@@ -4,13 +4,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const MASSIVE_API_KEY = process.env.MASSIVE_API_KEY;
-const MASSIVE_BASE_URL = 'https://api.polygon.io';
+const MASSIVE_BASE_URL = 'https://api.massive.com';
 
 if (!MASSIVE_API_KEY) {
   throw new Error('Missing MASSIVE_API_KEY environment variable');
 }
 
-// Create Axios instance for Massive.com API (Polygon.io)
+// Create Axios instance for Massive.com API
 export const massiveClient: AxiosInstance = axios.create({
   baseURL: MASSIVE_BASE_URL,
   headers: {

@@ -86,7 +86,7 @@ router.get(
         });
       }
 
-      if (error.message.includes('Polygon.io') || error.message.includes('fetch')) {
+      if (error.message.includes('Massive.com') || error.message.includes('fetch')) {
         return res.status(503).json({
           error: 'Data provider error',
           message: 'Unable to fetch options data. Please try again in a moment.',
@@ -242,7 +242,7 @@ router.post(
     } catch (error: any) {
       console.error('Error in position analysis endpoint:', error);
 
-      if (error.message.includes('fetch') || error.message.includes('Polygon.io')) {
+      if (error.message.includes('fetch') || error.message.includes('Massive.com')) {
         return res.status(503).json({
           error: 'Data provider error',
           message: 'Unable to fetch current market data. Analysis may be incomplete.',
