@@ -69,24 +69,8 @@ serve(async (req) => {
         conversation.ai_handled = true
         conversation.escalation_reason = null
 
-        // Fetch message history for Discord notification
-        const { data: reopenHistory } = await supabase
-          .from('chat_messages')
-          .select('*')
-          .eq('conversation_id', conversation.id)
-          .order('created_at', { ascending: true })
-          .limit(10)
-
-        // Notify team via Discord about reopened conversation
-        await sendDiscordNotification(
-          supabase,
-          conversation.id,
-          `Conversation reopened (was ${previousStatus})`,
-          conversation.visitor_name,
-          5,
-          reopenHistory || [],
-          conversation.visitor_email
-        )
+        // NOTE: Discord notification disabled for reopened conversations
+        // Only notify on initial chat creation (below)
       }
     } else {
       // Create new conversation
@@ -106,15 +90,7 @@ serve(async (req) => {
 
       if (error) throw error
       conversation = data
-
-      // Notify team about new conversation
-      await sendDiscordNotification(
-        supabase,
-        conversation.id,
-        'New conversation started',
-        undefined, // Visitor name not known yet
-        3 // Lower priority for new conversations
-      )
+      conversation.isNewConversation = true // Flag for Discord notification later
     }
 
     // 2. Extract visitor info (name/email) from message
@@ -198,6 +174,19 @@ serve(async (req) => {
 
     if (messageSaveError) throw messageSaveError
 
+    // 3a. Send Discord notification ONCE for new conversations only
+    if (conversation.isNewConversation) {
+      await sendDiscordNotification(
+        supabase,
+        conversation.id,
+        'New conversation started',
+        conversation.visitor_name || visitorInfo.name,
+        3, // Lower priority for new conversations
+        [{ sender_type: 'visitor', message_text: visitorMessage, sender_name: conversation.visitor_name || 'Visitor' }], // Include first question
+        conversation.visitor_email
+      )
+    }
+
     // 4. Get message history
     const { data: messageHistory } = await supabase
       .from('chat_messages')
@@ -276,7 +265,8 @@ serve(async (req) => {
       visitorMessage,
       messageHistory || [],
       relevantKnowledge,
-      openaiKey
+      openaiKey,
+      supabase
     )
 
     // 9. If low confidence, escalate instead of answering (gated by email) - DISABLED
@@ -540,16 +530,8 @@ async function handleGatedEscalation(
       ai_confidence: 1.0
     })
 
-  // Notify team via Discord
-  await sendDiscordNotification(
-    supabase,
-    conversation.id,
-    reason,
-    conversation.visitor_name,
-    leadScore,
-    messageHistory,
-    conversation.visitor_email
-  )
+  // Discord notification disabled - only notify on initial chat creation
+  // (Escalations are disabled via ENABLE_AUTO_ESCALATIONS flag)
 
   return { handled: true, needsEmail: false }
 }
@@ -602,16 +584,8 @@ async function checkPendingEscalation(
       ai_confidence: 1.0
     })
 
-  // Notify team via Discord
-  await sendDiscordNotification(
-    supabase,
-    conversation.id,
-    pending.reason,
-    conversation.visitor_name,
-    pending.lead_score,
-    messageHistory,
-    visitorEmail || undefined
-  )
+  // Discord notification disabled - only notify on initial chat creation
+  // (Escalations are disabled via ENABLE_AUTO_ESCALATIONS flag)
 
   return true
 }
@@ -817,9 +791,17 @@ async function generateAIResponse(
   visitorMessage: string,
   messageHistory: any[],
   knowledgeBase: any[],
-  openaiKey: string
+  openaiKey: string,
+  supabase: any
 ) {
-  const SYSTEM_PROMPT = `You are an AI assistant for TradeITM, a premium options trading signals service.
+  // Fetch system prompt from database (allows admin editing)
+  const { data: promptData } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'ai_system_prompt')
+    .single()
+
+  const SYSTEM_PROMPT = promptData?.value || `You are an AI assistant for TradeITM, a premium options trading signals service.
 
 ## Your Role
 - Help potential customers understand our service

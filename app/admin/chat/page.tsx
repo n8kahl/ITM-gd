@@ -38,7 +38,9 @@ import {
   Archive,
   Trash2,
   ArrowLeft,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 
 // Default canned responses - can be overridden via app_settings
@@ -167,6 +169,8 @@ function ChatManagementContent() {
   const [archivingResolved, setArchivingResolved] = useState(false)
   const [isMobileView, setIsMobileView] = useState(false)
   const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>(DEFAULT_CANNED_RESPONSES)
+  const [chatWidgetVisible, setChatWidgetVisible] = useState(true)
+  const [togglingChatWidget, setTogglingChatWidget] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const conversationRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const previousEscalatedIds = useRef<Set<string>>(new Set())
@@ -229,6 +233,22 @@ function ChatManagementContent() {
     }
   }, [])
 
+  // Load chat widget visibility setting
+  useEffect(() => {
+    const loadChatWidgetSetting = async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'chat_widget_visible')
+        .single()
+
+      // Default to visible if setting doesn't exist
+      setChatWidgetVisible(data?.value !== 'false')
+    }
+
+    loadChatWidgetSetting()
+  }, [])
+
   // Request notification permission
   const requestNotificationPermission = useCallback(async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -240,6 +260,38 @@ function ChatManagementContent() {
     setNotificationPermission(permission)
     setNotificationsEnabled(permission === 'granted')
   }, [])
+
+  // Toggle chat widget visibility
+  const toggleChatWidget = useCallback(async () => {
+    setTogglingChatWidget(true)
+
+    try {
+      const newValue = !chatWidgetVisible
+
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({
+          key: 'chat_widget_visible',
+          value: newValue.toString(),
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'key'
+        })
+
+      if (error) {
+        console.error('Failed to toggle chat widget:', error)
+        alert('Failed to update chat widget visibility')
+        return
+      }
+
+      setChatWidgetVisible(newValue)
+    } catch (err) {
+      console.error('Error toggling chat widget:', err)
+      alert('Error updating chat widget visibility')
+    } finally {
+      setTogglingChatWidget(false)
+    }
+  }, [chatWidgetVisible])
 
   // Broadcast typing status to the visitor
   const broadcastTypingStatus = useCallback(async (conversationId: string, isTyping: boolean) => {
@@ -656,25 +708,53 @@ function ChatManagementContent() {
           </p>
         </div>
 
-        {/* Desktop Notifications Toggle */}
-        <Button
-          variant={notificationsEnabled ? 'default' : 'outline'}
-          onClick={notificationsEnabled ? () => setNotificationsEnabled(false) : requestNotificationPermission}
-          className={`flex-shrink-0 ${notificationsEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
-          size="sm"
-        >
-          {notificationsEnabled ? (
-            <>
-              <Bell className="w-4 h-4 lg:mr-2" />
-              <span className="hidden lg:inline">Notifications On</span>
-            </>
-          ) : (
-            <>
-              <BellOff className="w-4 h-4 lg:mr-2" />
-              <span className="hidden lg:inline">Enable Notifications</span>
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2 flex-shrink-0">
+          {/* Chat Widget Visibility Toggle */}
+          <Button
+            variant={chatWidgetVisible ? 'default' : 'outline'}
+            onClick={toggleChatWidget}
+            disabled={togglingChatWidget}
+            className={`${chatWidgetVisible ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
+            size="sm"
+          >
+            {togglingChatWidget ? (
+              <>
+                <Loader2 className="w-4 h-4 lg:mr-2 animate-spin" />
+                <span className="hidden lg:inline">Updating...</span>
+              </>
+            ) : chatWidgetVisible ? (
+              <>
+                <Eye className="w-4 h-4 lg:mr-2" />
+                <span className="hidden lg:inline">Chat Visible</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-4 h-4 lg:mr-2" />
+                <span className="hidden lg:inline">Chat Hidden</span>
+              </>
+            )}
+          </Button>
+
+          {/* Desktop Notifications Toggle */}
+          <Button
+            variant={notificationsEnabled ? 'default' : 'outline'}
+            onClick={notificationsEnabled ? () => setNotificationsEnabled(false) : requestNotificationPermission}
+            className={`${notificationsEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
+            size="sm"
+          >
+            {notificationsEnabled ? (
+              <>
+                <Bell className="w-4 h-4 lg:mr-2" />
+                <span className="hidden lg:inline">Notifications On</span>
+              </>
+            ) : (
+              <>
+                <BellOff className="w-4 h-4 lg:mr-2" />
+                <span className="hidden lg:inline">Enable Notifications</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards - Compact on mobile */}

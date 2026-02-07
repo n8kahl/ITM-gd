@@ -109,21 +109,38 @@ export default function KnowledgeBasePage() {
       context: formData.context || null
     }
 
-    if (editingEntry) {
-      // Update
-      await supabase
-        .from('knowledge_base')
-        .update(payload)
-        .eq('id', editingEntry.id)
-    } else {
-      // Create
-      await supabase
-        .from('knowledge_base')
-        .insert(payload)
-    }
+    try {
+      if (editingEntry) {
+        // Update
+        const { error } = await supabase
+          .from('knowledge_base')
+          .update(payload)
+          .eq('id', editingEntry.id)
 
-    cancelEdit()
-    loadEntries()
+        if (error) {
+          console.error('Update error:', error)
+          alert(`Failed to update: ${error.message}`)
+          return
+        }
+      } else {
+        // Create
+        const { error } = await supabase
+          .from('knowledge_base')
+          .insert(payload)
+
+        if (error) {
+          console.error('Insert error:', error)
+          alert(`Failed to create: ${error.message}`)
+          return
+        }
+      }
+
+      cancelEdit()
+      loadEntries()
+    } catch (err) {
+      console.error('Save error:', err)
+      alert(`Error saving entry: ${err}`)
+    }
   }
 
   function startEdit(entry: KBEntry) {
