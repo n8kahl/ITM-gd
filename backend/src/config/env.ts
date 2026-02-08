@@ -29,6 +29,9 @@ const envSchema = z.object({
   // Massive.com
   MASSIVE_API_KEY: z.string().optional(),
 
+  // Sentry
+  SENTRY_DSN: z.string().url().optional(),
+
   // CORS
   ALLOWED_ORIGINS: z.string().default(''),
 

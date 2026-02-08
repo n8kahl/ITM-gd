@@ -3,6 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+
+dotenv.config();
+
+import { initSentry, flushSentry, Sentry } from './config/sentry';
 import { logger } from './lib/logger';
 import { connectRedis } from './config/redis';
 import { requestIdMiddleware } from './middleware/requestId';
@@ -19,10 +23,11 @@ import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
 
-dotenv.config();
-
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize Sentry FIRST — before any other middleware
+initSentry(app);
 
 // Trust proxy - required when running behind Railway/reverse proxy
 app.set('trust proxy', 1);
@@ -64,6 +69,16 @@ app.use((req: Request, res: Response, next: any) => {
       res.status(408).json({ error: 'Request timeout', message: 'The request took too long to process. Please try again.' });
     }
   });
+  next();
+});
+
+// Sentry request context — attach requestId and userId to error reports
+app.use((req: Request, _res: Response, next: any) => {
+  Sentry.setTag('requestId', (req as any).requestId);
+  const userId = (req as any).userId;
+  if (userId) {
+    Sentry.setUser({ id: userId });
+  }
   next();
 });
 
@@ -115,6 +130,8 @@ app.use((err: Error, _req: Request, res: Response, _next: any) => {
     res.status(403).json({ error: 'Forbidden', message: 'Origin not allowed' });
     return;
   }
+  // Report non-CORS errors to Sentry
+  Sentry.captureException(err);
   const isProduction = process.env.NODE_ENV === 'production';
   res.status(500).json({ error: 'Internal server error', message: isProduction ? 'An unexpected error occurred' : err.message });
 });
@@ -150,6 +167,9 @@ async function gracefulShutdown(signal: string) {
   if (httpServer) { httpServer.close(() => { logger.info('HTTP server closed'); }); }
   const shutdownTimeout = setTimeout(() => { logger.error('Graceful shutdown timed out, forcing exit'); process.exit(1); }, 30000);
   try {
+    // Flush pending Sentry events before shutdown
+    await flushSentry();
+    logger.info('Sentry flushed');
     const { redisClient } = require('./config/redis');
     if (redisClient?.isOpen) { await redisClient.quit(); logger.info('Redis connection closed'); }
   } catch (err) { logger.error('Error during shutdown', { error: err instanceof Error ? err.message : String(err) }); }

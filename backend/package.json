@@ -18,6 +18,7 @@
   "author": "TITM",
   "license": "MIT",
   "dependencies": {
+    "@sentry/node": "^10.38.0",
     "@supabase/supabase-js": "^2.39.3",
     "axios": "^1.6.5",
     "cors": "^2.8.5",
