@@ -39,7 +39,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
   try {
     // Get or create session
-    const session = await getOrCreateSession(sessionId, userId);
+    await getOrCreateSession(sessionId, userId);
 
     // Get conversation history
     const history = await getConversationHistory(sessionId);
@@ -56,6 +56,11 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
     // Save user message to database
     await saveMessage(sessionId, userId, 'user', message);
+
+    // Auto-title session from first user message
+    if (history.length === 0) {
+      await updateSessionTitle(sessionId, message);
+    }
 
     // Call OpenAI API with function calling
     let completion = await openaiClient.chat.completions.create({
@@ -101,7 +106,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
           const functionResult = await executeFunctionCall({
             name: functionName,
             arguments: functionArgs
-          });
+          }, { userId });
 
           functionCalls.push({
             function: functionName,
@@ -175,7 +180,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
  */
 async function getOrCreateSession(sessionId: string, userId: string) {
   // Try to get existing session
-  const { data: existingSession, error: fetchError } = await supabase
+  const { data: existingSession } = await supabase
     .from('ai_coach_sessions')
     .select('*')
     .eq('id', sessionId)
@@ -271,6 +276,71 @@ export async function getUserSessions(userId: string, limit: number = 10) {
   }
 
   return sessions || [];
+}
+
+/**
+ * Get messages for a specific session
+ */
+export async function getSessionMessages(
+  sessionId: string,
+  userId: string,
+  limit: number = 50,
+  offset: number = 0
+) {
+  // Verify session belongs to user
+  const { data: session, error: sessionError } = await supabase
+    .from('ai_coach_sessions')
+    .select('id')
+    .eq('id', sessionId)
+    .eq('user_id', userId)
+    .single();
+
+  if (sessionError || !session) {
+    throw new Error('Session not found or access denied');
+  }
+
+  const { data: messages, error, count } = await supabase
+    .from('ai_coach_messages')
+    .select('id, role, content, function_call, tokens_used, created_at', { count: 'exact' })
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    throw new Error(`Failed to fetch messages: ${error.message}`);
+  }
+
+  return {
+    messages: (messages || []).map(msg => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      functionCalls: msg.function_call || undefined,
+      tokensUsed: msg.tokens_used,
+      timestamp: msg.created_at,
+    })),
+    total: count || 0,
+    hasMore: (count || 0) > offset + limit,
+  };
+}
+
+/**
+ * Update session title based on first user message
+ */
+export async function updateSessionTitle(sessionId: string, firstMessage: string) {
+  // Generate title from first message (truncate to 60 chars)
+  const title = firstMessage.length > 60
+    ? firstMessage.substring(0, 57) + '...'
+    : firstMessage;
+
+  const { error } = await supabase
+    .from('ai_coach_sessions')
+    .update({ title })
+    .eq('id', sessionId);
+
+  if (error) {
+    console.error('Failed to update session title:', error);
+  }
 }
 
 /**

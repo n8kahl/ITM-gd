@@ -4,6 +4,7 @@ import { memo } from 'react'
 import { User, BrainCircuit, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
+import { WidgetCard, extractWidgets } from './widget-cards'
 
 interface MessageBubbleProps {
   message: ChatMessage
@@ -50,6 +51,18 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
               <FormattedContent content={message.content} />
             </div>
           </div>
+
+          {/* Widget cards rendered from function call results */}
+          {!isUser && message.functionCalls && (() => {
+            const widgets = extractWidgets(message.functionCalls)
+            return widgets.length > 0 ? (
+              <div className="space-y-2">
+                {widgets.map((widget, i) => (
+                  <WidgetCard key={i} widget={widget} />
+                ))}
+              </div>
+            ) : null
+          })()}
 
           {/* Footer: timestamp + function call badge */}
           <div className={cn(

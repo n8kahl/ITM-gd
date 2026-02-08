@@ -5,6 +5,7 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   sendMessage as apiSendMessage,
   getSessions as apiGetSessions,
+  getSessionMessages as apiGetSessionMessages,
   deleteSession as apiDeleteSession,
   AICoachAPIError,
   type ChatMessageResponse,
@@ -234,6 +235,9 @@ export function useAICoachChat() {
     // If already selected, do nothing
     if (sessionId === state.currentSessionId) return
 
+    const token = getToken()
+    if (!token) return
+
     setState(prev => ({
       ...prev,
       currentSessionId: sessionId,
@@ -242,15 +246,35 @@ export function useAICoachChat() {
       error: null,
     }))
 
-    // Note: The backend doesn't have a "get messages for session" endpoint yet.
-    // For Phase 2, we load sessions but start fresh when selecting.
-    // Messages will be loaded from the backend's conversation history
-    // when the user sends their next message (the backend loads history internally).
-    setState(prev => ({
-      ...prev,
-      isLoadingMessages: false,
-    }))
-  }, [state.currentSessionId])
+    try {
+      const result = await apiGetSessionMessages(sessionId, token)
+
+      const loadedMessages: ChatMessage[] = result.messages
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+        .map(msg => ({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp,
+          functionCalls: msg.functionCalls,
+        }))
+
+      setState(prev => ({
+        ...prev,
+        messages: loadedMessages,
+        isLoadingMessages: false,
+      }))
+    } catch (error) {
+      const message = error instanceof AICoachAPIError
+        ? error.apiError.message
+        : 'Failed to load messages'
+      setState(prev => ({
+        ...prev,
+        isLoadingMessages: false,
+        error: message,
+      }))
+    }
+  }, [state.currentSessionId, getToken])
 
   const removeSession = useCallback(async (sessionId: string) => {
     const token = getToken()
