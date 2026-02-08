@@ -28,7 +28,8 @@
     "morgan": "^1.10.0",
     "openai": "^4.28.0",
     "redis": "^4.6.12",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

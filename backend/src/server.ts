@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { connectRedis } from './config/redis';
+import { generalLimiter, chatLimiter, screenshotLimiter } from './middleware/rateLimiter';
 import healthRouter from './routes/health';
 import levelsRouter from './routes/levels';
 import chatRouter from './routes/chat';
@@ -24,6 +25,11 @@ app.use(cors()); // Enable CORS
 app.use(express.json({ limit: '15mb' })); // Parse JSON bodies (larger for screenshots)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(morgan('dev')); // HTTP request logging
+
+// Rate limiting
+app.use('/api/', generalLimiter);
+app.use('/api/chat', chatLimiter);
+app.use('/api/screenshot', screenshotLimiter);
 
 // Routes
 app.use('/health', healthRouter);

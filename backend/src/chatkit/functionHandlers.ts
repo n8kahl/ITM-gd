@@ -4,6 +4,7 @@ import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
+import { getMarketStatus as getMarketStatusService } from '../services/marketHours';
 
 /**
  * Function handlers - these execute when the AI calls a function
@@ -128,68 +129,10 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
 /**
  * Handler: get_market_status
  * Determines if market is open, pre-market, after-hours, or closed
+ * Uses DST-aware market hours and holiday calendar
  */
 async function handleGetMarketStatus(_args: any) {
-  const now = new Date();
-  const hour = now.getUTCHours() - 5; // Convert to ET (simplified, no DST)
-  const minute = now.getUTCMinutes();
-  const timeInMinutes = hour * 60 + minute;
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
-
-  // Check if weekend
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return {
-      status: 'closed',
-      session: 'weekend',
-      nextOpen: 'Monday 9:30 AM ET',
-      message: 'Markets are closed for the weekend'
-    };
-  }
-
-  // Pre-market: 4:00 AM - 9:30 AM (240 - 570 minutes)
-  if (timeInMinutes >= 240 && timeInMinutes < 570) {
-    const minutesUntilOpen = 570 - timeInMinutes;
-    const hoursUntilOpen = Math.floor(minutesUntilOpen / 60);
-    const minsUntilOpen = minutesUntilOpen % 60;
-
-    return {
-      status: 'pre-market',
-      session: 'extended',
-      timeUntilOpen: `${hoursUntilOpen}h ${minsUntilOpen}m`,
-      message: 'Pre-market session is active'
-    };
-  }
-
-  // Regular hours: 9:30 AM - 4:00 PM (570 - 960 minutes)
-  if (timeInMinutes >= 570 && timeInMinutes <= 960) {
-    const minutesSinceOpen = timeInMinutes - 570;
-    const hours = Math.floor(minutesSinceOpen / 60);
-    const mins = minutesSinceOpen % 60;
-
-    return {
-      status: 'open',
-      session: 'regular',
-      timeSinceOpen: `${hours}h ${mins}m`,
-      message: 'Market is open for regular trading'
-    };
-  }
-
-  // After-hours: 4:00 PM - 8:00 PM (960 - 1200 minutes)
-  if (timeInMinutes > 960 && timeInMinutes < 1200) {
-    return {
-      status: 'after-hours',
-      session: 'extended',
-      message: 'After-hours session is active'
-    };
-  }
-
-  // Closed: 8:00 PM - 4:00 AM
-  return {
-    status: 'closed',
-    session: 'none',
-    nextOpen: 'Tomorrow 4:00 AM ET (pre-market)',
-    message: 'Markets are closed'
-  };
+  return getMarketStatusService();
 }
 
 /**
