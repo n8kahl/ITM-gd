@@ -36,7 +36,6 @@ export function ChatWidget() {
   const [isWaitingForAI, setIsWaitingForAI] = useState(false)
   const [isEscalated, setIsEscalated] = useState(false)
   const [teamTyping, setTeamTyping] = useState<string | null>(null)
-  const [chatVisible, setChatVisible] = useState(true) // Chat visibility setting
   const [visitorId] = useState(() => {
     // Generate or retrieve visitor ID from localStorage
     if (typeof window !== 'undefined') {
@@ -100,22 +99,6 @@ export function ChatWidget() {
       setConversation(data as Conversation)
       setIsEscalated(!data.ai_handled)
     }
-  }, [])
-
-  // Check if chat widget is enabled
-  useEffect(() => {
-    const checkChatVisibility = async () => {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'chat_widget_visible')
-        .single()
-
-      // Default to visible (true) if setting doesn't exist
-      setChatVisible(data?.value !== 'false')
-    }
-
-    checkChatVisibility()
   }, [])
 
   // Initialize: show greeting when widget opens (no conversation yet)
@@ -288,11 +271,6 @@ export function ChatWidget() {
       setIsSending(false)
       setIsWaitingForAI(false)
     }
-  }
-
-  // Don't render chat widget if it's been disabled by admin
-  if (!chatVisible) {
-    return null
   }
 
   return (
