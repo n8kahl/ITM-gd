@@ -227,14 +227,29 @@ export async function getJournalStats(): Promise<{
     // Call RPC function
     const { data, error } = await supabase
       .rpc('get_journal_stats', { target_user_id: user.id })
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Get stats error:', error)
       return { success: false, error: error.message }
     }
 
-    return { success: true, data }
+    // Return default stats when user has no journal entries
+    return {
+      success: true,
+      data: data ?? {
+        total_trades: 0,
+        winning_trades: 0,
+        losing_trades: 0,
+        win_rate: 0,
+        total_pnl: 0,
+        avg_pnl: 0,
+        best_trade: 0,
+        worst_trade: 0,
+        unique_symbols: 0,
+        last_trade_date: null,
+      },
+    }
   } catch (error) {
     console.error('getJournalStats error:', error)
     return {
