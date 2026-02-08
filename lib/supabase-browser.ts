@@ -3,15 +3,28 @@ import { createBrowserClient } from '@supabase/ssr'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-/**
- * Creates a Supabase client for browser/client components.
- *
- * This client uses @supabase/ssr which automatically syncs auth sessions
- * to cookies, making them accessible to middleware and server components.
- *
- * IMPORTANT: Call this function to get a fresh client rather than using
- * a singleton. This ensures cookies are properly read/written.
- */
+// Use globalThis to ensure true singleton across Turbopack chunk evaluations
+const SUPABASE_KEY = '__supabase_browser_client'
+
 export function createBrowserSupabase() {
-  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+  // Diagnostic: log env var status on first call
+  if (typeof window !== 'undefined' && !(globalThis as any)[SUPABASE_KEY]) {
+    console.log('[Supabase] Creating browser client:', {
+      hasUrl: !!supabaseUrl,
+      urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING',
+      hasAnonKey: !!supabaseAnonKey,
+      anonKeyPrefix: supabaseAnonKey ? supabaseAnonKey.substring(0, 10) + '...' : 'MISSING',
+      hasNavigatorLocks: typeof navigator !== 'undefined' && !!navigator.locks,
+    })
+  }
+
+  if ((globalThis as any)[SUPABASE_KEY]) {
+    console.log('[Supabase] Returning cached singleton')
+    return (globalThis as any)[SUPABASE_KEY]
+  }
+
+  console.log('[Supabase] Creating NEW client instance')
+  const client = createBrowserClient(supabaseUrl, supabaseAnonKey)
+  ;(globalThis as any)[SUPABASE_KEY] = client
+  return client
 }

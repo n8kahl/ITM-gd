@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   sendMessage as apiSendMessage,
@@ -13,10 +13,6 @@ import {
   type ChartTimeframe,
 } from '@/lib/api/ai-coach'
 import type { ChartRequest } from '@/components/ai-coach/center-panel'
-
-// ============================================
-// TYPES
-// ============================================
 
 export interface ChatMessage {
   id: string
@@ -43,10 +39,6 @@ interface AICoachChatState {
   chartRequest: ChartRequest | null
 }
 
-// ============================================
-// HOOK
-// ============================================
-
 export function useAICoachChat() {
   const { session } = useMemberAuth()
 
@@ -62,63 +54,45 @@ export function useAICoachChat() {
     chartRequest: null,
   })
 
-  // Ref to prevent double-sends
   const sendingRef = useRef(false)
+
+  // Use a ref for the token so callbacks don't depend on the session object
+  const tokenRef = useRef<string | null>(session?.access_token || null)
+  tokenRef.current = session?.access_token || null
 
   // AbortController for cancelling in-flight requests on unmount
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Get auth token
+  // Stable getter — never recreated
   const getToken = useCallback((): string | null => {
-    return session?.access_token || null
-  }, [session])
-
-  // ============================================
-  // LOAD SESSIONS
-  // ============================================
+    return tokenRef.current
+  }, [])
 
   const loadSessions = useCallback(async () => {
     const token = getToken()
     if (!token) return
-
     setState(prev => ({ ...prev, isLoadingSessions: true, error: null }))
-
     try {
       const result = await apiGetSessions(token, 20)
-      setState(prev => ({
-        ...prev,
-        sessions: result.sessions,
-        isLoadingSessions: false,
-      }))
+      setState(prev => ({ ...prev, sessions: result.sessions, isLoadingSessions: false }))
     } catch (error) {
-      const message = error instanceof AICoachAPIError
-        ? error.apiError.message
-        : 'Failed to load sessions'
-      setState(prev => ({
-        ...prev,
-        isLoadingSessions: false,
-        error: message,
-      }))
+      console.error('[AI Coach] loadSessions error:', error)
+      const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to load sessions'
+      setState(prev => ({ ...prev, isLoadingSessions: false, error: message }))
     }
   }, [getToken])
 
-  // Load sessions on mount
   useEffect(() => {
-    if (session?.access_token) {
-      loadSessions()
-    }
-  }, [session?.access_token, loadSessions])
+    if (session?.access_token) { loadSessions() }
+  }, [session?.access_token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const currentSessionIdRef = useRef<string | null>(state.currentSessionId)
+  currentSessionIdRef.current = state.currentSessionId
 
   // Cleanup: abort in-flight requests on unmount
   useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort()
-    }
+    return () => { abortControllerRef.current?.abort() }
   }, [])
-
-  // ============================================
-  // SEND MESSAGE
-  // ============================================
 
   const sendMessage = useCallback(async (text: string) => {
     const token = getToken()
@@ -131,10 +105,8 @@ export function useAICoachChat() {
     const controller = new AbortController()
     abortControllerRef.current = controller
 
-    // Generate or use current session ID
-    const sessionId = state.currentSessionId || crypto.randomUUID()
+    const sessionId = currentSessionIdRef.current || crypto.randomUUID()
 
-    // Optimistic user message
     const userMessage: ChatMessage = {
       id: `optimistic-${Date.now()}`,
       role: 'user',
@@ -154,11 +126,7 @@ export function useAICoachChat() {
     try {
       const response = await apiSendMessage(sessionId, text.trim(), token, controller.signal)
 
-      // Replace optimistic message and add assistant response
-      const confirmedUserMessage: ChatMessage = {
-        ...userMessage,
-        isOptimistic: false,
-      }
+      const confirmedUserMessage: ChatMessage = { ...userMessage, isOptimistic: false }
 
       const assistantMessage: ChatMessage = {
         id: response.messageId,
@@ -168,22 +136,19 @@ export function useAICoachChat() {
         functionCalls: response.functionCalls,
       }
 
-      // Check if AI called show_chart function
       let newChartRequest: ChartRequest | null = null
       if (response.functionCalls) {
         const showChartCall = response.functionCalls.find(fc => fc.function === 'show_chart')
         if (showChartCall) {
           const args = showChartCall.arguments as { symbol?: string; timeframe?: string }
           const result = showChartCall.result as {
-            symbol?: string
-            timeframe?: string
+            symbol?: string; timeframe?: string;
             levels?: {
               resistance?: Array<{ name: string; price: number; distance?: string }>
               support?: Array<{ name: string; price: number; distance?: string }>
               indicators?: { vwap?: number; atr14?: number }
             }
           } | undefined
-
           newChartRequest = {
             symbol: args.symbol || 'SPX',
             timeframe: (args.timeframe || '1D') as ChartTimeframe,
@@ -194,171 +159,83 @@ export function useAICoachChat() {
 
       setState(prev => ({
         ...prev,
-        messages: [
-          ...prev.messages.filter(m => m.id !== userMessage.id),
-          confirmedUserMessage,
-          assistantMessage,
-        ],
+        messages: [...prev.messages.filter(m => m.id !== userMessage.id), confirmedUserMessage, assistantMessage],
         isSending: false,
         ...(newChartRequest ? { chartRequest: newChartRequest } : {}),
       }))
 
-      // Refresh sessions list to get updated titles/counts
       loadSessions()
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        // Request was cancelled, don't update state
+      if (error instanceof DOMException && error.name === 'AbortError') { return }
+
+      if (error instanceof AICoachAPIError && error.isUnauthorized) {
+        setState(prev => ({ ...prev, isSending: false, error: 'Your session has expired. Please sign in again.' }))
         return
       }
 
-      if (error instanceof AICoachAPIError && error.isUnauthorized) {
-        setState(prev => ({
-          ...prev,
-          isSending: false,
-          error: 'Your session has expired. Please sign in again.',
-        }))
-        return
-      }
+      console.error('[AI Coach] sendMessage error:', error)
 
       if (error instanceof AICoachAPIError && error.isRateLimited) {
         setState(prev => ({
-          ...prev,
-          isSending: false,
-          error: error.apiError.message,
-          rateLimitInfo: {
-            queryCount: error.apiError.queryCount,
-            queryLimit: error.apiError.queryLimit,
-            resetDate: error.apiError.resetDate,
-          },
+          ...prev, isSending: false, error: error.apiError.message,
+          rateLimitInfo: { queryCount: error.apiError.queryCount, queryLimit: error.apiError.queryLimit, resetDate: error.apiError.resetDate },
         }))
       } else {
-        const message = error instanceof AICoachAPIError
-          ? error.apiError.message
-          : 'Failed to send message. Please try again.'
-        setState(prev => ({
-          ...prev,
-          isSending: false,
-          error: message,
-        }))
+        const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to send message. Please try again.'
+        setState(prev => ({ ...prev, isSending: false, error: message }))
       }
     } finally {
       sendingRef.current = false
     }
-  }, [getToken, state.currentSessionId, loadSessions])
-
-  // ============================================
-  // SESSION MANAGEMENT
-  // ============================================
+  }, [getToken, loadSessions])
 
   const newSession = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      messages: [],
-      currentSessionId: null,
-      error: null,
-      rateLimitInfo: null,
-    }))
+    setState(prev => ({ ...prev, messages: [], currentSessionId: null, error: null, rateLimitInfo: null }))
   }, [])
 
   const selectSession = useCallback(async (sessionId: string) => {
-    // If already selected, do nothing
-    if (sessionId === state.currentSessionId) return
-
+    if (sessionId === currentSessionIdRef.current) return
     const token = getToken()
     if (!token) return
-
-    setState(prev => ({
-      ...prev,
-      currentSessionId: sessionId,
-      messages: [],
-      isLoadingMessages: true,
-      error: null,
-    }))
-
+    setState(prev => ({ ...prev, currentSessionId: sessionId, messages: [], isLoadingMessages: true, error: null }))
     try {
       const result = await apiGetSessionMessages(sessionId, token)
-
       const loadedMessages: ChatMessage[] = result.messages
         .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .map(msg => ({
-          id: msg.id,
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-          timestamp: msg.timestamp,
-          functionCalls: msg.functionCalls,
-        }))
-
-      setState(prev => ({
-        ...prev,
-        messages: loadedMessages,
-        isLoadingMessages: false,
-      }))
+        .map(msg => ({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content, timestamp: msg.timestamp, functionCalls: msg.functionCalls }))
+      setState(prev => ({ ...prev, messages: loadedMessages, isLoadingMessages: false }))
     } catch (error) {
-      const message = error instanceof AICoachAPIError
-        ? error.apiError.message
-        : 'Failed to load messages'
-      setState(prev => ({
-        ...prev,
-        isLoadingMessages: false,
-        error: message,
-      }))
+      const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to load messages'
+      setState(prev => ({ ...prev, isLoadingMessages: false, error: message }))
     }
-  }, [state.currentSessionId, getToken])
+  }, [getToken])
 
   const removeSession = useCallback(async (sessionId: string) => {
     const token = getToken()
     if (!token) return
-
     try {
       await apiDeleteSession(sessionId, token)
-
       setState(prev => {
         const updatedSessions = prev.sessions.filter(s => s.id !== sessionId)
         const isCurrentSession = prev.currentSessionId === sessionId
-
-        return {
-          ...prev,
-          sessions: updatedSessions,
-          ...(isCurrentSession ? {
-            currentSessionId: null,
-            messages: [],
-          } : {}),
-        }
+        return { ...prev, sessions: updatedSessions, ...(isCurrentSession ? { currentSessionId: null, messages: [] } : {}) }
       })
     } catch (error) {
-      const message = error instanceof AICoachAPIError
-        ? error.apiError.message
-        : 'Failed to delete session'
+      const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to delete session'
       setState(prev => ({ ...prev, error: message }))
     }
   }, [getToken])
 
-  // ============================================
-  // UTILITIES
-  // ============================================
+  const clearError = useCallback(() => { setState(prev => ({ ...prev, error: null })) }, [])
 
-  const clearError = useCallback(() => {
-    setState(prev => ({ ...prev, error: null }))
-  }, [])
-
-  return {
-    // State
-    messages: state.messages,
-    sessions: state.sessions,
-    currentSessionId: state.currentSessionId,
-    isSending: state.isSending,
-    isLoadingSessions: state.isLoadingSessions,
-    isLoadingMessages: state.isLoadingMessages,
-    error: state.error,
-    rateLimitInfo: state.rateLimitInfo,
-    chartRequest: state.chartRequest,
-
-    // Actions
-    sendMessage,
-    newSession,
-    selectSession,
-    deleteSession: removeSession,
-    loadSessions,
-    clearError,
-  }
+  return useMemo(() => ({
+    messages: state.messages, sessions: state.sessions, currentSessionId: state.currentSessionId,
+    isSending: state.isSending, isLoadingSessions: state.isLoadingSessions, isLoadingMessages: state.isLoadingMessages,
+    error: state.error, rateLimitInfo: state.rateLimitInfo, chartRequest: state.chartRequest,
+    sendMessage, newSession, selectSession, deleteSession: removeSession, loadSessions, clearError,
+  }), [
+    state.messages, state.sessions, state.currentSessionId, state.isSending, state.isLoadingSessions,
+    state.isLoadingMessages, state.error, state.rateLimitInfo, state.chartRequest,
+    sendMessage, newSession, selectSession, removeSession, loadSessions, clearError,
+  ])
 }

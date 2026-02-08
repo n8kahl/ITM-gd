@@ -40,7 +40,7 @@ router.post(
       // Analyze the screenshot
       const analysis = await analyzeScreenshot(image, mimeType);
 
-      res.json({
+      return res.json({
         ...analysis,
         positionCount: analysis.positions.length,
       });
@@ -55,7 +55,7 @@ router.post(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to analyze screenshot. Please try again.',
       });

@@ -41,10 +41,12 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
   try {
     // Get or create session
+    logger.info('getOrCreateSession', { sessionId, userId });
     await getOrCreateSession(sessionId, userId);
 
     // Get conversation history
     const history = await getConversationHistory(sessionId);
+    logger.info('History loaded', { messageCount: history.length });
 
     // Build messages array
     const messages: ChatCompletionMessageParam[] = [
@@ -64,7 +66,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       await updateSessionTitle(sessionId, message);
     }
 
-    // Call OpenAI API with function calling
+    // Call OpenAI API with function calling via circuit breaker
     let completion = await openaiCircuit.execute(() => openaiClient.chat.completions.create({
       model: CHAT_MODEL,
       messages,
@@ -183,8 +185,14 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       responseTime: responseTime / 1000 // Convert to seconds
     };
   } catch (error: any) {
-    logger.error('Chat service error', { error: error?.message || String(error) });
-    throw new Error(`Failed to process chat message: ${error.message}`);
+    logger.error('Chat service error', {
+      name: error.name,
+      message: error?.message || String(error),
+      status: error.status,
+      code: error.code,
+      type: error.type,
+    });
+    throw error; // Re-throw original error so route can inspect it properly
   }
 }
 
@@ -215,9 +223,14 @@ async function getOrCreateSession(sessionId: string, userId: string) {
     .select('*')
     .eq('id', sessionId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
-  if (fetchError || !session) {
+  if (fetchError) {
+    logger.error('Error fetching session', { error: fetchError.message });
+    throw new Error(`Failed to fetch session: ${fetchError.message}`);
+  }
+
+  if (!session) {
     throw new Error('Session not found or access denied');
   }
 
@@ -342,7 +355,6 @@ export async function getSessionMessages(
  * Update session title based on first user message
  */
 export async function updateSessionTitle(sessionId: string, firstMessage: string) {
-  // Generate title from first message (truncate to 60 chars)
   const title = firstMessage.length > 60
     ? firstMessage.substring(0, 57) + '...'
     : firstMessage;
@@ -361,7 +373,6 @@ export async function updateSessionTitle(sessionId: string, firstMessage: string
  * Delete a session and all its messages
  */
 export async function deleteSession(sessionId: string, userId: string) {
-  // Verify session belongs to user
   const { data: session, error: fetchError } = await supabase
     .from('ai_coach_sessions')
     .select('id')
@@ -373,7 +384,6 @@ export async function deleteSession(sessionId: string, userId: string) {
     throw new Error('Session not found or access denied');
   }
 
-  // Delete session (CASCADE will delete messages)
   const { error: deleteError } = await supabase
     .from('ai_coach_sessions')
     .delete()

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { API_BASE } from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -73,7 +74,6 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
   const [projections, setProjections] = useState<Record<string, GreeksSnapshot[]>>({})
 
   const token = session?.access_token
-  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API || 'http://localhost:3001'
 
   const fetchPositions = useCallback(async () => {
     if (!token) return
@@ -92,7 +92,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [token, API_BASE])
+  }, [token])
 
   useEffect(() => {
     fetchPositions()
@@ -117,7 +117,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
       // Projection fetch failed - continue without projections
       console.debug('Failed to fetch Greeks projection for position', positionId)
     }
-  }, [token, API_BASE, projections])
+  }, [token, projections])
 
   const deletePosition = useCallback(async (id: string) => {
     if (!token) return
@@ -134,7 +134,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete position')
     }
-  }, [token, API_BASE])
+  }, [token])
 
   const toggleExpand = (id: string) => {
     if (expandedId === id) {

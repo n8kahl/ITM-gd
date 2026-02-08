@@ -65,8 +65,8 @@ async function getCurrentPrice(symbol: string): Promise<number> {
       return intradayData[intradayData.length - 1].c;
     }
 
-    // Fallback to daily data if no intraday available
-    const dailyData = await fetchDailyData(symbol, 1);
+    // Fallback to daily data if no intraday available (7 days covers weekends + holidays)
+    const dailyData = await fetchDailyData(symbol, 7);
     if (dailyData.length > 0) {
       return dailyData[dailyData.length - 1].c;
     }

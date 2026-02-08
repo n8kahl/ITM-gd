@@ -22,7 +22,7 @@ export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 // Test database connection
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('ai_coach_users')
       .select('count')
       .limit(1);

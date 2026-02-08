@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { API_BASE } from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -80,7 +81,6 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
   const [activeTab, setActiveTab] = useState<'calendar' | 'fed' | 'sectors' | 'earnings'>('calendar')
 
   const token = session?.access_token
-  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API || 'http://localhost:3001'
 
   const fetchMacro = useCallback(async () => {
     if (!token) return
@@ -99,7 +99,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [token, API_BASE])
+  }, [token])
 
   useEffect(() => {
     fetchMacro()

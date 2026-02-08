@@ -7,6 +7,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useMemo,
   type ReactNode
 } from 'react'
 import { useRouter } from 'next/navigation'
@@ -116,9 +117,6 @@ async function fetchWithTimeout(
 }
 
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
-  // IMMEDIATE logging - if you don't see this, provider isn't mounting
-  console.log('🚀 MemberAuthProvider mounting')
-
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
     user: null,
@@ -132,8 +130,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     errorCode: null,
   })
 
-  console.log('📊 MemberAuthProvider initial state:', { isLoading: state.isLoading })
-
   // Dynamic role mapping fetched from config API (role ID -> tier)
   const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'executive'>>(DEFAULT_ROLE_MAPPING)
 
@@ -143,6 +139,15 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Track authentication status to prevent re-initialization on navigation
   const isAuthenticatedRef = useRef(false)
+
+  // Guard against concurrent initializeAuth calls (useEffect + onAuthStateChange race)
+  const isInitializingRef = useRef(false)
+
+  // Refs for state values so callbacks stay stable (don't depend on state objects)
+  const sessionRef = useRef(state.session)
+  sessionRef.current = state.session
+  const userRef = useRef(state.user)
+  userRef.current = state.user
 
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
@@ -219,6 +224,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Refs for stable access to latest callback versions (breaks dependency chains)
+  const getMembershipTierRef = useRef(getMembershipTier)
+  getMembershipTierRef.current = getMembershipTier
+  const fetchAllowedTabsRef = useRef(fetchAllowedTabs)
+  fetchAllowedTabsRef.current = fetchAllowedTabs
+
   // Sync Discord roles via Edge Function (with rate limiting and timeout)
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
     const now = Date.now()
@@ -238,7 +249,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     isSyncingRef.current = true
     lastSyncTimeRef.current = now
 
-    if (!state.session) {
+    if (!sessionRef.current) {
       console.log('No session available for Discord sync')
       isSyncingRef.current = false
       return null
@@ -250,7 +261,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${state.session.access_token}`,
+            'Authorization': `Bearer ${sessionRef.current.access_token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -273,13 +284,13 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
       // Update state with sync results
       const profile: MemberProfile = {
-        id: state.user?.id || '',
-        email: state.user?.email || null,
+        id: userRef.current?.id || '',
+        email: userRef.current?.email || null,
         discord_user_id: result.discord_user_id,
         discord_username: result.discord_username,
         discord_avatar: result.discord_avatar || null, // Store avatar from sync result
         discord_roles: roleIds,
-        membership_tier: getMembershipTier(roleIds),
+        membership_tier: getMembershipTierRef.current(roleIds),
       }
 
       const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -290,7 +301,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
 
       // Get allowed tabs based on membership tier
-      const allowedTabs = await fetchAllowedTabs(state.user?.id || '', profile.membership_tier)
+      const allowedTabs = await fetchAllowedTabsRef.current(userRef.current?.id || '', profile.membership_tier)
 
       setState(prev => ({
         ...prev,
@@ -326,12 +337,44 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     } finally {
       isSyncingRef.current = false
     }
-  }, [state.session, state.user, getMembershipTier, fetchAllowedTabs])
+  }, []) // Stable — reads from refs
+
+  // Ref for syncDiscordRoles so initializeAuth doesn't depend on it
+  const syncDiscordRolesRef = useRef(syncDiscordRoles)
+  syncDiscordRolesRef.current = syncDiscordRoles
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
+    // Prevent concurrent calls (useEffect + onAuthStateChange can race)
+    if (isInitializingRef.current) {
+      console.log('[MemberAuth] initializeAuth already running, skipping')
+      return
+    }
+    isInitializingRef.current = true
+
     console.log('[MemberAuth] initializeAuth started')
     try {
+      // Diagnostic: check Supabase client health
+      console.log('[MemberAuth] 🔍 Supabase client check:', {
+        hasAuthModule: !!supabase?.auth,
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) || 'MISSING',
+      })
+
+      // Try a direct fetch to Supabase to check connectivity
+      const healthUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`
+      console.log('[MemberAuth] 🔍 Testing Supabase connectivity:', healthUrl)
+      try {
+        const healthCheck = await Promise.race([
+          fetch(healthUrl, {
+            headers: { 'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '' }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('health check timeout')), 5000))
+        ]) as Response
+        console.log('[MemberAuth] 🔍 Supabase health:', { status: healthCheck.status, ok: healthCheck.ok })
+      } catch (healthErr: any) {
+        console.error('[MemberAuth] 🔍 Supabase NOT reachable:', healthErr.message)
+      }
+
       // Get current session with timeout wrapper
       console.log('[MemberAuth] 1️⃣ Calling getSession()...')
 
@@ -347,10 +390,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { data: { session }, error: sessionError } = await getSessionWithTimeout() as any
-      console.log('[MemberAuth] 1️⃣ getSession() complete:', { hasSession: !!session, error: sessionError })
 
       if (sessionError) {
-        console.error('[MemberAuth] Session error:', sessionError)
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -360,8 +401,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!session) {
-        // No session - user needs to log in
-        console.log('[MemberAuth] No session, marking as unauthenticated')
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -370,13 +409,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      // Get user
-      console.log('[MemberAuth] 2️⃣ Calling getUser()...')
       const { data: { user }, error: userError } = await supabase.auth.getUser()
-      console.log('[MemberAuth] 2️⃣ getUser() complete:', { hasUser: !!user, error: userError })
 
       if (userError || !user) {
-        console.error('[MemberAuth] User error:', userError)
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -385,8 +420,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      // Update state with user and session
-      console.log('[MemberAuth] 3️⃣ Updating state with user and session')
       setState(prev => ({
         ...prev,
         user,
@@ -395,16 +428,13 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
 
       // Try to get cached Discord profile first
-      console.log('[MemberAuth] 4️⃣ Fetching cached Discord profile...')
       const { data: discordProfile } = await supabase
         .from('user_discord_profiles')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle()
-      console.log('[MemberAuth] 4️⃣ Discord profile fetch complete:', { hasProfile: !!discordProfile })
 
       if (discordProfile) {
-        console.log('[MemberAuth] 5️⃣ Found cached profile, building member profile...')
         const profile: MemberProfile = {
           id: user.id,
           email: user.email || null,
@@ -412,11 +442,10 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           discord_username: discordProfile.discord_username,
           discord_avatar: discordProfile.discord_avatar,
           discord_roles: discordProfile.discord_roles || [],
-          membership_tier: getMembershipTier(discordProfile.discord_roles || []),
+          membership_tier: getMembershipTierRef.current(discordProfile.discord_roles || []),
         }
 
         // Get cached permissions
-        console.log('[MemberAuth] 6️⃣ Fetching user permissions...')
         const { data: userPermissions } = await supabase
           .from('user_permissions')
           .select(`
@@ -430,7 +459,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           `)
           .eq('user_id', user.id)
 
-        console.log('[MemberAuth] 6️⃣ Permissions fetch complete, processing...')
         const permissions: MemberPermission[] = (userPermissions || []).map((up: any) => ({
           id: up.app_permissions?.id || up.permission_id,
           name: up.app_permissions?.name || '',
@@ -439,11 +467,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }))
 
         // Get allowed tabs based on membership tier
-        console.log('[MemberAuth] 7️⃣ Calling fetchAllowedTabs...')
-        const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
-        console.log('[MemberAuth] 7️⃣ fetchAllowedTabs complete:', allowedTabs)
+        const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier)
 
-        console.log('[MemberAuth] 8️⃣ Setting final state with profile')
         setState(prev => ({
           ...prev,
           profile,
@@ -451,32 +476,24 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           allowedTabs,
           isLoading: false,
         }))
-        console.log('[MemberAuth] ✅ State updated, isLoading now false')
 
         // Sync Discord roles in background if profile is stale (> 5 minutes)
         const lastSynced = new Date(discordProfile.last_synced_at).getTime()
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
         if (lastSynced < fiveMinutesAgo) {
-          console.log('[MemberAuth] 🔄 Discord profile stale, syncing in background...')
-          syncDiscordRoles()
-        } else {
-          console.log('[MemberAuth] ✅ Profile is fresh, no sync needed')
+          syncDiscordRolesRef.current()
         }
       } else {
         // No cached profile - sync Discord roles immediately
-        console.log('No cached Discord profile, syncing...')
         setState(prev => ({ ...prev, session, user }))
 
         // Validate Supabase URL is configured
         if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-          console.error('NEXT_PUBLIC_SUPABASE_URL is not configured')
           throw new Error('Supabase URL not configured')
         }
 
-        // Need to sync after state is updated - USE TIMEOUT to prevent infinite loading
         try {
           const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
-          console.log('Calling Discord sync edge function:', edgeFunctionUrl)
 
           const response = await fetchWithTimeout(
             edgeFunctionUrl,
@@ -502,7 +519,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_username: result.discord_username,
             discord_avatar: result.discord_avatar || null,
             discord_roles: roleIds,
-            membership_tier: getMembershipTier(roleIds),
+            membership_tier: getMembershipTierRef.current(roleIds),
           }
 
           const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -513,7 +530,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           }))
 
           // Get allowed tabs based on membership tier
-          const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
+          const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier)
 
           setState(prev => ({
             ...prev,
@@ -591,6 +608,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         errorCode: isTimeout ? SYNC_ERROR_CODES.SYNC_FAILED : null,
       }))
     } finally {
+      isInitializingRef.current = false
       // Safety net: ensure loading is always set to false
       console.log('[MemberAuth] initializeAuth completed')
       setState(prev => {
@@ -601,7 +619,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         return prev
       })
     }
-  }, [syncDiscordRoles, getMembershipTier, fetchAllowedTabs])
+  }, []) // Stable — reads from refs to avoid re-render cascade
 
   // Sign out with full cleanup
   const signOut = useCallback(async () => {
@@ -668,21 +686,20 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return state.permissions.some(p => p.name === permissionName)
   }, [state.permissions, state.allowedTabs])
 
-  // Refresh auth state
+  // Refresh auth state (reset guard so initializeAuth can run again)
   const refresh = useCallback(async () => {
+    isInitializingRef.current = false
     setState(prev => ({ ...prev, isLoading: true }))
     await initializeAuth()
   }, [initializeAuth])
 
   // Initialize on mount
   useEffect(() => {
-    console.log('⚡ useEffect running - calling initializeAuth()')
     initializeAuth()
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔄 Auth state changed:', event)
 
         if (event === 'SIGNED_OUT') {
           isAuthenticatedRef.current = false
@@ -773,14 +790,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // Computed flag for NOT_MEMBER error
   const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
 
-  const value: MemberAuthContextValue = {
+  const value = useMemo<MemberAuthContextValue>(() => ({
     ...state,
     signOut,
     syncDiscordRoles,
     hasPermission,
     refresh,
     isNotMember,
-  }
+  }), [state, signOut, syncDiscordRoles, hasPermission, refresh, isNotMember])
 
   return (
     <MemberAuthContext.Provider value={value}>
