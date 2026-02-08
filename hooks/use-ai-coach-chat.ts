@@ -92,6 +92,7 @@ export function useAICoachChat() {
         isLoadingSessions: false,
       }))
     } catch (error) {
+      console.error('[AI Coach] loadSessions error:', error)
       const message = error instanceof AICoachAPIError
         ? error.apiError.message
         : 'Failed to load sessions'
@@ -199,6 +200,7 @@ export function useAICoachChat() {
       // Refresh sessions list to get updated titles/counts
       loadSessions()
     } catch (error) {
+      console.error('[AI Coach] sendMessage error:', error)
       if (error instanceof AICoachAPIError && error.isRateLimited) {
         setState(prev => ({
           ...prev,
