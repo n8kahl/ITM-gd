@@ -73,7 +73,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
   const [projections, setProjections] = useState<Record<string, GreeksSnapshot[]>>({})
 
   const token = session?.access_token
-  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API || 'http://localhost:3001'
+  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API_URL || 'http://localhost:3001'
 
   const fetchPositions = useCallback(async () => {
     if (!token) return
