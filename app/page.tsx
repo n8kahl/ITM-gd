@@ -750,8 +750,8 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* AI Chat Widget */}
-      <ChatWidget />
+      {/* AI Chat Widget - temporarily disabled to diagnose React Error #310 */}
+      {/* <ChatWidget /> */}
     </main>
   );
 }
