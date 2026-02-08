@@ -47,10 +47,26 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
               : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 text-white/90',
             message.isOptimistic && 'opacity-70'
           )}>
+            {/* Streaming status indicator */}
+            {message.isStreaming && message.streamStatus && !message.content && (
+              <div className="flex items-center gap-2 text-xs text-emerald-400/70">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {message.streamStatus}
+              </div>
+            )}
             {/* Render message content with basic formatting */}
-            <div className="text-sm leading-relaxed whitespace-pre-wrap">
-              <FormattedContent content={message.content} />
-            </div>
+            {message.content ? (
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                <FormattedContent content={message.content} />
+                {message.isStreaming && (
+                  <span className="inline-block w-1.5 h-4 bg-emerald-400/60 ml-0.5 animate-pulse" />
+                )}
+              </div>
+            ) : !message.isStreaming ? (
+              <div className="text-sm leading-relaxed whitespace-pre-wrap text-white/40">
+                No response
+              </div>
+            ) : null}
           </div>
 
           {/* Widget cards rendered from function call results */}

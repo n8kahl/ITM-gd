@@ -909,6 +909,153 @@ export async function deleteAlert(
 }
 
 // ============================================
+// SCANNER API
+// ============================================
+
+export interface ScanOpportunity {
+  id: string
+  type: 'technical' | 'options'
+  setupType: string
+  symbol: string
+  direction: 'bullish' | 'bearish' | 'neutral'
+  score: number
+  confidence: number
+  currentPrice: number
+  description: string
+  suggestedTrade?: {
+    strategy: string
+    strikes?: number[]
+    expiry?: string
+    entry?: number
+    stopLoss?: number
+    target?: number
+    estimatedCredit?: number
+    estimatedDebit?: number
+    maxProfit?: string
+    maxLoss?: string
+    probability?: string
+  }
+  metadata: Record<string, unknown>
+  scannedAt: string
+}
+
+export interface ScanResult {
+  opportunities: ScanOpportunity[]
+  symbols: string[]
+  scanDurationMs: number
+  scannedAt: string
+}
+
+/**
+ * Run opportunity scanner directly (without going through AI chat)
+ */
+export async function scanOpportunities(
+  token: string,
+  options?: { symbols?: string[]; includeOptions?: boolean }
+): Promise<ScanResult> {
+  const params = new URLSearchParams()
+  if (options?.symbols) params.set('symbols', options.symbols.join(','))
+  if (options?.includeOptions === false) params.set('include_options', 'false')
+
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/scanner/scan?${params}`,
+    { headers: {} },
+    token,
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// STREAMING CHAT API
+// ============================================
+
+export interface StreamEvent {
+  type: 'session' | 'status' | 'token' | 'done' | 'error'
+  data: unknown
+}
+
+export interface StreamDoneData {
+  messageId: string
+  functionCalls?: ChatMessageResponse['functionCalls']
+  tokensUsed: number
+  responseTime: number
+}
+
+/**
+ * Send a chat message with SSE streaming response.
+ * Returns an async generator that yields stream events.
+ */
+export async function* streamMessage(
+  sessionId: string,
+  message: string,
+  token: string,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
+  const response = await fetch(`${API_BASE}/api/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ sessionId, message }),
+    signal,
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Response body is not readable')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Parse SSE events from buffer
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+      let currentEvent = ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7)
+        } else if (line.startsWith('data: ') && currentEvent) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            yield { type: currentEvent as StreamEvent['type'], data }
+          } catch {
+            // Skip malformed JSON
+          }
+          currentEvent = ''
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// ============================================
 // ERROR CLASS
 // ============================================
 

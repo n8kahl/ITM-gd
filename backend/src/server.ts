@@ -22,6 +22,7 @@ import journalRouter from './routes/journal';
 import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
+import scannerRouter from './routes/scanner';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -99,6 +100,7 @@ app.use('/api/journal', journalRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/leaps', leapsRouter);
 app.use('/api/macro', macroRouter);
+app.use('/api/scanner', scannerRouter);
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
@@ -113,7 +115,8 @@ app.get('/', (_req: Request, res: Response) => {
       positionsAnalyze: '/api/positions/analyze', chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
-      leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol'
+      leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
+      scannerScan: '/api/scanner/scan', chatStream: '/api/chat/stream'
     }
   });
 });
