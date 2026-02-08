@@ -188,7 +188,7 @@ export async function getCohortApplications(limit = 100, offset = 0, status?: Co
 
   // For applications with contact_submission_id, fetch the metadata
   const enrichedApplications = await Promise.all(
-    (applications || []).map(async (app) => {
+    (applications || []).map(async (app: any) => {
       if (app.contact_submission_id) {
         const { data: submission } = await supabase
           .from('contact_submissions')
@@ -339,7 +339,7 @@ export async function getDeviceBreakdown(days = 30) {
 
   if (error) throw error
 
-  const breakdown = data.reduce((acc: Record<string, number>, view) => {
+  const breakdown = data.reduce((acc: Record<string, number>, view: any) => {
     const device = view.device_type || 'unknown'
     acc[device] = (acc[device] || 0) + 1
     return acc
@@ -358,7 +358,7 @@ export async function getBrowserBreakdown(days = 30) {
 
   if (error) throw error
 
-  const breakdown = data.reduce((acc: Record<string, number>, view) => {
+  const breakdown = data.reduce((acc: Record<string, number>, view: any) => {
     const browser = view.browser || 'unknown'
     acc[browser] = (acc[browser] || 0) + 1
     return acc

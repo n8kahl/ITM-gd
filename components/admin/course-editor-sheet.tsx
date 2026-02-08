@@ -256,7 +256,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                 </p>
               )}
               <div className="grid grid-cols-2 gap-2">
-                {DISCORD_ROLES.map((role) => (
+                {DISCORD_ROLES.map((role: any) => (
                   <button
                     key={role.id || 'public'}
                     type="button"

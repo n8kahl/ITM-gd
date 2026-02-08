@@ -89,14 +89,14 @@ export default function KnowledgeBasePage() {
       setEntries(data)
 
       // Calculate stats
-      const byCategory = data.reduce((acc, entry) => {
+      const byCategory = data.reduce((acc: any, entry: any) => {
         acc[entry.category] = (acc[entry.category] || 0) + 1
         return acc
       }, {} as Record<string, number>)
 
       setStats({
         total: data.length,
-        active: data.filter(e => e.is_active).length,
+        active: data.filter((e: any) => e.is_active).length,
         byCategory
       })
     }

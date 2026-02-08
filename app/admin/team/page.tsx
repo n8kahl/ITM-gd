@@ -178,9 +178,9 @@ export default function TeamMembersPage() {
 
       setStats({
         total: data.length,
-        online: data.filter(m => m.status === 'online').length,
-        admins: data.filter(m => m.role === 'admin').length,
-        agents: data.filter(m => m.role === 'agent').length
+        online: data.filter((m: any) => m.status === 'online').length,
+        admins: data.filter((m: any) => m.role === 'admin').length,
+        agents: data.filter((m: any) => m.role === 'agent').length
       })
     }
   }

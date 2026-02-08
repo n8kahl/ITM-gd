@@ -494,7 +494,7 @@ function ChatManagementContent() {
       setConversations(data)
 
       // Track existing escalated and high-value IDs to avoid duplicate notifications
-      data.forEach(conv => {
+      data.forEach((conv: any) => {
         if (conv.escalation_reason) {
           previousEscalatedIds.current.add(conv.id)
         }
@@ -506,10 +506,10 @@ function ChatManagementContent() {
       // Calculate stats
       const stats = {
         total: data.length,
-        active: data.filter(c => !c.status || c.status === 'active').length,
-        resolved: data.filter(c => c.status === 'resolved').length,
-        archived: data.filter(c => c.status === 'archived').length,
-        escalated: data.filter(c => c.escalation_reason && (!c.status || c.status === 'active')).length
+        active: data.filter((c: any) => !c.status || c.status === 'active').length,
+        resolved: data.filter((c: any) => c.status === 'resolved').length,
+        archived: data.filter((c: any) => c.status === 'archived').length,
+        escalated: data.filter((c: any) => c.escalation_reason && (!c.status || c.status === 'active')).length
       }
       setStats(stats)
     }
@@ -635,7 +635,7 @@ function ChatManagementContent() {
       await supabase
         .from('chat_conversations')
         .update({ status: 'archived' })
-        .in('id', resolvedConvs.map(c => c.id))
+        .in('id', resolvedConvs.map((c: any) => c.id))
 
       loadConversations()
     }
