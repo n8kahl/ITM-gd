@@ -42,6 +42,7 @@ app.get('/', (req: Request, res: Response) => {
       levels: '/api/levels/:symbol',
       chat: '/api/chat/message',
       sessions: '/api/chat/sessions',
+      sessionMessages: '/api/chat/sessions/:sessionId/messages',
       optionsChain: '/api/options/:symbol/chain',
       optionsExpirations: '/api/options/:symbol/expirations',
       positionsAnalyze: '/api/positions/analyze',

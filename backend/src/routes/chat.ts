@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { sendChatMessage, getUserSessions, deleteSession } from '../chatkit/chatService';
+import { sendChatMessage, getUserSessions, getSessionMessages, deleteSession } from '../chatkit/chatService';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -95,6 +95,46 @@ router.get(
       res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch sessions'
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/chat/sessions/:sessionId/messages
+ *
+ * Get messages for a specific session
+ *
+ * Query params:
+ * - limit: Max messages to return (default: 50)
+ * - offset: Offset for pagination (default: 0)
+ */
+router.get(
+  '/sessions/:sessionId/messages',
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const { sessionId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const result = await getSessionMessages(sessionId, userId, limit, offset);
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error fetching session messages:', error);
+
+      if (error.message.includes('not found') || error.message.includes('access denied')) {
+        return res.status(404).json({
+          error: 'Not found',
+          message: 'Session not found or access denied'
+        });
+      }
+
+      res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to fetch messages'
       });
     }
   }

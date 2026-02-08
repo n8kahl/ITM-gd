@@ -53,6 +53,25 @@ export interface ChartDataResponse {
   cached: boolean
 }
 
+export interface SessionMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  functionCalls?: Array<{
+    function: string
+    arguments: Record<string, unknown>
+    result: unknown
+  }>
+  tokensUsed?: number
+  timestamp: string
+}
+
+export interface SessionMessagesResponse {
+  messages: SessionMessage[]
+  total: number
+  hasMore: boolean
+}
+
 export interface APIError {
   error: string
   message: string
@@ -131,6 +150,35 @@ export async function deleteSession(
       'Authorization': `Bearer ${token}`,
     },
   })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get messages for a specific session
+ */
+export async function getSessionMessages(
+  sessionId: string,
+  token: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<SessionMessagesResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
