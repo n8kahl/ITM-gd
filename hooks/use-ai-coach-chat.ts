@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   sendMessage as apiSendMessage,
@@ -65,10 +65,14 @@ export function useAICoachChat() {
   // Ref to prevent double-sends
   const sendingRef = useRef(false)
 
-  // Get auth token
+  // Use a ref for the token so callbacks don't depend on the session object
+  const tokenRef = useRef<string | null>(session?.access_token || null)
+  tokenRef.current = session?.access_token || null
+
+  // Stable getter — never recreated
   const getToken = useCallback((): string | null => {
-    return session?.access_token || null
-  }, [session])
+    return tokenRef.current
+  }, [])
 
   // ============================================
   // LOAD SESSIONS
@@ -99,12 +103,16 @@ export function useAICoachChat() {
     }
   }, [getToken])
 
-  // Load sessions on mount
+  // Load sessions on mount and when token changes
   useEffect(() => {
     if (session?.access_token) {
       loadSessions()
     }
-  }, [session?.access_token, loadSessions])
+  }, [session?.access_token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ref for currentSessionId so sendMessage doesn't depend on state
+  const currentSessionIdRef = useRef<string | null>(state.currentSessionId)
+  currentSessionIdRef.current = state.currentSessionId
 
   // ============================================
   // SEND MESSAGE
@@ -117,7 +125,7 @@ export function useAICoachChat() {
     sendingRef.current = true
 
     // Generate or use current session ID
-    const sessionId = state.currentSessionId || crypto.randomUUID()
+    const sessionId = currentSessionIdRef.current || crypto.randomUUID()
 
     // Optimistic user message
     const userMessage: ChatMessage = {
@@ -215,7 +223,7 @@ export function useAICoachChat() {
     } finally {
       sendingRef.current = false
     }
-  }, [getToken, state.currentSessionId, loadSessions])
+  }, [getToken, loadSessions])
 
   // ============================================
   // SESSION MANAGEMENT
@@ -233,7 +241,7 @@ export function useAICoachChat() {
 
   const selectSession = useCallback(async (sessionId: string) => {
     // If already selected, do nothing
-    if (sessionId === state.currentSessionId) return
+    if (sessionId === currentSessionIdRef.current) return
 
     const token = getToken()
     if (!token) return
@@ -274,7 +282,7 @@ export function useAICoachChat() {
         error: message,
       }))
     }
-  }, [state.currentSessionId, getToken])
+  }, [getToken])
 
   const removeSession = useCallback(async (sessionId: string) => {
     const token = getToken()
@@ -312,7 +320,7 @@ export function useAICoachChat() {
     setState(prev => ({ ...prev, error: null }))
   }, [])
 
-  return {
+  return useMemo(() => ({
     // State
     messages: state.messages,
     sessions: state.sessions,
@@ -331,5 +339,21 @@ export function useAICoachChat() {
     deleteSession: removeSession,
     loadSessions,
     clearError,
-  }
+  }), [
+    state.messages,
+    state.sessions,
+    state.currentSessionId,
+    state.isSending,
+    state.isLoadingSessions,
+    state.isLoadingMessages,
+    state.error,
+    state.rateLimitInfo,
+    state.chartRequest,
+    sendMessage,
+    newSession,
+    selectSession,
+    removeSession,
+    loadSessions,
+    clearError,
+  ])
 }

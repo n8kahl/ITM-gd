@@ -16,7 +16,7 @@ export default function AICoachPage() {
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
     setMobileView('chat') // Switch to chat on mobile after sending
-  }, [chat])
+  }, [chat.sendMessage])
 
   return (
     <div className="space-y-4">

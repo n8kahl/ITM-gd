@@ -99,7 +99,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [token, API_BASE])
+  }, [token])
 
   useEffect(() => {
     fetchMacro()
