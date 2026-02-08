@@ -126,7 +126,7 @@ router.get(
       // Cache result
       await cacheSet(cacheKey, result, config.cacheTTL);
 
-      res.json(result);
+      return res.json(result);
     } catch (error: any) {
       console.error('Chart data error:', error);
 
@@ -138,7 +138,7 @@ router.get(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch chart data.'
       });

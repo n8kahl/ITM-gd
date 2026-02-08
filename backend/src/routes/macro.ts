@@ -29,9 +29,9 @@ router.get('/impact/:symbol', authenticateToken, async (req: Request, res: Respo
     }
 
     const impact = assessMacroImpact(symbol);
-    res.json({ symbol, ...impact });
+    return res.json({ symbol, ...impact });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to assess macro impact', message: error.message });
+    return res.status(500).json({ error: 'Failed to assess macro impact', message: error.message });
   }
 });
 

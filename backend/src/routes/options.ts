@@ -8,7 +8,6 @@ import {
   analyzePortfolio
 } from '../services/options/positionAnalyzer';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
-import { Position } from '../services/options/types';
 
 const router = Router();
 
@@ -66,7 +65,7 @@ router.get(
       // Fetch options chain
       const chain = await fetchOptionsChain(symbol, expiry, strikeRange);
 
-      res.json(chain);
+      return res.json(chain);
     } catch (error: any) {
       console.error('Error in options chain endpoint:', error);
 
@@ -94,7 +93,7 @@ router.get(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch options chain. Please try again.'
       });
@@ -129,7 +128,7 @@ router.get(
       // Fetch expirations
       const expirations = await fetchExpirationDates(symbol);
 
-      res.json({
+      return res.json({
         symbol,
         expirations,
         count: expirations.length
@@ -145,7 +144,7 @@ router.get(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch expirations. Please try again.'
       });
@@ -239,6 +238,11 @@ router.post(
         const analysis = await analyzePortfolio(positions);
         return res.json(analysis);
       }
+
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Must provide either "position" or "positions" in request body'
+      });
     } catch (error: any) {
       console.error('Error in position analysis endpoint:', error);
 
@@ -250,7 +254,7 @@ router.post(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to analyze position(s). Please try again.'
       });

@@ -23,9 +23,9 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 
     if (error) throw new Error(error.message);
 
-    res.json({ positions: data || [], count: (data || []).length });
+    return res.json({ positions: data || [], count: (data || []).length });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to fetch LEAPS positions', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch LEAPS positions', message: error.message });
   }
 });
 
@@ -62,14 +62,14 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
       data.current_iv || 0.25 // fallback IV
     );
 
-    res.json({
+    return res.json({
       position: data,
       daysToExpiry,
       daysHeld: Math.ceil((Date.now() - new Date(data.entry_date).getTime()) / (1000 * 60 * 60 * 24)),
       greeksProjection: projection.projections,
     });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to fetch LEAPS position', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch LEAPS position', message: error.message });
   }
 });
 
@@ -130,9 +130,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
     if (error) throw new Error(error.message);
 
-    res.status(201).json({ position: data });
+    return res.status(201).json({ position: data });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to create LEAPS position', message: error.message });
+    return res.status(500).json({ error: 'Failed to create LEAPS position', message: error.message });
   }
 });
 
@@ -175,9 +175,9 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     if (error) throw new Error(error.message);
     if (!data) return res.status(404).json({ error: 'Position not found' });
 
-    res.json({ position: data });
+    return res.json({ position: data });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to update LEAPS position', message: error.message });
+    return res.status(500).json({ error: 'Failed to update LEAPS position', message: error.message });
   }
 });
 
@@ -198,9 +198,9 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
 
     if (error) throw new Error(error.message);
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to delete LEAPS position', message: error.message });
+    return res.status(500).json({ error: 'Failed to delete LEAPS position', message: error.message });
   }
 });
 
@@ -240,9 +240,9 @@ router.post('/:id/roll-calculation', authenticateToken, async (req: Request, res
       quantity: position.quantity,
     });
 
-    res.json(rollAnalysis);
+    return res.json(rollAnalysis);
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to calculate roll', message: error.message });
+    return res.status(500).json({ error: 'Failed to calculate roll', message: error.message });
   }
 });
 
@@ -278,9 +278,9 @@ router.post('/:id/greeks-projection', authenticateToken, async (req: Request, re
       position.current_iv || 0.25
     );
 
-    res.json(projection);
+    return res.json(projection);
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to generate projection', message: error.message });
+    return res.status(500).json({ error: 'Failed to generate projection', message: error.message });
   }
 });
 
