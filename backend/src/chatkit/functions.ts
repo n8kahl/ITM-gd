@@ -253,5 +253,27 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         required: ['symbol']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'scan_opportunities',
+      description: 'Scan the market for trading opportunities using technical and options analysis. Use this when the user asks to find setups, scan for opportunities, look for trades, or wants to know what setups are available.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbols: {
+            type: 'array',
+            items: { type: 'string', enum: ['SPX', 'NDX'] },
+            description: 'Symbols to scan (default: SPX and NDX)'
+          },
+          include_options: {
+            type: 'boolean',
+            description: 'Include options-based scans (default: true)',
+            default: true
+          }
+        }
+      }
+    }
   }
 ];

@@ -5,6 +5,7 @@ import { analyzePosition, analyzePortfolio } from '../services/options/positionA
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
 import { getMarketStatus as getMarketStatusService } from '../services/marketHours';
+import { scanOpportunities } from '../services/scanner';
 
 /**
  * Function handlers - these execute when the AI calls a function
@@ -48,6 +49,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_alerts':
       return await handleGetAlerts(args, context?.userId);
+
+    case 'scan_opportunities':
+      return await handleScanOpportunities(args);
 
     case 'show_chart':
       return await handleShowChart(args);
@@ -465,6 +469,46 @@ async function handleGetAlerts(
   } catch (error: any) {
     return {
       error: 'Failed to fetch alerts',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: scan_opportunities
+ * Scans for trading opportunities across symbols
+ */
+async function handleScanOpportunities(args: {
+  symbols?: string[];
+  include_options?: boolean;
+}) {
+  const { symbols = ['SPX', 'NDX'], include_options = true } = args;
+
+  try {
+    const result = await scanOpportunities(symbols, include_options);
+
+    return {
+      opportunities: result.opportunities.map(opp => ({
+        type: opp.type,
+        setupType: opp.setupType.replace(/_/g, ' '),
+        symbol: opp.symbol,
+        direction: opp.direction,
+        score: opp.score,
+        currentPrice: opp.currentPrice,
+        description: opp.description,
+        suggestedTrade: opp.suggestedTrade,
+        metadata: opp.metadata,
+      })),
+      count: result.opportunities.length,
+      symbols: result.symbols,
+      scanDurationMs: result.scanDurationMs,
+      message: result.opportunities.length > 0
+        ? `Found ${result.opportunities.length} opportunity${result.opportunities.length > 1 ? 'ies' : 'y'} across ${symbols.join(', ')}`
+        : `No opportunities found across ${symbols.join(', ')} at this time`,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to scan opportunities',
       message: error.message,
     };
   }

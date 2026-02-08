@@ -13,6 +13,7 @@ import {
   Camera,
   BookOpen,
   Bell,
+  Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -23,6 +24,7 @@ import { PositionForm } from './position-form'
 import { ScreenshotUpload } from './screenshot-upload'
 import { TradeJournal } from './trade-journal'
 import { AlertsPanel } from './alerts-panel'
+import { OpportunityScanner } from './opportunity-scanner'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -53,7 +55,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts'
+type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts' | 'scanner'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -98,6 +100,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'journal', icon: BookOpen, label: 'Journal' },
   { view: 'screenshot', icon: Camera, label: 'Screenshot' },
   { view: 'alerts', icon: Bell, label: 'Alerts' },
+  { view: 'scanner', icon: Search, label: 'Scanner' },
 ]
 
 // Level annotation colors by type
@@ -277,6 +280,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             onShowPosition={() => setActiveView('position')}
             onShowJournal={() => setActiveView('journal')}
             onShowAlerts={() => setActiveView('alerts')}
+            onShowScanner={() => setActiveView('scanner')}
           />
         )}
 
@@ -308,6 +312,13 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'alerts' && (
           <AlertsPanel onClose={() => setActiveView('welcome')} />
+        )}
+
+        {activeView === 'scanner' && (
+          <OpportunityScanner
+            onClose={() => setActiveView('welcome')}
+            onSendPrompt={onSendPrompt}
+          />
         )}
 
         {activeView === 'screenshot' && (
@@ -401,6 +412,7 @@ function WelcomeView({
   onShowPosition,
   onShowJournal,
   onShowAlerts,
+  onShowScanner,
 }: {
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
@@ -408,6 +420,7 @@ function WelcomeView({
   onShowPosition: () => void
   onShowJournal: () => void
   onShowAlerts: () => void
+  onShowScanner: () => void
 }) {
   return (
     <div className="h-full flex flex-col">
@@ -488,7 +501,7 @@ function WelcomeView({
           </div>
 
           {/* Quick Access Cards */}
-          <div className="grid grid-cols-5 gap-3 mt-4">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mt-4">
             <button
               onClick={onShowChart}
               className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
@@ -528,6 +541,14 @@ function WelcomeView({
               <Bell className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-white">Alerts</p>
               <p className="text-[10px] text-white/30 mt-0.5">Price Watch</p>
+            </button>
+            <button
+              onClick={onShowScanner}
+              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <Search className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-medium text-white">Scanner</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Find Setups</p>
             </button>
           </div>
         </div>
