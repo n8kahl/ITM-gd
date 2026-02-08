@@ -2,13 +2,12 @@ import {
   fetchDailyData,
   fetchPreMarketData,
   fetchIntradayData,
-  getPreviousTradingDay
 } from './fetcher';
 import { calculatePreviousDayLevels, calculateDistances } from './calculators/previousDay';
 import { calculatePreMarketLevels } from './calculators/premarket';
 import { calculateAllPivots } from './calculators/pivots';
 import { calculateVWAP } from './calculators/vwap';
-import { calculateATR, calculateMultipleATRs } from './calculators/atr';
+import { calculateATR } from './calculators/atr';
 import {
   getCachedLevels,
   cacheLevels,

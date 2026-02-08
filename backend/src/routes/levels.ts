@@ -46,7 +46,7 @@ router.get(
       // Calculate levels
       const levels = await calculateLevels(symbol, timeframe);
 
-      res.json(levels);
+      return res.json(levels);
     } catch (error: any) {
       console.error('Error in levels endpoint:', error);
 
@@ -66,7 +66,7 @@ router.get(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to calculate levels. Please try again.'
       });

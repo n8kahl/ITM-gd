@@ -7,12 +7,12 @@ import { testOpenAIConnection } from '../config/openai';
 const router = Router();
 
 // Basic health check
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
 // Detailed health check
-router.get('/detailed', async (req: Request, res: Response) => {
+router.get('/detailed', async (_req: Request, res: Response) => {
   const checks = {
     status: 'ok',
     timestamp: new Date().toISOString(),

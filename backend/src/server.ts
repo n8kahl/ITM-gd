@@ -54,7 +54,7 @@ app.use('/api/leaps', leapsRouter);
 app.use('/api/macro', macroRouter);
 
 // Root endpoint
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({
     name: 'TITM AI Coach Backend',
     version: '1.0.0',
@@ -94,7 +94,7 @@ app.use((req: Request, res: Response) => {
 });
 
 // Error handler
-app.use((err: Error, req: Request, res: Response, next: any) => {
+app.use((err: Error, _req: Request, res: Response, _next: any) => {
   console.error('Unhandled error:', err);
   res.status(500).json({
     error: 'Internal server error',

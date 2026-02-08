@@ -48,7 +48,7 @@ router.post(
         userId
       });
 
-      res.json({
+      return res.json({
         sessionId: finalSessionId,
         ...response
       });
@@ -63,7 +63,7 @@ router.post(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to process chat message. Please try again.'
       });
@@ -121,7 +121,7 @@ router.get(
 
       const result = await getSessionMessages(sessionId, userId, limit, offset);
 
-      res.json(result);
+      return res.json(result);
     } catch (error: any) {
       console.error('Error fetching session messages:', error);
 
@@ -132,7 +132,7 @@ router.get(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch messages'
       });
@@ -155,7 +155,7 @@ router.delete(
 
       await deleteSession(sessionId, userId);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Session deleted successfully'
       });
@@ -169,7 +169,7 @@ router.delete(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to delete session'
       });
