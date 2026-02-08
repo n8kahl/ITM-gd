@@ -213,6 +213,16 @@ export async function sendMessage(
 }
 
 /**
+ * Send a chat message without requiring an existing session (backend auto-creates one)
+ */
+export async function sendChatMessage(
+  message: string,
+  token: string
+): Promise<ChatMessageResponse> {
+  return sendMessage('', message, token)
+}
+
+/**
  * Get user's chat sessions
  */
 export async function getSessions(
