@@ -5,7 +5,15 @@
  * Uses Supabase JWT for authentication.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API_URL || 'http://localhost:3001'
+function resolveApiBase(): string {
+  const url = process.env.NEXT_PUBLIC_AI_COACH_API_URL
+  if (!url) return 'http://localhost:3001'
+  // Ensure the URL has a protocol so fetch() treats it as absolute
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  return `https://${url}`
+}
+
+export const API_BASE = resolveApiBase()
 
 // ============================================
 // TYPES

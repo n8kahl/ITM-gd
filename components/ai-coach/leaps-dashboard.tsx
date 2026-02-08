@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { API_BASE } from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -73,7 +74,6 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
   const [projections, setProjections] = useState<Record<string, GreeksSnapshot[]>>({})
 
   const token = session?.access_token
-  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API_URL || 'http://localhost:3001'
 
   const fetchPositions = useCallback(async () => {
     if (!token) return
