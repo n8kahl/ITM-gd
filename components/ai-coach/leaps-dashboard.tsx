@@ -92,7 +92,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [token, API_BASE])
+  }, [token])
 
   useEffect(() => {
     fetchPositions()
@@ -116,7 +116,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     } catch {
       // Projection fetch failed silently
     }
-  }, [token, API_BASE, projections])
+  }, [token, projections])
 
   const deletePosition = useCallback(async (id: string) => {
     if (!token) return
@@ -130,7 +130,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     } catch {
       // Delete failed silently
     }
-  }, [token, API_BASE])
+  }, [token])
 
   const toggleExpand = (id: string) => {
     if (expandedId === id) {
