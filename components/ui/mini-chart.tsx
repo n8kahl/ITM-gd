@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   ResponsiveContainer,
   RadialBarChart,
@@ -169,9 +169,9 @@ export function CandlestickChart({ className }: CandlestickChartProps) {
   const maxVolume = Math.max(...candles.map(c => c.volume));
 
   // Convert price to Y coordinate (SVG coords: 0 at top)
-  const priceToY = useCallback((price: number, height: number) => {
+  const priceToY = (price: number, height: number) => {
     return height - ((price - chartMin) / chartRange) * height;
-  }, [chartMin, chartRange]);
+  };
 
   const candleWidth = 100 / candles.length;
   const bodyWidth = candleWidth * 0.7;
