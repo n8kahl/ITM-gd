@@ -72,6 +72,105 @@ export interface SessionMessagesResponse {
   hasMore: boolean
 }
 
+// ============================================
+// OPTIONS TYPES
+// ============================================
+
+export interface OptionContract {
+  strike: number
+  last: number
+  bid: number
+  ask: number
+  volume: number
+  openInterest: number
+  impliedVolatility: number
+  delta: number | null
+  gamma: number | null
+  theta: number | null
+  vega: number | null
+  rho: number | null
+  inTheMoney: boolean
+  intrinsicValue: number
+  extrinsicValue: number
+}
+
+export interface OptionsChainResponse {
+  symbol: string
+  currentPrice: number
+  expiry: string
+  daysToExpiry: number
+  ivRank: number
+  options: {
+    calls: OptionContract[]
+    puts: OptionContract[]
+  }
+}
+
+export interface ExpirationsResponse {
+  symbol: string
+  expirations: string[]
+  count: number
+}
+
+export type PositionType = 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock'
+
+export interface PositionInput {
+  symbol: string
+  type: PositionType
+  strike?: number
+  strike2?: number
+  expiry?: string
+  quantity: number
+  entryPrice: number
+  entryDate: string
+}
+
+export interface PositionAnalysis {
+  position: PositionInput
+  currentValue: number
+  costBasis: number
+  pnl: number
+  pnlPct: number
+  daysHeld: number
+  daysToExpiry: number
+  breakeven: number | null
+  maxGain: number | string
+  maxLoss: number | string
+  riskRewardRatio?: number
+  greeks: {
+    delta: number
+    gamma: number
+    theta: number
+    vega: number
+    rho?: number
+  }
+}
+
+export interface PortfolioAnalysis {
+  positions: PositionAnalysis[]
+  portfolio: {
+    totalValue: number
+    totalCostBasis: number
+    totalPnl: number
+    totalPnlPct: number
+    portfolioGreeks: {
+      delta: number
+      gamma: number
+      theta: number
+      vega: number
+    }
+    risk: {
+      maxLoss: number | string
+      maxGain: number | string
+      buyingPowerUsed?: number
+    }
+    riskAssessment: {
+      overall: string
+      warnings: string[]
+    }
+  }
+}
+
 export interface APIError {
   error: string
   message: string
@@ -207,6 +306,119 @@ export async function getChartData(
       },
     }
   )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// OPTIONS API FUNCTIONS
+// ============================================
+
+/**
+ * Get options chain for a symbol
+ */
+export async function getOptionsChain(
+  symbol: string,
+  token: string,
+  expiry?: string,
+  strikeRange: number = 10
+): Promise<OptionsChainResponse> {
+  const params = new URLSearchParams({ strikeRange: strikeRange.toString() })
+  if (expiry) params.set('expiry', expiry)
+
+  const response = await fetch(
+    `${API_BASE}/api/options/${symbol}/chain?${params}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` },
+    }
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get available expiration dates for a symbol
+ */
+export async function getExpirations(
+  symbol: string,
+  token: string
+): Promise<ExpirationsResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/options/${symbol}/expirations`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` },
+    }
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Analyze a single position
+ */
+export async function analyzePosition(
+  position: PositionInput,
+  token: string
+): Promise<PositionAnalysis> {
+  const response = await fetch(`${API_BASE}/api/positions/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ position }),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Analyze a portfolio of positions
+ */
+export async function analyzePortfolio(
+  positions: PositionInput[],
+  token: string
+): Promise<PortfolioAnalysis> {
+  const response = await fetch(`${API_BASE}/api/positions/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ positions }),
+  })
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
