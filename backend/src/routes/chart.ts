@@ -9,7 +9,8 @@ import { chartParamSchema, chartQuerySchema } from '../schemas/chartValidation';
 
 const router = Router();
 
-const SUPPORTED_SYMBOLS = ['SPX', 'NDX'];
+// Known index symbols that need the I: prefix for Massive.com aggregates
+const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'VIX', 'RUT', 'COMP', 'DJIA']);
 
 type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D' | '1W' | '1M';
 
@@ -31,7 +32,7 @@ const TIMEFRAME_CONFIG: Record<string, TimeframeConfig> = {
 
 function normalizeSymbol(symbol: string): string {
   if (symbol.startsWith('I:')) return symbol;
-  if (symbol === 'SPX' || symbol === 'NDX') return `I:${symbol}`;
+  if (INDEX_SYMBOLS.has(symbol)) return `I:${symbol}`;
   return symbol;
 }
 
@@ -63,11 +64,11 @@ router.get(
       const symbol = req.params.symbol.toUpperCase();
       const timeframe = (req.query.timeframe as ChartTimeframe) || '1D';
 
-      // Validate symbol
-      if (!SUPPORTED_SYMBOLS.includes(symbol)) {
-        return res.status(404).json({
-          error: 'Symbol not found',
-          message: `Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`
+      // Validate symbol format (1-10 uppercase letters)
+      if (!/^[A-Z]{1,10}$/.test(symbol)) {
+        return res.status(400).json({
+          error: 'Invalid symbol',
+          message: 'Symbol must be 1-10 uppercase letters'
         });
       }
 

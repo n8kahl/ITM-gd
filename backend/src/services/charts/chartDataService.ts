@@ -38,9 +38,12 @@ export interface ChartDataResult {
   cached: boolean;
 }
 
+// Known index symbols that need the I: prefix for Massive.com aggregates
+const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'VIX', 'RUT', 'COMP', 'DJIA']);
+
 function normalizeSymbol(symbol: string): string {
   if (symbol.startsWith('I:')) return symbol;
-  if (symbol === 'SPX' || symbol === 'NDX') return `I:${symbol}`;
+  if (INDEX_SYMBOLS.has(symbol)) return `I:${symbol}`;
   return symbol;
 }
 

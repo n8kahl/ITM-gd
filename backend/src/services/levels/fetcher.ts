@@ -2,14 +2,15 @@ import { logger } from '../../lib/logger';
 import { getDailyAggregates, getMinuteAggregates, MassiveAggregate } from '../../config/massive';
 import { isTradingDay, getETOffset } from '../marketHours';
 
-// Convert Massive.com ticker format (I:SPX -> SPX)
+// Known index symbols that need the I: prefix for Massive.com aggregates
+const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'VIX', 'RUT', 'COMP', 'DJIA']);
+
+// Normalize symbol to Massive.com ticker format (SPX -> I:SPX, AAPL stays AAPL)
 function normalizeSymbol(symbol: string): string {
-  // Remove index prefix if present
   if (symbol.startsWith('I:')) {
     return symbol;
   }
-  // Add index prefix for SPX and NDX
-  if (symbol === 'SPX' || symbol === 'NDX') {
+  if (INDEX_SYMBOLS.has(symbol)) {
     return `I:${symbol}`;
   }
   return symbol;

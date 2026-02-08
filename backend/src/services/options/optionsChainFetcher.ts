@@ -30,11 +30,24 @@ import {
 // Default risk-free rate (US 10-year Treasury, update periodically)
 const RISK_FREE_RATE = 0.045; // 4.5%
 
-// Default dividend yield for SPX/NDX
+// Dividend yields for common symbols (used in Black-Scholes fallback)
 const DIVIDEND_YIELDS: { [key: string]: number } = {
-  'SPX': 0.014, // ~1.4% for S&P 500
-  'NDX': 0.007  // ~0.7% for NASDAQ-100
+  'SPX': 0.014,   // ~1.4% for S&P 500
+  'NDX': 0.007,   // ~0.7% for NASDAQ-100
+  'QQQ': 0.006,   // ~0.6% for Invesco QQQ
+  'SPY': 0.013,   // ~1.3% for SPDR S&P 500
+  'IWM': 0.012,   // ~1.2% for Russell 2000 ETF
+  'DIA': 0.018,   // ~1.8% for Dow ETF
+  'AAPL': 0.005,  // ~0.5%
+  'MSFT': 0.007,  // ~0.7%
+  'AMZN': 0.0,    // No dividend
+  'GOOGL': 0.005, // ~0.5%
+  'META': 0.004,  // ~0.4%
+  'TSLA': 0.0,    // No dividend
+  'NVDA': 0.0003, // ~0.03%
 };
+// Default for unknown symbols — most large-caps pay ~0.5-1%
+const DEFAULT_DIVIDEND_YIELD = 0.005;
 
 // Cache TTL for options chain (5 minutes during market hours)
 const OPTIONS_CHAIN_CACHE_TTL = 300; // 5 minutes
@@ -42,8 +55,11 @@ const OPTIONS_CHAIN_CACHE_TTL = 300; // 5 minutes
 /**
  * Get current price for underlying symbol
  */
+// Known index symbols that need the I: prefix for Massive.com aggregates
+const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'VIX', 'RUT', 'COMP', 'DJIA']);
+
 async function getCurrentPrice(symbol: string): Promise<number> {
-  const ticker = symbol === 'SPX' || symbol === 'NDX' ? `I:${symbol}` : symbol;
+  const ticker = INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
   const today = new Date().toISOString().split('T')[0];
   // 7-day lookback covers weekends + holidays (longest US market closure = 3 consecutive days)
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
@@ -119,7 +135,7 @@ function calculateContractGreeks(
   symbol: string
 ): { delta: number; gamma: number; theta: number; vega: number; rho: number } {
   const timeToExpiry = daysToYears(daysToExpiry(expiryDate));
-  const dividendYield = DIVIDEND_YIELDS[symbol] || 0;
+  const dividendYield = DIVIDEND_YIELDS[symbol] || DEFAULT_DIVIDEND_YIELD;
 
   const inputs: BlackScholesInputs = {
     spotPrice,
