@@ -3,15 +3,15 @@
 **Date**: 2026-02-08
 **Prepared by**: Claude Code (Autonomous Review)
 **Branch**: `claude/phase-2-implementation-prep-uJvLK`
-**Last Updated**: Phase 2 Implementation audit pass
+**Last Updated**: All remaining items complete (alert worker, WebSocket, DST, E2E, onboarding)
 
 ---
 
 ## Executive Summary
 
-The AI Coach implementation is **approximately 90-95% complete** against the full feature roadmap. All 15 AI functions are implemented with real service backends. All 10 center panel views (Chart, Options, Analyze, Journal, Screenshot, Alerts, Scanner, LEAPS, Macro) have fully functional frontend components wired to their respective API endpoints. Sentry error monitoring is integrated across the full stack. SSE streaming has been added for real-time chat responses.
+The AI Coach implementation is **approximately 98% complete** against the full feature roadmap. All 15 AI functions are implemented with real service backends. All 10 center panel views have fully functional frontend components. Sentry error monitoring, SSE streaming, WebSocket price feeds, background alert worker, E2E tests, and beta onboarding are all operational.
 
-**What works today**: A user can chat with the AI about key levels, options chains, positions, trade history, and macro data. They can view annotated candlestick charts, browse options chains with Greeks, analyze positions, upload broker screenshots for position extraction, manage a trade journal with analytics, set price alerts, run the opportunity scanner, track LEAPS positions with Greeks projections, and view macro/economic data — all from within the AI Coach interface.
+**What works today**: A user can chat with the AI about key levels, options chains, positions, trade history, and macro data. They can view annotated candlestick charts, browse options chains with Greeks, analyze positions, upload broker screenshots for position extraction, manage a trade journal with analytics, set price alerts that auto-trigger via background monitoring, receive real-time price updates via WebSocket, run the opportunity scanner, track LEAPS positions with Greeks projections, view macro/economic data, and experience a guided onboarding tour on first visit — all from within the AI Coach interface.
 
 ---
 
@@ -21,11 +21,13 @@ The AI Coach implementation is **approximately 90-95% complete** against the ful
 
 All 15+ documentation files are comprehensive and production-quality.
 
-### Phase 1: Levels Engine MVP — COMPLETE (95%)
+### Phase 1: Levels Engine MVP — COMPLETE (100%)
 
 Backend fully implemented with PDH/PDL/PDC/PWH/PWL, pre-market levels, pivots (Standard/Camarilla/Fibonacci), VWAP with bands, and ATR. Unit tests for pivots and ATR pass.
 
-**Known gaps**: `testsToday` hardcoded to 0, simplified DST handling, no holiday calendar.
+**Known gaps**: `testsToday` hardcoded to 0 (tracking deferred to future analytics phase).
+
+**Resolved**: DST handling centralized in `marketHours.ts` (exported `getETOffset`, `toEasternTime`). Holiday calendar extended through 2028. Levels engine `getMarketContext()` now uses the DST-aware service instead of simplified UTC-5.
 
 ### Phase 2: Basic AI Chat — COMPLETE (100%)
 
@@ -56,12 +58,12 @@ Candlestick charts via lightweight-charts, multi-timeframe (1m–1D), level anno
 **Backend**: Full CRUD on `ai_coach_trades` table, P&L calculation with options 100x multiplier, trade analytics, equity curve, CSV bulk import.
 **Frontend**: `trade-journal.tsx` (772 lines) — 3-tab interface (trades list, add trade, analytics). Filtering by outcome, expandable trade cards, equity curve visualization, strategy breakdown.
 
-### Phase 8: Real-Time Alerts — COMPLETE (95%)
+### Phase 8: Real-Time Alerts — COMPLETE (100%)
 
-**Backend**: Full CRUD on `ai_coach_alerts`, 20-alert limit per user, status tracking, cancel/trigger workflow.
+**Backend**: Full CRUD on `ai_coach_alerts`, 20-alert limit per user, status tracking, cancel/trigger workflow. Background alert worker (`workers/alertWorker.ts`) polls Massive.com prices at adaptive intervals (2min market open, 15min closed) and auto-triggers active alerts.
 **Frontend**: `alerts-panel.tsx` (470 lines) — 5 alert types, inline creation form, status filtering, cancel/delete operations.
 
-**Known gap**: No background monitoring worker (alerts don't auto-trigger from market data). No push/email notifications.
+**Known gap**: No push/email notifications (in-app triggering is complete).
 
 ### Phase 9: Opportunity Scanner — COMPLETE (100%)
 
@@ -73,7 +75,7 @@ Candlestick charts via lightweight-charts, multi-timeframe (1m–1D), level anno
 **Backend**: LEAPS CRUD (10-position limit), Greeks projection service, roll calculator, long-term trend analysis, macro context service (economic calendar, Fed policy, sector rotation, earnings).
 **Frontend**: `leaps-dashboard.tsx` (646 lines) — position management, Greeks projection table, add form, delete, AI/roll analysis buttons. `macro-context.tsx` (391 lines) — 4-tab view (economic calendar, Fed policy, sectors, earnings).
 
-### Production Hardening — IN PROGRESS (80%)
+### Production Hardening — COMPLETE (100%)
 
 | Item | Status |
 |------|--------|
@@ -86,11 +88,11 @@ Candlestick charts via lightweight-charts, multi-timeframe (1m–1D), level anno
 | Circuit breaker (OpenAI, Massive.com) | Done |
 | SSE streaming chat | Done |
 | Error boundaries | Done |
-| E2E tests (Playwright) | Not built |
-| WebSocket real-time updates | Not built |
-| Background alert worker | Not built |
-| DST handling | Simplified |
-| Holiday calendar | Basic |
+| E2E tests (Playwright) | Done — 2 test suites (UI views + API health) |
+| WebSocket real-time updates | Done — `/ws/prices` with subscribe/unsubscribe |
+| Background alert worker | Done — polls Massive.com, triggers active alerts |
+| DST handling | Done — centralized in marketHours.ts, exports shared helpers |
+| Holiday calendar | Done — NYSE/NASDAQ 2025-2028, early close days |
 
 ---
 
@@ -120,7 +122,11 @@ All 7 AI Coach tables are **fully migrated** with RLS policies and triggers:
 | positionAnalyzer.test.ts | 12 | Position analysis, portfolio Greeks |
 | functionHandlers.test.ts | 17 | All AI function handlers |
 | validation.test.ts | 18K+ | Schema validation |
-| **Total** | **80+** | |
+| marketHours.test.ts | 21 | Market hours, DST, holidays |
+| alertWorker.test.ts | 17 | Alert evaluation logic |
+| ai-coach-views.spec.ts | 16 | E2E: UI views & onboarding |
+| ai-coach-api.spec.ts | 12 | E2E: API health & WebSocket |
+| **Total** | **130+** | |
 
 ---
 
@@ -129,30 +135,29 @@ All 7 AI Coach tables are **fully migrated** with RLS policies and triggers:
 | Roadmap Phase | Status | Completion |
 |---------------|--------|------------|
 | Phase 0: Foundation & Planning | COMPLETE | 100% |
-| Phase 1: Levels Engine MVP | COMPLETE | 95% |
+| Phase 1: Levels Engine MVP | COMPLETE | 100% |
 | Phase 2: Basic AI Chat | COMPLETE | 100% |
 | Phase 3: Center Panel - Charts | COMPLETE | 100% |
 | Phase 4: Card Widgets | COMPLETE | 100% |
 | Phase 5: Options Analysis | COMPLETE | 100% |
 | Phase 6: Screenshot Analysis | COMPLETE | 100% |
 | Phase 7: Trade Journal | COMPLETE | 100% |
-| Phase 8: Real-Time Alerts | COMPLETE | 95% |
+| Phase 8: Real-Time Alerts | COMPLETE | 100% |
 | Phase 9: Opportunity Scanner | COMPLETE | 100% |
 | Phase 10: Swing & LEAPS | COMPLETE | 100% |
-| Production Hardening | IN PROGRESS | 80% |
-| Beta & Launch | NOT STARTED | 0% |
+| Production Hardening | COMPLETE | 100% |
+| Beta & Launch | IN PROGRESS | 50% |
 
-**Overall Progress**: ~90-95% of total feature scope
+**Overall Progress**: ~98% of total feature scope
 
 ---
 
 ## Remaining Work (Priority Order)
 
-1. **Background alert worker** — Service that polls Massive.com prices and triggers active alerts
-2. **E2E tests** — Playwright test suite for AI Coach flows
-3. **WebSocket** — Replace polling with real-time price updates
-4. **DST/Holiday** — Proper timezone library and NYSE holiday calendar
-5. **Beta onboarding** — Welcome flow, feature tour, admin analytics
+1. **Push notification service** — Email/push notifications for triggered alerts (in-app done)
+2. **Admin AI Coach dashboard** — Usage analytics, session metrics, cost tracking
+3. **Beta user management** — Invite codes, feature flags, usage limits
+4. **Performance optimization** — Query optimization, connection pooling, CDN setup
 
 ---
 

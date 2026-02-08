@@ -15,6 +15,7 @@ import {
   addCacheMetadata,
   CACHE_TTL
 } from './cache';
+import { getMarketStatus as getMarketStatusService } from '../marketHours';
 
 export interface LevelItem {
   type: string;
@@ -91,47 +92,19 @@ function determineLevelStrength(distanceATR: number): 'strong' | 'moderate' | 'w
 }
 
 /**
- * Get market context (open/closed, session type)
+ * Get market context using the centralized DST-aware market hours service
  */
 function getMarketContext(): {
   marketStatus: string;
   sessionType: string;
   timeSinceOpen?: string;
 } {
-  const now = new Date();
-  const hour = now.getUTCHours() - 5; // Convert to ET (simplified)
-  const minute = now.getUTCMinutes();
-  const timeInMinutes = hour * 60 + minute;
-
-  // Pre-market: 4:00 AM - 9:30 AM (240 - 570 minutes)
-  // Regular: 9:30 AM - 4:00 PM (570 - 960 minutes)
-  // After-hours: 4:00 PM - 8:00 PM (960 - 1200 minutes)
-
-  if (timeInMinutes >= 240 && timeInMinutes < 570) {
-    return {
-      marketStatus: 'pre-market',
-      sessionType: 'extended'
-    };
-  } else if (timeInMinutes >= 570 && timeInMinutes <= 960) {
-    const minutesSinceOpen = timeInMinutes - 570;
-    const hours = Math.floor(minutesSinceOpen / 60);
-    const minutes = minutesSinceOpen % 60;
-    return {
-      marketStatus: 'open',
-      sessionType: 'regular',
-      timeSinceOpen: `${hours}h ${minutes}m`
-    };
-  } else if (timeInMinutes > 960 && timeInMinutes < 1200) {
-    return {
-      marketStatus: 'after-hours',
-      sessionType: 'extended'
-    };
-  } else {
-    return {
-      marketStatus: 'closed',
-      sessionType: 'none'
-    };
-  }
+  const status = getMarketStatusService();
+  return {
+    marketStatus: status.status,
+    sessionType: status.session,
+    timeSinceOpen: status.timeSinceOpen,
+  };
 }
 
 /**

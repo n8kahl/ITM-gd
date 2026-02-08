@@ -29,6 +29,7 @@ import { AlertsPanel } from './alerts-panel'
 import { OpportunityScanner } from './opportunity-scanner'
 import { LEAPSDashboard } from './leaps-dashboard'
 import { MacroContext } from './macro-context'
+import { Onboarding, hasCompletedOnboarding } from './onboarding'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -59,7 +60,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts' | 'scanner' | 'leaps' | 'macro'
+type CenterView = 'onboarding' | 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts' | 'scanner' | 'leaps' | 'macro'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -133,7 +134,13 @@ const LEVEL_COLORS: Record<string, string> = {
 export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const { session } = useMemberAuth()
 
-  const [activeView, setActiveView] = useState<CenterView>('welcome')
+  const [activeView, setActiveView] = useState<CenterView>(() => {
+    // Show onboarding on first visit
+    if (typeof window !== 'undefined' && !hasCompletedOnboarding()) {
+      return 'onboarding'
+    }
+    return 'welcome'
+  })
 
   // Chart state
   const [chartSymbol, setChartSymbol] = useState('SPX')
@@ -242,8 +249,8 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Tab bar — shown for non-welcome views */}
-      {activeView !== 'welcome' && (
+      {/* Tab bar — shown for non-welcome/non-onboarding views */}
+      {activeView !== 'welcome' && activeView !== 'onboarding' && (
         <div className="border-b border-white/5 px-2 flex items-center gap-1">
           {TABS.map(tab => {
             const Icon = tab.icon
@@ -278,6 +285,14 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
       {/* View content */}
       <div className="flex-1 min-h-0">
+        {activeView === 'onboarding' && (
+          <Onboarding
+            onComplete={() => setActiveView('welcome')}
+            onSkip={() => setActiveView('welcome')}
+            onTryFeature={(feature) => setActiveView(feature as CenterView)}
+          />
+        )}
+
         {activeView === 'welcome' && (
           <WelcomeView
             onSendPrompt={onSendPrompt}

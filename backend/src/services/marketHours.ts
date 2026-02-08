@@ -1,9 +1,15 @@
 /**
  * DST-aware market hours and holiday calendar for US equity markets.
  * All times are relative to US Eastern Time (ET).
+ *
+ * This module is the single source of truth for:
+ *   - DST detection (isUSEasternDST)
+ *   - UTC → ET conversion (toEasternTime, getETOffset)
+ *   - NYSE/NASDAQ holidays (2025-2028)
+ *   - Market session status (pre-market, regular, after-hours, closed)
  */
 
-// NYSE/NASDAQ holidays for 2025-2027
+// NYSE/NASDAQ holidays for 2025-2028
 // Markets close at 1:00 PM ET on early close days
 const MARKET_HOLIDAYS: Record<string, 'closed' | 'early'> = {
   // 2025
@@ -48,6 +54,19 @@ const MARKET_HOLIDAYS: Record<string, 'closed' | 'early'> = {
   '2027-11-26': 'early',  // Black Friday
   '2027-12-24': 'early',  // Christmas Eve
   '2027-12-25': 'closed', // Christmas (Sat - observed Fri Dec 24)
+  // 2028
+  '2028-01-01': 'closed', // New Year's Day (Sat - observed Mon)
+  '2028-01-17': 'closed', // MLK Day
+  '2028-02-21': 'closed', // Presidents' Day
+  '2028-04-14': 'closed', // Good Friday
+  '2028-05-29': 'closed', // Memorial Day
+  '2028-06-19': 'closed', // Juneteenth
+  '2028-07-03': 'early',  // Independence Day Eve
+  '2028-07-04': 'closed', // Independence Day
+  '2028-09-04': 'closed', // Labor Day
+  '2028-11-23': 'closed', // Thanksgiving
+  '2028-11-24': 'early',  // Black Friday
+  '2028-12-25': 'closed', // Christmas
 };
 
 export interface MarketStatus {
@@ -64,7 +83,7 @@ export interface MarketStatus {
 /**
  * Returns whether the US is currently in DST (2nd Sun March - 1st Sun November)
  */
-function isUSEasternDST(date: Date): boolean {
+export function isUSEasternDST(date: Date): boolean {
   const year = date.getUTCFullYear();
 
   // 2nd Sunday of March (DST starts)
@@ -81,9 +100,17 @@ function isUSEasternDST(date: Date): boolean {
 }
 
 /**
+ * DST-aware UTC-to-Eastern-Time offset in hours.
+ * Returns -4 during EDT (March-November) and -5 during EST.
+ */
+export function getETOffset(date: Date): number {
+  return isUSEasternDST(date) ? -4 : -5;
+}
+
+/**
  * Convert UTC date to Eastern Time components
  */
-function toEasternTime(date: Date): { hour: number; minute: number; dayOfWeek: number; dateStr: string } {
+export function toEasternTime(date: Date): { hour: number; minute: number; dayOfWeek: number; dateStr: string } {
   const offset = isUSEasternDST(date) ? -4 : -5; // EDT = UTC-4, EST = UTC-5
   const etMs = date.getTime() + offset * 3600 * 1000;
   const et = new Date(etMs);

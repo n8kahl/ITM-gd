@@ -23,6 +23,8 @@ import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
 import scannerRouter from './routes/scanner';
+import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
+import { initWebSocket, shutdownWebSocket } from './services/websocket';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -116,7 +118,7 @@ app.get('/', (_req: Request, res: Response) => {
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
       leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
-      scannerScan: '/api/scanner/scan', chatStream: '/api/chat/stream'
+      scannerScan: '/api/scanner/scan', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
     }
   });
 });
@@ -156,6 +158,12 @@ async function start() {
 
     httpServer = app.listen(PORT, () => { logger.info(`Server running on http://localhost:${PORT}`); });
     httpServer.setTimeout(30000);
+
+    // Initialize WebSocket server for real-time price updates
+    initWebSocket(httpServer);
+
+    // Start background alert worker
+    startAlertWorker();
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -170,6 +178,9 @@ async function gracefulShutdown(signal: string) {
   if (httpServer) { httpServer.close(() => { logger.info('HTTP server closed'); }); }
   const shutdownTimeout = setTimeout(() => { logger.error('Graceful shutdown timed out, forcing exit'); process.exit(1); }, 30000);
   try {
+    // Stop background services
+    stopAlertWorker();
+    shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();
     logger.info('Sentry flushed');

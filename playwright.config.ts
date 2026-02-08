@@ -47,6 +47,12 @@ export default defineConfig({
       testMatch: /discord-auth-flow\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
+    // AI Coach tests
+    {
+      name: 'ai-coach',
+      testMatch: /ai-coach.*\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // All other tests
     {
       name: 'chromium',
