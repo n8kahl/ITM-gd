@@ -371,7 +371,7 @@ function ChatManagementContent() {
         event: '*',
         schema: 'public',
         table: 'chat_conversations'
-      }, (payload) => {
+      }, (payload: any) => {
         loadConversations()
 
         // Check for escalations or high-value leads
@@ -467,7 +467,7 @@ function ChatManagementContent() {
         schema: 'public',
         table: 'chat_messages',
         filter: `conversation_id=eq.${selectedConv.id}`
-      }, (payload) => {
+      }, (payload: any) => {
         const newMessage = payload.new as Message
         setMessages(prev => [...prev, newMessage])
 

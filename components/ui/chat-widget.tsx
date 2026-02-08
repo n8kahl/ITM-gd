@@ -151,7 +151,7 @@ export function ChatWidget() {
         schema: 'public',
         table: 'chat_messages',
         filter: `conversation_id=eq.${conversationId}`
-      }, (payload) => {
+      }, (payload: any) => {
         const newMessage = payload.new as Message
         // Add message if not already in state (dedupe by id)
         setMessages(prev => {
@@ -169,7 +169,7 @@ export function ChatWidget() {
         schema: 'public',
         table: 'chat_conversations',
         filter: `id=eq.${conversationId}`
-      }, (payload) => {
+      }, (payload: any) => {
         const updated = payload.new as Conversation
         setConversation(updated)
         setIsEscalated(!updated.ai_handled)
@@ -180,7 +180,7 @@ export function ChatWidget() {
         schema: 'public',
         table: 'team_typing_indicators',
         filter: `conversation_id=eq.${conversationId}`
-      }, (payload) => {
+      }, (payload: any) => {
         if (payload.eventType === 'DELETE') {
           setTeamTyping(null)
         } else if (payload.new) {
