@@ -105,10 +105,14 @@ app.use((err: Error, _req: Request, res: Response, _next: any) => {
 // Initialize connections and start server
 async function start() {
   try {
-    // Connect to Redis
-    console.log('Connecting to Redis...');
-    await connectRedis();
-    console.log('✓ Redis connected');
+    // Connect to Redis (optional - server starts without it)
+    try {
+      console.log('Connecting to Redis...');
+      await connectRedis();
+      console.log('✓ Redis connected (or skipped if not configured)');
+    } catch (redisError) {
+      console.warn('⚠ Redis connection failed - running without cache:', redisError instanceof Error ? redisError.message : redisError);
+    }
 
     // Start Express server
     app.listen(PORT, () => {
