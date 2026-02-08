@@ -1,111 +1,278 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import { Plus, BookOpen } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { EntryModal } from '@/components/journal/entry-modal'
-import { EntriesTable } from '@/components/journal/entries-table'
-import { getEntries } from '@/app/actions/journal'
+import { cn } from '@/lib/utils'
+import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
+import { DEFAULT_FILTERS } from '@/lib/types/journal'
+import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
+import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
+import { JournalTableView } from '@/components/journal/journal-table-view'
+import { JournalCardView } from '@/components/journal/journal-card-view'
+import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
+import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
+
+// ============================================
+// FILTERING + SORTING LOGIC
+// ============================================
+
+function applyFilters(entries: JournalEntry[], filters: JournalFilters): JournalEntry[] {
+  let filtered = [...entries]
+
+  // Date range
+  if (filters.dateRange.from) {
+    filtered = filtered.filter(e => e.trade_date >= filters.dateRange.from!)
+  }
+  if (filters.dateRange.to) {
+    filtered = filtered.filter(e => e.trade_date.split('T')[0] <= filters.dateRange.to!)
+  }
+
+  // Symbol
+  if (filters.symbol) {
+    const sym = filters.symbol.toUpperCase()
+    filtered = filtered.filter(e => e.symbol?.toUpperCase().includes(sym))
+  }
+
+  // Direction
+  if (filters.direction !== 'all') {
+    filtered = filtered.filter(e => e.direction === filters.direction)
+  }
+
+  // P&L
+  if (filters.pnlFilter === 'winners') {
+    filtered = filtered.filter(e => (e.pnl ?? 0) > 0)
+  } else if (filters.pnlFilter === 'losers') {
+    filtered = filtered.filter(e => (e.pnl ?? 0) < 0)
+  }
+
+  // Tags
+  if (filters.tags.length > 0) {
+    filtered = filtered.filter(e =>
+      filters.tags.some(tag => e.tags.includes(tag) || e.smart_tags.includes(tag))
+    )
+  }
+
+  // AI Grade
+  if (filters.aiGrade && filters.aiGrade.length > 0) {
+    filtered = filtered.filter(e =>
+      e.ai_analysis?.grade && filters.aiGrade!.includes(e.ai_analysis.grade)
+    )
+  }
+
+  // Sort
+  filtered.sort((a, b) => {
+    switch (filters.sortBy) {
+      case 'date-asc':
+        return a.trade_date.localeCompare(b.trade_date)
+      case 'pnl-desc':
+        return (b.pnl ?? 0) - (a.pnl ?? 0)
+      case 'pnl-asc':
+        return (a.pnl ?? 0) - (b.pnl ?? 0)
+      case 'rating-desc':
+        return (b.rating ?? 0) - (a.rating ?? 0)
+      case 'date-desc':
+      default:
+        return b.trade_date.localeCompare(a.trade_date)
+    }
+  })
+
+  return filtered
+}
+
+// ============================================
+// JOURNAL PAGE
+// ============================================
 
 export default function JournalPage() {
-  const [entries, setEntries] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingEntry, setEditingEntry] = useState<any>(null)
+  const [entries, setEntries] = useState<JournalEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
 
-  const loadEntries = async () => {
-    setIsLoading(true)
-    const result = await getEntries({ limit: 100, orderBy: 'trade_date', orderDirection: 'desc' })
+  // Sheet states
+  const [entrySheetOpen, setEntrySheetOpen] = useState(false)
+  const [editEntry, setEditEntry] = useState<JournalEntry | null>(null)
+  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
 
-    if (result.success && result.data) {
-      setEntries(result.data)
+  // Load entries
+  const loadEntries = useCallback(async () => {
+    try {
+      const res = await fetch('/api/members/journal?limit=500')
+      const data = await res.json()
+      if (data.success && Array.isArray(data.data)) {
+        setEntries(data.data)
+      }
+    } catch {
+      // Silent fail
+    } finally {
+      setLoading(false)
     }
-
-    setIsLoading(false)
-  }
-
-  useEffect(() => {
-    loadEntries()
   }, [])
 
-  const handleNewEntry = () => {
-    setEditingEntry(null)
-    setIsModalOpen(true)
-  }
+  useEffect(() => { loadEntries() }, [loadEntries])
 
-  const handleEdit = (entry: any) => {
-    setEditingEntry(entry)
-    setIsModalOpen(true)
-  }
+  // Apply filters
+  const filteredEntries = useMemo(() => applyFilters(entries, filters), [entries, filters])
 
-  const handleModalClose = () => {
-    setIsModalOpen(false)
-    setEditingEntry(null)
-  }
+  // Collect available tags
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>()
+    entries.forEach(e => {
+      e.tags?.forEach(t => tagSet.add(t))
+      e.smart_tags?.forEach(t => tagSet.add(t))
+    })
+    return Array.from(tagSet).sort()
+  }, [entries])
 
-  const handleSuccess = () => {
-    loadEntries()
-  }
+  // Save trade (create or update)
+  const handleSave = useCallback(async (data: Record<string, unknown>) => {
+    const method = data.id ? 'PATCH' : 'POST'
+    const res = await fetch('/api/members/journal', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    const result = await res.json()
 
-  if (isLoading) {
+    if (result.success && result.data) {
+      // Trigger enrichment in background
+      if (!data.id) {
+        fetch('/api/members/journal/enrich', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entryId: result.data.id }),
+        }).catch(() => {})
+      }
+    }
+
+    await loadEntries()
+  }, [loadEntries])
+
+  // Delete trade
+  const handleDelete = useCallback(async (entryId: string) => {
+    if (!confirm('Delete this trade? This action cannot be undone.')) return
+    await fetch(`/api/members/journal?id=${entryId}`, { method: 'DELETE' })
+    await loadEntries()
+  }, [loadEntries])
+
+  // Open entry sheet for new/edit
+  const handleNewEntry = useCallback(() => {
+    setEditEntry(null)
+    setEntrySheetOpen(true)
+  }, [])
+
+  const handleEditEntry = useCallback((entry: JournalEntry) => {
+    setEditEntry(entry)
+    setEntrySheetOpen(true)
+  }, [])
+
+  const handleSelectEntry = useCallback((entry: JournalEntry) => {
+    setSelectedEntry(entry)
+  }, [])
+
+  // Loading
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white/60">Loading your journal...</p>
+          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
+            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+          </div>
+          <p className="text-muted-foreground text-sm">Loading your journal...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <BookOpen className="w-8 h-8 text-emerald-500" />
-            Trading Journal
+          <h1 className="text-xl lg:text-2xl font-serif text-ivory font-medium tracking-tight flex items-center gap-2.5">
+            <BookOpen className="w-6 h-6 text-emerald-400" />
+            Trade Journal
           </h1>
-          <p className="text-white/60 mt-2">
-            Track your trades and analyze your performance with AI
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {entries.length} trade{entries.length !== 1 ? 's' : ''} logged
           </p>
         </div>
 
-        <Button
+        <button
           onClick={handleNewEntry}
-          size="lg"
-          className="bg-emerald-500 hover:bg-emerald-600 gap-2"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
         >
-          <Plus className="w-5 h-5" />
-          New Entry
-        </Button>
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Log Trade</span>
+          <span className="sm:hidden">New</span>
+        </button>
       </div>
 
-      {/* Entries Table */}
-      <Card className="glass-card-heavy border-emerald-500/20">
-        <CardHeader>
-          <CardTitle>Trade History</CardTitle>
-          <CardDescription>
-            {entries.length} {entries.length === 1 ? 'trade' : 'trades'} logged
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EntriesTable
-            entries={entries}
-            onEdit={handleEdit}
-            onRefresh={loadEntries}
-          />
-        </CardContent>
-      </Card>
+      {/* Filter Bar */}
+      <JournalFilterBar
+        filters={filters}
+        onChange={setFilters}
+        availableTags={availableTags}
+        totalFiltered={filteredEntries.length}
+      />
 
-      {/* Entry Modal */}
-      <EntryModal
-        isOpen={isModalOpen}
-        onClose={handleModalClose}
-        entry={editingEntry}
-        onSuccess={handleSuccess}
+      {/* Summary Stats */}
+      <JournalSummaryStats entries={filteredEntries} />
+
+      {/* Entries */}
+      {filteredEntries.length === 0 ? (
+        <div className="glass-card-heavy rounded-2xl p-12 text-center">
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] inline-block mb-4">
+            <BookOpen className="w-8 h-8 text-champagne/50" />
+          </div>
+          <h3 className="text-base font-medium text-ivory mb-1">
+            {entries.length === 0 ? 'Your trading story starts here' : 'No trades match your filters'}
+          </h3>
+          <p className="text-sm text-muted-foreground mb-5 max-w-md mx-auto">
+            {entries.length === 0
+              ? 'Log your first trade and start building your performance history with AI-powered analysis.'
+              : 'Try adjusting your filters to see more trades.'}
+          </p>
+          {entries.length === 0 && (
+            <button
+              onClick={handleNewEntry}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4 inline mr-1.5" />
+              Log Your First Trade
+            </button>
+          )}
+        </div>
+      ) : filters.view === 'table' ? (
+        <JournalTableView
+          entries={filteredEntries}
+          onSelectEntry={handleSelectEntry}
+          onEditEntry={handleEditEntry}
+          onDeleteEntry={handleDelete}
+        />
+      ) : (
+        <JournalCardView
+          entries={filteredEntries}
+          onSelectEntry={handleSelectEntry}
+          onEditEntry={handleEditEntry}
+          onDeleteEntry={handleDelete}
+        />
+      )}
+
+      {/* Trade Entry Sheet */}
+      <TradeEntrySheet
+        open={entrySheetOpen}
+        onClose={() => { setEntrySheetOpen(false); setEditEntry(null) }}
+        onSave={handleSave}
+        editEntry={editEntry}
+      />
+
+      {/* Entry Detail Sheet */}
+      <EntryDetailSheet
+        entry={selectedEntry}
+        onClose={() => setSelectedEntry(null)}
+        onEdit={handleEditEntry}
+        onDelete={handleDelete}
       />
     </div>
   )
