@@ -9,6 +9,10 @@ import {
   BarChart2,
   ArrowUpRight,
   ArrowDownRight,
+  Globe,
+  DollarSign,
+  Search,
+  Calendar,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +20,7 @@ import { cn } from '@/lib/utils'
 // TYPES
 // ============================================
 
-export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview'
+export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview' | 'macro_context' | 'options_chain' | 'scan_results' | 'current_price'
 
 export interface WidgetData {
   type: WidgetType
@@ -39,6 +43,14 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
       return <MarketOverviewCard data={widget.data} />
     case 'alert_status':
       return <AlertStatusCard data={widget.data} />
+    case 'macro_context':
+      return <MacroContextCard data={widget.data} />
+    case 'options_chain':
+      return <OptionsChainCard data={widget.data} />
+    case 'scan_results':
+      return <ScanResultsCard data={widget.data} />
+    case 'current_price':
+      return <CurrentPriceCard data={widget.data} />
     default:
       return null
   }
@@ -310,6 +322,214 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
 }
 
 // ============================================
+// CURRENT PRICE CARD
+// ============================================
+
+function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = data.symbol as string || '—'
+  const price = data.price as number || 0
+  const high = data.high as number | undefined
+  const low = data.low as number | undefined
+  const isDelayed = data.isDelayed as boolean || false
+  const priceAsOf = data.priceAsOf as string | undefined
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="text-xs font-medium text-white">{symbol}</span>
+          {isDelayed && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">Delayed</span>}
+        </div>
+        <span className="text-base font-bold font-mono text-white">${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      </div>
+      <div className="flex gap-4 text-[10px] text-white/40">
+        {high != null && <span>H: <span className="font-mono text-white/60">${high.toLocaleString()}</span></span>}
+        {low != null && <span>L: <span className="font-mono text-white/60">${low.toLocaleString()}</span></span>}
+        {priceAsOf && <span className="ml-auto">{priceAsOf}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// MACRO CONTEXT CARD
+// ============================================
+
+function MacroContextCard({ data }: { data: Record<string, unknown> }) {
+  const calendar = (data.economicCalendar as Array<{ event: string; date: string; impact: string; actual?: string; forecast?: string }>) || []
+  const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
+  const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+      <div className="flex items-center gap-1.5 mb-3">
+        <Globe className="w-3.5 h-3.5 text-emerald-500" />
+        <span className="text-xs font-medium text-white">Macro Context</span>
+        {symbolImpact?.outlook && (
+          <span className={cn(
+            'ml-auto text-[9px] px-1.5 py-0.5 rounded font-medium capitalize',
+            symbolImpact.outlook === 'bullish' ? 'bg-emerald-500/10 text-emerald-400' :
+            symbolImpact.outlook === 'bearish' ? 'bg-red-500/10 text-red-400' :
+            'bg-white/5 text-white/40'
+          )}>
+            {symbolImpact.outlook}
+          </span>
+        )}
+      </div>
+
+      {/* Fed policy */}
+      {fedPolicy && (
+        <div className="mb-2 pb-2 border-b border-white/5 text-[11px]">
+          <div className="flex justify-between text-white/50">
+            <span>Fed Rate</span>
+            <span className="font-mono text-white/70">{fedPolicy.currentRate || '—'}</span>
+          </div>
+          {fedPolicy.tone && (
+            <div className="flex justify-between text-white/50 mt-0.5">
+              <span>Tone</span>
+              <span className={cn(
+                'capitalize',
+                fedPolicy.tone === 'hawkish' ? 'text-red-400' :
+                fedPolicy.tone === 'dovish' ? 'text-emerald-400' : 'text-white/60'
+              )}>{fedPolicy.tone}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Economic calendar */}
+      {calendar.length > 0 && (
+        <div className="space-y-1.5">
+          {calendar.slice(0, 3).map((event, i) => (
+            <div key={i} className="flex items-center gap-2 text-[11px]">
+              <Calendar className="w-3 h-3 text-white/30 shrink-0" />
+              <span className="text-white/60 truncate flex-1">{event.event}</span>
+              <span className={cn(
+                'px-1 py-0.5 rounded text-[9px] font-medium shrink-0',
+                event.impact === 'High' || event.impact === 'high' ? 'bg-red-500/10 text-red-400' :
+                event.impact === 'Medium' || event.impact === 'medium' ? 'bg-amber-500/10 text-amber-400' :
+                'bg-white/5 text-white/40'
+              )}>
+                {event.impact}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// OPTIONS CHAIN CARD (compact summary)
+// ============================================
+
+function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = data.symbol as string || '—'
+  const currentPrice = data.currentPrice as number || 0
+  const expiry = data.expiry as string || '—'
+  const daysToExpiry = data.daysToExpiry as number || 0
+  const ivRank = data.ivRank as number | undefined
+  const calls = (data.calls as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
+  const puts = (data.puts as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
+
+  // Show only ATM strikes (3 each)
+  const topCalls = calls.slice(0, 3)
+  const topPuts = puts.slice(-3)
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-md">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="text-xs font-medium text-white">{symbol} Options</span>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-white/40">
+          <span>{expiry} ({daysToExpiry}d)</span>
+          {ivRank != null && <span className="font-mono">IV: {ivRank}%</span>}
+        </div>
+      </div>
+
+      {/* ATM options table */}
+      <div className="grid grid-cols-2 gap-2 text-[10px]">
+        <div>
+          <p className="text-[9px] text-emerald-400/60 font-medium uppercase mb-1">Calls</p>
+          {topCalls.map((c, i) => (
+            <div key={i} className="flex justify-between py-0.5">
+              <span className="font-mono text-white/50">{c.strike}</span>
+              <span className="font-mono text-white/70">${c.last}</span>
+              <span className="text-white/40">{c.delta}</span>
+            </div>
+          ))}
+        </div>
+        <div>
+          <p className="text-[9px] text-red-400/60 font-medium uppercase mb-1">Puts</p>
+          {topPuts.map((p, i) => (
+            <div key={i} className="flex justify-between py-0.5">
+              <span className="font-mono text-white/50">{p.strike}</span>
+              <span className="font-mono text-white/70">${p.last}</span>
+              <span className="text-white/40">{p.delta}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-1.5 pt-1.5 border-t border-white/5 text-[10px] text-white/40 text-center">
+        Price: <span className="font-mono text-white/60">${currentPrice.toLocaleString()}</span>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// SCAN RESULTS CARD
+// ============================================
+
+function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
+  const opportunities = (data.opportunities as Array<{
+    symbol: string; setupType: string; direction: string; score: number; description: string
+  }>) || []
+  const count = data.count as number || 0
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Search className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="text-xs font-medium text-white">Scan Results</span>
+        </div>
+        <span className="text-[10px] text-white/40">{count} found</span>
+      </div>
+
+      {opportunities.length === 0 ? (
+        <p className="text-xs text-white/30">No opportunities at this time</p>
+      ) : (
+        <div className="space-y-2">
+          {opportunities.slice(0, 3).map((opp, i) => (
+            <div key={i} className="flex items-start gap-2 text-[11px]">
+              <div className={cn(
+                'w-1.5 h-1.5 rounded-full mt-1.5 shrink-0',
+                opp.direction === 'bullish' ? 'bg-emerald-400' :
+                opp.direction === 'bearish' ? 'bg-red-400' : 'bg-white/40'
+              )} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium text-white">{opp.symbol}</span>
+                  <span className="text-white/40 capitalize">{opp.setupType}</span>
+                  <span className="ml-auto text-[9px] font-mono text-emerald-400/70">{opp.score}/100</span>
+                </div>
+                <p className="text-white/40 truncate">{opp.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
 // UTILITY: Parse widget data from function calls
 // ============================================
 
@@ -368,6 +588,26 @@ export function extractWidgets(functionCalls?: Array<{
             },
           })
         }
+        break
+      }
+      case 'get_current_price': {
+        if (result.error) break
+        widgets.push({ type: 'current_price', data: result })
+        break
+      }
+      case 'get_macro_context': {
+        if (result.error) break
+        widgets.push({ type: 'macro_context', data: result })
+        break
+      }
+      case 'get_options_chain': {
+        if (result.error) break
+        widgets.push({ type: 'options_chain', data: result })
+        break
+      }
+      case 'scan_opportunities': {
+        if (result.error) break
+        widgets.push({ type: 'scan_results', data: result })
         break
       }
     }
