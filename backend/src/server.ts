@@ -21,9 +21,25 @@ dotenv.config();
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
+// Allowed origins for CORS
+const allowedOrigins = [
+  'https://www.tradeinthemoney.com',
+  'https://tradeinthemoney.com',
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+].filter(Boolean) as string[];
+
 // Middleware
-app.use(helmet()); // Security headers
-app.use(cors()); // Enable CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: false,
+}));
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
 app.use(express.json({ limit: '15mb' })); // Parse JSON bodies (larger for screenshots)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(morgan('dev')); // HTTP request logging
