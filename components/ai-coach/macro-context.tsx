@@ -80,7 +80,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
   const [activeTab, setActiveTab] = useState<'calendar' | 'fed' | 'sectors' | 'earnings'>('calendar')
 
   const token = session?.access_token
-  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API || 'http://localhost:3001'
+  const API_BASE = process.env.NEXT_PUBLIC_AI_COACH_API_URL || 'http://localhost:3001'
 
   const fetchMacro = useCallback(async () => {
     if (!token) return
