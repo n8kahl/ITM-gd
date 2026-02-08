@@ -44,9 +44,10 @@ const OPTIONS_CHAIN_CACHE_TTL = 300; // 5 minutes
 async function getCurrentPrice(symbol: string): Promise<number> {
   const ticker = symbol === 'SPX' || symbol === 'NDX' ? `I:${symbol}` : symbol;
   const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  // 7-day lookback covers weekends + holidays (longest US market closure = 3 consecutive days)
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
-  const data = await getDailyAggregates(ticker, yesterday, today);
+  const data = await getDailyAggregates(ticker, weekAgo, today);
 
   if (data.length === 0) {
     throw new Error(`No price data available for ${symbol}`);

@@ -1,5 +1,5 @@
 import { calculateLevels } from '../services/levels';
-import { fetchIntradayData } from '../services/levels/fetcher';
+import { fetchIntradayData, fetchDailyData } from '../services/levels/fetcher';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
@@ -124,23 +124,41 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
     // Fetch intraday data
     const intradayData = await fetchIntradayData(symbol);
 
-    if (intradayData.length === 0) {
+    if (intradayData.length > 0) {
+      // Market is open or has today's data
+      const latestCandle = intradayData[intradayData.length - 1];
       return {
-        error: 'No price data available',
-        message: 'Market may be closed or data unavailable'
+        symbol,
+        price: latestCandle.c,
+        timestamp: new Date(latestCandle.t).toISOString(),
+        high: latestCandle.h,
+        low: latestCandle.l,
+        volume: latestCandle.v,
+        isDelayed: false
       };
     }
 
-    // Get most recent candle
-    const latestCandle = intradayData[intradayData.length - 1];
+    // Fallback to daily data (covers weekends + holidays with 7-day lookback)
+    const dailyData = await fetchDailyData(symbol, 7);
+    if (dailyData.length > 0) {
+      const latestBar = dailyData[dailyData.length - 1];
+      const marketStatus = getMarketStatusService();
+      return {
+        symbol,
+        price: latestBar.c,
+        timestamp: new Date(latestBar.t).toISOString(),
+        high: latestBar.h,
+        low: latestBar.l,
+        volume: latestBar.v,
+        isDelayed: true,
+        priceAsOf: 'Last trading day close',
+        marketStatusMessage: marketStatus.message || 'Market is currently closed'
+      };
+    }
 
     return {
-      symbol,
-      price: latestCandle.c,
-      timestamp: new Date(latestCandle.t).toISOString(),
-      high: latestCandle.h,
-      low: latestCandle.l,
-      volume: latestCandle.v
+      error: 'No price data available',
+      message: 'No market data found for the past 7 days'
     };
   } catch (error: any) {
     return {
@@ -615,15 +633,21 @@ async function handleAnalyzeLeapsPosition(args: {
       (Date.now() - new Date(entry_date).getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Get current price via intraday data
-    let currentPrice = strike; // fallback
+    // Get current price via intraday data, falling back to daily
+    let currentPrice = strike; // last resort fallback
     try {
       const intradayData = await fetchIntradayData(symbol);
       if (intradayData.length > 0) {
         currentPrice = intradayData[intradayData.length - 1].c;
+      } else {
+        // Fallback to daily data (covers weekends + holidays)
+        const dailyData = await fetchDailyData(symbol, 7);
+        if (dailyData.length > 0) {
+          currentPrice = dailyData[dailyData.length - 1].c;
+        }
       }
     } catch {
-      // Use strike as fallback
+      // Use strike as last resort fallback
     }
 
     // Greeks projection
