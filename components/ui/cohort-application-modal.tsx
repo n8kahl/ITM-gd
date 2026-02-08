@@ -35,7 +35,7 @@ interface CohortApplicationModalProps {
   onClose: () => void;
   redirectUrl?: string;
   programType?: 'cohort' | 'mentorship';
-  submissionType?: string;
+  submissionType?: 'contact' | 'cohort_application' | 'general_inquiry';
 }
 
 const STEPS = [

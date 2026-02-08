@@ -3,6 +3,8 @@
 import { useEffect, useRef, useCallback } from 'react'
 import {
   createChart,
+  CandlestickSeries,
+  HistogramSeries,
   type IChartApi,
   type ISeriesApi,
   type CandlestickData,
@@ -114,19 +116,19 @@ export function TradingChart({
     })
 
     // Candlestick series
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: CHART_COLORS.upColor,
       downColor: CHART_COLORS.downColor,
       borderVisible: false,
       wickUpColor: CHART_COLORS.upWickColor,
       wickDownColor: CHART_COLORS.downWickColor,
-      priceLineSource: PriceLineSource.LastClose,
+      priceLineSource: PriceLineSource.LastBar,
       priceLineColor: '#10B981',
       priceLineWidth: 1,
     })
 
     // Volume histogram (overlaid at bottom)
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     })

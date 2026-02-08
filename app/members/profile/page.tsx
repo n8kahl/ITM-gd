@@ -68,7 +68,7 @@ export default function ProfilePage() {
   }
 
   // Determine if membership is active
-  const isActive = tier && tier !== 'none'
+  const isActive = !!tier
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -99,7 +99,7 @@ export default function ProfilePage() {
               </p>
 
               {/* Membership Tier Badge */}
-              {tier && tier !== 'none' && (
+              {tier && (
                 <div className={cn(
                   'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium mt-3 border',
                   tierColors[tier]

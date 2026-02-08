@@ -79,7 +79,7 @@ export default function Home() {
       <GradientMeshBackground />
 
       {/* Floating Island Navbar */}
-      <FloatingNavbar onSubscribeClick={() => setIsSubscribeModalOpen(true)} />
+      <FloatingNavbar />
 
       {/* Promo Banner - Fixed below navbar */}
       <PromoBanner />

@@ -37,6 +37,7 @@ export interface ApplicationMetadata {
   primary_struggle?: 'Psychology' | 'Risk Management' | 'Strategy' | 'Consistency' | 'Other'
   short_term_goal?: string
   source?: string
+  program_type?: 'cohort' | 'mentorship'
 }
 
 export interface ApplicationData extends Omit<ContactSubmission, 'submission_type' | 'metadata'> {

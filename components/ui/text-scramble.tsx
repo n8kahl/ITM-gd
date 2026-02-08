@@ -28,7 +28,7 @@ export function TextScramble({
   const [displayText, setDisplayText] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const revealedIndexRef = useRef(0);
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number>(0);
 
   const scramble = useCallback(() => {
     const chars = characterSet.split("");
