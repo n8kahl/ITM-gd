@@ -21,9 +21,9 @@ import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker"
 import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
 import { PromoBanner } from "@/components/ui/promo-banner";
 import { CohortSection } from "@/components/ui/cohort-section";
+import { MentorshipSection } from "@/components/ui/mentorship-section";
 import { SubscribeModal } from "@/components/ui/subscribe-modal";
 import { ContactModal } from "@/components/ui/contact-modal";
-import { CohortApplicationModal } from "@/components/ui/cohort-application-modal";
 import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
 import { BillingToggle } from "@/components/ui/billing-toggle";
@@ -33,16 +33,9 @@ import SparkleLog from "@/components/ui/sparkle-logo";
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
-    const [isCohortApplicationOpen, setIsCohortApplicationOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
-
-  // Handler for Cohort application - opens the multi-step wizard
-  const handleCohortApply = () => {
-    setIsCohortApplicationOpen(true);
-    Analytics.trackCTAClick('Cohort Application Wizard');
-  };
 
   // Legacy handler for contact modal with preset message (kept for fallback)
   const handleCohortContactFallback = () => {
@@ -105,13 +98,6 @@ export default function Home() {
           setCohortModalMessage(undefined);
         }}
         presetMessage={cohortModalMessage}
-      />
-
-
-      {/* Cohort Application Wizard */}
-      <CohortApplicationModal
-        isOpen={isCohortApplicationOpen}
-        onClose={() => setIsCohortApplicationOpen(false)}
       />
 
       {/* Mobile Sticky CTA - appears after scrolling past hero */}
@@ -509,8 +495,44 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Affiliate Banner - Subtle CTA */}
+      <section className="container mx-auto px-4 py-8">
+        <RevealContent>
+          <div className="max-w-2xl mx-auto">
+            <a
+              href="https://whop.com/trade-in-the-money/affiliates"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center justify-center gap-3 py-4 px-6 rounded-lg border border-champagne/20 bg-champagne/[0.03] hover:bg-champagne/[0.06] hover:border-champagne/30 transition-all duration-300"
+            >
+              <span className="text-sm text-platinum/70 group-hover:text-platinum/90 transition-colors">
+                Have an audience?
+              </span>
+              <span className="text-sm font-medium text-champagne group-hover:text-champagne/90 transition-colors">
+                Become a TITM Affiliate and earn 20%
+              </span>
+              <svg
+                className="w-4 h-4 text-champagne/60 group-hover:text-champagne group-hover:translate-x-0.5 transition-all duration-300"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </a>
+          </div>
+        </RevealContent>
+      </section>
+
       {/* Precision Cohort Section - Annual Mentorship */}
-      <CohortSection onApplyClick={handleCohortApply} />
+      <CohortSection />
+
+      {/* Ribbon Divider */}
+      <RibbonDivider flip />
+
+      {/* 1 on 1 Mentorship Section */}
+      <MentorshipSection />
 
       {/* Testimonials Section - Infinite Marquee */}
       <section id="testimonials" className="py-14 overflow-hidden">
@@ -739,6 +761,7 @@ export default function Home() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
               <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <a href="https://whop.com/trade-in-the-money/affiliates" target="_blank" rel="noopener noreferrer" className="hover:text-champagne transition-colors duration-300">Affiliates</a>
               <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>
           </div>
@@ -750,8 +773,8 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* AI Chat Widget - temporarily disabled to diagnose React Error #310 */}
-      {/* <ChatWidget /> */}
+      {/* AI Chat Widget */}
+      <ChatWidget />
     </main>
   );
 }
