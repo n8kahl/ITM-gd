@@ -34,7 +34,8 @@ jest.mock('../../services/levels', () => ({
 }));
 
 jest.mock('../../services/levels/fetcher', () => ({
-  fetchIntradayData: jest.fn()
+  fetchIntradayData: jest.fn(),
+  fetchDailyData: jest.fn()
 }));
 
 jest.mock('../../services/options/optionsChainFetcher', () => ({
@@ -47,12 +48,13 @@ jest.mock('../../services/options/positionAnalyzer', () => ({
 }));
 
 import { calculateLevels } from '../../services/levels';
-import { fetchIntradayData } from '../../services/levels/fetcher';
+import { fetchIntradayData, fetchDailyData } from '../../services/levels/fetcher';
 import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
 import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
 const mockFetchIntradayData = fetchIntradayData as jest.MockedFunction<typeof fetchIntradayData>;
+const mockFetchDailyData = fetchDailyData as jest.MockedFunction<typeof fetchDailyData>;
 const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
@@ -167,6 +169,7 @@ describe('Function Handlers', () => {
 
     it('should handle no data available', async () => {
       mockFetchIntradayData.mockResolvedValue([]);
+      mockFetchDailyData.mockResolvedValue([]);
 
       const result = await executeFunctionCall({
         name: 'get_current_price',
