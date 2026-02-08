@@ -6,12 +6,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 /**
  * Creates a Supabase client for browser/client components.
  *
- * This client uses @supabase/ssr which automatically syncs auth sessions
- * to cookies, making them accessible to middleware and server components.
- *
- * IMPORTANT: Call this function to get a fresh client rather than using
- * a singleton. This ensures cookies are properly read/written.
+ * Uses a singleton pattern to prevent multiple auth lock acquisitions
+ * which cause navigator.locks deadlocks and getSession() timeouts.
  */
+let _client: ReturnType<typeof createBrowserClient> | null = null
+
 export function createBrowserSupabase() {
-  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+  if (_client) return _client
+  _client = createBrowserClient(supabaseUrl, supabaseAnonKey)
+  return _client
 }
