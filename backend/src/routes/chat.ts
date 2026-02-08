@@ -53,19 +53,33 @@ router.post(
         ...response
       });
     } catch (error: any) {
-      console.error('Error in chat message endpoint:', error);
+      console.error('[chat route] Error in chat message endpoint:', {
+        name: error?.name,
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        type: error?.type
+      });
 
-      if (error.message.includes('OpenAI')) {
+      // Detect OpenAI API errors (status codes from openai SDK)
+      const isOpenAIError = error?.status === 401 || error?.status === 429 ||
+        error?.status === 403 || error?.name === 'APIError' ||
+        error?.message?.includes('OpenAI') || error?.message?.includes('openai') ||
+        error?.message?.includes('API key') || error?.message?.includes('rate limit');
+
+      if (isOpenAIError) {
         return res.status(503).json({
           error: 'AI service unavailable',
           message: 'The AI service is temporarily unavailable. Please try again in a moment.',
+          details: process.env.NODE_ENV !== 'production' ? error?.message : undefined,
           retryAfter: 30
         });
       }
 
       return res.status(500).json({
         error: 'Internal server error',
-        message: 'Failed to process chat message. Please try again.'
+        message: 'Failed to process chat message. Please try again.',
+        details: error?.message || 'Unknown error'
       });
     }
   }

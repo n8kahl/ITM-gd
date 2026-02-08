@@ -39,10 +39,13 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
   try {
     // Get or create session
+    console.log(`[chat] getOrCreateSession: sessionId=${sessionId}, userId=${userId}`);
     await getOrCreateSession(sessionId, userId);
+    console.log(`[chat] Session ready`);
 
     // Get conversation history
     const history = await getConversationHistory(sessionId);
+    console.log(`[chat] History loaded: ${history.length} messages`);
 
     // Build messages array
     const messages: ChatCompletionMessageParam[] = [
@@ -55,7 +58,9 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     ];
 
     // Save user message to database
+    console.log(`[chat] Saving user message...`);
     await saveMessage(sessionId, userId, 'user', message);
+    console.log(`[chat] User message saved`);
 
     // Auto-title session from first user message
     if (history.length === 0) {
@@ -63,6 +68,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     }
 
     // Call OpenAI API with function calling
+    console.log(`[chat] Calling OpenAI (model: ${CHAT_MODEL})...`);
     let completion = await openaiClient.chat.completions.create({
       model: CHAT_MODEL,
       messages,
@@ -71,6 +77,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE
     });
+    console.log(`[chat] OpenAI response received, tokens: ${completion.usage?.total_tokens}`);
 
     const functionCalls: any[] = [];
     let assistantMessage = completion.choices[0].message;
@@ -170,8 +177,15 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       responseTime: responseTime / 1000 // Convert to seconds
     };
   } catch (error: any) {
-    console.error('Chat service error:', error);
-    throw new Error(`Failed to process chat message: ${error.message}`);
+    console.error('[chat] Chat service error:', {
+      name: error.name,
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      type: error.type,
+      stack: error.stack?.split('\n').slice(0, 5).join('\n')
+    });
+    throw error; // Re-throw original error so route can inspect it properly
   }
 }
 
@@ -179,13 +193,18 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
  * Get or create a chat session
  */
 async function getOrCreateSession(sessionId: string, userId: string) {
-  // Try to get existing session
-  const { data: existingSession } = await supabase
+  // Try to get existing session (use maybeSingle to avoid PGRST116 on no rows)
+  const { data: existingSession, error: fetchError } = await supabase
     .from('ai_coach_sessions')
     .select('*')
     .eq('id', sessionId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error('[chat] Error fetching session:', fetchError);
+    throw new Error(`Failed to fetch session: ${fetchError.message}`);
+  }
 
   if (existingSession) {
     return existingSession;
