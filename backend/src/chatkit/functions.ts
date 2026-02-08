@@ -10,14 +10,13 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_key_levels',
-      description: 'Get support and resistance levels for a symbol (SPX or NDX). Returns PDH/PDL/PDC, PMH/PML, pivots, VWAP, and ATR.',
+      description: 'Get support and resistance levels for a symbol. Returns PDH/PDL/PDC, PMH/PML, pivots, VWAP, and ATR.',
       parameters: {
         type: 'object',
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The symbol to get levels for (SPX or NDX)'
+            description: 'The stock or index symbol (e.g., SPX, NDX, AAPL, MSFT, QQQ)'
           },
           timeframe: {
             type: 'string',
@@ -40,8 +39,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The symbol to get price for'
+            description: 'The stock or index symbol (e.g., SPX, NDX, AAPL, MSFT, QQQ)'
           }
         },
         required: ['symbol']
@@ -70,8 +68,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The underlying symbol'
+            description: 'The underlying stock or index symbol (e.g., SPX, NDX, AAPL, MSFT, QQQ)'
           },
           expiry: {
             type: 'string',
@@ -101,8 +98,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
             properties: {
               symbol: {
                 type: 'string',
-                enum: ['SPX', 'NDX'],
-                description: 'Underlying symbol'
+                description: 'The underlying stock or index symbol (e.g., SPX, NDX, AAPL)'
               },
               type: {
                 type: 'string',
@@ -188,8 +184,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The symbol to monitor'
+            description: 'The stock or index symbol to monitor (e.g., SPX, NDX, AAPL)'
           },
           alert_type: {
             type: 'string',
@@ -240,8 +235,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The symbol to chart'
+            description: 'The stock or index symbol to chart (e.g., SPX, NDX, AAPL, MSFT)'
           },
           timeframe: {
             type: 'string',
@@ -264,8 +258,8 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbols: {
             type: 'array',
-            items: { type: 'string', enum: ['SPX', 'NDX'] },
-            description: 'Symbols to scan (default: SPX and NDX)'
+            items: { type: 'string' },
+            description: 'Symbols to scan (default: SPX and NDX). Can include any stock or index symbol.'
           },
           include_options: {
             type: 'boolean',
@@ -286,8 +280,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The symbol to analyze'
+            description: 'The stock or index symbol to analyze (e.g., SPX, NDX, AAPL, MSFT)'
           },
           timeframe: {
             type: 'string',
@@ -310,8 +303,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'Underlying symbol'
+            description: 'The underlying stock or index symbol (e.g., SPX, NDX, AAPL)'
           },
           option_type: {
             type: 'string',
@@ -359,8 +351,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'The symbol being traded'
+            description: 'The stock or index symbol being traded (e.g., SPX, NDX, AAPL)'
           },
           position_type: {
             type: 'string',
@@ -399,8 +390,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
-            description: 'Underlying symbol'
+            description: 'The underlying stock or index symbol (e.g., SPX, NDX, AAPL)'
           },
           option_type: {
             type: 'string',
@@ -452,7 +442,6 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         properties: {
           symbol: {
             type: 'string',
-            enum: ['SPX', 'NDX'],
             description: 'Symbol to assess macro impact for (optional, omit for general context)'
           }
         }
