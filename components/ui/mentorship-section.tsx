@@ -23,7 +23,7 @@ export function MentorshipSection() {
   };
 
   const handleApplyClick = () => {
-    Analytics.trackCTAClick('Mentorship Apply Now');
+    Analytics.trackCTAClick('Mentorship Join Now');
     window.location.href = 'https://whop.com/checkout/plan_W5Jebtb1V478b';
   };
 
@@ -258,7 +258,7 @@ export function MentorshipSection() {
                     size="xl"
                     className="rounded-sm min-w-[220px]"
                   >
-                    Apply Now
+                    Join Now
                   </Button>
                 </motion.div>
               </motion.div>
@@ -269,7 +269,7 @@ export function MentorshipSection() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
                 </span>
-                <span>Limited spots — applications reviewed personally</span>
+                <span>Limited spots available</span>
               </div>
             </div>
           </RevealContent>
