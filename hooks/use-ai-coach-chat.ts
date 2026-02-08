@@ -65,6 +65,9 @@ export function useAICoachChat() {
   // Ref to prevent double-sends
   const sendingRef = useRef(false)
 
+  // AbortController for cancelling in-flight requests on unmount
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   // Get auth token
   const getToken = useCallback((): string | null => {
     return session?.access_token || null
@@ -106,6 +109,13 @@ export function useAICoachChat() {
     }
   }, [session?.access_token, loadSessions])
 
+  // Cleanup: abort in-flight requests on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
+
   // ============================================
   // SEND MESSAGE
   // ============================================
@@ -115,6 +125,11 @@ export function useAICoachChat() {
     if (!token || !text.trim() || sendingRef.current) return
 
     sendingRef.current = true
+
+    // Cancel any in-flight request
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     // Generate or use current session ID
     const sessionId = state.currentSessionId || crypto.randomUUID()
@@ -137,7 +152,7 @@ export function useAICoachChat() {
     }))
 
     try {
-      const response = await apiSendMessage(sessionId, text.trim(), token)
+      const response = await apiSendMessage(sessionId, text.trim(), token, controller.signal)
 
       // Replace optimistic message and add assistant response
       const confirmedUserMessage: ChatMessage = {
@@ -191,6 +206,20 @@ export function useAICoachChat() {
       // Refresh sessions list to get updated titles/counts
       loadSessions()
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        // Request was cancelled, don't update state
+        return
+      }
+
+      if (error instanceof AICoachAPIError && error.isUnauthorized) {
+        setState(prev => ({
+          ...prev,
+          isSending: false,
+          error: 'Your session has expired. Please sign in again.',
+        }))
+        return
+      }
+
       if (error instanceof AICoachAPIError && error.isRateLimited) {
         setState(prev => ({
           ...prev,

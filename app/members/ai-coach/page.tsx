@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useAICoachChat } from '@/hooks/use-ai-coach-chat'
 import { ChatPanel } from '@/components/ai-coach/chat-panel'
 import { CenterPanel } from '@/components/ai-coach/center-panel'
+import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 
 export default function AICoachPage() {
   const chat = useAICoachChat()
@@ -66,11 +67,44 @@ export default function AICoachPage() {
 
       {/* Main Content Area */}
       <div className="glass-card-heavy border-emerald-500/10 rounded-xl overflow-hidden" style={{ height: 'calc(100vh - 220px)' }}>
-        {/* Desktop: Resizable Split Panels */}
-        <div className="hidden lg:block h-full">
-          <PanelGroup direction="horizontal">
-            {/* Left Panel: Chat (30%) */}
-            <Panel defaultSize={30} minSize={25} maxSize={45}>
+        <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
+          {/* Desktop: Resizable Split Panels */}
+          <div className="hidden lg:block h-full">
+            <PanelGroup direction="horizontal">
+              {/* Left Panel: Chat (30%) */}
+              <Panel defaultSize={30} minSize={25} maxSize={45}>
+                <ChatPanel
+                  messages={chat.messages}
+                  sessions={chat.sessions}
+                  currentSessionId={chat.currentSessionId}
+                  isSending={chat.isSending}
+                  isLoadingSessions={chat.isLoadingSessions}
+                  isLoadingMessages={chat.isLoadingMessages}
+                  error={chat.error}
+                  rateLimitInfo={chat.rateLimitInfo}
+                  onSendMessage={chat.sendMessage}
+                  onNewSession={chat.newSession}
+                  onSelectSession={chat.selectSession}
+                  onDeleteSession={chat.deleteSession}
+                  onClearError={chat.clearError}
+                />
+              </Panel>
+
+              {/* Resize Handle */}
+              <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
+                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
+              </PanelResizeHandle>
+
+              {/* Right Panel: Center (70%) */}
+              <Panel defaultSize={70} minSize={40}>
+                <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
+              </Panel>
+            </PanelGroup>
+          </div>
+
+          {/* Mobile: Toggled View */}
+          <div className="lg:hidden h-full">
+            {mobileView === 'chat' ? (
               <ChatPanel
                 messages={chat.messages}
                 sessions={chat.sessions}
@@ -86,42 +120,11 @@ export default function AICoachPage() {
                 onDeleteSession={chat.deleteSession}
                 onClearError={chat.clearError}
               />
-            </Panel>
-
-            {/* Resize Handle */}
-            <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
-              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
-            </PanelResizeHandle>
-
-            {/* Right Panel: Center (70%) */}
-            <Panel defaultSize={70} minSize={40}>
+            ) : (
               <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-            </Panel>
-          </PanelGroup>
-        </div>
-
-        {/* Mobile: Toggled View */}
-        <div className="lg:hidden h-full">
-          {mobileView === 'chat' ? (
-            <ChatPanel
-              messages={chat.messages}
-              sessions={chat.sessions}
-              currentSessionId={chat.currentSessionId}
-              isSending={chat.isSending}
-              isLoadingSessions={chat.isLoadingSessions}
-              isLoadingMessages={chat.isLoadingMessages}
-              error={chat.error}
-              rateLimitInfo={chat.rateLimitInfo}
-              onSendMessage={chat.sendMessage}
-              onNewSession={chat.newSession}
-              onSelectSession={chat.selectSession}
-              onDeleteSession={chat.deleteSession}
-              onClearError={chat.clearError}
-            />
-          ) : (
-            <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-          )}
-        </div>
+            )}
+          </div>
+        </AICoachErrorBoundary>
       </div>
     </div>
   )

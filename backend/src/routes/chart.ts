@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { getAggregates, MassiveAggregate } from '../config/massive';
 import { authenticateToken } from '../middleware/auth';
+import { validateParams, validateQuery } from '../middleware/validate';
 import { cacheGet, cacheSet } from '../config/redis';
 import { getChartData } from '../services/charts/chartDataService';
+import { chartParamSchema, chartQuerySchema } from '../schemas/chartValidation';
 
 const router = Router();
 
@@ -53,6 +56,8 @@ function getDateRange(daysBack: number): { from: string; to: string } {
 router.get(
   '/:symbol',
   authenticateToken,
+  validateParams(chartParamSchema),
+  validateQuery(chartQuerySchema),
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
@@ -83,13 +88,6 @@ router.get(
         });
       }
 
-      // Validate timeframe
-      if (!TIMEFRAME_CONFIG[timeframe]) {
-        return res.status(400).json({
-          error: 'Invalid timeframe',
-          message: `Supported timeframes: ${Object.keys(TIMEFRAME_CONFIG).join(', ')}, 1W, 1M`
-        });
-      }
 
       const config = TIMEFRAME_CONFIG[timeframe];
       const ticker = normalizeSymbol(symbol);
@@ -128,7 +126,7 @@ router.get(
 
       res.json(result);
     } catch (error: any) {
-      console.error('Chart data error:', error);
+      logger.error('Chart data error', { error: error?.message || String(error) });
 
       if (error.message?.includes('Massive') || error.message?.includes('fetch')) {
         return res.status(503).json({

@@ -1,14 +1,14 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { calculateLevels } from '../services/levels';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
+import { validateParams, validateQuery } from '../middleware/validate';
+import { levelsParamSchema, levelsQuerySchema } from '../schemas/levelsValidation';
 
 const router = Router();
 
 // Supported symbols
 const SUPPORTED_SYMBOLS = ['SPX', 'NDX'];
-
-// Supported timeframes
-const SUPPORTED_TIMEFRAMES = ['intraday', 'daily', 'weekly'];
 
 /**
  * GET /api/levels/:symbol
@@ -22,6 +22,8 @@ router.get(
   '/:symbol',
   authenticateToken,
   checkQueryLimit,
+  validateParams(levelsParamSchema),
+  validateQuery(levelsQuerySchema),
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
@@ -35,20 +37,13 @@ router.get(
         });
       }
 
-      // Validate timeframe
-      if (!SUPPORTED_TIMEFRAMES.includes(timeframe)) {
-        return res.status(400).json({
-          error: 'Invalid timeframe',
-          message: `Timeframe '${timeframe}' is not valid. Supported timeframes: ${SUPPORTED_TIMEFRAMES.join(', ')}`
-        });
-      }
 
       // Calculate levels
       const levels = await calculateLevels(symbol, timeframe);
 
       res.json(levels);
     } catch (error: any) {
-      console.error('Error in levels endpoint:', error);
+      logger.error('Error in levels endpoint', { error: error?.message || String(error) });
 
       // Handle specific error types
       if (error.message.includes('Missing') || error.message.includes('environment')) {

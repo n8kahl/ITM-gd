@@ -1,6 +1,15 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { authenticateToken } from '../middleware/auth';
+import { validateBody, validateParams, validateQuery } from '../middleware/validate';
 import { supabase } from '../config/database';
+import {
+  createTradeSchema,
+  updateTradeSchema,
+  tradeIdSchema,
+  getTradesQuerySchema,
+  importTradesSchema,
+} from '../schemas/journalValidation';
 
 const router = Router();
 
@@ -12,6 +21,7 @@ const router = Router();
 router.get(
   '/trades',
   authenticateToken,
+  validateQuery(getTradesQuerySchema),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -41,7 +51,7 @@ router.get(
         hasMore: (count || 0) > offset + limit,
       });
     } catch (error: any) {
-      console.error('Error fetching trades:', error);
+      logger.error('Error fetching trades', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch trades' });
     }
   }
@@ -55,6 +65,7 @@ router.get(
 router.post(
   '/trades',
   authenticateToken,
+  validateBody(createTradeSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
@@ -64,14 +75,6 @@ router.post(
         quantity, exit_reason, lessons_learned, tags,
       } = req.body;
 
-      // Validate required fields
-      if (!symbol || !position_type || !entry_date || !entry_price || !quantity) {
-        res.status(400).json({
-          error: 'Missing fields',
-          message: 'symbol, position_type, entry_date, entry_price, and quantity are required',
-        });
-        return;
-      }
 
       // Calculate P&L if exit data provided
       let pnl = null;
@@ -116,7 +119,7 @@ router.post(
 
       res.status(201).json(data);
     } catch (error: any) {
-      console.error('Error creating trade:', error);
+      logger.error('Error creating trade', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to create trade' });
     }
   }
@@ -130,6 +133,8 @@ router.post(
 router.put(
   '/trades/:id',
   authenticateToken,
+  validateParams(tradeIdSchema),
+  validateBody(updateTradeSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
@@ -161,7 +166,7 @@ router.put(
 
       res.json(data);
     } catch (error: any) {
-      console.error('Error updating trade:', error);
+      logger.error('Error updating trade', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to update trade' });
     }
   }
@@ -173,6 +178,7 @@ router.put(
 router.delete(
   '/trades/:id',
   authenticateToken,
+  validateParams(tradeIdSchema),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -188,7 +194,7 @@ router.delete(
 
       res.json({ success: true });
     } catch (error: any) {
-      console.error('Error deleting trade:', error);
+      logger.error('Error deleting trade', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to delete trade' });
     }
   }
@@ -271,7 +277,7 @@ router.get(
         byStrategy,
       });
     } catch (error: any) {
-      console.error('Error fetching analytics:', error);
+      logger.error('Error fetching analytics', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch analytics' });
     }
   }
@@ -285,18 +291,12 @@ router.get(
 router.post(
   '/import',
   authenticateToken,
+  validateBody(importTradesSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
       const { trades: importedTrades } = req.body;
 
-      if (!Array.isArray(importedTrades) || importedTrades.length === 0) {
-        res.status(400).json({
-          error: 'Invalid data',
-          message: 'trades must be a non-empty array',
-        });
-        return;
-      }
 
       // Map imported trades to our schema
       const mapped = importedTrades.map((t: any) => ({
@@ -328,7 +328,7 @@ router.post(
         total: mapped.length,
       });
     } catch (error: any) {
-      console.error('Error importing trades:', error);
+      logger.error('Error importing trades', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to import trades' });
     }
   }

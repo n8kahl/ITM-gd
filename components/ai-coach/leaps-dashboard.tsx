@@ -113,8 +113,9 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
       if (data.projections) {
         setProjections(prev => ({ ...prev, [positionId]: data.projections }))
       }
-    } catch {
-      // Projection fetch failed silently
+    } catch (err) {
+      // Projection fetch failed - continue without projections
+      console.debug('Failed to fetch Greeks projection for position', positionId)
     }
   }, [token, API_BASE, projections])
 
@@ -122,13 +123,16 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     if (!token) return
 
     try {
-      await fetch(`${API_BASE}/api/leaps/${id}`, {
+      const res = await fetch(`${API_BASE}/api/leaps/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (!res.ok) {
+        throw new Error('Failed to delete position')
+      }
       setPositions(prev => prev.filter(p => p.id !== id))
-    } catch {
-      // Delete failed silently
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete position')
     }
   }, [token, API_BASE])
 

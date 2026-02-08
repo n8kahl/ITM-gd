@@ -1,15 +1,50 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
+
+function corsHeaders(origin: string | null) {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
+}
+
+async function verifyJWT(req: Request, supabaseClient: any): Promise<{ user: any; error: string | null }> {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { user: null, error: 'Missing or invalid authorization header' }
+  }
+
+  const token = authHeader.replace('Bearer ', '')
+  const { data: { user }, error } = await supabaseClient.auth.getUser(token)
+
+  if (error || !user) {
+    return { user: null, error: 'Invalid or expired token' }
+  }
+
+  return { user, error: null }
+}
+
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email) && email.length <= 255
+}
+
+function sanitizeInput(input: string | undefined, maxLength: number): string {
+  if (!input) return ''
+  return input.substring(0, maxLength).trim()
 }
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const headers = corsHeaders(origin)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers })
   }
 
   try {
@@ -17,6 +52,11 @@ serve(async (req) => {
 
     if (!conversationId) {
       throw new Error('conversationId is required')
+    }
+
+    // Validate conversationId format (UUID)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId)) {
+      throw new Error('Invalid conversationId format')
     }
 
     // Initialize Supabase client
@@ -29,6 +69,15 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Verify JWT
+    const { user, error: authError } = await verifyJWT(req, supabase)
+    if (authError) {
+      return new Response(JSON.stringify({ error: authError }), {
+        status: 401,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+      })
+    }
 
     // 1. Get conversation details
     const { data: conversation, error: convError } = await supabase
@@ -57,6 +106,11 @@ serve(async (req) => {
 
     if (!emailTo) {
       throw new Error('No recipient email provided and visitor email not available')
+    }
+
+    // Validate recipient email
+    if (!validateEmail(emailTo)) {
+      throw new Error('Invalid recipient email address')
     }
 
     // 3. Generate HTML email content
@@ -103,7 +157,7 @@ serve(async (req) => {
         emailId: emailResult.id,
         sentTo: emailTo
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...headers, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
@@ -111,7 +165,7 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...headers, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })

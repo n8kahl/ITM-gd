@@ -1,9 +1,11 @@
+import { logger } from '../lib/logger';
 import { openaiClient, CHAT_MODEL, MAX_TOKENS, TEMPERATURE } from '../config/openai';
 import { getSystemPrompt } from './systemPrompt';
 import { AI_FUNCTIONS } from './functions';
 import { executeFunctionCall } from './functionHandlers';
 import { supabase } from '../config/database';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { openaiCircuit } from '../lib/circuitBreaker';
 
 /**
  * Chat Service
@@ -63,17 +65,21 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     }
 
     // Call OpenAI API with function calling
-    let completion = await openaiClient.chat.completions.create({
+    let completion = await openaiCircuit.execute(() => openaiClient.chat.completions.create({
       model: CHAT_MODEL,
       messages,
       tools: AI_FUNCTIONS,
       tool_choice: 'auto',
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE
-    });
+    }));
 
     const functionCalls: any[] = [];
     let assistantMessage = completion.choices[0].message;
+
+    // Track cumulative token usage to enforce budget
+    let cumulativeTokens = completion.usage?.total_tokens || 0;
+    const MAX_TOTAL_TOKENS = 4000; // Hard budget per request
 
     // Handle function calling loop (max 5 iterations to prevent runaway costs)
     const MAX_FUNCTION_CALL_ITERATIONS = 5;
@@ -82,7 +88,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
       iterations++;
       if (iterations > MAX_FUNCTION_CALL_ITERATIONS) {
-        console.warn(`Function calling loop exceeded ${MAX_FUNCTION_CALL_ITERATIONS} iterations, breaking`);
+        logger.warn(`Function calling loop exceeded ${MAX_FUNCTION_CALL_ITERATIONS} iterations, breaking`);
         break;
       }
 
@@ -98,7 +104,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
         const functionName = toolCall.function.name;
         const functionArgs = toolCall.function.arguments;
 
-        console.log(`Executing function: ${functionName}`, functionArgs);
+        logger.info(`Executing function: ${functionName}`, { functionArgs });
 
         try {
           const args = JSON.parse(functionArgs);
@@ -120,7 +126,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
             content: JSON.stringify(functionResult)
           });
         } catch (error: any) {
-          console.error(`Function ${functionName} failed:`, error);
+          logger.error(`Function ${functionName} failed`, { error: error?.message || String(error) });
 
           messages.push({
             role: 'tool',
@@ -134,16 +140,23 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       }
 
       // Call OpenAI again with function results
-      completion = await openaiClient.chat.completions.create({
+      completion = await openaiCircuit.execute(() => openaiClient.chat.completions.create({
         model: CHAT_MODEL,
         messages,
         tools: AI_FUNCTIONS,
         tool_choice: 'auto',
         max_tokens: MAX_TOKENS,
         temperature: TEMPERATURE
-      });
+      }));
 
       assistantMessage = completion.choices[0].message;
+
+      // Track cumulative tokens
+      cumulativeTokens += completion.usage?.total_tokens || 0;
+      if (cumulativeTokens > MAX_TOTAL_TOKENS) {
+        logger.warn(`Token budget exceeded: ${cumulativeTokens}/${MAX_TOTAL_TOKENS}`);
+        break;
+      }
     }
 
     // Extract final response
@@ -170,44 +183,45 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       responseTime: responseTime / 1000 // Convert to seconds
     };
   } catch (error: any) {
-    console.error('Chat service error:', error);
+    logger.error('Chat service error', { error: error?.message || String(error) });
     throw new Error(`Failed to process chat message: ${error.message}`);
   }
 }
 
 /**
- * Get or create a chat session
+ * Get or create a chat session using upsert to prevent race conditions
  */
 async function getOrCreateSession(sessionId: string, userId: string) {
-  // Try to get existing session
-  const { data: existingSession } = await supabase
+  // Use upsert: INSERT ... ON CONFLICT DO NOTHING then SELECT
+  const { error: upsertError } = await supabase
+    .from('ai_coach_sessions')
+    .upsert(
+      {
+        id: sessionId,
+        user_id: userId,
+        title: 'New Conversation',
+        message_count: 0,
+      },
+      { onConflict: 'id', ignoreDuplicates: true }
+    );
+
+  if (upsertError) {
+    throw new Error(`Failed to create/find session: ${upsertError.message}`);
+  }
+
+  // Now fetch the session (guaranteed to exist)
+  const { data: session, error: fetchError } = await supabase
     .from('ai_coach_sessions')
     .select('*')
     .eq('id', sessionId)
     .eq('user_id', userId)
     .single();
 
-  if (existingSession) {
-    return existingSession;
+  if (fetchError || !session) {
+    throw new Error('Session not found or access denied');
   }
 
-  // Create new session
-  const { data: newSession, error: createError } = await supabase
-    .from('ai_coach_sessions')
-    .insert({
-      id: sessionId,
-      user_id: userId,
-      title: 'New Conversation', // Will be updated later with first message summary
-      message_count: 0
-    })
-    .select()
-    .single();
-
-  if (createError) {
-    throw new Error(`Failed to create session: ${createError.message}`);
-  }
-
-  return newSession;
+  return session;
 }
 
 /**
@@ -222,7 +236,7 @@ async function getConversationHistory(sessionId: string, limit: number = 20): Pr
     .limit(limit);
 
   if (error) {
-    console.error('Failed to fetch conversation history:', error);
+    logger.error('Failed to fetch conversation history', { error: error?.message || String(error) });
     return [];
   }
 
@@ -339,7 +353,7 @@ export async function updateSessionTitle(sessionId: string, firstMessage: string
     .eq('id', sessionId);
 
   if (error) {
-    console.error('Failed to update session title:', error);
+    logger.error('Failed to update session title', { error: error?.message || String(error) });
   }
 }
 

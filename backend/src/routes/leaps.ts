@@ -1,8 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { validateParams, validateBody } from '../middleware/validate';
 import { supabase } from '../config/database';
 import { generateGreeksProjection } from '../services/leaps/greeksProjection';
 import { calculateRoll } from '../services/leaps/rollCalculator';
+import {
+  leapsIdSchema,
+  createLeapsSchema,
+  updateLeapsSchema,
+  rollCalculationSchema,
+} from '../schemas/leapsValidation';
 
 const router = Router();
 
@@ -33,7 +40,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
  * GET /api/leaps/:id
  * Get a single LEAPS position with Greeks projection
  */
-router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.get('/:id', authenticateToken, validateParams(leapsIdSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -77,7 +84,7 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
  * POST /api/leaps
  * Create a new LEAPS position
  */
-router.post('/', authenticateToken, async (req: Request, res: Response) => {
+router.post('/', authenticateToken, validateBody(createLeapsSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -88,15 +95,6 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       entry_delta, entry_gamma, entry_vega, entry_theta,
     } = req.body;
 
-    // Validate required fields
-    if (!symbol || !option_type || !strike || !entry_price || !entry_date || !expiry_date || !quantity) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    // Validate option_type
-    if (!['CALL', 'PUT'].includes(option_type.toUpperCase())) {
-      return res.status(400).json({ error: 'option_type must be CALL or PUT' });
-    }
 
     // Check position limit (10 LEAPS max)
     const { count } = await supabase
@@ -140,7 +138,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
  * PUT /api/leaps/:id
  * Update a LEAPS position (current value, Greeks, notes)
  */
-router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.put('/:id', authenticateToken, validateParams(leapsIdSchema), validateBody(updateLeapsSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -158,9 +156,6 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       }
     }
 
-    if (Object.keys(updateFields).length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
-    }
 
     updateFields.updated_at = new Date().toISOString();
 
@@ -185,7 +180,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
  * DELETE /api/leaps/:id
  * Delete a LEAPS position
  */
-router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateToken, validateParams(leapsIdSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -208,7 +203,7 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
  * POST /api/leaps/:id/roll-calculation
  * Calculate a roll analysis for a LEAPS position
  */
-router.post('/:id/roll-calculation', authenticateToken, async (req: Request, res: Response) => {
+router.post('/:id/roll-calculation', authenticateToken, validateParams(leapsIdSchema), validateBody(rollCalculationSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -225,9 +220,6 @@ router.post('/:id/roll-calculation', authenticateToken, async (req: Request, res
     if (!position) return res.status(404).json({ error: 'Position not found' });
 
     const { newStrike, newExpiry } = req.body;
-    if (!newStrike) {
-      return res.status(400).json({ error: 'newStrike is required' });
-    }
 
     const rollAnalysis = calculateRoll({
       currentStrike: position.strike,
@@ -250,7 +242,7 @@ router.post('/:id/roll-calculation', authenticateToken, async (req: Request, res
  * POST /api/leaps/:id/greeks-projection
  * Get Greeks projection for a LEAPS position
  */
-router.post('/:id/greeks-projection', authenticateToken, async (req: Request, res: Response) => {
+router.post('/:id/greeks-projection', authenticateToken, validateParams(leapsIdSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

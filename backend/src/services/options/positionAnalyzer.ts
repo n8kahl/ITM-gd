@@ -1,3 +1,4 @@
+import { logger } from '../../lib/logger';
 import {
   Position,
   PositionAnalysis,
@@ -215,7 +216,7 @@ async function fetchCurrentOptionData(
       greeks: positionGreeks
     };
   } catch (error) {
-    console.error('Failed to fetch current option data:', error);
+    logger.error('Failed to fetch current option data', { error: error instanceof Error ? error.message : String(error) });
     return null;
   }
 }

@@ -1,12 +1,14 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
 import { analyzeScreenshot } from '../services/screenshot/analyzer';
+import { analyzeScreenshotSchema } from '../schemas/screenshotValidation';
 
 const router = Router();
 
 // Max file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 /**
  * POST /api/screenshot/analyze
@@ -21,25 +23,10 @@ router.post(
   '/analyze',
   authenticateToken,
   checkQueryLimit,
+  validateBody(analyzeScreenshotSchema),
   async (req: Request, res: Response) => {
     try {
       const { image, mimeType = 'image/png' } = req.body;
-
-      // Validate image
-      if (!image || typeof image !== 'string') {
-        return res.status(400).json({
-          error: 'Invalid request',
-          message: 'Image data is required (base64 encoded)',
-        });
-      }
-
-      // Check MIME type
-      if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-        return res.status(400).json({
-          error: 'Invalid file type',
-          message: `Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}`,
-        });
-      }
 
       // Check size (base64 is ~33% larger than binary)
       const estimatedSize = (image.length * 3) / 4;
@@ -58,7 +45,7 @@ router.post(
         positionCount: analysis.positions.length,
       });
     } catch (error: any) {
-      console.error('Error in screenshot analysis:', error);
+      logger.error('Error in screenshot analysis', { error: error?.message || String(error) });
 
       if (error.message.includes('OpenAI') || error.message.includes('Vision')) {
         return res.status(503).json({

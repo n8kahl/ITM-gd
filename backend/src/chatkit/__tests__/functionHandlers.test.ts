@@ -1,5 +1,25 @@
 import { executeFunctionCall } from '../functionHandlers';
 
+// Mock logger
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+// Mock circuit breaker
+jest.mock('../../lib/circuitBreaker', () => ({
+  openaiCircuit: {
+    execute: jest.fn((fn) => fn()),
+  },
+  massiveCircuit: {
+    execute: jest.fn((fn) => fn()),
+  },
+}));
+
 // Mock Supabase
 const mockSupabaseFrom = jest.fn();
 jest.mock('../../config/database', () => ({

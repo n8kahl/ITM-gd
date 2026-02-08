@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { validateParams } from '../middleware/validate';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
+import { macroImpactParamSchema } from '../schemas/macroValidation';
 
 const router = Router();
 
@@ -21,13 +23,9 @@ router.get('/', authenticateToken, async (_req: Request, res: Response) => {
  * GET /api/macro/impact/:symbol
  * Get macro impact assessment for a specific symbol
  */
-router.get('/impact/:symbol', authenticateToken, async (req: Request, res: Response) => {
+router.get('/impact/:symbol', authenticateToken, validateParams(macroImpactParamSchema), async (req: Request, res: Response) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
-    if (!['SPX', 'NDX'].includes(symbol)) {
-      return res.status(400).json({ error: 'Supported symbols: SPX, NDX' });
-    }
-
+    const symbol = req.params.symbol as string;
     const impact = assessMacroImpact(symbol);
     res.json({ symbol, ...impact });
   } catch (error: any) {

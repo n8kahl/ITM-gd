@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { sendChatMessage, getUserSessions, getSessionMessages, deleteSession } from '../chatkit/chatService';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
+import { validateBody, validateParams, validateQuery } from '../middleware/validate';
+import { sendMessageSchema, getSessionMessagesSchema, deleteSessionSchema, getSessionsQuerySchema } from '../schemas/chatValidation';
+// sendError / ErrorCode available if needed for structured error responses
 
 const router = Router();
 
@@ -18,25 +22,11 @@ router.post(
   '/message',
   authenticateToken,
   checkQueryLimit,
+  validateBody(sendMessageSchema),
   async (req: Request, res: Response) => {
     try {
-      const { sessionId, message } = req.body;
+      const { sessionId, message } = (req as any).validatedBody;
       const userId = req.user!.id;
-
-      // Validate message
-      if (!message || typeof message !== 'string' || message.trim().length === 0) {
-        return res.status(400).json({
-          error: 'Invalid request',
-          message: 'Message is required and must be non-empty'
-        });
-      }
-
-      if (message.length > 2000) {
-        return res.status(400).json({
-          error: 'Invalid request',
-          message: 'Message must be less than 2000 characters'
-        });
-      }
 
       // Generate session ID if not provided
       const finalSessionId = sessionId || uuidv4();
@@ -53,7 +43,7 @@ router.post(
         ...response
       });
     } catch (error: any) {
-      console.error('Error in chat message endpoint:', error);
+      logger.error('Error in chat message endpoint', { error: error?.message || String(error) });
 
       if (error.message.includes('OpenAI')) {
         return res.status(503).json({
@@ -79,6 +69,7 @@ router.post(
 router.get(
   '/sessions',
   authenticateToken,
+  validateQuery(getSessionsQuerySchema as any),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -91,7 +82,7 @@ router.get(
         count: sessions.length
       });
     } catch (error: any) {
-      console.error('Error fetching sessions:', error);
+      logger.error('Error fetching sessions', { error: error?.message || String(error) });
       res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch sessions'
@@ -112,10 +103,11 @@ router.get(
 router.get(
   '/sessions/:sessionId/messages',
   authenticateToken,
+  validateParams(getSessionMessagesSchema),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
-      const { sessionId } = req.params;
+      const { sessionId } = (req as any).validatedParams;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
 
@@ -123,7 +115,7 @@ router.get(
 
       res.json(result);
     } catch (error: any) {
-      console.error('Error fetching session messages:', error);
+      logger.error('Error fetching session messages', { error: error?.message || String(error) });
 
       if (error.message.includes('not found') || error.message.includes('access denied')) {
         return res.status(404).json({
@@ -148,10 +140,11 @@ router.get(
 router.delete(
   '/sessions/:sessionId',
   authenticateToken,
+  validateParams(deleteSessionSchema),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
-      const { sessionId } = req.params;
+      const { sessionId } = (req as any).validatedParams;
 
       await deleteSession(sessionId, userId);
 
@@ -160,7 +153,7 @@ router.delete(
         message: 'Session deleted successfully'
       });
     } catch (error: any) {
-      console.error('Error deleting session:', error);
+      logger.error('Error deleting session', { error: error?.message || String(error) });
 
       if (error.message.includes('not found') || error.message.includes('access denied')) {
         return res.status(404).json({

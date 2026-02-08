@@ -2,6 +2,16 @@ import request from 'supertest';
 import express from 'express';
 import { chatLimiter } from '../rateLimiter';
 
+// Mock logger
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 describe('Rate Limiter Middleware', () => {
   it('should allow requests within the limit', async () => {
     const app = express();

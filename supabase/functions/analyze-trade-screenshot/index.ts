@@ -1,9 +1,36 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
+
+function corsHeaders(origin: string | null) {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
+}
+
+async function verifyJWT(req: Request, supabaseClient: any): Promise<{ user: any; error: string | null }> {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { user: null, error: 'Missing or invalid authorization header' }
+  }
+
+  const token = authHeader.replace('Bearer ', '')
+  const { data: { user }, error } = await supabaseClient.auth.getUser(token)
+
+  if (error || !user) {
+    return { user: null, error: 'Invalid or expired token' }
+  }
+
+  return { user, error: null }
+}
+
+function sanitizeInput(input: string | undefined, maxLength: number): string {
+  if (!input) return ''
+  return input.substring(0, maxLength).trim()
 }
 
 const TRADING_ANALYSIS_PROMPT = `You are an expert trading coach analyzing a trading chart screenshot. Your role is to provide constructive, educational feedback to help the trader improve.
@@ -51,9 +78,12 @@ Focus on:
 Be constructive and educational. The goal is to help the trader learn, not to criticize harshly.`
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const headers = corsHeaders(origin)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers })
   }
 
   try {
@@ -66,6 +96,15 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Verify JWT
+    const { user, error: authError } = await verifyJWT(req, supabase)
+    if (authError) {
+      return new Response(JSON.stringify({ error: authError }), {
+        status: 401,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+      })
+    }
 
     // Parse request - can be JSON with base64 image or form data
     let imageBase64: string
@@ -80,7 +119,7 @@ serve(async (req) => {
       imageBase64 = body.image // base64 encoded image
       userId = body.userId
       entryId = body.entryId || null
-      additionalContext = body.context || ''
+      additionalContext = sanitizeInput(body.context, 1000)
 
       if (!imageBase64) {
         throw new Error('Image data is required')
@@ -88,18 +127,24 @@ serve(async (req) => {
       if (!userId) {
         throw new Error('User ID is required')
       }
+      if (imageBase64.length > 5242880) { // 5MB limit
+        throw new Error('Image data exceeds maximum size (5MB)')
+      }
     } else if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData()
       const imageFile = formData.get('image') as File
       userId = formData.get('userId') as string
       entryId = formData.get('entryId') as string || null
-      additionalContext = formData.get('context') as string || ''
+      additionalContext = sanitizeInput(formData.get('context') as string || '', 1000)
 
       if (!imageFile) {
         throw new Error('Image file is required')
       }
       if (!userId) {
         throw new Error('User ID is required')
+      }
+      if (imageFile.size > 5242880) { // 5MB limit
+        throw new Error('Image file exceeds maximum size (5MB)')
       }
 
       // Convert file to base64
@@ -212,7 +257,7 @@ serve(async (req) => {
         entryId,
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json' },
       }
     )
   } catch (error) {
@@ -221,7 +266,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ error: errorMessage }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json' },
         status: 500,
       }
     )

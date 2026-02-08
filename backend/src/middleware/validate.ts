@@ -1,56 +1,52 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodSchema, ZodError } from 'zod';
+import { ZodSchema } from 'zod';
+import { sendError, ErrorCode } from '../lib/errors';
 
 /**
- * Express middleware factory for Zod request validation.
- * Validates req.body against the provided schema.
+ * Middleware factory that validates request body/params/query against a Zod schema.
  */
-export function validateBody(schema: ZodSchema) {
+export function validateBody<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    try {
-      req.body = schema.parse(req.body);
-      next();
-    } catch (err) {
-      if (err instanceof ZodError) {
-        const errors = err.errors.map(e => ({
-          field: e.path.join('.'),
-          message: e.message,
-        }));
-        res.status(400).json({
-          error: 'Validation error',
-          message: 'Request body validation failed',
-          details: errors,
-        });
-        return;
-      }
-      next(err);
+    const result = schema.safeParse(req.body);
+    if (!result.success) {
+      const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+      sendError(res, 400, ErrorCode.VALIDATION_ERROR, 'Invalid request body', {
+        issues,
+      });
+      return;
     }
+    // Attach validated data to request
+    (req as any).validatedBody = result.data;
+    next();
   };
 }
 
-/**
- * Express middleware factory for Zod query parameter validation.
- * Validates req.query against the provided schema.
- */
-export function validateQuery(schema: ZodSchema) {
+export function validateParams<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    try {
-      req.query = schema.parse(req.query);
-      next();
-    } catch (err) {
-      if (err instanceof ZodError) {
-        const errors = err.errors.map(e => ({
-          field: e.path.join('.'),
-          message: e.message,
-        }));
-        res.status(400).json({
-          error: 'Validation error',
-          message: 'Query parameter validation failed',
-          details: errors,
-        });
-        return;
-      }
-      next(err);
+    const result = schema.safeParse(req.params);
+    if (!result.success) {
+      const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+      sendError(res, 400, ErrorCode.VALIDATION_ERROR, 'Invalid request parameters', {
+        issues,
+      });
+      return;
     }
+    (req as any).validatedParams = result.data;
+    next();
+  };
+}
+
+export function validateQuery<T>(schema: ZodSchema<T>) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+      sendError(res, 400, ErrorCode.VALIDATION_ERROR, 'Invalid query parameters', {
+        issues,
+      });
+      return;
+    }
+    (req as any).validatedQuery = result.data;
+    next();
   };
 }

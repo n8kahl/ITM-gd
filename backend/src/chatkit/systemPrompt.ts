@@ -93,7 +93,17 @@ Your goal is to be the **most helpful trading companion** a trader could have:
 Be helpful. Be accurate. Be concise. Be supportive.`;
 
 /**
- * Get system prompt with optional user context
+ * Allowed values for user context - strict enum validation
+ */
+const ALLOWED_EXPERIENCE_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
+const ALLOWED_TIERS = ['free', 'basic', 'pro', 'premium'] as const;
+
+type ExperienceLevel = typeof ALLOWED_EXPERIENCE_LEVELS[number];
+type Tier = typeof ALLOWED_TIERS[number];
+
+/**
+ * Get system prompt with validated user context.
+ * SECURITY: Never interpolate raw user input into prompts.
  */
 export function getSystemPrompt(userContext?: {
   tier?: string;
@@ -102,21 +112,25 @@ export function getSystemPrompt(userContext?: {
 }): string {
   let prompt = SYSTEM_PROMPT;
 
-  // Add experience level context
-  if (userContext?.experienceLevel === 'beginner') {
-    prompt += '\n\nThe user appears to be learning options trading. Explain concepts more thoroughly, define jargon, and provide educational context. Be patient and encouraging.';
-  } else if (userContext?.experienceLevel === 'advanced') {
-    prompt += '\n\nThe user is experienced. Be more concise, assume knowledge of terms, dive deeper into nuanced analysis. Skip basic explanations unless asked.';
+  // Validate experience level against enum before using
+  const level = userContext?.experienceLevel;
+  if (level && ALLOWED_EXPERIENCE_LEVELS.includes(level as ExperienceLevel)) {
+    if (level === 'beginner') {
+      prompt += '\n\nThe user appears to be learning options trading. Explain concepts more thoroughly, define jargon, and provide educational context. Be patient and encouraging.';
+    } else if (level === 'advanced') {
+      prompt += '\n\nThe user is experienced. Be more concise, assume knowledge of terms, dive deeper into nuanced analysis. Skip basic explanations unless asked.';
+    }
   }
 
-  // Add mobile context
-  if (userContext?.isMobile) {
+  // Add mobile context (boolean only, no user input)
+  if (userContext?.isMobile === true) {
     prompt += '\n\nUser is on mobile. Be extra concise. Use shorter sentences. Limit lists to 3-5 items max.';
   }
 
-  // Add tier context
-  if (userContext?.tier) {
-    prompt += `\n\nUser subscription tier: ${userContext.tier}`;
+  // Validate tier against enum - never interpolate raw value
+  const tier = userContext?.tier;
+  if (tier && ALLOWED_TIERS.includes(tier as Tier)) {
+    prompt += `\n\nUser subscription tier: ${tier}`;
   }
 
   return prompt;

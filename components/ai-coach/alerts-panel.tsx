@@ -93,8 +93,11 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
       setAlerts(prev => prev.map(a =>
         a.id === id ? { ...a, status: 'cancelled' as AlertStatus } : a
       ))
-    } catch {
-      // Silent
+    } catch (err) {
+      const msg = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to cancel alert'
+      setError(msg)
     }
   }, [token])
 
@@ -103,8 +106,11 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
     try {
       await deleteAlert(id, token)
       setAlerts(prev => prev.filter(a => a.id !== id))
-    } catch {
-      // Silent
+    } catch (err) {
+      const msg = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to delete alert'
+      setError(msg)
     }
   }, [token])
 

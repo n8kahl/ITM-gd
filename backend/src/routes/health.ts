@@ -1,58 +1,99 @@
 import { Router, Request, Response } from 'express';
 import { testDatabaseConnection } from '../config/database';
 import { testRedisConnection } from '../config/redis';
-import { testMassiveConnection } from '../config/massive';
 import { testOpenAIConnection } from '../config/openai';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
-// Basic health check
-router.get('/', async (req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+interface HealthCheck {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  uptime: number;
+  version: string;
+  checks?: Record<string, {
+    status: 'pass' | 'fail';
+    latency?: number;
+    message?: string;
+  }>;
+}
+
+/**
+ * GET /health - Basic liveness check
+ * Used by load balancers and container orchestration.
+ */
+router.get('/', (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
+  });
 });
 
-// Detailed health check
-router.get('/detailed', async (req: Request, res: Response) => {
-  const checks = {
-    status: 'ok',
+/**
+ * GET /health/ready - Readiness check with dependency verification
+ * Returns 503 if critical dependencies are down.
+ */
+router.get('/ready', async (_req: Request, res: Response) => {
+  const checks: HealthCheck['checks'] = {};
+  let overallHealthy = true;
+
+  // Check Database
+  const dbStart = Date.now();
+  try {
+    const dbOk = await testDatabaseConnection();
+    checks.database = {
+      status: dbOk ? 'pass' : 'fail',
+      latency: Date.now() - dbStart,
+    };
+    if (!dbOk) overallHealthy = false;
+  } catch (err) {
+    checks.database = { status: 'fail', latency: Date.now() - dbStart, message: 'Connection failed' };
+    overallHealthy = false;
+  }
+
+  // Check Redis
+  const redisStart = Date.now();
+  try {
+    const redisOk = await testRedisConnection();
+    checks.redis = {
+      status: redisOk ? 'pass' : 'fail',
+      latency: Date.now() - redisStart,
+    };
+    if (!redisOk) overallHealthy = false;
+  } catch (err) {
+    checks.redis = { status: 'fail', latency: Date.now() - redisStart, message: 'Connection failed' };
+    overallHealthy = false;
+  }
+
+  // Check OpenAI (non-critical - degrades but doesn't fail)
+  const aiStart = Date.now();
+  try {
+    const aiOk = await testOpenAIConnection();
+    checks.openai = {
+      status: aiOk ? 'pass' : 'fail',
+      latency: Date.now() - aiStart,
+    };
+  } catch (err) {
+    checks.openai = { status: 'fail', latency: Date.now() - aiStart, message: 'Connection failed' };
+  }
+
+  const response: HealthCheck = {
+    status: overallHealthy ? 'healthy' : 'unhealthy',
     timestamp: new Date().toISOString(),
-    services: {
-      database: false,
-      redis: false,
-      massive: false,
-      openai: false
-    }
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
+    checks,
   };
 
-  try {
-    // Test all connections in parallel
-    const [dbOk, redisOk, massiveOk, openaiOk] = await Promise.all([
-      testDatabaseConnection(),
-      testRedisConnection(),
-      testMassiveConnection(),
-      testOpenAIConnection()
-    ]);
+  const statusCode = overallHealthy ? 200 : 503;
 
-    checks.services.database = dbOk;
-    checks.services.redis = redisOk;
-    checks.services.massive = massiveOk;
-    checks.services.openai = openaiOk;
-
-    // Overall status is ok only if all services are ok
-    const allOk = dbOk && redisOk && massiveOk && openaiOk;
-    checks.status = allOk ? 'ok' : 'degraded';
-
-    const statusCode = allOk ? 200 : 503;
-    res.status(statusCode).json(checks);
-  } catch (error) {
-    console.error('Health check failed:', error);
-    res.status(503).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      services: checks.services,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+  if (!overallHealthy) {
+    logger.warn('Health check failed', { checks });
   }
+
+  res.status(statusCode).json(response);
 });
 
 export default router;

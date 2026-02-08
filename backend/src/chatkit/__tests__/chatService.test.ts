@@ -5,6 +5,16 @@ import {
   updateSessionTitle,
 } from '../chatService';
 
+// Mock logger
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 // Mock Supabase
 const mockFrom = jest.fn() as jest.Mock<any, any>;
 
@@ -214,7 +224,7 @@ describe('Chat Service', () => {
     });
 
     it('should not throw on error (logs instead)', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const { logger } = require('../../lib/logger');
       const chain: any = {
         eq: jest.fn().mockResolvedValue({ error: { message: 'DB error' } }),
       };
@@ -224,8 +234,7 @@ describe('Chat Service', () => {
       // Should not throw
       await updateSessionTitle('session-1', 'Test title');
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 

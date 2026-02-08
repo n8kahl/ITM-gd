@@ -1,32 +1,27 @@
 import OpenAI from 'openai';
-import dotenv from 'dotenv';
+import { getEnv } from './env';
 
-dotenv.config();
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-if (!OPENAI_API_KEY) {
-  throw new Error('Missing OPENAI_API_KEY environment variable');
-}
+const env = getEnv();
 
 // Create OpenAI client
 export const openaiClient = new OpenAI({
-  apiKey: OPENAI_API_KEY
+  apiKey: env.OPENAI_API_KEY,
+  timeout: 30000, // 30 second timeout
+  maxRetries: 2,
 });
 
 // Test OpenAI connection
 export async function testOpenAIConnection(): Promise<boolean> {
   try {
-    // Simple test: list models
     await openaiClient.models.list();
     return true;
   } catch (error) {
-    console.error('OpenAI API connection test failed:', error);
     return false;
   }
 }
 
-// Model configuration
-export const CHAT_MODEL = 'gpt-4o';
-export const MAX_TOKENS = 1000;
-export const TEMPERATURE = 0.7;
+// Model configuration - all from validated env vars
+export const CHAT_MODEL = env.CHAT_MODEL;
+export const MAX_TOKENS = env.MAX_TOKENS;
+export const TEMPERATURE = env.TEMPERATURE;
+export const MAX_TOTAL_TOKENS_PER_REQUEST = env.MAX_TOTAL_TOKENS_PER_REQUEST;

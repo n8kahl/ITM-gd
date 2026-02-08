@@ -1,6 +1,14 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { authenticateToken } from '../middleware/auth';
+import { validateBody, validateParams, validateQuery } from '../middleware/validate';
 import { supabase } from '../config/database';
+import {
+  createAlertSchema,
+  updateAlertSchema,
+  alertIdSchema,
+  getAlertsQuerySchema,
+} from '../schemas/alertsValidation';
 
 const router = Router();
 
@@ -12,6 +20,7 @@ const router = Router();
 router.get(
   '/',
   authenticateToken,
+  validateQuery(getAlertsQuerySchema),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -36,7 +45,7 @@ router.get(
         total: count || 0,
       });
     } catch (error: any) {
-      console.error('Error fetching alerts:', error);
+      logger.error('Error fetching alerts', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch alerts' });
     }
   }
@@ -50,6 +59,7 @@ router.get(
 router.post(
   '/',
   authenticateToken,
+  validateBody(createAlertSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
@@ -62,24 +72,6 @@ router.post(
         expires_at,
       } = req.body;
 
-      // Validate required fields
-      if (!symbol || !alert_type || target_value == null) {
-        res.status(400).json({
-          error: 'Missing fields',
-          message: 'symbol, alert_type, and target_value are required',
-        });
-        return;
-      }
-
-      // Validate alert_type
-      const validTypes = ['price_above', 'price_below', 'level_approach', 'level_break', 'volume_spike'];
-      if (!validTypes.includes(alert_type)) {
-        res.status(400).json({
-          error: 'Invalid alert_type',
-          message: `alert_type must be one of: ${validTypes.join(', ')}`,
-        });
-        return;
-      }
 
       // Check active alert count (limit to 20)
       const { count: activeCount } = await supabase
@@ -114,7 +106,7 @@ router.post(
 
       res.status(201).json(data);
     } catch (error: any) {
-      console.error('Error creating alert:', error);
+      logger.error('Error creating alert', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to create alert' });
     }
   }
@@ -128,6 +120,8 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
+  validateParams(alertIdSchema),
+  validateBody(updateAlertSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
@@ -154,7 +148,7 @@ router.put(
 
       res.json(data);
     } catch (error: any) {
-      console.error('Error updating alert:', error);
+      logger.error('Error updating alert', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to update alert' });
     }
   }
@@ -168,6 +162,7 @@ router.put(
 router.delete(
   '/:id',
   authenticateToken,
+  validateParams(alertIdSchema),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -183,7 +178,7 @@ router.delete(
 
       res.json({ success: true });
     } catch (error: any) {
-      console.error('Error deleting alert:', error);
+      logger.error('Error deleting alert', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to delete alert' });
     }
   }
@@ -197,6 +192,7 @@ router.delete(
 router.post(
   '/:id/cancel',
   authenticateToken,
+  validateParams(alertIdSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
@@ -219,7 +215,7 @@ router.post(
 
       res.json(data);
     } catch (error: any) {
-      console.error('Error cancelling alert:', error);
+      logger.error('Error cancelling alert', { error: error?.message || String(error) });
       res.status(500).json({ error: 'Internal server error', message: 'Failed to cancel alert' });
     }
   }

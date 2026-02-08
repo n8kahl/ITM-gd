@@ -181,6 +181,39 @@ export interface APIError {
 }
 
 // ============================================
+// HELPERS
+// ============================================
+
+/**
+ * Enhanced fetch with automatic 401 retry
+ * On 401, attempts to refresh the session before retrying once.
+ */
+async function fetchWithAuth(
+  url: string,
+  options: RequestInit & { headers: Record<string, string> },
+  token: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${token}`,
+  }
+
+  const response = await fetch(url, { ...options, headers, signal })
+
+  if (response.status === 401) {
+    // Token might be expired - throw specific error so hook can handle refresh
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Unauthorized',
+      message: 'Session expired. Please sign in again.',
+    }))
+    throw new AICoachAPIError(401, error)
+  }
+
+  return response
+}
+
+// ============================================
 // API FUNCTIONS
 // ============================================
 
@@ -190,16 +223,19 @@ export interface APIError {
 export async function sendMessage(
   sessionId: string,
   message: string,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<ChatMessageResponse> {
-  const response = await fetch(`${API_BASE}/api/chat/message`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/chat/message`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, message }),
     },
-    body: JSON.stringify({ sessionId, message }),
-  })
+    token,
+    signal
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -227,13 +263,15 @@ export async function sendChatMessage(
  */
 export async function getSessions(
   token: string,
-  limit: number = 10
+  limit: number = 10,
+  signal?: AbortSignal
 ): Promise<{ sessions: ChatSession[]; count: number }> {
-  const response = await fetch(`${API_BASE}/api/chat/sessions?limit=${limit}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/chat/sessions?limit=${limit}`,
+    { headers: {} },
+    token,
+    signal
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -251,14 +289,15 @@ export async function getSessions(
  */
 export async function deleteSession(
   sessionId: string,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean; message: string }> {
-  const response = await fetch(`${API_BASE}/api/chat/sessions/${sessionId}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/chat/sessions/${sessionId}`,
+    { method: 'DELETE', headers: {} },
+    token,
+    signal
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -278,15 +317,14 @@ export async function getSessionMessages(
   sessionId: string,
   token: string,
   limit: number = 50,
-  offset: number = 0
+  offset: number = 0,
+  signal?: AbortSignal
 ): Promise<SessionMessagesResponse> {
-  const response = await fetch(
+  const response = await fetchWithAuth(
     `${API_BASE}/api/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    }
+    { headers: {} },
+    token,
+    signal
   )
 
   if (!response.ok) {
@@ -306,15 +344,14 @@ export async function getSessionMessages(
 export async function getChartData(
   symbol: string,
   timeframe: ChartTimeframe,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<ChartDataResponse> {
-  const response = await fetch(
+  const response = await fetchWithAuth(
     `${API_BASE}/api/chart/${symbol}?timeframe=${timeframe}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    }
+    { headers: {} },
+    token,
+    signal
   )
 
   if (!response.ok) {
@@ -874,7 +911,7 @@ export class AICoachAPIError extends Error {
   }
 
   get isRateLimited(): boolean {
-    return this.status === 403
+    return this.status === 429 || this.status === 403
   }
 
   get isUnauthorized(): boolean {

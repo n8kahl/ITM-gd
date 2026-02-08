@@ -1,3 +1,4 @@
+import { logger } from '../../../lib/logger';
 import { MassiveAggregate } from '../../../config/massive';
 
 export interface PreMarketLevels {
@@ -12,7 +13,7 @@ export interface PreMarketLevels {
  */
 export function calculatePreMarketLevels(preMarketData: MassiveAggregate[]): PreMarketLevels | null {
   if (preMarketData.length === 0) {
-    console.log('No pre-market data available');
+    logger.info('No pre-market data available');
     return null;
   }
 

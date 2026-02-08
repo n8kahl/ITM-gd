@@ -1,3 +1,4 @@
+import { logger } from '../../lib/logger';
 import {
   getOptionsContracts,
   getOptionsSnapshot,
@@ -218,11 +219,11 @@ export async function fetchOptionsChain(
   const cached = await cacheGet<OptionsChainResponse>(cacheKey);
 
   if (cached) {
-    console.log(`Options chain cache hit: ${cacheKey}`);
+    logger.info(`Options chain cache hit: ${cacheKey}`);
     return cached;
   }
 
-  console.log(`Fetching options chain for ${symbol}, expiry: ${expiryDate || 'nearest'}`);
+  logger.info(`Fetching options chain for ${symbol}, expiry: ${expiryDate || 'nearest'}`);
 
   try {
     // Get current price
@@ -263,7 +264,7 @@ export async function fetchOptionsChain(
             snapshots.set(contract.ticker, snapshotData[0]);
           }
         } catch (error) {
-          console.error(`Failed to fetch snapshot for ${contract.ticker}:`, error);
+          logger.error(`Failed to fetch snapshot for ${contract.ticker}`, { error: error instanceof Error ? error.message : String(error) });
         }
       });
 
@@ -283,7 +284,7 @@ export async function fetchOptionsChain(
       const snapshot = snapshots.get(contract.ticker);
 
       if (!snapshot) {
-        console.warn(`No snapshot data for ${contract.ticker}, skipping`);
+        logger.warn(`No snapshot data for ${contract.ticker}, skipping`);
         continue;
       }
 
@@ -326,11 +327,11 @@ export async function fetchOptionsChain(
 
     // Cache the result
     await cacheSet(cacheKey, response, OPTIONS_CHAIN_CACHE_TTL);
-    console.log(`Options chain cached: ${cacheKey}`);
+    logger.info(`Options chain cached: ${cacheKey}`);
 
     return response;
   } catch (error: any) {
-    console.error(`Failed to fetch options chain for ${symbol}:`, error.message);
+    logger.error(`Failed to fetch options chain for ${symbol}`, { error: error.message });
     throw new Error(`Failed to fetch options chain: ${error.message}`);
   }
 }
@@ -343,7 +344,7 @@ export async function fetchExpirationDates(symbol: string): Promise<string[]> {
   const cached = await cacheGet<string[]>(cacheKey);
 
   if (cached) {
-    console.log(`Expirations cache hit: ${cacheKey}`);
+    logger.info(`Expirations cache hit: ${cacheKey}`);
     return cached;
   }
 
@@ -359,7 +360,7 @@ export async function fetchExpirationDates(symbol: string): Promise<string[]> {
 
     return futureExpirations;
   } catch (error: any) {
-    console.error(`Failed to fetch expirations for ${symbol}:`, error.message);
+    logger.error(`Failed to fetch expirations for ${symbol}`, { error: error.message });
     throw new Error(`Failed to fetch expirations: ${error.message}`);
   }
 }
@@ -395,7 +396,7 @@ export async function fetchOptionContract(
 
     return convertToOptionContract(contract, snapshotData[0], currentPrice, symbol);
   } catch (error: any) {
-    console.error(`Failed to fetch option contract:`, error.message);
+    logger.error('Failed to fetch option contract', { error: error.message });
     return null;
   }
 }

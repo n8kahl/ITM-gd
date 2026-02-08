@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import {
   fetchOptionsChain,
   fetchExpirationDates
@@ -8,7 +9,13 @@ import {
   analyzePortfolio
 } from '../services/options/positionAnalyzer';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
+import { validateParams, validateQuery, validateBody } from '../middleware/validate';
 import { Position } from '../services/options/types';
+import {
+  symbolParamSchema,
+  optionsChainQuerySchema,
+  analyzePositionSchema,
+} from '../schemas/optionsValidation';
 
 const router = Router();
 
@@ -31,6 +38,8 @@ router.get(
   '/:symbol/chain',
   authenticateToken,
   checkQueryLimit,
+  validateParams(symbolParamSchema),
+  validateQuery(optionsChainQuerySchema),
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
@@ -47,28 +56,12 @@ router.get(
         });
       }
 
-      // Validate strike range
-      if (isNaN(strikeRange) || strikeRange < 1 || strikeRange > 50) {
-        return res.status(400).json({
-          error: 'Invalid strike range',
-          message: 'Strike range must be between 1 and 50'
-        });
-      }
-
-      // Validate expiry format if provided
-      if (expiry && !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
-        return res.status(400).json({
-          error: 'Invalid expiry format',
-          message: 'Expiry must be in YYYY-MM-DD format'
-        });
-      }
-
       // Fetch options chain
       const chain = await fetchOptionsChain(symbol, expiry, strikeRange);
 
       res.json(chain);
     } catch (error: any) {
-      console.error('Error in options chain endpoint:', error);
+      logger.error('Error in options chain endpoint', { error: error?.message || String(error) });
 
       // Handle specific error types
       if (error.message.includes('No options')) {
@@ -114,6 +107,7 @@ router.get(
   '/:symbol/expirations',
   authenticateToken,
   checkQueryLimit,
+  validateParams(symbolParamSchema),
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
@@ -135,7 +129,7 @@ router.get(
         count: expirations.length
       });
     } catch (error: any) {
-      console.error('Error in expirations endpoint:', error);
+      logger.error('Error in expirations endpoint', { error: error?.message || String(error) });
 
       if (error.message.includes('fetch')) {
         return res.status(503).json({
@@ -183,24 +177,11 @@ router.post(
   '/analyze',
   authenticateToken,
   checkQueryLimit,
+  validateBody(analyzePositionSchema),
   async (req: Request, res: Response) => {
     try {
       const { position, positions } = req.body;
 
-      // Validate request
-      if (!position && !positions) {
-        return res.status(400).json({
-          error: 'Invalid request',
-          message: 'Must provide either "position" or "positions" in request body'
-        });
-      }
-
-      if (position && positions) {
-        return res.status(400).json({
-          error: 'Invalid request',
-          message: 'Cannot provide both "position" and "positions". Choose one.'
-        });
-      }
 
       // Analyze single position
       if (position) {
@@ -218,29 +199,11 @@ router.post(
 
       // Analyze portfolio
       if (positions) {
-        // Validate positions array
-        if (!Array.isArray(positions) || positions.length === 0) {
-          return res.status(400).json({
-            error: 'Invalid positions',
-            message: 'Positions must be a non-empty array'
-          });
-        }
-
-        // Validate each position
-        for (let i = 0; i < positions.length; i++) {
-          if (!validatePosition(positions[i])) {
-            return res.status(400).json({
-              error: 'Invalid position',
-              message: `Position at index ${i} is missing required fields`
-            });
-          }
-        }
-
         const analysis = await analyzePortfolio(positions);
         return res.json(analysis);
       }
     } catch (error: any) {
-      console.error('Error in position analysis endpoint:', error);
+      logger.error('Error in position analysis endpoint', { error: error?.message || String(error) });
 
       if (error.message.includes('fetch') || error.message.includes('Massive.com')) {
         return res.status(503).json({

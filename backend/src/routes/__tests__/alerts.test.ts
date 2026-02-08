@@ -1,6 +1,16 @@
 import request from 'supertest';
 import express from 'express';
 
+// Mock logger
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 // Mock Supabase
 const mockFrom = jest.fn() as jest.Mock<any, any>;
 
@@ -38,7 +48,7 @@ describe('Alerts Routes', () => {
     it('should return alerts for authenticated user', async () => {
       const mockAlerts = [
         {
-          id: 'alert-1',
+          id: 'a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4',
           user_id: 'test-user-123',
           symbol: 'SPX',
           alert_type: 'price_above',
@@ -134,7 +144,7 @@ describe('Alerts Routes', () => {
             select: jest.fn().mockReturnValue({
               single: jest.fn().mockResolvedValue({
                 data: {
-                  id: 'alert-new',
+                  id: 'b1b1b1b1-c2c2-d3d3-e4e4-f5f5f5f5f5f5',
                   user_id: 'test-user-123',
                   symbol: 'SPX',
                   alert_type: 'price_above',
@@ -153,7 +163,7 @@ describe('Alerts Routes', () => {
         .send(validAlert);
 
       expect(res.status).toBe(201);
-      expect(res.body.id).toBe('alert-new');
+      expect(res.body.id).toBe('b1b1b1b1-c2c2-d3d3-e4e4-f5f5f5f5f5f5');
       expect(res.body.symbol).toBe('SPX');
     });
 
@@ -163,7 +173,8 @@ describe('Alerts Routes', () => {
         .send({ symbol: 'SPX' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Missing fields');
+      // Zod validation middleware catches missing fields
+      expect(res.body.error).toMatch(/Missing fields|VALIDATION_ERROR/);
     });
 
     it('should reject invalid alert_type', async () => {
@@ -172,7 +183,8 @@ describe('Alerts Routes', () => {
         .send({ symbol: 'SPX', alert_type: 'invalid_type', target_value: 6000 });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Invalid alert_type');
+      // Zod validation middleware catches invalid enum values
+      expect(res.body.error).toMatch(/Invalid alert_type|VALIDATION_ERROR/);
     });
 
     it('should reject when alert limit reached', async () => {
@@ -235,7 +247,7 @@ describe('Alerts Routes', () => {
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: {
-            id: 'alert-1',
+            id: 'a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4',
             target_value: 6100,
             status: 'active',
           },
@@ -245,7 +257,7 @@ describe('Alerts Routes', () => {
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
       const res = await request(app)
-        .put('/api/alerts/alert-1')
+        .put('/api/alerts/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4')
         .send({ target_value: 6100 });
 
       expect(res.status).toBe(200);
@@ -264,7 +276,7 @@ describe('Alerts Routes', () => {
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
       const res = await request(app)
-        .put('/api/alerts/nonexistent')
+        .put('/api/alerts/00000000-0000-0000-0000-000000000000')
         .send({ target_value: 6100 });
 
       expect(res.status).toBe(404);
@@ -282,7 +294,7 @@ describe('Alerts Routes', () => {
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
       const res = await request(app)
-        .put('/api/alerts/alert-1')
+        .put('/api/alerts/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4')
         .send({ target_value: 6100 });
 
       expect(res.status).toBe(500);
@@ -302,7 +314,7 @@ describe('Alerts Routes', () => {
         .mockResolvedValueOnce({ error: null }); // .eq('user_id', userId)
       mockFrom.mockReturnValue({ delete: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).delete('/api/alerts/alert-1');
+      const res = await request(app).delete('/api/alerts/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4');
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -317,7 +329,7 @@ describe('Alerts Routes', () => {
         .mockResolvedValueOnce({ error: { message: 'Delete failed' } });
       mockFrom.mockReturnValue({ delete: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).delete('/api/alerts/alert-1');
+      const res = await request(app).delete('/api/alerts/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4');
 
       expect(res.status).toBe(500);
     });
@@ -333,7 +345,7 @@ describe('Alerts Routes', () => {
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: {
-            id: 'alert-1',
+            id: 'a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4',
             status: 'cancelled',
             symbol: 'SPX',
           },
@@ -342,7 +354,7 @@ describe('Alerts Routes', () => {
       };
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).post('/api/alerts/alert-1/cancel');
+      const res = await request(app).post('/api/alerts/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4/cancel');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('cancelled');
@@ -359,7 +371,7 @@ describe('Alerts Routes', () => {
       };
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).post('/api/alerts/nonexistent/cancel');
+      const res = await request(app).post('/api/alerts/00000000-0000-0000-0000-000000000000/cancel');
 
       expect(res.status).toBe(404);
     });
@@ -375,7 +387,7 @@ describe('Alerts Routes', () => {
       };
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).post('/api/alerts/alert-1/cancel');
+      const res = await request(app).post('/api/alerts/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4/cancel');
 
       expect(res.status).toBe(500);
     });

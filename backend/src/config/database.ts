@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { logger } from '../lib/logger';
 
 dotenv.config();
 
@@ -29,7 +30,7 @@ export async function testDatabaseConnection(): Promise<boolean> {
     if (error) throw error;
     return true;
   } catch (error) {
-    console.error('Database connection test failed:', error);
+    logger.error('Database connection test failed', { error: error instanceof Error ? error.message : String(error) });
     return false;
   }
 }

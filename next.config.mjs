@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    // SECURITY: Never ignore build errors in production
+    // ignoreBuildErrors: false, // default
   },
   images: {
     // Enable Next.js image optimization for better mobile performance
@@ -13,7 +14,7 @@ const nextConfig = {
       },
     ],
   },
- 
+
 }
 
 export default nextConfig

@@ -11,6 +11,7 @@ import { generateGreeksProjection, assessGreeksTrend } from '../services/leaps/g
 import { calculateRoll } from '../services/leaps/rollCalculator';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
+// Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
  * Function handlers - these execute when the AI calls a function
@@ -26,55 +27,82 @@ interface FunctionCallContext {
   userId?: string;
 }
 
+/**
+ * Execute a function with a timeout. Prevents hung external API calls.
+ */
+async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return Promise.race([
+    fn(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
+const FUNCTION_TIMEOUT_MS = 10000; // 10 second timeout per function call
+
 export async function executeFunctionCall(functionCall: FunctionCall, context?: FunctionCallContext): Promise<any> {
   const { name, arguments: argsString } = functionCall;
-  const args = JSON.parse(argsString);
+  let args: Record<string, unknown>;
+  try {
+    args = JSON.parse(argsString);
+  } catch (parseError) {
+    throw new Error(`Invalid function arguments JSON: ${(parseError as Error).message}`);
+  }
+
+  // Validate required fields based on function name
+  if (!args || typeof args !== 'object') {
+    throw new Error('Function arguments must be a JSON object');
+  }
+
+  // Cast args to `any` at the dispatch layer — each handler validates its own inputs
+  const typedArgs = args as any;
 
   switch (name) {
     case 'get_key_levels':
-      return await handleGetKeyLevels(args);
+      return await handleGetKeyLevels(typedArgs);
 
     case 'get_current_price':
-      return await handleGetCurrentPrice(args);
+      return await handleGetCurrentPrice(typedArgs);
 
     case 'get_market_status':
-      return await handleGetMarketStatus(args);
+      return await handleGetMarketStatus(typedArgs);
 
     case 'get_options_chain':
-      return await handleGetOptionsChain(args);
+      return await handleGetOptionsChain(typedArgs);
 
     case 'analyze_position':
-      return await handleAnalyzePosition(args);
+      return await handleAnalyzePosition(typedArgs);
 
     case 'get_trade_history':
-      return await handleGetTradeHistory(args, context?.userId);
+      return await handleGetTradeHistory(typedArgs, context?.userId);
 
     case 'set_alert':
-      return await handleSetAlert(args, context?.userId);
+      return await handleSetAlert(typedArgs, context?.userId);
 
     case 'get_alerts':
-      return await handleGetAlerts(args, context?.userId);
+      return await handleGetAlerts(typedArgs, context?.userId);
 
     case 'scan_opportunities':
-      return await handleScanOpportunities(args);
+      return await handleScanOpportunities(typedArgs);
 
     case 'show_chart':
-      return await handleShowChart(args);
+      return await handleShowChart(typedArgs);
 
     case 'get_long_term_trend':
-      return await handleGetLongTermTrend(args);
+      return await handleGetLongTermTrend(typedArgs);
 
     case 'analyze_leaps_position':
-      return await handleAnalyzeLeapsPosition(args);
+      return await handleAnalyzeLeapsPosition(typedArgs);
 
     case 'analyze_swing_trade':
-      return await handleAnalyzeSwingTrade(args);
+      return await handleAnalyzeSwingTrade(typedArgs);
 
     case 'calculate_roll_decision':
-      return await handleCalculateRollDecision(args);
+      return await handleCalculateRollDecision(typedArgs);
 
     case 'get_macro_context':
-      return await handleGetMacroContext(args);
+      return await handleGetMacroContext(typedArgs);
 
     default:
       throw new Error(`Unknown function: ${name}`);
@@ -88,9 +116,17 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) {
   const { symbol, timeframe = 'intraday' } = args;
 
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
   try {
     // Call the levels service
-    const levels = await calculateLevels(symbol, timeframe);
+    const levels = await withTimeout(
+      () => calculateLevels(symbol, timeframe),
+      FUNCTION_TIMEOUT_MS,
+      'get_key_levels'
+    );
 
     // Return simplified response for AI (remove some metadata)
     return {
@@ -120,9 +156,17 @@ async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) 
 async function handleGetCurrentPrice(args: { symbol: string }) {
   const { symbol } = args;
 
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
   try {
     // Fetch intraday data
-    const intradayData = await fetchIntradayData(symbol);
+    const intradayData = await withTimeout(
+      () => fetchIntradayData(symbol),
+      FUNCTION_TIMEOUT_MS,
+      'get_current_price'
+    );
 
     if (intradayData.length === 0) {
       return {
@@ -170,8 +214,16 @@ async function handleGetOptionsChain(args: {
 }) {
   const { symbol, expiry, strikeRange = 10 } = args;
 
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
   try {
-    const chain = await fetchOptionsChain(symbol, expiry, strikeRange);
+    const chain = await withTimeout(
+      () => fetchOptionsChain(symbol, expiry, strikeRange),
+      FUNCTION_TIMEOUT_MS,
+      'get_options_chain'
+    );
 
     // Simplify for AI - return only most relevant data
     return {
@@ -505,7 +557,11 @@ async function handleScanOpportunities(args: {
   const { symbols = ['SPX', 'NDX'], include_options = true } = args;
 
   try {
-    const result = await scanOpportunities(symbols, include_options);
+    const result = await withTimeout(
+      () => scanOpportunities(symbols, include_options),
+      15000, // Scanner needs more time
+      'scan_opportunities'
+    );
 
     return {
       opportunities: result.opportunities.map(opp => ({
@@ -541,6 +597,10 @@ async function handleScanOpportunities(args: {
  */
 async function handleShowChart(args: { symbol: string; timeframe?: string }) {
   const { symbol, timeframe = '1D' } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
 
   try {
     // Fetch levels to include as annotations

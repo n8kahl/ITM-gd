@@ -3,6 +3,20 @@ import type { NextRequest } from 'next/server'
 import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
 
+/**
+ * Validate redirect path to prevent open redirect attacks.
+ * Only allows relative paths starting with / that don't contain protocol markers.
+ */
+function isValidRedirect(path: string): boolean {
+  // Must start with /
+  if (!path.startsWith('/')) return false;
+  // Must not contain protocol markers
+  if (path.includes('://') || path.startsWith('//')) return false;
+  // Must only contain valid URL characters
+  if (!/^\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]*$/.test(path)) return false;
+  return true;
+}
+
 // Security headers to add to all responses
 const securityHeaders = {
   'X-Frame-Options': 'DENY',
@@ -10,6 +24,7 @@ const securityHeaders = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'X-XSS-Protection': '1; mode=block',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com; frame-ancestors 'none';",
 }
 
 /**
@@ -117,7 +132,7 @@ export async function middleware(request: NextRequest) {
       // Check redirect param, or send to appropriate dashboard
       const redirectParam = request.nextUrl.searchParams.get('redirect')
 
-      if (redirectParam) {
+      if (redirectParam && isValidRedirect(redirectParam)) {
         return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(redirectParam, request)))
       }
 

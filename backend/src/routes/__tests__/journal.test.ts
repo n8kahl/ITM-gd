@@ -1,6 +1,16 @@
 import request from 'supertest';
 import express from 'express';
 
+// Mock logger
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 // Mock Supabase - use 'any' to avoid strict type matching on partial mocks
 const mockFrom = jest.fn() as jest.Mock<any, any>;
 
@@ -38,7 +48,7 @@ describe('Journal Routes', () => {
     it('should return trades for authenticated user', async () => {
       const mockTrades = [
         {
-          id: 'trade-1',
+          id: 'a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4',
           user_id: 'test-user-123',
           symbol: 'SPX',
           position_type: 'call',
@@ -129,7 +139,7 @@ describe('Journal Routes', () => {
 
     it('should create a trade with P&L calculated', async () => {
       const createdTrade = {
-        id: 'trade-new',
+        id: 'b1b1b1b1-c2c2-d3d3-e4e4-f5f5f5f5f5f5',
         user_id: 'test-user-123',
         ...validTrade,
         pnl: 540,
@@ -149,7 +159,7 @@ describe('Journal Routes', () => {
         .send(validTrade);
 
       expect(res.status).toBe(201);
-      expect(res.body.id).toBe('trade-new');
+      expect(res.body.id).toBe('b1b1b1b1-c2c2-d3d3-e4e4-f5f5f5f5f5f5');
     });
 
     it('should reject missing required fields', async () => {
@@ -158,7 +168,8 @@ describe('Journal Routes', () => {
         .send({ symbol: 'SPX' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Missing fields');
+      // Zod validation middleware catches missing fields
+      expect(res.body.error).toMatch(/Missing fields|VALIDATION_ERROR/);
     });
 
     it('should create an open trade without exit data', async () => {
@@ -171,7 +182,7 @@ describe('Journal Routes', () => {
       };
 
       const createdTrade = {
-        id: 'trade-open',
+        id: 'c2c2c2c2-d3d3-e4e4-f5f5-a0a0a0a0a0a0',
         user_id: 'test-user-123',
         ...openTrade,
         pnl: null,
@@ -214,7 +225,7 @@ describe('Journal Routes', () => {
   describe('PUT /api/journal/trades/:id', () => {
     it('should update a trade', async () => {
       const updatedTrade = {
-        id: 'trade-1',
+        id: 'a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4',
         exit_price: 10.00,
         exit_date: '2026-02-02',
         pnl: 900,
@@ -229,7 +240,7 @@ describe('Journal Routes', () => {
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
       const res = await request(app)
-        .put('/api/journal/trades/trade-1')
+        .put('/api/journal/trades/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4')
         .send({ exit_price: 10.00, exit_date: '2026-02-02' });
 
       expect(res.status).toBe(200);
@@ -244,7 +255,7 @@ describe('Journal Routes', () => {
       mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
 
       const res = await request(app)
-        .put('/api/journal/trades/trade-1')
+        .put('/api/journal/trades/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4')
         .send({ exit_price: 10.00 });
 
       expect(res.status).toBe(500);
@@ -266,7 +277,7 @@ describe('Journal Routes', () => {
         .mockResolvedValueOnce({ error: null }); // .eq('user_id', userId) resolves
       mockFrom.mockReturnValue({ delete: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).delete('/api/journal/trades/trade-1');
+      const res = await request(app).delete('/api/journal/trades/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4');
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -281,7 +292,7 @@ describe('Journal Routes', () => {
         .mockResolvedValueOnce({ error: { message: 'Delete failed' } });
       mockFrom.mockReturnValue({ delete: jest.fn().mockReturnValue(chain) });
 
-      const res = await request(app).delete('/api/journal/trades/trade-1');
+      const res = await request(app).delete('/api/journal/trades/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4');
 
       expect(res.status).toBe(500);
     });
@@ -377,7 +388,8 @@ describe('Journal Routes', () => {
         .send({ trades: [] });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Invalid data');
+      // Zod validation catches empty array (min 1), or inline validation catches it
+      expect(res.body.error).toMatch(/Invalid data|VALIDATION_ERROR/);
     });
 
     it('should reject missing trades', async () => {

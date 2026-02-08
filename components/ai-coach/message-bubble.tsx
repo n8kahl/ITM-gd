@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { User, BrainCircuit, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { sanitizeContent } from '@/lib/sanitize'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import { WidgetCard, extractWidgets } from './widget-cards'
 
@@ -90,8 +91,10 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
  * Handles bold, inline code, and code blocks.
  */
 function FormattedContent({ content }: { content: string }) {
+  // Sanitize content to prevent XSS
+  const sanitized = sanitizeContent(content)
   // Split content into lines for processing
-  const lines = content.split('\n')
+  const lines = sanitized.split('\n')
   const elements: React.ReactNode[] = []
   let inCodeBlock = false
   let codeBlockContent: string[] = []

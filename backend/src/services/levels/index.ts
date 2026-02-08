@@ -1,14 +1,14 @@
+import { logger } from '../../lib/logger';
 import {
   fetchDailyData,
   fetchPreMarketData,
   fetchIntradayData,
-  getPreviousTradingDay
 } from './fetcher';
 import { calculatePreviousDayLevels, calculateDistances } from './calculators/previousDay';
 import { calculatePreMarketLevels } from './calculators/premarket';
 import { calculateAllPivots } from './calculators/pivots';
 import { calculateVWAP } from './calculators/vwap';
-import { calculateATR, calculateMultipleATRs } from './calculators/atr';
+import { calculateATR } from './calculators/atr';
 import {
   getCachedLevels,
   cacheLevels,
@@ -73,7 +73,7 @@ async function getCurrentPrice(symbol: string): Promise<number> {
 
     throw new Error('No price data available');
   } catch (error) {
-    console.error('Failed to get current price:', error);
+    logger.error('Failed to get current price', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -144,11 +144,11 @@ export async function calculateLevels(
   // Check cache first
   const cachedData = await getCachedLevels(symbol, timeframe);
   if (cachedData) {
-    console.log(`Returning cached levels for ${symbol}:${timeframe}`);
+    logger.info(`Returning cached levels for ${symbol}:${timeframe}`);
     return addCacheMetadata(cachedData, true, CACHE_TTL.LEVELS);
   }
 
-  console.log(`Calculating fresh levels for ${symbol}:${timeframe}`);
+  logger.info(`Calculating fresh levels for ${symbol}:${timeframe}`);
 
   try {
     // Fetch all required data in parallel
@@ -306,7 +306,7 @@ export async function calculateLevels(
 
     return addCacheMetadata(result, false, CACHE_TTL.LEVELS);
   } catch (error: any) {
-    console.error(`Failed to calculate levels for ${symbol}:`, error);
+    logger.error(`Failed to calculate levels for ${symbol}`, { error: error?.message || String(error) });
     throw new Error(`Failed to calculate levels: ${error.message}`);
   }
 }

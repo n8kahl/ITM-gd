@@ -1,3 +1,4 @@
+import { logger } from '../../../lib/logger';
 import { MassiveAggregate } from '../../../config/massive';
 
 /**
@@ -25,7 +26,7 @@ function calculateTrueRange(current: MassiveAggregate, previous: MassiveAggregat
  */
 export function calculateATR(dailyData: MassiveAggregate[], period: number = 14): number | null {
   if (dailyData.length < period + 1) {
-    console.warn(`Insufficient data for ATR(${period}). Need at least ${period + 1} bars, got ${dailyData.length}`);
+    logger.warn(`Insufficient data for ATR(${period}). Need at least ${period + 1} bars, got ${dailyData.length}`);
     return null;
   }
 

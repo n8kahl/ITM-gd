@@ -1,3 +1,4 @@
+import { logger } from '../../../lib/logger';
 import { MassiveAggregate } from '../../../config/massive';
 
 /**
@@ -11,7 +12,7 @@ import { MassiveAggregate } from '../../../config/massive';
  */
 export function calculateVWAP(intradayData: MassiveAggregate[]): number | null {
   if (intradayData.length === 0) {
-    console.log('No intraday data available for VWAP calculation');
+    logger.info('No intraday data available for VWAP calculation');
     return null;
   }
 
@@ -31,7 +32,7 @@ export function calculateVWAP(intradayData: MassiveAggregate[]): number | null {
   }
 
   if (cumulativeVolume === 0) {
-    console.warn('Total volume is zero, cannot calculate VWAP');
+    logger.warn('Total volume is zero, cannot calculate VWAP');
     return null;
   }
 

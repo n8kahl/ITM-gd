@@ -1,9 +1,86 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
+const RATE_LIMIT_MAX_MESSAGES = 30 // Max messages per minute per visitor
+const MAX_MESSAGE_LENGTH = 2000
+
+function corsHeaders(origin: string | null) {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
+}
+
+function stripHtmlTags(text: string): string {
+  return text.replace(/<[^>]*>/g, '').trim()
+}
+
+function sanitizeVisitorMessage(message: string | undefined): string {
+  if (!message) throw new Error('Message is required')
+
+  // Remove HTML tags
+  let sanitized = stripHtmlTags(message)
+
+  // Limit length
+  if (sanitized.length > MAX_MESSAGE_LENGTH) {
+    sanitized = sanitized.substring(0, MAX_MESSAGE_LENGTH)
+  }
+
+  // Trim whitespace
+  sanitized = sanitized.trim()
+
+  if (!sanitized) {
+    throw new Error('Message cannot be empty')
+  }
+
+  return sanitized
+}
+
+function validateConversationId(id: string | undefined): void {
+  if (!id) throw new Error('conversationId is required')
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error('Invalid conversationId format')
+  }
+}
+
+function validateVisitorId(id: string | undefined): void {
+  if (!id) throw new Error('visitorId is required')
+  if (id.length > 255) {
+    throw new Error('visitorId is too long')
+  }
+}
+
+async function checkRateLimit(supabase: any, visitorId: string): Promise<boolean> {
+  // Check messages from this visitor in the last 60 seconds
+  const oneMinuteAgo = new Date(Date.now() - 60000).toISOString()
+
+  const { data: recentMessages, error } = await supabase
+    .from('chat_messages')
+    .select('id', { count: 'exact' })
+    .eq('sender_type', 'visitor')
+    .gte('created_at', oneMinuteAgo)
+    .then((result: any) => {
+      // Use a simple count query by filtering conversations by visitor_id
+      return supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('visitor_id', visitorId)
+        .then((convResult: any) => {
+          if (!convResult.data) return { data: [], error: null }
+          const convIds = convResult.data.map((c: any) => c.id)
+          return supabase
+            .from('chat_messages')
+            .select('id', { count: 'exact' })
+            .in('conversation_id', convIds)
+            .eq('sender_type', 'visitor')
+            .gte('created_at', oneMinuteAgo)
+        })
+    })
+
+  return !error && recentMessages && recentMessages.length < RATE_LIMIT_MAX_MESSAGES
 }
 
 // FEATURE FLAG: Disable automatic escalations
@@ -11,13 +88,21 @@ const corsHeaders = {
 const ENABLE_AUTO_ESCALATIONS = false
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const headers = corsHeaders(origin)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers })
   }
 
   try {
     const { conversationId, visitorMessage, visitorId } = await req.json()
+
+    // Validate required fields
+    validateConversationId(conversationId)
+    validateVisitorId(visitorId)
+    const sanitizedMessage = sanitizeVisitorMessage(visitorMessage)
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -25,6 +110,18 @@ serve(async (req) => {
     const openaiKey = Deno.env.get('OPENAI_API_KEY')!
 
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Check rate limit
+    const withinRateLimit = await checkRateLimit(supabase, visitorId)
+    if (!withinRateLimit) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please wait before sending another message.' }),
+        {
+          status: 429,
+          headers: { ...headers, 'Content-Type': 'application/json' },
+        }
+      )
+    }
 
     // 1. Get or create conversation
     let conversation
@@ -160,14 +257,14 @@ serve(async (req) => {
       }
     }
 
-    // 3. Save visitor message
+    // 3. Save visitor message (use sanitized version)
     const { error: messageSaveError } = await supabase
       .from('chat_messages')
       .insert({
         conversation_id: conversation.id,
         sender_type: 'visitor',
         sender_name: conversation.visitor_name || visitorInfo.name || 'Visitor',
-        message_text: visitorMessage
+        message_text: sanitizedMessage
       })
       .select()
       .single()
@@ -197,7 +294,7 @@ serve(async (req) => {
 
     // 5. Analyze sentiment using GPT-4o
     const sentimentResult = await analyzeSentiment(
-      visitorMessage,
+      sanitizedMessage,
       messageHistory || [],
       openaiKey
     )
@@ -258,11 +355,11 @@ serve(async (req) => {
     }
 
     // 7. Search knowledge base using PostgreSQL Full-Text Search
-    const relevantKnowledge = await searchKnowledgeBaseRPC(supabase, visitorMessage)
+    const relevantKnowledge = await searchKnowledgeBaseRPC(supabase, sanitizedMessage)
 
     // 8. Generate AI response
     const aiResponse = await generateAIResponse(
-      visitorMessage,
+      sanitizedMessage,
       messageHistory || [],
       relevantKnowledge,
       openaiKey,
@@ -315,15 +412,16 @@ serve(async (req) => {
         conversationId: conversation.id,
         confidence: aiResponse.confidence
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...headers, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const status = error instanceof Error && error.message.includes('Rate limit') ? 429 : 500
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...headers, 'Content-Type': 'application/json' }, status }
     )
   }
 })

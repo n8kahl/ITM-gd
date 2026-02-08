@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import dotenv from 'dotenv';
+import { logger } from '../lib/logger';
 
 dotenv.config();
 
@@ -22,7 +23,7 @@ export const massiveClient: AxiosInstance = axios.create({
 // Add request interceptor for logging
 massiveClient.interceptors.request.use(
   (config) => {
-    console.log(`Massive.com API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    logger.info(`Massive.com API Request: ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
   (error) => {
@@ -36,7 +37,7 @@ massiveClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('Massive.com API Error:', error.response?.data || error.message);
+    logger.error('Massive.com API Error', { error: error.response?.data || error.message });
     return Promise.reject(error);
   }
 );
@@ -85,7 +86,7 @@ export async function getAggregates(
     );
     return response.data;
   } catch (error: any) {
-    console.error(`Failed to fetch aggregates for ${ticker}:`, error.message);
+    logger.error(`Failed to fetch aggregates for ${ticker}`, { error: error.message });
     throw error;
   }
 }
@@ -181,7 +182,7 @@ export async function getOptionsContracts(
 
     return response.data.results || [];
   } catch (error: any) {
-    console.error(`Failed to fetch options contracts for ${underlyingTicker}:`, error.message);
+    logger.error(`Failed to fetch options contracts for ${underlyingTicker}`, { error: error.message });
     throw error;
   }
 }
@@ -199,7 +200,7 @@ export async function getOptionsSnapshot(
     const response = await massiveClient.get<OptionsSnapshotResponse>(url);
     return response.data.results || [];
   } catch (error: any) {
-    console.error(`Failed to fetch options snapshot for ${underlyingTicker}:`, error.message);
+    logger.error(`Failed to fetch options snapshot for ${underlyingTicker}`, { error: error.message });
     throw error;
   }
 }
@@ -214,7 +215,7 @@ export async function getOptionsExpirations(
     const expirations = [...new Set(contracts.map(c => c.expiration_date))];
     return expirations.sort();
   } catch (error: any) {
-    console.error(`Failed to fetch expirations for ${underlyingTicker}:`, error.message);
+    logger.error(`Failed to fetch expirations for ${underlyingTicker}`, { error: error.message });
     throw error;
   }
 }
@@ -229,7 +230,7 @@ export async function testMassiveConnection(): Promise<boolean> {
     await getDailyAggregates('I:SPX', yesterday, today);
     return true;
   } catch (error) {
-    console.error('Massive.com API connection test failed:', error);
+    logger.error('Massive.com API connection test failed', { error: error instanceof Error ? error.message : String(error) });
     return false;
   }
 }

@@ -92,10 +92,10 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
         headers: { Authorization: `Bearer ${token}` },
       })
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to fetch')
+      if (!res.ok) throw new Error(result.error || 'Failed to fetch macro data')
       setData(result)
     } catch (err: any) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : 'Failed to load macro context')
     } finally {
       setIsLoading(false)
     }
