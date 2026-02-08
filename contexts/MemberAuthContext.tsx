@@ -354,7 +354,31 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
     console.log('[MemberAuth] initializeAuth started')
     try {
-      // Get current session with timeout wrapper (8s to prevent hanging)
+      // Diagnostic: check Supabase client health
+      console.log('[MemberAuth] 🔍 Supabase client check:', {
+        hasAuthModule: !!supabase?.auth,
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) || 'MISSING',
+      })
+
+      // Try a direct fetch to Supabase to check connectivity
+      const healthUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`
+      console.log('[MemberAuth] 🔍 Testing Supabase connectivity:', healthUrl)
+      try {
+        const healthCheck = await Promise.race([
+          fetch(healthUrl, {
+            headers: { 'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '' }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('health check timeout')), 5000))
+        ]) as Response
+        console.log('[MemberAuth] 🔍 Supabase health:', { status: healthCheck.status, ok: healthCheck.ok })
+      } catch (healthErr: any) {
+        console.error('[MemberAuth] 🔍 Supabase NOT reachable:', healthErr.message)
+      }
+
+      // Get current session with timeout wrapper
+      console.log('[MemberAuth] 1️⃣ Calling getSession()...')
+
+      // Add 8-second timeout to prevent hanging
       const getSessionWithTimeout = async () => {
         const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('getSession timeout after 8 seconds')), 8000)
