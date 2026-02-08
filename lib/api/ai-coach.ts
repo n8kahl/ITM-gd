@@ -15,6 +15,11 @@ function resolveApiBase(): string {
 
 export const API_BASE = resolveApiBase()
 
+// Log resolved URL once at module load for debugging
+if (typeof window !== 'undefined') {
+  console.log('[AI Coach] API_BASE:', API_BASE)
+}
+
 // ============================================
 // TYPES
 // ============================================
