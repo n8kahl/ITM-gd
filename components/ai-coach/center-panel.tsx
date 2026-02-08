@@ -134,13 +134,14 @@ const LEVEL_COLORS: Record<string, string> = {
 export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const { session } = useMemberAuth()
 
-  const [activeView, setActiveView] = useState<CenterView>(() => {
-    // Show onboarding on first visit
-    if (typeof window !== 'undefined' && !hasCompletedOnboarding()) {
-      return 'onboarding'
+  const [activeView, setActiveView] = useState<CenterView>('welcome')
+
+  // Check onboarding status after mount (localStorage not available during SSR)
+  useEffect(() => {
+    if (!hasCompletedOnboarding()) {
+      setActiveView('onboarding')
     }
-    return 'welcome'
-  })
+  }, [])
 
   // Chart state
   const [chartSymbol, setChartSymbol] = useState('SPX')
