@@ -1,23 +1,6 @@
 import { logger } from '../../lib/logger';
 import { getDailyAggregates, getMinuteAggregates, MassiveAggregate } from '../../config/massive';
-import { isTradingDay } from '../marketHours';
-
-/**
- * DST-aware UTC-to-Eastern-Time offset in hours.
- * Returns -4 during EDT (March-November) and -5 during EST.
- */
-function getETOffset(date: Date): number {
-  const year = date.getUTCFullYear();
-  // 2nd Sunday of March (DST starts at 2:00 AM ET = 7:00 AM UTC)
-  const march = new Date(Date.UTC(year, 2, 1));
-  const marchDay = march.getUTCDay();
-  const dstStart = new Date(Date.UTC(year, 2, 8 + (7 - marchDay) % 7, 7));
-  // 1st Sunday of November (DST ends at 2:00 AM ET = 6:00 AM UTC)
-  const november = new Date(Date.UTC(year, 10, 1));
-  const novDay = november.getUTCDay();
-  const dstEnd = new Date(Date.UTC(year, 10, 1 + (7 - novDay) % 7, 6));
-  return (date >= dstStart && date < dstEnd) ? -4 : -5;
-}
+import { isTradingDay, getETOffset } from '../marketHours';
 
 // Convert Massive.com ticker format (I:SPX -> SPX)
 function normalizeSymbol(symbol: string): string {

@@ -3,6 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+
+dotenv.config();
+
+import { initSentry, flushSentry, Sentry } from './config/sentry';
 import { logger } from './lib/logger';
 import { connectRedis } from './config/redis';
 import { requestIdMiddleware } from './middleware/requestId';
@@ -18,11 +22,15 @@ import journalRouter from './routes/journal';
 import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
-
-dotenv.config();
+import scannerRouter from './routes/scanner';
+import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
+import { initWebSocket, shutdownWebSocket } from './services/websocket';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize Sentry FIRST — before any other middleware
+initSentry(app);
 
 // Trust proxy - required when running behind Railway/reverse proxy
 app.set('trust proxy', 1);
@@ -67,6 +75,16 @@ app.use((req: Request, res: Response, next: any) => {
   next();
 });
 
+// Sentry request context — attach requestId and userId to error reports
+app.use((req: Request, _res: Response, next: any) => {
+  Sentry.setTag('requestId', (req as any).requestId);
+  const userId = (req as any).userId;
+  if (userId) {
+    Sentry.setUser({ id: userId });
+  }
+  next();
+});
+
 // Rate limiting
 app.use('/api/', generalLimiter);
 app.use('/api/chat', chatLimiter);
@@ -84,6 +102,7 @@ app.use('/api/journal', journalRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/leaps', leapsRouter);
 app.use('/api/macro', macroRouter);
+app.use('/api/scanner', scannerRouter);
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
@@ -98,7 +117,8 @@ app.get('/', (_req: Request, res: Response) => {
       positionsAnalyze: '/api/positions/analyze', chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
-      leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol'
+      leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
+      scannerScan: '/api/scanner/scan', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
     }
   });
 });
@@ -115,6 +135,8 @@ app.use((err: Error, _req: Request, res: Response, _next: any) => {
     res.status(403).json({ error: 'Forbidden', message: 'Origin not allowed' });
     return;
   }
+  // Report non-CORS errors to Sentry
+  Sentry.captureException(err);
   const isProduction = process.env.NODE_ENV === 'production';
   res.status(500).json({ error: 'Internal server error', message: isProduction ? 'An unexpected error occurred' : err.message });
 });
@@ -136,6 +158,12 @@ async function start() {
 
     httpServer = app.listen(PORT, () => { logger.info(`Server running on http://localhost:${PORT}`); });
     httpServer.setTimeout(30000);
+
+    // Initialize WebSocket server for real-time price updates
+    initWebSocket(httpServer);
+
+    // Start background alert worker
+    startAlertWorker();
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -150,6 +178,12 @@ async function gracefulShutdown(signal: string) {
   if (httpServer) { httpServer.close(() => { logger.info('HTTP server closed'); }); }
   const shutdownTimeout = setTimeout(() => { logger.error('Graceful shutdown timed out, forcing exit'); process.exit(1); }, 30000);
   try {
+    // Stop background services
+    stopAlertWorker();
+    shutdownWebSocket();
+    // Flush pending Sentry events before shutdown
+    await flushSentry();
+    logger.info('Sentry flushed');
     const { redisClient } = require('./config/redis');
     if (redisClient?.isOpen) { await redisClient.quit(); logger.info('Redis connection closed'); }
   } catch (err) { logger.error('Error during shutdown', { error: err instanceof Error ? err.message : String(err) }); }

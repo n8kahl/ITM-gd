@@ -7,6 +7,8 @@
  * external API integration (FRED, etc.) in the future.
  */
 
+import { isTradingDay } from '../marketHours';
+
 // ============================================
 // TYPES
 // ============================================
@@ -90,8 +92,9 @@ function generateEconomicCalendar(): EconomicEvent[] {
     const month = date.getMonth();
     const dateStr = date.toISOString().split('T')[0];
 
-    // Skip weekends
+    // Skip weekends and market holidays
     if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+    if (!isTradingDay(date)) continue;
 
     // CPI - typically around 10th-14th of each month
     if (dayOfMonth >= 10 && dayOfMonth <= 14 && dayOfWeek === 3) {

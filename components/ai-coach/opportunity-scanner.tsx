@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { sendChatMessage, type ChatMessageResponse } from '@/lib/api/ai-coach'
+import { scanOpportunities as apiScanOpportunities, AICoachAPIError, type ScanOpportunity } from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -29,28 +29,7 @@ interface OpportunityScannerProps {
   onSendPrompt?: (prompt: string) => void
 }
 
-interface Opportunity {
-  type: 'technical' | 'options'
-  setupType: string
-  symbol: string
-  direction: 'bullish' | 'bearish' | 'neutral'
-  score: number
-  currentPrice: number
-  description: string
-  suggestedTrade?: {
-    strategy: string
-    strikes?: number[]
-    expiry?: string
-    entry?: number
-    stopLoss?: number
-    target?: number
-    estimatedCredit?: number
-    maxProfit?: string
-    maxLoss?: string
-    probability?: string
-  }
-  metadata: Record<string, any>
-}
+type Opportunity = ScanOpportunity
 
 // ============================================
 // COMPONENT
@@ -73,31 +52,18 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
     setScanError(null)
 
     try {
-      // Use the chat API to trigger scan_opportunities function
-      const response: ChatMessageResponse = await sendChatMessage(
-        'Scan for trading opportunities across SPX and NDX. Include options analysis.',
-        token
-      )
+      const result = await apiScanOpportunities(token, {
+        symbols: ['SPX', 'NDX'],
+        includeOptions: true,
+      })
 
-      // Parse opportunities from the AI response function calls
-      const scanResult = response.functionCalls?.find(
-        fc => fc.function === 'scan_opportunities'
-      )
-
-      if (scanResult?.result) {
-        const result = scanResult.result as any
-        if (result.opportunities) {
-          setOpportunities(result.opportunities)
-        } else {
-          setOpportunities([])
-        }
-      } else {
-        setOpportunities([])
-      }
-
+      setOpportunities(result.opportunities)
       setLastScanTime(new Date().toLocaleTimeString())
     } catch (err) {
-      setScanError('Failed to scan for opportunities. Please try again.')
+      const message = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to scan for opportunities. Please try again.'
+      setScanError(message)
     } finally {
       setIsScanning(false)
     }

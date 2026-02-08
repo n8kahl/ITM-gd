@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { sendChatMessage, getUserSessions, getSessionMessages, deleteSession } from '../chatkit/chatService';
+import { streamChatMessage } from '../chatkit/streamService';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate';
@@ -63,6 +64,54 @@ router.post(
         message: 'Failed to process chat message. Please try again.',
         details: error?.message || 'Unknown error'
       });
+    }
+  }
+);
+
+/**
+ * POST /api/chat/stream
+ *
+ * Streaming chat endpoint using Server-Sent Events.
+ * Returns tokens as they are generated for real-time UI updates.
+ */
+router.post(
+  '/stream',
+  authenticateToken,
+  checkQueryLimit,
+  validateBody(sendMessageSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { sessionId, message } = (req as any).validatedBody;
+      const userId = req.user!.id;
+      const finalSessionId = sessionId || uuidv4();
+
+      // Set SSE headers
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // Disable nginx buffering
+      });
+
+      // Send session ID as first event
+      res.write(`event: session\ndata: ${JSON.stringify({ sessionId: finalSessionId })}\n\n`);
+
+      await streamChatMessage({ sessionId: finalSessionId, message: message.trim(), userId }, res);
+
+      res.end();
+    } catch (error: any) {
+      logger.error('Error in chat stream endpoint', { error: error?.message || String(error) });
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'Internal server error',
+          message: 'Failed to start streaming. Please try again.',
+        });
+        return;
+      }
+      // If headers already sent, send error event and close
+      res.write(`event: error\ndata: ${JSON.stringify({ message: 'Stream interrupted' })}\n\n`);
+      res.end();
     }
   }
 );
