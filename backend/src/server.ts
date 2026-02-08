@@ -13,6 +13,8 @@ import chartRouter from './routes/chart';
 import screenshotRouter from './routes/screenshot';
 import journalRouter from './routes/journal';
 import alertsRouter from './routes/alerts';
+import leapsRouter from './routes/leaps';
+import macroRouter from './routes/macro';
 
 dotenv.config();
 
@@ -41,6 +43,8 @@ app.use('/api/chart', chartRouter);
 app.use('/api/screenshot', screenshotRouter);
 app.use('/api/journal', journalRouter);
 app.use('/api/alerts', alertsRouter);
+app.use('/api/leaps', leapsRouter);
+app.use('/api/macro', macroRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
@@ -64,7 +68,12 @@ app.get('/', (req: Request, res: Response) => {
       journalAnalytics: '/api/journal/analytics',
       journalImport: '/api/journal/import',
       alerts: '/api/alerts',
-      alertCancel: '/api/alerts/:id/cancel'
+      alertCancel: '/api/alerts/:id/cancel',
+      leaps: '/api/leaps',
+      leapsDetail: '/api/leaps/:id',
+      leapsRoll: '/api/leaps/:id/roll-calculation',
+      macroContext: '/api/macro',
+      macroImpact: '/api/macro/impact/:symbol'
     }
   });
 });

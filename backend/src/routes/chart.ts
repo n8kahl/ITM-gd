@@ -2,12 +2,13 @@ import { Router, Request, Response } from 'express';
 import { getAggregates, MassiveAggregate } from '../config/massive';
 import { authenticateToken } from '../middleware/auth';
 import { cacheGet, cacheSet } from '../config/redis';
+import { getChartData } from '../services/charts/chartDataService';
 
 const router = Router();
 
 const SUPPORTED_SYMBOLS = ['SPX', 'NDX'];
 
-type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D';
+type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D' | '1W' | '1M';
 
 interface TimeframeConfig {
   multiplier: number;
@@ -16,7 +17,7 @@ interface TimeframeConfig {
   cacheTTL: number;
 }
 
-const TIMEFRAME_CONFIG: Record<ChartTimeframe, TimeframeConfig> = {
+const TIMEFRAME_CONFIG: Record<string, TimeframeConfig> = {
   '1m':  { multiplier: 1,  timespan: 'minute', daysBack: 1,   cacheTTL: 60 },
   '5m':  { multiplier: 5,  timespan: 'minute', daysBack: 5,   cacheTTL: 60 },
   '15m': { multiplier: 15, timespan: 'minute', daysBack: 10,  cacheTTL: 120 },
@@ -65,11 +66,28 @@ router.get(
         });
       }
 
+      // Handle weekly/monthly via chart data service
+      if (timeframe === '1W' || timeframe === '1M') {
+        const tf = timeframe === '1W' ? 'weekly' : 'monthly';
+        const bars = parseInt(req.query.bars as string) || (tf === 'weekly' ? 260 : 60);
+        const chartData = await getChartData(symbol, tf, bars);
+
+        return res.json({
+          symbol,
+          timeframe,
+          bars: chartData.candles,
+          indicators: chartData.indicators,
+          count: chartData.count,
+          timestamp: chartData.timestamp,
+          cached: chartData.cached,
+        });
+      }
+
       // Validate timeframe
       if (!TIMEFRAME_CONFIG[timeframe]) {
         return res.status(400).json({
           error: 'Invalid timeframe',
-          message: `Supported timeframes: ${Object.keys(TIMEFRAME_CONFIG).join(', ')}`
+          message: `Supported timeframes: ${Object.keys(TIMEFRAME_CONFIG).join(', ')}, 1W, 1M`
         });
       }
 
