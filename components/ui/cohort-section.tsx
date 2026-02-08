@@ -9,7 +9,7 @@ import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/c
 import { Analytics } from "@/lib/analytics";
 
 interface CohortSectionProps {
-  // No props needed - using direct link
+  onApplyClick: () => void;
 }
 
 const pillars = [
@@ -35,7 +35,7 @@ const pillars = [
   },
 ];
 
-export function CohortSection({}: CohortSectionProps = {}) {
+export function CohortSection({ onApplyClick }: CohortSectionProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -50,8 +50,8 @@ export function CohortSection({}: CohortSectionProps = {}) {
   };
 
   const handleApplyClick = () => {
-    Analytics.trackCTAClick('Cohort Join Today');
-    window.location.href = 'https://whop.com/checkout/plan_T4Ymve5JhqpY7';
+    Analytics.trackCTAClick('Cohort Apply');
+    onApplyClick();
   };
 
   return (
@@ -121,7 +121,7 @@ export function CohortSection({}: CohortSectionProps = {}) {
               {/* Subtitle */}
               <RevealContent delay={0.1}>
                 <p className="text-lg text-ivory/70 leading-relaxed max-w-md">
-                  The Next Cohort is starting soon! Our exclusive annual mentorship program for traders ready to
+                  Our exclusive annual mentorship program for traders ready to
                   <span className="text-champagne"> develop their own edge</span>.
                 </p>
               </RevealContent>
@@ -169,7 +169,7 @@ export function CohortSection({}: CohortSectionProps = {}) {
                       size="xl"
                       className="rounded-sm min-w-[200px]"
                     >
-                      Join Today
+                      Apply for Cohort
                     </Button>
                   </motion.div>
                 </motion.div>
