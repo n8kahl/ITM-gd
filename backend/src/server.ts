@@ -11,6 +11,7 @@ import optionsRouter from './routes/options';
 import chartRouter from './routes/chart';
 import screenshotRouter from './routes/screenshot';
 import journalRouter from './routes/journal';
+import alertsRouter from './routes/alerts';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use('/api/positions', optionsRouter);
 app.use('/api/chart', chartRouter);
 app.use('/api/screenshot', screenshotRouter);
 app.use('/api/journal', journalRouter);
+app.use('/api/alerts', alertsRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
@@ -54,7 +56,9 @@ app.get('/', (req: Request, res: Response) => {
       screenshotAnalyze: '/api/screenshot/analyze',
       journalTrades: '/api/journal/trades',
       journalAnalytics: '/api/journal/analytics',
-      journalImport: '/api/journal/import'
+      journalImport: '/api/journal/import',
+      alerts: '/api/alerts',
+      alertCancel: '/api/alerts/:id/cancel'
     }
   });
 });

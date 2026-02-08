@@ -181,6 +181,58 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'set_alert',
+      description: 'Create a price alert for a symbol. Use this when the user asks to be notified when a price level is hit, or wants to set an alert for a specific price target.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            enum: ['SPX', 'NDX'],
+            description: 'The symbol to monitor'
+          },
+          alert_type: {
+            type: 'string',
+            enum: ['price_above', 'price_below', 'level_approach', 'level_break', 'volume_spike'],
+            description: 'Type of alert condition'
+          },
+          target_value: {
+            type: 'number',
+            description: 'The target price or value for the alert'
+          },
+          notes: {
+            type: 'string',
+            description: 'Optional notes about the alert'
+          }
+        },
+        required: ['symbol', 'alert_type', 'target_value']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_alerts',
+      description: 'Get the user\'s active price alerts. Use this when the user asks about their alerts, what alerts they have set, or wants to check alert status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['active', 'triggered', 'cancelled'],
+            description: 'Filter by alert status (default: active)'
+          },
+          symbol: {
+            type: 'string',
+            description: 'Filter by symbol (optional)'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'show_chart',
       description: 'Display a candlestick chart with key levels for a symbol in the center panel. Use this when the user asks to see a chart, visualize price action, or view levels on a chart.',
       parameters: {

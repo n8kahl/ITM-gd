@@ -12,6 +12,7 @@ import {
   Calculator,
   Camera,
   BookOpen,
+  Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -21,6 +22,7 @@ import { OptionsChain } from './options-chain'
 import { PositionForm } from './position-form'
 import { ScreenshotUpload } from './screenshot-upload'
 import { TradeJournal } from './trade-journal'
+import { AlertsPanel } from './alerts-panel'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -51,7 +53,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal'
+type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -95,6 +97,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'position', icon: Calculator, label: 'Analyze' },
   { view: 'journal', icon: BookOpen, label: 'Journal' },
   { view: 'screenshot', icon: Camera, label: 'Screenshot' },
+  { view: 'alerts', icon: Bell, label: 'Alerts' },
 ]
 
 // Level annotation colors by type
@@ -273,6 +276,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             onShowOptions={() => setActiveView('options')}
             onShowPosition={() => setActiveView('position')}
             onShowJournal={() => setActiveView('journal')}
+            onShowAlerts={() => setActiveView('alerts')}
           />
         )}
 
@@ -300,6 +304,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'journal' && (
           <TradeJournal onClose={() => setActiveView('welcome')} />
+        )}
+
+        {activeView === 'alerts' && (
+          <AlertsPanel onClose={() => setActiveView('welcome')} />
         )}
 
         {activeView === 'screenshot' && (
@@ -392,12 +400,14 @@ function WelcomeView({
   onShowOptions,
   onShowPosition,
   onShowJournal,
+  onShowAlerts,
 }: {
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
   onShowOptions: () => void
   onShowPosition: () => void
   onShowJournal: () => void
+  onShowAlerts: () => void
 }) {
   return (
     <div className="h-full flex flex-col">
@@ -478,7 +488,7 @@ function WelcomeView({
           </div>
 
           {/* Quick Access Cards */}
-          <div className="grid grid-cols-4 gap-3 mt-4">
+          <div className="grid grid-cols-5 gap-3 mt-4">
             <button
               onClick={onShowChart}
               className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
@@ -510,6 +520,14 @@ function WelcomeView({
               <BookOpen className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-white">Journal</p>
               <p className="text-[10px] text-white/30 mt-0.5">Trade Log</p>
+            </button>
+            <button
+              onClick={onShowAlerts}
+              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <Bell className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-medium text-white">Alerts</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Price Watch</p>
             </button>
           </div>
         </div>

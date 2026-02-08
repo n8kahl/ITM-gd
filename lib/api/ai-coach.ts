@@ -713,6 +713,142 @@ export async function importTrades(
 }
 
 // ============================================
+// ALERTS API
+// ============================================
+
+export type AlertType = 'price_above' | 'price_below' | 'level_approach' | 'level_break' | 'volume_spike'
+export type AlertStatus = 'active' | 'triggered' | 'cancelled'
+
+export interface AlertEntry {
+  id: string
+  user_id: string
+  symbol: string
+  alert_type: AlertType
+  target_value: number
+  condition_met: boolean
+  triggered_at?: string
+  notification_sent: boolean
+  notification_channels: string[]
+  status: AlertStatus
+  notes?: string
+  created_at: string
+  expires_at?: string
+}
+
+export interface AlertCreateInput {
+  symbol: string
+  alert_type: AlertType
+  target_value: number
+  notification_channels?: string[]
+  notes?: string
+  expires_at?: string
+}
+
+export interface AlertsListResponse {
+  alerts: AlertEntry[]
+  total: number
+}
+
+/**
+ * Get alerts with optional filters
+ */
+export async function getAlerts(
+  token: string,
+  options?: { status?: AlertStatus; symbol?: string }
+): Promise<AlertsListResponse> {
+  const params = new URLSearchParams()
+  if (options?.status) params.set('status', options.status)
+  if (options?.symbol) params.set('symbol', options.symbol)
+
+  const response = await fetch(`${API_BASE}/api/alerts?${params}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Create a new alert
+ */
+export async function createAlert(
+  alert: AlertCreateInput,
+  token: string
+): Promise<AlertEntry> {
+  const response = await fetch(`${API_BASE}/api/alerts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(alert),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Cancel an active alert
+ */
+export async function cancelAlert(
+  id: string,
+  token: string
+): Promise<AlertEntry> {
+  const response = await fetch(`${API_BASE}/api/alerts/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete an alert
+ */
+export async function deleteAlert(
+  id: string,
+  token: string
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/api/alerts/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
 // ERROR CLASS
 // ============================================
 

@@ -39,7 +39,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
   try {
     // Get or create session
-    const session = await getOrCreateSession(sessionId, userId);
+    await getOrCreateSession(sessionId, userId);
 
     // Get conversation history
     const history = await getConversationHistory(sessionId);
@@ -180,7 +180,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
  */
 async function getOrCreateSession(sessionId: string, userId: string) {
   // Try to get existing session
-  const { data: existingSession, error: fetchError } = await supabase
+  const { data: existingSession } = await supabase
     .from('ai_coach_sessions')
     .select('*')
     .eq('id', sessionId)

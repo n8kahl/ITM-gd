@@ -6,22 +6,7 @@ import {
 } from '../chatService';
 
 // Mock Supabase
-const mockSelect = jest.fn();
-const mockInsert = jest.fn();
-const mockUpdate = jest.fn();
-const mockDelete = jest.fn();
-const mockEq = jest.fn();
-const mockOrder = jest.fn();
-const mockLimit = jest.fn();
-const mockRange = jest.fn();
-const mockSingle = jest.fn();
-
-const mockFrom = jest.fn(() => ({
-  select: mockSelect,
-  insert: mockInsert,
-  update: mockUpdate,
-  delete: mockDelete,
-}));
+const mockFrom = jest.fn() as jest.Mock<any, any>;
 
 jest.mock('../../config/database', () => ({
   supabase: {
@@ -48,31 +33,6 @@ jest.mock('../functionHandlers', () => ({
   executeFunctionCall: jest.fn(),
 }));
 
-// Helper to set up chain
-function setupChain(data: any, error: any = null, count: number | null = null) {
-  const chain: any = {
-    eq: jest.fn().mockReturnThis(),
-    order: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    range: jest.fn().mockReturnThis(),
-    single: jest.fn().mockResolvedValue({ data, error }),
-    select: jest.fn().mockReturnThis(),
-  };
-
-  // For select with count
-  chain.select.mockImplementation(() => {
-    const innerChain: any = {
-      eq: jest.fn().mockReturnThis(),
-      order: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      range: jest.fn().mockResolvedValue({ data, error, count }),
-      single: jest.fn().mockResolvedValue({ data, error }),
-    };
-    return innerChain;
-  });
-
-  return chain;
-}
 
 describe('Chat Service', () => {
   beforeEach(() => {
