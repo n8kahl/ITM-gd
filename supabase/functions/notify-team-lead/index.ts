@@ -74,10 +74,10 @@ serve(async (req) => {
     // This function only handles Discord notifications
 
     // Embed colors
-    // Gold (#D4AF37 = 13938487) for cohort applications
+    // Emerald (#10B981 = 1095553) for cohort applications
     // Champagne (#E8E4D9 = 15262937) for legacy applications
     // Blue (#3B82F6 = 3899126) for contacts
-    const embedColor = isCohortApplication ? 13938487 : (isLegacyApplication ? 15262937 : 3899126)
+    const embedColor = isCohortApplication ? 1095553 : (isLegacyApplication ? 15262937 : 3899126)
 
     const title = isCohortApplication
       ? '🎯 Precision Cohort Application'

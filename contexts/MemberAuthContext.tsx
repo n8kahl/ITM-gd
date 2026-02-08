@@ -36,6 +36,26 @@ export interface MemberProfile {
   membership_tier: 'core' | 'pro' | 'executive' | null
 }
 
+/**
+ * V3: Admin-configured tab configuration from tab_configurations table.
+ * Fetched via /api/config/tabs, replaces hardcoded tab arrays.
+ */
+export interface TabConfig {
+  id: string
+  tab_id: string
+  label: string
+  icon: string
+  path: string
+  required_tier: 'core' | 'pro' | 'executive'
+  badge_text?: string | null
+  badge_variant?: 'emerald' | 'champagne' | 'destructive' | null
+  description?: string | null
+  mobile_visible: boolean
+  sort_order: number
+  is_required: boolean
+  is_active: boolean
+}
+
 // Error codes from sync-discord-roles edge function
 export const SYNC_ERROR_CODES = {
   NOT_MEMBER: 'NOT_MEMBER',
@@ -54,6 +74,7 @@ interface MemberAuthState {
   profile: MemberProfile | null
   permissions: MemberPermission[]
   allowedTabs: string[] // Simple RBAC: tabs user can access
+  tabConfigs: TabConfig[] // V3: Full tab configs from admin-configured table
   isLoading: boolean
   isAuthenticated: boolean
   error: string | null
@@ -66,6 +87,10 @@ interface MemberAuthContextValue extends MemberAuthState {
   hasPermission: (permissionName: string) => boolean
   refresh: () => Promise<void>
   isNotMember: boolean
+  /** V3: Get tab configs filtered by user's tier */
+  getVisibleTabs: () => TabConfig[]
+  /** V3: Get mobile-visible tab configs filtered by user's tier */
+  getMobileTabs: () => TabConfig[]
 }
 
 // ============================================
@@ -124,11 +149,15 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     profile: null,
     permissions: [],
     allowedTabs: [],
+    tabConfigs: [],
     isLoading: true,
     isAuthenticated: false,
     error: null,
     errorCode: null,
   })
+
+  // V3: Fetched tab configurations from /api/config/tabs
+  const [allTabConfigs, setAllTabConfigs] = useState<TabConfig[]>([])
 
   // Dynamic role mapping fetched from config API (role ID -> tier)
   const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'executive'>>(DEFAULT_ROLE_MAPPING)
@@ -152,8 +181,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
 
-  // Fetch role mapping from config API on mount
+  // Fetch role mapping and tab configurations from config APIs on mount
   useEffect(() => {
+    // Fetch role mapping
     fetch('/api/config/roles')
       .then(res => res.json())
       .then(data => {
@@ -163,6 +193,18 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         // Keep default mapping on error
+      })
+
+    // V3: Fetch admin-configured tab configurations
+    fetch('/api/config/tabs')
+      .then(res => res.json())
+      .then(response => {
+        if (response.success && Array.isArray(response.data)) {
+          setAllTabConfigs(response.data)
+        }
+      })
+      .catch(() => {
+        // Tab configs fallback handled by API route
       })
   }, [])
 
@@ -183,21 +225,37 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return null
   }, [roleMapping])
 
-  // Get allowed tabs based on membership tier
+  // V3: Get allowed tabs based on membership tier + admin-configured tab_configurations
   const getAllowedTabsForTier = useCallback((tier: 'core' | 'pro' | 'executive' | null): string[] => {
-    if (!tier) return ['dashboard', 'profile'] // Free users get minimal access
+    // If we have tab configurations from the API, use them
+    if (allTabConfigs.length > 0) {
+      const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
+      const userTierLevel = tier ? tierHierarchy[tier] || 0 : 0
+
+      return allTabConfigs
+        .filter(tab => {
+          if (!tab.is_active) return false
+          if (tab.is_required) return true // Always show required tabs
+          const requiredLevel = tierHierarchy[tab.required_tier] || 0
+          return userTierLevel >= requiredLevel
+        })
+        .map(tab => tab.tab_id)
+    }
+
+    // Fallback: hardcoded tabs if API not yet loaded
+    if (!tier) return ['dashboard', 'profile']
 
     switch (tier) {
       case 'executive':
-        return ['dashboard', 'ai-coach', 'journal', 'library', 'profile'] // All access
+        return ['dashboard', 'ai-coach', 'journal', 'library', 'studio', 'profile']
       case 'pro':
-        return ['dashboard', 'ai-coach', 'journal', 'library', 'profile'] // Same as executive for now
+        return ['dashboard', 'ai-coach', 'journal', 'library', 'profile']
       case 'core':
-        return ['dashboard', 'ai-coach', 'journal', 'profile'] // No library access
+        return ['dashboard', 'journal', 'profile']
       default:
         return ['dashboard', 'profile']
     }
-  }, [])
+  }, [allTabConfigs])
 
   // Fetch allowed tabs (now based on tier, not database)
   const fetchAllowedTabs = useCallback(async (userId: string, tier?: 'core' | 'pro' | 'executive' | null): Promise<string[]> => {
@@ -633,6 +691,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         profile: null,
         permissions: [],
         allowedTabs: [],
+        tabConfigs: [],
         isLoading: false,
         isAuthenticated: false,
         error: null,
@@ -790,6 +849,34 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // Computed flag for NOT_MEMBER error
   const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
 
+  // V3: Compute filtered tab configs based on user's tier
+  const getVisibleTabs = useCallback((): TabConfig[] => {
+    if (!allTabConfigs.length) return []
+    const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
+    const userTierLevel = state.profile?.membership_tier
+      ? tierHierarchy[state.profile.membership_tier] || 0
+      : 0
+
+    return allTabConfigs.filter(tab => {
+      if (!tab.is_active) return false
+      if (tab.is_required) return true
+      const requiredLevel = tierHierarchy[tab.required_tier] || 0
+      return userTierLevel >= requiredLevel
+    })
+  }, [allTabConfigs, state.profile?.membership_tier])
+
+  const getMobileTabs = useCallback((): TabConfig[] => {
+    return getVisibleTabs().filter(tab => tab.mobile_visible).slice(0, 5)
+  }, [getVisibleTabs])
+
+  // Keep tabConfigs in state synced with allTabConfigs when they're loaded
+  useEffect(() => {
+    if (allTabConfigs.length > 0 && state.profile) {
+      const visibleTabs = getVisibleTabs()
+      setState(prev => ({ ...prev, tabConfigs: visibleTabs }))
+    }
+  }, [allTabConfigs, state.profile?.membership_tier])
+
   const value = useMemo<MemberAuthContextValue>(() => ({
     ...state,
     signOut,
@@ -797,7 +884,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     hasPermission,
     refresh,
     isNotMember,
-  }), [state, signOut, syncDiscordRoles, hasPermission, refresh, isNotMember])
+    getVisibleTabs,
+    getMobileTabs,
+  }), [state, signOut, syncDiscordRoles, hasPermission, refresh, isNotMember, getVisibleTabs, getMobileTabs])
 
   return (
     <MemberAuthContext.Provider value={value}>

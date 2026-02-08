@@ -31,7 +31,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Trade In The Money - Premium Trade Alerts & Education',
   description: 'Join the elite trading community. Get real-time trade alerts, expert education, and proven strategies from professional traders. Quality setups alerted daily.',
-  generator: 'v0.app',
+  generator: 'TradeITM',
   metadataBase: new URL('https://trade-itm-prod.up.railway.app'),
   manifest: '/manifest.json',
   appleWebApp: {

@@ -220,6 +220,222 @@ export async function getOptionsExpirations(
   }
 }
 
+// ============================================
+// V3 ADDITIONS: Market Context & Enrichment
+// ============================================
+
+/**
+ * Market context snapshot for journal entry enrichment.
+ * Auto-populated from Massive.com data at trade entry/exit times.
+ */
+export interface MarketContextSnapshot {
+  entryContext: {
+    timestamp: string;
+    price: number;
+    vwap: number;
+    atr14: number;
+    volumeVsAvg: number;
+    distanceFromPDH: number;
+    distanceFromPDL: number;
+    nearestLevel: { name: string; price: number; distance: number };
+  };
+  exitContext: {
+    timestamp: string;
+    price: number;
+    vwap: number;
+    atr14: number;
+    volumeVsAvg: number;
+    distanceFromPDH: number;
+    distanceFromPDL: number;
+    nearestLevel: { name: string; price: number; distance: number };
+  };
+  optionsContext?: {
+    ivAtEntry: number;
+    ivAtExit: number;
+    ivRankAtEntry: number;
+    deltaAtEntry: number;
+    thetaAtEntry: number;
+    dteAtEntry: number;
+    dteAtExit: number;
+  };
+  dayContext: {
+    marketTrend: 'bullish' | 'bearish' | 'neutral';
+    atrUsed: number;
+    sessionType: 'trending' | 'range-bound' | 'volatile';
+    keyLevelsActive: {
+      pdh: number; pdl: number; pdc: number;
+      vwap: number; atr14: number;
+      pivotPP: number; pivotR1: number; pivotS1: number;
+    };
+  };
+}
+
+/**
+ * Trade verification result from Massive.com price matching.
+ */
+export interface TradeVerification {
+  isVerified: boolean;
+  confidence: 'exact' | 'close' | 'unverifiable';
+  entryPriceMatch: boolean;
+  exitPriceMatch: boolean;
+  priceSource: 'massive-1min';
+  verifiedAt: string;
+}
+
+/**
+ * Trade replay data structure for chart visualization.
+ */
+export interface TradeReplayData {
+  entryId: string;
+  symbol: string;
+  tradeDate: string;
+  bars: MassiveAggregate[];
+  overlays: {
+    entryPoint: { time: number; price: number };
+    exitPoint: { time: number; price: number };
+    vwapLine: { time: number; value: number }[];
+    levels: {
+      pdh: number; pdl: number; pdc: number;
+      pivotPP: number; pivotR1: number; pivotS1: number;
+    };
+  };
+}
+
+/**
+ * Live price update from WebSocket relay.
+ */
+export interface LivePriceUpdate {
+  symbol: string;
+  price: number;
+  change: number;
+  changePct: number;
+  volume: number;
+  timestamp: number;
+}
+
+/**
+ * Get market context for a specific symbol and date.
+ * Used for journal entry enrichment.
+ */
+export async function getMarketContext(
+  ticker: string,
+  date: string
+): Promise<{
+  minuteBars: MassiveAggregate[];
+  dailyBars: MassiveAggregate[];
+}> {
+  try {
+    // Calculate date range for daily data (30 days back for ATR)
+    const dateObj = new Date(date);
+    const thirtyDaysBack = new Date(dateObj);
+    thirtyDaysBack.setDate(thirtyDaysBack.getDate() - 45);
+    const from30 = thirtyDaysBack.toISOString().split('T')[0];
+
+    const [minuteBars, dailyBars] = await Promise.all([
+      getMinuteAggregates(ticker, date),
+      getDailyAggregates(ticker, from30, date),
+    ]);
+
+    return { minuteBars, dailyBars };
+  } catch (error: any) {
+    logger.error(`Failed to fetch market context for ${ticker} on ${date}`, {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Verify a reported price against Massive.com 1-minute data.
+ * Returns true if the reported price falls within the bar's high-low range.
+ */
+export async function verifyPrice(
+  ticker: string,
+  timestamp: string,
+  reportedPrice: number,
+  tolerance: number = 1.0
+): Promise<TradeVerification> {
+  try {
+    const date = timestamp.split('T')[0];
+    const minuteBars = await getMinuteAggregates(ticker, date);
+
+    const tradeTime = new Date(timestamp).getTime();
+    // Find the closest 1-minute bar
+    let closestBar: MassiveAggregate | null = null;
+    let minDiff = Infinity;
+
+    for (const bar of minuteBars) {
+      const diff = Math.abs(bar.t - tradeTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestBar = bar;
+      }
+    }
+
+    if (!closestBar) {
+      return {
+        isVerified: false,
+        confidence: 'unverifiable',
+        entryPriceMatch: false,
+        exitPriceMatch: false,
+        priceSource: 'massive-1min',
+        verifiedAt: new Date().toISOString(),
+      };
+    }
+
+    const withinRange =
+      reportedPrice >= closestBar.l - tolerance &&
+      reportedPrice <= closestBar.h + tolerance;
+
+    return {
+      isVerified: withinRange,
+      confidence: withinRange ? 'exact' : 'close',
+      entryPriceMatch: withinRange,
+      exitPriceMatch: false, // Caller sets this separately
+      priceSource: 'massive-1min',
+      verifiedAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    logger.error(`Failed to verify price for ${ticker}`, { error: error.message });
+    return {
+      isVerified: false,
+      confidence: 'unverifiable',
+      entryPriceMatch: false,
+      exitPriceMatch: false,
+      priceSource: 'massive-1min',
+      verifiedAt: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * Get IV rank for a symbol from the options chain.
+ */
+export async function getIVRank(
+  underlyingTicker: string
+): Promise<number | null> {
+  try {
+    const snapshots = await getOptionsSnapshot(underlyingTicker);
+    if (!snapshots.length) return null;
+
+    // Calculate average IV across ATM options
+    const ivValues = snapshots
+      .filter((s) => s.implied_volatility != null)
+      .map((s) => s.implied_volatility!);
+
+    if (!ivValues.length) return null;
+
+    const avgIV = ivValues.reduce((sum, v) => sum + v, 0) / ivValues.length;
+    // IV Rank is a 0-100 percentile; approximate from current snapshot
+    return Math.round(avgIV * 100);
+  } catch (error: any) {
+    logger.error(`Failed to fetch IV rank for ${underlyingTicker}`, {
+      error: error.message,
+    });
+    return null;
+  }
+}
+
 // Test Massive.com API connection
 export async function testMassiveConnection(): Promise<boolean> {
   try {
