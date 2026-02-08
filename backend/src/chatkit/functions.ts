@@ -160,6 +160,27 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_trade_history',
+      description: 'Get the user\'s recent trade history and performance analytics. Use this when the user asks about their past trades, win rate, P&L history, or trading performance.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Filter by symbol (optional)'
+          },
+          limit: {
+            type: 'number',
+            description: 'Number of recent trades to return (default: 10)',
+            default: 10
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'show_chart',
       description: 'Display a candlestick chart with key levels for a symbol in the center panel. Use this when the user asks to see a chart, visualize price action, or view levels on a chart.',
       parameters: {

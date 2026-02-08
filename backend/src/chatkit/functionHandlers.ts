@@ -3,6 +3,7 @@ import { fetchIntradayData } from '../services/levels/fetcher';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
+import { supabase } from '../config/database';
 
 /**
  * Function handlers - these execute when the AI calls a function
@@ -14,7 +15,11 @@ interface FunctionCall {
   arguments: string; // JSON string
 }
 
-export async function executeFunctionCall(functionCall: FunctionCall): Promise<any> {
+interface FunctionCallContext {
+  userId?: string;
+}
+
+export async function executeFunctionCall(functionCall: FunctionCall, context?: FunctionCallContext): Promise<any> {
   const { name, arguments: argsString } = functionCall;
   const args = JSON.parse(argsString);
 
@@ -33,6 +38,9 @@ export async function executeFunctionCall(functionCall: FunctionCall): Promise<a
 
     case 'analyze_position':
       return await handleAnalyzePosition(args);
+
+    case 'get_trade_history':
+      return await handleGetTradeHistory(args, context?.userId);
 
     case 'show_chart':
       return await handleShowChart(args);
@@ -325,6 +333,74 @@ async function handleAnalyzePosition(args: {
     return {
       error: 'Failed to analyze position',
       message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: get_trade_history
+ * Queries the user's trade journal for recent trades and performance stats
+ */
+async function handleGetTradeHistory(
+  args: { symbol?: string; limit?: number },
+  userId?: string
+) {
+  if (!userId) {
+    return { error: 'User not authenticated' };
+  }
+
+  const { symbol, limit = 10 } = args;
+
+  try {
+    let query = supabase
+      .from('ai_coach_trades')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (symbol) {
+      query = query.eq('symbol', symbol.toUpperCase());
+    }
+
+    const { data: trades, error } = await query
+      .order('entry_date', { ascending: false })
+      .limit(limit);
+
+    if (error) throw new Error(error.message);
+
+    const allTrades = trades || [];
+    const closedTrades = allTrades.filter(t => t.trade_outcome != null);
+    const wins = closedTrades.filter(t => t.trade_outcome === 'win');
+
+    return {
+      trades: allTrades.map(t => ({
+        symbol: t.symbol,
+        type: t.position_type,
+        strategy: t.strategy,
+        entryDate: t.entry_date,
+        entryPrice: t.entry_price,
+        exitDate: t.exit_date,
+        exitPrice: t.exit_price,
+        quantity: t.quantity,
+        pnl: t.pnl != null ? `$${t.pnl.toFixed(2)}` : 'Open',
+        pnlPct: t.pnl_pct != null ? `${t.pnl_pct.toFixed(1)}%` : null,
+        outcome: t.trade_outcome || 'open',
+      })),
+      summary: {
+        totalTrades: allTrades.length,
+        closedTrades: closedTrades.length,
+        openTrades: allTrades.length - closedTrades.length,
+        wins: wins.length,
+        losses: closedTrades.filter(t => t.trade_outcome === 'loss').length,
+        winRate: closedTrades.length > 0
+          ? `${((wins.length / closedTrades.length) * 100).toFixed(1)}%`
+          : 'N/A',
+        totalPnl: `$${closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0).toFixed(2)}`,
+      },
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch trade history',
+      message: error.message,
     };
   }
 }

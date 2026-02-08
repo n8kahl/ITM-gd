@@ -10,6 +10,7 @@ import chatRouter from './routes/chat';
 import optionsRouter from './routes/options';
 import chartRouter from './routes/chart';
 import screenshotRouter from './routes/screenshot';
+import journalRouter from './routes/journal';
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
 app.use('/api/chart', chartRouter);
 app.use('/api/screenshot', screenshotRouter);
+app.use('/api/journal', journalRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
@@ -49,7 +51,10 @@ app.get('/', (req: Request, res: Response) => {
       optionsExpirations: '/api/options/:symbol/expirations',
       positionsAnalyze: '/api/positions/analyze',
       chart: '/api/chart/:symbol',
-      screenshotAnalyze: '/api/screenshot/analyze'
+      screenshotAnalyze: '/api/screenshot/analyze',
+      journalTrades: '/api/journal/trades',
+      journalAnalytics: '/api/journal/analytics',
+      journalImport: '/api/journal/import'
     }
   });
 });

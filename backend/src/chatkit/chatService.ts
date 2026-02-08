@@ -106,7 +106,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
           const functionResult = await executeFunctionCall({
             name: functionName,
             arguments: functionArgs
-          });
+          }, { userId });
 
           functionCalls.push({
             function: functionName,

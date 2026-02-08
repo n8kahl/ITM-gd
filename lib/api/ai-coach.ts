@@ -484,6 +484,235 @@ export async function analyzeScreenshot(
 }
 
 // ============================================
+// TRADE JOURNAL API
+// ============================================
+
+export type TradeOutcome = 'win' | 'loss' | 'breakeven'
+
+export interface TradeEntry {
+  id: string
+  user_id: string
+  symbol: string
+  position_type: PositionType
+  strategy?: string
+  entry_date: string
+  entry_price: number
+  exit_date?: string
+  exit_price?: number
+  quantity: number
+  pnl?: number
+  pnl_pct?: number
+  trade_outcome?: TradeOutcome
+  hold_time_days?: number
+  exit_reason?: string
+  lessons_learned?: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface TradeCreateInput {
+  symbol: string
+  position_type: PositionType
+  strategy?: string
+  entry_date: string
+  entry_price: number
+  exit_date?: string
+  exit_price?: number
+  quantity: number
+  exit_reason?: string
+  lessons_learned?: string
+  tags?: string[]
+}
+
+export interface TradesListResponse {
+  trades: TradeEntry[]
+  total: number
+  hasMore: boolean
+}
+
+export interface TradeAnalyticsSummary {
+  totalTrades: number
+  wins: number
+  losses: number
+  breakeven: number
+  winRate: number
+  totalPnl: number
+  avgWin: number
+  avgLoss: number
+  profitFactor: number
+  avgHoldDays: number
+}
+
+export interface TradeAnalyticsResponse {
+  summary: TradeAnalyticsSummary
+  equityCurve: Array<{ date: string; pnl: number }>
+  byStrategy: Record<string, { count: number; pnl: number; winRate: number }>
+}
+
+/**
+ * Get trades with optional filters
+ */
+export async function getTrades(
+  token: string,
+  options?: {
+    limit?: number
+    offset?: number
+    symbol?: string
+    strategy?: string
+    outcome?: TradeOutcome
+  }
+): Promise<TradesListResponse> {
+  const params = new URLSearchParams()
+  if (options?.limit) params.set('limit', options.limit.toString())
+  if (options?.offset) params.set('offset', options.offset.toString())
+  if (options?.symbol) params.set('symbol', options.symbol)
+  if (options?.strategy) params.set('strategy', options.strategy)
+  if (options?.outcome) params.set('outcome', options.outcome)
+
+  const response = await fetch(`${API_BASE}/api/journal/trades?${params}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Create a new trade entry
+ */
+export async function createTrade(
+  trade: TradeCreateInput,
+  token: string
+): Promise<TradeEntry> {
+  const response = await fetch(`${API_BASE}/api/journal/trades`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(trade),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Update a trade entry
+ */
+export async function updateTrade(
+  id: string,
+  updates: Partial<TradeCreateInput>,
+  token: string
+): Promise<TradeEntry> {
+  const response = await fetch(`${API_BASE}/api/journal/trades/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(updates),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete a trade entry
+ */
+export async function deleteTrade(
+  id: string,
+  token: string
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/api/journal/trades/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get trade performance analytics
+ */
+export async function getTradeAnalytics(
+  token: string
+): Promise<TradeAnalyticsResponse> {
+  const response = await fetch(`${API_BASE}/api/journal/analytics`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Import trades from CSV/broker data
+ */
+export async function importTrades(
+  trades: TradeCreateInput[],
+  token: string,
+  broker?: string
+): Promise<{ imported: number; total: number }> {
+  const response = await fetch(`${API_BASE}/api/journal/import`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ trades, broker }),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
 // ERROR CLASS
 // ============================================
 

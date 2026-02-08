@@ -11,6 +11,7 @@ import {
   TableProperties,
   Calculator,
   Camera,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -19,6 +20,7 @@ import type { LevelAnnotation } from './trading-chart'
 import { OptionsChain } from './options-chain'
 import { PositionForm } from './position-form'
 import { ScreenshotUpload } from './screenshot-upload'
+import { TradeJournal } from './trade-journal'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -49,7 +51,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot'
+type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -91,6 +93,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'chart', icon: CandlestickChart, label: 'Chart' },
   { view: 'options', icon: TableProperties, label: 'Options' },
   { view: 'position', icon: Calculator, label: 'Analyze' },
+  { view: 'journal', icon: BookOpen, label: 'Journal' },
   { view: 'screenshot', icon: Camera, label: 'Screenshot' },
 ]
 
@@ -269,6 +272,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             onShowChart={handleShowChart}
             onShowOptions={() => setActiveView('options')}
             onShowPosition={() => setActiveView('position')}
+            onShowJournal={() => setActiveView('journal')}
           />
         )}
 
@@ -292,6 +296,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'position' && (
           <PositionForm onClose={() => setActiveView('welcome')} />
+        )}
+
+        {activeView === 'journal' && (
+          <TradeJournal onClose={() => setActiveView('welcome')} />
         )}
 
         {activeView === 'screenshot' && (
@@ -383,11 +391,13 @@ function WelcomeView({
   onShowChart,
   onShowOptions,
   onShowPosition,
+  onShowJournal,
 }: {
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
   onShowOptions: () => void
   onShowPosition: () => void
+  onShowJournal: () => void
 }) {
   return (
     <div className="h-full flex flex-col">
@@ -468,7 +478,7 @@ function WelcomeView({
           </div>
 
           {/* Quick Access Cards */}
-          <div className="grid grid-cols-3 gap-3 mt-4">
+          <div className="grid grid-cols-4 gap-3 mt-4">
             <button
               onClick={onShowChart}
               className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
@@ -482,7 +492,7 @@ function WelcomeView({
               className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
             >
               <TableProperties className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Options Chain</p>
+              <p className="text-xs font-medium text-white">Options</p>
               <p className="text-[10px] text-white/30 mt-0.5">Greeks &amp; IV</p>
             </button>
             <button
@@ -492,6 +502,14 @@ function WelcomeView({
               <Calculator className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-white">Analyze</p>
               <p className="text-[10px] text-white/30 mt-0.5">P&amp;L &amp; Risk</p>
+            </button>
+            <button
+              onClick={onShowJournal}
+              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <BookOpen className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-medium text-white">Journal</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Trade Log</p>
             </button>
           </div>
         </div>
