@@ -105,19 +105,11 @@ interface CandlestickChartProps {
 }
 
 export function CandlestickChart({ className }: CandlestickChartProps) {
-  const [mounted, setMounted] = useState(false);
-  const [candles, setCandles] = useState<Candle[]>([]);
+  const [candles, setCandles] = useState<Candle[]>(() => generateRealisticCandles(32));
   const [, setTick] = useState(0);
-
-  // Initialize candles only after mount to avoid hydration mismatch
-  useEffect(() => {
-    setCandles(generateRealisticCandles(32));
-    setMounted(true);
-  }, []);
 
   // Add new candle periodically
   useEffect(() => {
-    if (!mounted) return;
     const interval = setInterval(() => {
       setCandles(prev => {
         const lastCandle = prev[prev.length - 1];
@@ -146,15 +138,7 @@ export function CandlestickChart({ className }: CandlestickChartProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const sma = useMemo(() => {
-    if (candles.length === 0) return [];
-    return calculateSMA(candles, 7);
-  }, [candles]);
-
-  // Don't render until mounted
-  if (!mounted || candles.length === 0) {
-    return <div className={`relative w-full h-full ${className}`} />;
-  }
+  const sma = useMemo(() => calculateSMA(candles, 7), [candles]);
 
   // Calculate chart bounds
   const prices = candles.flatMap(c => [c.high, c.low]);
@@ -522,11 +506,7 @@ interface MiniLineChartProps {
 }
 
 export function MiniLineChart({ className }: MiniLineChartProps) {
-  const [mounted, setMounted] = useState(false);
-  const [points, setPoints] = useState<number[]>([]);
-
-  // Initialize points only after mount to avoid hydration mismatch
-  useEffect(() => {
+  const [points, setPoints] = useState<number[]>(() => {
     const arr: number[] = [];
     let value = 50;
     for (let i = 0; i < 40; i++) {
@@ -535,12 +515,10 @@ export function MiniLineChart({ className }: MiniLineChartProps) {
       value = Math.max(15, Math.min(85, value));
       arr.push(value);
     }
-    setPoints(arr);
-    setMounted(true);
-  }, []);
+    return arr;
+  });
 
   useEffect(() => {
-    if (!mounted) return;
     const interval = setInterval(() => {
       setPoints(prev => {
         const last = prev[prev.length - 1];
@@ -555,18 +533,12 @@ export function MiniLineChart({ className }: MiniLineChartProps) {
   }, []);
 
   const pathD = useMemo(() => {
-    if (points.length === 0) return '';
     return points.map((p, i) => {
       const x = (i / (points.length - 1)) * 100;
       const y = 100 - p;
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
     }).join(' ');
   }, [points]);
-
-  // Don't render until mounted
-  if (!mounted || points.length === 0) {
-    return <div className={`relative w-full h-full ${className}`} />;
-  }
 
   const areaD = `${pathD} L 100 100 L 0 100 Z`;
   const isUp = points[points.length - 1] > points[0];

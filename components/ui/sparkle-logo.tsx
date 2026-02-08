@@ -84,22 +84,14 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
   priority = false,
 }) => {
   const isMobile = useIsMobile()
-  const [mounted, setMounted] = useState(false)
-
-  // Only render dynamic content after mount to avoid hydration mismatch
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Reduce sparkle count on mobile for performance (0 = disabled entirely on mobile)
   const effectiveSparkleCount = isMobile ? 0 : sparkleCount
   // Disable glow backdrop animation on mobile
   const effectiveEnableGlow = isMobile ? false : enableGlow
 
-  // Generate random sparkle positions and properties (only after mount)
+  // Generate random sparkle positions and properties
   const sparkles = useMemo(() => {
-    if (!mounted) return []
-
     const colors = [
       'rgba(16, 185, 129, 0.8)', // Emerald
       'rgba(4, 120, 87, 0.7)',   // Dark emerald
@@ -116,7 +108,7 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
       duration: Math.random() * 2 + 2, // 2-4s
       color: colors[Math.floor(Math.random() * colors.length)],
     }))
-  }, [effectiveSparkleCount, mounted])
+  }, [effectiveSparkleCount])
 
   // Glow intensity settings
   const glowStyles = {
