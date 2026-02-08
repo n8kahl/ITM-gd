@@ -432,6 +432,58 @@ export async function analyzePortfolio(
 }
 
 // ============================================
+// SCREENSHOT API
+// ============================================
+
+export interface ExtractedPosition {
+  symbol: string
+  type: 'call' | 'put' | 'call_spread' | 'put_spread' | 'stock'
+  strike?: number
+  expiry?: string
+  quantity: number
+  entryPrice: number
+  currentPrice?: number
+  pnl?: number
+  confidence: number
+}
+
+export interface ScreenshotAnalysisResponse {
+  positions: ExtractedPosition[]
+  positionCount: number
+  broker?: string
+  accountValue?: number
+  warnings: string[]
+}
+
+/**
+ * Analyze a broker screenshot to extract positions
+ */
+export async function analyzeScreenshot(
+  imageBase64: string,
+  mimeType: string,
+  token: string
+): Promise<ScreenshotAnalysisResponse> {
+  const response = await fetch(`${API_BASE}/api/screenshot/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ image: imageBase64, mimeType }),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
 // ERROR CLASS
 // ============================================
 

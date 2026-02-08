@@ -10,6 +10,7 @@ import {
   CandlestickChart,
   TableProperties,
   Calculator,
+  Camera,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -17,6 +18,7 @@ import dynamic from 'next/dynamic'
 import type { LevelAnnotation } from './trading-chart'
 import { OptionsChain } from './options-chain'
 import { PositionForm } from './position-form'
+import { ScreenshotUpload } from './screenshot-upload'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -47,7 +49,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'welcome' | 'chart' | 'options' | 'position'
+type CenterView = 'welcome' | 'chart' | 'options' | 'position' | 'screenshot'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -89,6 +91,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'chart', icon: CandlestickChart, label: 'Chart' },
   { view: 'options', icon: TableProperties, label: 'Options' },
   { view: 'position', icon: Calculator, label: 'Analyze' },
+  { view: 'screenshot', icon: Camera, label: 'Screenshot' },
 ]
 
 // Level annotation colors by type
@@ -289,6 +292,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'position' && (
           <PositionForm onClose={() => setActiveView('welcome')} />
+        )}
+
+        {activeView === 'screenshot' && (
+          <ScreenshotUpload onClose={() => setActiveView('welcome')} />
         )}
       </div>
     </div>

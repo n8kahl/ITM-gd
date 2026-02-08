@@ -9,6 +9,7 @@ import levelsRouter from './routes/levels';
 import chatRouter from './routes/chat';
 import optionsRouter from './routes/options';
 import chartRouter from './routes/chart';
+import screenshotRouter from './routes/screenshot';
 
 dotenv.config();
 
@@ -18,7 +19,7 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(helmet()); // Security headers
 app.use(cors()); // Enable CORS
-app.use(express.json()); // Parse JSON bodies
+app.use(express.json({ limit: '15mb' })); // Parse JSON bodies (larger for screenshots)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(morgan('dev')); // HTTP request logging
 
@@ -29,6 +30,7 @@ app.use('/api/chat', chatRouter);
 app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
 app.use('/api/chart', chartRouter);
+app.use('/api/screenshot', screenshotRouter);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
@@ -46,7 +48,8 @@ app.get('/', (req: Request, res: Response) => {
       optionsChain: '/api/options/:symbol/chain',
       optionsExpirations: '/api/options/:symbol/expirations',
       positionsAnalyze: '/api/positions/analyze',
-      chart: '/api/chart/:symbol'
+      chart: '/api/chart/:symbol',
+      screenshotAnalyze: '/api/screenshot/analyze'
     }
   });
 });
