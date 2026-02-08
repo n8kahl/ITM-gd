@@ -7,6 +7,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useMemo,
   type ReactNode
 } from 'react'
 import { useRouter } from 'next/navigation'
@@ -116,9 +117,6 @@ async function fetchWithTimeout(
 }
 
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
-  // IMMEDIATE logging - if you don't see this, provider isn't mounting
-  console.log('🚀 MemberAuthProvider mounting')
-
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
     user: null,
@@ -132,8 +130,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     errorCode: null,
   })
 
-  console.log('📊 MemberAuthProvider initial state:', { isLoading: state.isLoading })
-
   // Dynamic role mapping fetched from config API (role ID -> tier)
   const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'executive'>>(DEFAULT_ROLE_MAPPING)
 
@@ -143,6 +139,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Track authentication status to prevent re-initialization on navigation
   const isAuthenticatedRef = useRef(false)
+
+  // Refs for state values so callbacks stay stable (don't depend on state objects)
+  const sessionRef = useRef(state.session)
+  sessionRef.current = state.session
+  const userRef = useRef(state.user)
+  userRef.current = state.user
 
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
@@ -219,6 +221,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Refs for stable access to latest callback versions (breaks dependency chains)
+  const getMembershipTierRef = useRef(getMembershipTier)
+  getMembershipTierRef.current = getMembershipTier
+  const fetchAllowedTabsRef = useRef(fetchAllowedTabs)
+  fetchAllowedTabsRef.current = fetchAllowedTabs
+
   // Sync Discord roles via Edge Function (with rate limiting and timeout)
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
     const now = Date.now()
@@ -238,7 +246,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     isSyncingRef.current = true
     lastSyncTimeRef.current = now
 
-    if (!state.session) {
+    if (!sessionRef.current) {
       console.log('No session available for Discord sync')
       isSyncingRef.current = false
       return null
@@ -250,7 +258,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${state.session.access_token}`,
+            'Authorization': `Bearer ${sessionRef.current.access_token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -273,13 +281,13 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
       // Update state with sync results
       const profile: MemberProfile = {
-        id: state.user?.id || '',
-        email: state.user?.email || null,
+        id: userRef.current?.id || '',
+        email: userRef.current?.email || null,
         discord_user_id: result.discord_user_id,
         discord_username: result.discord_username,
         discord_avatar: result.discord_avatar || null, // Store avatar from sync result
         discord_roles: roleIds,
-        membership_tier: getMembershipTier(roleIds),
+        membership_tier: getMembershipTierRef.current(roleIds),
       }
 
       const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -290,7 +298,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
 
       // Get allowed tabs based on membership tier
-      const allowedTabs = await fetchAllowedTabs(state.user?.id || '', profile.membership_tier)
+      const allowedTabs = await fetchAllowedTabsRef.current(userRef.current?.id || '', profile.membership_tier)
 
       setState(prev => ({
         ...prev,
@@ -326,7 +334,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     } finally {
       isSyncingRef.current = false
     }
-  }, [state.session, state.user, getMembershipTier, fetchAllowedTabs])
+  }, []) // Stable — reads from refs
+
+  // Ref for syncDiscordRoles so initializeAuth doesn't depend on it
+  const syncDiscordRolesRef = useRef(syncDiscordRoles)
+  syncDiscordRolesRef.current = syncDiscordRoles
 
   // Initialize auth state
   const initializeAuth = useCallback(async () => {
@@ -433,11 +445,10 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           discord_username: discordProfile.discord_username,
           discord_avatar: discordProfile.discord_avatar,
           discord_roles: discordProfile.discord_roles || [],
-          membership_tier: getMembershipTier(discordProfile.discord_roles || []),
+          membership_tier: getMembershipTierRef.current(discordProfile.discord_roles || []),
         }
 
         // Get cached permissions
-        console.log('[MemberAuth] 6️⃣ Fetching user permissions...')
         const { data: userPermissions } = await supabase
           .from('user_permissions')
           .select(`
@@ -451,7 +462,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           `)
           .eq('user_id', user.id)
 
-        console.log('[MemberAuth] 6️⃣ Permissions fetch complete, processing...')
         const permissions: MemberPermission[] = (userPermissions || []).map((up: any) => ({
           id: up.app_permissions?.id || up.permission_id,
           name: up.app_permissions?.name || '',
@@ -460,9 +470,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }))
 
         // Get allowed tabs based on membership tier
-        console.log('[MemberAuth] 7️⃣ Calling fetchAllowedTabs...')
-        const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
-        console.log('[MemberAuth] 7️⃣ fetchAllowedTabs complete:', allowedTabs)
+        const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier)
 
         console.log('[MemberAuth] 8️⃣ Setting final state with profile')
         setState(prev => ({
@@ -479,7 +487,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
         if (lastSynced < fiveMinutesAgo) {
           console.log('[MemberAuth] 🔄 Discord profile stale, syncing in background...')
-          syncDiscordRoles()
+          syncDiscordRolesRef.current()
         } else {
           console.log('[MemberAuth] ✅ Profile is fresh, no sync needed')
         }
@@ -523,7 +531,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_username: result.discord_username,
             discord_avatar: result.discord_avatar || null,
             discord_roles: roleIds,
-            membership_tier: getMembershipTier(roleIds),
+            membership_tier: getMembershipTierRef.current(roleIds),
           }
 
           const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -534,7 +542,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           }))
 
           // Get allowed tabs based on membership tier
-          const allowedTabs = await fetchAllowedTabs(user.id, profile.membership_tier)
+          const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier)
 
           setState(prev => ({
             ...prev,
@@ -622,7 +630,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         return prev
       })
     }
-  }, [syncDiscordRoles, getMembershipTier, fetchAllowedTabs])
+  }, []) // Stable — reads from refs to avoid re-render cascade
 
   // Sign out with full cleanup
   const signOut = useCallback(async () => {
@@ -794,14 +802,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // Computed flag for NOT_MEMBER error
   const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
 
-  const value: MemberAuthContextValue = {
+  const value = useMemo<MemberAuthContextValue>(() => ({
     ...state,
     signOut,
     syncDiscordRoles,
     hasPermission,
     refresh,
     isNotMember,
-  }
+  }), [state, signOut, syncDiscordRoles, hasPermission, refresh, isNotMember])
 
   return (
     <MemberAuthContext.Provider value={value}>
