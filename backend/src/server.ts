@@ -21,6 +21,10 @@ dotenv.config();
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy - required when running behind Railway/reverse proxy
+// Fixes express-rate-limit X-Forwarded-For validation error
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
