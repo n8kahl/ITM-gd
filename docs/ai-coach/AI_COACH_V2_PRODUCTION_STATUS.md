@@ -58,7 +58,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/morningBriefWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/setupPushWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
-- Worker health external alerting (Discord + Sentry hooks):
+- Worker health external alerting (Discord-first, Sentry optional):
   - New worker monitors `workerHealth` telemetry and sends Discord incident alerts for stale/unresolved-failure workers
   - Includes cooldown-based de-duplication and recovery notifications
   - Optional Sentry incident messages tied to worker name/type
@@ -199,10 +199,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
-- `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (blocked in this environment due missing `@sentry/nextjs` import in `next.config.mjs`)
-- `npm run build` (backend compile blocked in this environment by missing local module resolution for `@sentry/node`)
+- `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (Next now boots without Sentry dependency; current failure is E2E auth bootstrap not reaching `/members/ai-coach`)
+- `npm run build` (backend compile passes after making Sentry optional/no-op when package is not installed)
 - Targeted TS checks run on changed backend/frontend files before merge.
-- Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
+- Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment now starts; remaining blocker is authenticated E2E bootstrap).
 - Added scanner workflow smoke spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow.spec.ts` (mocked scanner/tracked/brief/WebSocket flow).
 
 ## 3) Production Gates (Current)
@@ -221,14 +221,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 
 ### Needs Completion
-- Enable full E2E execution in this repo by resolving frontend startup dependency issue (`@sentry/nextjs` import in `next.config.mjs`) so new workflow smoke specs run in CI/staging.
+- Stabilize authenticated E2E bootstrap so AI Coach workflow specs consistently reach `/members/ai-coach` (middleware currently redirects to `/login` in test mode).
 - Expand backend-integrated E2E coverage from mocked workflow smoke to authenticated staging data path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 - Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Resolve `@sentry/nextjs` runtime dependency in local/CI Playwright web server boot so AI Coach E2E specs execute.
+1. Add deterministic E2E auth bootstrap for middleware-protected member routes so AI Coach workflow specs execute reliably.
 2. Run the new workflow smoke spec + existing AI Coach view/api specs in CI and staging (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.

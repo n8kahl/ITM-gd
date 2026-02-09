@@ -55,7 +55,7 @@ const envSchema = z.object({
   WORKER_ALERTS_STALE_THRESHOLD_MS: z.string().default('1200000').transform(Number),
   WORKER_ALERTS_STARTUP_GRACE_MS: z.string().default('300000').transform(Number),
   WORKER_ALERTS_COOLDOWN_MS: z.string().default('900000').transform(Number),
-  WORKER_ALERTS_SENTRY_ENABLED: booleanFromEnv.default(true),
+  WORKER_ALERTS_SENTRY_ENABLED: booleanFromEnv.default(false),
 
   // Rate Limiting
   RATE_LIMIT_GENERAL: z.string().default('100').transform(Number),

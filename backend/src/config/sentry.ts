@@ -1,53 +1,135 @@
-import * as Sentry from '@sentry/node';
-import { Application } from 'express';
+import type { Application } from 'express';
+
+interface SentryUser {
+  id?: string;
+}
+
+interface SentryScope {
+  setTag(key: string, value: string): void;
+  setUser(user: SentryUser | null): void;
+  setLevel(level: 'info' | 'warning' | 'error'): void;
+  setExtra(key: string, value: unknown): void;
+}
+
+interface SentryLike {
+  init(options: unknown): void;
+  setupExpressErrorHandler(app: Application): void;
+  close(timeoutMs: number): Promise<boolean>;
+  captureException(error: unknown): void;
+  captureMessage(message: string, level?: 'info' | 'warning' | 'error'): void;
+  withScope(callback: (scope: SentryScope) => void): void;
+  setTag(key: string, value: string): void;
+  setUser(user: SentryUser | null): void;
+}
+
+const noopScope: SentryScope = {
+  setTag: () => undefined,
+  setUser: () => undefined,
+  setLevel: () => undefined,
+  setExtra: () => undefined,
+};
+
+const noopSentry: SentryLike = {
+  init: () => undefined,
+  setupExpressErrorHandler: () => undefined,
+  close: async () => true,
+  captureException: () => undefined,
+  captureMessage: () => undefined,
+  withScope: (callback: (scope: SentryScope) => void) => callback(noopScope),
+  setTag: () => undefined,
+  setUser: () => undefined,
+};
+
+let resolvedSentry: SentryLike | null = null;
+
+function resolveSentryModule(): SentryLike {
+  if (resolvedSentry) return resolvedSentry;
+
+  try {
+    // Optional dependency: if unavailable, fall back to no-op.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@sentry/node') as Partial<SentryLike>;
+    if (mod && typeof mod.captureException === 'function') {
+      resolvedSentry = {
+        init: (options) => mod.init?.(options),
+        setupExpressErrorHandler: (app) => mod.setupExpressErrorHandler?.(app as any),
+        close: async (timeoutMs) => (await mod.close?.(timeoutMs)) ?? true,
+        captureException: (error) => mod.captureException?.(error),
+        captureMessage: (message, level) => mod.captureMessage?.(message, level),
+        withScope: (callback) => {
+          if (typeof mod.withScope === 'function') {
+            mod.withScope((scope: any) => callback(scope as SentryScope));
+            return;
+          }
+          callback(noopScope);
+        },
+        setTag: (key, value) => mod.setTag?.(key, value),
+        setUser: (user) => mod.setUser?.(user),
+      };
+      return resolvedSentry;
+    }
+  } catch {
+    // Intentionally silent: Sentry is optional.
+  }
+
+  resolvedSentry = noopSentry;
+  return resolvedSentry;
+}
 
 /**
- * Initialize Sentry for the Express backend.
- * Must be called BEFORE any other middleware or route registration.
+ * Initialize Sentry for the Express backend when DSN + package are available.
+ * Safe no-op when Sentry is not installed or DSN is not configured.
  */
 export function initSentry(app: Application): void {
   const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
 
-  if (!dsn) {
-    console.warn('[Sentry] SENTRY_DSN not set — error tracking disabled');
-    return;
-  }
-
-  Sentry.init({
+  const sentry = resolveSentryModule();
+  sentry.init({
     dsn,
     environment: process.env.NODE_ENV || 'development',
     release: `titm-backend@${process.env.npm_package_version || '1.0.0'}`,
-
-    // Performance monitoring: sample 20% of transactions in production
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-
-    // Filter out noisy or irrelevant errors
     ignoreErrors: [
       'CORS: Origin',
       'Rate limit exceeded',
       'Request timeout',
     ],
-
     beforeSend(event: any) {
-      // Strip any sensitive headers that might leak into error reports
       if (event.request?.headers) {
-        delete event.request.headers['authorization'];
-        delete event.request.headers['cookie'];
+        delete event.request.headers.authorization;
+        delete event.request.headers.cookie;
       }
       return event;
     },
   });
 
-  // Instrument Express for automatic request tracing
-  Sentry.setupExpressErrorHandler(app);
+  sentry.setupExpressErrorHandler(app);
 }
 
 /**
  * Flush pending Sentry events before process exit.
- * Call this during graceful shutdown.
+ * Safe no-op when Sentry is disabled or unavailable.
  */
 export async function flushSentry(): Promise<void> {
-  await Sentry.close(2000);
+  const sentry = resolveSentryModule();
+  await sentry.close(2000);
 }
 
-export { Sentry };
+export const Sentry = {
+  captureException(error: unknown): void {
+    resolveSentryModule().captureException(error);
+  },
+  captureMessage(message: string, level?: 'info' | 'warning' | 'error'): void {
+    resolveSentryModule().captureMessage(message, level);
+  },
+  withScope(callback: (scope: SentryScope) => void): void {
+    resolveSentryModule().withScope(callback);
+  },
+  setTag(key: string, value: string): void {
+    resolveSentryModule().setTag(key, value);
+  },
+  setUser(user: SentryUser | null): void {
+    resolveSentryModule().setUser(user);
+  },
+};
