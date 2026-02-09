@@ -1,5 +1,6 @@
 import { detectBreakRetest } from './breakRetest';
 import { detectGapFill } from './gapFill';
+import { detectIndexOpeningDrive } from './indexSpecific';
 import { detectOrbBreakout } from './orb';
 import { DetectorSnapshot, SetupSignal } from './types';
 import { detectVWAPPlay } from './vwap';
@@ -13,6 +14,7 @@ export function detectSetupsFromSnapshot(snapshot: DetectorSnapshot): SetupSigna
     detectBreakRetest(snapshot),
     detectVWAPPlay(snapshot),
     detectGapFill(snapshot),
+    detectIndexOpeningDrive(snapshot),
   ];
 
   return detections

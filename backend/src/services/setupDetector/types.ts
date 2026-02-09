@@ -7,7 +7,10 @@ export type SetupSignalType =
   | 'vwap_cross'
   | 'vwap_bounce'
   | 'vwap_deviation'
-  | 'gap_fill';
+  | 'gap_fill'
+  | 'gamma_squeeze'
+  | 'spx_opening_drive'
+  | 'ndx_opening_drive';
 
 export type SetupDirection = 'long' | 'short' | 'neutral';
 

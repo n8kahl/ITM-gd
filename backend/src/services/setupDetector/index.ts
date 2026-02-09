@@ -4,7 +4,9 @@ import { publishSetupDetected } from '../setupPushChannel';
 import { calculateLevels } from '../levels';
 import { fetchDailyData, fetchIntradayData } from '../levels/fetcher';
 import { getMarketStatus } from '../marketHours';
+import { fetchOptionsChain } from '../options/optionsChainFetcher';
 import { detectSetupsFromSnapshot } from './detectors';
+import { detectGammaSqueeze } from './gammaSqueeze';
 import { SetupDirection, SetupSignal, toShortDirection } from './types';
 
 interface WatchlistRow {
@@ -34,6 +36,7 @@ interface SetupDetectorDeps {
 }
 
 const DEFAULT_SYMBOLS = ['SPX', 'NDX'];
+const GAMMA_SETUP_SYMBOLS = new Set(['SPX', 'NDX']);
 const MAX_SYMBOLS_PER_CYCLE = 20;
 
 export const SETUP_DETECTOR_INITIAL_DELAY = 10_000;
@@ -64,13 +67,32 @@ async function detectSetupsForSymbol(symbol: string, detectedAt: string): Promis
       return [];
     }
 
-    return detectSetupsFromSnapshot({
+    const snapshot = {
       symbol,
       intradayBars,
       dailyBars,
       levels,
       detectedAt,
-    });
+    };
+
+    const detections = detectSetupsFromSnapshot(snapshot);
+
+    if (GAMMA_SETUP_SYMBOLS.has(symbol.toUpperCase())) {
+      try {
+        const chain = await fetchOptionsChain(symbol, undefined, 20);
+        const gammaSignal = detectGammaSqueeze(snapshot, chain);
+        if (gammaSignal) {
+          detections.push(gammaSignal);
+        }
+      } catch (error) {
+        logger.warn('Gamma squeeze detector skipped for symbol', {
+          symbol,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return detections.sort((a, b) => b.confidence - a.confidence);
   } catch (error) {
     logger.warn('Setup detector failed for symbol', {
       symbol,
