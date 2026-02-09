@@ -557,6 +557,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live` (strict live-gate now passing against staging)
 - `railway up --detach` (staging deploy to `TradeITM / staging / ITM-gd`, deployment `8ef4a95f-b995-436b-b013-9a7cc9c7c209`)
 - `E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm ai-coach:staging:earnings https://itm-gd-staging.up.railway.app SPY` (PASS)
+- `railway up --detach` (production deploy to `TradeITM / production / ITM-gd`, deployment `4c5b7b72-10db-4f38-bb87-ac903d26b16a`)
+- `E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm ai-coach:staging:earnings https://itm-gd-production.up.railway.app SPY` (expected auth failure in production: bypass token rejected)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.ai-coach-symbols.json` (scoped frontend type-check for symbol-search integration files)
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
@@ -717,4 +719,13 @@ Earnings phase deployment status (2026-02-09, current):
     - `GET /api/earnings/calendar`
     - `GET /api/earnings/SPY/analysis`
 - Production deploy:
-  - Pending next explicit promotion run to `TradeITM / production / ITM-gd`, then run `pnpm ai-coach:staging:earnings https://itm-gd-production.up.railway.app SPY`.
+  - Deploy completed to `TradeITM / production / ITM-gd` (deployment `4c5b7b72-10db-4f38-bb87-ac903d26b16a`).
+  - Health checks pass:
+    - `GET https://itm-gd-production.up.railway.app/health` -> `200`
+    - `GET https://itm-gd-production.up.railway.app/health/detailed` -> `200`
+  - Earnings route presence confirmed:
+    - `GET https://itm-gd-production.up.railway.app/api/earnings/calendar` (unauthenticated) -> `401` (auth gate present; route deployed)
+  - Authenticated earnings validation remains pending for production:
+    - Bypass token validation returns `401 Invalid or expired token` in production.
+    - Complete with a valid production member JWT (or production-approved bypass mode) and rerun:
+      `pnpm ai-coach:staging:earnings https://itm-gd-production.up.railway.app SPY`
