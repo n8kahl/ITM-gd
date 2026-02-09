@@ -157,6 +157,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Added ET session-aware mode badges in Morning Brief (`Pre-Market Prep`, `Live Session`, `After-Hours Review`, `Market Closed`).
   - Mode updates automatically every minute to keep context accurate as market session changes.
   - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+- Widget action accessibility + micro-interactions:
+  - Added explicit tooltips/aria-labels for widget action buttons.
+  - Added consistent press/hover motion feedback for faster interaction confidence.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-action-bar.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
 
