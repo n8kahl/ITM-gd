@@ -22,7 +22,8 @@ import {
   Calendar,
   Sunrise,
   ListChecks,
-  SlidersHorizontal,
+  Settings,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -74,10 +75,12 @@ import {
 } from './preferences'
 import {
   getChartData,
+  scanOpportunities,
   AICoachAPIError,
   type ChartTimeframe,
   type ChartBar,
   type ChartProviderIndicators,
+  type ScanOpportunity,
 } from '@/lib/api/ai-coach'
 
 // ============================================
@@ -175,7 +178,6 @@ const TABS: Array<{
   { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
   { view: 'earnings', icon: Calendar, label: 'Earnings', group: 'research' },
   { view: 'macro', icon: Globe, label: 'Macro', group: 'research' },
-  { view: 'preferences', icon: SlidersHorizontal, label: 'Settings', group: 'research' },
 ]
 
 const PRESSABLE_PROPS = {
@@ -270,6 +272,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   const [activeView, setActiveView] = useState<CenterView>('welcome')
   const [isToolsSheetOpen, setIsToolsSheetOpen] = useState(false)
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false)
   const tabRailRef = useRef<HTMLDivElement | null>(null)
   const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
   const [canScrollTabRight, setCanScrollTabRight] = useState(false)
@@ -294,10 +297,15 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const [preferences, setPreferences] = useState<AICoachPreferences>(DEFAULT_AI_COACH_PREFERENCES)
 
   useEffect(() => {
+    if (activeCenterView === 'preferences') {
+      setIsPreferencesOpen(true)
+      setCenterView(null)
+      return
+    }
     if (activeCenterView && activeCenterView !== activeView) {
       setActiveView(activeCenterView as CenterView)
     }
-  }, [activeCenterView, activeView])
+  }, [activeCenterView, activeView, setCenterView])
 
   useEffect(() => {
     const loaded = loadAICoachPreferences()
@@ -543,6 +551,17 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     return () => window.removeEventListener('resize', handleResize)
   }, [updateTabRailScrollState])
 
+  useEffect(() => {
+    if (!isPreferencesOpen) return
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsPreferencesOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [isPreferencesOpen])
+
   const activateTabView = useCallback((view: CenterView) => {
     setActiveView(view)
     setCenterView(view as Parameters<typeof setCenterView>[0])
@@ -680,6 +699,16 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             </div>
           </div>
           </div>
+          <motion.button
+            type="button"
+            onClick={() => setIsPreferencesOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-white/45 hover:text-emerald-300 px-3 py-2.5 transition-colors shrink-0 border-l border-white/5 min-h-[44px]"
+            aria-label="Open workflow settings"
+            {...PRESSABLE_PROPS}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Settings
+          </motion.button>
         </div>
       )}
 
@@ -855,13 +884,6 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             />
           )}
 
-          {activeView === 'preferences' && (
-            <PreferencesPanel
-              value={preferences}
-              onChange={setPreferences}
-              onReset={() => setPreferences(DEFAULT_AI_COACH_PREFERENCES)}
-            />
-          )}
         </ViewTransition>
       </div>
 
@@ -940,6 +962,36 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                   )
                 })}
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isPreferencesOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 bg-black/70 p-3 sm:p-6"
+            onClick={() => setIsPreferencesOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI Coach workflow settings"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="mx-auto h-full w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-[#0D0F13]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <PreferencesPanel
+                value={preferences}
+                onChange={setPreferences}
+                onReset={() => setPreferences(DEFAULT_AI_COACH_PREFERENCES)}
+              />
             </motion.div>
           </motion.div>
         )}
@@ -1137,6 +1189,17 @@ function WelcomeView({
     isLoading: true,
     error: null,
   })
+  const [nextSetup, setNextSetup] = useState<{
+    opportunity: ScanOpportunity | null
+    scannedAt: string | null
+    isLoading: boolean
+    error: string | null
+  }>({
+    opportunity: null,
+    scannedAt: null,
+    isLoading: true,
+    error: null,
+  })
 
   useEffect(() => {
     const interval = setInterval(() => setClockTick((value) => value + 1), 60_000)
@@ -1198,6 +1261,38 @@ function WelcomeView({
     }
   }, [accessToken])
 
+  const loadNextSetup = useCallback(async () => {
+    if (!accessToken) return
+
+    setNextSetup((prev) => ({
+      ...prev,
+      isLoading: true,
+      error: null,
+    }))
+
+    try {
+      const scan = await scanOpportunities(accessToken, {
+        symbols: ['SPX', 'NDX', 'QQQ', 'SPY'],
+        includeOptions: true,
+      })
+      const topOpportunity = [...scan.opportunities]
+        .sort((a, b) => b.score - a.score)[0] ?? null
+
+      setNextSetup({
+        opportunity: topOpportunity,
+        scannedAt: scan.scannedAt,
+        isLoading: false,
+        error: topOpportunity ? null : 'No qualifying setup right now.',
+      })
+    } catch {
+      setNextSetup((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: 'Setup scan is temporarily unavailable.',
+      }))
+    }
+  }, [accessToken])
+
   useEffect(() => {
     if (!accessToken) return
     void loadSPXTicker()
@@ -1207,6 +1302,15 @@ function WelcomeView({
 
     return () => clearInterval(interval)
   }, [accessToken, loadSPXTicker])
+
+  useEffect(() => {
+    if (!accessToken) return
+    void loadNextSetup()
+    const interval = setInterval(() => {
+      void loadNextSetup()
+    }, 120_000)
+    return () => clearInterval(interval)
+  }, [accessToken, loadNextSetup])
 
   const quickAccessCards: Array<{
     label: string
@@ -1234,6 +1338,17 @@ function WelcomeView({
   }
 
   const tickerPositive = (spxTicker.change ?? 0) >= 0
+  const setupDirectionPositive = (nextSetup.opportunity?.direction ?? 'neutral') !== 'bearish'
+  const setupConfidenceRaw = nextSetup.opportunity?.confidence ?? null
+  const setupConfidence = setupConfidenceRaw === null
+    ? null
+    : Math.round(
+      Math.max(
+        0,
+        Math.min(100, setupConfidenceRaw <= 1 ? setupConfidenceRaw * 100 : setupConfidenceRaw)
+      )
+    )
+  const setupScore = nextSetup.opportunity ? Math.round(nextSetup.opportunity.score) : null
 
   return (
     <div className="h-full flex flex-col">
@@ -1277,6 +1392,81 @@ function WelcomeView({
           {spxTicker.asOf && (
             <p className="text-[10px] text-white/35 mt-1.5">As of {spxTicker.asOf} ET</p>
           )}
+        </div>
+
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] text-white/45 uppercase tracking-[0.12em]">Next Best Setup</p>
+              <p className="text-[11px] text-white/35 mt-0.5">Auto-refreshes every 2 minutes</p>
+            </div>
+            <motion.button
+              type="button"
+              onClick={() => {
+                void loadNextSetup()
+              }}
+              className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/55 hover:text-white/75 hover:bg-white/10 transition-colors disabled:opacity-50"
+              disabled={nextSetup.isLoading}
+              aria-label="Refresh next best setup"
+              {...PRESSABLE_PROPS}
+            >
+              <RefreshCw className={cn('w-3 h-3', nextSetup.isLoading && 'animate-spin')} />
+              Refresh
+            </motion.button>
+          </div>
+
+          <div className="mt-2.5 rounded-lg border border-white/10 bg-black/20 px-3 py-2.5">
+            {nextSetup.isLoading && !nextSetup.opportunity ? (
+              <p className="text-sm text-white/45">Scanning watchlist setups...</p>
+            ) : nextSetup.error && !nextSetup.opportunity ? (
+              <p className="text-sm text-red-300/80">{nextSetup.error}</p>
+            ) : nextSetup.opportunity ? (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {nextSetup.opportunity.symbol} · {nextSetup.opportunity.setupType}
+                    </p>
+                    <p className="text-xs text-white/45 mt-1 line-clamp-2">{nextSetup.opportunity.description}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-[11px] rounded-md border px-2 py-1 capitalize shrink-0',
+                      setupDirectionPositive
+                        ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                        : 'border-red-500/30 bg-red-500/15 text-red-300'
+                    )}
+                  >
+                    {nextSetup.opportunity.direction}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-white/50">
+                  <span>Score: {setupScore ?? '--'}</span>
+                  <span>Confidence: {setupConfidence !== null ? `${setupConfidence}%` : '--'}</span>
+                  <span>Price: ${nextSetup.opportunity.currentPrice.toFixed(2)}</span>
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <motion.button
+                    type="button"
+                    onClick={() => {
+                      onSendPrompt?.(`Expand this setup into a full trade plan with entry, stop, target, and invalidation: ${nextSetup.opportunity?.symbol} ${nextSetup.opportunity?.setupType} (${nextSetup.opportunity?.direction}).`)
+                    }}
+                    className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-[11px] text-emerald-200 hover:bg-emerald-500/25 transition-colors"
+                    {...PRESSABLE_PROPS}
+                  >
+                    Build Trade Plan
+                  </motion.button>
+                  <span className="text-[10px] text-white/35">
+                    {nextSetup.scannedAt
+                      ? `Scanned ${new Date(nextSetup.scannedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })} ET`
+                      : 'Awaiting scan timestamp'}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-white/45">No setup available yet.</p>
+            )}
+          </div>
         </div>
       </div>
 

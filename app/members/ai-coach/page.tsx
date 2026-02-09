@@ -827,9 +827,18 @@ function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center max-w-sm">
-        <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center mx-auto mb-5">
+        <motion.div
+          className="relative w-14 h-14 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center mx-auto mb-5 overflow-hidden"
+          animate={{ y: [0, -2, 0] }}
+          transition={{ duration: 2.2, ease: 'easeInOut', repeat: Infinity }}
+        >
+          <motion.span
+            className="absolute inset-0 rounded-2xl border border-emerald-400/25"
+            animate={{ scale: [1, 1.18, 1], opacity: [0.35, 0, 0.35] }}
+            transition={{ duration: 2.4, ease: 'easeInOut', repeat: Infinity }}
+          />
           <BrainCircuit className="w-7 h-7 text-emerald-500" />
-        </div>
+        </motion.div>
         <h3 className="text-base font-medium text-white mb-2">
           What are you trading today?
         </h3>

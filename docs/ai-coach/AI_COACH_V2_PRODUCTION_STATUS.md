@@ -171,6 +171,12 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Widget card presentation polish:
   - Added entrance animations to widget cards for smoother chat-to-data transitions.
   - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+- Navigation/settings refinement + welcome enhancements:
+  - Removed `Settings` from the crowded tab rail and added a dedicated settings action (gear) that opens workflow preferences in an overlay modal.
+  - Added a welcome-view `Next Best Setup` card with auto-refresh scanner polling (2-minute cadence), manual refresh control, and one-click trade-plan prompt handoff.
+  - Added animated chat empty-state icon pulse/bob micro-animation for a more polished idle experience.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
 
