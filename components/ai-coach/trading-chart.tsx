@@ -72,6 +72,24 @@ export function TradingChart({
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const safeBars = bars
+    .filter((bar) => (
+      Number.isFinite(bar.time)
+      && Number.isFinite(bar.open)
+      && Number.isFinite(bar.high)
+      && Number.isFinite(bar.low)
+      && Number.isFinite(bar.close)
+    ))
+    .sort((a, b) => a.time - b.time)
+    .reduce<ChartBar[]>((acc, bar) => {
+      const prev = acc[acc.length - 1]
+      if (prev?.time === bar.time) {
+        acc[acc.length - 1] = bar
+      } else {
+        acc.push(bar)
+      }
+      return acc
+    }, [])
 
   // Initialize chart
   const initChart = useCallback(() => {
@@ -165,10 +183,10 @@ export function TradingChart({
 
   // Update data when bars change
   useEffect(() => {
-    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || bars.length === 0) return
+    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || safeBars.length === 0) return
 
     // Format candlestick data
-    const candleData: CandlestickData<Time>[] = bars.map(bar => ({
+    const candleData: CandlestickData<Time>[] = safeBars.map(bar => ({
       time: bar.time as Time,
       open: bar.open,
       high: bar.high,
@@ -177,9 +195,9 @@ export function TradingChart({
     }))
 
     // Format volume data with color based on candle direction
-    const volumeData: HistogramData<Time>[] = bars.map(bar => ({
+    const volumeData: HistogramData<Time>[] = safeBars.map(bar => ({
       time: bar.time as Time,
-      value: bar.volume,
+      value: Number.isFinite(bar.volume) ? bar.volume : 0,
       color: bar.close >= bar.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
     }))
 
@@ -188,7 +206,7 @@ export function TradingChart({
 
     // Fit content to view
     chartRef.current?.timeScale().fitContent()
-  }, [bars])
+  }, [safeBars])
 
   useEffect(() => {
     if (!chartRef.current || !candlestickSeriesRef.current || !onHoverPrice) return
@@ -270,7 +288,7 @@ export function TradingChart({
       )}
 
       {/* Empty state */}
-      {!isLoading && bars.length === 0 && (
+      {!isLoading && safeBars.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <p className="text-sm text-white/30">No chart data available</p>
         </div>

@@ -123,6 +123,15 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
   - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+- Chart timeframe stability hardening (index volume normalization + frontend guardrails):
+  - Normalized missing Massive index volume (`SPX`/`NDX`) to `0` in chart API responses to keep response shape stable across all timeframes.
+  - Added numeric bar sanitization in backend chart routes/services.
+  - Added frontend chart data guardrails (sorted/deduped bars, finite checks, safe volume fallback) to prevent rendering crashes on timeframe switches.
+  - Added route regression tests for missing-volume index bars.
+  - `/Users/natekahl/ITM-gd/backend/src/routes/chart.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/charts/chartDataService.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/chart.test.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
 - Options chain loading hotfix (Massive API contract alignment):
   - Fixed Massive single-contract snapshot parsing (`results` object vs array) so `/api/options/:symbol/chain` no longer drops all contracts.
   - Added safer snapshot field handling for partial payloads.
@@ -304,6 +313,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/options/__tests__/zeroDTE.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/ivAnalysis.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/services/options/__tests__/optionsChainFetcher.test.ts`
+- `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/chart.test.ts src/routes/__tests__/options.test.ts`
 - `pnpm --filter titm-ai-coach-backend build`
 - `cd backend && LOG_LEVEL=error pnpm exec tsx -e "import { fetchOptionsChain } from './src/services/options/optionsChainFetcher'; const run=async()=>{for (const s of ['SPX','NDX','SPY','AAPL']){const c=await fetchOptionsChain(s, undefined, 2); console.log(JSON.stringify({symbol:s,expiry:c.expiry,calls:c.options.calls.length,puts:c.options.puts.length,current:c.currentPrice}));}}; run().catch((e)=>{console.error(e?.message||e);process.exit(1);});"`
 - `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
@@ -341,6 +351,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 - Options chain service has been patched to align with Massive snapshot response schema and locally validated with non-empty chains for `SPX`, `NDX`, `SPY`, and `AAPL`.
+- Chart API/renderer path now normalized for index symbols and validated on staging for `SPX`/`NDX` (`1m`, `5m`, `15m`, `1h`, `4h`, `1D`) with stable payload shape.
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
 - Staging live E2E workflow gate is defined in GitHub Actions (`ai-coach-live-e2e.yml`) with strict readiness mode support.
