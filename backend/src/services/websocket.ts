@@ -17,6 +17,7 @@
  *     { "type": "price",  "symbol": "SPX", "price": 5842.50, "change": 12.30, "changePct": 0.21, "volume": 1234567, "timestamp": "..." }
  *     { "type": "status", "marketStatus": "open", "session": "regular", ... }
  *     { "type": "setup_update", "channel": "setups:user-123", "data": { ... } }
+ *     { "type": "setup_detected", "channel": "setups:user-123", "data": { ... } }
  *     { "type": "pong" }
  *     { "type": "error",  "message": "..." }
  *
@@ -31,7 +32,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { logger } from '../lib/logger';
 import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { getMarketStatus } from './marketHours';
-import { subscribeSetupPushEvents, type SetupStatusUpdate } from './setupPushChannel';
+import {
+  subscribeSetupPushEvents,
+  type SetupDetectedUpdate,
+  type SetupStatusUpdate,
+} from './setupPushChannel';
 
 // ============================================
 // TYPES
@@ -153,6 +158,21 @@ function broadcastSetupUpdate(update: SetupStatusUpdate): void {
   const channel = `${SETUP_CHANNEL_PREFIX}${update.userId}`;
   const message = JSON.stringify({
     type: 'setup_update',
+    channel,
+    data: update,
+  });
+
+  for (const [ws, state] of clients) {
+    if (ws.readyState === WebSocket.OPEN && state.subscriptions.has(channel)) {
+      ws.send(message);
+    }
+  }
+}
+
+function broadcastSetupDetected(update: SetupDetectedUpdate): void {
+  const channel = `${SETUP_CHANNEL_PREFIX}${update.userId}`;
+  const message = JSON.stringify({
+    type: 'setup_detected',
     channel,
     data: update,
   });
@@ -367,8 +387,13 @@ export function initWebSocket(server: HTTPServer): void {
   startPolling();
   startHeartbeat();
   unsubscribeSetupEvents = subscribeSetupPushEvents((event) => {
-    if (event.type !== 'setup_update') return;
-    broadcastSetupUpdate(event.payload);
+    if (event.type === 'setup_update') {
+      broadcastSetupUpdate(event.payload);
+      return;
+    }
+    if (event.type === 'setup_detected') {
+      broadcastSetupDetected(event.payload);
+    }
   });
 
   logger.info('WebSocket price server initialized at /ws/prices');

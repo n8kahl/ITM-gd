@@ -118,7 +118,10 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data)
-        if (message?.type === 'setup_update' && message?.channel === setupChannel) {
+        if (
+          (message?.type === 'setup_update' || message?.type === 'setup_detected')
+          && message?.channel === setupChannel
+        ) {
           void fetchSetups()
         }
       } catch {
