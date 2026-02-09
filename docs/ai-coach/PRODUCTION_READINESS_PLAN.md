@@ -5,6 +5,9 @@
 
 This document is a **single source of truth** for taking this repo from **prototype/MVP** to **production-ready**.
 
+For AI Coach V2 feature scope and acceptance criteria, use:
+- `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_REBUILD_SPEC.md` (imported from `/Users/natekahl/Desktop/AI_COACH_V2_REBUILD_SPEC.pdf`)
+
 It contains:
 - A hard, prioritized roadmap (what to fix first and why)
 - A **Codex Execution Spec** (how to run work safely in PR-sized chunks)
@@ -644,4 +647,3 @@ This repo ZIP does not include the `.git` directory. Once this file is in your r
 git add PRODUCTION_READINESS_PLAN.md
 git commit -m "Add production readiness plan + Codex execution spec"
 ```
-

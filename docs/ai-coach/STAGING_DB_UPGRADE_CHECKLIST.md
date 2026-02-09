@@ -2,6 +2,11 @@
 
 Use this checklist to deploy the current upgrade safely to **staging first**.
 
+## Canonical spec reference
+
+- `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_REBUILD_SPEC.md` (imported from `/Users/natekahl/Desktop/AI_COACH_V2_REBUILD_SPEC.pdf`)
+- This checklist covers the staging DB and API rollout slice of that rebuild spec.
+
 ## Scope of this upgrade
 
 This rollout includes:
@@ -113,6 +118,24 @@ select
 5. Open replay view for the entry.
 6. Trigger enrich call and confirm no API error.
 7. Confirm dashboard stats still load.
+8. Open AI Coach scanner and confirm watchlist symbols are loaded (not fixed SPX/NDX only).
+9. Edit scanner watchlist, save, re-run scan, and confirm results use updated symbols.
+10. Track a setup from scanner and confirm it appears via `GET /api/tracked-setups`.
+11. Open Tracked Setups tab in AI Coach and confirm:
+   - status filter switches data (`active/triggered/invalidated/archived/all`)
+   - status transitions persist (e.g., `active -> triggered -> archived -> active`)
+   - notes save + delete actions persist without reload errors
+12. Open Morning Brief tab and confirm:
+   - brief loads from `/api/brief/today`
+   - `Mark Viewed` updates state with `PATCH /api/brief/today`
+   - optional watchlist preview works with `GET /api/brief/today?watchlist=AAPL,NVDA`
+13. Validate setup transition automation (during live market or with controlled test data):
+   - tracked setup with `suggestedTrade.target` is auto-marked `triggered` when price crosses target
+   - tracked setup with `suggestedTrade.stopLoss` is auto-marked `invalidated` when price crosses stop
+   - Tracked Setups panel refreshes in near real-time via WebSocket `setups:{userId}` updates
+14. Validate morning brief scheduler:
+   - after 7:00 AM ET on a trading day, `ai_coach_morning_briefs` has one row per active user/day
+   - re-running worker cycle does not duplicate rows for same `(user_id, market_date)`
 
 ## Step 6: Rollback plan (if needed)
 

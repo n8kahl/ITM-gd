@@ -98,7 +98,7 @@ test.describe('AI Coach — Rate Limiting', () => {
 })
 
 test.describe('AI Coach — WebSocket Connection', () => {
-  test('should accept WebSocket connections at /ws/prices', async ({ page }) => {
+  test('should accept WebSocket connections at /ws/prices with symbols and setup channels', async ({ page }) => {
     // Use the page to test WebSocket (Playwright can't directly connect to WebSockets via request API)
     const wsConnected = await page.evaluate(async (backendUrl) => {
       return new Promise<boolean>((resolve) => {
@@ -110,10 +110,21 @@ test.describe('AI Coach — WebSocket Connection', () => {
 
         ws.onopen = () => {
           clearTimeout(timeout)
-          // Send a subscribe message
+          // Send symbol + setup channel subscriptions
           ws.send(JSON.stringify({ type: 'subscribe', symbols: ['SPX'] }))
+          ws.send(JSON.stringify({ type: 'subscribe', channels: ['setups:user-123'] }))
           // Wait briefly for a response
-          ws.onmessage = () => {
+          ws.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.type === 'error') {
+                ws.close()
+                resolve(false)
+                return
+              }
+            } catch {
+              // ignore parse errors
+            }
             ws.close()
             resolve(true)
           }
