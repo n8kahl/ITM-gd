@@ -81,10 +81,14 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
   const [viewed, setViewed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
+  const [pullDistance, setPullDistance] = useState(0)
   const [isMarkingViewed, setIsMarkingViewed] = useState(false)
   const [hasAutoMarkedViewed, setHasAutoMarkedViewed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
+  const pullStartYRef = useRef<number | null>(null)
+  const isPullingRef = useRef(false)
 
   const loadBrief = useCallback(async (force = false, retryAttempt = 0) => {
     if (!token) return
@@ -202,6 +206,48 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
 
   const modeMeta = BRIEF_MODE_META[briefMode]
 
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const container = contentRef.current
+    if (!container) return
+    if (container.scrollTop > 0 || isRefreshing || isPullRefreshing) return
+
+    pullStartYRef.current = event.touches[0]?.clientY ?? null
+    isPullingRef.current = pullStartYRef.current !== null
+  }, [isPullRefreshing, isRefreshing])
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!isPullingRef.current || pullStartYRef.current === null) return
+
+    const currentY = event.touches[0]?.clientY ?? pullStartYRef.current
+    const delta = currentY - pullStartYRef.current
+
+    if (delta <= 0) {
+      setPullDistance(0)
+      return
+    }
+
+    const eased = Math.min(84, delta * 0.45)
+    setPullDistance(eased)
+  }, [])
+
+  const handleTouchEnd = useCallback(async () => {
+    isPullingRef.current = false
+    pullStartYRef.current = null
+
+    if (pullDistance >= 56 && !isRefreshing && !isPullRefreshing) {
+      setIsPullRefreshing(true)
+      try {
+        await loadBrief(true)
+      } finally {
+        setIsPullRefreshing(false)
+        setPullDistance(0)
+      }
+      return
+    }
+
+    setPullDistance(0)
+  }, [isPullRefreshing, isRefreshing, loadBrief, pullDistance])
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-white/5 flex items-center justify-between">
@@ -249,8 +295,27 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
       <div
         ref={contentRef}
         onScroll={handleAutoMarkViewed}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         className="flex-1 overflow-y-auto p-4 pb-24 space-y-4"
       >
+        {(pullDistance > 0 || isPullRefreshing) && (
+          <div className="flex items-center justify-center -mt-2 mb-1 h-6">
+            <div className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] transition-all',
+              isPullRefreshing
+                ? 'border-emerald-500/35 bg-emerald-500/15 text-emerald-200'
+                : pullDistance >= 56
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-white/15 bg-white/5 text-white/50'
+            )}>
+              <RefreshCw className={cn('w-3 h-3', isPullRefreshing && 'animate-spin')} />
+              {isPullRefreshing ? 'Refreshing...' : pullDistance >= 56 ? 'Release to refresh' : 'Pull to refresh'}
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
             {error}
