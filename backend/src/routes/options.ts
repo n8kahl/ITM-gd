@@ -5,6 +5,7 @@ import {
   fetchExpirationDates
 } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
+import { analyzeZeroDTE } from '../services/options/zeroDTE';
 import {
   analyzePosition,
   analyzePortfolio
@@ -15,6 +16,7 @@ import {
   symbolParamSchema,
   optionsChainQuerySchema,
   gexQuerySchema,
+  zeroDTEQuerySchema,
   analyzePositionSchema,
 } from '../schemas/optionsValidation';
 
@@ -58,6 +60,43 @@ router.get(
       logger.error('Error in expirations endpoint', { error: error?.message || String(error) });
       if (error.message.includes('fetch')) { return res.status(503).json({ error: 'Data provider error', message: 'Unable to fetch expiration dates. Please try again.', retryAfter: 30 }); }
       return res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch expirations. Please try again.' });
+    }
+  }
+);
+
+router.get(
+  '/:symbol/0dte',
+  authenticateToken,
+  checkQueryLimit,
+  validateParams(symbolParamSchema),
+  validateQuery(zeroDTEQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const validatedQuery = (req as any).validatedQuery as {
+        strike?: number;
+        type?: 'call' | 'put';
+      };
+
+      const analysis = await analyzeZeroDTE(symbol, {
+        strike: validatedQuery?.strike,
+        type: validatedQuery?.type,
+      });
+
+      return res.json(analysis);
+    } catch (error: any) {
+      logger.error('Error in options 0DTE endpoint', { error: error?.message || String(error) });
+      if (error.message.includes('No options') || error.message.includes('No price data')) {
+        return res.status(503).json({
+          error: 'Data unavailable',
+          message: 'Unable to run 0DTE analysis right now. Please try again shortly.',
+          retryAfter: 30,
+        });
+      }
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to analyze 0DTE structure. Please try again.',
+      });
     }
   }
 );

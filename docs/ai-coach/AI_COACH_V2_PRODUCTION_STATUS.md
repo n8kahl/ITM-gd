@@ -96,6 +96,20 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+- 0DTE toolkit backend slice (Phase 3 sequential start):
+  - New service `analyzeZeroDTE(symbol, { strike?, type? })` with:
+    - expected move used/remaining
+    - theta clock projections (15-min intervals)
+    - gamma risk profile and leverage estimate
+    - top 0DTE contracts by volume
+  - New API route: `GET /api/options/:symbol/0dte`
+  - New ChatKit function: `get_zero_dte_analysis`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/zeroDTE.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
 - Real-time setup detector service:
   - Implements ORB, break-retest, VWAP play, gap-fill, volume climax, level-test, gamma squeeze, and SPX/NDX opening-drive detectors
   - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`
@@ -251,9 +265,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/workerHealthAlertWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/zeroDTE.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/macro.test.ts`
-  - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure`, `get_zero_dte_analysis` coverage)
   - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
 
 ### Commands
@@ -263,6 +278,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
+- `npm test -- --runInBand src/services/options/__tests__/zeroDTE.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
@@ -369,7 +385,34 @@ Current checklist:
 - [x] Staging GitHub secrets are configured.
 - [x] Staging backend URL identified (`https://itm-gd-staging.up.railway.app`).
 - [x] Local strict live-gate run executed against staging backend URL (`pnpm test:e2e:ai-coach-live`, strict mode).
-- [ ] `ai-coach-live-e2e.yml` GitHub workflow dispatch executed (pending default-branch workflow visibility).
+- [x] `ai-coach-live-e2e.yml` GitHub workflow dispatch executed from `main`.
 - [x] Workflow evidence captured in this status doc.
 - [x] Staging migration-hardening verification completed.
-- [ ] Production promotion recommendation recorded.
+- [x] Production promotion recommendation recorded.
+
+GitHub live-gate evidence (`main`, 2026-02-09):
+
+- Workflow: `AI Coach Live E2E`
+- Run URL: `https://github.com/n8kahl/ITM-gd/actions/runs/21830645434`
+- Commit SHA: `9224cdfdf468e9eaae4dbd0ecb39be6282e6aa47`
+- Trigger: `workflow_dispatch` with `backend_url=https://itm-gd-staging.up.railway.app`
+- Result: `success` (`ai-coach-live` job passed)
+- Notable test annotation: `16 passed`
+
+Production promotion recommendation:
+
+- Recommendation: `GO` for production promotion of current AI Coach V2 implemented scope.
+- Basis:
+  - branch merged into `main`
+  - strict staging gate validated locally and in GitHub workflow from default branch
+  - staging health/auth/scanner/brief/tracked detector pathways validated end-to-end
+
+Production deployment evidence (`main`, 2026-02-09):
+
+- Railway target: `TradeITM / production / ITM-gd`
+- Production domain: `https://itm-gd-production.up.railway.app`
+- Deploy command: `cd backend && railway up --ci`
+- Verification snapshots:
+  - `GET /health` -> `200`
+  - `GET /health/detailed` -> `200`
+  - `GET /api/watchlist` (unauthenticated) -> `401` (expected)

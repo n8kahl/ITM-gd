@@ -134,6 +134,70 @@ export interface GEXProfile {
   expirationsAnalyzed: string[];
 }
 
+export interface ZeroDTEExpectedMove {
+  totalExpectedMove: number;
+  usedMove: number;
+  usedPct: number;
+  remainingMove: number;
+  remainingPct: number;
+  minutesLeft: number;
+  openPrice: number;
+  currentPrice: number;
+  atmStrike: number | null;
+}
+
+export interface ZeroDTEThetaProjection {
+  time: string;
+  estimatedValue: number;
+  thetaDecay: number;
+  pctRemaining: number;
+}
+
+export interface ZeroDTEThetaClock {
+  strike: number;
+  type: 'call' | 'put';
+  currentValue: number;
+  thetaPerDay: number;
+  projections: ZeroDTEThetaProjection[];
+}
+
+export interface ZeroDTEGammaProfile {
+  strike: number;
+  type: 'call' | 'put';
+  currentDelta: number;
+  gammaPerDollar: number;
+  dollarDeltaChangePerPoint: number;
+  leverageMultiplier: number;
+  riskLevel: 'low' | 'moderate' | 'high' | 'extreme';
+}
+
+export interface ZeroDTEContractSnapshot {
+  strike: number;
+  type: 'call' | 'put';
+  last: number;
+  volume: number;
+  openInterest: number;
+  gamma: number | null;
+  theta: number | null;
+}
+
+export interface ZeroDTEAnalysis {
+  symbol: string;
+  marketDate: string;
+  hasZeroDTE: boolean;
+  message: string;
+  expectedMove: ZeroDTEExpectedMove | null;
+  thetaClock: ZeroDTEThetaClock | null;
+  gammaProfile: ZeroDTEGammaProfile | null;
+  topContracts: ZeroDTEContractSnapshot[];
+}
+
+export interface ZeroDTEAnalysisRequest {
+  strike?: number;
+  type?: 'call' | 'put';
+  now?: Date;
+}
+
 // Black-Scholes inputs
 export interface BlackScholesInputs {
   spotPrice: number;        // Current underlying price

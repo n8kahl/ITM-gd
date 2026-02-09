@@ -2,6 +2,7 @@ import { calculateLevels } from '../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../services/levels/fetcher';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
+import { analyzeZeroDTE } from '../services/options/zeroDTE';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
@@ -75,6 +76,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_gamma_exposure':
       return await handleGetGammaExposure(typedArgs);
+
+    case 'get_zero_dte_analysis':
+      return await handleGetZeroDTEAnalysis(typedArgs);
 
     case 'analyze_position':
       return await handleAnalyzePosition(typedArgs);
@@ -337,6 +341,37 @@ async function handleGetGammaExposure(args: {
   } catch (error: any) {
     return {
       error: 'Failed to calculate gamma exposure',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_zero_dte_analysis
+ * Returns expected move usage, theta clock, and gamma profile for current-day expiration.
+ */
+async function handleGetZeroDTEAnalysis(args: {
+  symbol: string;
+  strike?: number;
+  type?: 'call' | 'put';
+}) {
+  const { symbol, strike, type } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
+  try {
+    const analysis = await withTimeout(
+      () => analyzeZeroDTE(symbol, { strike, type }),
+      FUNCTION_TIMEOUT_MS,
+      'get_zero_dte_analysis',
+    );
+
+    return analysis;
+  } catch (error: any) {
+    return {
+      error: 'Failed to analyze 0DTE structure',
       message: error.message,
     };
   }

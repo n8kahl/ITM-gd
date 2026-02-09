@@ -123,6 +123,32 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_zero_dte_analysis',
+      description: 'Analyze 0DTE option structure for a symbol. Returns expected move usage, remaining move, theta decay projections, and gamma risk profile.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for 0DTE analysis (e.g., SPX, NDX, SPY, QQQ)'
+          },
+          strike: {
+            type: 'number',
+            description: 'Optional strike to focus the theta/gamma analysis. If omitted, uses ATM.'
+          },
+          type: {
+            type: 'string',
+            enum: ['call', 'put'],
+            description: 'Optional contract type to focus the analysis.'
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'analyze_position',
       description: 'Analyze an options position or portfolio. Calculates P&L, Greeks, max gain/loss, breakeven, and risk assessment. Use this when the user asks about their position performance or risk.',
       parameters: {

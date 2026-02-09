@@ -24,6 +24,10 @@ jest.mock('../../services/options/gexCalculator', () => ({
   calculateGEXProfile: jest.fn(),
 }));
 
+jest.mock('../../services/options/zeroDTE', () => ({
+  analyzeZeroDTE: jest.fn(),
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn(),
@@ -31,8 +35,10 @@ jest.mock('../../services/options/positionAnalyzer', () => ({
 
 import optionsRouter from '../options';
 import { calculateGEXProfile } from '../../services/options/gexCalculator';
+import { analyzeZeroDTE } from '../../services/options/zeroDTE';
 
 const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
+const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
 
 const app = express();
 app.use(express.json());
@@ -86,6 +92,48 @@ describe('Options Routes', () => {
 
       expect(res.status).toBe(503);
       expect(res.body.error).toBe('Data unavailable');
+    });
+  });
+
+  describe('GET /api/options/:symbol/0dte', () => {
+    it('returns 0DTE analysis for valid symbol and query', async () => {
+      mockAnalyzeZeroDTE.mockResolvedValue({
+        symbol: 'SPX',
+        marketDate: '2026-02-09',
+        hasZeroDTE: true,
+        message: 'ok',
+        expectedMove: {
+          totalExpectedMove: 25,
+          usedMove: 10,
+          usedPct: 40,
+          remainingMove: 18,
+          remainingPct: 72,
+          minutesLeft: 120,
+          openPrice: 6000,
+          currentPrice: 6010,
+          atmStrike: 6010,
+        },
+        thetaClock: null,
+        gammaProfile: null,
+        topContracts: [],
+      });
+
+      const res = await request(app).get('/api/options/spx/0dte?strike=6000&type=call');
+
+      expect(res.status).toBe(200);
+      expect(res.body.symbol).toBe('SPX');
+      expect(mockAnalyzeZeroDTE).toHaveBeenCalledWith('SPX', {
+        strike: 6000,
+        type: 'call',
+      });
+    });
+
+    it('returns 400 when type query is invalid', async () => {
+      const res = await request(app).get('/api/options/spx/0dte?type=invalid');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect(mockAnalyzeZeroDTE).not.toHaveBeenCalled();
     });
   });
 });

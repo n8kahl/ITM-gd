@@ -26,6 +26,11 @@ export const gexQuerySchema = z.object({
   forceRefresh: booleanQuerySchema.optional().default(false),
 });
 
+export const zeroDTEQuerySchema = z.object({
+  strike: z.coerce.number().positive().optional(),
+  type: z.enum(['call', 'put']).optional(),
+});
+
 export const analyzePositionSchema = z.object({
   position: z.object({
     symbol: z.string().min(1).max(10),

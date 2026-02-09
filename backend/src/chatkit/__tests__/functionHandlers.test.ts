@@ -46,6 +46,10 @@ jest.mock('../../services/options/gexCalculator', () => ({
   calculateGEXProfile: jest.fn()
 }));
 
+jest.mock('../../services/options/zeroDTE', () => ({
+  analyzeZeroDTE: jest.fn()
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn()
@@ -55,6 +59,7 @@ import { calculateLevels } from '../../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../../services/levels/fetcher';
 import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../../services/options/gexCalculator';
+import { analyzeZeroDTE } from '../../services/options/zeroDTE';
 import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
@@ -62,6 +67,7 @@ const mockFetchIntradayData = fetchIntradayData as jest.MockedFunction<typeof fe
 const mockFetchDailyData = fetchDailyData as jest.MockedFunction<typeof fetchDailyData>;
 const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
 const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
+const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 
@@ -341,6 +347,55 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to calculate gamma exposure');
       expect(result).toHaveProperty('message', 'Symbol not supported');
+    });
+  });
+
+  describe('get_zero_dte_analysis', () => {
+    it('should return 0DTE analysis payload', async () => {
+      mockAnalyzeZeroDTE.mockResolvedValue({
+        symbol: 'SPX',
+        marketDate: '2026-02-09',
+        hasZeroDTE: true,
+        message: '0DTE toolkit generated for SPX (2026-02-09).',
+        expectedMove: {
+          totalExpectedMove: 32.4,
+          usedMove: 12.1,
+          usedPct: 37.35,
+          remainingMove: 18.7,
+          remainingPct: 57.72,
+          minutesLeft: 170,
+          openPrice: 6000,
+          currentPrice: 6012.1,
+          atmStrike: 6010,
+        },
+        thetaClock: null,
+        gammaProfile: null,
+        topContracts: [],
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_zero_dte_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX', strike: 6000, type: 'call' }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('hasZeroDTE', true);
+      expect(mockAnalyzeZeroDTE).toHaveBeenCalledWith('SPX', {
+        strike: 6000,
+        type: 'call',
+      });
+    });
+
+    it('should handle 0DTE analysis errors gracefully', async () => {
+      mockAnalyzeZeroDTE.mockRejectedValue(new Error('No options contracts found'));
+
+      const result = await executeFunctionCall({
+        name: 'get_zero_dte_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to analyze 0DTE structure');
+      expect(result).toHaveProperty('message', 'No options contracts found');
     });
   });
 
