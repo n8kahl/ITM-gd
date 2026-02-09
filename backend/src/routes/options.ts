@@ -4,6 +4,7 @@ import {
   fetchOptionsChain,
   fetchExpirationDates
 } from '../services/options/optionsChainFetcher';
+import { calculateGEXProfile } from '../services/options/gexCalculator';
 import {
   analyzePosition,
   analyzePortfolio
@@ -13,6 +14,7 @@ import { validateParams, validateQuery, validateBody } from '../middleware/valid
 import {
   symbolParamSchema,
   optionsChainQuerySchema,
+  gexQuerySchema,
   analyzePositionSchema,
 } from '../schemas/optionsValidation';
 
@@ -65,6 +67,70 @@ router.get(
       logger.error('Error in expirations endpoint', { error: error?.message || String(error) });
       if (error.message.includes('fetch')) { return res.status(503).json({ error: 'Data provider error', message: 'Unable to fetch expiration dates. Please try again.', retryAfter: 30 }); }
       return res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch expirations. Please try again.' });
+    }
+  }
+);
+
+router.get(
+  '/:symbol/gex',
+  authenticateToken,
+  checkQueryLimit,
+  validateParams(symbolParamSchema),
+  validateQuery(gexQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      if (!SUPPORTED_SYMBOLS.includes(symbol)) {
+        return res.status(404).json({
+          error: 'Symbol not found',
+          message: `Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`,
+        });
+      }
+
+      const validatedQuery = (req as any).validatedQuery as {
+        expiry?: string;
+        strikeRange: number;
+        maxExpirations: number;
+        forceRefresh: boolean;
+      };
+
+      const profile = await calculateGEXProfile(symbol, {
+        expiry: validatedQuery?.expiry,
+        strikeRange: validatedQuery?.strikeRange,
+        maxExpirations: validatedQuery?.maxExpirations,
+        forceRefresh: validatedQuery?.forceRefresh,
+      });
+
+      return res.json(profile);
+    } catch (error: any) {
+      logger.error('Error in options GEX endpoint', { error: error?.message || String(error) });
+
+      if (error.message.includes('not supported')) {
+        return res.status(404).json({ error: 'Symbol not found', message: error.message });
+      }
+      if (
+        error.message.includes('No options')
+        || error.message.includes('No price data')
+        || error.message.includes('Insufficient options data')
+      ) {
+        return res.status(503).json({
+          error: 'Data unavailable',
+          message: 'Unable to calculate GEX right now. Please try again shortly.',
+          retryAfter: 30,
+        });
+      }
+      if (error.message.includes('Massive.com') || error.message.includes('fetch')) {
+        return res.status(503).json({
+          error: 'Data provider error',
+          message: 'Unable to fetch options data. Please try again in a moment.',
+          retryAfter: 30,
+        });
+      }
+
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to calculate gamma exposure. Please try again.',
+      });
     }
   }
 );

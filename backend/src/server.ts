@@ -123,6 +123,7 @@ app.get('/', (_req: Request, res: Response) => {
       health: '/health', healthReady: '/health/ready', levels: '/api/levels/:symbol', chat: '/api/chat/message',
       sessions: '/api/chat/sessions', sessionMessages: '/api/chat/sessions/:sessionId/messages',
       optionsChain: '/api/options/:symbol/chain', optionsExpirations: '/api/options/:symbol/expirations',
+      optionsGex: '/api/options/:symbol/gex',
       positionsAnalyze: '/api/positions/analyze', chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',

@@ -87,6 +87,42 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_gamma_exposure',
+      description: 'Get gamma exposure (GEX) profile for SPX or NDX. Returns GEX by strike, flip point, max GEX strike, key levels, and gamma regime.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Index symbol for GEX analysis (SPX or NDX)'
+          },
+          expiry: {
+            type: 'string',
+            description: 'Optional specific expiry date (YYYY-MM-DD). If omitted, analyzes multiple nearby expirations.'
+          },
+          strikeRange: {
+            type: 'number',
+            description: 'Number of strikes above/below spot to include per expiration (default: 30)',
+            default: 30
+          },
+          maxExpirations: {
+            type: 'number',
+            description: 'Maximum nearby expirations to aggregate when expiry is omitted (default: 6)',
+            default: 6
+          },
+          forceRefresh: {
+            type: 'boolean',
+            description: 'Bypass cache and force fresh calculation (default: false)',
+            default: false
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'analyze_position',
       description: 'Analyze an options position or portfolio. Calculates P&L, Greeks, max gain/loss, breakeven, and risk assessment. Use this when the user asks about their position performance or risk.',
       parameters: {

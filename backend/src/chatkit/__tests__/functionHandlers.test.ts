@@ -42,6 +42,10 @@ jest.mock('../../services/options/optionsChainFetcher', () => ({
   fetchOptionsChain: jest.fn()
 }));
 
+jest.mock('../../services/options/gexCalculator', () => ({
+  calculateGEXProfile: jest.fn()
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn()
@@ -50,12 +54,14 @@ jest.mock('../../services/options/positionAnalyzer', () => ({
 import { calculateLevels } from '../../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../../services/levels/fetcher';
 import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
+import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
 const mockFetchIntradayData = fetchIntradayData as jest.MockedFunction<typeof fetchIntradayData>;
 const mockFetchDailyData = fetchDailyData as jest.MockedFunction<typeof fetchDailyData>;
 const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
+const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 
@@ -278,6 +284,63 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to fetch options chain');
       expect(result).toHaveProperty('message', 'No options found');
+    });
+  });
+
+  describe('get_gamma_exposure', () => {
+    it('should return gamma exposure profile', async () => {
+      mockCalculateGEXProfile.mockResolvedValue({
+        symbol: 'SPX',
+        spotPrice: 6012.5,
+        gexByStrike: [
+          {
+            strike: 6000,
+            gexValue: 1500000,
+            callGamma: 0.0042,
+            putGamma: 0.0039,
+            callOI: 12000,
+            putOI: 10500,
+          },
+        ],
+        flipPoint: 5990,
+        maxGEXStrike: 6000,
+        keyLevels: [{ strike: 6000, gexValue: 1500000, type: 'magnet' }],
+        regime: 'positive_gamma',
+        implication: 'Positive gamma regime.',
+        calculatedAt: '2026-02-09T17:00:00.000Z',
+        expirationsAnalyzed: ['2026-02-10', '2026-02-11'],
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_gamma_exposure',
+        arguments: JSON.stringify({ symbol: 'SPX', strikeRange: 25 }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('spotPrice', 6012.5);
+      expect(result).toHaveProperty('regime', 'positive_gamma');
+      expect(result).toHaveProperty('flipPoint', 5990);
+      expect(result).toHaveProperty('maxGEXStrike', 6000);
+      expect(result.keyLevels).toHaveLength(1);
+      expect(result.gexByStrike).toHaveLength(1);
+      expect(mockCalculateGEXProfile).toHaveBeenCalledWith('SPX', {
+        expiry: undefined,
+        strikeRange: 25,
+        maxExpirations: undefined,
+        forceRefresh: false,
+      });
+    });
+
+    it('should handle calculation errors gracefully', async () => {
+      mockCalculateGEXProfile.mockRejectedValue(new Error('Symbol not supported'));
+
+      const result = await executeFunctionCall({
+        name: 'get_gamma_exposure',
+        arguments: JSON.stringify({ symbol: 'AAPL' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to calculate gamma exposure');
+      expect(result).toHaveProperty('message', 'Symbol not supported');
     });
   });
 

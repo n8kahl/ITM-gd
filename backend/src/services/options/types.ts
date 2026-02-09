@@ -106,6 +106,34 @@ export interface OptionsChainResponse {
   };
 }
 
+export interface GEXStrikeData {
+  strike: number;
+  gexValue: number;
+  callGamma: number;
+  putGamma: number;
+  callOI: number;
+  putOI: number;
+}
+
+export interface GEXKeyLevel {
+  strike: number;
+  gexValue: number;
+  type: 'support' | 'resistance' | 'magnet';
+}
+
+export interface GEXProfile {
+  symbol: string;
+  spotPrice: number;
+  gexByStrike: GEXStrikeData[];
+  flipPoint: number | null;
+  maxGEXStrike: number | null;
+  keyLevels: GEXKeyLevel[];
+  regime: 'positive_gamma' | 'negative_gamma';
+  implication: string;
+  calculatedAt: string;
+  expirationsAnalyzed: string[];
+}
+
 // Black-Scholes inputs
 export interface BlackScholesInputs {
   spotPrice: number;        // Current underlying price
