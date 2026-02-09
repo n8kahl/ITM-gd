@@ -15,6 +15,7 @@ import {
   Calendar,
   Workflow,
 } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { GEXChart } from './gex-chart'
 import { WidgetActionBar } from './widget-action-bar'
@@ -82,32 +83,54 @@ function parseNullableNumeric(value: unknown): number | null {
 // ============================================
 
 export function WidgetCard({ widget }: { widget: WidgetData }) {
+  let content: any = null
   switch (widget.type) {
     case 'key_levels':
-      return <KeyLevelsCard data={widget.data} />
+      content = <KeyLevelsCard data={widget.data} />
+      break
     case 'position_summary':
-      return <PositionSummaryCard data={widget.data} />
+      content = <PositionSummaryCard data={widget.data} />
+      break
     case 'pnl_tracker':
-      return <PnLTrackerCard data={widget.data} />
+      content = <PnLTrackerCard data={widget.data} />
+      break
     case 'market_overview':
-      return <MarketOverviewCard data={widget.data} />
+      content = <MarketOverviewCard data={widget.data} />
+      break
     case 'alert_status':
-      return <AlertStatusCard data={widget.data} />
+      content = <AlertStatusCard data={widget.data} />
+      break
     case 'macro_context':
-      return <MacroContextCard data={widget.data} />
+      content = <MacroContextCard data={widget.data} />
+      break
     case 'options_chain':
-      return <OptionsChainCard data={widget.data} />
+      content = <OptionsChainCard data={widget.data} />
+      break
     case 'gex_profile':
-      return <GEXProfileCard data={widget.data} />
+      content = <GEXProfileCard data={widget.data} />
+      break
     case 'scan_results':
-      return <ScanResultsCard data={widget.data} />
+      content = <ScanResultsCard data={widget.data} />
+      break
     case 'current_price':
-      return <CurrentPriceCard data={widget.data} />
+      content = <CurrentPriceCard data={widget.data} />
+      break
     case 'spx_game_plan':
-      return <SPXGamePlanCard data={widget.data} />
+      content = <SPXGamePlanCard data={widget.data} />
+      break
     default:
       return null
   }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+    >
+      {content}
+    </motion.div>
+  )
 }
 
 // ============================================

@@ -162,6 +162,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Added explicit tooltips/aria-labels for widget action buttons.
   - Added consistent press/hover motion feedback for faster interaction confidence.
   - `/Users/natekahl/ITM-gd/components/ai-coach/widget-action-bar.tsx`
+- Widget card presentation polish:
+  - Added entrance animations to widget cards for smoother chat-to-data transitions.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
 
