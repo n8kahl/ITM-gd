@@ -128,6 +128,7 @@ Branch: `codex/trade-journal-implementation`
 - Interactive calendar heatmap with month/quarter/year views, richer day-level stats, annotations, and journal day deep-linking.
 - Trade replay upgrades: skip-to-entry/exit controls, live P&L ticker, stop/target overlays, and MFE/MAE markers.
 - End-of-day auto-journal endpoint plus in-app post-close draft detection and pending-draft expiry auto-dismiss.
+- Accessibility hardening in journal modals: focus-trap behavior, Escape close, and dialog semantics.
 
 ## Remaining
 - Server-side scheduled auto-journal execution + push-notification delivery at 4:05 PM ET is not yet wired (current flow auto-runs in-app post-close).

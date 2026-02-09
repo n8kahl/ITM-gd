@@ -18,11 +18,12 @@ import {
   TrendingDown,
   ChevronDown,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import type { JournalEntry, MarketContextSnapshot } from '@/lib/types/journal'
 import { TradeReplayChart } from '@/components/journal/trade-replay-chart'
+import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 // ============================================
 // HELPERS
@@ -203,9 +204,16 @@ interface SessionContextMessage {
 }
 
 export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDetailSheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
   const [sessionMessages, setSessionMessages] = useState<SessionContextMessage[]>([])
   const [sessionContextLoading, setSessionContextLoading] = useState(false)
   const [sessionContextError, setSessionContextError] = useState<string | null>(null)
+
+  useFocusTrap({
+    active: Boolean(entry),
+    containerRef: panelRef,
+    onEscape: onClose,
+  })
 
   useEffect(() => {
     if (!entry) return
@@ -283,10 +291,15 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
 
         {/* Sheet */}
         <motion.div
+          ref={panelRef}
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Trade entry details"
+          tabIndex={-1}
           className="relative w-full max-w-[600px] h-[100dvh] max-h-[100dvh] bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
         >
           {/* Header */}
@@ -307,7 +320,12 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
                 {new Date(entry.trade_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors">
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors"
+              aria-label="Close trade details"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>

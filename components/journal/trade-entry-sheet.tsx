@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, Bot, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
@@ -15,6 +15,7 @@ import { QuickEntryForm } from '@/components/journal/quick-entry-form'
 import { FullEntryForm } from '@/components/journal/full-entry-form'
 import type { AIFieldKey, AIFieldStatus, TradeEntryFormData } from '@/components/journal/trade-entry-types'
 import { createAppError, notifyAppError, type AppError } from '@/lib/error-handler'
+import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 const QUICK_TAGS = [
   'Breakout',
@@ -171,6 +172,7 @@ export function TradeEntrySheet({
   prefill,
   onRequestEditEntry,
 }: TradeEntrySheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
   const [form, setForm] = useState<TradeEntryFormData>(EMPTY_FORM)
   const [sourceSessionId, setSourceSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<'quick' | 'full'>('quick')
@@ -181,6 +183,12 @@ export function TradeEntrySheet({
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<UploadProgress | null>(null)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+
+  useFocusTrap({
+    active: open,
+    containerRef: panelRef,
+    onEscape: onClose,
+  })
 
   useEffect(() => {
     if (!open) return
@@ -557,10 +565,15 @@ export function TradeEntrySheet({
         />
 
         <motion.div
+          ref={panelRef}
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={editEntry ? 'Edit trade entry' : 'Log trade entry'}
+          tabIndex={-1}
           className="relative w-full max-w-[680px] h-[100dvh] max-h-[100dvh] bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
         >
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
