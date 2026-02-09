@@ -34,6 +34,20 @@ export const mockSupabaseSession = {
   },
 }
 
+export const e2eBypassUserId = '00000000-0000-4000-8000-000000000001'
+export const e2eBypassToken = `e2e:${e2eBypassUserId}`
+
+export const e2eBypassSession = {
+  ...mockSupabaseSession,
+  access_token: e2eBypassToken,
+  refresh_token: 'e2e-refresh-token',
+  user: {
+    ...mockSupabaseSession.user,
+    id: e2eBypassUserId,
+    email: 'e2e-member@example.com',
+  },
+}
+
 /**
  * Mock Discord profile data (what's stored after role sync)
  */
@@ -53,10 +67,25 @@ export const mockDiscordProfile = {
 /**
  * Get the Supabase storage key for the current project
  */
-function getSupabaseStorageKey(): string {
-  // The key format is: sb-{project-ref}-auth-token
-  // In tests, we use a generic key that the app should recognize
-  return 'sb-localhost-auth-token'
+function getSupabaseStorageKeys(): string[] {
+  const keys = new Set<string>([
+    'sb-localhost-auth-token',
+  ])
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (supabaseUrl) {
+    try {
+      const hostname = new URL(supabaseUrl).hostname
+      const projectRef = hostname.split('.')[0]
+      if (projectRef) {
+        keys.add(`sb-${projectRef}-auth-token`)
+      }
+    } catch {
+      // Ignore invalid URL in test bootstrap.
+    }
+  }
+
+  return Array.from(keys)
 }
 
 /**
@@ -67,17 +96,28 @@ export async function authenticateAsMember(page: Page): Promise<void> {
   // Navigate to a page first to set localStorage for the correct origin
   await page.goto('/')
 
+  const storageKeys = getSupabaseStorageKeys()
+
   // Set the Supabase session in localStorage
-  await page.evaluate((session) => {
+  await page.evaluate(({ session, keys }) => {
     // Supabase stores the session as a JSON string
-    localStorage.setItem('sb-localhost-auth-token', JSON.stringify(session))
+    keys.forEach((key: string) => {
+      localStorage.setItem(key, JSON.stringify(session))
+    })
 
     // Also set any other auth-related items that might be needed
     localStorage.setItem('supabase.auth.token', JSON.stringify({
       currentSession: session,
       expiresAt: session.expires_at,
     }))
-  }, mockSupabaseSession)
+  }, { session: mockSupabaseSession, keys: storageKeys })
+}
+
+/**
+ * Authenticate using backend E2E bypass token (for backend-integrated test mode).
+ */
+export async function authenticateAsE2EBypassMember(page: Page): Promise<void> {
+  await authenticateWithSession(page, e2eBypassSession)
 }
 
 /**
@@ -85,14 +125,17 @@ export async function authenticateAsMember(page: Page): Promise<void> {
  */
 export async function authenticateWithSession(page: Page, session: typeof mockSupabaseSession): Promise<void> {
   await page.goto('/')
+  const storageKeys = getSupabaseStorageKeys()
 
-  await page.evaluate((sessionData) => {
-    localStorage.setItem('sb-localhost-auth-token', JSON.stringify(sessionData))
+  await page.evaluate(({ sessionData, keys }) => {
+    keys.forEach((key: string) => {
+      localStorage.setItem(key, JSON.stringify(sessionData))
+    })
     localStorage.setItem('supabase.auth.token', JSON.stringify({
       currentSession: sessionData,
       expiresAt: sessionData.expires_at,
     }))
-  }, session)
+  }, { sessionData: session, keys: storageKeys })
 }
 
 /**
@@ -119,38 +162,48 @@ export async function clearMemberAuth(page: Page): Promise<void> {
  * Check if member is authenticated (has valid session in localStorage)
  */
 export async function isMemberAuthenticated(page: Page): Promise<boolean> {
-  return await page.evaluate(() => {
-    const session = localStorage.getItem('sb-localhost-auth-token')
-    if (!session) return false
+  const storageKeys = getSupabaseStorageKeys()
+  return await page.evaluate((keys) => {
+    for (const key of keys) {
+      const session = localStorage.getItem(key)
+      if (!session) continue
 
-    try {
-      const parsed = JSON.parse(session)
-      // Check if session is expired
-      if (parsed.expires_at && parsed.expires_at < Math.floor(Date.now() / 1000)) {
-        return false
+      try {
+        const parsed = JSON.parse(session)
+        // Check if session is expired
+        if (parsed.expires_at && parsed.expires_at < Math.floor(Date.now() / 1000)) {
+          continue
+        }
+        return !!parsed.access_token
+      } catch {
+        // Keep scanning other keys
       }
-      return !!parsed.access_token
-    } catch {
-      return false
     }
-  })
+    return false
+  }, storageKeys)
 }
 
 /**
  * Get the current user from localStorage
  */
 export async function getCurrentUser(page: Page): Promise<typeof mockSupabaseSession.user | null> {
-  return await page.evaluate(() => {
-    const session = localStorage.getItem('sb-localhost-auth-token')
-    if (!session) return null
+  const storageKeys = getSupabaseStorageKeys()
+  return await page.evaluate((keys) => {
+    for (const key of keys) {
+      const session = localStorage.getItem(key)
+      if (!session) continue
 
-    try {
-      const parsed = JSON.parse(session)
-      return parsed.user || null
-    } catch {
-      return null
+      try {
+        const parsed = JSON.parse(session)
+        if (parsed.user) {
+          return parsed.user
+        }
+      } catch {
+        // Keep scanning other keys
+      }
     }
-  })
+    return null
+  }, storageKeys)
 }
 
 /**

@@ -1,5 +1,47 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const aiCoachMode = process.env.E2E_AI_COACH_MODE || 'mock'
+const isAICoachLiveMode = aiCoachMode === 'live'
+const defaultLiveBackendUrl = 'http://localhost:3101'
+const e2eBackendUrl = process.env.E2E_BACKEND_URL
+  || process.env.NEXT_PUBLIC_AI_COACH_API_URL
+  || (isAICoachLiveMode ? defaultLiveBackendUrl : 'http://localhost:3001')
+
+if (isAICoachLiveMode && !process.env.E2E_BACKEND_URL) {
+  process.env.E2E_BACKEND_URL = e2eBackendUrl
+}
+
+function shouldStartLocalBackendServer(): boolean {
+  if (!isAICoachLiveMode) return false
+
+  try {
+    const hostname = new URL(e2eBackendUrl).hostname
+    return hostname === 'localhost' || hostname === '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
+const webServers: NonNullable<ReturnType<typeof defineConfig>['webServer']> = [
+  {
+    command: `E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true NEXT_PUBLIC_AI_COACH_API_URL=${e2eBackendUrl} pnpm dev`,
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000,
+  },
+]
+
+if (shouldStartLocalBackendServer()) {
+  const backendPort = new URL(e2eBackendUrl).port || '3001'
+  webServers.push({
+    command: `PORT=${backendPort} E2E_BYPASS_AUTH=true npm run dev`,
+    cwd: 'backend',
+    url: e2eBackendUrl,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000,
+  })
+}
+
 /**
  * Playwright E2E Test Configuration
  *
@@ -51,7 +93,12 @@ export default defineConfig({
     {
       name: 'ai-coach',
       testMatch: /ai-coach.*\.spec\.ts/,
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        extraHTTPHeaders: {
+          'x-e2e-bypass-auth': '1',
+        },
+      },
     },
     // All other tests
     {
@@ -66,10 +113,5 @@ export default defineConfig({
       use: { ...devices['iPhone 13'] },
     },
   ],
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  webServer: webServers,
 })

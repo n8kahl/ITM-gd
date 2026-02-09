@@ -370,7 +370,7 @@ test.describe('AI Coach — Scanner Workflow', () => {
 
     await page.getByText('Gamma squeeze continuation above overnight high').click()
     await page.getByRole('button', { name: 'Track This Setup' }).click()
-    await expect(page.getByText('Tracked')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Tracked' }).nth(1)).toBeVisible()
 
     await page.getByRole('button', { name: 'Tracked' }).first().click()
     await expect(page.getByText('Tracked Setups')).toBeVisible()

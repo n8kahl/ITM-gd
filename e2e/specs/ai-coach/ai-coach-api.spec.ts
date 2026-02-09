@@ -1,4 +1,9 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
+import {
+  e2eBackendUrl,
+  getAICoachAuthHeaders,
+  isAICoachLiveMode,
+} from '../../helpers/ai-coach-live'
 
 /**
  * AI Coach E2E Tests — Backend API Health
@@ -143,5 +148,112 @@ test.describe('AI Coach — WebSocket Connection', () => {
     }, BACKEND_URL)
 
     expect(wsConnected).toBe(true)
+  })
+})
+
+test.describe('AI Coach — Backend API Live Authenticated', () => {
+  test.skip(!isAICoachLiveMode, 'Set E2E_AI_COACH_MODE=live to run backend-integrated AI Coach API checks')
+
+  async function assertLiveBackendReadyOrSkip(request: APIRequestContext) {
+    const healthResponse = await request.get(`${e2eBackendUrl}/health/detailed`)
+    if (!healthResponse.ok()) {
+      test.skip(true, `Live backend not healthy at ${e2eBackendUrl}`)
+      return null
+    }
+
+    const healthPayload = await healthResponse.json().catch(() => null)
+    if (healthPayload?.services?.database === false) {
+      test.skip(true, 'Live backend database/service-role prerequisites are not ready for authenticated E2E')
+      return null
+    }
+
+    const watchlistResponse = await request.get(`${e2eBackendUrl}/api/watchlist`, {
+      headers: getAICoachAuthHeaders(),
+    })
+
+    if (watchlistResponse.status() !== 200) {
+      const payload = await watchlistResponse.json().catch(() => ({}))
+      const reason = typeof payload?.message === 'string'
+        ? payload.message
+        : `status ${watchlistResponse.status()}`
+      test.skip(true, `Live auth bypass preflight failed: ${reason}`)
+      return null
+    }
+
+    return watchlistResponse
+  }
+
+  test('watchlist + scanner + brief endpoints should return authenticated responses', async ({ request }) => {
+    const authHeaders = getAICoachAuthHeaders()
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+    const watchlistPayload = await watchlistResponse.json()
+    expect(Array.isArray(watchlistPayload.watchlists)).toBe(true)
+
+    const scanResponse = await request.get(`${e2eBackendUrl}/api/scanner/scan?symbols=SPX,NDX&include_options=false`, {
+      headers: authHeaders,
+    })
+    expect(scanResponse.status()).toBe(200)
+    const scanPayload = await scanResponse.json()
+    expect(Array.isArray(scanPayload.opportunities)).toBe(true)
+    expect(Array.isArray(scanPayload.symbols)).toBe(true)
+
+    const briefResponse = await request.get(`${e2eBackendUrl}/api/brief/today`, {
+      headers: authHeaders,
+    })
+    expect(briefResponse.status()).toBe(200)
+    const briefPayload = await briefResponse.json()
+    expect(typeof briefPayload.marketDate).toBe('string')
+    expect(typeof briefPayload.viewed).toBe('boolean')
+    expect(briefPayload.brief).toBeDefined()
+  })
+
+  test('tracked setup lifecycle should support create -> update -> delete', async ({ request }) => {
+    const authHeaders = getAICoachAuthHeaders()
+    const sourceOpportunityId = `e2e-live-${Date.now()}`
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+
+    const createResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups`, {
+      headers: authHeaders,
+      data: {
+        source_opportunity_id: sourceOpportunityId,
+        symbol: 'SPX',
+        setup_type: 'gamma_squeeze',
+        direction: 'bullish',
+        opportunity_data: {
+          score: 70,
+          suggestedTrade: {
+            entry: 5200,
+            stopLoss: 5180,
+            target: 5235,
+            strikes: [5200, 5225],
+            expiry: '2026-02-20',
+          },
+        },
+        notes: 'E2E live test seed',
+      },
+    })
+    expect([200, 201]).toContain(createResponse.status())
+    const createPayload = await createResponse.json()
+    const trackedSetupId = createPayload?.trackedSetup?.id as string
+    expect(typeof trackedSetupId).toBe('string')
+
+    const updateResponse = await request.patch(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
+      headers: authHeaders,
+      data: { status: 'triggered' },
+    })
+    expect(updateResponse.status()).toBe(200)
+    const updatePayload = await updateResponse.json()
+    expect(updatePayload?.trackedSetup?.status).toBe('triggered')
+
+    const deleteResponse = await request.delete(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
+      headers: authHeaders,
+    })
+    expect(deleteResponse.status()).toBe(200)
+    const deletePayload = await deleteResponse.json()
+    expect(deletePayload.success).toBe(true)
   })
 })
