@@ -77,7 +77,8 @@ export async function authenticateToken(
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     const env = getEnv();
 
-    const bypassEnabled = env.E2E_BYPASS_AUTH && env.NODE_ENV !== 'production';
+    const bypassEnabled = env.E2E_BYPASS_AUTH
+      && (env.NODE_ENV !== 'production' || env.E2E_BYPASS_ALLOW_IN_PRODUCTION);
     const bypassPrefix = env.E2E_BYPASS_TOKEN_PREFIX;
     if (bypassEnabled && token.startsWith(bypassPrefix)) {
       const bypassPayload = token.slice(bypassPrefix.length).trim();

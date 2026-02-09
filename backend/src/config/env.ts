@@ -64,6 +64,7 @@ const envSchema = z.object({
 
   // E2E auth bypass (non-production only; for Playwright/backend-integrated tests)
   E2E_BYPASS_AUTH: booleanFromEnv.default(false),
+  E2E_BYPASS_ALLOW_IN_PRODUCTION: booleanFromEnv.default(false),
   E2E_BYPASS_TOKEN_PREFIX: z.string().default('e2e:'),
   E2E_BYPASS_SHARED_SECRET: z.string().optional(),
 });
