@@ -18,7 +18,8 @@ import {
   TrendingDown,
   ChevronDown,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import type { JournalEntry, MarketContextSnapshot } from '@/lib/types/journal'
 import { TradeReplayChart } from '@/components/journal/trade-replay-chart'
@@ -194,14 +195,81 @@ interface EntryDetailSheetProps {
   onDelete: (entryId: string) => void
 }
 
+interface SessionContextMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  created_at: string
+}
+
 export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDetailSheetProps) {
-  if (!entry) return null
+  const [sessionMessages, setSessionMessages] = useState<SessionContextMessage[]>([])
+  const [sessionContextLoading, setSessionContextLoading] = useState(false)
+  const [sessionContextError, setSessionContextError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!entry) return
+
+    const originalOverflow = document.body.style.overflow
+    const originalOverscrollBehavior = document.body.style.overscrollBehavior
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'contain'
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.body.style.overscrollBehavior = originalOverscrollBehavior
+    }
+  }, [entry])
+
+  useEffect(() => {
+    if (!entry?.session_id) return
+
+    const controller = new AbortController()
+
+    const loadSessionContext = async () => {
+      setSessionContextLoading(true)
+      setSessionContextError(null)
+
+      try {
+        const response = await fetch(`/api/members/journal/session-context/${entry.session_id}?limit=8`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload?.error || 'Failed to load AI session context')
+        }
+
+        const payload = await response.json()
+        const messages = payload?.data?.messages
+        if (!Array.isArray(messages)) {
+          throw new Error('Invalid AI session context response')
+        }
+
+        setSessionMessages(messages)
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setSessionMessages([])
+        setSessionContextError(error instanceof Error ? error.message : 'Failed to load AI session context')
+      } finally {
+        setSessionContextLoading(false)
+      }
+    }
+
+    void loadSessionContext()
+
+    return () => controller.abort()
+  }, [entry?.id, entry?.session_id])
+
+  if (!entry || typeof document === 'undefined') return null
 
   const isWinner = (entry.pnl ?? 0) > 0
   const isLoss = (entry.pnl ?? 0) < 0
   const grade = entry.ai_analysis?.grade
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex justify-end">
         {/* Overlay */}
@@ -219,7 +287,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 350, damping: 35 }}
-          className="relative w-full max-w-[600px] h-full bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
+          className="relative w-full max-w-[600px] h-[100dvh] max-h-[100dvh] bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
@@ -366,6 +434,65 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
               </div>
             )}
 
+            {entry.session_id && (
+              <section className="glass-card rounded-xl p-4 border-emerald-500/15">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-medium uppercase tracking-wider text-emerald-300">
+                    AI Coach Context
+                  </h4>
+                  <Link
+                    href={`/members/ai-coach?context=journal&entryId=${entry.id}&session=${entry.session_id}`}
+                    className="text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
+                  >
+                    Open Session
+                  </Link>
+                </div>
+
+                {sessionContextLoading && (
+                  <p className="text-[11px] text-muted-foreground">Loading AI session context...</p>
+                )}
+
+                {!sessionContextLoading && sessionContextError && (
+                  <p className="text-[11px] text-amber-300">{sessionContextError}</p>
+                )}
+
+                {!sessionContextLoading && !sessionContextError && sessionMessages.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">No messages found for this AI Coach session.</p>
+                )}
+
+                {!sessionContextLoading && !sessionContextError && sessionMessages.length > 0 && (
+                  <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {sessionMessages.map((message) => {
+                      const isUserMessage = message.role === 'user'
+                      return (
+                        <div
+                          key={message.id}
+                          className={cn(
+                            'rounded-lg border px-2.5 py-2',
+                            isUserMessage
+                              ? 'border-champagne/20 bg-champagne/10'
+                              : 'border-emerald-500/20 bg-emerald-500/10',
+                          )}
+                        >
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wide text-white/60">
+                              {isUserMessage ? 'You' : message.role === 'assistant' ? 'AI Coach' : 'System'}
+                            </span>
+                            <span className="text-[10px] text-white/30">
+                              {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-ivory/85">
+                            {message.content}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Notes Accordion */}
             <div className="space-y-0">
               <NotesAccordion title="Setup Notes" content={entry.setup_notes} />
@@ -410,6 +537,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

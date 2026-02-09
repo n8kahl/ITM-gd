@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Plus, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
@@ -17,6 +18,10 @@ import { ImportWizard } from '@/components/journal/import-wizard'
 import { DraftEntriesPanel } from '@/components/journal/draft-entries-panel'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
+import {
+  parseJournalPrefillFromSearchParams,
+  type JournalPrefillPayload,
+} from '@/lib/journal/ai-coach-bridge'
 import {
   createAppError,
   createAppErrorFromResponse,
@@ -106,12 +111,15 @@ function getStoredViewPreference(): JournalFilters['view'] {
 }
 
 export default function JournalPage() {
+  const searchParams = useSearchParams()
+  const openedPrefillKeyRef = useRef<string | null>(null)
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [preferredDesktopView, setPreferredDesktopView] = useState<JournalFilters['view']>(DEFAULT_FILTERS.view)
   const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
 
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)
+  const [entryPrefill, setEntryPrefill] = useState<JournalPrefillPayload | null>(null)
   const [editEntry, setEditEntry] = useState<JournalEntry | null>(null)
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
 
@@ -143,6 +151,19 @@ export default function JournalPage() {
     setPreferredDesktopView(filters.view)
     window.localStorage.setItem(VIEW_PREFERENCE_KEY, filters.view)
   }, [filters.view])
+
+  useEffect(() => {
+    const prefill = parseJournalPrefillFromSearchParams(searchParams)
+    if (!prefill) return
+
+    const prefillKey = searchParams.toString()
+    if (openedPrefillKeyRef.current === prefillKey) return
+    openedPrefillKeyRef.current = prefillKey
+
+    setEditEntry(null)
+    setEntryPrefill(prefill)
+    setEntrySheetOpen(true)
+  }, [searchParams])
 
   const loadEntries = useCallback(async () => {
     try {
@@ -257,10 +278,12 @@ export default function JournalPage() {
 
   const handleNewEntry = useCallback(() => {
     setEditEntry(null)
+    setEntryPrefill(null)
     setEntrySheetOpen(true)
   }, [])
 
   const handleEditEntry = useCallback((entry: JournalEntry) => {
+    setEntryPrefill(null)
     setEditEntry(entry)
     setEntrySheetOpen(true)
   }, [])
@@ -375,10 +398,16 @@ export default function JournalPage() {
 
       <TradeEntrySheet
         open={entrySheetOpen}
-        onClose={() => { setEntrySheetOpen(false); setEditEntry(null) }}
+        onClose={() => {
+          setEntrySheetOpen(false)
+          setEditEntry(null)
+          setEntryPrefill(null)
+        }}
         onSave={handleSave}
         editEntry={editEntry}
+        prefill={entryPrefill}
         onRequestEditEntry={(entry) => {
+          setEntryPrefill(null)
           setEditEntry(entry)
           setEntrySheetOpen(true)
         }}

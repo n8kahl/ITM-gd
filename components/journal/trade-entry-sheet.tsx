@@ -4,11 +4,13 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, Bot, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { uploadScreenshot, type UploadProgress } from '@/lib/uploads/supabaseStorage'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import type { JournalEntry, AITradeAnalysis } from '@/lib/types/journal'
+import type { JournalPrefillPayload } from '@/lib/journal/ai-coach-bridge'
 import { QuickEntryForm } from '@/components/journal/quick-entry-form'
 import { FullEntryForm } from '@/components/journal/full-entry-form'
 import type { AIFieldKey, AIFieldStatus, TradeEntryFormData } from '@/components/journal/trade-entry-types'
@@ -68,6 +70,7 @@ interface TradeEntrySheetProps {
   onClose: () => void
   onSave: (data: Record<string, unknown>) => Promise<JournalEntry | null>
   editEntry?: JournalEntry | null
+  prefill?: JournalPrefillPayload | null
   onRequestEditEntry?: (entry: JournalEntry) => void
 }
 
@@ -165,9 +168,11 @@ export function TradeEntrySheet({
   onClose,
   onSave,
   editEntry,
+  prefill,
   onRequestEditEntry,
 }: TradeEntrySheetProps) {
   const [form, setForm] = useState<TradeEntryFormData>(EMPTY_FORM)
+  const [sourceSessionId, setSourceSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<'quick' | 'full'>('quick')
   const [saving, setSaving] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
@@ -176,6 +181,21 @@ export function TradeEntrySheet({
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<UploadProgress | null>(null)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const originalOverflow = document.body.style.overflow
+    const originalOverscrollBehavior = document.body.style.overscrollBehavior
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'contain'
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.body.style.overscrollBehavior = originalOverscrollBehavior
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -216,23 +236,38 @@ export function TradeEntrySheet({
         tags: editEntry.tags || [],
         rating: editEntry.rating || 0,
       })
+      setSourceSessionId(editEntry.session_id || null)
       setAiAnalysis(editEntry.ai_analysis || null)
       setScreenshotPreview(editEntry.screenshot_url || null)
       setMode('full')
     } else {
+      const today = new Date().toISOString().split('T')[0]
+      const hasAdvancedPrefill = Boolean(
+        prefill?.stop_loss
+        || prefill?.initial_target
+        || prefill?.strategy,
+      )
+
       setForm({
         ...EMPTY_FORM,
-        trade_date: new Date().toISOString().split('T')[0],
+        trade_date: prefill?.trade_date || today,
+        symbol: prefill?.symbol || '',
+        direction: prefill?.direction === 'short' ? 'short' : 'long',
+        entry_price: prefill?.entry_price || '',
+        stop_loss: prefill?.stop_loss || '',
+        initial_target: prefill?.initial_target || '',
+        strategy: prefill?.strategy || '',
       })
+      setSourceSessionId(prefill?.session_id || null)
       setAiAnalysis(null)
       setScreenshotPreview(null)
-      setMode('quick')
+      setMode(hasAdvancedPrefill ? 'full' : 'quick')
     }
 
     setAiFieldStatus({})
     setUploadStatus(null)
     setAnalyzeError(null)
-  }, [editEntry, open])
+  }, [editEntry, open, prefill])
 
   const handleScreenshotDrop = useCallback(async (accepted: File[]) => {
     if (accepted.length === 0) return
@@ -451,12 +486,16 @@ export function TradeEntrySheet({
       payload.ai_analysis = aiAnalysis
     }
 
+    if (!editEntry && sourceSessionId) {
+      payload.session_id = sourceSessionId
+    }
+
     if (editEntry) {
       payload.id = editEntry.id
     }
 
     return payload
-  }, [aiAnalysis, editEntry, form, uploadStatus?.storagePath])
+  }, [aiAnalysis, editEntry, form, sourceSessionId, uploadStatus?.storagePath])
 
   const submit = useCallback(async (saveMode: 'quick' | 'full') => {
     if (!form.symbol.trim()) return
@@ -503,11 +542,12 @@ export function TradeEntrySheet({
     }))
   }, [])
 
-  if (!open) return null
+  if (typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex justify-end">
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -521,7 +561,7 @@ export function TradeEntrySheet({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 350, damping: 35 }}
-          className="relative w-full max-w-[680px] h-full bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
+          className="relative w-full max-w-[680px] h-[100dvh] max-h-[100dvh] bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
         >
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
             <div className="space-y-1">
@@ -690,6 +730,8 @@ export function TradeEntrySheet({
           )}
         </motion.div>
       </div>
-    </AnimatePresence>
+      )}
+    </AnimatePresence>,
+    document.body,
   )
 }
