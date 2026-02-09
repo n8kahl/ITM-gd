@@ -37,8 +37,8 @@ export function Skeleton({
           <div className="h-1 w-32 bg-white/10 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 w-1/2 animate-[shimmer_1.5s_infinite]" />
           </div>
-          <span className="text-xs font-mono text-emerald-500/60 tracking-widest uppercase">
-            Initializing Terminal
+          <span className="text-xs font-medium text-emerald-500/60 tracking-widest uppercase">
+            Loading
           </span>
         </div>
       </div>

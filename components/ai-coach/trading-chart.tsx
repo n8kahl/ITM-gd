@@ -85,7 +85,7 @@ export function TradingChart({
       layout: {
         background: { type: ColorType.Solid, color: CHART_COLORS.background },
         textColor: CHART_COLORS.textColor,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontFamily: "'Inter', system-ui, sans-serif",
         fontSize: 11,
       },
       grid: {

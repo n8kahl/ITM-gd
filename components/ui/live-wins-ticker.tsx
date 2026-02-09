@@ -114,7 +114,7 @@ export const LiveWinsTicker = memo(function LiveWinsTicker() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
         </div>
-        <span className="text-xs font-mono tracking-widest text-emerald-400/80 uppercase">
+        <span className="text-xs font-semibold tracking-widest text-emerald-400/80 uppercase">
           Live Member Wins
         </span>
       </div>

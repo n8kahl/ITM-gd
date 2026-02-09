@@ -73,7 +73,7 @@ export function ChartToolbar({
             onClick={() => onTimeframeChange(tf.value)}
             disabled={isLoading}
             className={cn(
-              'px-2 py-1 text-xs font-mono rounded transition-all',
+              'px-2 py-1 text-xs rounded transition-all',
               timeframe === tf.value
                 ? 'bg-emerald-500/15 text-emerald-500'
                 : 'text-white/30 hover:text-white/50'

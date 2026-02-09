@@ -934,4 +934,13 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
   }
+
+  /* Hidden scrollbar — content still scrollable */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

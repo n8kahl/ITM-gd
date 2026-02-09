@@ -87,7 +87,13 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState<JournalFilters>(() => {
+    // Default to card view on small screens
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return { ...DEFAULT_FILTERS, view: 'cards' }
+    }
+    return DEFAULT_FILTERS
+  })
 
   // Sheet states
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)

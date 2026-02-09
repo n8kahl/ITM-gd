@@ -57,8 +57,8 @@ export function AdminSidebar() {
            </div>
            <div>
              <span className="text-base font-bold text-white tracking-tight">TradeITM</span>
-             <span className="text-[10px] text-emerald-500 block font-mono tracking-widest uppercase">
-               Admin Terminal
+             <span className="text-[10px] text-emerald-500 block tracking-widest uppercase font-medium">
+               Admin Panel
              </span>
            </div>
         </div>
@@ -73,7 +73,7 @@ export function AdminSidebar() {
 
         {navigation.slice(1).map((group: any) => (
           <div key={group.group}>
-            <h3 className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/20 font-mono">
+            <h3 className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/20">
               {group.group}
             </h3>
             <div className="space-y-1">
