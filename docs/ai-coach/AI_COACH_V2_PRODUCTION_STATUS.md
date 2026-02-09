@@ -139,6 +139,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Enhanced resize handle visibility for the split-panel divider.
   - Improved textarea resize smoothness using requestAnimationFrame + height transition.
   - Updated empty-state copy and prompt button micro-interactions.
+  - Added persistent SPX mini ticker in chat header (60-second refresh) with one-click SPX game plan action.
   - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
 - Tab accessibility and keyboard navigation:
   - Added ARIA tab semantics (`tablist`/`tab`/`tabpanel`) to center tools rail.

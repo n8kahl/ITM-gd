@@ -26,7 +26,7 @@ import { CenterPanel } from '@/components/ai-coach/center-panel'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
-import { analyzeScreenshot as apiAnalyzeScreenshot } from '@/lib/api/ai-coach'
+import { analyzeScreenshot as apiAnalyzeScreenshot, getChartData } from '@/lib/api/ai-coach'
 import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
@@ -342,6 +342,19 @@ function ChatArea({
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [placeholderBucket, setPlaceholderBucket] = useState<keyof typeof CHAT_PLACEHOLDERS>(() => getEasternPlaceholderBucket())
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
+  const [spxHeaderTicker, setSpxHeaderTicker] = useState<{
+    price: number | null
+    change: number | null
+    changePct: number | null
+    isLoading: boolean
+    error: string | null
+  }>({
+    price: null,
+    change: null,
+    changePct: null,
+    isLoading: true,
+    error: null,
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
@@ -398,6 +411,49 @@ function ChatArea({
       window.clearInterval(bucketInterval)
     }
   }, [])
+
+  const loadSPXHeaderTicker = useCallback(async () => {
+    if (!session?.access_token) return
+
+    try {
+      let data = await getChartData('SPX', '1m', session.access_token)
+      if (data.bars.length < 2) {
+        data = await getChartData('SPX', '1D', session.access_token)
+      }
+
+      if (data.bars.length === 0) {
+        throw new Error('No SPX bars available')
+      }
+
+      const last = data.bars[data.bars.length - 1]
+      const previous = data.bars.length > 1 ? data.bars[data.bars.length - 2] : null
+      const change = previous ? last.close - previous.close : 0
+      const changePct = previous && previous.close !== 0 ? (change / previous.close) * 100 : null
+
+      setSpxHeaderTicker({
+        price: Number(last.close.toFixed(2)),
+        change: Number(change.toFixed(2)),
+        changePct: changePct != null ? Number(changePct.toFixed(2)) : null,
+        isLoading: false,
+        error: null,
+      })
+    } catch {
+      setSpxHeaderTicker((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: 'SPX feed offline',
+      }))
+    }
+  }, [session?.access_token])
+
+  useEffect(() => {
+    if (!session?.access_token) return
+    void loadSPXHeaderTicker()
+    const interval = window.setInterval(() => {
+      void loadSPXHeaderTicker()
+    }, 60_000)
+    return () => window.clearInterval(interval)
+  }, [loadSPXHeaderTicker, session?.access_token])
 
   useEffect(() => {
     const handleFocusInput = () => {
@@ -617,6 +673,29 @@ function ChatArea({
               {currentSessionId ? sessions.find(s => s.id === currentSessionId)?.title || 'Chat' : 'AI Coach'}
             </h3>
           </div>
+          <button
+            onClick={() => onSendMessage('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')}
+            className="hidden xl:flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/15 transition-colors"
+            title="Refresh SPX game plan"
+          >
+            {spxHeaderTicker.isLoading ? (
+              <span>SPX loading...</span>
+            ) : spxHeaderTicker.error ? (
+              <span>{spxHeaderTicker.error}</span>
+            ) : (
+              <>
+                <span>SPX {spxHeaderTicker.price?.toLocaleString()}</span>
+                {spxHeaderTicker.change != null && (
+                  <span className={cn(
+                    spxHeaderTicker.change >= 0 ? 'text-emerald-300' : 'text-red-300'
+                  )}>
+                    {spxHeaderTicker.change >= 0 ? '+' : ''}{spxHeaderTicker.change.toFixed(2)}
+                    {spxHeaderTicker.changePct != null ? ` (${spxHeaderTicker.change >= 0 ? '+' : ''}${spxHeaderTicker.changePct.toFixed(2)}%)` : ''}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
           <p className="hidden xl:block text-[10px] text-white/30 whitespace-nowrap">
             Ctrl/Cmd+K focus | Ctrl/Cmd+/ sessions | Ctrl/Cmd+B collapse
           </p>
