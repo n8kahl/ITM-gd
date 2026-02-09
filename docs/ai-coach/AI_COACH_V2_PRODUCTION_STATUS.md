@@ -1,7 +1,7 @@
 # AI Coach V2 Production Status
 
 **Last Updated:** 2026-02-09  
-**Branch:** `Aiupgrade`  
+**Branch:** `main`  
 **Intent:** Track implementation status, production gates, and test evidence for V2 rollout.
 **Canonical Implementation Spec:** `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_REBUILD_SPEC.md` (source import from `/Users/natekahl/Desktop/AI_COACH_V2_REBUILD_SPEC.pdf`)
 
@@ -123,6 +123,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
   - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+- Options chain loading hotfix (Massive API contract alignment):
+  - Fixed Massive single-contract snapshot parsing (`results` object vs array) so `/api/options/:symbol/chain` no longer drops all contracts.
+  - Added safer snapshot field handling for partial payloads.
+  - Added options contracts pagination for expiry-specific pulls (required for full strike coverage near ATM).
+  - Added fast nearest-expiration lookup to avoid heavy full-chain pagination in standard chain requests.
+  - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/optionsChainFetcher.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/optionsChainFetcher.test.ts`
 - Real-time setup detector service:
   - Implements ORB, break-retest, VWAP play, gap-fill, volume climax, level-test, gamma squeeze, and SPX/NDX opening-drive detectors
   - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`
@@ -280,6 +288,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/zeroDTE.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/ivAnalysis.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/optionsChainFetcher.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/macro.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure`, `get_zero_dte_analysis`, `get_iv_analysis` coverage)
@@ -294,6 +303,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/zeroDTE.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/ivAnalysis.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
+- `pnpm --filter titm-ai-coach-backend test -- src/services/options/__tests__/optionsChainFetcher.test.ts`
+- `pnpm --filter titm-ai-coach-backend build`
+- `cd backend && LOG_LEVEL=error pnpm exec tsx -e "import { fetchOptionsChain } from './src/services/options/optionsChainFetcher'; const run=async()=>{for (const s of ['SPX','NDX','SPY','AAPL']){const c=await fetchOptionsChain(s, undefined, 2); console.log(JSON.stringify({symbol:s,expiry:c.expiry,calls:c.options.calls.length,puts:c.options.puts.length,current:c.currentPrice}));}}; run().catch((e)=>{console.error(e?.message||e);process.exit(1);});"`
 - `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
@@ -328,6 +340,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Setup detector service is running with ORB/break-retest/VWAP/gap-fill/volume-climax/level-test/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
+- Options chain service has been patched to align with Massive snapshot response schema and locally validated with non-empty chains for `SPX`, `NDX`, `SPY`, and `AAPL`.
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
 - Staging live E2E workflow gate is defined in GitHub Actions (`ai-coach-live-e2e.yml`) with strict readiness mode support.
@@ -338,6 +351,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Optional CI operationalization step:
   - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
+- Deploy the options-chain hotfix to staging and production, then re-run authenticated `/api/options/:symbol/chain` validation on live hosts.
 
 ## 4) Surgical Next Plan
 

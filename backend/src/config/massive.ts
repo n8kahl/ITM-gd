@@ -128,6 +128,13 @@ export interface OptionsContractsResponse {
 
 export interface OptionsSnapshot {
   ticker: string;
+  details?: {
+    ticker?: string;
+    contract_type?: 'call' | 'put';
+    exercise_style?: string;
+    expiration_date?: string;
+    strike_price?: number;
+  };
   day: {
     open: number;
     high: number;
@@ -155,7 +162,8 @@ export interface OptionsSnapshot {
 
 export interface OptionsSnapshotResponse {
   status: string;
-  results: OptionsSnapshot[];
+  results: OptionsSnapshot[] | OptionsSnapshot | null;
+  next_url?: string;
 }
 
 export interface MassiveTickerReference {
@@ -180,6 +188,7 @@ export async function getOptionsContracts(
   limit: number = 250
 ): Promise<OptionsContract[]> {
   try {
+    const MAX_PAGES = 20;
     const params: any = {
       underlying_ticker: underlyingTicker,
       limit,
@@ -195,7 +204,31 @@ export async function getOptionsContracts(
       { params }
     );
 
-    return response.data.results || [];
+    // Without a specific expiry we only need a single page in most call-sites.
+    // Full pagination is only required when pulling all strikes for one expiry.
+    if (!expirationDate) {
+      return response.data.results || [];
+    }
+
+    const contracts: OptionsContract[] = [...(response.data.results || [])];
+    let nextUrl = response.data.next_url;
+    let page = 1;
+
+    while (nextUrl && page < MAX_PAGES) {
+      const nextResponse = await massiveClient.get<OptionsContractsResponse>(nextUrl);
+      contracts.push(...(nextResponse.data.results || []));
+      nextUrl = nextResponse.data.next_url;
+      page += 1;
+    }
+
+    if (nextUrl) {
+      logger.warn(`Options contracts pagination truncated for ${underlyingTicker}`, {
+        pagesFetched: page,
+        maxPages: MAX_PAGES
+      });
+    }
+
+    return contracts;
   } catch (error: any) {
     logger.error(`Failed to fetch options contracts for ${underlyingTicker}`, { error: error.message });
     throw error;
@@ -208,12 +241,46 @@ export async function getOptionsSnapshot(
   optionTicker?: string
 ): Promise<OptionsSnapshot[]> {
   try {
+    const MAX_PAGES = 20;
+    const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
+      if (!results) return [];
+      return Array.isArray(results) ? results : [results];
+    };
+
     const url = optionTicker
       ? `/v3/snapshot/options/${underlyingTicker}/${optionTicker}`
       : `/v3/snapshot/options/${underlyingTicker}`;
 
-    const response = await massiveClient.get<OptionsSnapshotResponse>(url);
-    return response.data.results || [];
+    const response = await massiveClient.get<OptionsSnapshotResponse>(url, optionTicker ? undefined : {
+      params: {
+        limit: 250,
+      },
+    });
+
+    const firstPage = normalizeResults(response.data.results);
+    if (optionTicker) {
+      return firstPage;
+    }
+
+    const snapshots: OptionsSnapshot[] = [...firstPage];
+    let nextUrl = response.data.next_url;
+    let page = 1;
+
+    while (nextUrl && page < MAX_PAGES) {
+      const nextResponse = await massiveClient.get<OptionsSnapshotResponse>(nextUrl);
+      snapshots.push(...normalizeResults(nextResponse.data.results));
+      nextUrl = nextResponse.data.next_url;
+      page += 1;
+    }
+
+    if (nextUrl) {
+      logger.warn(`Options snapshot pagination truncated for ${underlyingTicker}`, {
+        pagesFetched: page,
+        maxPages: MAX_PAGES
+      });
+    }
+
+    return snapshots;
   } catch (error: any) {
     logger.error(`Failed to fetch options snapshot for ${underlyingTicker}`, { error: error.message });
     throw error;
@@ -225,12 +292,95 @@ export async function getOptionsExpirations(
   underlyingTicker: string
 ): Promise<string[]> {
   try {
-    // Fetch contracts and extract unique expiration dates
-    const contracts = await getOptionsContracts(underlyingTicker);
-    const expirations = [...new Set(contracts.map(c => c.expiration_date))];
-    return expirations.sort();
+    const MAX_PAGES = 20;
+    const TARGET_EXPIRATIONS = 24;
+    const today = new Date().toISOString().split('T')[0];
+    const expirations = new Set<string>();
+
+    let response = await massiveClient.get<OptionsContractsResponse>(
+      '/v3/reference/options/contracts',
+      {
+        params: {
+          underlying_ticker: underlyingTicker,
+          sort: 'expiration_date',
+          order: 'asc',
+          limit: 1000,
+          'expiration_date.gte': today,
+        },
+      },
+    );
+
+    for (const contract of response.data.results || []) {
+      if (contract.expiration_date >= today) {
+        expirations.add(contract.expiration_date);
+      }
+    }
+
+    let nextUrl = response.data.next_url;
+    let page = 1;
+
+    while (nextUrl && page < MAX_PAGES && expirations.size < TARGET_EXPIRATIONS) {
+      response = await massiveClient.get<OptionsContractsResponse>(nextUrl);
+      for (const contract of response.data.results || []) {
+        if (contract.expiration_date >= today) {
+          expirations.add(contract.expiration_date);
+        }
+      }
+      nextUrl = response.data.next_url;
+      page += 1;
+    }
+
+    if (nextUrl) {
+      logger.warn(`Options expirations pagination truncated for ${underlyingTicker}`, {
+        pagesFetched: page,
+        maxPages: MAX_PAGES,
+        expirationsCollected: expirations.size,
+      });
+    }
+
+    const expirationList = [...expirations];
+    if (expirationList.length === 0) return [];
+
+    const uniqueSorted = expirationList.sort();
+    // Backfill from unsorted fallback endpoint if filtered query returns sparse data.
+    if (uniqueSorted.length < 2) {
+      const fallbackContracts = await getOptionsContracts(underlyingTicker);
+      for (const contract of fallbackContracts) {
+        if (contract.expiration_date >= today) {
+          expirations.add(contract.expiration_date);
+        }
+      }
+    }
+
+    const sorted = [...expirations].sort();
+    return sorted;
   } catch (error: any) {
     logger.error(`Failed to fetch expirations for ${underlyingTicker}`, { error: error.message });
+    throw error;
+  }
+}
+
+export async function getNearestOptionsExpiration(
+  underlyingTicker: string
+): Promise<string | null> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const response = await massiveClient.get<OptionsContractsResponse>(
+      '/v3/reference/options/contracts',
+      {
+        params: {
+          underlying_ticker: underlyingTicker,
+          sort: 'expiration_date',
+          order: 'asc',
+          limit: 1,
+          'expiration_date.gte': today,
+        },
+      },
+    );
+
+    return response.data.results?.[0]?.expiration_date ?? null;
+  } catch (error: any) {
+    logger.error(`Failed to fetch nearest expiration for ${underlyingTicker}`, { error: error.message });
     throw error;
   }
 }

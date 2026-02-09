@@ -3,6 +3,7 @@ import {
   getOptionsContracts,
   getOptionsSnapshot,
   getOptionsExpirations,
+  getNearestOptionsExpiration,
   OptionsContract as MassiveOptionsContract,
   OptionsSnapshot
 } from '../../config/massive';
@@ -78,16 +79,17 @@ async function getCurrentPrice(symbol: string): Promise<number> {
  * Find nearest expiration date
  */
 async function getNearestExpiration(symbol: string): Promise<string> {
-  const expirations = await getOptionsExpirations(symbol);
+  const nearest = await getNearestOptionsExpiration(symbol);
+  if (nearest) return nearest;
 
+  // Fallback for providers that do not support expiration_date.gte sorting params.
+  const expirations = await getOptionsExpirations(symbol);
   if (expirations.length === 0) {
     throw new Error(`No options expirations found for ${symbol}`);
   }
 
-  // Return first future expiration
   const today = new Date().toISOString().split('T')[0];
   const futureExpirations = expirations.filter(exp => exp >= today);
-
   if (futureExpirations.length === 0) {
     throw new Error(`No future expirations available for ${symbol}`);
   }
@@ -161,35 +163,39 @@ function convertToOptionContract(
   symbol: string
 ): OptionContract {
   const { strike_price, expiration_date, contract_type } = massiveContract;
-  const { last_quote, day, greeks, implied_volatility, open_interest } = snapshot;
+  const day = snapshot.day || { open: 0, high: 0, low: 0, close: 0, volume: 0 };
+  const lastQuote = snapshot.last_quote || { bid: 0, ask: 0, bid_size: 0, ask_size: 0, last_updated: 0 };
+  const greeks = snapshot.greeks;
+  const impliedVolatility = snapshot.implied_volatility;
+  const openInterest = snapshot.open_interest;
 
   // Calculate intrinsic and extrinsic value
   const intrinsicValue = contract_type === 'call'
     ? Math.max(0, currentPrice - strike_price)
     : Math.max(0, strike_price - currentPrice);
 
-  const last = day.close || 0;
+  const last = day.close ?? 0;
   const extrinsicValue = Math.max(0, last - intrinsicValue);
 
   // Use Massive.com Greeks if available, otherwise calculate with Black-Scholes
   let contractGreeks: { delta: number; gamma: number; theta: number; vega: number; rho: number };
 
-  if (greeks && implied_volatility) {
+  if (greeks && impliedVolatility) {
     contractGreeks = {
-      delta: greeks.delta,
-      gamma: greeks.gamma,
-      theta: greeks.theta,
-      vega: greeks.vega,
+      delta: greeks.delta ?? 0,
+      gamma: greeks.gamma ?? 0,
+      theta: greeks.theta ?? 0,
+      vega: greeks.vega ?? 0,
       rho: 0 // Massive.com doesn't provide rho
     };
-  } else if (implied_volatility) {
+  } else if (impliedVolatility) {
     // Calculate Greeks using Black-Scholes
     contractGreeks = calculateContractGreeks(
       currentPrice,
       strike_price,
       expiration_date,
       contract_type,
-      implied_volatility,
+      impliedVolatility,
       symbol
     );
   } else {
@@ -203,11 +209,11 @@ function convertToOptionContract(
     expiry: expiration_date,
     type: contract_type,
     last,
-    bid: last_quote.bid,
-    ask: last_quote.ask,
-    volume: day.volume || 0,
-    openInterest: open_interest || 0,
-    impliedVolatility: implied_volatility || 0,
+    bid: lastQuote.bid ?? 0,
+    ask: lastQuote.ask ?? 0,
+    volume: day.volume ?? 0,
+    openInterest: openInterest ?? 0,
+    impliedVolatility: impliedVolatility ?? 0,
     delta: contractGreeks.delta,
     gamma: contractGreeks.gamma,
     theta: contractGreeks.theta,
@@ -277,8 +283,12 @@ export async function fetchOptionsChain(
       const snapshotPromises = batch.map(async contract => {
         try {
           const snapshotData = await getOptionsSnapshot(symbol, contract.ticker);
-          if (snapshotData.length > 0) {
-            snapshots.set(contract.ticker, snapshotData[0]);
+          const snapshotRows = Array.isArray(snapshotData)
+            ? snapshotData
+            : (snapshotData ? [snapshotData as unknown as OptionsSnapshot] : []);
+
+          if (snapshotRows.length > 0) {
+            snapshots.set(contract.ticker, snapshotRows[0]);
           }
         } catch (error) {
           logger.error(`Failed to fetch snapshot for ${contract.ticker}`, { error: error instanceof Error ? error.message : String(error) });
@@ -322,6 +332,15 @@ export async function fetchOptionsChain(
     // Sort by strike
     calls.sort((a, b) => a.strike - b.strike);
     puts.sort((a, b) => a.strike - b.strike);
+
+    if (calls.length === 0 && puts.length === 0) {
+      logger.warn(`Options chain resolved with zero contracts for ${symbol}`, {
+        expiry,
+        contractsFetched: contracts.length,
+        contractsFiltered: filteredContracts.length,
+        snapshotsFetched: snapshots.size
+      });
+    }
 
     // Calculate IV Rank (simplified - would need historical IV data for accurate calculation)
     // For now, just use current average IV as placeholder
@@ -407,11 +426,15 @@ export async function fetchOptionContract(
     // Fetch snapshot
     const snapshotData = await getOptionsSnapshot(symbol, contract.ticker);
 
-    if (snapshotData.length === 0) {
+    const snapshotRows = Array.isArray(snapshotData)
+      ? snapshotData
+      : (snapshotData ? [snapshotData as unknown as OptionsSnapshot] : []);
+
+    if (snapshotRows.length === 0) {
       return null;
     }
 
-    return convertToOptionContract(contract, snapshotData[0], currentPrice, symbol);
+    return convertToOptionContract(contract, snapshotRows[0], currentPrice, symbol);
   } catch (error: any) {
     logger.error('Failed to fetch option contract', { error: error.message });
     return null;
