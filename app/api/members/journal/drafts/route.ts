@@ -16,6 +16,20 @@ export async function GET(request: NextRequest) {
     })
 
     const supabase = getSupabaseAdminClient()
+
+    const { error: expireError } = await supabase
+      .from('journal_entries')
+      .update({ draft_status: 'dismissed' })
+      .eq('user_id', userId)
+      .eq('is_draft', true)
+      .eq('draft_status', 'pending')
+      .not('draft_expires_at', 'is', null)
+      .lt('draft_expires_at', new Date().toISOString())
+
+    if (expireError) {
+      return NextResponse.json({ success: false, error: expireError.message }, { status: 500 })
+    }
+
     let query = supabase
       .from('journal_entries')
       .select('*')

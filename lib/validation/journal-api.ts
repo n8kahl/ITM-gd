@@ -63,6 +63,10 @@ export const draftFromSessionSchema = z.object({
   marketDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
+export const autoJournalSchema = z.object({
+  marketDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+})
+
 export const listDraftsSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'dismissed']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),

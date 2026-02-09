@@ -89,6 +89,12 @@ Branch: `codex/trade-journal-implementation`
   - `backend/src/chatkit/functionHandlers.ts`
   - `backend/src/chatkit/systemPrompt.ts`
   - `backend/src/chatkit/__tests__/functionHandlers.test.ts`
+- [x] End-of-day auto-journal draft detection + in-app review flow
+  - `app/api/members/journal/auto-journal/route.ts`
+  - `app/api/members/journal/draft-from-session/route.ts`
+  - `app/api/members/journal/drafts/route.ts`
+  - `components/journal/draft-entries-panel.tsx`
+  - `lib/journal/draft-candidate-extractor.ts`
 
 ### Phase 6 - Enhanced Visualization & Dashboard
 - [x] Dashboard layout persistence API + schema field
@@ -121,9 +127,10 @@ Branch: `codex/trade-journal-implementation`
 - ChatKit journal-aware tools (`get_journal_insights`, `get_trade_history_for_symbol`) wired with tests and prompt guidance.
 - Interactive calendar heatmap with month/quarter/year views, richer day-level stats, annotations, and journal day deep-linking.
 - Trade replay upgrades: skip-to-entry/exit controls, live P&L ticker, stop/target overlays, and MFE/MAE markers.
+- End-of-day auto-journal endpoint plus in-app post-close draft detection and pending-draft expiry auto-dismiss.
 
 ## Remaining
-- End-of-day auto-journal automation (4:05 PM ET extraction job + notification flow + auto-dismiss lifecycle) is not implemented.
+- Server-side scheduled auto-journal execution + push-notification delivery at 4:05 PM ET is not yet wired (current flow auto-runs in-app post-close).
 - Phase 7 mobile gesture/offline/PWA and comprehensive WCAG hardening remain.
 
 ## Risks
@@ -132,7 +139,7 @@ Branch: `codex/trade-journal-implementation`
 - Options-chain enrichment currently performs lightweight contract parsing; full Greeks/IV chain hydration depends on expanding enrichment providers and rate-limit strategy.
 
 ## Next Steps
-1. Implement end-of-day auto-journal scheduling/notification pipeline and draft expiry handling for Phase 5.3.
+1. Wire server-side scheduler + push notification transport for 4:05 PM ET auto-journal runs.
 2. Add async/background jobs for grading, import enrichment queues, and weekly behavioral insight generation.
 3. Replace synchronous materialized view refresh trigger with queued refresh/job scheduling.
 4. Complete remaining Phase 6 polish on replay side-panel context/notes coupling.
