@@ -42,6 +42,13 @@ export interface MorningBrief {
       historicalFillRate: number | null;
     }>;
   };
+  spxSpyCorrelation: {
+    spxPrice: number;
+    spyPrice: number;
+    ratio: number;
+    spxExpectedMove: number | null;
+    spyExpectedMove: number | null;
+  } | null;
   keyLevelsToday: MorningBriefKeyLevels[];
   economicEvents: Array<{
     time: string;
@@ -333,6 +340,22 @@ export class MorningBriefService {
     const openPositionStatus = await this.getOpenPositions(userId);
     const overnightSummary = this.buildOvernightSummary(keyLevelsToday);
     const watchItems = this.buildWatchItems(symbols, keyLevelsToday, openPositionStatus);
+    let spxSpyCorrelation: MorningBrief['spxSpyCorrelation'] = null;
+
+    const spxLevels = keyLevelsToday.find((item) => item.symbol === 'SPX');
+    const spyLevels = keyLevelsToday.find((item) => item.symbol === 'SPY');
+    if (spxLevels?.currentPrice && spyLevels?.currentPrice) {
+      const ratio = spxLevels.currentPrice / spyLevels.currentPrice;
+      const spxExpectedMove = spxLevels.expectedMoveToday;
+
+      spxSpyCorrelation = {
+        spxPrice: Number(spxLevels.currentPrice.toFixed(2)),
+        spyPrice: Number(spyLevels.currentPrice.toFixed(2)),
+        ratio: Number(ratio.toFixed(2)),
+        spxExpectedMove: spxExpectedMove !== null ? Number(spxExpectedMove.toFixed(2)) : null,
+        spyExpectedMove: spxExpectedMove !== null ? Number((spxExpectedMove / ratio).toFixed(2)) : null,
+      };
+    }
 
     const economicEvents = macro.economicCalendar.slice(0, 8).map((event) => ({
       time: '08:30 ET',
@@ -363,6 +386,7 @@ export class MorningBriefService {
       marketStatus,
       watchlist: symbols,
       overnightSummary,
+      spxSpyCorrelation,
       keyLevelsToday,
       economicEvents,
       earningsToday,

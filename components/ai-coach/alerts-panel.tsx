@@ -17,6 +17,8 @@ import {
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
+import { motion } from 'framer-motion'
+import { runWithRetry } from './retry'
 import {
   getAlerts,
   createAlert,
@@ -49,6 +51,11 @@ const ALERT_TYPES: { value: AlertType; label: string; icon: typeof TrendingUp; d
   { value: 'volume_spike', label: 'Volume Spike', icon: BarChart3, description: 'Unusual volume detected' },
 ]
 
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -59,6 +66,7 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
   const [alerts, setAlerts] = useState<AlertEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState<AlertStatus | ''>('active')
 
@@ -68,11 +76,19 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
     if (!token) return
     setIsLoading(true)
     setError(null)
+    setRetryNotice(null)
 
     try {
-      const result = await getAlerts(token, {
-        status: filterStatus || undefined,
-      })
+      const result = await runWithRetry(
+        () => getAlerts(token, {
+          status: filterStatus || undefined,
+        }),
+        {
+          onRetry: ({ nextAttempt, maxAttempts }) => {
+            setRetryNotice(`Connection is unstable. Retrying (${nextAttempt}/${maxAttempts})...`)
+          },
+        },
+      )
       setAlerts(result.alerts)
     } catch (err) {
       const msg = err instanceof AICoachAPIError
@@ -80,6 +96,7 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
         : 'Failed to load alerts'
       setError(msg)
     } finally {
+      setRetryNotice(null)
       setIsLoading(false)
     }
   }, [token, filterStatus])
@@ -141,16 +158,21 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             onClick={() => setShowForm(!showForm)}
             className="flex items-center gap-1 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg px-2 py-1 transition-all"
+            {...PRESSABLE_PROPS}
           >
             <Plus className="w-3 h-3" />
             New Alert
-          </button>
-          <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+          </motion.button>
+          <motion.button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors"
+            {...PRESSABLE_PROPS}
+          >
             <X className="w-4 h-4" />
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -173,7 +195,7 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
         {/* Filter bar */}
         <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5">
           {(['active', 'triggered', 'cancelled', ''] as const).map(status => (
-            <button
+            <motion.button
               key={status || 'all'}
               onClick={() => setFilterStatus(status)}
               className={cn(
@@ -182,16 +204,20 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
                   ? 'bg-emerald-500/20 text-emerald-400'
                   : 'text-white/40 hover:text-white/60'
               )}
+              {...PRESSABLE_PROPS}
             >
               {status === '' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
-            </button>
+            </motion.button>
           ))}
         </div>
 
         {/* Loading */}
         {isLoading && (
-          <div className="flex items-center justify-center py-16">
+          <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+            {retryNotice && (
+              <p className="text-xs text-amber-300/80">{retryNotice}</p>
+            )}
           </div>
         )}
 
@@ -199,9 +225,13 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
         {error && !isLoading && (
           <div className="text-center py-12">
             <p className="text-sm text-red-400 mb-2">{error}</p>
-            <button onClick={fetchAlerts} className="text-xs text-emerald-500 hover:text-emerald-400">
+            <motion.button
+              onClick={fetchAlerts}
+              className="text-xs text-emerald-500 hover:text-emerald-400"
+              {...PRESSABLE_PROPS}
+            >
               Retry
-            </button>
+            </motion.button>
           </div>
         )}
 
@@ -273,22 +303,24 @@ function AlertCard({
         <div className="flex items-center gap-2">
           <StatusBadge status={alert.status} />
           {alert.status === 'active' && (
-            <button
+            <motion.button
               onClick={() => onCancel(alert.id)}
               className="text-white/20 hover:text-amber-400 transition-colors"
               title="Cancel alert"
+              {...PRESSABLE_PROPS}
             >
               <Ban className="w-3.5 h-3.5" />
-            </button>
+            </motion.button>
           )}
           {alert.status !== 'active' && (
-            <button
+            <motion.button
               onClick={() => onDelete(alert.id)}
               className="text-white/20 hover:text-red-400 transition-colors"
               title="Delete alert"
+              {...PRESSABLE_PROPS}
             >
               <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            </motion.button>
           )}
         </div>
       </div>
@@ -421,7 +453,7 @@ function AlertForm({
           {ALERT_TYPES.slice(0, 4).map(type => {
             const TypeIcon = type.icon
             return (
-              <button
+              <motion.button
                 key={type.value}
                 onClick={() => setAlertType(type.value)}
                 className={cn(
@@ -430,10 +462,11 @@ function AlertForm({
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
                     : 'border-white/5 text-white/40 hover:border-white/10'
                 )}
+                {...PRESSABLE_PROPS}
               >
                 <TypeIcon className="w-3.5 h-3.5 shrink-0" />
                 {type.label}
-              </button>
+              </motion.button>
             )
           })}
         </div>
@@ -451,7 +484,7 @@ function AlertForm({
       </div>
 
       <div className="flex gap-2">
-        <button
+        <motion.button
           onClick={handleSubmit}
           disabled={isSubmitting || !targetValue}
           className={cn(
@@ -460,6 +493,7 @@ function AlertForm({
               ? 'bg-white/5 text-white/30 cursor-not-allowed'
               : 'bg-emerald-500 hover:bg-emerald-600 text-white'
           )}
+          {...PRESSABLE_PROPS}
         >
           {isSubmitting ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -467,13 +501,14 @@ function AlertForm({
             <Check className="w-4 h-4" />
           )}
           {isSubmitting ? 'Creating...' : 'Create Alert'}
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           onClick={onCancel}
           className="px-4 py-2 rounded-lg text-sm text-white/40 hover:text-white/60 bg-white/5 hover:bg-white/10 transition-colors"
+          {...PRESSABLE_PROPS}
         >
           Cancel
-        </button>
+        </motion.button>
       </div>
     </div>
   )

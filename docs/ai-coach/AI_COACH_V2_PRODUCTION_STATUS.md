@@ -7,6 +7,144 @@
 
 All phase decisions, testing gates, and acceptance criteria in this status document should be interpreted against the rebuild spec above.
 
+## 0) Active UX Polish Track (AI_COACH_UX_AUDIT_AND_SPEC)
+
+### Phase 1 Critical Fixes Completed
+- Chat empty-state quick prompts are now actionable and aligned to SPX-first workflows.
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Center panel example prompts replaced with:
+  - `SPX Game Plan`
+  - `Morning Brief` (direct panel navigation)
+  - `Best Setup Now`
+  - `SPX vs SPY`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Morning brief now renders overnight/pre-market data (`overnightSummary`) and SPX/SPY correlation row.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/morningBrief/index.ts`
+- New composite ChatKit function `get_spx_game_plan` implemented and added to system prompt routing guidance.
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/systemPrompt.ts`
+
+### Validation Evidence
+- Backend unit tests: `pnpm --dir backend test -- functionHandlers.test.ts` (pass)
+- Backend compile: `pnpm --dir backend build` (pass)
+- Frontend TypeScript check: `pnpm exec tsc --noEmit` (pass)
+
+### Phase 2 In Progress (Completed in this session)
+- Welcome view hero redesign and cleanup:
+  - Dynamic greeting (time-aware, user-name aware)
+  - Live SPX ticker card (60s polling)
+  - Market status pill (Pre-Market/Open/After Hours/Closed)
+  - Removed redundant top-right quick header buttons
+  - Reduced quick-access grid to 8 high-use actions
+  - Added staggered framer-motion entrance animations
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Center panel view transitions:
+  - Added reusable transition wrapper with `AnimatePresence` and slide/fade transitions across views.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/view-transition.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Suggested follow-up chips:
+  - Added contextual follow-up chip component beneath assistant responses.
+  - Chips route directly into chat prompt send flow.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/follow-up-chips.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/chat-message.tsx`
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Screenshot analysis chat completion:
+  - Completed screenshot upload flow in chat input.
+  - Uploaded image now appears inline as user message.
+  - Backend screenshot extraction API (`/api/screenshot/analyze`) is called from chat flow.
+  - Extracted positions/warnings are rendered as assistant response message in-thread.
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+  - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
+- Navigation overhaul (desktop tab rail):
+  - Home control moved to left edge with icon.
+  - Tabs grouped by workflow domain with subtle divider markers.
+  - Active-tab underline now animates with `framer-motion` layout transitions.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Morning brief viewed-state UX:
+  - Removed manual "Mark Viewed" action.
+  - Brief now auto-marks viewed after 50% content scroll.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+- Morning brief redesign slice (Phase 2):
+  - AI Summary hero card with "Ask AI to elaborate" action.
+  - Enhanced overnight gap presentation via reusable component.
+  - SPX focus card with expected-move usage bar.
+  - Reusable level ladder visualization for top symbols.
+  - Sticky bottom CTA action bar (SPX game plan, alerts, setup scan).
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/overnight-gap-card.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/level-ladder.tsx`
+- SPX game plan widget integration:
+  - Added `spx_game_plan` widget card rendering path.
+  - Added `get_spx_game_plan` widget extraction support.
+  - Chat-to-chart sync now recognizes `get_spx_game_plan` payloads.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+  - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
+- Mobile tools access:
+  - Added mobile `Tools` FAB on center panel.
+  - Added bottom-sheet tools picker with all center views for faster navigation.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Chat polish pass:
+  - Added animated message entrance transitions.
+  - Replaced dot-only typing indicator with status-aware phase indicator (thinking/fetching/analyzing/writing).
+  - `/Users/natekahl/ITM-gd/components/ai-coach/chat-message.tsx`
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Skeleton loading system:
+  - Added reusable skeleton loaders (`Chart`, `Options`, `Brief`, `Scanner`).
+  - Integrated into chart view, options chain, morning brief, and scanner panels.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/skeleton-loaders.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/opportunity-scanner.tsx`
+- Friendly retry error handling:
+  - Added exponential retry copy/behavior (3 attempts) for chart data, options chain, and morning brief loaders.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+- Reliability and interaction polish extension:
+  - Added shared retry utility with exponential backoff and user-facing retry messaging in remaining high-traffic panels:
+    - Alerts
+    - Macro Context
+    - Tracked Setups
+    - Trade Journal
+    - LEAPS
+    - Earnings Intelligence
+    - Live Position Tracker
+  - Added consistent press/hover micro-interactions across panel controls and status actions.
+  - Added mobile/desktop tab-rail edge fades for horizontal discoverability in center panel.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/retry.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/alerts-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/macro-context.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trade-journal.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/leaps-dashboard.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/earnings-dashboard.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/position-tracker.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Chat input placeholder rotation:
+  - Added time-aware rotating placeholders (pre-market/session/after-hours/closed), rotating every 10 seconds.
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Chat workspace ergonomics + navigation polish:
+  - Added desktop collapsible chat panel with explicit collapse/expand controls.
+  - Added keyboard shortcuts:
+    - `Ctrl/Cmd+K` focus chat composer
+    - `Ctrl/Cmd+/` toggle sessions drawer
+    - `Ctrl/Cmd+B` collapse/expand desktop chat panel
+  - Added mobile swipe navigation between chat and center panel (`swipe left/right`).
+  - Upgraded sessions loading from spinner to skeleton rows.
+  - Upgraded rate-limit banner to calm usage meter with threshold tones and progress bar.
+  - Enhanced resize handle visibility for the split-panel divider.
+  - Improved textarea resize smoothness using requestAnimationFrame + height transition.
+  - Updated empty-state copy and prompt button micro-interactions.
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Tab accessibility and keyboard navigation:
+  - Added ARIA tab semantics (`tablist`/`tab`/`tabpanel`) to center tools rail.
+  - Added keyboard navigation support for tool tabs (`ArrowLeft`, `ArrowRight`, `Home`, `End`).
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
 
 ### Backend

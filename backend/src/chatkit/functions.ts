@@ -185,6 +185,24 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_spx_game_plan',
+      description: 'Get a comprehensive SPX game plan: key levels, GEX profile, 0DTE structure, expected move, and SPY correlation. Use this when the user asks for SPX analysis, game plan, levels overview, or what to watch in SPX today.',
+      parameters: {
+        type: 'object',
+        properties: {
+          include_spy: {
+            type: 'boolean',
+            description: 'Include SPY correlation and translation (default: true)',
+            default: true
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_earnings_calendar',
       description: 'Get upcoming earnings events for a watchlist. Returns symbol, date, timing (BMO/AMC/DURING), and confirmation status.',
       parameters: {

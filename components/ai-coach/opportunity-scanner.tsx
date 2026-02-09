@@ -36,6 +36,7 @@ import {
   type ScanOpportunity,
 } from '@/lib/api/ai-coach'
 import { SymbolSearch } from './symbol-search'
+import { ScannerSkeleton } from './skeleton-loaders'
 
 // ============================================
 // TYPES
@@ -419,11 +420,7 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
 
         {/* Loading */}
         {isScanning && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-            <p className="text-sm text-white/50">Scanning markets...</p>
-            <p className="text-xs text-white/25">Analyzing technical setups and options flow</p>
-          </div>
+          <ScannerSkeleton />
         )}
 
         {/* Error */}

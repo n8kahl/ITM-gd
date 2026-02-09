@@ -32,6 +32,7 @@ import { SymbolSearch } from './symbol-search'
 import { ZeroDTEDashboard } from './zero-dte-dashboard'
 import { IVDashboard } from './iv-dashboard'
 import { OptionsHeatmap, type HeatmapMode } from './options-heatmap'
+import { OptionsSkeleton } from './skeleton-loaders'
 import type { AICoachPreferences } from './preferences'
 
 // ============================================
@@ -163,7 +164,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
     }
   }, [token, expiry, setWorkflowExpiry])
 
-  const loadChain = useCallback(async () => {
+  const loadChain = useCallback(async (retryAttempt = 0) => {
     if (!token) return
     setIsLoading(true)
     setError(null)
@@ -171,7 +172,16 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
       const data = await getOptionsChain(symbol, token, expiry || undefined, strikeRange)
       setChain(data)
     } catch (err) {
-      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load options chain'
+      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Options chain is temporarily unavailable.'
+      if (retryAttempt < 2) {
+        const nextAttempt = retryAttempt + 1
+        const retryDelayMs = 3000 * (2 ** retryAttempt)
+        setError(`${msg} Retrying... (${nextAttempt}/3)`)
+        window.setTimeout(() => {
+          void loadChain(nextAttempt)
+        }, retryDelayMs)
+        return
+      }
       setError(msg)
       setChain(null)
     } finally {
@@ -580,14 +590,12 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
         {activeDataView === 'chain' && error && (
           <div className="p-4 text-center">
             <p className="text-sm text-red-400 mb-2">{error}</p>
-            <button onClick={loadChain} className="text-xs text-emerald-500 hover:text-emerald-400">Retry</button>
+            <button onClick={() => { void loadChain() }} className="text-xs text-emerald-500 hover:text-emerald-400">Retry</button>
           </div>
         )}
 
         {activeDataView === 'chain' && isLoading && !chain && (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
-          </div>
+          <OptionsSkeleton />
         )}
 
         {activeDataView === 'chain' && !chain && !isLoading && !error && (

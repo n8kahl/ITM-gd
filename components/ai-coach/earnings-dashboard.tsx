@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Loader2, RefreshCw, TrendingUp, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { motion } from 'framer-motion'
 import {
   AICoachAPIError,
   getEarningsAnalysis,
@@ -11,6 +12,7 @@ import {
   type EarningsAnalysisResponse,
   type EarningsCalendarEvent,
 } from '@/lib/api/ai-coach'
+import { runWithRetry } from './retry'
 
 interface EarningsDashboardProps {
   onClose?: () => void
@@ -18,6 +20,11 @@ interface EarningsDashboardProps {
 }
 
 const DEFAULT_WATCHLIST = ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'META']
+
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
+}
 
 function parseWatchlistInput(value: string): string[] {
   return value
@@ -36,11 +43,13 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
   const [events, setEvents] = useState<EarningsCalendarEvent[]>([])
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(false)
   const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [calendarRetryNotice, setCalendarRetryNotice] = useState<string | null>(null)
 
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<EarningsAnalysisResponse | null>(null)
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [analysisRetryNotice, setAnalysisRetryNotice] = useState<string | null>(null)
 
   const [ivCrushSlider, setIvCrushSlider] = useState(25)
 
@@ -51,9 +60,17 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
 
     setIsLoadingCalendar(true)
     setCalendarError(null)
+    setCalendarRetryNotice(null)
 
     try {
-      const data = await getEarningsCalendar(token, watchlist, daysAhead)
+      const data = await runWithRetry(
+        () => getEarningsCalendar(token, watchlist, daysAhead),
+        {
+          onRetry: ({ nextAttempt, maxAttempts }) => {
+            setCalendarRetryNotice(`Refreshing earnings calendar (${nextAttempt}/${maxAttempts})...`)
+          },
+        },
+      )
       setEvents(data.events)
       if (data.events.length > 0) {
         setSelectedSymbol((prev) => prev ?? data.events[0].symbol)
@@ -67,6 +84,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
       setCalendarError(message)
       setEvents([])
     } finally {
+      setCalendarRetryNotice(null)
       setIsLoadingCalendar(false)
     }
   }, [daysAhead, token, watchlist])
@@ -76,9 +94,18 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
 
     setIsLoadingAnalysis(true)
     setAnalysisError(null)
+    setAnalysisRetryNotice(null)
 
     try {
-      const data = await getEarningsAnalysis(symbol, token)
+      const data = await runWithRetry(
+        () => getEarningsAnalysis(symbol, token),
+        {
+          maxAttempts: 2,
+          onRetry: ({ nextAttempt, maxAttempts }) => {
+            setAnalysisRetryNotice(`Refreshing ${symbol} analysis (${nextAttempt}/${maxAttempts})...`)
+          },
+        },
+      )
       setAnalysis(data)
       setIvCrushSlider(Math.round(data.projectedIVCrushPct ?? 25))
     } catch (error) {
@@ -88,6 +115,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
       setAnalysisError(message)
       setAnalysis(null)
     } finally {
+      setAnalysisRetryNotice(null)
       setIsLoadingAnalysis(false)
     }
   }, [token])
@@ -129,22 +157,24 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             type="button"
             onClick={loadCalendar}
             className="p-1.5 rounded-lg border border-white/10 text-white/50 hover:text-white/80 hover:bg-white/5"
             title="Refresh calendar"
+            {...PRESSABLE_PROPS}
           >
             <RefreshCw className={cn('w-4 h-4', isLoadingCalendar && 'animate-spin')} />
-          </button>
+          </motion.button>
           {onClose && (
-            <button
+            <motion.button
               type="button"
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white/70"
+              {...PRESSABLE_PROPS}
             >
               <X className="w-4 h-4" />
-            </button>
+            </motion.button>
           )}
         </div>
       </div>
@@ -167,21 +197,25 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
           ))}
         </select>
 
-        <button
+        <motion.button
           type="button"
           onClick={loadCalendar}
           disabled={isLoadingCalendar}
           className="px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs font-medium text-amber-200 hover:bg-amber-500/15 disabled:opacity-50"
+          {...PRESSABLE_PROPS}
         >
           Apply
-        </button>
+        </motion.button>
       </div>
 
       <div className="flex-1 min-h-0 grid lg:grid-cols-[320px_1fr]">
         <aside className="border-r border-white/5 overflow-y-auto">
           {isLoadingCalendar && events.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
+            <div className="h-full flex flex-col items-center justify-center gap-2">
               <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
+              {calendarRetryNotice && (
+                <p className="text-[11px] text-amber-200/80">{calendarRetryNotice}</p>
+              )}
             </div>
           ) : calendarError ? (
             <div className="p-4 text-xs text-red-300">{calendarError}</div>
@@ -190,7 +224,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
           ) : (
             <div className="p-2 space-y-2">
               {events.map((event) => (
-                <button
+                <motion.button
                   key={`${event.symbol}-${event.date}`}
                   type="button"
                   onClick={() => setSelectedSymbol(event.symbol)}
@@ -200,6 +234,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
                       ? 'border-amber-500/40 bg-amber-500/10'
                       : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
                   )}
+                  {...PRESSABLE_PROPS}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-white">{event.symbol}</span>
@@ -209,7 +244,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
                   {!event.confirmed && (
                     <div className="mt-1 text-[10px] text-amber-300/80">Date not yet confirmed</div>
                   )}
-                </button>
+                </motion.button>
               ))}
             </div>
           )}
@@ -223,8 +258,11 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
           )}
 
           {selectedSymbol && isLoadingAnalysis && !analysis && (
-            <div className="h-full flex items-center justify-center">
+            <div className="h-full flex flex-col items-center justify-center gap-2">
               <Loader2 className="w-6 h-6 animate-spin text-amber-300" />
+              {analysisRetryNotice && (
+                <p className="text-[11px] text-amber-200/80">{analysisRetryNotice}</p>
+              )}
             </div>
           )}
 

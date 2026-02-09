@@ -1856,7 +1856,26 @@ export interface MorningBrief {
     closingTime?: string
   }
   watchlist: string[]
-  overnightSummary?: Record<string, unknown>
+  overnightSummary?: {
+    futuresDirection: 'up' | 'down' | 'flat'
+    futuresChange: number
+    futuresChangePct: number
+    gapAnalysis: Array<{
+      symbol: string
+      gapSize: number
+      gapPct: number
+      gapType: 'up' | 'down' | 'flat'
+      atrRatio: number | null
+      historicalFillRate: number | null
+    }>
+  }
+  spxSpyCorrelation?: {
+    spxPrice: number
+    spyPrice: number
+    ratio: number
+    spxExpectedMove: number | null
+    spyExpectedMove: number | null
+  }
   keyLevelsToday?: Array<Record<string, unknown>>
   economicEvents?: Array<Record<string, unknown>>
   earningsToday?: Array<Record<string, unknown>>

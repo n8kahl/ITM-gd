@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
+import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels'
 import {
   BrainCircuit,
   MessageSquare,
@@ -14,6 +14,8 @@ import {
   ChevronRight,
   AlertCircle,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -29,14 +31,153 @@ import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
 
+const CHAT_QUICK_PROMPTS = [
+  {
+    text: 'SPX Game Plan',
+    prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
+  },
+  {
+    text: 'Morning Brief',
+    prompt: 'Show me today\'s morning brief with overnight gaps, key levels, and what to watch.',
+  },
+  {
+    text: 'Best Setup Now',
+    prompt: 'Scan SPX, NDX, QQQ, SPY, AAPL, TSLA, NVDA for the best setups right now. Show me the highest-probability trade with entry, target, and stop.',
+  },
+  {
+    text: 'SPX vs SPY',
+    prompt: 'Compare SPX and SPY right now: price levels, expected move, GEX context, and which has the better risk/reward for day trading today. Include the SPX-to-SPY price ratio.',
+  },
+] as const
+
+const CHAT_PLACEHOLDERS = {
+  pre_market: [
+    'What\'s the gap looking like?',
+    'Show me overnight levels',
+    'Morning brief',
+  ],
+  session: [
+    'How is SPX holding up?',
+    'Best setup right now',
+    'Check my positions',
+  ],
+  after_hours: [
+    'Recap today\'s session',
+    'What worked today?',
+    'Plan for tomorrow',
+  ],
+  closed: [
+    'Review my trade journal',
+    'Analyze my win rate',
+    'Study a setup',
+  ],
+} as const
+
+function getEasternPlaceholderBucket(now: Date = new Date()): keyof typeof CHAT_PLACEHOLDERS {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0')
+  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? 'Mon'
+  const isWeekend = weekday === 'Sat' || weekday === 'Sun'
+
+  if (isWeekend) return 'closed'
+
+  const totalMinutes = hour * 60 + minute
+  if (totalMinutes >= 570 && totalMinutes < 960) return 'session'
+  if (totalMinutes >= 240 && totalMinutes < 570) return 'pre_market'
+  if (totalMinutes >= 960 && totalMinutes < 1200) return 'after_hours'
+  return 'closed'
+}
+
 export default function AICoachPage() {
   const chat = useAICoachChat()
   const [mobileView, setMobileView] = useState<'chat' | 'center'>('chat')
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false)
+  const chatPanelRef = useRef<ImperativePanelHandle | null>(null)
+  const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
     setMobileView('chat')
   }, [chat.sendMessage])
+
+  const requestFocusInput = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('ai-coach-focus-input'))
+  }, [])
+
+  const toggleChatPanelCollapse = useCallback(() => {
+    if (!chatPanelRef.current) return
+    if (isChatCollapsed) {
+      chatPanelRef.current.expand()
+      setIsChatCollapsed(false)
+      requestAnimationFrame(() => requestFocusInput())
+    } else {
+      chatPanelRef.current.collapse()
+      setIsChatCollapsed(true)
+    }
+  }, [isChatCollapsed, requestFocusInput])
+
+  const handleMobileTouchStart = useCallback((event: React.TouchEvent) => {
+    const touch = event.changedTouches[0]
+    mobileTouchStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }, [])
+
+  const handleMobileTouchEnd = useCallback((event: React.TouchEvent) => {
+    const start = mobileTouchStartRef.current
+    if (!start) return
+    const touch = event.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    mobileTouchStartRef.current = null
+
+    if (Math.abs(dy) > 60 || Math.abs(dx) < 70) return
+    if (dx < 0) setMobileView('center')
+    if (dx > 0) setMobileView('chat')
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isMeta = event.metaKey || event.ctrlKey
+      if (!isMeta) return
+
+      const key = event.key.toLowerCase()
+      if (key === 'k') {
+        event.preventDefault()
+        if (window.innerWidth < 1024) {
+          setMobileView('chat')
+        } else if (isChatCollapsed) {
+          chatPanelRef.current?.expand()
+          setIsChatCollapsed(false)
+        }
+        requestAnimationFrame(() => requestFocusInput())
+        return
+      }
+
+      if (key === 'b' && window.innerWidth >= 1024) {
+        event.preventDefault()
+        toggleChatPanelCollapse()
+        return
+      }
+
+      if (event.key === '/') {
+        event.preventDefault()
+        if (window.innerWidth < 1024) {
+          setMobileView('chat')
+        }
+        window.dispatchEvent(new CustomEvent('ai-coach-toggle-sessions'))
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isChatCollapsed, requestFocusInput, toggleChatPanelCollapse])
 
   return (
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
@@ -74,10 +215,19 @@ export default function AICoachPage() {
           {/* Main Content — full remaining height */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {/* Desktop: Resizable Split Panels */}
-            <div className="hidden lg:block h-full">
+            <div className="hidden lg:block h-full relative">
               <PanelGroup direction="horizontal">
                 {/* Chat Panel (40% default, more room for messages) */}
-                <Panel defaultSize={40} minSize={30} maxSize={55}>
+                <Panel
+                  ref={chatPanelRef}
+                  defaultSize={40}
+                  minSize={30}
+                  maxSize={55}
+                  collapsible
+                  collapsedSize={0}
+                  onCollapse={() => setIsChatCollapsed(true)}
+                  onExpand={() => setIsChatCollapsed(false)}
+                >
                   <ChatArea
                     messages={chat.messages}
                     sessions={chat.sessions}
@@ -92,12 +242,16 @@ export default function AICoachPage() {
                     onSelectSession={chat.selectSession}
                     onDeleteSession={chat.deleteSession}
                     onClearError={chat.clearError}
+                    onAppendUserMessage={chat.appendUserMessage}
+                    onAppendAssistantMessage={chat.appendAssistantMessage}
+                    onTogglePanelCollapse={toggleChatPanelCollapse}
                   />
                 </Panel>
 
                 {/* Resize Handle */}
-                <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
-                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
+                <PanelResizeHandle className="w-2.5 bg-transparent hover:bg-emerald-500/15 active:bg-emerald-500/25 transition-colors cursor-col-resize relative group">
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/10 group-hover:bg-emerald-500/45 transition-colors" />
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-12 rounded-full bg-white/10 group-hover:bg-emerald-500/35 transition-colors" />
                 </PanelResizeHandle>
 
                 {/* Center Panel (60%) */}
@@ -105,10 +259,25 @@ export default function AICoachPage() {
                   <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
                 </Panel>
               </PanelGroup>
+
+              {isChatCollapsed && (
+                <button
+                  onClick={toggleChatPanelCollapse}
+                  className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/20 transition-colors"
+                  title="Expand chat panel (Ctrl/Cmd+B)"
+                >
+                  <PanelLeftOpen className="w-3.5 h-3.5" />
+                  Chat
+                </button>
+              )}
             </div>
 
             {/* Mobile: Toggled View */}
-            <div className="lg:hidden h-full">
+            <div
+              className="lg:hidden h-full"
+              onTouchStart={handleMobileTouchStart}
+              onTouchEnd={handleMobileTouchEnd}
+            >
               {mobileView === 'chat' ? (
                 <ChatArea
                   messages={chat.messages}
@@ -124,6 +293,8 @@ export default function AICoachPage() {
                   onSelectSession={chat.selectSession}
                   onDeleteSession={chat.deleteSession}
                   onClearError={chat.clearError}
+                  onAppendUserMessage={chat.appendUserMessage}
+                  onAppendAssistantMessage={chat.appendAssistantMessage}
                 />
               ) : (
                 <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
@@ -154,16 +325,22 @@ interface ChatAreaProps {
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
   onClearError: () => void
+  onAppendUserMessage: (content: string) => void
+  onAppendAssistantMessage: (content: string) => void
+  onTogglePanelCollapse?: () => void
 }
 
 function ChatArea({
   messages, sessions, currentSessionId, isSending, isLoadingSessions,
   isLoadingMessages, error, rateLimitInfo, onSendMessage, onNewSession,
-  onSelectSession, onDeleteSession, onClearError,
+  onSelectSession, onDeleteSession, onClearError, onAppendUserMessage, onAppendAssistantMessage, onTogglePanelCollapse,
 }: ChatAreaProps) {
   const { session } = useMemberAuth()
   const [inputValue, setInputValue] = useState('')
   const [showSessions, setShowSessions] = useState(false)
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false)
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [placeholderBucket, setPlaceholderBucket] = useState<keyof typeof CHAT_PLACEHOLDERS>(() => getEasternPlaceholderBucket())
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -171,6 +348,18 @@ function ChatArea({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
   const isUserScrolledUp = useRef(false)
+
+  const autoResizeInput = useCallback((element: HTMLTextAreaElement | null) => {
+    if (!element) return
+    window.requestAnimationFrame(() => {
+      element.style.height = 'auto'
+      element.style.height = `${Math.min(element.scrollHeight, 120)}px`
+    })
+  }, [])
+
+  const toggleSessions = useCallback(() => {
+    setShowSessions((prev) => !prev)
+  }, [])
 
   // Track whether user has scrolled away from bottom
   const handleMessagesScroll = useCallback(() => {
@@ -196,34 +385,124 @@ function ChatArea({
     previousMessageCount.current = messages.length
   }, [messages.length])
 
+  useEffect(() => {
+    const rotateInterval = window.setInterval(() => {
+      setPlaceholderIndex((index) => index + 1)
+    }, 10_000)
+    const bucketInterval = window.setInterval(() => {
+      setPlaceholderBucket(getEasternPlaceholderBucket())
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(rotateInterval)
+      window.clearInterval(bucketInterval)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleFocusInput = () => {
+      inputRef.current?.focus()
+      autoResizeInput(inputRef.current)
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowSessions(false)
+      }
+    }
+
+    window.addEventListener('ai-coach-focus-input', handleFocusInput as EventListener)
+    window.addEventListener('ai-coach-toggle-sessions', toggleSessions as EventListener)
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      window.removeEventListener('ai-coach-focus-input', handleFocusInput as EventListener)
+      window.removeEventListener('ai-coach-toggle-sessions', toggleSessions as EventListener)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [autoResizeInput, toggleSessions])
+
+  const isBusy = isSending || isAnalyzingImage
+  const streamStatus = messages.find((msg) => msg.isStreaming)?.streamStatus
+  const placeholderOptions = CHAT_PLACEHOLDERS[placeholderBucket]
+  const rotatingPlaceholder = placeholderOptions[placeholderIndex % placeholderOptions.length]
+  const usageRatio = rateLimitInfo?.queryCount && rateLimitInfo?.queryLimit
+    ? rateLimitInfo.queryCount / rateLimitInfo.queryLimit
+    : 0
+  const usageToneClass = usageRatio >= 0.95
+    ? 'text-red-300 border-red-500/30 bg-red-500/10'
+    : usageRatio >= 0.8
+      ? 'text-amber-300 border-amber-500/30 bg-amber-500/10'
+      : 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
+  const usageBarClass = usageRatio >= 0.95
+    ? 'bg-red-400'
+    : usageRatio >= 0.8
+      ? 'bg-amber-400'
+      : 'bg-emerald-400'
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
     const text = inputValue.trim()
-    if ((!text && !stagedImage) || isSending) return
+    if ((!text && !stagedImage) || isBusy) return
 
     if (stagedImage) {
       // Send image for analysis through the chat
-      handleImageAnalysis(text)
+      void handleImageAnalysis(text)
     } else {
       onSendMessage(text)
     }
     setInputValue('')
     // Reset textarea height
-    if (inputRef.current) inputRef.current.style.height = 'auto'
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+    }
   }
 
   const handleImageAnalysis = async (userMessage: string) => {
-    if (!stagedImage || !session?.access_token) return
+    if (!stagedImage) return
 
+    const staged = stagedImage
     const msg = userMessage || 'Analyze this screenshot'
-    onSendMessage(msg)
-
-    // Clear staged image after sending
+    onAppendUserMessage(`${msg}\n\n![Uploaded screenshot](${staged.preview})`)
     setStagedImage(null)
+    setIsAnalyzingImage(true)
 
-    // TODO: The backend screenshot analysis could be integrated
-    // into the streaming chat flow. For now, the image upload
-    // through the screenshot-upload component handles this.
+    if (!session?.access_token) {
+      onAppendAssistantMessage('Screenshot upload received, but your session token is missing. Please refresh and try again.')
+      setIsAnalyzingImage(false)
+      return
+    }
+
+    try {
+      const analysis = await apiAnalyzeScreenshot(staged.base64, staged.mimeType, session.access_token)
+
+      const extracted = analysis.positions.map((position, index) => {
+        const strike = position.strike ? ` ${position.strike}` : ''
+        const expiry = position.expiry ? ` ${position.expiry}` : ''
+        const confidence = Math.round(position.confidence * 100)
+        return `${index + 1}. ${position.symbol} ${position.type}${strike}${expiry} x${position.quantity} (confidence ${confidence}%)`
+      })
+
+      const warnings = analysis.warnings.length > 0
+        ? `\n\nWarnings:\n${analysis.warnings.map((warning) => `- ${warning}`).join('\n')}`
+        : ''
+
+      const accountValue = typeof analysis.accountValue === 'number'
+        ? `\n\nAccount Value: $${analysis.accountValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+        : ''
+
+      const summary = analysis.positionCount > 0
+        ? `I extracted ${analysis.positionCount} position${analysis.positionCount === 1 ? '' : 's'} from your screenshot:\n${extracted.join('\n')}`
+        : 'I could not reliably extract any positions from this screenshot.'
+
+      onAppendAssistantMessage(
+        `${summary}${accountValue}${warnings}\n\nIf you want, I can now run a risk analysis on these extracted positions.`
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to analyze screenshot.'
+      onAppendAssistantMessage(`Screenshot analysis failed: ${message}`)
+    } finally {
+      setIsAnalyzingImage(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -276,8 +555,14 @@ function ChatArea({
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {isLoadingSessions ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
+                <div className="space-y-2 py-2">
+                  {[80, 62, 90, 70].map((width, index) => (
+                    <div
+                      key={`session-skeleton-${index}`}
+                      className="h-10 rounded-lg border border-white/5 bg-white/5 animate-pulse"
+                      style={{ width: `${width}%` }}
+                    />
+                  ))}
                 </div>
               ) : sessions.length === 0 ? (
                 <p className="text-xs text-white/30 text-center py-4">No sessions yet</p>
@@ -320,8 +605,9 @@ function ChatArea({
         {/* Chat Header */}
         <div className="px-4 py-3 border-b border-white/5 flex items-center gap-3">
           <button
-            onClick={() => setShowSessions(!showSessions)}
+            onClick={toggleSessions}
             className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+            title="Toggle sessions (Ctrl/Cmd+/)"
           >
             {showSessions ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
@@ -331,6 +617,9 @@ function ChatArea({
               {currentSessionId ? sessions.find(s => s.id === currentSessionId)?.title || 'Chat' : 'AI Coach'}
             </h3>
           </div>
+          <p className="hidden xl:block text-[10px] text-white/30 whitespace-nowrap">
+            Ctrl/Cmd+K focus | Ctrl/Cmd+/ sessions | Ctrl/Cmd+B collapse
+          </p>
           <Button
             onClick={onNewSession}
             variant="ghost"
@@ -340,6 +629,15 @@ function ChatArea({
             <Plus className="w-4 h-4 mr-1" />
             <span className="text-xs">New</span>
           </Button>
+          {onTogglePanelCollapse && (
+            <button
+              onClick={onTogglePanelCollapse}
+              className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+              title="Collapse chat panel (Ctrl/Cmd+B)"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Error / Rate Limit Banners */}
@@ -355,9 +653,20 @@ function ChatArea({
           )}
           {rateLimitInfo && (
             <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-              <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                <p className="text-xs text-amber-400">{rateLimitInfo.queryCount}/{rateLimitInfo.queryLimit} queries used</p>
+              <div className={cn('px-4 py-2 border-b', usageToneClass)}>
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p className="text-xs">
+                    Usage {rateLimitInfo.queryCount}/{rateLimitInfo.queryLimit} queries
+                    {rateLimitInfo.resetDate ? ` • resets ${new Date(rateLimitInfo.resetDate).toLocaleDateString()}` : ''}
+                  </p>
+                </div>
+                <div className="mt-1.5 h-1 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className={cn('h-full transition-all duration-300', usageBarClass)}
+                    style={{ width: `${Math.min(Math.max(usageRatio * 100, 0), 100)}%` }}
+                  />
+                </div>
               </div>
             </motion.div>
           )}
@@ -374,13 +683,15 @@ function ChatArea({
               <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
             </div>
           ) : messages.length === 0 ? (
-            <EmptyState />
+            <EmptyState onSendPrompt={onSendMessage} />
           ) : (
             <>
               {messages.map((msg) => (
-                <ChatMessageBubble key={msg.id} message={msg} />
+                <ChatMessageBubble key={msg.id} message={msg} onSendPrompt={onSendMessage} />
               ))}
-              {isSending && !messages.some(m => m.isStreaming) && <TypingIndicator />}
+              {isSending && !messages.some(m => m.isStreaming) && (
+                <TypingIndicator streamStatus={isAnalyzingImage ? 'Analyzing screenshot...' : streamStatus} />
+              )}
               <div ref={messagesEndRef} />
             </>
           )}
@@ -392,7 +703,7 @@ function ChatArea({
           <ChatImageUpload
             onImageReady={handleImageReady}
             onClear={() => setStagedImage(null)}
-            isSending={isSending}
+            isSending={isBusy}
             stagedPreview={stagedImage?.preview || null}
           />
 
@@ -402,23 +713,21 @@ function ChatArea({
               value={inputValue}
               onChange={(e) => {
                 setInputValue(e.target.value)
-                // Auto-resize textarea
-                e.target.style.height = 'auto'
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
+                autoResizeInput(e.target)
               }}
               onKeyDown={handleKeyDown}
-              placeholder={isSending ? 'Waiting for response...' : 'Ask about any ticker, levels, options...'}
-              disabled={isSending}
+              placeholder={isBusy ? 'Processing...' : rotatingPlaceholder}
+              disabled={isBusy}
               maxLength={2000}
               rows={1}
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all disabled:opacity-40 resize-none min-h-[44px] max-h-[120px]"
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all transition-[height] duration-150 ease-out disabled:opacity-40 resize-none min-h-[44px] max-h-[120px]"
             />
             <Button
               type="submit"
-              disabled={(!inputValue.trim() && !stagedImage) || isSending}
+              disabled={(!inputValue.trim() && !stagedImage) || isBusy}
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-3 rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed h-[44px]"
             >
-              {isSending ? (
+              {isBusy ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <Send className="w-5 h-5" />
@@ -435,7 +744,7 @@ function ChatArea({
 // EMPTY STATE
 // ============================================
 
-function EmptyState() {
+function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }) {
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center max-w-sm">
@@ -443,24 +752,22 @@ function EmptyState() {
           <BrainCircuit className="w-7 h-7 text-emerald-500" />
         </div>
         <h3 className="text-base font-medium text-white mb-2">
-          What can I help you with?
+          What are you trading today?
         </h3>
         <p className="text-sm text-white/40 leading-relaxed mb-6">
-          Ask about any ticker — SPX, AAPL, TSLA, QQQ — levels, options chains, macro outlook, or trade analysis.
+          Ask me about any ticker, levels, options setups, and risk in one flow.
         </p>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          {[
-            'SPX levels today',
-            'AAPL options chain',
-            'What\'s TGT trading at?',
-            'Macro outlook',
-          ].map((prompt) => (
-            <button
-              key={prompt}
+          {CHAT_QUICK_PROMPTS.map((item) => (
+            <motion.button
+              key={item.text}
+              onClick={() => onSendPrompt(item.prompt)}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
               className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:text-white hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-left"
             >
-              {prompt}
-            </button>
+              {item.text}
+            </motion.button>
           ))}
         </div>
       </div>

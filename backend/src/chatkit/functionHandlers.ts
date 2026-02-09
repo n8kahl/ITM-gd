@@ -92,6 +92,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
     case 'get_iv_analysis':
       return await handleGetIVAnalysis(typedArgs);
 
+    case 'get_spx_game_plan':
+      return await handleGetSPXGamePlan(typedArgs);
+
     case 'get_earnings_calendar':
       return await handleGetEarningsCalendar(typedArgs);
 
@@ -434,6 +437,160 @@ async function handleGetIVAnalysis(args: {
   } catch (error: any) {
     return {
       error: 'Failed to analyze implied volatility',
+      message: error.message,
+    };
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function findNamedLevel(levels: Record<string, unknown> | null, target: string): number | null {
+  if (!levels) return null;
+  const sections: unknown[] = [levels.resistance, levels.support];
+  const upperTarget = target.toUpperCase();
+
+  for (const section of sections) {
+    if (!Array.isArray(section)) continue;
+    for (const item of section) {
+      const rec = asRecord(item);
+      if (!rec) continue;
+      const type = String(rec.type ?? rec.name ?? '').toUpperCase();
+      if (type === upperTarget) {
+        return toFiniteNumber(rec.price);
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildSetupContext(
+  currentPrice: number,
+  keyLevels: Record<string, unknown> | null,
+  gexProfile: Record<string, unknown> | null,
+  gammaRegime: 'positive' | 'negative' | 'neutral',
+): string {
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+    return 'SPX setup context unavailable due to missing live price data.';
+  }
+
+  const indicators = asRecord(keyLevels?.indicators);
+  const pivots = asRecord(keyLevels?.pivots);
+  const standardPivots = asRecord(pivots?.standard);
+  const pivot = toFiniteNumber(standardPivots?.pp);
+  const vwap = toFiniteNumber(indicators?.vwap);
+  const pdh = findNamedLevel(keyLevels, 'PDH');
+  const pdl = findNamedLevel(keyLevels, 'PDL');
+  const flipPoint = toFiniteNumber(gexProfile?.flipPoint);
+  const maxGEXStrike = toFiniteNumber(gexProfile?.maxGEXStrike);
+
+  const anchors = [vwap, pivot, pdh, pdl].filter((value): value is number => value !== null);
+  const nearestAnchor = anchors.length > 0
+    ? anchors.reduce((closest, level) =>
+      Math.abs(level - currentPrice) < Math.abs(closest - currentPrice) ? level : closest, anchors[0])
+    : null;
+
+  const distanceText = nearestAnchor !== null
+    ? `${Math.abs(currentPrice - nearestAnchor).toFixed(1)} pts from key anchor ${nearestAnchor.toFixed(1)}`
+    : 'key anchors unavailable';
+
+  const regimeText = gammaRegime === 'positive'
+    ? 'positive gamma (mean-reversion favored)'
+    : gammaRegime === 'negative'
+      ? 'negative gamma (trend-extension risk elevated)'
+      : 'neutral gamma (mixed dealer hedging pressure)';
+
+  const gexReference = maxGEXStrike !== null
+    ? `max GEX strike ${maxGEXStrike.toFixed(0)}`
+    : flipPoint !== null
+      ? `gamma flip ${flipPoint.toFixed(0)}`
+      : 'no dominant GEX reference';
+
+  return `SPX is ${distanceText} in a ${regimeText} regime. Watch ${gexReference} for intraday control shifts and confirm direction with reclaim/reject behavior around VWAP and pivot.`;
+}
+
+/**
+ * Handler: get_spx_game_plan
+ * Composite SPX workflow to minimize multi-tool latency for high-frequency prompts.
+ */
+async function handleGetSPXGamePlan(args: { include_spy?: boolean }) {
+  const includeSpy = args.include_spy !== false;
+
+  try {
+    const [spxLevelsRaw, spxGexRaw, spxZeroDTERaw, spxPriceRaw, spyPriceRaw] = await withTimeout(
+      () => Promise.all([
+        handleGetKeyLevels({ symbol: 'SPX', timeframe: 'intraday' }),
+        handleGetGammaExposure({ symbol: 'SPX' }),
+        handleGetZeroDTEAnalysis({ symbol: 'SPX' }),
+        handleGetCurrentPrice({ symbol: 'SPX' }),
+        includeSpy ? handleGetCurrentPrice({ symbol: 'SPY' }) : Promise.resolve(null),
+      ]),
+      FUNCTION_TIMEOUT_MS,
+      'get_spx_game_plan',
+    );
+
+    const spxLevels = asRecord(spxLevelsRaw);
+    const spxGex = asRecord(spxGexRaw);
+    const spxZeroDTE = asRecord(spxZeroDTERaw);
+    const spxPrice = asRecord(spxPriceRaw);
+    const spyPrice = asRecord(spyPriceRaw);
+
+    const spxPriceVal = toFiniteNumber(spxPrice?.price)
+      ?? toFiniteNumber(spxLevels?.currentPrice)
+      ?? toFiniteNumber(spxGex?.spotPrice)
+      ?? 0;
+    const spyPriceVal = toFiniteNumber(spyPrice?.price) ?? 0;
+    const ratio = spyPriceVal > 0 ? spxPriceVal / spyPriceVal : null;
+
+    const flipPoint = toFiniteNumber(spxGex?.flipPoint);
+    const maxGEXStrike = toFiniteNumber(spxGex?.maxGEXStrike);
+
+    const gammaRegime: 'positive' | 'negative' | 'neutral' = flipPoint !== null && spxPriceVal > 0
+      ? (spxPriceVal > flipPoint ? 'positive' : 'negative')
+      : 'neutral';
+
+    const levelsData = asRecord(spxLevels?.levels);
+    const indicators = asRecord(levelsData?.indicators);
+    const expectedMove = toFiniteNumber(indicators?.expectedMove)
+      ?? toFiniteNumber(indicators?.atr14)
+      ?? toFiniteNumber(asRecord(spxZeroDTE?.expectedMove)?.totalExpectedMove);
+
+    const spyExpectedMove = expectedMove !== null && ratio !== null && ratio > 0
+      ? expectedMove / ratio
+      : null;
+
+    return {
+      symbol: 'SPX',
+      currentPrice: spxPriceVal > 0 ? Number(spxPriceVal.toFixed(2)) : null,
+      spyPrice: includeSpy && spyPriceVal > 0 ? Number(spyPriceVal.toFixed(2)) : null,
+      spxSpyRatio: ratio !== null ? Number(ratio.toFixed(2)) : null,
+      gammaRegime,
+      flipPoint: flipPoint !== null ? Number(flipPoint.toFixed(2)) : null,
+      maxGEXStrike: maxGEXStrike !== null ? Number(maxGEXStrike.toFixed(2)) : null,
+      expectedMove: expectedMove !== null ? Number(expectedMove.toFixed(2)) : null,
+      spyExpectedMove: spyExpectedMove !== null ? Number(spyExpectedMove.toFixed(2)) : null,
+      keyLevels: levelsData,
+      gexProfile: spxGex,
+      zeroDTE: spxZeroDTE,
+      setupContext: buildSetupContext(spxPriceVal, levelsData, spxGex, gammaRegime),
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to generate SPX game plan',
       message: error.message,
     };
   }

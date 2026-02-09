@@ -16,6 +16,8 @@ import {
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { API_BASE } from '@/lib/api/ai-coach'
+import { motion } from 'framer-motion'
+import { runWithRetry } from './retry'
 
 // ============================================
 // TYPES
@@ -69,6 +71,11 @@ interface MacroContextProps {
   onSendPrompt?: (prompt: string) => void
 }
 
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -78,6 +85,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
   const [data, setData] = useState<MacroData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'calendar' | 'fed' | 'sectors' | 'earnings'>('calendar')
 
   const token = session?.access_token
@@ -86,17 +94,26 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
     if (!token) return
     setIsLoading(true)
     setError(null)
+    setRetryNotice(null)
 
     try {
-      const res = await fetch(`${API_BASE}/api/macro`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const result = await runWithRetry(async () => {
+        const res = await fetch(`${API_BASE}/api/macro`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error || 'Failed to fetch macro data')
+        return payload as MacroData
+      }, {
+        onRetry: ({ nextAttempt, maxAttempts }) => {
+          setRetryNotice(`Macro feed reconnecting (${nextAttempt}/${maxAttempts})...`)
+        },
       })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to fetch macro data')
       setData(result)
     } catch (err: any) {
       setError(err instanceof Error ? err.message : 'Failed to load macro context')
     } finally {
+      setRetryNotice(null)
       setIsLoading(false)
     }
   }, [token])
@@ -114,7 +131,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
           <h2 className="text-sm font-medium text-white">Macro Context</h2>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             onClick={fetchMacro}
             disabled={isLoading}
             className={cn(
@@ -123,12 +140,17 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
                 ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
                 : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20'
             )}
+            {...PRESSABLE_PROPS}
           >
             <RefreshCw className={cn('w-3 h-3', isLoading && 'animate-spin')} />
-          </button>
-          <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+          </motion.button>
+          <motion.button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors"
+            {...PRESSABLE_PROPS}
+          >
             <X className="w-4 h-4" />
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -140,7 +162,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
           { key: 'sectors', label: 'Sectors' },
           { key: 'earnings', label: 'Earnings' },
         ] as const).map(tab => (
-          <button
+          <motion.button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={cn(
@@ -149,9 +171,10 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
                 ? 'bg-emerald-500/20 text-emerald-400'
                 : 'text-white/40 hover:text-white/60'
             )}
+            {...PRESSABLE_PROPS}
           >
             {tab.label}
-          </button>
+          </motion.button>
         ))}
       </div>
 
@@ -160,7 +183,7 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-            <p className="text-sm text-white/50">Loading macro data...</p>
+            <p className="text-sm text-white/50">{retryNotice || 'Loading macro data...'}</p>
           </div>
         )}
 
@@ -168,9 +191,13 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
         {error && !isLoading && (
           <div className="text-center py-12">
             <p className="text-sm text-red-400 mb-2">{error}</p>
-            <button onClick={fetchMacro} className="text-xs text-emerald-500 hover:text-emerald-400">
+            <motion.button
+              onClick={fetchMacro}
+              className="text-xs text-emerald-500 hover:text-emerald-400"
+              {...PRESSABLE_PROPS}
+            >
               Retry
-            </button>
+            </motion.button>
           </div>
         )}
 
@@ -200,13 +227,14 @@ export function MacroContext({ onClose, onSendPrompt }: MacroContextProps) {
             {/* Ask AI */}
             {onSendPrompt && (
               <div className="mt-4 pt-3 border-t border-white/5">
-                <button
+                <motion.button
                   onClick={() => onSendPrompt('What does the current macro environment mean for my positions? How should I adjust my strategy?')}
                   className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+                  {...PRESSABLE_PROPS}
                 >
                   <Zap className="w-3 h-3" />
                   Ask AI about macro impact
-                </button>
+                </motion.button>
               </div>
             )}
           </div>

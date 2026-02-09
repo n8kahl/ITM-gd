@@ -34,7 +34,7 @@ import type { PositionType } from '@/lib/api/ai-coach'
 // TYPES
 // ============================================
 
-export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview' | 'macro_context' | 'options_chain' | 'gex_profile' | 'scan_results' | 'current_price'
+export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview' | 'macro_context' | 'options_chain' | 'gex_profile' | 'scan_results' | 'current_price' | 'spx_game_plan'
 
 export interface WidgetData {
   type: WidgetType
@@ -66,6 +66,17 @@ function parseNumeric(value: unknown): number {
   return 0
 }
 
+function parseNullableNumeric(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^0-9.+-]/g, '')
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
 // ============================================
 // WIDGET CARD WRAPPER
 // ============================================
@@ -92,6 +103,8 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
       return <ScanResultsCard data={widget.data} />
     case 'current_price':
       return <CurrentPriceCard data={widget.data} />
+    case 'spx_game_plan':
+      return <SPXGamePlanCard data={widget.data} />
     default:
       return null
   }
@@ -764,6 +777,135 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
 }
 
 // ============================================
+// SPX GAME PLAN CARD
+// ============================================
+
+function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = (data.symbol as string) || 'SPX'
+  const currentPrice = parseNullableNumeric(data.currentPrice)
+  const spyPrice = parseNullableNumeric(data.spyPrice)
+  const ratio = parseNullableNumeric(data.spxSpyRatio)
+  const expectedMove = parseNullableNumeric(data.expectedMove)
+  const spyExpectedMove = parseNullableNumeric(data.spyExpectedMove)
+  const flipPoint = parseNullableNumeric(data.flipPoint)
+  const maxGEXStrike = parseNullableNumeric(data.maxGEXStrike)
+  const setupContext = (data.setupContext as string) || ''
+  const gammaRegime = (data.gammaRegime as string) || 'neutral'
+  const keyLevels = (data.keyLevels as Record<string, unknown> | undefined) || {}
+
+  const resistance = (keyLevels.resistance as Array<{ name?: string; type?: string; price?: number }> | undefined) || []
+  const support = (keyLevels.support as Array<{ name?: string; type?: string; price?: number }> | undefined) || []
+  const topResistance = resistance.slice(0, 2).map((level) => ({
+    name: level.name || level.type || 'R',
+    price: parseNullableNumeric(level.price) ?? 0,
+  }))
+  const topSupport = support.slice(0, 2).map((level) => ({
+    name: level.name || level.type || 'S',
+    price: parseNullableNumeric(level.price) ?? 0,
+  }))
+
+  const regimeBadgeClass = gammaRegime === 'positive'
+    ? 'bg-emerald-500/10 text-emerald-300'
+    : gammaRegime === 'negative'
+      ? 'bg-red-500/10 text-red-300'
+      : 'bg-white/5 text-white/55'
+
+  const moveUsedPct = currentPrice != null && expectedMove != null && flipPoint != null && expectedMove > 0
+    ? Math.min(100, Math.abs(((currentPrice - flipPoint) / expectedMove) * 100))
+    : null
+
+  const actions: WidgetAction[] = [
+    chartAction(symbol, currentPrice ?? undefined, '1D', 'SPX Game Plan'),
+    optionsAction(symbol, maxGEXStrike ?? undefined),
+    chatAction('Turn this SPX game plan into an actionable intraday checklist with bull and bear triggers.'),
+  ]
+  const alertLevel = flipPoint ?? currentPrice
+  if (alertLevel != null) {
+    actions.splice(2, 0, alertAction(symbol, alertLevel, 'level_approach', `${symbol} gamma flip`))
+  }
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/15 mt-2 max-w-xl">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+          <span className="text-xs font-medium text-white">{symbol} Game Plan</span>
+        </div>
+        <span className={cn('px-2 py-0.5 rounded text-[10px] font-medium capitalize', regimeBadgeClass)}>
+          {gammaRegime} gamma
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-[10px] text-white/45 mb-2">
+        <div className="rounded bg-white/5 px-2 py-1.5">
+          <p>SPX Spot</p>
+          <p className="font-mono text-white/75">{currentPrice != null ? currentPrice.toLocaleString() : '—'}</p>
+        </div>
+        <div className="rounded bg-white/5 px-2 py-1.5">
+          <p>SPY Spot</p>
+          <p className="font-mono text-white/75">{spyPrice != null ? spyPrice.toLocaleString() : '—'}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-[10px] text-white/45 mb-2">
+        <div>
+          <p>Flip</p>
+          <p className="font-mono text-yellow-300">{flipPoint != null ? flipPoint.toLocaleString() : '—'}</p>
+        </div>
+        <div>
+          <p>Max GEX</p>
+          <p className="font-mono text-violet-300">{maxGEXStrike != null ? maxGEXStrike.toLocaleString() : '—'}</p>
+        </div>
+        <div>
+          <p>Ratio</p>
+          <p className="font-mono text-white/75">{ratio != null ? ratio.toFixed(2) : '—'}</p>
+        </div>
+      </div>
+
+      {(expectedMove != null || spyExpectedMove != null) && (
+        <div className="mb-2 rounded border border-white/10 bg-white/5 p-2">
+          <div className="flex items-center justify-between text-[10px] text-white/45">
+            <span>Expected move</span>
+            <span className="font-mono text-white/70">
+              {expectedMove != null ? `${expectedMove.toFixed(2)} SPX` : '--'}
+              {spyExpectedMove != null ? ` / ${spyExpectedMove.toFixed(2)} SPY` : ''}
+            </span>
+          </div>
+          {moveUsedPct != null && (
+            <div className="mt-1.5 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-400/80 rounded-full" style={{ width: `${moveUsedPct}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {(topResistance.length > 0 || topSupport.length > 0) && (
+        <div className="grid grid-cols-2 gap-2 text-[10px] mb-2">
+          <div className="rounded border border-white/10 bg-white/5 p-2">
+            <p className="text-red-300/80 uppercase text-[9px] mb-1">Resistance</p>
+            {topResistance.map((level) => (
+              <p key={`r-${level.name}`} className="font-mono text-white/70">{level.name}: {level.price.toFixed(2)}</p>
+            ))}
+          </div>
+          <div className="rounded border border-white/10 bg-white/5 p-2">
+            <p className="text-emerald-300/80 uppercase text-[9px] mb-1">Support</p>
+            {topSupport.map((level) => (
+              <p key={`s-${level.name}`} className="font-mono text-white/70">{level.name}: {level.price.toFixed(2)}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {setupContext && (
+        <p className="text-[10px] leading-relaxed text-white/55 mb-2">{setupContext}</p>
+      )}
+
+      <WidgetActionBar actions={actions} />
+    </div>
+  )
+}
+
+// ============================================
 // SCAN RESULTS CARD
 // ============================================
 
@@ -915,6 +1057,11 @@ export function extractWidgets(functionCalls?: Array<{
       case 'get_gamma_exposure': {
         if (result.error) break
         widgets.push({ type: 'gex_profile', data: result })
+        break
+      }
+      case 'get_spx_game_plan': {
+        if (result.error) break
+        widgets.push({ type: 'spx_game_plan', data: result })
         break
       }
       case 'scan_opportunities': {

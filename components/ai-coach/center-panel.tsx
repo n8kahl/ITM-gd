@@ -3,10 +3,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   BarChart3,
-  TrendingUp,
   Target,
-  Zap,
+  Activity,
+  ArrowUpRight,
+  ArrowDownRight,
   ArrowRight,
+  Home,
+  Grid3X3,
   CandlestickChart,
   TableProperties,
   Calculator,
@@ -25,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import dynamic from 'next/dynamic'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelAnnotation } from './trading-chart'
 import { OptionsChain } from './options-chain'
 import { PositionTracker } from './position-tracker'
@@ -41,6 +45,8 @@ import { TrackedSetupsPanel } from './tracked-setups-panel'
 import { WidgetContextMenu } from './widget-context-menu'
 import { WorkflowBreadcrumb } from './workflow-breadcrumb'
 import { PreferencesPanel } from './preferences-panel'
+import { ViewTransition } from './view-transition'
+import { ChartSkeleton } from './skeleton-loaders'
 import {
   alertAction,
   chartAction,
@@ -125,45 +131,55 @@ interface CenterPanelProps {
 const EXAMPLE_PROMPTS = [
   {
     icon: Target,
-    label: 'Key Levels',
-    prompt: "Where's PDH for SPX today?",
-    description: 'Get pivot points, support & resistance',
+    label: 'SPX Game Plan',
+    prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
+    description: 'Complete SPX analysis with levels, GEX, and trade setups',
   },
   {
-    icon: TrendingUp,
-    label: 'Market Status',
-    prompt: "What's the current market status?",
-    description: 'Check if market is open, pre-market, or closed',
+    icon: Sunrise,
+    label: 'Morning Brief',
+    prompt: '__NAVIGATE_BRIEF__',
+    description: 'Pre-market overview, overnight gaps, key levels & events',
   },
   {
-    icon: BarChart3,
-    label: 'ATR Analysis',
-    prompt: "What's the ATR for SPX and NDX?",
-    description: 'Volatility measurement for position sizing',
+    icon: Search,
+    label: 'Best Setup Now',
+    prompt: 'Scan SPX, NDX, QQQ, SPY, AAPL, TSLA, NVDA for the best setups right now. Show me the highest-probability trade with entry, target, and stop.',
+    description: 'AI scans 7 symbols for the highest-conviction setup',
   },
   {
-    icon: Zap,
-    label: 'VWAP Check',
-    prompt: "Where is VWAP for SPX right now?",
-    description: 'Volume-weighted average price for intraday reference',
+    icon: Activity,
+    label: 'SPX vs SPY',
+    prompt: 'Compare SPX and SPY right now: price levels, expected move, GEX context, and which has the better risk/reward for day trading today. Include the SPX-to-SPY price ratio.',
+    description: 'Head-to-head comparison for day trading decisions',
   },
 ]
 
-const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[] = [
-  { view: 'chart', icon: CandlestickChart, label: 'Chart' },
-  { view: 'options', icon: TableProperties, label: 'Options' },
-  { view: 'position', icon: Calculator, label: 'Positions' },
-  { view: 'journal', icon: BookOpen, label: 'Journal' },
-  { view: 'screenshot', icon: Camera, label: 'Screenshot' },
-  { view: 'alerts', icon: Bell, label: 'Alerts' },
-  { view: 'brief', icon: Sunrise, label: 'Brief' },
-  { view: 'scanner', icon: Search, label: 'Scanner' },
-  { view: 'tracked', icon: ListChecks, label: 'Tracked' },
-  { view: 'leaps', icon: Clock, label: 'LEAPS' },
-  { view: 'earnings', icon: Calendar, label: 'Earnings' },
-  { view: 'macro', icon: Globe, label: 'Macro' },
-  { view: 'preferences', icon: SlidersHorizontal, label: 'Prefs' },
+const TABS: Array<{
+  view: CenterView
+  icon: typeof CandlestickChart
+  label: string
+  group: 'analyze' | 'portfolio' | 'monitor' | 'research'
+}> = [
+  { view: 'chart', icon: CandlestickChart, label: 'Chart', group: 'analyze' },
+  { view: 'options', icon: TableProperties, label: 'Options', group: 'analyze' },
+  { view: 'position', icon: Calculator, label: 'Positions', group: 'analyze' },
+  { view: 'scanner', icon: Search, label: 'Scanner', group: 'analyze' },
+  { view: 'journal', icon: BookOpen, label: 'Journal', group: 'portfolio' },
+  { view: 'tracked', icon: ListChecks, label: 'Tracked', group: 'portfolio' },
+  { view: 'alerts', icon: Bell, label: 'Alerts', group: 'monitor' },
+  { view: 'brief', icon: Sunrise, label: 'Brief', group: 'monitor' },
+  { view: 'screenshot', icon: Camera, label: 'Screenshot', group: 'monitor' },
+  { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
+  { view: 'earnings', icon: Calendar, label: 'Earnings', group: 'research' },
+  { view: 'macro', icon: Globe, label: 'Macro', group: 'research' },
+  { view: 'preferences', icon: SlidersHorizontal, label: 'Prefs', group: 'research' },
 ]
+
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
+}
 
 // Level annotation colors by type
 const LEVEL_COLORS: Record<string, string> = {
@@ -187,6 +203,53 @@ const LEVEL_COLORS: Record<string, string> = {
   GEX_MAGNET: '#a855f7',
 }
 
+type WelcomeMarketStatus = {
+  label: 'Pre-Market' | 'Open' | 'After Hours' | 'Closed'
+  toneClass: string
+}
+
+function getEasternTimeParts(now: Date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0')
+  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? 'Mon'
+  return { hour, minute, weekday }
+}
+
+function getWelcomeMarketStatus(now: Date = new Date()): WelcomeMarketStatus {
+  const { hour, minute, weekday } = getEasternTimeParts(now)
+  const minutes = hour * 60 + minute
+  const isWeekend = weekday === 'Sat' || weekday === 'Sun'
+
+  if (isWeekend) {
+    return { label: 'Closed', toneClass: 'bg-white/10 text-white/60 border-white/20' }
+  }
+  if (minutes >= 570 && minutes < 960) {
+    return { label: 'Open', toneClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' }
+  }
+  if (minutes >= 240 && minutes < 570) {
+    return { label: 'Pre-Market', toneClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30' }
+  }
+  if (minutes >= 960 && minutes < 1200) {
+    return { label: 'After Hours', toneClass: 'bg-sky-500/15 text-sky-300 border-sky-500/30' }
+  }
+  return { label: 'Closed', toneClass: 'bg-white/10 text-white/60 border-white/20' }
+}
+
+function getWelcomeGreeting(displayName?: string, now: Date = new Date()): string {
+  const { hour } = getEasternTimeParts(now)
+  const firstName = displayName?.trim().split(/\s+/)[0]
+  const baseGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  return firstName ? `${baseGreeting}, ${firstName}` : baseGreeting
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -204,6 +267,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   } = useAICoachWorkflow()
 
   const [activeView, setActiveView] = useState<CenterView>('welcome')
+  const [isToolsSheetOpen, setIsToolsSheetOpen] = useState(false)
 
   // Check onboarding status after mount (localStorage not available during SSR)
   useEffect(() => {
@@ -253,7 +317,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   }, [activeSymbol, chartSymbol, preferences.autoSyncWorkflowSymbol])
 
   // Fetch chart data
-  const fetchChartData = useCallback(async (symbol: string, timeframe: ChartTimeframe) => {
+  const fetchChartData = useCallback(async (symbol: string, timeframe: ChartTimeframe, retryAttempt = 0) => {
     const token = session?.access_token
     if (!token) return
 
@@ -269,7 +333,18 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     } catch (error) {
       const message = error instanceof AICoachAPIError
         ? error.apiError.message
-        : 'Failed to load chart data'
+        : 'Chart data is temporarily unavailable.'
+
+      if (retryAttempt < 2) {
+        const nextAttempt = retryAttempt + 1
+        const retryDelayMs = 3000 * (2 ** retryAttempt)
+        setChartError(`${message} Retrying... (${nextAttempt}/3)`)
+        window.setTimeout(() => {
+          void fetchChartData(symbol, timeframe, nextAttempt)
+        }, retryDelayMs)
+        return
+      }
+
       setChartError(message)
       setChartBars([])
       setChartProviderIndicators(null)
@@ -435,12 +510,41 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     fetchChartData(chartSymbol, chartTimeframe)
   }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView])
 
+  const activateTabView = useCallback((view: CenterView) => {
+    setActiveView(view)
+    setCenterView(view as Parameters<typeof setCenterView>[0])
+    if (view === 'chart') {
+      fetchChartData(chartSymbol, chartTimeframe)
+    }
+  }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView])
+
+  const handleTabKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') {
+      return
+    }
+    event.preventDefault()
+
+    let nextIndex = index
+    if (event.key === 'ArrowRight') {
+      nextIndex = (index + 1) % TABS.length
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + TABS.length) % TABS.length
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = TABS.length - 1
+    }
+
+    const nextTab = TABS[nextIndex]
+    activateTabView(nextTab.view)
+  }, [activateTabView])
+
   // ============================================
   // RENDER
   // ============================================
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
       {activeView !== 'onboarding' && (
         <WorkflowBreadcrumb
           path={workflowPath}
@@ -452,237 +556,329 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
       {/* Tab bar — shown for non-welcome/non-onboarding views */}
       {activeView !== 'welcome' && activeView !== 'onboarding' && (
         <div className="border-b border-white/5 flex items-center">
-          <div className="flex-1 overflow-x-auto scrollbar-hide px-2">
-            <div className="flex items-center gap-1 min-w-max">
-              {TABS.map(tab => {
-                const Icon = tab.icon
-                return (
-                  <button
-                    key={tab.view}
-                    onClick={() => {
-                      setActiveView(tab.view)
-                      setCenterView(tab.view as Parameters<typeof setCenterView>[0])
-                      if (tab.view === 'chart') fetchChartData(chartSymbol, chartTimeframe)
-                    }}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-all border-b-2 whitespace-nowrap min-h-[44px]',
-                      activeView === tab.view
-                        ? 'text-emerald-400 border-emerald-500'
-                        : 'text-white/40 hover:text-white/60 border-transparent'
-                    )}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {tab.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <button
+          <motion.button
             onClick={() => {
               setActiveView('welcome')
               setCenterView(null)
             }}
-            className="text-xs text-white/30 hover:text-white/60 px-3 py-2 transition-colors shrink-0 border-b-2 border-transparent min-h-[44px]"
+            className="flex items-center gap-1.5 text-xs text-white/40 hover:text-emerald-300 px-3 py-2.5 transition-colors shrink-0 border-r border-white/5 min-h-[44px]"
+            aria-label="Go to home view"
+            {...PRESSABLE_PROPS}
           >
+            <Home className="w-3.5 h-3.5" />
             Home
-          </button>
+          </motion.button>
+          <div className="relative flex-1 min-w-0">
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-[#0B0D10] to-transparent z-10" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#0B0D10] to-transparent z-10" />
+            <div className="overflow-x-auto scrollbar-hide px-2">
+            <div className="flex items-center gap-1 min-w-max" role="tablist" aria-label="AI Coach tools">
+              {TABS.map((tab, index) => {
+                const Icon = tab.icon
+                const previousGroup = index > 0 ? TABS[index - 1].group : null
+                const showDivider = previousGroup !== null && previousGroup !== tab.group
+                return (
+                  <div key={tab.view} className="flex items-center">
+                    {showDivider && (
+                      <div className="w-px h-5 bg-white/10 mx-1.5" aria-hidden />
+                    )}
+                    <motion.button
+                      onClick={() => {
+                        activateTabView(tab.view)
+                      }}
+                      onKeyDown={(event) => handleTabKeyDown(event, index)}
+                      className={cn(
+                        'relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-all whitespace-nowrap min-h-[44px]',
+                        activeView === tab.view
+                          ? 'text-emerald-300'
+                          : 'text-white/40 hover:text-white/60'
+                      )}
+                      role="tab"
+                      aria-selected={activeView === tab.view}
+                      aria-controls={`ai-coach-panel-${tab.view}`}
+                      id={`ai-coach-tab-${tab.view}`}
+                      {...PRESSABLE_PROPS}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {tab.label}
+                      {activeView === tab.view && (
+                        <motion.div
+                          layoutId="center-panel-active-tab"
+                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                          className="absolute left-2 right-2 bottom-0 h-0.5 rounded-full bg-emerald-400"
+                        />
+                      )}
+                    </motion.button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          </div>
         </div>
       )}
 
       {/* View content */}
-      <div className="flex-1 min-h-0">
-        {activeView === 'onboarding' && (
-          <Onboarding
-            onComplete={() => setActiveView('welcome')}
-            onSkip={() => setActiveView('welcome')}
-            onTryFeature={(feature) => setActiveView(feature as CenterView)}
-          />
-        )}
+      <div className="flex-1 min-h-0" role="tabpanel" id={`ai-coach-panel-${activeView}`} aria-labelledby={`ai-coach-tab-${activeView}`}>
+        <ViewTransition viewKey={activeView}>
+          {activeView === 'onboarding' && (
+            <Onboarding
+              onComplete={() => setActiveView('welcome')}
+              onSkip={() => setActiveView('welcome')}
+              onTryFeature={(feature) => setActiveView(feature as CenterView)}
+            />
+          )}
 
-        {activeView === 'welcome' && (
-          <WelcomeView
-            onSendPrompt={onSendPrompt}
-            onShowChart={handleShowChart}
-            onShowOptions={() => {
-              setActiveView('options')
-              setCenterView('options')
-            }}
-            onShowPosition={() => {
-              setActiveView('position')
-              setCenterView('position')
-            }}
-            onShowJournal={() => {
-              setActiveView('journal')
-              setCenterView('journal')
-            }}
-            onShowAlerts={() => {
-              setActiveView('alerts')
-              setCenterView('alerts')
-            }}
-            onShowBrief={() => {
-              setActiveView('brief')
-              setCenterView('brief')
-            }}
-            onShowScanner={() => {
-              setActiveView('scanner')
-              setCenterView('scanner')
-            }}
-            onShowTracked={() => {
-              setActiveView('tracked')
-              setCenterView('tracked')
-            }}
-            onShowLeaps={() => {
-              setActiveView('leaps')
-              setCenterView('leaps')
-            }}
-            onShowEarnings={() => {
-              setActiveView('earnings')
-              setCenterView('earnings')
-            }}
-            onShowMacro={() => {
-              setActiveView('macro')
-              setCenterView('macro')
-            }}
-            onShowPreferences={() => {
-              setActiveView('preferences')
-              setCenterView('preferences')
-            }}
-          />
-        )}
+          {activeView === 'welcome' && (
+            <WelcomeView
+              accessToken={session?.access_token}
+              displayName={session?.user?.user_metadata?.full_name || session?.user?.email || undefined}
+              onSendPrompt={onSendPrompt}
+              onShowChart={handleShowChart}
+              onShowOptions={() => {
+                setActiveView('options')
+                setCenterView('options')
+              }}
+              onShowPosition={() => {
+                setActiveView('position')
+                setCenterView('position')
+              }}
+              onShowJournal={() => {
+                setActiveView('journal')
+                setCenterView('journal')
+              }}
+              onShowAlerts={() => {
+                setActiveView('alerts')
+                setCenterView('alerts')
+              }}
+              onShowBrief={() => {
+                setActiveView('brief')
+                setCenterView('brief')
+              }}
+              onShowScanner={() => {
+                setActiveView('scanner')
+                setCenterView('scanner')
+              }}
+              onShowTracked={() => {
+                setActiveView('tracked')
+                setCenterView('tracked')
+              }}
+            />
+          )}
 
-        {activeView === 'chart' && (
-          <ChartView
-            symbol={chartSymbol}
-            timeframe={chartTimeframe}
-            bars={chartBars}
-            levels={chartLevels}
-            providerIndicators={chartProviderIndicators}
-            indicators={chartIndicatorConfig}
-            openingRangeMinutes={preferences.orbMinutes}
-            pendingSyncSymbol={pendingChartSyncSymbol}
-            isLoading={isLoadingChart}
-            error={chartError}
-            onSymbolChange={handleSymbolChange}
-            onTimeframeChange={handleTimeframeChange}
-            onIndicatorsChange={setChartIndicatorConfig}
-            onRetry={() => fetchChartData(chartSymbol, chartTimeframe)}
-            onAcceptSync={handleSyncChartSymbol}
-            onDismissSync={() => setPendingChartSyncSymbol(null)}
-          />
-        )}
+          {activeView === 'chart' && (
+            <ChartView
+              symbol={chartSymbol}
+              timeframe={chartTimeframe}
+              bars={chartBars}
+              levels={chartLevels}
+              providerIndicators={chartProviderIndicators}
+              indicators={chartIndicatorConfig}
+              openingRangeMinutes={preferences.orbMinutes}
+              pendingSyncSymbol={pendingChartSyncSymbol}
+              isLoading={isLoadingChart}
+              error={chartError}
+              onSymbolChange={handleSymbolChange}
+              onTimeframeChange={handleTimeframeChange}
+              onIndicatorsChange={setChartIndicatorConfig}
+              onRetry={() => fetchChartData(chartSymbol, chartTimeframe)}
+              onAcceptSync={handleSyncChartSymbol}
+              onDismissSync={() => setPendingChartSyncSymbol(null)}
+            />
+          )}
 
-        {activeView === 'options' && (
-          <OptionsChain
-            initialSymbol={chartSymbol}
-            preferences={{
-              defaultOptionsStrikeRange: preferences.defaultOptionsStrikeRange,
-              defaultShowGex: preferences.defaultShowGex,
-              defaultShowVolAnalytics: preferences.defaultShowVolAnalytics,
-              autoSyncWorkflowSymbol: preferences.autoSyncWorkflowSymbol,
-            }}
-          />
-        )}
+          {activeView === 'options' && (
+            <OptionsChain
+              initialSymbol={chartSymbol}
+              preferences={{
+                defaultOptionsStrikeRange: preferences.defaultOptionsStrikeRange,
+                defaultShowGex: preferences.defaultShowGex,
+                defaultShowVolAnalytics: preferences.defaultShowVolAnalytics,
+                autoSyncWorkflowSymbol: preferences.autoSyncWorkflowSymbol,
+              }}
+            />
+          )}
 
-        {activeView === 'position' && (
-          <PositionTracker
-            onClose={() => {
+          {activeView === 'position' && (
+            <PositionTracker
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
+
+          {activeView === 'journal' && (
+            <TradeJournal onClose={() => {
               setActiveView('welcome')
               setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
+            }} />
+          )}
 
-        {activeView === 'journal' && (
-          <TradeJournal onClose={() => {
-            setActiveView('welcome')
-            setCenterView(null)
-          }} />
-        )}
-
-        {activeView === 'alerts' && (
-          <AlertsPanel onClose={() => {
-            setActiveView('welcome')
-            setCenterView(null)
-          }} />
-        )}
-
-        {activeView === 'brief' && (
-          <MorningBriefPanel
-            onClose={() => {
+          {activeView === 'alerts' && (
+            <AlertsPanel onClose={() => {
               setActiveView('welcome')
               setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
+            }} />
+          )}
 
-        {activeView === 'scanner' && (
-          <OpportunityScanner
-            onClose={() => {
+          {activeView === 'brief' && (
+            <MorningBriefPanel
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
+
+          {activeView === 'scanner' && (
+            <OpportunityScanner
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
+
+          {activeView === 'tracked' && (
+            <TrackedSetupsPanel
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
+
+          {activeView === 'screenshot' && (
+            <ScreenshotUpload onClose={() => {
               setActiveView('welcome')
               setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
+            }} />
+          )}
 
-        {activeView === 'tracked' && (
-          <TrackedSetupsPanel
-            onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
+          {activeView === 'leaps' && (
+            <LEAPSDashboard
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
 
-        {activeView === 'screenshot' && (
-          <ScreenshotUpload onClose={() => {
-            setActiveView('welcome')
-            setCenterView(null)
-          }} />
-        )}
+          {activeView === 'earnings' && (
+            <EarningsDashboard
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
 
-        {activeView === 'leaps' && (
-          <LEAPSDashboard
-            onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
+          {activeView === 'macro' && (
+            <MacroContext
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onSendPrompt={onSendPrompt}
+            />
+          )}
 
-        {activeView === 'earnings' && (
-          <EarningsDashboard
-            onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
-
-        {activeView === 'macro' && (
-          <MacroContext
-            onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }}
-            onSendPrompt={onSendPrompt}
-          />
-        )}
-
-        {activeView === 'preferences' && (
-          <PreferencesPanel
-            value={preferences}
-            onChange={setPreferences}
-            onReset={() => setPreferences(DEFAULT_AI_COACH_PREFERENCES)}
-          />
-        )}
+          {activeView === 'preferences' && (
+            <PreferencesPanel
+              value={preferences}
+              onChange={setPreferences}
+              onReset={() => setPreferences(DEFAULT_AI_COACH_PREFERENCES)}
+            />
+          )}
+        </ViewTransition>
       </div>
+
+      <motion.button
+        onClick={() => setIsToolsSheetOpen(true)}
+        className="lg:hidden absolute right-4 bottom-4 z-20 inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-3 py-2 text-xs text-emerald-200 shadow-[0_8px_30px_rgba(16,185,129,0.25)] hover:bg-emerald-500/30 transition-colors"
+        aria-label="Open tools menu"
+        {...PRESSABLE_PROPS}
+      >
+        <Grid3X3 className="w-3.5 h-3.5" />
+        Tools
+      </motion.button>
+
+      <AnimatePresence>
+        {isToolsSheetOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="lg:hidden absolute inset-0 z-30 bg-black/65"
+            onClick={() => setIsToolsSheetOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-white/10 bg-[#0F1013] p-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="w-12 h-1 rounded-full bg-white/20 mx-auto mb-3" />
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-white">Tools</h3>
+                <motion.button
+                  onClick={() => setIsToolsSheetOpen(false)}
+                  className="text-xs text-white/45 hover:text-white/70 transition-colors"
+                  {...PRESSABLE_PROPS}
+                >
+                  Close
+                </motion.button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <motion.button
+                  onClick={() => {
+                    setActiveView('welcome')
+                    setCenterView(null)
+                    setIsToolsSheetOpen(false)
+                  }}
+                  className="rounded-lg border border-white/10 bg-white/5 py-2 text-xs text-white/75"
+                  {...PRESSABLE_PROPS}
+                >
+                  Home
+                </motion.button>
+                {TABS.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <motion.button
+                      key={`mobile-tools-${tab.view}`}
+                      onClick={() => {
+                        setActiveView(tab.view)
+                        setCenterView(tab.view as Parameters<typeof setCenterView>[0])
+                        if (tab.view === 'chart') fetchChartData(chartSymbol, chartTimeframe)
+                        setIsToolsSheetOpen(false)
+                      }}
+                      className={cn(
+                        'rounded-lg border py-2 text-xs transition-colors flex items-center justify-center gap-1.5',
+                        activeView === tab.view
+                          ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+                          : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                      )}
+                      {...PRESSABLE_PROPS}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {tab.label}
+                    </motion.button>
+                  )
+                })}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -804,6 +1000,8 @@ function ChartView({
               </button>
             </div>
           </div>
+        ) : isLoading && bars.length === 0 ? (
+          <ChartSkeleton />
         ) : (
           <WidgetContextMenu actions={chartContextActions}>
             <div className="relative h-full">
@@ -834,6 +1032,8 @@ function ChartView({
 // ============================================
 
 function WelcomeView({
+  accessToken,
+  displayName,
   onSendPrompt,
   onShowChart,
   onShowOptions,
@@ -843,11 +1043,9 @@ function WelcomeView({
   onShowBrief,
   onShowScanner,
   onShowTracked,
-  onShowLeaps,
-  onShowEarnings,
-  onShowMacro,
-  onShowPreferences,
 }: {
+  accessToken?: string
+  displayName?: string
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
   onShowOptions: () => void
@@ -857,79 +1055,200 @@ function WelcomeView({
   onShowBrief: () => void
   onShowScanner: () => void
   onShowTracked: () => void
-  onShowLeaps: () => void
-  onShowEarnings: () => void
-  onShowMacro: () => void
-  onShowPreferences: () => void
 }) {
+  const [clockTick, setClockTick] = useState(0)
+  const [spxTicker, setSpxTicker] = useState<{
+    price: number | null
+    change: number | null
+    changePct: number | null
+    asOf: string | null
+    isLoading: boolean
+    error: string | null
+  }>({
+    price: null,
+    change: null,
+    changePct: null,
+    asOf: null,
+    isLoading: true,
+    error: null,
+  })
+
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick((value) => value + 1), 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const marketStatus = useMemo(() => getWelcomeMarketStatus(), [clockTick])
+  const greeting = useMemo(() => getWelcomeGreeting(displayName), [displayName, clockTick])
+
+  const loadSPXTicker = useCallback(async () => {
+    if (!accessToken) return
+
+    setSpxTicker((prev) => ({
+      ...prev,
+      isLoading: prev.price === null,
+      error: null,
+    }))
+
+    try {
+      let chartData = await getChartData('SPX', '1m', accessToken)
+      if (chartData.bars.length === 0) {
+        chartData = await getChartData('SPX', '1D', accessToken)
+      }
+
+      if (chartData.bars.length === 0) {
+        throw new Error('No bars returned')
+      }
+
+      const last = chartData.bars[chartData.bars.length - 1]
+      const previous = chartData.bars.length > 1 ? chartData.bars[chartData.bars.length - 2] : null
+      const change = previous ? last.close - previous.close : 0
+      const changePct = previous && previous.close !== 0 ? (change / previous.close) * 100 : null
+      const timestampMs = last.time > 1_000_000_000_000 ? last.time : last.time * 1000
+
+      setSpxTicker({
+        price: Number(last.close.toFixed(2)),
+        change: Number(change.toFixed(2)),
+        changePct: changePct !== null ? Number(changePct.toFixed(2)) : null,
+        asOf: new Date(timestampMs).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/New_York',
+        }),
+        isLoading: false,
+        error: null,
+      })
+    } catch {
+      setSpxTicker((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: 'Live SPX feed unavailable',
+      }))
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (!accessToken) return
+    void loadSPXTicker()
+    const interval = setInterval(() => {
+      void loadSPXTicker()
+    }, 60_000)
+
+    return () => clearInterval(interval)
+  }, [accessToken, loadSPXTicker])
+
+  const quickAccessCards: Array<{
+    label: string
+    subtitle: string
+    icon: typeof CandlestickChart
+    onClick: () => void
+  }> = [
+    { label: 'Live Chart', subtitle: 'SPX & NDX', icon: CandlestickChart, onClick: onShowChart },
+    { label: 'Options', subtitle: 'Greeks & IV', icon: TableProperties, onClick: onShowOptions },
+    { label: 'Analyze', subtitle: 'P&L & Risk', icon: Calculator, onClick: onShowPosition },
+    { label: 'Brief', subtitle: 'Pre-Market', icon: Sunrise, onClick: onShowBrief },
+    { label: 'Journal', subtitle: 'Trade Log', icon: BookOpen, onClick: onShowJournal },
+    { label: 'Alerts', subtitle: 'Price Watch', icon: Bell, onClick: onShowAlerts },
+    { label: 'Scanner', subtitle: 'Find Setups', icon: Search, onClick: onShowScanner },
+    { label: 'Tracked', subtitle: 'Manage Setups', icon: ListChecks, onClick: onShowTracked },
+  ]
+
+  const containerMotion = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+  }
+  const itemMotion = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.24 } },
+  }
+
+  const tickerPositive = (spxTicker.change ?? 0) >= 0
+
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-white/5 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium text-white">AI Coach Center</h2>
-          <p className="text-xs text-white/40">Charts, options & analytics</p>
+      <div className="p-5 border-b border-white/5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs text-emerald-400/80 uppercase tracking-[0.14em]">AI Coach</p>
+            <h2 className="text-xl font-semibold text-white mt-1">{greeting}</h2>
+            <p className="text-sm text-white/45 mt-1">Run your pre-market and session workflow from one panel.</p>
+          </div>
+          <span className={cn('text-[11px] font-medium px-2.5 py-1 rounded-md border shrink-0', marketStatus.toneClass)}>
+            {marketStatus.label}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onShowChart}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
-          >
-            <CandlestickChart className="w-3.5 h-3.5" />
-            Chart
-          </button>
-          <button
-            onClick={onShowOptions}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
-          >
-            <TableProperties className="w-3.5 h-3.5" />
-            Options
-          </button>
-          <button
-            onClick={onShowPosition}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
-          >
-            <Calculator className="w-3.5 h-3.5" />
-            Analyze
-          </button>
-          <button
-            onClick={onShowBrief}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
-          >
-            <Sunrise className="w-3.5 h-3.5" />
-            Brief
-          </button>
-          <button
-            onClick={onShowPreferences}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            Prefs
-          </button>
+
+        <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] text-emerald-300/75 uppercase tracking-[0.12em]">SPX Live</p>
+              {spxTicker.isLoading && spxTicker.price === null ? (
+                <p className="text-sm text-white/45 mt-1">Loading live index quote...</p>
+              ) : spxTicker.error ? (
+                <p className="text-sm text-red-300/80 mt-1">{spxTicker.error}</p>
+              ) : (
+                <p className="text-xl font-semibold text-white mt-0.5">${spxTicker.price?.toLocaleString()}</p>
+              )}
+            </div>
+            {spxTicker.price !== null && spxTicker.change !== null && (
+              <div className={cn(
+                'flex items-center gap-1.5 text-sm font-medium',
+                tickerPositive ? 'text-emerald-300' : 'text-red-300'
+              )}>
+                {tickerPositive ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                <span>
+                  {tickerPositive ? '+' : ''}{spxTicker.change.toFixed(2)}
+                  {spxTicker.changePct !== null ? ` (${tickerPositive ? '+' : ''}${spxTicker.changePct.toFixed(2)}%)` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+          {spxTicker.asOf && (
+            <p className="text-[10px] text-white/35 mt-1.5">As of {spxTicker.asOf} ET</p>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-lg mx-auto">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+        <div className="max-w-2xl mx-auto">
+          <motion.div
+            variants={containerMotion}
+            initial="hidden"
+            animate="show"
+            className="text-center mb-8"
+          >
+            <motion.div variants={itemMotion} className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
               <BarChart3 className="w-8 h-8 text-emerald-500" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">
-              Welcome to AI Coach
-            </h3>
-            <p className="text-sm text-white/50 leading-relaxed">
-              Your AI-powered trading assistant. Ask about key levels, market conditions,
-              options data, and more. Try one of the examples below to get started.
-            </p>
-          </div>
+            </motion.div>
+            <motion.h3 variants={itemMotion} className="text-lg font-semibold text-white mb-2">
+              Ready to execute the session plan?
+            </motion.h3>
+            <motion.p variants={itemMotion} className="text-sm text-white/50 leading-relaxed">
+              Start with one high-impact workflow below, then pivot into chart, options, and risk views as setups develop.
+            </motion.p>
+          </motion.div>
 
-          <div className="grid gap-3">
+          <motion.div
+            variants={containerMotion}
+            initial="hidden"
+            animate="show"
+            className="grid gap-3"
+          >
             {EXAMPLE_PROMPTS.map((item) => {
               const Icon = item.icon
               return (
-                <button
-                  key={item.label}
-                  onClick={() => onSendPrompt?.(item.prompt)}
+            <motion.button
+              variants={itemMotion}
+              key={item.label}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={() => {
+                if (item.prompt === '__NAVIGATE_BRIEF__') {
+                  onShowBrief()
+                      return
+                    }
+                    onSendPrompt?.(item.prompt)
+                  }}
                   className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-4 text-left transition-all duration-300 hover:-translate-y-0.5"
                 >
                   <div className="flex items-start gap-3">
@@ -945,106 +1264,40 @@ function WelcomeView({
                       </div>
                       <p className="text-xs text-white/40 mb-1.5">{item.description}</p>
                       <p className="text-xs text-emerald-500/70 italic">
-                        &ldquo;{item.prompt}&rdquo;
+                        &ldquo;{item.prompt === '__NAVIGATE_BRIEF__' ? 'Open Morning Brief panel' : item.prompt}&rdquo;
                       </p>
                     </div>
                   </div>
-                </button>
+                </motion.button>
               )
             })}
-          </div>
+          </motion.div>
 
           {/* Quick Access Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-            <button
-              onClick={onShowChart}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <CandlestickChart className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Live Chart</p>
-              <p className="text-[10px] text-white/30 mt-0.5">SPX &amp; NDX</p>
-            </button>
-            <button
-              onClick={onShowOptions}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <TableProperties className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Options</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Greeks &amp; IV</p>
-            </button>
-            <button
-              onClick={onShowPosition}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Calculator className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Analyze</p>
-              <p className="text-[10px] text-white/30 mt-0.5">P&amp;L &amp; Risk</p>
-            </button>
-            <button
-              onClick={onShowJournal}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <BookOpen className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Journal</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Trade Log</p>
-            </button>
-            <button
-              onClick={onShowAlerts}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Bell className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Alerts</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Price Watch</p>
-            </button>
-            <button
-              onClick={onShowBrief}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Sunrise className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Brief</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Pre-Market</p>
-            </button>
-            <button
-              onClick={onShowScanner}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Search className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Scanner</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Find Setups</p>
-            </button>
-            <button
-              onClick={onShowTracked}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <ListChecks className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Tracked</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Manage Setups</p>
-            </button>
-            <button
-              onClick={onShowLeaps}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Clock className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">LEAPS</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Long-Term</p>
-            </button>
-            <button
-              onClick={onShowEarnings}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Earnings</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Event Vol</p>
-            </button>
-            <button
-              onClick={onShowMacro}
-              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Globe className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-white">Macro</p>
-              <p className="text-[10px] text-white/30 mt-0.5">Econ Data</p>
-            </button>
-          </div>
+          <motion.div
+            variants={containerMotion}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"
+          >
+            {quickAccessCards.map((card) => {
+              const Icon = card.icon
+              return (
+                <motion.button
+                  variants={itemMotion}
+                  key={card.label}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={card.onClick}
+                  className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  <Icon className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+                  <p className="text-xs font-medium text-white">{card.label}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5">{card.subtitle}</p>
+                </motion.button>
+              )
+            })}
+          </motion.div>
         </div>
       </div>
     </div>

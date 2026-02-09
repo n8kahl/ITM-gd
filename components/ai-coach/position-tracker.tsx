@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { motion } from 'framer-motion'
 import {
   API_BASE,
   AICoachAPIError,
@@ -18,10 +19,16 @@ import {
   type PositionAdvice,
   type PositionLiveSnapshot,
 } from '@/lib/api/ai-coach'
+import { runWithRetry } from './retry'
 
 interface PositionTrackerProps {
   onClose: () => void
   onSendPrompt?: (prompt: string) => void
+}
+
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
 }
 
 function formatDollar(value: number): string {
@@ -66,6 +73,7 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [flashPnl, setFlashPnl] = useState<Record<string, boolean>>({})
 
@@ -109,15 +117,25 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
       setIsRefreshing(true)
     } else {
       setIsLoading(true)
+      setRetryNotice(null)
     }
 
     setError(null)
 
     try {
-      const [live, advice] = await Promise.all([
-        getLivePositions(token),
-        getPositionAdvice(token),
-      ])
+      const [live, advice] = await runWithRetry(
+        () => Promise.all([
+          getLivePositions(token),
+          getPositionAdvice(token),
+        ]),
+        {
+          onRetry: ({ nextAttempt, maxAttempts }) => {
+            if (!isBackground) {
+              setRetryNotice(`Refreshing positions feed (${nextAttempt}/${maxAttempts})...`)
+            }
+          },
+        },
+      )
 
       setPositions(live.positions)
       setLastUpdated(live.timestamp)
@@ -133,6 +151,9 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
         : 'Failed to load live positions'
       setError(message)
     } finally {
+      if (!isBackground) {
+        setRetryNotice(null)
+      }
       setIsLoading(false)
       setIsRefreshing(false)
     }
@@ -211,23 +232,31 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             onClick={() => void fetchAll(true)}
             disabled={isRefreshing}
             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border border-white/10 text-white/70 hover:text-white hover:border-white/20 disabled:opacity-60"
+            {...PRESSABLE_PROPS}
           >
             {isRefreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             Refresh
-          </button>
-          <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+          </motion.button>
+          <motion.button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors"
+            {...PRESSABLE_PROPS}
+          >
             <X className="w-4 h-4" />
-          </button>
+          </motion.button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {lastUpdated && (
           <p className="text-[11px] text-white/40">Last updated: {new Date(lastUpdated).toLocaleTimeString()}</p>
+        )}
+        {retryNotice && (
+          <p className="text-[11px] text-amber-300/80">{retryNotice}</p>
         )}
 
         {error && (
@@ -237,7 +266,7 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
         )}
 
         {isLoading && (
-          <div className="h-32 flex items-center justify-center text-white/50 gap-2">
+          <div className="h-32 flex flex-col items-center justify-center text-white/50 gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
             Loading open positions...
           </div>
@@ -335,11 +364,12 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
+    <motion.button
       onClick={onClick}
       className="text-[11px] px-2.5 py-1.5 rounded-md border border-white/15 text-white/75 hover:text-white hover:border-white/30 transition-colors"
+      {...PRESSABLE_PROPS}
     >
       {label}
-    </button>
+    </motion.button>
   )
 }

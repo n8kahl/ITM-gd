@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { motion } from 'framer-motion'
 import {
   getTrades,
   createTrade,
@@ -30,6 +31,7 @@ import {
   type TradeOutcome,
 } from '@/lib/api/ai-coach'
 import { JournalInsights } from './journal-insights'
+import { runWithRetry } from './retry'
 
 // ============================================
 // TYPES
@@ -67,6 +69,11 @@ const STRATEGIES = [
   'Other',
 ]
 
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -78,6 +85,7 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
   const [analytics, setAnalytics] = useState<TradeAnalyticsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [filterOutcome, setFilterOutcome] = useState<TradeOutcome | ''>('')
 
   const token = session?.access_token
@@ -87,12 +95,20 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
     if (!token) return
     setIsLoading(true)
     setError(null)
+    setRetryNotice(null)
 
     try {
-      const result = await getTrades(token, {
-        limit: 50,
-        outcome: filterOutcome || undefined,
-      })
+      const result = await runWithRetry(
+        () => getTrades(token, {
+          limit: 50,
+          outcome: filterOutcome || undefined,
+        }),
+        {
+          onRetry: ({ nextAttempt, maxAttempts }) => {
+            setRetryNotice(`Reconnecting trade journal (${nextAttempt}/${maxAttempts})...`)
+          },
+        },
+      )
       setTrades(result.trades)
     } catch (err) {
       const msg = err instanceof AICoachAPIError
@@ -100,6 +116,7 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
         : 'Failed to load trades'
       setError(msg)
     } finally {
+      setRetryNotice(null)
       setIsLoading(false)
     }
   }, [token, filterOutcome])
@@ -108,7 +125,9 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
   const fetchAnalytics = useCallback(async () => {
     if (!token) return
     try {
-      const data = await getTradeAnalytics(token)
+      const data = await runWithRetry(() => getTradeAnalytics(token), {
+        maxAttempts: 2,
+      })
       setAnalytics(data)
     } catch {
       // Silent fail - analytics are secondary
@@ -144,9 +163,13 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
           <BookOpen className="w-4 h-4 text-emerald-500" />
           <h2 className="text-sm font-medium text-white">Trade Journal</h2>
         </div>
-        <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+        <motion.button
+          onClick={onClose}
+          className="text-white/30 hover:text-white/60 transition-colors"
+          {...PRESSABLE_PROPS}
+        >
           <X className="w-4 h-4" />
-        </button>
+        </motion.button>
       </div>
 
       {/* Tab bar */}
@@ -158,7 +181,7 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
         ]).map(tab => {
           const Icon = tab.icon
           return (
-            <button
+            <motion.button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
@@ -167,10 +190,11 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
                   ? 'text-emerald-400 border-emerald-500'
                   : 'text-white/40 hover:text-white/60 border-transparent'
               )}
+              {...PRESSABLE_PROPS}
             >
               <Icon className="w-3.5 h-3.5" />
               {tab.label}
-            </button>
+            </motion.button>
           )
         })}
       </div>
@@ -182,6 +206,7 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
             trades={trades}
             isLoading={isLoading}
             error={error}
+            retryNotice={retryNotice}
             filterOutcome={filterOutcome}
             onFilterChange={setFilterOutcome}
             onDelete={handleDeleteTrade}
@@ -217,6 +242,7 @@ function TradesList({
   trades,
   isLoading,
   error,
+  retryNotice,
   filterOutcome,
   onFilterChange,
   onDelete,
@@ -225,6 +251,7 @@ function TradesList({
   trades: TradeEntry[]
   isLoading: boolean
   error: string | null
+  retryNotice: string | null
   filterOutcome: TradeOutcome | ''
   onFilterChange: (o: TradeOutcome | '') => void
   onDelete: (id: string) => void
@@ -234,8 +261,11 @@ function TradesList({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
+      <div className="flex flex-col items-center justify-center py-16 gap-2">
         <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+        {retryNotice && (
+          <p className="text-xs text-amber-300/80">{retryNotice}</p>
+        )}
       </div>
     )
   }
@@ -244,9 +274,13 @@ function TradesList({
     return (
       <div className="text-center py-12">
         <p className="text-sm text-red-400 mb-2">{error}</p>
-        <button onClick={onRetry} className="text-xs text-emerald-500 hover:text-emerald-400">
+        <motion.button
+          onClick={onRetry}
+          className="text-xs text-emerald-500 hover:text-emerald-400"
+          {...PRESSABLE_PROPS}
+        >
           Retry
-        </button>
+        </motion.button>
       </div>
     )
   }
@@ -257,7 +291,7 @@ function TradesList({
       <div className="flex items-center gap-2">
         <span className="text-xs text-white/40">Filter:</span>
         {(['', 'win', 'loss', 'breakeven'] as const).map(outcome => (
-          <button
+          <motion.button
             key={outcome || 'all'}
             onClick={() => onFilterChange(outcome)}
             className={cn(
@@ -266,9 +300,10 @@ function TradesList({
                 ? 'bg-emerald-500/20 text-emerald-400'
                 : 'text-white/40 hover:text-white/60'
             )}
+            {...PRESSABLE_PROPS}
           >
             {outcome === '' ? 'All' : outcome.charAt(0).toUpperCase() + outcome.slice(1)}
-          </button>
+          </motion.button>
         ))}
       </div>
 
@@ -284,9 +319,10 @@ function TradesList({
             key={trade.id}
             className="glass-card-heavy rounded-lg border border-white/5 overflow-hidden"
           >
-            <button
+            <motion.button
               onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
               className="w-full p-3 flex items-center justify-between text-left"
+              {...PRESSABLE_PROPS}
             >
               <div className="flex items-center gap-3">
                 <OutcomeIcon outcome={trade.trade_outcome} />
@@ -324,7 +360,7 @@ function TradesList({
                   <ChevronDown className="w-4 h-4 text-white/30" />
                 )}
               </div>
-            </button>
+            </motion.button>
 
             {expandedId === trade.id && (
               <div className="px-3 pb-3 border-t border-white/5 pt-3">
@@ -375,13 +411,14 @@ function TradesList({
                 </div>
 
                 <div className="flex justify-end mt-3">
-                  <button
+                  <motion.button
                     onClick={() => onDelete(trade.id)}
                     className="flex items-center gap-1 text-xs text-red-400/60 hover:text-red-400 transition-colors"
+                    {...PRESSABLE_PROPS}
                   >
                     <Trash2 className="w-3 h-3" />
                     Delete
-                  </button>
+                  </motion.button>
                 </div>
               </div>
             )}
@@ -589,7 +626,7 @@ function TradeForm({
       </div>
 
       {/* Submit */}
-      <button
+      <motion.button
         onClick={handleSubmit}
         disabled={isSubmitting || !symbol.trim() || !entryPrice}
         className={cn(
@@ -598,6 +635,7 @@ function TradeForm({
             ? 'bg-white/5 text-white/30 cursor-not-allowed'
             : 'bg-emerald-500 hover:bg-emerald-600 text-white'
         )}
+        {...PRESSABLE_PROPS}
       >
         {isSubmitting ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -605,7 +643,7 @@ function TradeForm({
           <Plus className="w-4 h-4" />
         )}
         {isSubmitting ? 'Saving...' : 'Add Trade'}
-      </button>
+      </motion.button>
     </div>
   )
 }

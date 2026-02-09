@@ -1,23 +1,35 @@
 'use client'
 
-import { memo, useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, BrainCircuit, Wrench } from 'lucide-react'
+import { User, BrainCircuit, Wrench, Search, Activity, PenSquare, NotebookPen } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { sanitizeContent } from '@/lib/sanitize'
-import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
+import {
+  AI_COACH_CURRENT_SESSION_STORAGE_KEY,
+  type ChatMessage,
+} from '@/hooks/use-ai-coach-chat'
+import {
+  buildJournalPrefillSearchParams,
+  extractJournalPrefillFromAssistantMessage,
+} from '@/lib/journal/ai-coach-bridge'
 import { WidgetCard, extractWidgets } from './widget-cards'
+import { FollowUpChips } from './follow-up-chips'
 
 interface ChatMessageProps {
   message: ChatMessage
+  onSendPrompt?: (prompt: string) => void
 }
 
 /**
  * Modern chat message component with proper bubbles, markdown rendering,
  * and inline generative UI widgets.
  */
-export const ChatMessageBubble = memo(function ChatMessageBubble({ message }: ChatMessageProps) {
+export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSendPrompt }: ChatMessageProps) {
+  const router = useRouter()
   const isUser = message.role === 'user'
 
   const widgets = useMemo(() => {
@@ -25,8 +37,36 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message }: Ch
     return extractWidgets(message.functionCalls)
   }, [isUser, message.functionCalls])
 
+  const journalPrefill = useMemo(() => {
+    if (isUser || message.isStreaming || !message.content) return null
+    return extractJournalPrefillFromAssistantMessage({
+      role: message.role,
+      content: message.content,
+      functionCalls: message.functionCalls,
+    })
+  }, [isUser, message.content, message.functionCalls, message.isStreaming, message.role])
+
+  const handleLogTrade = useCallback(() => {
+    if (!journalPrefill) return
+
+    const nextPrefill = { ...journalPrefill }
+    if (typeof window !== 'undefined') {
+      const sessionId = window.sessionStorage.getItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY)
+      if (sessionId && !nextPrefill.session_id) {
+        nextPrefill.session_id = sessionId
+      }
+    }
+
+    router.push(`/members/journal?${buildJournalPrefillSearchParams(nextPrefill).toString()}`)
+  }, [journalPrefill, router])
+
   return (
-    <div className={cn('flex gap-3 group', isUser ? 'justify-end' : 'justify-start')}>
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className={cn('flex gap-3 group', isUser ? 'justify-end' : 'justify-start')}
+    >
       <div className={cn(
         'flex gap-3 max-w-[80%]',
         isUser ? 'flex-row-reverse' : 'flex-row'
@@ -92,6 +132,27 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message }: Ch
             </div>
           )}
 
+          {journalPrefill && (
+            <div className="mt-1">
+              <button
+                type="button"
+                onClick={handleLogTrade}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15 hover:text-emerald-200"
+              >
+                <NotebookPen className="h-3.5 w-3.5" />
+                Log This Trade
+              </button>
+            </div>
+          )}
+
+          {!isUser && !message.isStreaming && message.content && onSendPrompt && (
+            <FollowUpChips
+              content={message.content}
+              functionCalls={message.functionCalls}
+              onSelect={onSendPrompt}
+            />
+          )}
+
           {/* Footer */}
           <div className={cn(
             'flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
@@ -109,31 +170,43 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message }: Ch
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 })
 
 /**
- * Typing indicator — 3 bouncing dots with AI avatar
+ * Typing indicator with stream-status context
  */
-export function TypingIndicator() {
+export function TypingIndicator({ streamStatus }: { streamStatus?: string }) {
+  const normalized = (streamStatus || '').toLowerCase()
+  const state = normalized.includes('analyz')
+    ? { label: 'Analyzing...', icon: Activity }
+    : normalized.includes('writing')
+      ? { label: 'Writing...', icon: PenSquare }
+      : normalized.includes('fetch') || normalized.includes('using')
+        ? { label: 'Fetching data...', icon: Search }
+        : { label: 'Thinking...', icon: BrainCircuit }
+  const StatusIcon = state.icon
+
   return (
     <div className="flex gap-3 justify-start">
       <div className="flex gap-3">
         <div className="w-8 h-8 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/25 flex items-center justify-center shrink-0 mt-1">
           <BrainCircuit className="w-4 h-4 text-emerald-400" />
         </div>
-        <div className="flex items-center gap-1.5 px-4 py-3">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <StatusIcon className="w-3.5 h-3.5 text-emerald-300/80 animate-pulse" />
+          <span className="text-xs text-emerald-200/80">{state.label}</span>
           <span
-            className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+            className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce"
             style={{ animationDelay: '0ms', animationDuration: '0.6s' }}
           />
           <span
-            className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+            className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce"
             style={{ animationDelay: '150ms', animationDuration: '0.6s' }}
           />
           <span
-            className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+            className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce"
             style={{ animationDelay: '300ms', animationDuration: '0.6s' }}
           />
         </div>

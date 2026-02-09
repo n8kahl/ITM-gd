@@ -497,6 +497,65 @@ describe('Function Handlers', () => {
     });
   });
 
+  describe('get_spx_game_plan', () => {
+    it('returns a unified SPX game plan payload', async () => {
+      mockCalculateLevels.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 6005.25,
+        levels: {
+          resistance: [{ type: 'PDH', price: 6020 }],
+          support: [{ type: 'PDL', price: 5980 }],
+          pivots: { standard: { pp: 6000 } },
+          indicators: { vwap: 6002.5, atr14: 45.2 },
+        },
+        marketContext: {},
+        timestamp: '2026-02-09T15:00:00.000Z',
+        cached: false,
+        cacheExpiresAt: null,
+      } as any);
+
+      mockCalculateGEXProfile.mockResolvedValue({
+        symbol: 'SPX',
+        spotPrice: 6005.25,
+        gexByStrike: [],
+        flipPoint: 5995,
+        maxGEXStrike: 6010,
+        keyLevels: [],
+        regime: 'positive_gamma',
+        implication: 'Positive gamma regime.',
+        calculatedAt: '2026-02-09T15:00:00.000Z',
+        expirationsAnalyzed: ['2026-02-09'],
+      });
+
+      mockAnalyzeZeroDTE.mockResolvedValue({
+        symbol: 'SPX',
+        hasZeroDTE: true,
+        expectedMove: { totalExpectedMove: 42.5 },
+      } as any);
+
+      mockFetchIntradayData
+        .mockResolvedValueOnce([{ o: 6000, h: 6008, l: 5998, c: 6005.25, v: 1_000_000, t: Date.now() }])
+        .mockResolvedValueOnce([{ o: 600, h: 601, l: 599, c: 600.1, v: 2_000_000, t: Date.now() }]);
+
+      const result = await executeFunctionCall({
+        name: 'get_spx_game_plan',
+        arguments: JSON.stringify({ include_spy: true }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('currentPrice', 6005.25);
+      expect(result).toHaveProperty('spyPrice', 600.1);
+      expect(result).toHaveProperty('spxSpyRatio');
+      expect(result).toHaveProperty('gammaRegime', 'positive');
+      expect(result).toHaveProperty('flipPoint', 5995);
+      expect(result).toHaveProperty('expectedMove', 45.2);
+      expect(result).toHaveProperty('setupContext');
+      expect(result).toHaveProperty('keyLevels');
+      expect(result).toHaveProperty('gexProfile');
+      expect(result).toHaveProperty('zeroDTE');
+    });
+  });
+
   describe('get_earnings_calendar', () => {
     it('should return earnings calendar for watchlist', async () => {
       mockGetEarningsCalendar.mockResolvedValue([

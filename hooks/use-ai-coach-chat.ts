@@ -16,6 +16,8 @@ import {
 } from '@/lib/api/ai-coach'
 import type { ChartRequest } from '@/components/ai-coach/center-panel'
 
+export const AI_COACH_CURRENT_SESSION_STORAGE_KEY = 'ai-coach-current-session-id'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -90,6 +92,15 @@ export function useAICoachChat() {
     if (session?.access_token) { loadSessions() }
   }, [session?.access_token]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (state.currentSessionId) {
+      window.sessionStorage.setItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY, state.currentSessionId)
+    } else {
+      window.sessionStorage.removeItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY)
+    }
+  }, [state.currentSessionId])
+
   const currentSessionIdRef = useRef<string | null>(state.currentSessionId)
   currentSessionIdRef.current = state.currentSessionId
 
@@ -105,7 +116,8 @@ export function useAICoachChat() {
     if (!functionCalls) return null
     const showChartCall = functionCalls.find(fc => fc.function === 'show_chart')
     const gexCall = functionCalls.find(fc => fc.function === 'get_gamma_exposure')
-    if (!showChartCall && !gexCall) return null
+    const spxGamePlanCall = functionCalls.find(fc => fc.function === 'get_spx_game_plan')
+    if (!showChartCall && !gexCall && !spxGamePlanCall) return null
 
     const showChartArgs = showChartCall?.arguments as { symbol?: string; timeframe?: string } | undefined
     const showChartResult = showChartCall?.result as {
@@ -126,10 +138,25 @@ export function useAICoachChat() {
       maxGEXStrike?: number | null
       keyLevels?: Array<{ strike: number; gexValue: number; type: 'support' | 'resistance' | 'magnet' }>
     } | undefined
+    const spxGamePlanResult = spxGamePlanCall?.result as {
+      symbol?: string
+      keyLevels?: {
+        resistance?: Array<{ name: string; price: number; distance?: string }>
+        support?: Array<{ name: string; price: number; distance?: string }>
+        indicators?: { vwap?: number; atr14?: number }
+      }
+      gexProfile?: {
+        symbol?: string
+        spotPrice?: number
+        flipPoint?: number | null
+        maxGEXStrike?: number | null
+        keyLevels?: Array<{ strike: number; gexValue: number; type: 'support' | 'resistance' | 'magnet' }>
+      }
+    } | undefined
 
-    const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || 'SPX'
+    const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || 'SPX'
     const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '1D') as ChartTimeframe
-    const levels = showChartResult?.levels
+    const levels = showChartResult?.levels || spxGamePlanResult?.keyLevels
     const gexProfile = gexResult
       ? {
           symbol: gexResult.symbol || symbol,
@@ -138,6 +165,14 @@ export function useAICoachChat() {
           maxGEXStrike: gexResult.maxGEXStrike,
           keyLevels: gexResult.keyLevels,
         }
+      : spxGamePlanResult?.gexProfile
+        ? {
+            symbol: spxGamePlanResult.gexProfile.symbol || symbol,
+            spotPrice: spxGamePlanResult.gexProfile.spotPrice,
+            flipPoint: spxGamePlanResult.gexProfile.flipPoint,
+            maxGEXStrike: spxGamePlanResult.gexProfile.maxGEXStrike,
+            keyLevels: spxGamePlanResult.gexProfile.keyLevels,
+          }
       : undefined
 
     return {
@@ -349,14 +384,49 @@ export function useAICoachChat() {
 
   const clearError = useCallback(() => { setState(prev => ({ ...prev, error: null })) }, [])
 
+  const appendUserMessage = useCallback((content: string) => {
+    if (!content.trim()) return
+    setState(prev => ({
+      ...prev,
+      messages: [
+        ...prev.messages,
+        {
+          id: `local-user-${Date.now()}`,
+          role: 'user',
+          content,
+          timestamp: new Date().toISOString(),
+          isOptimistic: false,
+        },
+      ],
+    }))
+  }, [])
+
+  const appendAssistantMessage = useCallback((content: string) => {
+    if (!content.trim()) return
+    setState(prev => ({
+      ...prev,
+      messages: [
+        ...prev.messages,
+        {
+          id: `local-assistant-${Date.now()}`,
+          role: 'assistant',
+          content,
+          timestamp: new Date().toISOString(),
+          isStreaming: false,
+        },
+      ],
+    }))
+  }, [])
+
   return useMemo(() => ({
     messages: state.messages, sessions: state.sessions, currentSessionId: state.currentSessionId,
     isSending: state.isSending, isLoadingSessions: state.isLoadingSessions, isLoadingMessages: state.isLoadingMessages,
     error: state.error, rateLimitInfo: state.rateLimitInfo, chartRequest: state.chartRequest,
     sendMessage, newSession, selectSession, deleteSession: removeSession, loadSessions, clearError,
+    appendUserMessage, appendAssistantMessage,
   }), [
     state.messages, state.sessions, state.currentSessionId, state.isSending, state.isLoadingSessions,
     state.isLoadingMessages, state.error, state.rateLimitInfo, state.chartRequest,
-    sendMessage, newSession, selectSession, removeSession, loadSessions, clearError,
+    sendMessage, newSession, selectSession, removeSession, loadSessions, clearError, appendUserMessage, appendAssistantMessage,
   ])
 }

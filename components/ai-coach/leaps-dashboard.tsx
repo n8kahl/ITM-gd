@@ -17,7 +17,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { motion } from 'framer-motion'
 import { API_BASE } from '@/lib/api/ai-coach'
+import { runWithRetry } from './retry'
 
 // ============================================
 // TYPES
@@ -60,6 +62,11 @@ interface LEAPSDashboardProps {
   onSendPrompt?: (prompt: string) => void
 }
 
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -69,6 +76,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
   const [positions, setPositions] = useState<LEAPSPosition[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [projections, setProjections] = useState<Record<string, GreeksSnapshot[]>>({})
@@ -79,17 +87,26 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
     if (!token) return
     setIsLoading(true)
     setError(null)
+    setRetryNotice(null)
 
     try {
-      const res = await fetch(`${API_BASE}/api/leaps`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const data = await runWithRetry(async () => {
+        const res = await fetch(`${API_BASE}/api/leaps`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error || 'Failed to fetch')
+        return payload
+      }, {
+        onRetry: ({ nextAttempt, maxAttempts }) => {
+          setRetryNotice(`Reconnecting LEAPS feed (${nextAttempt}/${maxAttempts})...`)
+        },
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch')
       setPositions(data.positions || [])
     } catch (err: any) {
       setError(err.message)
     } finally {
+      setRetryNotice(null)
       setIsLoading(false)
     }
   }, [token])
@@ -159,16 +176,21 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             onClick={() => setShowAddForm(!showAddForm)}
             className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20 transition-all"
+            {...PRESSABLE_PROPS}
           >
             <Plus className="w-3 h-3" />
             Add Position
-          </button>
-          <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+          </motion.button>
+          <motion.button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors"
+            {...PRESSABLE_PROPS}
+          >
             <X className="w-4 h-4" />
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -190,7 +212,7 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-            <p className="text-sm text-white/50">Loading LEAPS positions...</p>
+            <p className="text-sm text-white/50">{retryNotice || 'Loading LEAPS positions...'}</p>
           </div>
         )}
 
@@ -198,9 +220,13 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
         {error && !isLoading && (
           <div className="text-center py-12">
             <p className="text-sm text-red-400 mb-2">{error}</p>
-            <button onClick={fetchPositions} className="text-xs text-emerald-500 hover:text-emerald-400">
+            <motion.button
+              onClick={fetchPositions}
+              className="text-xs text-emerald-500 hover:text-emerald-400"
+              {...PRESSABLE_PROPS}
+            >
               Retry
-            </button>
+            </motion.button>
           </div>
         )}
 
@@ -212,12 +238,13 @@ export function LEAPSDashboard({ onClose, onSendPrompt }: LEAPSDashboardProps) {
             <p className="text-xs text-white/25 mb-6">
               Track your long-term options with Greeks projection, roll analysis, and macro context
             </p>
-            <button
+            <motion.button
               onClick={() => setShowAddForm(true)}
               className="px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+              {...PRESSABLE_PROPS}
             >
               Add Your First Position
-            </button>
+            </motion.button>
           </div>
         )}
 
@@ -412,7 +439,7 @@ function PositionCard({
           {/* Actions */}
           <div className="flex items-center gap-3">
             {onAskAI && (
-              <button
+              <motion.button
                 onClick={(e) => {
                   e.stopPropagation()
                   onAskAI(
@@ -423,13 +450,14 @@ function PositionCard({
                   )
                 }}
                 className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+                {...PRESSABLE_PROPS}
               >
                 <Zap className="w-3 h-3" />
                 AI Analysis
-              </button>
+              </motion.button>
             )}
             {onAskAI && (
-              <button
+              <motion.button
                 onClick={(e) => {
                   e.stopPropagation()
                   onAskAI(
@@ -438,20 +466,22 @@ function PositionCard({
                   )
                 }}
                 className="flex items-center gap-1.5 text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                {...PRESSABLE_PROPS}
               >
                 <Calculator className="w-3 h-3" />
                 Roll Analysis
-              </button>
+              </motion.button>
             )}
-            <button
+            <motion.button
               onClick={(e) => {
                 e.stopPropagation()
                 if (window.confirm('Delete this position?')) onDelete()
               }}
               className="flex items-center gap-1.5 text-xs text-red-400/60 hover:text-red-400 transition-colors ml-auto"
+              {...PRESSABLE_PROPS}
             >
               <Trash2 className="w-3 h-3" />
-            </button>
+            </motion.button>
           </div>
         </div>
       )}
@@ -625,20 +655,22 @@ function AddPositionForm({
       )}
 
       <div className="flex items-center gap-2">
-        <button
+        <motion.button
           type="submit"
           disabled={isSubmitting}
           className="flex-1 py-1.5 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
+          {...PRESSABLE_PROPS}
         >
           {isSubmitting ? 'Adding...' : 'Add Position'}
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           type="button"
           onClick={onCancel}
           className="px-3 py-1.5 text-xs text-white/50 hover:text-white/70 transition-colors"
+          {...PRESSABLE_PROPS}
         >
           Cancel
-        </button>
+        </motion.button>
       </div>
     </form>
   )

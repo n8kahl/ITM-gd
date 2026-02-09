@@ -18,8 +18,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { motion } from 'framer-motion'
 import { WidgetActionBar } from './widget-action-bar'
 import { WidgetContextMenu } from './widget-context-menu'
+import { runWithRetry } from './retry'
 import {
   alertAction,
   analyzeAction,
@@ -64,6 +66,11 @@ const DIRECTION_STYLES: Record<'bullish' | 'bearish' | 'neutral', string> = {
   bullish: 'text-emerald-400',
   bearish: 'text-red-400',
   neutral: 'text-amber-400',
+}
+
+const PRESSABLE_PROPS = {
+  whileHover: { y: -1 },
+  whileTap: { scale: 0.98 },
 }
 
 interface SetupTradePlan {
@@ -185,6 +192,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
   const [trackedSetups, setTrackedSetups] = useState<TrackedSetup[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('active')
   const [mutatingIds, setMutatingIds] = useState<Record<string, boolean>>({})
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
@@ -195,11 +203,19 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     if (!token) return
     setIsLoading(true)
     setError(null)
+    setRetryNotice(null)
 
     try {
-      const result = await getTrackedSetups(
-        token,
-        filterStatus === 'all' ? undefined : { status: filterStatus },
+      const result = await runWithRetry(
+        () => getTrackedSetups(
+          token,
+          filterStatus === 'all' ? undefined : { status: filterStatus },
+        ),
+        {
+          onRetry: ({ nextAttempt, maxAttempts }) => {
+            setRetryNotice(`Tracked setups feed retrying (${nextAttempt}/${maxAttempts})...`)
+          },
+        },
       )
       setTrackedSetups(result.trackedSetups)
     } catch (err) {
@@ -208,6 +224,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
         : 'Failed to load tracked setups'
       setError(message)
     } finally {
+      setRetryNotice(null)
       setIsLoading(false)
     }
   }, [filterStatus, token])
@@ -355,7 +372,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             onClick={fetchSetups}
             disabled={isLoading}
             className={cn(
@@ -364,19 +381,24 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
                 ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
                 : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20',
             )}
+            {...PRESSABLE_PROPS}
           >
             {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             Refresh
-          </button>
-          <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+          </motion.button>
+          <motion.button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors"
+            {...PRESSABLE_PROPS}
+          >
             <X className="w-4 h-4" />
-          </button>
+          </motion.button>
         </div>
       </div>
 
       <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 overflow-x-auto">
         {STATUS_FILTERS.map((status) => (
-          <button
+          <motion.button
             key={status.value}
             onClick={() => setFilterStatus(status.value)}
             className={cn(
@@ -385,25 +407,33 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
                 ? 'bg-emerald-500/20 text-emerald-400'
                 : 'text-white/40 hover:text-white/60',
             )}
+            {...PRESSABLE_PROPS}
           >
             {status.label}
-          </button>
+          </motion.button>
         ))}
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {isLoading && (
-          <div className="flex items-center justify-center py-16">
+          <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+            {retryNotice && (
+              <p className="text-xs text-amber-300/80">{retryNotice}</p>
+            )}
           </div>
         )}
 
         {!isLoading && error && (
           <div className="text-center py-12">
             <p className="text-sm text-red-400 mb-2">{error}</p>
-            <button onClick={fetchSetups} className="text-xs text-emerald-500 hover:text-emerald-400">
+            <motion.button
+              onClick={fetchSetups}
+              className="text-xs text-emerald-500 hover:text-emerald-400"
+              {...PRESSABLE_PROPS}
+            >
               Retry
-            </button>
+            </motion.button>
           </div>
         )}
 
@@ -482,15 +512,16 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
 
                       <div className="flex items-center gap-1 shrink-0">
                         {onSendPrompt && (
-                          <button
+                          <motion.button
                             onClick={() => onSendPrompt(askPrompt)}
                             className="text-white/30 hover:text-emerald-400 transition-colors"
                             title="Ask AI about this setup"
+                            {...PRESSABLE_PROPS}
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
-                          </button>
+                          </motion.button>
                         )}
-                        <button
+                        <motion.button
                           onClick={() => handleDelete(setup.id)}
                           disabled={isMutating}
                           className={cn(
@@ -498,9 +529,10 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
                             isMutating ? 'text-white/20 cursor-not-allowed' : 'text-white/30 hover:text-red-400',
                           )}
                           title="Delete setup"
+                          {...PRESSABLE_PROPS}
                         >
                           {isMutating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                        </button>
+                        </motion.button>
                       </div>
                     </div>
 
@@ -556,7 +588,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
                             className="w-full rounded-md bg-white/5 border border-white/10 px-2.5 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/35 resize-none"
                           />
                           <div className="flex items-center gap-2">
-                            <button
+                            <motion.button
                               onClick={() => handleSaveNotes(setup.id)}
                               disabled={isMutating}
                               className={cn(
@@ -565,23 +597,26 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
                                   ? 'text-white/35 border-white/10 cursor-not-allowed'
                                   : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15',
                               )}
+                              {...PRESSABLE_PROPS}
                             >
                               <Save className="w-3 h-3" />
                               Save Notes
-                            </button>
-                            <button
+                            </motion.button>
+                            <motion.button
                               onClick={cancelEditingNotes}
                               disabled={isMutating}
                               className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-white/50 hover:text-white/70 transition-colors"
+                              {...PRESSABLE_PROPS}
                             >
                               Cancel
-                            </button>
+                            </motion.button>
                           </div>
                         </div>
                       ) : (
-                        <button
+                        <motion.button
                           onClick={() => startEditingNotes(setup)}
                           className="w-full text-left text-xs rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-2 transition-colors"
+                          {...PRESSABLE_PROPS}
                         >
                           <span className="flex items-center gap-1.5 text-white/45 mb-1">
                             <Edit3 className="w-3 h-3" />
@@ -590,7 +625,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
                           <span className="text-white/70">
                             {setup.notes?.trim() ? setup.notes : 'Add notes for this tracked setup...'}
                           </span>
-                        </button>
+                        </motion.button>
                       )}
                     </div>
                   </div>
@@ -626,16 +661,17 @@ function StatusActionButton({
         : 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/15'
 
   return (
-    <button
+    <motion.button
       onClick={onClick}
       disabled={disabled}
       className={cn(
         'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
         disabled ? 'opacity-50 cursor-not-allowed' : toneClass,
       )}
+      {...PRESSABLE_PROPS}
     >
       <Icon className="w-3 h-3" />
       {label}
-    </button>
+    </motion.button>
   )
 }
