@@ -119,4 +119,9 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000, // 100 requests per minute
     identifier: 'api-general',
   },
+  analyzeScreenshot: {
+    limit: 10,
+    windowMs: 60 * 60 * 1000, // 10 analyses per hour
+    identifier: 'analyze-screenshot',
+  },
 } as const
