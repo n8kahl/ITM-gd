@@ -144,6 +144,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Added ARIA tab semantics (`tablist`/`tab`/`tabpanel`) to center tools rail.
   - Added keyboard navigation support for tool tabs (`ArrowLeft`, `ArrowRight`, `Home`, `End`).
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+- Copy and labeling clarity pass:
+  - Updated center navigation labels for clearer intent:
+    - `Tracked` → `Watchlist`
+    - `Brief` → `Daily Brief`
+    - `Prefs` → `Settings`
+  - Updated welcome hero heading from `AI Coach` to `Command Center` with session-aware descriptor copy.
+  - Updated morning brief section title from `Watch Items` to `What to Watch`.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
+- Time-aware Morning Brief mode:
+  - Added ET session-aware mode badges in Morning Brief (`Pre-Market Prep`, `Live Session`, `After-Hours Review`, `Market Closed`).
+  - Mode updates automatically every minute to keep context accurate as market session changes.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
 

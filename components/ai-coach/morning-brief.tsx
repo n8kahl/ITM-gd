@@ -19,6 +19,49 @@ interface MorningBriefPanelProps {
   onSendPrompt?: (prompt: string) => void
 }
 
+type BriefMode = 'pre_market' | 'session' | 'post_market' | 'closed'
+
+function getBriefMode(now: Date = new Date()): BriefMode {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0')
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? '0')
+  const weekday = parts.find((part) => part.type === 'weekday')?.value ?? 'Mon'
+  const isWeekend = weekday === 'Sat' || weekday === 'Sun'
+  if (isWeekend) return 'closed'
+
+  const minutes = hour * 60 + minute
+  if (minutes >= 240 && minutes < 570) return 'pre_market'
+  if (minutes >= 570 && minutes < 960) return 'session'
+  if (minutes >= 960 && minutes < 1200) return 'post_market'
+  return 'closed'
+}
+
+const BRIEF_MODE_META: Record<BriefMode, { label: string; toneClass: string }> = {
+  pre_market: {
+    label: 'Pre-Market Prep',
+    toneClass: 'text-amber-300 bg-amber-500/10 border-amber-500/25',
+  },
+  session: {
+    label: 'Live Session',
+    toneClass: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+  },
+  post_market: {
+    label: 'After-Hours Review',
+    toneClass: 'text-sky-300 bg-sky-500/10 border-sky-500/25',
+  },
+  closed: {
+    label: 'Market Closed',
+    toneClass: 'text-white/60 bg-white/5 border-white/15',
+  },
+}
+
 function asNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
@@ -34,6 +77,7 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
 
   const [brief, setBrief] = useState<MorningBrief | null>(null)
   const [marketDate, setMarketDate] = useState<string>('')
+  const [briefMode, setBriefMode] = useState<BriefMode>(() => getBriefMode())
   const [viewed, setViewed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -84,6 +128,13 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
     if (!token) return
     void loadBrief(false)
   }, [loadBrief, token])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setBriefMode(getBriefMode())
+    }, 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
 
   const handleMarkViewed = useCallback(async () => {
     if (!token || viewed || isMarkingViewed) return
@@ -149,6 +200,8 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
     return <BriefSkeleton />
   }
 
+  const modeMeta = BRIEF_MODE_META[briefMode]
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-white/5 flex items-center justify-between">
@@ -160,6 +213,9 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
               {marketDate || brief?.marketDate || 'Today'}
             </p>
           </div>
+          <span className={cn('text-[10px] px-1.5 py-0.5 rounded border', modeMeta.toneClass)}>
+            {modeMeta.label}
+          </span>
           {viewed && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
               Viewed
@@ -374,7 +430,7 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
         </section>
 
         <section className="glass-card-heavy rounded-xl p-4 border border-white/10">
-          <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Watch Items</p>
+          <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">What to Watch</p>
           <ul className="space-y-1.5">
             {(brief?.watchItems || []).map((item) => (
               <li key={item} className="text-xs text-white/70">

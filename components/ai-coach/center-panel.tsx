@@ -166,14 +166,14 @@ const TABS: Array<{
   { view: 'position', icon: Calculator, label: 'Positions', group: 'analyze' },
   { view: 'scanner', icon: Search, label: 'Scanner', group: 'analyze' },
   { view: 'journal', icon: BookOpen, label: 'Journal', group: 'portfolio' },
-  { view: 'tracked', icon: ListChecks, label: 'Tracked', group: 'portfolio' },
+  { view: 'tracked', icon: ListChecks, label: 'Watchlist', group: 'portfolio' },
   { view: 'alerts', icon: Bell, label: 'Alerts', group: 'monitor' },
-  { view: 'brief', icon: Sunrise, label: 'Brief', group: 'monitor' },
+  { view: 'brief', icon: Sunrise, label: 'Daily Brief', group: 'monitor' },
   { view: 'screenshot', icon: Camera, label: 'Screenshot', group: 'monitor' },
   { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
   { view: 'earnings', icon: Calendar, label: 'Earnings', group: 'research' },
   { view: 'macro', icon: Globe, label: 'Macro', group: 'research' },
-  { view: 'preferences', icon: SlidersHorizontal, label: 'Prefs', group: 'research' },
+  { view: 'preferences', icon: SlidersHorizontal, label: 'Settings', group: 'research' },
 ]
 
 const PRESSABLE_PROPS = {
@@ -1080,6 +1080,12 @@ function WelcomeView({
 
   const marketStatus = useMemo(() => getWelcomeMarketStatus(), [clockTick])
   const greeting = useMemo(() => getWelcomeGreeting(displayName), [displayName, clockTick])
+  const sessionDescriptor = useMemo(() => {
+    if (marketStatus.label === 'Pre-Market') return 'Pre-Market Prep'
+    if (marketStatus.label === 'Open') return 'Live Session'
+    if (marketStatus.label === 'After Hours') return 'After-Hours Review'
+    return 'Market Closed'
+  }, [marketStatus.label])
 
   const loadSPXTicker = useCallback(async () => {
     if (!accessToken) return
@@ -1146,11 +1152,11 @@ function WelcomeView({
     { label: 'Live Chart', subtitle: 'SPX & NDX', icon: CandlestickChart, onClick: onShowChart },
     { label: 'Options', subtitle: 'Greeks & IV', icon: TableProperties, onClick: onShowOptions },
     { label: 'Analyze', subtitle: 'P&L & Risk', icon: Calculator, onClick: onShowPosition },
-    { label: 'Brief', subtitle: 'Pre-Market', icon: Sunrise, onClick: onShowBrief },
+    { label: 'Daily Brief', subtitle: 'Pre-Market', icon: Sunrise, onClick: onShowBrief },
     { label: 'Journal', subtitle: 'Trade Log', icon: BookOpen, onClick: onShowJournal },
     { label: 'Alerts', subtitle: 'Price Watch', icon: Bell, onClick: onShowAlerts },
     { label: 'Scanner', subtitle: 'Find Setups', icon: Search, onClick: onShowScanner },
-    { label: 'Tracked', subtitle: 'Manage Setups', icon: ListChecks, onClick: onShowTracked },
+    { label: 'Watchlist', subtitle: 'Manage Setups', icon: ListChecks, onClick: onShowTracked },
   ]
 
   const containerMotion = {
@@ -1169,9 +1175,9 @@ function WelcomeView({
       <div className="p-5 border-b border-white/5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs text-emerald-400/80 uppercase tracking-[0.14em]">AI Coach</p>
+            <p className="text-xs text-emerald-400/80 uppercase tracking-[0.14em]">Command Center</p>
             <h2 className="text-xl font-semibold text-white mt-1">{greeting}</h2>
-            <p className="text-sm text-white/45 mt-1">Run your pre-market and session workflow from one panel.</p>
+            <p className="text-sm text-white/45 mt-1">{sessionDescriptor} across chart, options, and risk in one panel.</p>
           </div>
           <span className={cn('text-[11px] font-medium px-2.5 py-1 rounded-md border shrink-0', marketStatus.toneClass)}>
             {marketStatus.label}
