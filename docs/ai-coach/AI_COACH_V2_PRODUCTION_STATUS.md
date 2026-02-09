@@ -140,6 +140,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/optionsChainFetcher.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/optionsChainFetcher.test.ts`
+- Options expirations performance hardening:
+  - Reduced expiration discovery path to a lightweight near-term fetch to prevent timeout regressions on `SPX/NDX` `0DTE` and `IV` routes.
+  - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
 - Real-time setup detector service:
   - Implements ORB, break-retest, VWAP play, gap-fill, volume climax, level-test, gamma squeeze, and SPX/NDX opening-drive detectors
   - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`

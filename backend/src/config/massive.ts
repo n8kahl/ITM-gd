@@ -292,68 +292,15 @@ export async function getOptionsExpirations(
   underlyingTicker: string
 ): Promise<string[]> {
   try {
-    const MAX_PAGES = 20;
-    const TARGET_EXPIRATIONS = 24;
+    // Keep this intentionally lightweight. Most consumers only need near-term expirations.
+    const contracts = await getOptionsContracts(underlyingTicker);
     const today = new Date().toISOString().split('T')[0];
-    const expirations = new Set<string>();
-
-    let response = await massiveClient.get<OptionsContractsResponse>(
-      '/v3/reference/options/contracts',
-      {
-        params: {
-          underlying_ticker: underlyingTicker,
-          sort: 'expiration_date',
-          order: 'asc',
-          limit: 1000,
-          'expiration_date.gte': today,
-        },
-      },
-    );
-
-    for (const contract of response.data.results || []) {
-      if (contract.expiration_date >= today) {
-        expirations.add(contract.expiration_date);
-      }
-    }
-
-    let nextUrl = response.data.next_url;
-    let page = 1;
-
-    while (nextUrl && page < MAX_PAGES && expirations.size < TARGET_EXPIRATIONS) {
-      response = await massiveClient.get<OptionsContractsResponse>(nextUrl);
-      for (const contract of response.data.results || []) {
-        if (contract.expiration_date >= today) {
-          expirations.add(contract.expiration_date);
-        }
-      }
-      nextUrl = response.data.next_url;
-      page += 1;
-    }
-
-    if (nextUrl) {
-      logger.warn(`Options expirations pagination truncated for ${underlyingTicker}`, {
-        pagesFetched: page,
-        maxPages: MAX_PAGES,
-        expirationsCollected: expirations.size,
-      });
-    }
-
-    const expirationList = [...expirations];
-    if (expirationList.length === 0) return [];
-
-    const uniqueSorted = expirationList.sort();
-    // Backfill from unsorted fallback endpoint if filtered query returns sparse data.
-    if (uniqueSorted.length < 2) {
-      const fallbackContracts = await getOptionsContracts(underlyingTicker);
-      for (const contract of fallbackContracts) {
-        if (contract.expiration_date >= today) {
-          expirations.add(contract.expiration_date);
-        }
-      }
-    }
-
-    const sorted = [...expirations].sort();
-    return sorted;
+    const expirations = [...new Set(
+      contracts
+        .map((contract) => contract.expiration_date)
+        .filter((expiration) => expiration >= today),
+    )];
+    return expirations.sort();
   } catch (error: any) {
     logger.error(`Failed to fetch expirations for ${underlyingTicker}`, { error: error.message });
     throw error;
