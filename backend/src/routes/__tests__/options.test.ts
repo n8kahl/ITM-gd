@@ -28,6 +28,10 @@ jest.mock('../../services/options/zeroDTE', () => ({
   analyzeZeroDTE: jest.fn(),
 }));
 
+jest.mock('../../services/options/ivAnalysis', () => ({
+  analyzeIVProfile: jest.fn(),
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn(),
@@ -36,9 +40,11 @@ jest.mock('../../services/options/positionAnalyzer', () => ({
 import optionsRouter from '../options';
 import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../../services/options/zeroDTE';
+import { analyzeIVProfile } from '../../services/options/ivAnalysis';
 
 const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
 const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
+const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
 
 const app = express();
 app.use(express.json());
@@ -134,6 +140,54 @@ describe('Options Routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('VALIDATION_ERROR');
       expect(mockAnalyzeZeroDTE).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/options/:symbol/iv', () => {
+    it('returns IV analysis profile for valid symbol/query', async () => {
+      mockAnalyzeIVProfile.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 6012.5,
+        asOf: '2026-02-09T15:00:00.000Z',
+        ivRank: {
+          currentIV: 22.1,
+          ivRank: 48.3,
+          ivPercentile: 52.7,
+          iv52wkHigh: 41.2,
+          iv52wkLow: 11.4,
+          ivTrend: 'stable',
+        },
+        skew: {
+          skew25delta: 2.8,
+          skew10delta: 4.6,
+          skewDirection: 'put_heavy',
+          interpretation: 'Put-side IV is elevated versus calls, suggesting downside hedge demand.',
+        },
+        termStructure: {
+          expirations: [{ date: '2026-02-10', dte: 1, atmIV: 21.8 }],
+          shape: 'flat',
+        },
+      });
+
+      const res = await request(app)
+        .get('/api/options/spx/iv?strikeRange=15&maxExpirations=3&forceRefresh=true');
+
+      expect(res.status).toBe(200);
+      expect(res.body.symbol).toBe('SPX');
+      expect(mockAnalyzeIVProfile).toHaveBeenCalledWith('SPX', {
+        expiry: undefined,
+        strikeRange: 15,
+        maxExpirations: 3,
+        forceRefresh: true,
+      });
+    });
+
+    it('returns 400 for invalid IV query params', async () => {
+      const res = await request(app).get('/api/options/spx/iv?strikeRange=2');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect(mockAnalyzeIVProfile).not.toHaveBeenCalled();
     });
   });
 });

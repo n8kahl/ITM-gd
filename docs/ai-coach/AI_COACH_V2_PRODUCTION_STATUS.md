@@ -110,6 +110,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
   - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+- IV Intelligence backend slice (Phase 3 sequential continuation):
+  - New service `analyzeIVProfile(symbol, { expiry?, strikeRange?, maxExpirations?, forceRefresh? })` with:
+    - IV rank + percentile from historical volatility proxy series
+    - put/call skew analysis (`25-delta`, `10-delta`) with interpretation
+    - term-structure shape classification (`contango`, `backwardation`, `flat`)
+  - New API route: `GET /api/options/:symbol/iv`
+  - New ChatKit function: `get_iv_analysis`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/ivAnalysis.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
 - Real-time setup detector service:
   - Implements ORB, break-retest, VWAP play, gap-fill, volume climax, level-test, gamma squeeze, and SPX/NDX opening-drive detectors
   - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`
@@ -266,9 +279,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/zeroDTE.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/ivAnalysis.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/macro.test.ts`
-  - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure`, `get_zero_dte_analysis` coverage)
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure`, `get_zero_dte_analysis`, `get_iv_analysis` coverage)
   - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
 
 ### Commands
@@ -279,6 +293,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/zeroDTE.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
+- `npm test -- --runInBand src/services/options/__tests__/ivAnalysis.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
@@ -416,3 +431,5 @@ Production deployment evidence (`main`, 2026-02-09):
   - `GET /health` -> `200`
   - `GET /health/detailed` -> `200`
   - `GET /api/watchlist` (unauthenticated) -> `401` (expected)
+  - `GET /api/options/:symbol/0dte` (unauthenticated) -> `401` (expected auth gate)
+  - `GET /api/options/:symbol/iv` (unauthenticated) -> `401` (expected auth gate)

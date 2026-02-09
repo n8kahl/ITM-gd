@@ -3,6 +3,7 @@ import { fetchIntradayData, fetchDailyData } from '../services/levels/fetcher';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../services/options/zeroDTE';
+import { analyzeIVProfile } from '../services/options/ivAnalysis';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
@@ -79,6 +80,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_zero_dte_analysis':
       return await handleGetZeroDTEAnalysis(typedArgs);
+
+    case 'get_iv_analysis':
+      return await handleGetIVAnalysis(typedArgs);
 
     case 'analyze_position':
       return await handleAnalyzePosition(typedArgs);
@@ -372,6 +376,44 @@ async function handleGetZeroDTEAnalysis(args: {
   } catch (error: any) {
     return {
       error: 'Failed to analyze 0DTE structure',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_iv_analysis
+ * Returns IV rank, skew, and term-structure profile for a symbol.
+ */
+async function handleGetIVAnalysis(args: {
+  symbol: string;
+  expiry?: string;
+  strikeRange?: number;
+  maxExpirations?: number;
+  forceRefresh?: boolean;
+}) {
+  const {
+    symbol,
+    expiry,
+    strikeRange,
+    maxExpirations,
+    forceRefresh = false,
+  } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
+  try {
+    const profile = await withTimeout(
+      () => analyzeIVProfile(symbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
+      FUNCTION_TIMEOUT_MS,
+      'get_iv_analysis',
+    );
+    return profile;
+  } catch (error: any) {
+    return {
+      error: 'Failed to analyze implied volatility',
       message: error.message,
     };
   }

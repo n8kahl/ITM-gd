@@ -31,6 +31,13 @@ export const zeroDTEQuerySchema = z.object({
   type: z.enum(['call', 'put']).optional(),
 });
 
+export const ivAnalysisQuerySchema = z.object({
+  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  strikeRange: z.coerce.number().int().min(5).max(50).optional().default(20),
+  maxExpirations: z.coerce.number().int().min(1).max(12).optional().default(6),
+  forceRefresh: booleanQuerySchema.optional().default(false),
+});
+
 export const analyzePositionSchema = z.object({
   position: z.object({
     symbol: z.string().min(1).max(10),

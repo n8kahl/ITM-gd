@@ -149,6 +149,42 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_iv_analysis',
+      description: 'Analyze implied volatility structure for a symbol. Returns IV rank/percentile, put-call skew, and term structure shape.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for IV analysis (e.g., SPX, NDX, AAPL, QQQ)'
+          },
+          expiry: {
+            type: 'string',
+            description: 'Optional expiry date (YYYY-MM-DD) to focus skew analysis.'
+          },
+          strikeRange: {
+            type: 'number',
+            description: 'Number of strikes above/below spot for each expiry (default: 20)',
+            default: 20
+          },
+          maxExpirations: {
+            type: 'number',
+            description: 'Max expirations for term-structure analysis when expiry is omitted (default: 6)',
+            default: 6
+          },
+          forceRefresh: {
+            type: 'boolean',
+            description: 'Bypass cache and force fresh calculation (default: false)',
+            default: false
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'analyze_position',
       description: 'Analyze an options position or portfolio. Calculates P&L, Greeks, max gain/loss, breakeven, and risk assessment. Use this when the user asks about their position performance or risk.',
       parameters: {

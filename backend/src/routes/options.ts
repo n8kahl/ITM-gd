@@ -6,6 +6,7 @@ import {
 } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../services/options/zeroDTE';
+import { analyzeIVProfile } from '../services/options/ivAnalysis';
 import {
   analyzePosition,
   analyzePortfolio
@@ -17,6 +18,7 @@ import {
   optionsChainQuerySchema,
   gexQuerySchema,
   zeroDTEQuerySchema,
+  ivAnalysisQuerySchema,
   analyzePositionSchema,
 } from '../schemas/optionsValidation';
 
@@ -96,6 +98,49 @@ router.get(
       return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to analyze 0DTE structure. Please try again.',
+      });
+    }
+  }
+);
+
+router.get(
+  '/:symbol/iv',
+  authenticateToken,
+  checkQueryLimit,
+  validateParams(symbolParamSchema),
+  validateQuery(ivAnalysisQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const validatedQuery = (req as any).validatedQuery as {
+        expiry?: string;
+        strikeRange: number;
+        maxExpirations: number;
+        forceRefresh: boolean;
+      };
+
+      const profile = await analyzeIVProfile(symbol, {
+        expiry: validatedQuery?.expiry,
+        strikeRange: validatedQuery?.strikeRange,
+        maxExpirations: validatedQuery?.maxExpirations,
+        forceRefresh: validatedQuery?.forceRefresh,
+      });
+
+      return res.json(profile);
+    } catch (error: any) {
+      logger.error('Error in options IV endpoint', { error: error?.message || String(error) });
+
+      if (error.message.includes('No options') || error.message.includes('No price data')) {
+        return res.status(503).json({
+          error: 'Data unavailable',
+          message: 'Unable to analyze implied volatility right now. Please try again shortly.',
+          retryAfter: 30,
+        });
+      }
+
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to analyze implied volatility. Please try again.',
       });
     }
   }

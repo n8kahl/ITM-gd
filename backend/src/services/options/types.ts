@@ -198,6 +198,43 @@ export interface ZeroDTEAnalysisRequest {
   now?: Date;
 }
 
+export interface IVRankAnalysis {
+  currentIV: number | null;
+  ivRank: number | null;
+  ivPercentile: number | null;
+  iv52wkHigh: number | null;
+  iv52wkLow: number | null;
+  ivTrend: 'rising' | 'falling' | 'stable' | 'unknown';
+}
+
+export interface IVSkewAnalysis {
+  skew25delta: number | null;
+  skew10delta: number | null;
+  skewDirection: 'put_heavy' | 'call_heavy' | 'balanced' | 'unknown';
+  interpretation: string;
+}
+
+export interface IVTermStructurePoint {
+  date: string;
+  dte: number;
+  atmIV: number;
+}
+
+export interface IVTermStructureAnalysis {
+  expirations: IVTermStructurePoint[];
+  shape: 'contango' | 'backwardation' | 'flat';
+  inversionPoint?: string;
+}
+
+export interface IVAnalysisProfile {
+  symbol: string;
+  currentPrice: number;
+  asOf: string;
+  ivRank: IVRankAnalysis;
+  skew: IVSkewAnalysis;
+  termStructure: IVTermStructureAnalysis;
+}
+
 // Black-Scholes inputs
 export interface BlackScholesInputs {
   spotPrice: number;        // Current underlying price

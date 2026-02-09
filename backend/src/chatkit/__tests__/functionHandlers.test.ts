@@ -50,6 +50,10 @@ jest.mock('../../services/options/zeroDTE', () => ({
   analyzeZeroDTE: jest.fn()
 }));
 
+jest.mock('../../services/options/ivAnalysis', () => ({
+  analyzeIVProfile: jest.fn()
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn()
@@ -60,6 +64,7 @@ import { fetchIntradayData, fetchDailyData } from '../../services/levels/fetcher
 import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../../services/options/zeroDTE';
+import { analyzeIVProfile } from '../../services/options/ivAnalysis';
 import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
@@ -68,6 +73,7 @@ const mockFetchDailyData = fetchDailyData as jest.MockedFunction<typeof fetchDai
 const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
 const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
 const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
+const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 
@@ -396,6 +402,65 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to analyze 0DTE structure');
       expect(result).toHaveProperty('message', 'No options contracts found');
+    });
+  });
+
+  describe('get_iv_analysis', () => {
+    it('should return IV analysis payload', async () => {
+      mockAnalyzeIVProfile.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 6011.25,
+        asOf: '2026-02-09T15:15:00.000Z',
+        ivRank: {
+          currentIV: 24.4,
+          ivRank: 58.1,
+          ivPercentile: 63.2,
+          iv52wkHigh: 44.7,
+          iv52wkLow: 10.8,
+          ivTrend: 'rising',
+        },
+        skew: {
+          skew25delta: 3.4,
+          skew10delta: 5.1,
+          skewDirection: 'put_heavy',
+          interpretation: 'Put-side IV is elevated versus calls, suggesting downside hedge demand.',
+        },
+        termStructure: {
+          expirations: [
+            { date: '2026-02-10', dte: 1, atmIV: 23.8 },
+            { date: '2026-02-12', dte: 3, atmIV: 24.6 },
+          ],
+          shape: 'contango',
+        },
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_iv_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX', strikeRange: 15, maxExpirations: 4 }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('ivRank');
+      expect(result).toHaveProperty('skew');
+      expect(result).toHaveProperty('termStructure');
+      expect(mockAnalyzeIVProfile).toHaveBeenCalledWith('SPX', {
+        expiry: undefined,
+        strikeRange: 15,
+        maxExpirations: 4,
+        forceRefresh: false,
+      });
+    });
+
+    it('should handle IV analysis errors gracefully', async () => {
+      mockAnalyzeIVProfile.mockRejectedValue(new Error('No options expirations found for SPX'));
+
+      const result = await executeFunctionCall({
+        name: 'get_iv_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to analyze implied volatility');
+      expect(result).toHaveProperty('message', 'No options expirations found for SPX');
     });
   });
 
