@@ -13,9 +13,22 @@ import {
   DollarSign,
   Search,
   Calendar,
+  Workflow,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GEXChart } from './gex-chart'
+import { WidgetActionBar } from './widget-action-bar'
+import { WidgetContextMenu } from './widget-context-menu'
+import {
+  type WidgetAction,
+  alertAction,
+  analyzeAction,
+  chartAction,
+  chatAction,
+  copyAction,
+  optionsAction,
+} from './widget-actions'
+import type { PositionType } from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -26,6 +39,31 @@ export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'al
 export interface WidgetData {
   type: WidgetType
   data: Record<string, unknown>
+}
+
+function normalizePositionType(value: string | undefined): PositionType {
+  const normalized = value?.toLowerCase()
+  if (
+    normalized === 'call'
+    || normalized === 'put'
+    || normalized === 'call_spread'
+    || normalized === 'put_spread'
+    || normalized === 'iron_condor'
+    || normalized === 'stock'
+  ) {
+    return normalized
+  }
+  return 'call'
+}
+
+function parseNumeric(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^0-9.+-]/g, '')
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
 }
 
 // ============================================
@@ -70,6 +108,23 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   const support = (data.support as Array<{ name: string; price: number; distance?: string }>) || []
   const vwap = data.vwap as number | undefined
   const atr = data.atr14 as number | undefined
+  const cardActions: WidgetAction[] = [
+    chartAction(symbol, currentPrice, '1D', 'Current Price'),
+    optionsAction(symbol, currentPrice),
+    chatAction(`Summarize ${symbol} key levels and likely scenarios around ${currentPrice.toFixed(2)}.`),
+  ]
+
+  const levelActions = (level: { name: string; price: number }, side: 'support' | 'resistance'): WidgetAction[] => ([
+    chartAction(symbol, level.price, '1D', level.name),
+    optionsAction(symbol, level.price),
+    alertAction(
+      symbol,
+      level.price,
+      side === 'resistance' ? 'price_above' : 'price_below',
+      `${symbol} ${level.name} (${side})`,
+    ),
+    copyAction(`${symbol} ${level.name} ${level.price}`),
+  ])
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -86,10 +141,16 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
         <div className="space-y-1">
           <p className="text-[10px] text-red-400/60 font-medium uppercase">Resistance</p>
           {resistance.slice(0, 3).map((level) => (
-            <div key={level.name} className="flex justify-between">
-              <span className="text-red-400">{level.name}</span>
-              <span className="font-mono text-white/60">${level.price.toLocaleString()}</span>
-            </div>
+            <WidgetContextMenu key={level.name} actions={levelActions(level, 'resistance')}>
+              <button
+                type="button"
+                onClick={() => chartAction(symbol, level.price, '1D', level.name).action()}
+                className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
+              >
+                <span className="text-red-400">{level.name}</span>
+                <span className="font-mono text-white/60">${level.price.toLocaleString()}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
 
@@ -97,10 +158,16 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
         <div className="space-y-1">
           <p className="text-[10px] text-emerald-400/60 font-medium uppercase">Support</p>
           {support.slice(0, 3).map((level) => (
-            <div key={level.name} className="flex justify-between">
-              <span className="text-emerald-400">{level.name}</span>
-              <span className="font-mono text-white/60">${level.price.toLocaleString()}</span>
-            </div>
+            <WidgetContextMenu key={level.name} actions={levelActions(level, 'support')}>
+              <button
+                type="button"
+                onClick={() => chartAction(symbol, level.price, '1D', level.name).action()}
+                className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
+              >
+                <span className="text-emerald-400">{level.name}</span>
+                <span className="font-mono text-white/60">${level.price.toLocaleString()}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       </div>
@@ -112,6 +179,8 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
           {atr && <span>ATR14: <span className="text-white/60 font-mono">{atr.toFixed(2)}</span></span>}
         </div>
       )}
+
+      <WidgetActionBar actions={cardActions} />
     </div>
   )
 }
@@ -125,11 +194,25 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
   const type = data.type as string || '-'
   const strike = data.strike as number | undefined
   const expiry = data.expiry as string | undefined
-  const pnl = data.pnl as number || 0
-  const pnlPct = data.pnlPct as number || 0
-  const currentValue = data.currentValue as number || 0
+  const pnl = parseNumeric(data.pnl)
+  const pnlPct = parseNumeric(data.pnlPct)
+  const currentValue = parseNumeric(data.currentValue)
   const greeks = data.greeks as { delta?: number; theta?: number; gamma?: number; vega?: number } | undefined
   const pnlPositive = pnl >= 0
+  const entryPrice = parseNumeric(data.entryPrice) || undefined
+  const actions: WidgetAction[] = [
+    chartAction(symbol, strike),
+    optionsAction(symbol, strike, expiry),
+    analyzeAction({
+      symbol,
+      type: normalizePositionType(type),
+      strike,
+      expiry,
+      quantity: 1,
+      entryPrice: entryPrice || 1,
+      entryDate: new Date().toISOString().slice(0, 10),
+    }),
+  ]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -170,6 +253,8 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
           {greeks.vega != null && <span>V: <span className="font-mono text-white/60">{greeks.vega.toFixed(2)}</span></span>}
         </div>
       )}
+
+      <WidgetActionBar actions={actions} />
     </div>
   )
 }
@@ -179,14 +264,17 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
 // ============================================
 
 function PnLTrackerCard({ data }: { data: Record<string, unknown> }) {
-  const totalPnl = data.totalPnl as number || 0
-  const totalPnlPct = data.totalPnlPct as number || 0
-  const totalValue = data.totalValue as number || 0
+  const totalPnl = parseNumeric(data.totalPnl)
+  const totalPnlPct = parseNumeric(data.totalPnlPct)
+  const totalValue = parseNumeric(data.totalValue)
   const positionCount = data.positionCount as number || 0
   const portfolioGreeks = data.portfolioGreeks as {
     delta?: number; gamma?: number; theta?: number; vega?: number
   } | undefined
   const positive = totalPnl >= 0
+  const actions: WidgetAction[] = [
+    chatAction('Summarize my portfolio risk and what to manage first.'),
+  ]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -234,6 +322,8 @@ function PnLTrackerCard({ data }: { data: Record<string, unknown> }) {
           </div>
         </div>
       )}
+
+      <WidgetActionBar actions={actions} compact />
     </div>
   )
 }
@@ -254,6 +344,10 @@ function MarketOverviewCard({ data }: { data: Record<string, unknown> }) {
     'after-hours': 'text-blue-400 bg-blue-500/10',
     closed: 'text-white/40 bg-white/5',
   }
+  const actions: WidgetAction[] = [
+    chartAction('SPX'),
+    chatAction('Given current market status, what trading approach should I prioritize?'),
+  ]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -271,6 +365,7 @@ function MarketOverviewCard({ data }: { data: Record<string, unknown> }) {
       </div>
       <p className="text-xs text-white/60">{message}</p>
       {timeInfo && <p className="text-[10px] text-white/30 mt-1">{timeInfo}</p>}
+      <WidgetActionBar actions={actions} compact />
     </div>
   )
 }
@@ -287,6 +382,12 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
     status: string
   }>) || []
   const activeCount = alerts.filter(a => a.status === 'active').length
+  const actions: WidgetAction[] = alerts.length > 0
+    ? [
+        chartAction(alerts[0].symbol, alerts[0].target),
+        alertAction(alerts[0].symbol, alerts[0].target, 'level_approach', `Alert from widget (${alerts[0].type})`),
+      ]
+    : [chatAction('Show my active alerts and suggest which ones to keep.')]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -303,23 +404,35 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
       ) : (
         <div className="space-y-1.5">
           {alerts.slice(0, 4).map((alert, i) => (
-            <div key={i} className="flex items-center justify-between text-[11px]">
-              <span className="text-white/60">{alert.symbol} {alert.type}</span>
-              <span className="font-mono text-white/40">${alert.target.toLocaleString()}</span>
-              <span className={cn(
-                'px-1.5 py-0.5 rounded text-[9px] font-medium',
-                alert.status === 'active'
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : alert.status === 'triggered'
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'bg-white/5 text-white/30'
-              )}>
-                {alert.status}
-              </span>
-            </div>
+            <WidgetContextMenu
+              key={i}
+              actions={[
+                chartAction(alert.symbol, alert.target, '1D', `${alert.type}`),
+                optionsAction(alert.symbol, alert.target),
+                alertAction(alert.symbol, alert.target, 'level_approach', `Alert: ${alert.type}`),
+                copyAction(`${alert.symbol} ${alert.type} ${alert.target}`),
+              ]}
+            >
+              <button type="button" className="w-full flex items-center justify-between text-[11px] rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer">
+                <span className="text-white/60">{alert.symbol} {alert.type}</span>
+                <span className="font-mono text-white/40">${alert.target.toLocaleString()}</span>
+                <span className={cn(
+                  'px-1.5 py-0.5 rounded text-[9px] font-medium',
+                  alert.status === 'active'
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : alert.status === 'triggered'
+                    ? 'bg-amber-500/10 text-amber-400'
+                    : 'bg-white/5 text-white/30'
+                )}>
+                  {alert.status}
+                </span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
+
+      <WidgetActionBar actions={actions} compact />
     </div>
   )
 }
@@ -335,6 +448,11 @@ function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
   const low = data.low as number | undefined
   const isDelayed = data.isDelayed as boolean || false
   const priceAsOf = data.priceAsOf as string | undefined
+  const actions: WidgetAction[] = [
+    chartAction(symbol, price),
+    optionsAction(symbol, price),
+    alertAction(symbol, price, 'level_approach', `${symbol} price watch`),
+  ]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -351,6 +469,7 @@ function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
         {low != null && <span>L: <span className="font-mono text-white/60">${low.toLocaleString()}</span></span>}
         {priceAsOf && <span className="ml-auto">{priceAsOf}</span>}
       </div>
+      <WidgetActionBar actions={actions} compact />
     </div>
   )
 }
@@ -363,6 +482,11 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   const calendar = (data.economicCalendar as Array<{ event: string; date: string; impact: string; actual?: string; forecast?: string }>) || []
   const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
   const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
+  const actions: WidgetAction[] = [
+    chatAction(symbolImpact?.symbol
+      ? `Give me a macro-aware plan for ${symbolImpact.symbol} this week.`
+      : 'Summarize the top macro risks and catalysts this week.'),
+  ]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -420,6 +544,8 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
           ))}
         </div>
       )}
+
+      <WidgetActionBar actions={actions} compact />
     </div>
   )
 }
@@ -436,6 +562,11 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
   const ivRank = data.ivRank as number | undefined
   const calls = (data.calls as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
   const puts = (data.puts as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
+  const actions: WidgetAction[] = [
+    optionsAction(symbol, currentPrice, expiry),
+    chartAction(symbol, currentPrice),
+    chatAction(`Review the ${symbol} ${expiry} options chain and identify the best strikes to monitor.`),
+  ]
 
   // Show only ATM strikes (3 each)
   const topCalls = calls.slice(0, 3)
@@ -459,21 +590,41 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
         <div>
           <p className="text-[9px] text-emerald-400/60 font-medium uppercase mb-1">Calls</p>
           {topCalls.map((c, i) => (
-            <div key={i} className="flex justify-between py-0.5">
-              <span className="font-mono text-white/50">{c.strike}</span>
-              <span className="font-mono text-white/70">${c.last}</span>
-              <span className="text-white/40">{c.delta}</span>
-            </div>
+            <WidgetContextMenu
+              key={i}
+              actions={[
+                chartAction(symbol, c.strike, '1D', `${symbol} ${c.strike}C`),
+                optionsAction(symbol, c.strike, expiry),
+                alertAction(symbol, c.strike, 'level_approach', `${symbol} call strike ${c.strike}`),
+                copyAction(`${symbol} CALL ${c.strike} ${expiry}`),
+              ]}
+            >
+              <button type="button" className="w-full flex justify-between py-0.5 rounded px-1 hover:bg-white/10 cursor-pointer text-left">
+                <span className="font-mono text-white/50">{c.strike}</span>
+                <span className="font-mono text-white/70">${c.last}</span>
+                <span className="text-white/40">{c.delta}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
         <div>
           <p className="text-[9px] text-red-400/60 font-medium uppercase mb-1">Puts</p>
           {topPuts.map((p, i) => (
-            <div key={i} className="flex justify-between py-0.5">
-              <span className="font-mono text-white/50">{p.strike}</span>
-              <span className="font-mono text-white/70">${p.last}</span>
-              <span className="text-white/40">{p.delta}</span>
-            </div>
+            <WidgetContextMenu
+              key={i}
+              actions={[
+                chartAction(symbol, p.strike, '1D', `${symbol} ${p.strike}P`),
+                optionsAction(symbol, p.strike, expiry),
+                alertAction(symbol, p.strike, 'level_approach', `${symbol} put strike ${p.strike}`),
+                copyAction(`${symbol} PUT ${p.strike} ${expiry}`),
+              ]}
+            >
+              <button type="button" className="w-full flex justify-between py-0.5 rounded px-1 hover:bg-white/10 cursor-pointer text-left">
+                <span className="font-mono text-white/50">{p.strike}</span>
+                <span className="font-mono text-white/70">${p.last}</span>
+                <span className="text-white/40">{p.delta}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       </div>
@@ -481,6 +632,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
       <div className="mt-1.5 pt-1.5 border-t border-white/5 text-[10px] text-white/40 text-center">
         Price: <span className="font-mono text-white/60">${currentPrice.toLocaleString()}</span>
       </div>
+      <WidgetActionBar actions={actions} />
     </div>
   )
 }
@@ -523,6 +675,16 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
       },
     }))
   }
+  const actions: WidgetAction[] = [
+    {
+      label: 'Show on Chart',
+      icon: Workflow,
+      variant: 'primary',
+      action: handleShowOnChart,
+    },
+    optionsAction(symbol, maxGEXStrike || undefined),
+    chatAction(`Interpret ${symbol} gamma profile with flip ${flipPoint ?? 'n/a'} and max GEX ${maxGEXStrike ?? 'n/a'}.`),
+  ]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-xl">
@@ -562,17 +724,27 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
       {keyLevels.length > 0 && (
         <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
           {keyLevels.slice(0, 6).map((level) => (
-            <div key={`${level.strike}-${level.type}`} className="flex items-center justify-between rounded bg-white/5 px-2 py-1">
-              <span className={cn(
-                'capitalize',
-                level.type === 'support' ? 'text-emerald-300' :
-                level.type === 'resistance' ? 'text-red-300' :
-                'text-violet-300'
-              )}>
-                {level.type}
-              </span>
-              <span className="font-mono text-white/70">{level.strike.toLocaleString()}</span>
-            </div>
+            <WidgetContextMenu
+              key={`${level.strike}-${level.type}`}
+              actions={[
+                chartAction(symbol, level.strike, '1D', `GEX ${level.type}`),
+                optionsAction(symbol, level.strike),
+                alertAction(symbol, level.strike, 'level_approach', `${symbol} GEX ${level.type}`),
+                copyAction(`${symbol} GEX ${level.type} ${level.strike}`),
+              ]}
+            >
+              <button type="button" className="w-full flex items-center justify-between rounded bg-white/5 px-2 py-1 hover:bg-white/10 cursor-pointer text-left">
+                <span className={cn(
+                  'capitalize',
+                  level.type === 'support' ? 'text-emerald-300' :
+                  level.type === 'resistance' ? 'text-red-300' :
+                  'text-violet-300'
+                )}>
+                  {level.type}
+                </span>
+                <span className="font-mono text-white/70">{level.strike.toLocaleString()}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
@@ -582,13 +754,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <div className="mt-2 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={handleShowOnChart}
-          className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300 hover:bg-emerald-500/15"
-        >
-          Show on Chart
-        </button>
+        <WidgetActionBar actions={actions} className="mt-0" />
         <span className="text-[9px] text-white/35">
           {calculatedAt ? `Updated ${new Date(calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
         </span>
@@ -603,9 +769,16 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
 
 function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
   const opportunities = (data.opportunities as Array<{
-    symbol: string; setupType: string; direction: string; score: number; description: string
+    symbol: string; setupType: string; direction: string; score: number; description: string; currentPrice?: number
   }>) || []
   const count = data.count as number || 0
+  const actions: WidgetAction[] = opportunities.length > 0
+    ? [
+        chartAction(opportunities[0].symbol, opportunities[0].currentPrice),
+        optionsAction(opportunities[0].symbol, opportunities[0].currentPrice),
+        chatAction(`Review top scanner opportunities and rank by conviction with risk plan.`),
+      ]
+    : [chatAction('Run another opportunity scan and summarize strongest setups.')]
 
   return (
     <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
@@ -622,24 +795,43 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
       ) : (
         <div className="space-y-2">
           {opportunities.slice(0, 3).map((opp, i) => (
-            <div key={i} className="flex items-start gap-2 text-[11px]">
-              <div className={cn(
-                'w-1.5 h-1.5 rounded-full mt-1.5 shrink-0',
-                opp.direction === 'bullish' ? 'bg-emerald-400' :
-                opp.direction === 'bearish' ? 'bg-red-400' : 'bg-white/40'
-              )} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium text-white">{opp.symbol}</span>
-                  <span className="text-white/40 capitalize">{opp.setupType}</span>
-                  <span className="ml-auto text-[9px] font-mono text-emerald-400/70">{opp.score}/100</span>
+            <WidgetContextMenu
+              key={i}
+              actions={[
+                chartAction(opp.symbol, opp.currentPrice, '15m', `${opp.setupType}`),
+                optionsAction(opp.symbol, opp.currentPrice),
+                analyzeAction({
+                  symbol: opp.symbol,
+                  type: opp.direction === 'bearish' ? 'put' : 'call',
+                  strike: opp.currentPrice,
+                  quantity: 1,
+                  entryPrice: 1,
+                  entryDate: new Date().toISOString().slice(0, 10),
+                }),
+                chatAction(`Analyze ${opp.symbol} ${opp.setupType} (${opp.direction}) setup and suggest execution details.`),
+              ]}
+            >
+              <button type="button" className="w-full flex items-start gap-2 text-[11px] rounded px-1.5 py-1 hover:bg-white/10 cursor-pointer text-left">
+                <div className={cn(
+                  'w-1.5 h-1.5 rounded-full mt-1.5 shrink-0',
+                  opp.direction === 'bullish' ? 'bg-emerald-400' :
+                  opp.direction === 'bearish' ? 'bg-red-400' : 'bg-white/40'
+                )} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-white">{opp.symbol}</span>
+                    <span className="text-white/40 capitalize">{opp.setupType}</span>
+                    <span className="ml-auto text-[9px] font-mono text-emerald-400/70">{opp.score}/100</span>
+                  </div>
+                  <p className="text-white/40 truncate">{opp.description}</p>
                 </div>
-                <p className="text-white/40 truncate">{opp.description}</p>
-              </div>
-            </div>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
+
+      <WidgetActionBar actions={actions} compact />
     </div>
   )
 }

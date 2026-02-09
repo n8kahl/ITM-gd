@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import dynamic from 'next/dynamic'
 import type { LevelAnnotation } from './trading-chart'
 import { OptionsChain } from './options-chain'
@@ -164,6 +165,15 @@ const LEVEL_COLORS: Record<string, string> = {
 
 export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const { session } = useMemberAuth()
+  const {
+    activeCenterView,
+    activeSymbol,
+    workflowPath,
+    setCenterView,
+    setSymbol,
+    goToWorkflowStep,
+    clearWorkflowPath,
+  } = useAICoachWorkflow()
 
   const [activeView, setActiveView] = useState<CenterView>('welcome')
 
@@ -181,6 +191,18 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const [chartLevels, setChartLevels] = useState<LevelAnnotation[]>([])
   const [isLoadingChart, setIsLoadingChart] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (activeCenterView && activeCenterView !== activeView) {
+      setActiveView(activeCenterView as CenterView)
+    }
+  }, [activeCenterView, activeView])
+
+  useEffect(() => {
+    if (activeSymbol && activeSymbol !== chartSymbol) {
+      setChartSymbol(activeSymbol)
+    }
+  }, [activeSymbol, chartSymbol])
 
   // Fetch chart data
   const fetchChartData = useCallback(async (symbol: string, timeframe: ChartTimeframe) => {
@@ -299,7 +321,9 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     if (!chartRequest) return
 
     setActiveView('chart')
+    setCenterView('chart')
     setChartSymbol(chartRequest.symbol)
+    setSymbol(chartRequest.symbol)
     setChartTimeframe(chartRequest.timeframe)
 
     const levelAnnotations = buildLevelAnnotations(chartRequest)
@@ -307,7 +331,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     setChartLevels([...levelAnnotations, ...gexAnnotations])
 
     fetchChartData(chartRequest.symbol, chartRequest.timeframe)
-  }, [chartRequest, fetchChartData, buildLevelAnnotations, buildGEXAnnotations])
+  }, [chartRequest, fetchChartData, buildLevelAnnotations, buildGEXAnnotations, setCenterView, setSymbol])
 
   useEffect(() => {
     const handleChartEvent = (event: Event) => {
@@ -316,7 +340,9 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
       if (!request?.symbol || !request?.timeframe) return
 
       setActiveView('chart')
+      setCenterView('chart')
       setChartSymbol(request.symbol)
+      setSymbol(request.symbol)
       setChartTimeframe(request.timeframe)
 
       const levelAnnotations = buildLevelAnnotations(request)
@@ -328,13 +354,14 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
     window.addEventListener('ai-coach-show-chart', handleChartEvent)
     return () => window.removeEventListener('ai-coach-show-chart', handleChartEvent)
-  }, [buildLevelAnnotations, buildGEXAnnotations, fetchChartData])
+  }, [buildLevelAnnotations, buildGEXAnnotations, fetchChartData, setCenterView, setSymbol])
 
   const handleSymbolChange = useCallback((symbol: string) => {
     setChartSymbol(symbol)
+    setSymbol(symbol)
     setChartLevels([])
     fetchChartData(symbol, chartTimeframe)
-  }, [chartTimeframe, fetchChartData])
+  }, [chartTimeframe, fetchChartData, setSymbol])
 
   const handleTimeframeChange = useCallback((timeframe: ChartTimeframe) => {
     setChartTimeframe(timeframe)
@@ -343,8 +370,9 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   const handleShowChart = useCallback(() => {
     setActiveView('chart')
+    setCenterView('chart')
     fetchChartData(chartSymbol, chartTimeframe)
-  }, [chartSymbol, chartTimeframe, fetchChartData])
+  }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView])
 
   // ============================================
   // RENDER
@@ -352,6 +380,31 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   return (
     <div className="h-full flex flex-col">
+      {workflowPath.length > 0 && activeView !== 'onboarding' && (
+        <div className="border-b border-white/5 px-3 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+          {workflowPath.map((step, index) => (
+            <button
+              key={step.id}
+              onClick={() => goToWorkflowStep(index)}
+              className={cn(
+                'text-[10px] px-2 py-1 rounded border whitespace-nowrap transition-colors',
+                index === workflowPath.length - 1
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-white/10 bg-white/5 text-white/45 hover:text-white/65'
+              )}
+            >
+              {step.label}
+            </button>
+          ))}
+          <button
+            onClick={clearWorkflowPath}
+            className="text-[10px] px-2 py-1 rounded border border-white/10 bg-white/5 text-white/35 hover:text-white/60 transition-colors whitespace-nowrap"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Tab bar — shown for non-welcome/non-onboarding views */}
       {activeView !== 'welcome' && activeView !== 'onboarding' && (
         <div className="border-b border-white/5 flex items-center">
@@ -364,6 +417,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                     key={tab.view}
                     onClick={() => {
                       setActiveView(tab.view)
+                      setCenterView(tab.view as Parameters<typeof setCenterView>[0])
                       if (tab.view === 'chart') fetchChartData(chartSymbol, chartTimeframe)
                     }}
                     className={cn(
@@ -381,7 +435,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             </div>
           </div>
           <button
-            onClick={() => setActiveView('welcome')}
+            onClick={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
             className="text-xs text-white/30 hover:text-white/60 px-3 py-2 transition-colors shrink-0 border-b-2 border-transparent min-h-[44px]"
           >
             Home
@@ -403,15 +460,42 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
           <WelcomeView
             onSendPrompt={onSendPrompt}
             onShowChart={handleShowChart}
-            onShowOptions={() => setActiveView('options')}
-            onShowPosition={() => setActiveView('position')}
-            onShowJournal={() => setActiveView('journal')}
-            onShowAlerts={() => setActiveView('alerts')}
-            onShowBrief={() => setActiveView('brief')}
-            onShowScanner={() => setActiveView('scanner')}
-            onShowTracked={() => setActiveView('tracked')}
-            onShowLeaps={() => setActiveView('leaps')}
-            onShowMacro={() => setActiveView('macro')}
+            onShowOptions={() => {
+              setActiveView('options')
+              setCenterView('options')
+            }}
+            onShowPosition={() => {
+              setActiveView('position')
+              setCenterView('position')
+            }}
+            onShowJournal={() => {
+              setActiveView('journal')
+              setCenterView('journal')
+            }}
+            onShowAlerts={() => {
+              setActiveView('alerts')
+              setCenterView('alerts')
+            }}
+            onShowBrief={() => {
+              setActiveView('brief')
+              setCenterView('brief')
+            }}
+            onShowScanner={() => {
+              setActiveView('scanner')
+              setCenterView('scanner')
+            }}
+            onShowTracked={() => {
+              setActiveView('tracked')
+              setCenterView('tracked')
+            }}
+            onShowLeaps={() => {
+              setActiveView('leaps')
+              setCenterView('leaps')
+            }}
+            onShowMacro={() => {
+              setActiveView('macro')
+              setCenterView('macro')
+            }}
           />
         )}
 
@@ -434,52 +518,79 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
         )}
 
         {activeView === 'position' && (
-          <PositionForm onClose={() => setActiveView('welcome')} />
+          <PositionForm onClose={() => {
+            setActiveView('welcome')
+            setCenterView(null)
+          }} />
         )}
 
         {activeView === 'journal' && (
-          <TradeJournal onClose={() => setActiveView('welcome')} />
+          <TradeJournal onClose={() => {
+            setActiveView('welcome')
+            setCenterView(null)
+          }} />
         )}
 
         {activeView === 'alerts' && (
-          <AlertsPanel onClose={() => setActiveView('welcome')} />
+          <AlertsPanel onClose={() => {
+            setActiveView('welcome')
+            setCenterView(null)
+          }} />
         )}
 
         {activeView === 'brief' && (
           <MorningBriefPanel
-            onClose={() => setActiveView('welcome')}
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
             onSendPrompt={onSendPrompt}
           />
         )}
 
         {activeView === 'scanner' && (
           <OpportunityScanner
-            onClose={() => setActiveView('welcome')}
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
             onSendPrompt={onSendPrompt}
           />
         )}
 
         {activeView === 'tracked' && (
           <TrackedSetupsPanel
-            onClose={() => setActiveView('welcome')}
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
             onSendPrompt={onSendPrompt}
           />
         )}
 
         {activeView === 'screenshot' && (
-          <ScreenshotUpload onClose={() => setActiveView('welcome')} />
+          <ScreenshotUpload onClose={() => {
+            setActiveView('welcome')
+            setCenterView(null)
+          }} />
         )}
 
         {activeView === 'leaps' && (
           <LEAPSDashboard
-            onClose={() => setActiveView('welcome')}
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
             onSendPrompt={onSendPrompt}
           />
         )}
 
         {activeView === 'macro' && (
           <MacroContext
-            onClose={() => setActiveView('welcome')}
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
             onSendPrompt={onSendPrompt}
           />
         )}

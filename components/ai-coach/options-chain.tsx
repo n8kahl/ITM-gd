@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import {
   getOptionsChain,
   getExpirations,
@@ -40,6 +41,15 @@ type SortDir = 'asc' | 'desc'
 
 export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsChainProps) {
   const { session } = useMemberAuth()
+  const {
+    activeSymbol,
+    activeExpiry,
+    activeStrike,
+    setSymbol: setWorkflowSymbol,
+    setCenterView,
+    setStrike: setWorkflowStrike,
+    setExpiry: setWorkflowExpiry,
+  } = useAICoachWorkflow()
 
   const [symbol, setSymbol] = useState(initialSymbol)
   const [expiry, setExpiry] = useState(initialExpiry || '')
@@ -54,6 +64,7 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
   const [gexProfile, setGexProfile] = useState<GEXProfileResponse | null>(null)
   const [isLoadingGex, setIsLoadingGex] = useState(false)
   const [gexError, setGexError] = useState<string | null>(null)
+  const [pendingSyncSymbol, setPendingSyncSymbol] = useState<string | null>(null)
 
   const token = session?.access_token
 
@@ -69,6 +80,20 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
     loadChain()
   }, [expiry, strikeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const workflowSymbol = activeSymbol
+    if (!workflowSymbol || workflowSymbol === symbol) return
+    if (!['SPX', 'NDX'].includes(workflowSymbol)) return
+    setPendingSyncSymbol(workflowSymbol)
+  }, [activeSymbol, symbol])
+
+  useEffect(() => {
+    if (!activeExpiry || activeSymbol !== symbol) return
+    if (activeExpiry !== expiry) {
+      setExpiry(activeExpiry)
+    }
+  }, [activeExpiry, activeSymbol, symbol, expiry])
+
   const loadExpirations = useCallback(async (sym: string) => {
     if (!token) return
     try {
@@ -76,12 +101,13 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
       setExpirations(data.expirations)
       if (data.expirations.length > 0 && !expiry) {
         setExpiry(data.expirations[0])
+        setWorkflowExpiry(data.expirations[0])
       }
     } catch (err) {
       const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load expirations'
       setError(msg)
     }
-  }, [token, expiry])
+  }, [token, expiry, setWorkflowExpiry])
 
   const loadChain = useCallback(async () => {
     if (!token) return
@@ -144,6 +170,18 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
     }))
   }, [gexProfile, symbol])
 
+  const handleSyncSymbol = useCallback(() => {
+    if (!pendingSyncSymbol) return
+    setSymbol(pendingSyncSymbol)
+    setExpiry('')
+    setChain(null)
+    setGexProfile(null)
+    setGexError(null)
+    setWorkflowSymbol(pendingSyncSymbol)
+    setCenterView('options')
+    setPendingSyncSymbol(null)
+  }, [pendingSyncSymbol, setWorkflowSymbol, setCenterView])
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
@@ -187,6 +225,10 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
                 setChain(null)
                 setGexProfile(null)
                 setGexError(null)
+                setWorkflowSymbol(s)
+                setCenterView('options')
+                setWorkflowStrike(null)
+                setPendingSyncSymbol(null)
               }}
               className={cn(
                 'px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
@@ -205,7 +247,10 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
         {/* Expiry selector */}
         <select
           value={expiry}
-          onChange={(e) => setExpiry(e.target.value)}
+          onChange={(e) => {
+            setExpiry(e.target.value)
+            setWorkflowExpiry(e.target.value || null)
+          }}
           className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
         >
           <option value="">Select expiry</option>
@@ -281,6 +326,28 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
           </div>
         )}
       </div>
+
+      {pendingSyncSymbol && (
+        <div className="border-b border-white/5 px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+          <p className="text-white/45">
+            Workflow symbol is <span className="text-white/70">{pendingSyncSymbol}</span>. Sync options chain?
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSyncSymbol}
+              className="px-2 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => setPendingSyncSymbol(null)}
+              className="px-2 py-1 rounded border border-white/10 bg-white/5 text-white/45 hover:text-white/65"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
@@ -371,6 +438,7 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
                 <OptionsTable
                   contracts={sortContracts(chain.options.calls)}
                   currentPrice={chain.currentPrice}
+                  highlightStrike={activeSymbol === symbol ? activeStrike : null}
                   side="call"
                   sortField={sortField}
                   sortDir={sortDir}
@@ -393,6 +461,7 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
                 <OptionsTable
                   contracts={sortContracts(chain.options.puts)}
                   currentPrice={chain.currentPrice}
+                  highlightStrike={activeSymbol === symbol ? activeStrike : null}
                   side="put"
                   sortField={sortField}
                   sortDir={sortDir}
@@ -415,6 +484,7 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
 function OptionsTable({
   contracts,
   currentPrice,
+  highlightStrike,
   side,
   sortField,
   sortDir,
@@ -423,6 +493,7 @@ function OptionsTable({
 }: {
   contracts: OptionContract[]
   currentPrice: number
+  highlightStrike: number | null
   side: 'call' | 'put'
   sortField: SortField
   sortDir: SortDir
@@ -465,6 +536,7 @@ function OptionsTable({
         {contracts.map((contract) => {
           const isITM = contract.inTheMoney
           const isATM = Math.abs(contract.strike - currentPrice) < (currentPrice * 0.002)
+          const isFocused = highlightStrike != null && Math.round(contract.strike) === Math.round(highlightStrike)
 
           return (
             <tr
@@ -472,7 +544,8 @@ function OptionsTable({
               className={cn(
                 'border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors',
                 isITM && (side === 'call' ? 'bg-emerald-500/[0.04]' : 'bg-red-500/[0.04]'),
-                isATM && 'border-l-2 border-l-emerald-500'
+                isATM && 'border-l-2 border-l-emerald-500',
+                isFocused && 'ring-1 ring-violet-500/35 bg-violet-500/[0.08]'
               )}
             >
               <td className={cn(

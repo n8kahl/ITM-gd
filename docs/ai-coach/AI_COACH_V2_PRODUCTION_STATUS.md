@@ -118,6 +118,21 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
   - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Cross-widget workflow/action framework (production pass):
+  - Shared workflow context with symbol/strike/expiry sync, center-view routing, breadcrumb path, and alert prefill state
+  - Reusable widget action primitives (`widget-actions`, `widget-action-bar`, `widget-context-menu`) wired into key widgets
+  - Key levels, options, scanner, current price, alerts, and GEX cards now expose chart/options/alert/analyze/chat actions via a unified action layer
+  - Options panel now supports workflow symbol-sync prompts and workflow strike highlighting
+  - Alerts panel consumes workflow prefill for one-click alert creation from widgets
+  - `/Users/natekahl/ITM-gd/contexts/AICoachWorkflowContext.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-actions.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-action-bar.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-context-menu.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/alerts-panel.tsx`
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
 
 ### Database
 - Applied to staging:
@@ -159,6 +174,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
+- `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
 
@@ -177,13 +193,13 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 
 ### Needs Completion
-- Implement the broader interactive widget action system from spec (`widget-actions`, context menus, workflow context wiring across all widget types).
+- Extend workflow-context actions beyond widget cards into scanner/table/chart native interaction surfaces (row-level chart context menus, setup analysis handoffs, and tracked-position chart overlays).
 - Full E2E path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 
 ## 4) Surgical Next Plan
 
 1. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
-2. Implement cross-widget action framework (`widget-action-bar`, context menus, workflow context) so GEX/earnings/scanner cards share consistent chart/options/alert actions.
+2. Extend workflow-context actions into scanner/track panels and chart-native context menus (non-widget surfaces) for full rebuild-spec parity.
 3. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
 4. Run staging verification against pending hardening migrations from `main` before production cut.

@@ -23,6 +23,7 @@ import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-ima
 import { CenterPanel } from '@/components/ai-coach/center-panel'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
 import { analyzeScreenshot as apiAnalyzeScreenshot } from '@/lib/api/ai-coach'
 import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
@@ -39,43 +40,76 @@ export default function AICoachPage() {
 
   return (
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
-      {/* Full-height container — fills available space inside member layout */}
-      <div className="flex flex-col h-[calc(100dvh-10.5rem)] lg:h-[calc(100dvh-3.5rem)]">
-        {/* Mobile View Toggle */}
-        <div className="flex gap-1 p-1 mx-4 mt-2 rounded-lg bg-white/5 border border-white/10 lg:hidden">
-          <button
-            onClick={() => setMobileView('chat')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
-              mobileView === 'chat'
-                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                : 'text-white/60 hover:text-white border border-transparent'
-            )}
-          >
-            <MessageSquare className="w-4 h-4" />
-            Chat
-          </button>
-          <button
-            onClick={() => setMobileView('center')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
-              mobileView === 'center'
-                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                : 'text-white/60 hover:text-white border border-transparent'
-            )}
-          >
-            <CandlestickChart className="w-4 h-4" />
-            Chart
-          </button>
-        </div>
+      <AICoachWorkflowProvider onSendPrompt={handleSendPrompt}>
+        {/* Full-height container — fills available space inside member layout */}
+        <div className="flex flex-col h-[calc(100dvh-10.5rem)] lg:h-[calc(100dvh-3.5rem)]">
+          {/* Mobile View Toggle */}
+          <div className="flex gap-1 p-1 mx-4 mt-2 rounded-lg bg-white/5 border border-white/10 lg:hidden">
+            <button
+              onClick={() => setMobileView('chat')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
+                mobileView === 'chat'
+                  ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                  : 'text-white/60 hover:text-white border border-transparent'
+              )}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Chat
+            </button>
+            <button
+              onClick={() => setMobileView('center')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
+                mobileView === 'center'
+                  ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                  : 'text-white/60 hover:text-white border border-transparent'
+              )}
+            >
+              <CandlestickChart className="w-4 h-4" />
+              Chart
+            </button>
+          </div>
 
-        {/* Main Content — full remaining height */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {/* Desktop: Resizable Split Panels */}
-          <div className="hidden lg:block h-full">
-            <PanelGroup direction="horizontal">
-              {/* Chat Panel (40% default, more room for messages) */}
-              <Panel defaultSize={40} minSize={30} maxSize={55}>
+          {/* Main Content — full remaining height */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {/* Desktop: Resizable Split Panels */}
+            <div className="hidden lg:block h-full">
+              <PanelGroup direction="horizontal">
+                {/* Chat Panel (40% default, more room for messages) */}
+                <Panel defaultSize={40} minSize={30} maxSize={55}>
+                  <ChatArea
+                    messages={chat.messages}
+                    sessions={chat.sessions}
+                    currentSessionId={chat.currentSessionId}
+                    isSending={chat.isSending}
+                    isLoadingSessions={chat.isLoadingSessions}
+                    isLoadingMessages={chat.isLoadingMessages}
+                    error={chat.error}
+                    rateLimitInfo={chat.rateLimitInfo}
+                    onSendMessage={chat.sendMessage}
+                    onNewSession={chat.newSession}
+                    onSelectSession={chat.selectSession}
+                    onDeleteSession={chat.deleteSession}
+                    onClearError={chat.clearError}
+                  />
+                </Panel>
+
+                {/* Resize Handle */}
+                <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
+                </PanelResizeHandle>
+
+                {/* Center Panel (60%) */}
+                <Panel defaultSize={60} minSize={35}>
+                  <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
+                </Panel>
+              </PanelGroup>
+            </div>
+
+            {/* Mobile: Toggled View */}
+            <div className="lg:hidden h-full">
+              {mobileView === 'chat' ? (
                 <ChatArea
                   messages={chat.messages}
                   sessions={chat.sessions}
@@ -91,44 +125,13 @@ export default function AICoachPage() {
                   onDeleteSession={chat.deleteSession}
                   onClearError={chat.clearError}
                 />
-              </Panel>
-
-              {/* Resize Handle */}
-              <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
-                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
-              </PanelResizeHandle>
-
-              {/* Center Panel (60%) */}
-              <Panel defaultSize={60} minSize={35}>
+              ) : (
                 <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-              </Panel>
-            </PanelGroup>
-          </div>
-
-          {/* Mobile: Toggled View */}
-          <div className="lg:hidden h-full">
-            {mobileView === 'chat' ? (
-              <ChatArea
-                messages={chat.messages}
-                sessions={chat.sessions}
-                currentSessionId={chat.currentSessionId}
-                isSending={chat.isSending}
-                isLoadingSessions={chat.isLoadingSessions}
-                isLoadingMessages={chat.isLoadingMessages}
-                error={chat.error}
-                rateLimitInfo={chat.rateLimitInfo}
-                onSendMessage={chat.sendMessage}
-                onNewSession={chat.newSession}
-                onSelectSession={chat.selectSession}
-                onDeleteSession={chat.deleteSession}
-                onClearError={chat.clearError}
-              />
-            ) : (
-              <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </AICoachWorkflowProvider>
     </AICoachErrorBoundary>
   )
 }
