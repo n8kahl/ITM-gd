@@ -71,6 +71,13 @@ The preflight checks:
 6. Start run.
 7. Wait for completion and confirm all required jobs are green.
 
+CLI alternative (recommended for repeatable runs):
+
+```bash
+cd /Users/natekahl/ITM-gd
+pnpm ai-coach:staging:run https://<staging-api-host>
+```
+
 ## 5) Required Pass Criteria
 
 The gate passes only if all are true:

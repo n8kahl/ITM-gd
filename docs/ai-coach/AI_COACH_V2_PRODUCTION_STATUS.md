@@ -293,6 +293,12 @@ Staging preflight evidence (2026-02-09):
   - required repository secrets are not configured/visible (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_BYPASS_TOKEN`)
 - Warning:
   - workflow `.github/workflows/ai-coach-live-e2e.yml` is not on `main` yet (expected until merge)
+- Automation:
+  - preflight script: `/Users/natekahl/ITM-gd/scripts/ai-coach/check-staging-gate-readiness.sh`
+  - dispatch script: `/Users/natekahl/ITM-gd/scripts/ai-coach/run-staging-live-gate.sh`
+  - npm commands:
+    - `pnpm ai-coach:staging:preflight`
+    - `pnpm ai-coach:staging:run https://<staging-api-host>`
 
 Current checklist:
 
