@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="${1:-n8kahl/ITM-gd}"
-TARGET_BRANCH="${2:-Aiupgrade}"
+TARGET_BRANCH="${2:-main}"
 WORKFLOW_PATH=".github/workflows/ai-coach-live-e2e.yml"
 
 required_secrets=(
@@ -18,6 +18,7 @@ optional_secrets=(
 
 failures=0
 warnings=0
+gh_ready=0
 
 print_header() {
   echo "AI Coach Staging Gate Preflight"
@@ -38,10 +39,17 @@ check_prereqs() {
     failures=$((failures + 1))
   else
     echo "PASS: gh CLI authenticated."
+    gh_ready=1
   fi
 }
 
 check_workflow_exists_on_branch() {
+  if [[ "${gh_ready}" != "1" ]]; then
+    echo "WARN: skipping workflow branch check (gh not authenticated)."
+    warnings=$((warnings + 1))
+    return
+  fi
+
   if gh api "repos/${REPO}/contents/${WORKFLOW_PATH}?ref=${TARGET_BRANCH}" >/dev/null 2>&1; then
     echo "PASS: ${WORKFLOW_PATH} exists on ${TARGET_BRANCH}."
   else
@@ -51,21 +59,38 @@ check_workflow_exists_on_branch() {
 }
 
 check_workflow_exists_on_main() {
+  if [[ "${TARGET_BRANCH}" == "main" ]]; then
+    return
+  fi
+
+  if [[ "${gh_ready}" != "1" ]]; then
+    echo "WARN: skipping workflow main-branch check (gh not authenticated)."
+    warnings=$((warnings + 1))
+    return
+  fi
+
   if gh api "repos/${REPO}/contents/${WORKFLOW_PATH}?ref=main" >/dev/null 2>&1; then
     echo "PASS: ${WORKFLOW_PATH} exists on main."
   else
-    echo "WARN: ${WORKFLOW_PATH} is not on main yet (expected before merge)."
+    echo "WARN: ${WORKFLOW_PATH} is not on main."
     warnings=$((warnings + 1))
   fi
 }
 
 check_secrets() {
+  if [[ "${gh_ready}" != "1" ]]; then
+    echo "WARN: skipping secrets check (gh not authenticated)."
+    warnings=$((warnings + 1))
+    return
+  fi
+
   local secret_list
   secret_list="$(gh secret list --repo "${REPO}" --json name --jq '.[].name' 2>/dev/null || true)"
 
   if [[ -z "${secret_list}" ]]; then
-    echo "FAIL: No repository secrets visible via gh for ${REPO}."
-    failures=$((failures + 1))
+    echo "WARN: repository secrets are not visible via gh for ${REPO} (permission scope may be limited)."
+    echo "WARN: confirm required secrets manually in GitHub settings before dispatch."
+    warnings=$((warnings + 1))
     return
   fi
 

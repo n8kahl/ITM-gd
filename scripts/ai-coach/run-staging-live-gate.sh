@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="${REPO:-n8kahl/ITM-gd}"
-TARGET_BRANCH="${TARGET_BRANCH:-Aiupgrade}"
+TARGET_BRANCH="${TARGET_BRANCH:-main}"
 WORKFLOW_PATH="${WORKFLOW_PATH:-.github/workflows/ai-coach-live-e2e.yml}"
 
 if [[ $# -lt 1 ]]; then

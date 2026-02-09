@@ -467,6 +467,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Live backend-integrated AI Coach test lane (opt-in):
   - Shared live-mode test helper (`E2E_AI_COACH_MODE=live`, backend URL/auth headers)
   - New live workflow spec executes scanner -> tracked lifecycle -> brief against real backend APIs (no route mocks)
+  - Added live authenticated earnings endpoint checks for:
+    - `GET /api/earnings/calendar`
+    - `GET /api/earnings/:symbol/analysis` (supports transient provider-unavailable `503` contract in test assertions)
   - API health spec now includes authenticated watchlist/scanner/brief + tracked lifecycle checks in live mode
   - Strict CI gate mode via `E2E_AI_COACH_REQUIRE_LIVE=true` (fails instead of skip when live prerequisites are missing)
   - Dedicated workflow dispatch gate for staging live E2E
@@ -476,6 +479,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts`
   - `/Users/natekahl/ITM-gd/playwright.config.ts`
   - `/Users/natekahl/ITM-gd/.github/workflows/ai-coach-live-e2e.yml`
+  - `/Users/natekahl/ITM-gd/scripts/ai-coach/validate-earnings-endpoints.sh`
+  - `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_STAGING_GATE_RUNBOOK.md`
 
 ### Database
 - Applied to staging:
@@ -602,15 +607,15 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Optional CI operationalization step:
   - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
-- Deploy the earnings module updates to staging and production, then run authenticated validation for:
-  - `GET /api/earnings/calendar`
-  - `GET /api/earnings/:symbol/analysis`
+- Execute authenticated earnings endpoint validation against staging and production after deploy:
+  - `pnpm ai-coach:staging:earnings https://<backend-url> SPY`
 
 ## 4) Surgical Next Plan
 
-1. Merge branch to `main` and run `ai-coach-live-e2e.yml` from GitHub Actions (default-branch workflow dispatch requirement).
-2. Capture and archive GitHub run evidence URL in this doc.
-3. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
+1. Run `pnpm ai-coach:staging:run https://<staging-api-host>` on `main`.
+2. After workflow completion, run `pnpm ai-coach:staging:earnings https://<staging-api-host> SPY`.
+3. Capture and archive workflow URL + earnings command output evidence in this doc.
+4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
 
 ## 5) Active Phase: Staging Gate Execution
 

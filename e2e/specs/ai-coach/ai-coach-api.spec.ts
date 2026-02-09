@@ -230,6 +230,45 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
     expect(briefPayload.brief).toBeDefined()
   })
 
+  test('earnings endpoints should return authenticated responses', async ({ request }) => {
+    test.setTimeout(90000)
+
+    const authHeaders = getAICoachAuthHeaders()
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+
+    const calendarResponse = await request.get(
+      `${e2eBackendUrl}/api/earnings/calendar?watchlist=SPY,QQQ,AAPL&days=14`,
+      {
+        headers: authHeaders,
+        timeout: 30000,
+      },
+    )
+    expect(calendarResponse.status()).toBe(200)
+    const calendarPayload = await calendarResponse.json()
+    expect(Array.isArray(calendarPayload.watchlist)).toBe(true)
+    expect(Array.isArray(calendarPayload.events)).toBe(true)
+    expect(typeof calendarPayload.daysAhead).toBe('number')
+
+    const analysisResponse = await request.get(`${e2eBackendUrl}/api/earnings/SPY/analysis`, {
+      headers: authHeaders,
+      timeout: 30000,
+    })
+    expect([200, 503]).toContain(analysisResponse.status())
+
+    const analysisPayload = await analysisResponse.json()
+    if (analysisResponse.status() === 200) {
+      expect(typeof analysisPayload.symbol).toBe('string')
+      expect(analysisPayload.symbol).toBe('SPY')
+      expect(analysisPayload.expectedMove).toBeDefined()
+      expect(Array.isArray(analysisPayload.suggestedStrategies)).toBe(true)
+      return
+    }
+
+    expect(typeof analysisPayload.error).toBe('string')
+    expect(typeof analysisPayload.message).toBe('string')
+  })
+
   test('tracked setup lifecycle should support create -> update -> delete', async ({ request }) => {
     const authHeaders = getAICoachAuthHeaders()
     const sourceOpportunityId = `e2e-live-${Date.now()}`

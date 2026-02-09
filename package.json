@@ -20,7 +20,8 @@
     "test:e2e:ai-coach-live": "E2E_AI_COACH_MODE=live playwright test e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts e2e/specs/ai-coach/ai-coach-api.spec.ts --project=ai-coach",
     "ai-coach:staging:secrets": "scripts/ai-coach/configure-staging-gate-secrets.sh",
     "ai-coach:staging:preflight": "scripts/ai-coach/check-staging-gate-readiness.sh",
-    "ai-coach:staging:run": "scripts/ai-coach/run-staging-live-gate.sh"
+    "ai-coach:staging:run": "scripts/ai-coach/run-staging-live-gate.sh",
+    "ai-coach:staging:earnings": "scripts/ai-coach/validate-earnings-endpoints.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

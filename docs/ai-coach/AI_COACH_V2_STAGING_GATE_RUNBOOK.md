@@ -4,7 +4,7 @@
 **Owner:** Nate + Codex  
 **Scope:** Execute and document the staging quality gate before production cutover.
 
-This runbook is the operational next phase after implementation on `Aiupgrade`.
+This runbook is the operational next phase after implementation on `main`.
 It validates the staging deployment path using the live backend-integrated E2E lane.
 
 ## 1) Gate Objective
@@ -80,7 +80,7 @@ The preflight checks:
 1. Open GitHub Actions for this repo.
 2. Select workflow `AI Coach Live E2E`.
 3. Click `Run workflow`.
-4. Choose branch `Aiupgrade` (or release candidate branch).
+4. Choose branch `main` (or release candidate branch).
 5. Enter `backend_url` for staging.
 6. Start run.
 7. Wait for completion and confirm all required jobs are green.
@@ -95,6 +95,13 @@ cd /Users/natekahl/ITM-gd
 pnpm ai-coach:staging:run https://<staging-api-host>
 ```
 
+After the live workflow completes, validate earnings endpoints with authenticated requests:
+
+```bash
+cd /Users/natekahl/ITM-gd
+E2E_BYPASS_TOKEN=<token> pnpm ai-coach:staging:earnings https://<staging-api-host> SPY
+```
+
 ## 5) Required Pass Criteria
 
 The gate passes only if all are true:
@@ -103,6 +110,9 @@ The gate passes only if all are true:
 2. Live authenticated API checks pass (or strict-mode-valid failure reason is not present).
 3. Live workflow spec passes scanner -> detector simulation -> tracked management -> brief.
 4. No critical backend startup/auth bypass bootstrap failures in workflow logs.
+5. Authenticated earnings checks pass:
+   - `GET /api/earnings/calendar`
+   - `GET /api/earnings/:symbol/analysis`
 
 ## 6) Evidence Capture
 
@@ -148,3 +158,4 @@ All required conditions must be met:
 1. Latest staging live gate run is green.
 2. Evidence block is recorded in `AI_COACH_V2_PRODUCTION_STATUS.md`.
 3. No unresolved P0/P1 issues in staging validation logs.
+4. Earnings endpoint validation command succeeds for staging URL.
