@@ -33,12 +33,55 @@ function parseMaybeBoolean(value: unknown): boolean | null {
   return null
 }
 
+function parseMaybeInteger(value: unknown): number | null {
+  const parsed = parseMaybeNumber(value)
+  if (parsed == null) return null
+  return Number.isInteger(parsed) ? parsed : Math.round(parsed)
+}
+
+function parseMaybeDateString(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Date.parse(trimmed)
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
+}
+
 function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null {
   if (typeof value !== 'string') return null
   const normalized = value.toLowerCase().trim()
   if (['long', 'call', 'bullish', 'buy'].includes(normalized)) return 'long'
   if (['short', 'put', 'bearish', 'sell'].includes(normalized)) return 'short'
   if (normalized === 'neutral') return 'neutral'
+  return null
+}
+
+function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | 'spread' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.toLowerCase().trim()
+  if (['stock', 'equity'].includes(normalized)) return 'stock'
+  if (['call', 'calls'].includes(normalized)) return 'call'
+  if (['put', 'puts'].includes(normalized)) return 'put'
+  if (['spread', 'credit_spread', 'debit_spread'].includes(normalized)) return 'spread'
+  return null
+}
+
+function normalizeMood(value: unknown): 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.toLowerCase().trim()
+  if (['confident', 'neutral', 'anxious', 'frustrated', 'excited', 'fearful'].includes(normalized)) {
+    return normalized as 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful'
+  }
+  return null
+}
+
+function normalizeDraftStatus(value: unknown): 'pending' | 'confirmed' | 'dismissed' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.toLowerCase().trim()
+  if (normalized === 'pending' || normalized === 'confirmed' || normalized === 'dismissed') {
+    return normalized
+  }
   return null
 }
 
@@ -97,6 +140,126 @@ function normalizeJournalWritePayload(
   const pnlPctInput = getFirstDefined<unknown>(input.pnl_percentage, input.profit_loss_percent)
   if (pnlPctInput !== undefined) {
     payload.pnl_percentage = parseMaybeNumber(pnlPctInput)
+  }
+
+  if (input.stop_loss !== undefined) {
+    payload.stop_loss = parseMaybeNumber(input.stop_loss)
+  }
+
+  if (input.initial_target !== undefined) {
+    payload.initial_target = parseMaybeNumber(input.initial_target)
+  }
+
+  if (input.strategy !== undefined) {
+    payload.strategy = typeof input.strategy === 'string' && input.strategy.trim().length > 0
+      ? input.strategy.trim()
+      : null
+  }
+
+  if (input.hold_duration_min !== undefined) {
+    payload.hold_duration_min = parseMaybeInteger(input.hold_duration_min)
+  }
+
+  if (input.mfe_percent !== undefined) {
+    payload.mfe_percent = parseMaybeNumber(input.mfe_percent)
+  }
+
+  if (input.mae_percent !== undefined) {
+    payload.mae_percent = parseMaybeNumber(input.mae_percent)
+  }
+
+  if (input.contract_type !== undefined) {
+    payload.contract_type = normalizeContractType(input.contract_type)
+  }
+
+  if (input.strike_price !== undefined) {
+    payload.strike_price = parseMaybeNumber(input.strike_price)
+  }
+
+  if (input.expiration_date !== undefined) {
+    payload.expiration_date = typeof input.expiration_date === 'string' && input.expiration_date.trim().length > 0
+      ? input.expiration_date.trim()
+      : null
+  }
+
+  if (input.dte_at_entry !== undefined) {
+    payload.dte_at_entry = parseMaybeInteger(input.dte_at_entry)
+  }
+
+  if (input.dte_at_exit !== undefined) {
+    payload.dte_at_exit = parseMaybeInteger(input.dte_at_exit)
+  }
+
+  if (input.iv_at_entry !== undefined) {
+    payload.iv_at_entry = parseMaybeNumber(input.iv_at_entry)
+  }
+
+  if (input.iv_at_exit !== undefined) {
+    payload.iv_at_exit = parseMaybeNumber(input.iv_at_exit)
+  }
+
+  if (input.delta_at_entry !== undefined) {
+    payload.delta_at_entry = parseMaybeNumber(input.delta_at_entry)
+  }
+
+  if (input.theta_at_entry !== undefined) {
+    payload.theta_at_entry = parseMaybeNumber(input.theta_at_entry)
+  }
+
+  if (input.gamma_at_entry !== undefined) {
+    payload.gamma_at_entry = parseMaybeNumber(input.gamma_at_entry)
+  }
+
+  if (input.vega_at_entry !== undefined) {
+    payload.vega_at_entry = parseMaybeNumber(input.vega_at_entry)
+  }
+
+  if (input.underlying_at_entry !== undefined) {
+    payload.underlying_at_entry = parseMaybeNumber(input.underlying_at_entry)
+  }
+
+  if (input.underlying_at_exit !== undefined) {
+    payload.underlying_at_exit = parseMaybeNumber(input.underlying_at_exit)
+  }
+
+  if (input.mood_before !== undefined) {
+    payload.mood_before = normalizeMood(input.mood_before)
+  }
+
+  if (input.mood_after !== undefined) {
+    payload.mood_after = normalizeMood(input.mood_after)
+  }
+
+  if (input.discipline_score !== undefined) {
+    payload.discipline_score = parseMaybeInteger(input.discipline_score)
+  }
+
+  if (input.followed_plan !== undefined) {
+    payload.followed_plan = parseMaybeBoolean(input.followed_plan)
+  }
+
+  if (input.deviation_notes !== undefined) {
+    payload.deviation_notes = typeof input.deviation_notes === 'string' && input.deviation_notes.trim().length > 0
+      ? input.deviation_notes.trim()
+      : null
+  }
+
+  if (input.session_id !== undefined) {
+    payload.session_id = typeof input.session_id === 'string' && input.session_id.trim().length > 0
+      ? input.session_id.trim()
+      : null
+  }
+
+  if (input.draft_status !== undefined) {
+    payload.draft_status = normalizeDraftStatus(input.draft_status)
+  }
+
+  if (input.is_draft !== undefined) {
+    payload.is_draft = parseMaybeBoolean(input.is_draft)
+  }
+
+  if (input.draft_expires_at !== undefined) {
+    payload.draft_expires_at = parseMaybeDateString(input.draft_expires_at)
   }
 
   if (input.screenshot_url !== undefined) {

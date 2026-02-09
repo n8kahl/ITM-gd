@@ -61,6 +61,9 @@ export async function POST(request: NextRequest) {
 
     let marketContext: Record<string, any> = {}
     let verification: Record<string, any> = {}
+    let mfePercent: number | null = null
+    let maePercent: number | null = null
+    let holdDurationMin: number | null = null
 
     if (minuteRes.ok && dailyRes.ok) {
       const minuteData = await minuteRes.json()
@@ -153,6 +156,24 @@ export async function POST(request: NextRequest) {
         return dist < best.distance ? { ...l, distance: dist / (atr14 || 1) } : best
       }, { name: 'None', price: 0, distance: Infinity })
 
+      // MFE / MAE over the active trade window.
+      const activeBars = minuteBars.filter((bar: any) => bar.t >= entryTimestamp && bar.t <= exitTimestamp)
+      if (activeBars.length > 0 && ep > 0) {
+        const highestHigh = activeBars.reduce((max: number, bar: any) => Math.max(max, bar.h), activeBars[0].h)
+        const lowestLow = activeBars.reduce((min: number, bar: any) => Math.min(min, bar.l), activeBars[0].l)
+        if (entry.direction === 'short') {
+          mfePercent = ((ep - lowestLow) / ep) * 100
+          maePercent = ((highestHigh - ep) / ep) * 100
+        } else {
+          mfePercent = ((highestHigh - ep) / ep) * 100
+          maePercent = ((ep - lowestLow) / ep) * 100
+        }
+      }
+
+      if (entryTimestamp && exitTimestamp && exitTimestamp >= entryTimestamp) {
+        holdDurationMin = Math.max(0, Math.round((exitTimestamp - entryTimestamp) / (1000 * 60)))
+      }
+
       // Determine day context
       const dayHigh = dailyBars[dailyBars.length - 1]?.h || 0
       const dayLow = dailyBars[dailyBars.length - 1]?.l || 0
@@ -232,6 +253,30 @@ export async function POST(request: NextRequest) {
     if (smartTags.length > 0) {
       updateData.smart_tags = smartTags
     }
+    if (mfePercent != null) {
+      updateData.mfe_percent = Math.round(mfePercent * 100) / 100
+    }
+    if (maePercent != null) {
+      updateData.mae_percent = Math.round(maePercent * 100) / 100
+    }
+    if (holdDurationMin != null) {
+      updateData.hold_duration_min = holdDurationMin
+    }
+
+    const detectedContract = parseOptionContract(entry.symbol)
+    if (detectedContract) {
+      if (!entry.contract_type) updateData.contract_type = detectedContract.contractType
+      if (!entry.strike_price) updateData.strike_price = detectedContract.strikePrice
+      if (!entry.expiration_date) updateData.expiration_date = detectedContract.expirationDate
+      if (!entry.dte_at_entry) {
+        const dteAtEntry = computeDte(detectedContract.expirationDate, tradeDate)
+        if (dteAtEntry != null) updateData.dte_at_entry = dteAtEntry
+      }
+      if (!entry.dte_at_exit) {
+        const dteAtExit = computeDte(detectedContract.expirationDate, tradeDate)
+        if (dteAtExit != null) updateData.dte_at_exit = dteAtExit
+      }
+    }
 
     const { error: updateError } = await supabase
       .from('journal_entries')
@@ -249,6 +294,8 @@ export async function POST(request: NextRequest) {
         market_context: marketContext,
         verification,
         smart_tags: smartTags,
+        mfe_percent: updateData.mfe_percent ?? null,
+        mae_percent: updateData.mae_percent ?? null,
       },
     })
   } catch (error) {
@@ -304,4 +351,33 @@ function generateSmartTags(context: any, entry: any): string[] {
   }
 
   return tags
+}
+
+function parseOptionContract(symbol: string | null | undefined): {
+  contractType: 'call' | 'put'
+  strikePrice: number | null
+  expirationDate: string | null
+} | null {
+  if (!symbol || typeof symbol !== 'string') return null
+
+  const occ = symbol.match(/([A-Z]{1,6})(\d{2})(\d{2})(\d{2})([CP])(\d{8})/)
+  if (!occ) return null
+
+  const [, , yy, mm, dd, cp, strikeRaw] = occ
+  const expirationDate = `20${yy}-${mm}-${dd}`
+  const strikePrice = Number(strikeRaw) / 1000
+
+  return {
+    contractType: cp === 'C' ? 'call' : 'put',
+    strikePrice: Number.isFinite(strikePrice) ? strikePrice : null,
+    expirationDate,
+  }
+}
+
+function computeDte(expirationDate: string | null, tradeDate: string | null): number | null {
+  if (!expirationDate || !tradeDate) return null
+  const expiry = new Date(`${expirationDate}T00:00:00Z`)
+  const trade = new Date(`${tradeDate}T00:00:00Z`)
+  if (Number.isNaN(expiry.getTime()) || Number.isNaN(trade.getTime())) return null
+  return Math.max(0, Math.ceil((expiry.getTime() - trade.getTime()) / (1000 * 60 * 60 * 24)))
 }

@@ -27,6 +27,34 @@ export interface JournalEntry {
   verification: TradeVerification | null
   entry_timestamp: string | null
   exit_timestamp: string | null
+  stop_loss: number | null
+  initial_target: number | null
+  strategy: string | null
+  hold_duration_min: number | null
+  mfe_percent: number | null
+  mae_percent: number | null
+  contract_type: 'stock' | 'call' | 'put' | 'spread' | null
+  strike_price: number | null
+  expiration_date: string | null
+  dte_at_entry: number | null
+  dte_at_exit: number | null
+  iv_at_entry: number | null
+  iv_at_exit: number | null
+  delta_at_entry: number | null
+  theta_at_entry: number | null
+  gamma_at_entry: number | null
+  vega_at_entry: number | null
+  underlying_at_entry: number | null
+  underlying_at_exit: number | null
+  mood_before: 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful' | null
+  mood_after: 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful' | null
+  discipline_score: number | null
+  followed_plan: boolean | null
+  deviation_notes: string | null
+  session_id: string | null
+  draft_status: 'pending' | 'confirmed' | 'dismissed' | null
+  is_draft: boolean
+  draft_expires_at: string | null
   is_open: boolean
   enriched_at: string | null
   share_count: number
@@ -42,6 +70,7 @@ export interface JournalFilters {
   }
   symbol: string | null
   direction: 'long' | 'short' | 'all'
+  contractType: 'all' | 'stock' | 'call' | 'put' | 'spread'
   pnlFilter: 'winners' | 'losers' | 'all'
   tags: string[]
   aiGrade: string[] | null
@@ -53,6 +82,7 @@ export const DEFAULT_FILTERS: JournalFilters = {
   dateRange: { from: null, to: null, preset: 'all' },
   symbol: null,
   direction: 'all',
+  contractType: 'all',
   pnlFilter: 'all',
   tags: [],
   aiGrade: null,
@@ -194,4 +224,35 @@ export interface TradeReplayData {
 export interface SmartTagRule {
   tag: string
   condition: (context: MarketContextSnapshot) => boolean
+}
+
+export interface AdvancedAnalyticsResponse {
+  period: '7d' | '30d' | '90d' | '1y'
+  period_start: string
+  total_trades: number
+  closed_trades: number
+  winning_trades: number
+  losing_trades: number
+  win_rate: number
+  total_pnl: number
+  avg_pnl: number
+  expectancy: number
+  profit_factor: number | null
+  avg_r_multiple: number
+  sharpe_ratio: number
+  sortino_ratio: number
+  max_drawdown: number
+  max_drawdown_duration_days: number
+  avg_hold_minutes: number
+  avg_mfe_percent: number
+  avg_mae_percent: number
+  hourly_pnl: Array<{ hour_of_day: number; pnl: number; trade_count: number }>
+  day_of_week_pnl: Array<{ day_of_week: number; pnl: number; trade_count: number }>
+  monthly_pnl: Array<{ month: string; pnl: number; trade_count: number }>
+  symbol_stats: Array<{ symbol: string; pnl: number; trade_count: number; win_rate: number }>
+  direction_stats: Array<{ direction: string; pnl: number; trade_count: number; win_rate: number }>
+  dte_buckets: Array<{ bucket: string; pnl: number; trade_count: number; win_rate: number }>
+  equity_curve?: Array<{ trade_date: string; equity: number; drawdown: number }>
+  r_multiple_distribution?: Array<{ bucket: string; count: number }>
+  mfe_mae_scatter?: Array<{ id: string; mfe: number; mae: number; pnl: number }>
 }
