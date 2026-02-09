@@ -180,6 +180,97 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
         </section>
 
         <section className="glass-card-heavy rounded-lg p-3 border border-white/5">
+          <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Key Levels</p>
+          <div className="space-y-2">
+            {(brief?.keyLevelsToday || []).map((level: Record<string, unknown>) => {
+              const symbol = String(level.symbol || '')
+              const currentPrice = typeof level.currentPrice === 'number' ? level.currentPrice.toFixed(2) : 'N/A'
+              const pivot = typeof level.pivot === 'number' ? level.pivot.toFixed(2) : 'N/A'
+              const pdh = typeof level.pdh === 'number' ? level.pdh.toFixed(2) : 'N/A'
+              const pdl = typeof level.pdl === 'number' ? level.pdl.toFixed(2) : 'N/A'
+              const atr = typeof level.atr14 === 'number' ? level.atr14.toFixed(2) : 'N/A'
+
+              return (
+                <button
+                  key={symbol}
+                  onClick={() => onSendPrompt?.(`Show me a chart setup for ${symbol} with PDH ${pdh}, PDL ${pdl}, and pivot ${pivot}.`)}
+                  className="w-full text-left rounded-md border border-white/10 bg-white/5 px-2.5 py-2 hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/80 font-medium">{symbol}</span>
+                    <span className="text-emerald-300">Current {currentPrice}</span>
+                  </div>
+                  <p className="text-[11px] text-white/50 mt-1">
+                    Pivot {pivot} | PDH {pdh} | PDL {pdl} | ATR {atr}
+                  </p>
+                </button>
+              )
+            })}
+            {(brief?.keyLevelsToday || []).length === 0 && (
+              <p className="text-xs text-white/40">No key level data available yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="glass-card-heavy rounded-lg p-3 border border-white/5">
+          <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Economic Events</p>
+          <div className="space-y-2">
+            {(brief?.economicEvents || []).map((event: Record<string, unknown>, idx: number) => {
+              const impact = String(event.impact || 'LOW').toUpperCase()
+              const impactClass = impact === 'HIGH'
+                ? 'text-red-300 bg-red-500/10'
+                : impact === 'MEDIUM'
+                  ? 'text-amber-300 bg-amber-500/10'
+                  : 'text-emerald-300 bg-emerald-500/10'
+
+              return (
+                <div key={`${event.event || 'event'}-${idx}`} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-white/80">{String(event.event || 'Event')}</p>
+                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded', impactClass)}>{impact}</span>
+                  </div>
+                  <p className="text-[11px] text-white/45 mt-1">{String(event.tradingImplication || '')}</p>
+                </div>
+              )
+            })}
+            {(brief?.economicEvents || []).length === 0 && (
+              <p className="text-xs text-white/40">No major scheduled events detected.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="glass-card-heavy rounded-lg p-3 border border-white/5">
+          <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Open Position Risk</p>
+          <div className="space-y-2">
+            {(brief?.openPositionStatus || []).map((position: Record<string, unknown>, idx: number) => {
+              const pnlPct = typeof position.currentPnlPct === 'number' ? position.currentPnlPct : null
+              const pnlClass = pnlPct === null
+                ? 'text-white/55'
+                : pnlPct >= 0
+                  ? 'text-emerald-300'
+                  : 'text-red-300'
+
+              return (
+                <div key={`${position.symbol || 'position'}-${idx}`} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-white/80">
+                      {String(position.symbol || '')} {String(position.type || '')}
+                    </p>
+                    <p className={cn('text-xs font-medium', pnlClass)}>
+                      {pnlPct === null ? 'P&L N/A' : `${pnlPct.toFixed(2)}%`}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-white/45 mt-1">{String(position.recommendation || '')}</p>
+                </div>
+              )
+            })}
+            {(brief?.openPositionStatus || []).length === 0 && (
+              <p className="text-xs text-white/40">No open positions detected.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="glass-card-heavy rounded-lg p-3 border border-white/5">
           <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Watch Items</p>
           <ul className="space-y-1.5">
             {(brief?.watchItems || []).map((item) => (

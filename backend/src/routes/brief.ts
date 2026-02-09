@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { supabase } from '../config/database';
-import { getMarketStatus } from '../services/marketHours';
+import { morningBriefService } from '../services/morningBrief';
 
 const router = Router();
 
-const DEFAULT_WATCHLIST_SYMBOLS = ['SPX', 'NDX', 'SPY', 'QQQ'];
+const BRIEF_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function getEasternMarketDate(now: Date = new Date()): string {
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -17,55 +17,15 @@ function getEasternMarketDate(now: Date = new Date()): string {
   return formatter.format(now);
 }
 
-async function getUserDefaultWatchlistSymbols(userId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('ai_coach_watchlists')
-    .select('symbols, is_default, created_at')
-    .eq('user_id', userId)
-    .order('is_default', { ascending: false })
-    .order('created_at', { ascending: true });
+function parseWatchlistQuery(value: string | undefined): string[] {
+  if (!value) return [];
 
-  if (error) {
-    throw new Error(`Failed to load watchlist: ${error.message}`);
-  }
+  const symbols = value
+    .split(',')
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol));
 
-  const watchlists = data || [];
-  if (watchlists.length === 0) return DEFAULT_WATCHLIST_SYMBOLS;
-
-  const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
-  const symbols = Array.isArray(defaultWatchlist.symbols)
-    ? defaultWatchlist.symbols.filter((symbol) => typeof symbol === 'string')
-    : [];
-
-  return symbols.length > 0 ? symbols : DEFAULT_WATCHLIST_SYMBOLS;
-}
-
-async function buildFallbackBrief(userId: string, marketDate: string) {
-  const watchlist = await getUserDefaultWatchlistSymbols(userId);
-  const marketStatus = getMarketStatus();
-
-  return {
-    generatedAt: new Date().toISOString(),
-    marketDate,
-    marketStatus,
-    watchlist,
-    overnightSummary: {
-      futuresDirection: 'flat' as const,
-      futuresChange: 0,
-      futuresChangePct: 0,
-      gapAnalysis: [],
-    },
-    keyLevelsToday: [],
-    economicEvents: [],
-    earningsToday: [],
-    openPositionStatus: [],
-    watchItems: [
-      `Review key levels and trend context for ${watchlist.join(', ')}`,
-      'Run opportunity scanner after the opening range forms',
-      'Confirm risk sizing before placing any trade',
-    ],
-    aiSummary: 'Morning brief placeholder generated. Connect live market context service to replace this fallback summary.',
-  };
+  return Array.from(new Set(symbols)).slice(0, 20);
 }
 
 /**
@@ -78,6 +38,20 @@ router.get('/today', authenticateToken, async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const marketDate = getEasternMarketDate();
     const forceRefresh = req.query.force === 'true';
+    const watchlistOverride = parseWatchlistQuery(
+      typeof req.query.watchlist === 'string' ? req.query.watchlist : undefined
+    );
+
+    // On-demand custom watchlist preview: generate but do not persist user daily cache.
+    if (watchlistOverride.length > 0) {
+      const brief = await morningBriefService.generateBrief(userId, watchlistOverride);
+      return res.json({
+        brief,
+        marketDate,
+        viewed: false,
+        cached: false,
+      });
+    }
 
     if (!forceRefresh) {
       const { data: existing, error: existingError } = await supabase
@@ -92,16 +66,23 @@ router.get('/today', authenticateToken, async (req: Request, res: Response) => {
       }
 
       if (existing) {
-        return res.json({
-          brief: existing.brief_data,
-          marketDate,
-          viewed: existing.viewed,
-          cached: true,
-        });
+        const createdAt = new Date(existing.created_at).getTime();
+        const isFresh = Number.isFinite(createdAt)
+          ? (Date.now() - createdAt) < BRIEF_CACHE_TTL_MS
+          : false;
+
+        if (isFresh) {
+          return res.json({
+            brief: existing.brief_data,
+            marketDate,
+            viewed: existing.viewed,
+            cached: true,
+          });
+        }
       }
     }
 
-    const briefData = await buildFallbackBrief(userId, marketDate);
+    const briefData = await morningBriefService.generateBrief(userId);
 
     const { data: upserted, error: upsertError } = await supabase
       .from('ai_coach_morning_briefs')

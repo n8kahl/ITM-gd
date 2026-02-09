@@ -19,6 +19,8 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   scanOpportunities as apiScanOpportunities,
   getWatchlists,
+  createWatchlist,
+  updateWatchlist,
   trackSetup,
   AICoachAPIError,
   type ScanOpportunity,
@@ -49,7 +51,11 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
   const [filterDirection, setFilterDirection] = useState<'all' | 'bullish' | 'bearish' | 'neutral'>('all')
   const [filterType, setFilterType] = useState<'all' | 'technical' | 'options'>('all')
   const [scanSymbols, setScanSymbols] = useState<string[]>(['SPX', 'NDX'])
+  const [defaultWatchlistId, setDefaultWatchlistId] = useState<string | null>(null)
   const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(false)
+  const [isSavingWatchlist, setIsSavingWatchlist] = useState(false)
+  const [isEditingWatchlist, setIsEditingWatchlist] = useState(false)
+  const [watchlistInput, setWatchlistInput] = useState('SPX, NDX')
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
   const [trackStatusById, setTrackStatusById] = useState<Record<string, TrackStatus>>({})
 
@@ -67,9 +73,12 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
       try {
         const result = await getWatchlists(token)
         const symbols = result.defaultWatchlist?.symbols?.filter(Boolean) || []
+        const watchlistId = result.defaultWatchlist?.id || null
 
         if (!cancelled && symbols.length > 0) {
           setScanSymbols(symbols)
+          setDefaultWatchlistId(watchlistId)
+          setWatchlistInput(symbols.join(', '))
         }
       } catch (err) {
         if (cancelled) return
@@ -114,6 +123,56 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
       setIsScanning(false)
     }
   }, [scanSymbols, token])
+
+  const handleSaveWatchlist = useCallback(async () => {
+    if (!token) return
+
+    const parsedSymbols = watchlistInput
+      .split(',')
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol))
+
+    const uniqueSymbols = Array.from(new Set(parsedSymbols)).slice(0, 20)
+    if (uniqueSymbols.length === 0) {
+      setWatchlistError('Enter at least one valid symbol (e.g., SPX, AAPL, NVDA).')
+      return
+    }
+
+    setIsSavingWatchlist(true)
+    setWatchlistError(null)
+
+    try {
+      if (defaultWatchlistId) {
+        const result = await updateWatchlist(defaultWatchlistId, token, {
+          symbols: uniqueSymbols,
+          isDefault: true,
+        })
+        const defaultSymbols = result.defaultWatchlist?.symbols || uniqueSymbols
+        setDefaultWatchlistId(result.defaultWatchlist?.id || defaultWatchlistId)
+        setScanSymbols(defaultSymbols)
+        setWatchlistInput(defaultSymbols.join(', '))
+      } else {
+        const result = await createWatchlist(token, {
+          name: 'Default',
+          symbols: uniqueSymbols,
+          isDefault: true,
+        })
+        const defaultSymbols = result.defaultWatchlist?.symbols || uniqueSymbols
+        setDefaultWatchlistId(result.defaultWatchlist?.id || result.watchlist.id)
+        setScanSymbols(defaultSymbols)
+        setWatchlistInput(defaultSymbols.join(', '))
+      }
+
+      setIsEditingWatchlist(false)
+    } catch (err) {
+      const message = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to save watchlist.'
+      setWatchlistError(message)
+    } finally {
+      setIsSavingWatchlist(false)
+    }
+  }, [defaultWatchlistId, token, watchlistInput])
 
   const handleTrackSetup = useCallback(async (opportunity: Opportunity) => {
     if (!token) return
@@ -183,9 +242,39 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
 
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 py-2 border-b border-white/5">
-          <p className="text-[10px] text-white/35">
-            Watchlist: <span className="text-white/60">{scanSymbols.join(', ')}</span>
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-white/35">
+              Watchlist: <span className="text-white/60">{scanSymbols.join(', ')}</span>
+            </p>
+            <button
+              onClick={() => setIsEditingWatchlist((prev) => !prev)}
+              className="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              {isEditingWatchlist ? 'Cancel' : 'Edit'}
+            </button>
+          </div>
+          {isEditingWatchlist && (
+            <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                value={watchlistInput}
+                onChange={(e) => setWatchlistInput(e.target.value)}
+                placeholder="SPX, NDX, AAPL"
+                className="flex-1 h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white placeholder:text-white/35 focus:outline-none focus:border-emerald-500/40"
+              />
+              <button
+                onClick={handleSaveWatchlist}
+                disabled={isSavingWatchlist}
+                className={cn(
+                  'h-8 px-3 rounded-md text-xs border transition-all',
+                  isSavingWatchlist
+                    ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
+                    : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20'
+                )}
+              >
+                {isSavingWatchlist ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          )}
           {watchlistError && (
             <p className="text-[10px] text-amber-400 mt-1">{watchlistError}</p>
           )}
