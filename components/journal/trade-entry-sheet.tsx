@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { uploadScreenshot, type UploadProgress } from '@/lib/uploads/supabaseStorage'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import type { JournalEntry, AITradeAnalysis } from '@/lib/types/journal'
@@ -253,8 +254,8 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
       }
       await onSave(payload)
       onClose()
-    } catch {
-      // Error handled by parent
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save trade')
     } finally {
       setSaving(false)
     }
