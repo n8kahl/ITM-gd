@@ -91,6 +91,7 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
 }
 
 const VIEW_PREFERENCE_KEY = 'journal-view-preference'
+const DATE_FILTER_PARAM_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 function countActiveFilters(filters: JournalFilters): number {
   let count = 0
@@ -108,6 +109,11 @@ function getStoredViewPreference(): JournalFilters['view'] {
   if (typeof window === 'undefined') return DEFAULT_FILTERS.view
   const stored = window.localStorage.getItem(VIEW_PREFERENCE_KEY)
   return stored === 'cards' || stored === 'table' ? stored : DEFAULT_FILTERS.view
+}
+
+function sanitizeDateFilterParam(value: string | null): string | null {
+  if (!value) return null
+  return DATE_FILTER_PARAM_PATTERN.test(value) ? value : null
 }
 
 export default function JournalPage() {
@@ -163,6 +169,35 @@ export default function JournalPage() {
     setEditEntry(null)
     setEntryPrefill(prefill)
     setEntrySheetOpen(true)
+  }, [searchParams])
+
+  useEffect(() => {
+    const fromParam = sanitizeDateFilterParam(searchParams.get('from'))
+    const toParam = sanitizeDateFilterParam(searchParams.get('to'))
+    if (!fromParam && !toParam) return
+
+    const nextFrom = fromParam || toParam
+    const nextTo = toParam || fromParam
+    if (!nextFrom || !nextTo) return
+
+    setFilters((prev) => {
+      if (
+        prev.dateRange.preset === 'custom'
+        && prev.dateRange.from === nextFrom
+        && prev.dateRange.to === nextTo
+      ) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        dateRange: {
+          from: nextFrom,
+          to: nextTo,
+          preset: 'custom',
+        },
+      }
+    })
   }, [searchParams])
 
   const loadEntries = useCallback(async () => {

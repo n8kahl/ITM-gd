@@ -98,6 +98,10 @@ Branch: `codex/trade-journal-implementation`
   - `components/dashboard/customizable-dashboard.tsx`
   - `components/journal/analytics-dashboard.tsx`
   - `app/members/journal/analytics/page.tsx`
+- [x] Enhanced calendar heatmap (interactive)
+  - `app/api/members/dashboard/calendar/route.ts`
+  - `components/dashboard/calendar-heatmap.tsx`
+  - `app/members/journal/page.tsx`
 - [x] Trade replay controls + overlays upgrade
   - `app/api/members/journal/replay/[entryId]/route.ts`
   - `components/journal/trade-replay-chart.tsx`
@@ -115,11 +119,11 @@ Branch: `codex/trade-journal-implementation`
 - Journal analytics dashboard with persisted drag/drop/resizable widgets and preset layouts.
 - AI Coach bridge for one-click trade logging with prefill/session linking and entry-level session replay context.
 - ChatKit journal-aware tools (`get_journal_insights`, `get_trade_history_for_symbol`) wired with tests and prompt guidance.
+- Interactive calendar heatmap with month/quarter/year views, richer day-level stats, annotations, and journal day deep-linking.
 - Trade replay upgrades: skip-to-entry/exit controls, live P&L ticker, stop/target overlays, and MFE/MAE markers.
 
 ## Remaining
 - End-of-day auto-journal automation (4:05 PM ET extraction job + notification flow + auto-dismiss lifecycle) is not implemented.
-- Enhanced calendar heatmap is not upgraded to the richer interactive/annotated spec variant.
 - Phase 7 mobile gesture/offline/PWA and comprehensive WCAG hardening remain.
 
 ## Risks
@@ -131,7 +135,7 @@ Branch: `codex/trade-journal-implementation`
 1. Implement end-of-day auto-journal scheduling/notification pipeline and draft expiry handling for Phase 5.3.
 2. Add async/background jobs for grading, import enrichment queues, and weekly behavioral insight generation.
 3. Replace synchronous materialized view refresh trigger with queued refresh/job scheduling.
-4. Complete remaining Phase 6 visuals (enhanced calendar heatmap + replay side-panel polish).
+4. Complete remaining Phase 6 polish on replay side-panel context/notes coupling.
 5. Complete Phase 7 accessibility/mobile/PWA hardening.
 
 ## Migration Notes
