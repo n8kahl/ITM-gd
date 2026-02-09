@@ -16,6 +16,15 @@ import {
   publishSetupPushHeartbeat,
   publishSetupStatusUpdate,
 } from '../services/setupPushChannel';
+import {
+  markWorkerCycleFailed,
+  markWorkerCycleStarted,
+  markWorkerCycleSucceeded,
+  markWorkerNextRun,
+  markWorkerStarted,
+  markWorkerStopped,
+  registerWorker,
+} from '../services/workerHealth';
 
 interface ActiveTrackedSetupRow {
   id: string;
@@ -48,8 +57,10 @@ export const SETUP_PUSH_POLL_INTERVAL_MARKET_OPEN = 15_000; // 15 seconds
 export const SETUP_PUSH_POLL_INTERVAL_MARKET_CLOSED = 60_000; // 60 seconds
 export const SETUP_PUSH_INITIAL_DELAY = 15_000; // 15 seconds
 const SETUP_PUSH_FETCH_LIMIT = 200;
+const WORKER_NAME = 'setup_push_worker';
 
 const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'RUT', 'DJX']);
+registerWorker(WORKER_NAME);
 
 let pollingTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
@@ -261,8 +272,20 @@ async function pollTrackedSetups(): Promise<void> {
 async function runCycle(): Promise<void> {
   if (!isRunning) return;
 
-  await pollTrackedSetups();
-  pollingTimer = setTimeout(runCycle, getSetupPushPollingInterval());
+  const cycleStartedAt = markWorkerCycleStarted(WORKER_NAME);
+  try {
+    await pollTrackedSetups();
+    markWorkerCycleSucceeded(WORKER_NAME, cycleStartedAt);
+  } catch (error) {
+    markWorkerCycleFailed(WORKER_NAME, cycleStartedAt, error);
+    logger.error('Setup push worker: run cycle failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const interval = getSetupPushPollingInterval();
+  markWorkerNextRun(WORKER_NAME, interval);
+  pollingTimer = setTimeout(runCycle, interval);
 }
 
 export function startSetupPushWorker(): void {
@@ -272,12 +295,15 @@ export function startSetupPushWorker(): void {
   }
 
   isRunning = true;
+  markWorkerStarted(WORKER_NAME);
   logger.info('Setup push worker started');
+  markWorkerNextRun(WORKER_NAME, SETUP_PUSH_INITIAL_DELAY);
   pollingTimer = setTimeout(runCycle, SETUP_PUSH_INITIAL_DELAY);
 }
 
 export function stopSetupPushWorker(): void {
   isRunning = false;
+  markWorkerStopped(WORKER_NAME);
 
   if (pollingTimer) {
     clearTimeout(pollingTimer);

@@ -9,13 +9,24 @@ import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
 import { isTradingDay, toEasternTime } from '../services/marketHours';
 import { morningBriefService } from '../services/morningBrief';
+import {
+  markWorkerCycleFailed,
+  markWorkerCycleStarted,
+  markWorkerCycleSucceeded,
+  markWorkerNextRun,
+  markWorkerStarted,
+  markWorkerStopped,
+  registerWorker,
+} from '../services/workerHealth';
 
 const MORNING_BRIEF_TARGET_MINUTES_ET = 7 * 60; // 7:00 AM ET
 const MORNING_BRIEF_CHECK_INTERVAL_MS = 60_000; // 1 minute
+const WORKER_NAME = 'morning_brief_worker';
 
 let workerTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 let lastGeneratedMarketDate: string | null = null;
+registerWorker(WORKER_NAME);
 
 export function shouldGenerateMorningBriefs(
   now: Date,
@@ -164,6 +175,7 @@ export async function generateMorningBriefsForMarketDate(marketDate: string): Pr
 async function runCycle(): Promise<void> {
   if (!isRunning) return;
 
+  const cycleStartedAt = markWorkerCycleStarted(WORKER_NAME);
   try {
     const now = new Date();
     const schedule = shouldGenerateMorningBriefs(now, lastGeneratedMarketDate);
@@ -177,11 +189,14 @@ async function runCycle(): Promise<void> {
         ...stats,
       });
     }
+    markWorkerCycleSucceeded(WORKER_NAME, cycleStartedAt);
   } catch (error) {
+    markWorkerCycleFailed(WORKER_NAME, cycleStartedAt, error);
     logger.error('Morning brief worker cycle failed', {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
+    markWorkerNextRun(WORKER_NAME, MORNING_BRIEF_CHECK_INTERVAL_MS);
     workerTimer = setTimeout(runCycle, MORNING_BRIEF_CHECK_INTERVAL_MS);
   }
 }
@@ -193,12 +208,15 @@ export function startMorningBriefWorker(): void {
   }
 
   isRunning = true;
+  markWorkerStarted(WORKER_NAME);
   logger.info('Morning brief worker started');
+  markWorkerNextRun(WORKER_NAME, MORNING_BRIEF_CHECK_INTERVAL_MS);
   workerTimer = setTimeout(runCycle, MORNING_BRIEF_CHECK_INTERVAL_MS);
 }
 
 export function stopMorningBriefWorker(): void {
   isRunning = false;
+  markWorkerStopped(WORKER_NAME);
 
   if (workerTimer) {
     clearTimeout(workerTimer);
