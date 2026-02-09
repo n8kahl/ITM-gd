@@ -608,18 +608,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Strict staging live gate passes locally against staging backend URL (`17/17` latest strict run).
 
 ### Needs Completion
-- Optional CI operationalization step:
-  - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
-- Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
+- No blocking implementation items remain for AI Coach V2 rebuild scope.
+- Optional operations backlog:
+  - Re-run/archive latest GitHub `AI Coach Live E2E` workflow evidence on newest commit.
+  - Add PagerDuty escalation only if operations policy requires paging (Discord remains primary).
 
-## 4) Surgical Next Plan
+## 4) Optional Follow-ups
 
-1. Run `pnpm ai-coach:staging:run https://<staging-api-host>` on `main`.
-2. After workflow completion, run `pnpm ai-coach:staging:earnings https://<staging-api-host> SPY`.
-3. Capture and archive workflow URL + earnings command output evidence in this doc.
-4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
+1. Re-run `pnpm ai-coach:staging:run https://<staging-api-host>` and archive the newest workflow URL.
+2. If policy changes, add PagerDuty escalation on top of Discord worker alerts.
 
-## 5) Active Phase: Staging Gate Execution
+## 5) Closeout Status
+
+Implementation state: `CLOSED` (production deployed, staging + production validations complete).
 
 Execution runbook:
 
