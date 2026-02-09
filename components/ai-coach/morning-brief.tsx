@@ -6,6 +6,7 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   getMorningBrief,
   setMorningBriefViewed,
+  getGammaExposure,
   AICoachAPIError,
   type MorningBrief,
 } from '@/lib/api/ai-coach'
@@ -86,6 +87,15 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
   const [isMarkingViewed, setIsMarkingViewed] = useState(false)
   const [hasAutoMarkedViewed, setHasAutoMarkedViewed] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [spxGammaSummary, setSpxGammaSummary] = useState<{
+    regime: 'positive_gamma' | 'negative_gamma' | null
+    flipPoint: number | null
+    maxGEXStrike: number | null
+  }>({
+    regime: null,
+    flipPoint: null,
+    maxGEXStrike: null,
+  })
   const contentRef = useRef<HTMLDivElement | null>(null)
   const pullStartYRef = useRef<number | null>(null)
   const isPullingRef = useRef(false)
@@ -101,11 +111,27 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
     setError(null)
 
     try {
-      const result = await getMorningBrief(token, { force })
+      const [result, gamma] = await Promise.all([
+        getMorningBrief(token, { force }),
+        getGammaExposure('SPX', token, { maxExpirations: 4, strikeRange: 20 }).catch(() => null),
+      ])
       setBrief(result.brief)
       setMarketDate(result.marketDate)
       setViewed(result.viewed)
       setHasAutoMarkedViewed(result.viewed)
+      if (gamma) {
+        setSpxGammaSummary({
+          regime: gamma.regime,
+          flipPoint: gamma.flipPoint,
+          maxGEXStrike: gamma.maxGEXStrike,
+        })
+      } else {
+        setSpxGammaSummary({
+          regime: null,
+          flipPoint: null,
+          maxGEXStrike: null,
+        })
+      }
     } catch (err) {
       const message = err instanceof AICoachAPIError
         ? err.apiError.message
@@ -205,6 +231,16 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
   }
 
   const modeMeta = BRIEF_MODE_META[briefMode]
+  const gammaLabel = spxGammaSummary.regime === 'positive_gamma'
+    ? 'Positive'
+    : spxGammaSummary.regime === 'negative_gamma'
+      ? 'Negative'
+      : 'Unavailable'
+  const gammaToneClass = spxGammaSummary.regime === 'positive_gamma'
+    ? 'text-emerald-300'
+    : spxGammaSummary.regime === 'negative_gamma'
+      ? 'text-red-300'
+      : 'text-white/55'
 
   const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
     const container = contentRef.current
@@ -366,7 +402,13 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
             </div>
             <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
               <p className="text-[10px] text-white/40 uppercase">Gamma Regime</p>
-              <p className="text-sm text-white font-medium mt-0.5">Pending Tool Read</p>
+              <p className={cn('text-sm font-medium mt-0.5', gammaToneClass)}>{gammaLabel}</p>
+              {(spxGammaSummary.flipPoint != null || spxGammaSummary.maxGEXStrike != null) && (
+                <p className="text-[10px] text-white/45 mt-0.5">
+                  {spxGammaSummary.flipPoint != null ? `Flip ${spxGammaSummary.flipPoint.toFixed(0)}` : 'Flip N/A'}
+                  {spxGammaSummary.maxGEXStrike != null ? ` • Max ${spxGammaSummary.maxGEXStrike.toFixed(0)}` : ''}
+                </p>
+              )}
             </div>
           </div>
           <div className="mt-3">
