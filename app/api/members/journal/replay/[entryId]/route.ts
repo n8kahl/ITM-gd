@@ -30,7 +30,7 @@ export async function GET(
     // Fetch the journal entry from canonical table
     const { data: entry, error: entryError } = await supabase
       .from('journal_entries')
-      .select('id, user_id, symbol, trade_date, entry_price, exit_price, entry_timestamp, exit_timestamp, direction')
+      .select('id, user_id, symbol, trade_date, entry_price, exit_price, entry_timestamp, exit_timestamp, direction, stop_loss, initial_target')
       .eq('id', entryId)
       .eq('user_id', userId)
       .single()
@@ -128,6 +128,9 @@ export async function GET(
           data: {
             entryId,
             symbol: entry.symbol,
+            direction: entry.direction,
+            stopLoss: entry.stop_loss,
+            initialTarget: entry.initial_target,
             bars,
             entryPoint: { time: entryTime, price: entry.entry_price || 0 },
             exitPoint: { time: exitTime, price: entry.exit_price || 0 },
@@ -186,6 +189,9 @@ function generateMockReplayData(entryId: string, entry: any) {
   return {
     entryId,
     symbol: entry.symbol || 'SPY',
+    direction: entry.direction || 'long',
+    stopLoss: entry.stop_loss || null,
+    initialTarget: entry.initial_target || null,
     bars,
     entryPoint: { time: bars[entryIdx].time, price: entry.entry_price || bars[entryIdx].close },
     exitPoint: { time: bars[exitIdx].time, price: entry.exit_price || bars[exitIdx].close },

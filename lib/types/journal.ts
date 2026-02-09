@@ -200,6 +200,9 @@ export interface TradeVerification {
 export interface TradeReplayData {
   entryId: string
   symbol: string
+  direction?: 'long' | 'short' | 'neutral' | null
+  stopLoss?: number | null
+  initialTarget?: number | null
   bars: {
     time: number
     open: number
