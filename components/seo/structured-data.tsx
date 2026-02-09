@@ -2,9 +2,10 @@ import React from "react";
 
 interface StructuredDataProps {
   baseUrl?: string;
+  nonce?: string;
 }
 
-export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.app" }: StructuredDataProps) {
+export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.app", nonce }: StructuredDataProps) {
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -62,18 +63,21 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     <>
       <script
         type="application/ld+json"
+        nonce={nonce}
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(productSchema),
         }}
       />
       <script
         type="application/ld+json"
+        nonce={nonce}
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(organizationSchema),
         }}
       />
       <script
         type="application/ld+json"
+        nonce={nonce}
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(websiteSchema),
         }}
