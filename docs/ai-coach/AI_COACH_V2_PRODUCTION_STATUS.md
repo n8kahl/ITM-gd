@@ -133,6 +133,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/alerts-panel.tsx`
   - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Non-widget workflow action extension (scanner/tracked/chart surfaces):
+  - Opportunity Scanner cards now support context-menu + action-bar workflow handoffs (chart/options/alerts/analyze/chat)
+  - Tracked Setups cards now support setup-overlay chart actions (entry/stop/target), context actions, and production handoffs to options/alerts/analyze/chat
+  - Chart view now exposes native right-click workflow actions at hovered price (chart focus/options/alert/chat)
+  - `/Users/natekahl/ITM-gd/components/ai-coach/opportunity-scanner.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
 
 ### Database
 - Applied to staging:
@@ -175,8 +183,11 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
+- `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
+- `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (blocked in this environment due missing `@sentry/nextjs` import in `next.config.mjs`)
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
+- Added scanner workflow smoke spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow.spec.ts` (mocked scanner/tracked/brief/WebSocket flow).
 
 ## 3) Production Gates (Current)
 
@@ -193,13 +204,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 
 ### Needs Completion
-- Extend workflow-context actions beyond widget cards into scanner/table/chart native interaction surfaces (row-level chart context menus, setup analysis handoffs, and tracked-position chart overlays).
-- Full E2E path:
+- Enable full E2E execution in this repo by resolving frontend startup dependency issue (`@sentry/nextjs` import in `next.config.mjs`) so new workflow smoke specs run in CI/staging.
+- Expand backend-integrated E2E coverage from mocked workflow smoke to authenticated staging data path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
+- Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
 
 ## 4) Surgical Next Plan
 
-1. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
-2. Extend workflow-context actions into scanner/track panels and chart-native context menus (non-widget surfaces) for full rebuild-spec parity.
+1. Resolve `@sentry/nextjs` runtime dependency in local/CI Playwright web server boot so AI Coach E2E specs execute.
+2. Run the new workflow smoke spec + existing AI Coach view/api specs in CI and staging (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
 3. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
 4. Run staging verification against pending hardening migrations from `main` before production cut.

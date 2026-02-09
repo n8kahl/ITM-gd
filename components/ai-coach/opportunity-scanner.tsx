@@ -16,6 +16,16 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { WidgetActionBar } from './widget-action-bar'
+import { WidgetContextMenu } from './widget-context-menu'
+import {
+  alertAction,
+  chartAction,
+  chatAction,
+  copyAction,
+  optionsAction,
+  type WidgetAction,
+} from './widget-actions'
 import {
   scanOpportunities as apiScanOpportunities,
   getWatchlists,
@@ -37,6 +47,39 @@ interface OpportunityScannerProps {
 
 type Opportunity = ScanOpportunity
 type TrackStatus = 'idle' | 'saving' | 'saved' | 'duplicate' | 'error'
+
+function parseNumeric(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^0-9.+-]/g, '')
+    const parsed = Number(cleaned)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function getOpportunityFocusPrice(opportunity: Opportunity): number {
+  const suggested = parseNumeric(opportunity.suggestedTrade?.entry)
+  if (suggested != null) return suggested
+
+  const stop = parseNumeric(opportunity.suggestedTrade?.stopLoss)
+  if (stop != null) return stop
+
+  const target = parseNumeric(opportunity.suggestedTrade?.target)
+  if (target != null) return target
+
+  return opportunity.currentPrice
+}
+
+function getOpportunityStrike(opportunity: Opportunity): number | undefined {
+  const firstSuggested = opportunity.suggestedTrade?.strikes?.[0]
+  if (typeof firstSuggested === 'number' && Number.isFinite(firstSuggested)) {
+    return firstSuggested
+  }
+
+  const entry = parseNumeric(opportunity.suggestedTrade?.entry)
+  return entry != null ? entry : undefined
+}
 
 // ============================================
 // COMPONENT
@@ -427,154 +470,176 @@ function OpportunityCard({
           ? 'Retry Track'
           : 'Track This Setup'
 
+  const focusPrice = getOpportunityFocusPrice(opportunity)
+  const strike = getOpportunityStrike(opportunity)
+  const askPrompt = `Tell me more about this ${opportunity.setupType} setup on ${opportunity.symbol}. What's the risk/reward and how should I trade it?`
+
+  const workflowActions: WidgetAction[] = [
+    chartAction(opportunity.symbol, focusPrice, '15m', opportunity.setupType),
+    optionsAction(opportunity.symbol, strike ?? focusPrice, opportunity.suggestedTrade?.expiry),
+    alertAction(
+      opportunity.symbol,
+      focusPrice,
+      opportunity.direction === 'bearish' ? 'price_below' : 'price_above',
+      `Scanner setup: ${opportunity.setupType}`,
+    ),
+    onAskAI
+      ? {
+          label: 'Ask AI',
+          icon: Zap,
+          variant: 'secondary',
+          action: () => onAskAI(askPrompt),
+        }
+      : chatAction(askPrompt),
+  ]
+
+  const contextActions: WidgetAction[] = [
+    ...workflowActions,
+    copyAction(`${opportunity.symbol} ${opportunity.setupType} ${focusPrice.toFixed(2)}`),
+  ]
+
   return (
-    <div
-      className={cn(
-        'glass-card-heavy rounded-lg p-3 border border-white/5 cursor-pointer transition-all hover:border-emerald-500/20',
-        expanded && 'border-emerald-500/20'
-      )}
-      onClick={() => setExpanded(!expanded)}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <DirectionIcon className={cn('w-4 h-4', directionColor)} />
-          <span className="text-sm font-medium text-white">{opportunity.symbol}</span>
-          <span className={cn('text-[10px] px-1.5 py-0.5 rounded', scoreColor)}>
-            Score: {opportunity.score}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-white/30 flex items-center gap-1">
-            <TypeIcon className="w-3 h-3" />
-            {opportunity.setupType}
-          </span>
-        </div>
-      </div>
-
-      {/* Description */}
-      <p className="text-xs text-white/60 mb-2">{opportunity.description}</p>
-
-      {/* Price */}
-      <div className="flex items-center gap-3 text-xs">
-        <div>
-          <span className="text-white/30">Price:</span>
-          <span className="text-white/70 ml-1 font-medium">${opportunity.currentPrice.toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="text-white/30">Direction:</span>
-          <span className={cn('ml-1 font-medium', directionColor)}>
-            {opportunity.direction}
-          </span>
-        </div>
-      </div>
-
-      {/* Expanded details */}
-      {expanded && (
-        <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
-          {/* Suggested Trade */}
-          {opportunity.suggestedTrade && (
-            <div className="bg-white/5 rounded-lg p-2.5">
-              <p className="text-[10px] text-white/30 mb-1.5">SUGGESTED TRADE</p>
-              <p className="text-xs text-white/70 font-medium mb-1">
-                {opportunity.suggestedTrade.strategy}
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                {opportunity.suggestedTrade.entry && (
-                  <div>
-                    <span className="text-white/30">Entry:</span>
-                    <span className="text-white/60 ml-1">${opportunity.suggestedTrade.entry.toFixed(2)}</span>
-                  </div>
-                )}
-                {opportunity.suggestedTrade.stopLoss && (
-                  <div>
-                    <span className="text-white/30">Stop:</span>
-                    <span className="text-red-400 ml-1">${opportunity.suggestedTrade.stopLoss.toFixed(2)}</span>
-                  </div>
-                )}
-                {opportunity.suggestedTrade.target && (
-                  <div>
-                    <span className="text-white/30">Target:</span>
-                    <span className="text-emerald-400 ml-1">${opportunity.suggestedTrade.target.toFixed(2)}</span>
-                  </div>
-                )}
-                {opportunity.suggestedTrade.maxProfit && (
-                  <div>
-                    <span className="text-white/30">Max Profit:</span>
-                    <span className="text-emerald-400 ml-1">{opportunity.suggestedTrade.maxProfit}</span>
-                  </div>
-                )}
-                {opportunity.suggestedTrade.maxLoss && (
-                  <div>
-                    <span className="text-white/30">Max Loss:</span>
-                    <span className="text-red-400 ml-1">{opportunity.suggestedTrade.maxLoss}</span>
-                  </div>
-                )}
-                {opportunity.suggestedTrade.probability && (
-                  <div>
-                    <span className="text-white/30">Probability:</span>
-                    <span className="text-white/60 ml-1">{opportunity.suggestedTrade.probability}</span>
-                  </div>
-                )}
-                {opportunity.suggestedTrade.strikes && (
-                  <div className="col-span-2">
-                    <span className="text-white/30">Strikes:</span>
-                    <span className="text-white/60 ml-1">
-                      {opportunity.suggestedTrade.strikes.join(' / ')}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Metadata */}
-          {Object.keys(opportunity.metadata).length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(opportunity.metadata).map(([key, value]) => (
-                <span key={key} className="text-[10px] text-white/30 bg-white/5 rounded px-1.5 py-0.5">
-                  {key.replace(/_/g, ' ')}: <span className="text-white/50">{String(value)}</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Ask AI button */}
-          <div className="flex items-center gap-2 pt-1">
-            {onAskAI && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAskAI(`Tell me more about this ${opportunity.setupType} setup on ${opportunity.symbol}. What's the risk/reward and how should I trade it?`)
-                }}
-                className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
-              >
-                <Zap className="w-3 h-3" />
-                Ask AI
-              </button>
-            )}
-            {onTrackSetup && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onTrackSetup(opportunity)
-                }}
-                disabled={isTrackDisabled}
-                className={cn(
-                  'flex items-center gap-1.5 text-xs transition-colors',
-                  isTrackDisabled
-                    ? 'text-white/35 cursor-not-allowed'
-                    : 'text-emerald-500 hover:text-emerald-400',
-                  trackStatus === 'error' && 'text-red-400 hover:text-red-300'
-                )}
-              >
-                {trackStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Target className="w-3 h-3" />}
-                {trackLabel}
-              </button>
-            )}
+    <WidgetContextMenu actions={contextActions}>
+      <div
+        className={cn(
+          'glass-card-heavy rounded-lg p-3 border border-white/5 cursor-pointer transition-all hover:border-emerald-500/20',
+          expanded && 'border-emerald-500/20'
+        )}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <DirectionIcon className={cn('w-4 h-4', directionColor)} />
+            <span className="text-sm font-medium text-white">{opportunity.symbol}</span>
+            <span className={cn('text-[10px] px-1.5 py-0.5 rounded', scoreColor)}>
+              Score: {opportunity.score}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-white/30 flex items-center gap-1">
+              <TypeIcon className="w-3 h-3" />
+              {opportunity.setupType}
+            </span>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Description */}
+        <p className="text-xs text-white/60 mb-2">{opportunity.description}</p>
+
+        {/* Price */}
+        <div className="flex items-center gap-3 text-xs">
+          <div>
+            <span className="text-white/30">Price:</span>
+            <span className="text-white/70 ml-1 font-medium">${opportunity.currentPrice.toFixed(2)}</span>
+          </div>
+          <div>
+            <span className="text-white/30">Direction:</span>
+            <span className={cn('ml-1 font-medium', directionColor)}>
+              {opportunity.direction}
+            </span>
+          </div>
+        </div>
+
+        {/* Expanded details */}
+        {expanded && (
+          <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+            {/* Suggested Trade */}
+            {opportunity.suggestedTrade && (
+              <div className="bg-white/5 rounded-lg p-2.5">
+                <p className="text-[10px] text-white/30 mb-1.5">SUGGESTED TRADE</p>
+                <p className="text-xs text-white/70 font-medium mb-1">
+                  {opportunity.suggestedTrade.strategy}
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                  {opportunity.suggestedTrade.entry && (
+                    <div>
+                      <span className="text-white/30">Entry:</span>
+                      <span className="text-white/60 ml-1">${opportunity.suggestedTrade.entry.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {opportunity.suggestedTrade.stopLoss && (
+                    <div>
+                      <span className="text-white/30">Stop:</span>
+                      <span className="text-red-400 ml-1">${opportunity.suggestedTrade.stopLoss.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {opportunity.suggestedTrade.target && (
+                    <div>
+                      <span className="text-white/30">Target:</span>
+                      <span className="text-emerald-400 ml-1">${opportunity.suggestedTrade.target.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {opportunity.suggestedTrade.maxProfit && (
+                    <div>
+                      <span className="text-white/30">Max Profit:</span>
+                      <span className="text-emerald-400 ml-1">{opportunity.suggestedTrade.maxProfit}</span>
+                    </div>
+                  )}
+                  {opportunity.suggestedTrade.maxLoss && (
+                    <div>
+                      <span className="text-white/30">Max Loss:</span>
+                      <span className="text-red-400 ml-1">{opportunity.suggestedTrade.maxLoss}</span>
+                    </div>
+                  )}
+                  {opportunity.suggestedTrade.probability && (
+                    <div>
+                      <span className="text-white/30">Probability:</span>
+                      <span className="text-white/60 ml-1">{opportunity.suggestedTrade.probability}</span>
+                    </div>
+                  )}
+                  {opportunity.suggestedTrade.strikes && (
+                    <div className="col-span-2">
+                      <span className="text-white/30">Strikes:</span>
+                      <span className="text-white/60 ml-1">
+                        {opportunity.suggestedTrade.strikes.join(' / ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Metadata */}
+            {Object.keys(opportunity.metadata).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(opportunity.metadata).map(([key, value]) => (
+                  <span key={key} className="text-[10px] text-white/30 bg-white/5 rounded px-1.5 py-0.5">
+                    {key.replace(/_/g, ' ')}: <span className="text-white/50">{String(value)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div onClick={(event) => event.stopPropagation()}>
+              <WidgetActionBar actions={workflowActions} />
+            </div>
+
+            {/* Ask AI button */}
+            <div className="flex items-center gap-2 pt-1">
+              {onTrackSetup && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTrackSetup(opportunity)
+                  }}
+                  disabled={isTrackDisabled}
+                  className={cn(
+                    'flex items-center gap-1.5 text-xs transition-colors',
+                    isTrackDisabled
+                      ? 'text-white/35 cursor-not-allowed'
+                      : 'text-emerald-500 hover:text-emerald-400',
+                    trackStatus === 'error' && 'text-red-400 hover:text-red-300'
+                  )}
+                >
+                  {trackStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Target className="w-3 h-3" />}
+                  {trackLabel}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </WidgetContextMenu>
   )
 }

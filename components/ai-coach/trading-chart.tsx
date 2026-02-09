@@ -34,6 +34,7 @@ interface TradingChartProps {
   symbol: string
   timeframe: string
   isLoading?: boolean
+  onHoverPrice?: (price: number | null) => void
 }
 
 // ============================================
@@ -65,6 +66,7 @@ export function TradingChart({
   symbol,
   timeframe,
   isLoading,
+  onHoverPrice,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -187,6 +189,41 @@ export function TradingChart({
     // Fit content to view
     chartRef.current?.timeScale().fitContent()
   }, [bars])
+
+  useEffect(() => {
+    if (!chartRef.current || !candlestickSeriesRef.current || !onHoverPrice) return
+
+    const chart = chartRef.current
+    const series = candlestickSeriesRef.current
+    const handleCrosshairMove = (param: any) => {
+      if (!param?.point || !param?.time) {
+        onHoverPrice(null)
+        return
+      }
+
+      const seriesData = param.seriesData?.get(series)
+      if (seriesData && typeof seriesData.close === 'number') {
+        onHoverPrice(seriesData.close)
+        return
+      }
+
+      if (typeof param.point.y === 'number') {
+        const coordinatePrice = series.coordinateToPrice(param.point.y)
+        if (typeof coordinatePrice === 'number' && Number.isFinite(coordinatePrice)) {
+          onHoverPrice(coordinatePrice)
+          return
+        }
+      }
+
+      onHoverPrice(null)
+    }
+
+    chart.subscribeCrosshairMove(handleCrosshairMove)
+    return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove)
+      onHoverPrice(null)
+    }
+  }, [onHoverPrice])
 
   // Update level annotations
   useEffect(() => {

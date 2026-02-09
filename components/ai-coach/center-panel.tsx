@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   BarChart3,
   TrendingUp,
@@ -35,6 +35,14 @@ import { MacroContext } from './macro-context'
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
 import { MorningBriefPanel } from './morning-brief'
 import { TrackedSetupsPanel } from './tracked-setups-panel'
+import { WidgetContextMenu } from './widget-context-menu'
+import {
+  alertAction,
+  chartAction,
+  chatAction,
+  optionsAction,
+  type WidgetAction,
+} from './widget-actions'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -624,6 +632,28 @@ function ChartView({
   onTimeframeChange: (t: ChartTimeframe) => void
   onRetry: () => void
 }) {
+  const [hoveredPrice, setHoveredPrice] = useState<number | null>(null)
+  const roundedHoverPrice = useMemo(() => {
+    if (hoveredPrice == null || !Number.isFinite(hoveredPrice)) return null
+    return Number(hoveredPrice.toFixed(2))
+  }, [hoveredPrice])
+
+  const chartContextActions = useMemo<WidgetAction[]>(() => {
+    const actions: WidgetAction[] = [
+      chartAction(symbol, roundedHoverPrice ?? undefined, timeframe, 'Chart Focus'),
+      chatAction(`Analyze ${symbol} ${timeframe} chart and define key levels plus trade scenarios.`),
+    ]
+
+    if (roundedHoverPrice != null) {
+      actions.splice(1, 0,
+        optionsAction(symbol, roundedHoverPrice),
+        alertAction(symbol, roundedHoverPrice, 'level_approach', `${symbol} ${timeframe} chart level`),
+      )
+    }
+
+    return actions
+  }, [roundedHoverPrice, symbol, timeframe])
+
   return (
     <div className="h-full flex flex-col">
       <div className="border-b border-white/5">
@@ -658,13 +688,21 @@ function ChartView({
             </div>
           </div>
         ) : (
-          <TradingChart
-            bars={bars}
-            levels={levels}
-            symbol={symbol}
-            timeframe={timeframe}
-            isLoading={isLoading}
-          />
+          <WidgetContextMenu actions={chartContextActions}>
+            <div className="relative h-full">
+              <TradingChart
+                bars={bars}
+                levels={levels}
+                symbol={symbol}
+                timeframe={timeframe}
+                isLoading={isLoading}
+                onHoverPrice={setHoveredPrice}
+              />
+              <div className="pointer-events-none absolute right-3 top-3 rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-white/55 backdrop-blur">
+                Right-click chart for actions{roundedHoverPrice != null ? ` @ ${roundedHoverPrice.toFixed(2)}` : ''}
+              </div>
+            </div>
+          </WidgetContextMenu>
         )}
       </div>
     </div>
