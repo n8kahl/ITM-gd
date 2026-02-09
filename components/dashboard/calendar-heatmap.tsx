@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 // ============================================
 // TYPES
@@ -58,11 +59,23 @@ export function CalendarHeatmap() {
   const [data, setData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
   const [hoveredDay, setHoveredDay] = useState<CalendarDay | null>(null)
+  const { session, isLoading: isAuthLoading } = useMemberAuth()
 
   useEffect(() => {
+    const accessToken = session?.access_token
+    if (isAuthLoading) return
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     async function fetchData() {
       try {
-        const res = await fetch('/api/members/dashboard/calendar?months=6')
+        const res = await fetch('/api/members/dashboard/calendar?months=6', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
         const result = await res.json()
         if (result.success && Array.isArray(result.data)) {
           setData(result.data)
@@ -74,7 +87,7 @@ export function CalendarHeatmap() {
       }
     }
     fetchData()
-  }, [])
+  }, [isAuthLoading, session?.access_token])
 
   // Build calendar grid (GitHub-style)
   const { weeks, dayMap } = useMemo(() => {

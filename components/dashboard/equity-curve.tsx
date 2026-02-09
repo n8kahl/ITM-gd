@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 // ============================================
 // TYPES
@@ -63,13 +64,25 @@ export function EquityCurve() {
   const [data, setData] = useState<EquityPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
+  const { session, isLoading: isAuthLoading } = useMemberAuth()
 
   useEffect(() => {
+    const accessToken = session?.access_token
+    if (isAuthLoading) return
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     async function fetchData() {
       setLoading(true)
       try {
         const days = TIME_RANGE_OPTIONS.find(t => t.value === timeRange)?.days ?? 30
-        const res = await fetch(`/api/members/dashboard/equity-curve?days=${days}`)
+        const res = await fetch(`/api/members/dashboard/equity-curve?days=${days}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
         const result = await res.json()
         if (result.success && Array.isArray(result.data)) {
           setData(result.data)
@@ -81,7 +94,7 @@ export function EquityCurve() {
       }
     }
     fetchData()
-  }, [timeRange])
+  }, [timeRange, isAuthLoading, session?.access_token])
 
   const hasData = data.length > 0
   const currentPnl = hasData ? data[data.length - 1].cumulative_pnl : 0

@@ -9,6 +9,7 @@ import {
 } from '../../config/massive';
 import { getDailyAggregates } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
+import { toEasternTime } from '../marketHours';
 import {
   OptionContract,
   OptionsMatrixCell,
@@ -65,11 +66,15 @@ const MATRIX_FETCH_CONCURRENCY = 2;
 // Known index symbols that need the I: prefix for Massive.com aggregates
 const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'VIX', 'RUT', 'COMP', 'DJIA']);
 
+function getCurrentEasternDate(now: Date = new Date()): string {
+  return toEasternTime(now).dateStr;
+}
+
 async function getCurrentPrice(symbol: string): Promise<number> {
   const ticker = INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
-  const today = new Date().toISOString().split('T')[0];
+  const today = getCurrentEasternDate();
   // 7-day lookback covers weekends + holidays (longest US market closure = 3 consecutive days)
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  const weekAgo = getCurrentEasternDate(new Date(Date.now() - 7 * 86400000));
 
   const data = await getDailyAggregates(ticker, weekAgo, today);
 
@@ -94,7 +99,7 @@ async function getNearestExpiration(symbol: string): Promise<string> {
     throw new Error(`No options expirations found for ${symbol}`);
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getCurrentEasternDate();
   const futureExpirations = expirations.filter(exp => exp >= today);
   if (futureExpirations.length === 0) {
     throw new Error(`No future expirations available for ${symbol}`);
@@ -225,8 +230,15 @@ function convertToOptionContract(
 
   // Use Massive.com Greeks if available, otherwise calculate with Black-Scholes
   let contractGreeks: { delta: number; gamma: number; theta: number; vega: number; rho: number };
+  const hasProviderGreeks = (
+    typeof greeks?.delta === 'number'
+    && typeof greeks?.gamma === 'number'
+    && typeof greeks?.theta === 'number'
+    && typeof greeks?.vega === 'number'
+  );
+  const hasImpliedVolatility = typeof impliedVolatility === 'number' && impliedVolatility > 0;
 
-  if (greeks && impliedVolatility) {
+  if (hasProviderGreeks) {
     contractGreeks = {
       delta: greeks.delta ?? 0,
       gamma: greeks.gamma ?? 0,
@@ -234,14 +246,14 @@ function convertToOptionContract(
       vega: greeks.vega ?? 0,
       rho: 0 // Massive.com doesn't provide rho
     };
-  } else if (impliedVolatility) {
+  } else if (hasImpliedVolatility) {
     // Calculate Greeks using Black-Scholes
     contractGreeks = calculateContractGreeks(
       currentPrice,
       strike_price,
       expiration_date,
       contract_type,
-      impliedVolatility,
+      impliedVolatility as number,
       symbol
     );
   } else {
@@ -434,7 +446,7 @@ export async function fetchExpirationDates(symbol: string): Promise<string[]> {
     const expirations = await getOptionsExpirations(symbol);
 
     // Filter to only future expirations
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentEasternDate();
     const futureExpirations = expirations.filter(exp => exp >= today);
 
     // Cache for 1 hour

@@ -1,6 +1,8 @@
 import axios, { AxiosInstance } from 'axios';
 import dotenv from 'dotenv';
 import { logger } from '../lib/logger';
+import { formatMassiveTicker } from '../lib/symbols';
+import { toEasternTime } from '../services/marketHours';
 
 dotenv.config();
 
@@ -19,6 +21,19 @@ export const massiveClient: AxiosInstance = axios.create({
   },
   timeout: 30000
 });
+
+function getCurrentEasternDate(now: Date = new Date()): string {
+  return toEasternTime(now).dateStr;
+}
+
+function normalizeOptionsUnderlyingTicker(underlyingTicker: string): string {
+  const normalized = underlyingTicker.trim().toUpperCase();
+  return normalized.startsWith('I:') ? normalized.slice(2) : normalized;
+}
+
+function toOptionsSnapshotUnderlyingTicker(underlyingTicker: string): string {
+  return formatMassiveTicker(normalizeOptionsUnderlyingTicker(underlyingTicker));
+}
 
 // Add request interceptor for logging
 massiveClient.interceptors.request.use(
@@ -349,10 +364,11 @@ export async function getOptionsContracts(
   limit: number = 250
 ): Promise<OptionsContract[]> {
   try {
+    const normalizedUnderlyingTicker = normalizeOptionsUnderlyingTicker(underlyingTicker);
     const MAX_PAGES = 20;
     const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 1000);
     const params: any = {
-      underlying_ticker: underlyingTicker,
+      underlying_ticker: normalizedUnderlyingTicker,
       limit: safeLimit,
       sort: 'strike_price'
     };
@@ -384,7 +400,7 @@ export async function getOptionsContracts(
     }
 
     if (nextUrl) {
-      logger.warn(`Options contracts pagination truncated for ${underlyingTicker}`, {
+      logger.warn(`Options contracts pagination truncated for ${normalizedUnderlyingTicker}`, {
         pagesFetched: page,
         maxPages: MAX_PAGES
       });
@@ -403,6 +419,7 @@ export async function getOptionsSnapshot(
   optionTicker?: string
 ): Promise<OptionsSnapshot[]> {
   try {
+    const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
     const MAX_PAGES = 20;
     const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
       if (!results) return [];
@@ -410,8 +427,8 @@ export async function getOptionsSnapshot(
     };
 
     const url = optionTicker
-      ? `/v3/snapshot/options/${underlyingTicker}/${optionTicker}`
-      : `/v3/snapshot/options/${underlyingTicker}`;
+      ? `/v3/snapshot/options/${snapshotUnderlyingTicker}/${optionTicker}`
+      : `/v3/snapshot/options/${snapshotUnderlyingTicker}`;
 
     const response = await massiveClient.get<OptionsSnapshotResponse>(url, optionTicker ? undefined : {
       params: {
@@ -436,7 +453,7 @@ export async function getOptionsSnapshot(
     }
 
     if (nextUrl) {
-      logger.warn(`Options snapshot pagination truncated for ${underlyingTicker}`, {
+      logger.warn(`Options snapshot pagination truncated for ${snapshotUnderlyingTicker}`, {
         pagesFetched: page,
         maxPages: MAX_PAGES
       });
@@ -454,7 +471,8 @@ export async function getOptionsExpirations(
   underlyingTicker: string
 ): Promise<string[]> {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const normalizedUnderlyingTicker = normalizeOptionsUnderlyingTicker(underlyingTicker);
+    const today = getCurrentEasternDate();
     const MAX_PAGES = 20;
     const expirations = new Set<string>();
 
@@ -467,7 +485,7 @@ export async function getOptionsExpirations(
           '/v3/reference/options/contracts',
           {
             params: {
-              underlying_ticker: underlyingTicker,
+              underlying_ticker: normalizedUnderlyingTicker,
               sort: 'expiration_date',
               order: 'asc',
               'expiration_date.gte': today,
@@ -488,7 +506,7 @@ export async function getOptionsExpirations(
     } while (nextUrl && page < MAX_PAGES);
 
     if (nextUrl) {
-      logger.warn(`Options expirations pagination truncated for ${underlyingTicker}`, {
+      logger.warn(`Options expirations pagination truncated for ${normalizedUnderlyingTicker}`, {
         pagesFetched: page,
         maxPages: MAX_PAGES,
       });
@@ -505,12 +523,13 @@ export async function getNearestOptionsExpiration(
   underlyingTicker: string
 ): Promise<string | null> {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const normalizedUnderlyingTicker = normalizeOptionsUnderlyingTicker(underlyingTicker);
+    const today = getCurrentEasternDate();
     const response = await massiveClient.get<OptionsContractsResponse>(
       '/v3/reference/options/contracts',
       {
         params: {
-          underlying_ticker: underlyingTicker,
+          underlying_ticker: normalizedUnderlyingTicker,
           sort: 'expiration_date',
           order: 'asc',
           limit: 1,

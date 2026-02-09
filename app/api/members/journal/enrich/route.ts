@@ -1,35 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) throw new Error('Missing Supabase env vars')
   return createClient(url, key)
-}
-
-async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anonKey) return null
-
-  const authHeader = request.headers.get('authorization')
-  let accessToken: string | null = null
-
-  if (authHeader?.startsWith('Bearer ')) {
-    accessToken = authHeader.substring(7)
-  } else {
-    const cookies = request.cookies.getAll()
-    const authCookie = cookies.find(c => c.name.includes('-auth-token'))
-    if (authCookie) {
-      try { const parsed = JSON.parse(authCookie.value); accessToken = parsed[0] || parsed.access_token } catch {}
-    }
-  }
-
-  if (!accessToken) return null
-  const supabase = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } } })
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.id || null
 }
 
 /**
@@ -39,7 +16,8 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
  */
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId(request)
+    const auth = await getAuthenticatedUserFromRequest(request)
+    const userId = auth?.user.id ?? null
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }

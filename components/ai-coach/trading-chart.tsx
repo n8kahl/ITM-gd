@@ -67,6 +67,10 @@ interface NormalizedIndicatorPoint {
   histogram?: number
 }
 
+function isDisposedError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('disposed')
+}
+
 // ============================================
 // CONSTANTS
 // ============================================
@@ -131,6 +135,7 @@ export function TradingChart({
   const macdSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const macdHistogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const levelPriceLinesRef = useRef<any[]>([])
   const safeBars = bars
     .filter((bar) => (
       Number.isFinite(bar.time)
@@ -241,13 +246,49 @@ export function TradingChart({
     }
   }, [normalizeIndicatorPoints, providerIndicators, safeBars])
 
+  const clearLevelPriceLines = useCallback((series: ISeriesApi<'Candlestick'> | null) => {
+    if (!series || levelPriceLinesRef.current.length === 0) {
+      levelPriceLinesRef.current = []
+      return
+    }
+
+    for (const line of levelPriceLinesRef.current) {
+      try {
+        series.removePriceLine(line)
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to remove level price line', error)
+        }
+      }
+    }
+
+    levelPriceLinesRef.current = []
+  }, [])
+
+  const resetMainChartRefs = useCallback(() => {
+    candlestickSeriesRef.current = null
+    volumeSeriesRef.current = null
+    ema8SeriesRef.current = null
+    ema21SeriesRef.current = null
+    vwapSeriesRef.current = null
+    levelPriceLinesRef.current = []
+  }, [])
+
   // Initialize chart
   const initChart = useCallback(() => {
     if (!containerRef.current) return
 
     // Clean up existing chart
     if (chartRef.current) {
-      chartRef.current.remove()
+      clearLevelPriceLines(candlestickSeriesRef.current)
+      resetMainChartRefs()
+      try {
+        chartRef.current.remove()
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to remove existing chart', error)
+        }
+      }
       chartRef.current = null
     }
 
@@ -340,15 +381,32 @@ export function TradingChart({
     // Handle resize
     const resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
-      chart.applyOptions({ width, height })
+      try {
+        chart.applyOptions({ width, height })
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to resize main chart', error)
+        }
+      }
     })
     resizeObserver.observe(containerRef.current)
 
     return () => {
       resizeObserver.disconnect()
-      chart.remove()
+      clearLevelPriceLines(candlestickSeriesRef.current)
+      resetMainChartRefs()
+      try {
+        chart.remove()
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to cleanup main chart', error)
+        }
+      }
+      if (chartRef.current === chart) {
+        chartRef.current = null
+      }
     }
-  }, [timeframe])
+  }, [timeframe, clearLevelPriceLines, resetMainChartRefs])
 
   // Initialize chart on mount
   useEffect(() => {
@@ -359,7 +417,13 @@ export function TradingChart({
   useEffect(() => {
     if (!indicators.rsi) {
       if (rsiChartRef.current) {
-        rsiChartRef.current.remove()
+        try {
+          rsiChartRef.current.remove()
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to remove RSI chart', error)
+          }
+        }
         rsiChartRef.current = null
       }
       rsiSeriesRef.current = null
@@ -369,7 +433,13 @@ export function TradingChart({
     if (!rsiContainerRef.current) return
 
     if (rsiChartRef.current) {
-      rsiChartRef.current.remove()
+      try {
+        rsiChartRef.current.remove()
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to replace RSI chart', error)
+        }
+      }
       rsiChartRef.current = null
     }
 
@@ -428,13 +498,25 @@ export function TradingChart({
 
     const resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
-      chart.applyOptions({ width, height })
+      try {
+        chart.applyOptions({ width, height })
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to resize RSI chart', error)
+        }
+      }
     })
     resizeObserver.observe(rsiContainerRef.current)
 
     return () => {
       resizeObserver.disconnect()
-      chart.remove()
+      try {
+        chart.remove()
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to cleanup RSI chart', error)
+        }
+      }
       rsiChartRef.current = null
       rsiSeriesRef.current = null
     }
@@ -443,7 +525,13 @@ export function TradingChart({
   useEffect(() => {
     if (!indicators.macd) {
       if (macdChartRef.current) {
-        macdChartRef.current.remove()
+        try {
+          macdChartRef.current.remove()
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to remove MACD chart', error)
+          }
+        }
         macdChartRef.current = null
       }
       macdSeriesRef.current = null
@@ -455,7 +543,13 @@ export function TradingChart({
     if (!macdContainerRef.current) return
 
     if (macdChartRef.current) {
-      macdChartRef.current.remove()
+      try {
+        macdChartRef.current.remove()
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to replace MACD chart', error)
+        }
+      }
       macdChartRef.current = null
     }
 
@@ -521,13 +615,25 @@ export function TradingChart({
 
     const resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
-      chart.applyOptions({ width, height })
+      try {
+        chart.applyOptions({ width, height })
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to resize MACD chart', error)
+        }
+      }
     })
     resizeObserver.observe(macdContainerRef.current)
 
     return () => {
       resizeObserver.disconnect()
-      chart.remove()
+      try {
+        chart.remove()
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to cleanup MACD chart', error)
+        }
+      }
       macdChartRef.current = null
       macdHistogramSeriesRef.current = null
       macdSeriesRef.current = null
@@ -542,16 +648,34 @@ export function TradingChart({
     const syncRange = (range: any) => {
       if (!range) return
       if (rsiChartRef.current) {
-        rsiChartRef.current.timeScale().setVisibleLogicalRange(range)
+        try {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(range)
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to sync RSI range', error)
+          }
+        }
       }
       if (macdChartRef.current) {
-        macdChartRef.current.timeScale().setVisibleLogicalRange(range)
+        try {
+          macdChartRef.current.timeScale().setVisibleLogicalRange(range)
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to sync MACD range', error)
+          }
+        }
       }
     }
 
     mainChart.timeScale().subscribeVisibleLogicalRangeChange(syncRange)
     return () => {
-      mainChart.timeScale().unsubscribeVisibleLogicalRangeChange(syncRange)
+      try {
+        mainChart.timeScale().unsubscribeVisibleLogicalRangeChange(syncRange)
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to unsubscribe range sync', error)
+        }
+      }
     }
   }, [indicators.rsi, indicators.macd])
 
@@ -581,8 +705,15 @@ export function TradingChart({
       color: bar.close >= bar.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
     }))
 
-    candlestickSeriesRef.current.setData(candleData)
-    volumeSeriesRef.current.setData(volumeData)
+    try {
+      candlestickSeriesRef.current.setData(candleData)
+      volumeSeriesRef.current.setData(volumeData)
+    } catch (error) {
+      if (!isDisposedError(error)) {
+        console.warn('[TradingChart] Failed to set main series data', error)
+      }
+      return
+    }
 
     const ema8Data: LineData<Time>[] = indicators.ema8
       ? calculateEMA(safeBars, 8).map((point) => ({
@@ -603,25 +734,50 @@ export function TradingChart({
       }))
       : []
 
-    ema8SeriesRef.current.setData(ema8Data)
-    ema21SeriesRef.current.setData(ema21Data)
-    vwapSeriesRef.current.setData(vwapData)
+    try {
+      ema8SeriesRef.current.setData(ema8Data)
+      ema21SeriesRef.current.setData(ema21Data)
+      vwapSeriesRef.current.setData(vwapData)
+    } catch (error) {
+      if (!isDisposedError(error)) {
+        console.warn('[TradingChart] Failed to set indicator data', error)
+      }
+      return
+    }
 
     if (rsiSeriesRef.current) {
       const rsiData = indicators.rsi ? buildRSIData() : []
-      rsiSeriesRef.current.setData(rsiData)
+      try {
+        rsiSeriesRef.current.setData(rsiData)
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to set RSI data', error)
+        }
+      }
     }
 
     if (macdSeriesRef.current && macdSignalSeriesRef.current && macdHistogramSeriesRef.current) {
       if (indicators.macd) {
         const macdData = buildMACDData()
-        macdSeriesRef.current.setData(macdData.macd)
-        macdSignalSeriesRef.current.setData(macdData.signal)
-        macdHistogramSeriesRef.current.setData(macdData.histogram)
+        try {
+          macdSeriesRef.current.setData(macdData.macd)
+          macdSignalSeriesRef.current.setData(macdData.signal)
+          macdHistogramSeriesRef.current.setData(macdData.histogram)
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to set MACD data', error)
+          }
+        }
       } else {
-        macdSeriesRef.current.setData([])
-        macdSignalSeriesRef.current.setData([])
-        macdHistogramSeriesRef.current.setData([])
+        try {
+          macdSeriesRef.current.setData([])
+          macdSignalSeriesRef.current.setData([])
+          macdHistogramSeriesRef.current.setData([])
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to clear MACD data', error)
+          }
+        }
       }
     }
 
@@ -661,7 +817,13 @@ export function TradingChart({
 
     chart.subscribeCrosshairMove(handleCrosshairMove)
     return () => {
-      chart.unsubscribeCrosshairMove(handleCrosshairMove)
+      try {
+        chart.unsubscribeCrosshairMove(handleCrosshairMove)
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to unsubscribe crosshair handler', error)
+        }
+      }
       onHoverPrice(null)
     }
   }, [onHoverPrice])
@@ -672,11 +834,7 @@ export function TradingChart({
 
     const series = candlestickSeriesRef.current
 
-    // Remove existing price lines
-    const existingLines = (series as any)._priceLines || []
-    for (const line of existingLines) {
-      series.removePriceLine(line)
-    }
+    clearLevelPriceLines(series)
 
     const derivedLevels: LevelAnnotation[] = [...levels]
 
@@ -732,22 +890,29 @@ export function TradingChart({
     }
 
     // Add new price lines for each level
-    const newLines = derivedLevels.map(level => {
+    const newLines = []
+    for (const level of derivedLevels) {
       const lineStyle = level.lineStyle === 'dashed' ? 1 : level.lineStyle === 'dotted' ? 2 : 0
 
-      return series.createPriceLine({
-        price: level.price,
-        color: level.color,
-        lineWidth: (level.lineWidth || 1) as 1 | 2 | 3 | 4,
-        lineStyle,
-        axisLabelVisible: true,
-        title: level.label,
-      })
-    })
+      try {
+        const line = series.createPriceLine({
+          price: level.price,
+          color: level.color,
+          lineWidth: (level.lineWidth || 1) as 1 | 2 | 3 | 4,
+          lineStyle,
+          axisLabelVisible: true,
+          title: level.label,
+        })
+        newLines.push(line)
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to create price line', error)
+        }
+      }
+    }
 
-    // Store for cleanup
-    ;(series as any)._priceLines = newLines
-  }, [levels, indicators.openingRange, safeBars, timeframe, openingRangeMinutes, positionOverlays])
+    levelPriceLinesRef.current = newLines
+  }, [levels, indicators.openingRange, safeBars, timeframe, openingRangeMinutes, positionOverlays, clearLevelPriceLines])
 
   const showRSIPane = indicators.rsi
   const showMACDPane = indicators.macd

@@ -181,6 +181,34 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/optionsChainFetcher.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/optionsChainFetcher.test.ts`
+- SPX/NDX options analytics accuracy hardening (Massive index snapshot + ET date normalization):
+  - Massive option snapshots now use index-prefixed underlyings (`I:SPX`, `I:NDX`, etc.) so Greeks and implied volatility are populated correctly for index contracts.
+  - Added fallback Greek calculation when provider IV is present but provider Greeks are missing.
+  - Expiration discovery/filtering now uses US Eastern market date (not UTC date) to avoid false `No 0DTE expiration found` windows around UTC midnight.
+  - Added regression tests for index snapshot mapping and ET expiration filtering.
+  - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/optionsChainFetcher.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/config/__tests__/massive-options-snapshot.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/optionsChainFetcher.test.ts`
+- Member dashboard/journal auth + RPC resilience hardening:
+  - Unified API auth for member journal routes to accept either bearer token or server-session cookies through shared request auth utility.
+  - Dashboard endpoints (`stats`, `equity-curve`, `calendar`) now:
+    - authenticate via bearer/cookie path consistently
+    - normalize RPC response shapes for frontend expectations
+    - gracefully fall back to direct `journal_entries` aggregation when RPC functions are unavailable in an environment.
+  - Dashboard frontend widgets now wait for member auth readiness and include bearer token headers on member API calls to prevent transient 401 loops.
+  - `/Users/natekahl/ITM-gd/lib/request-auth.ts`
+  - `/Users/natekahl/ITM-gd/app/api/members/journal/route.ts`
+  - `/Users/natekahl/ITM-gd/app/api/members/journal/enrich/route.ts`
+  - `/Users/natekahl/ITM-gd/app/api/members/journal/replay/[entryId]/route.ts`
+  - `/Users/natekahl/ITM-gd/app/api/members/dashboard/stats/route.ts`
+  - `/Users/natekahl/ITM-gd/app/api/members/dashboard/equity-curve/route.ts`
+  - `/Users/natekahl/ITM-gd/app/api/members/dashboard/calendar/route.ts`
+  - `/Users/natekahl/ITM-gd/components/dashboard/ai-insights.tsx`
+  - `/Users/natekahl/ITM-gd/components/dashboard/recent-trades.tsx`
+  - `/Users/natekahl/ITM-gd/components/dashboard/equity-curve.tsx`
+  - `/Users/natekahl/ITM-gd/components/dashboard/calendar-heatmap.tsx`
+  - `/Users/natekahl/ITM-gd/components/dashboard/dashboard-stat-cards.tsx`
 - Options expirations performance hardening:
   - Reduced expiration discovery path to a lightweight near-term fetch to prevent timeout regressions on `SPX/NDX` `0DTE` and `IV` routes.
   - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`

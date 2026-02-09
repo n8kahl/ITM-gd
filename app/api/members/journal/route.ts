@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -139,55 +140,6 @@ function normalizeJournalWritePayload(
   return payload
 }
 
-/**
- * Get authenticated user ID from Supabase session (server-validated via getUser)
- */
-async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !anonKey) {
-    console.error('Missing Supabase environment variables')
-    return null
-  }
-
-  const authHeader = request.headers.get('authorization')
-  let accessToken: string | null = null
-
-  if (authHeader?.startsWith('Bearer ')) {
-    accessToken = authHeader.substring(7)
-  } else {
-    const cookies = request.cookies.getAll()
-    const authCookie = cookies.find(c => c.name.includes('-auth-token'))
-    if (authCookie) {
-      try {
-        const parsed = JSON.parse(authCookie.value)
-        accessToken = parsed[0] || parsed.access_token
-      } catch {
-        // Cookie might be in different format
-      }
-    }
-  }
-
-  if (!accessToken) {
-    return null
-  }
-
-  const supabase = createClient(url, anonKey, {
-    global: {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
-  })
-
-  const { data: { user }, error } = await supabase.auth.getUser()
-
-  if (error || !user) {
-    return null
-  }
-
-  return user.id
-}
-
 // ============================================
 // CANONICAL TABLE: journal_entries
 // Field names match lib/types/journal.ts:
@@ -197,7 +149,8 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
 // GET - Fetch journal entries for user
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId(request)
+    const auth = await getAuthenticatedUserFromRequest(request)
+    const userId = auth?.user.id ?? null
 
     if (!userId) {
       return NextResponse.json(
@@ -260,7 +213,8 @@ export async function GET(request: NextRequest) {
 // POST - Create new journal entry
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId(request)
+    const auth = await getAuthenticatedUserFromRequest(request)
+    const userId = auth?.user.id ?? null
 
     if (!userId) {
       return NextResponse.json(
@@ -309,7 +263,8 @@ export async function POST(request: NextRequest) {
 // PATCH - Update journal entry
 export async function PATCH(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId(request)
+    const auth = await getAuthenticatedUserFromRequest(request)
+    const userId = auth?.user.id ?? null
 
     if (!userId) {
       return NextResponse.json(
@@ -370,7 +325,8 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete journal entry
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId(request)
+    const auth = await getAuthenticatedUserFromRequest(request)
+    const userId = auth?.user.id ?? null
 
     if (!userId) {
       return NextResponse.json(

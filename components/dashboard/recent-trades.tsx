@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 interface RecentTrade {
   id: string
@@ -40,11 +41,23 @@ function gradeColor(grade: string | null | undefined): string {
 export function RecentTrades() {
   const [trades, setTrades] = useState<RecentTrade[]>([])
   const [loading, setLoading] = useState(true)
+  const { session, isLoading: isAuthLoading } = useMemberAuth()
 
   useEffect(() => {
+    const accessToken = session?.access_token
+    if (isAuthLoading) return
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     async function fetchTrades() {
       try {
-        const res = await fetch('/api/members/journal?limit=5&sort=created_at&order=desc')
+        const res = await fetch('/api/members/journal?limit=5&sort=created_at&order=desc', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
         const data = await res.json()
         if (data.success && Array.isArray(data.data)) {
           setTrades(data.data.slice(0, 5))
@@ -58,7 +71,7 @@ export function RecentTrades() {
       }
     }
     fetchTrades()
-  }, [])
+  }, [isAuthLoading, session?.access_token])
 
   return (
     <div className="glass-card-heavy rounded-2xl overflow-hidden">

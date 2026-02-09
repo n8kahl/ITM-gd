@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Bot, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 interface InsightData {
   summary?: string
@@ -14,12 +15,24 @@ interface InsightData {
 export function AIInsights() {
   const [insights, setInsights] = useState<InsightData | null>(null)
   const [loading, setLoading] = useState(true)
+  const { session, isLoading: isAuthLoading } = useMemberAuth()
 
   useEffect(() => {
+    const accessToken = session?.access_token
+    if (isAuthLoading) return
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     async function fetchInsights() {
       try {
         // Try fetching latest AI analysis from journal entries
-        const res = await fetch('/api/members/journal?limit=1&sort=created_at&order=desc&has_ai=true')
+        const res = await fetch('/api/members/journal?limit=1&sort=created_at&order=desc&has_ai=true', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
         const data = await res.json()
         const entries = data.success ? data.data : Array.isArray(data) ? data : []
 
@@ -41,7 +54,7 @@ export function AIInsights() {
       }
     }
     fetchInsights()
-  }, [])
+  }, [isAuthLoading, session?.access_token])
 
   return (
     <div className="glass-card-heavy rounded-2xl p-4 lg:p-6 border-champagne/[0.08] h-full flex flex-col">

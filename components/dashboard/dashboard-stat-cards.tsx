@@ -10,6 +10,7 @@ import {
   BarChart3,
 } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 interface DashboardStats {
   win_rate: number
@@ -26,11 +27,23 @@ interface DashboardStats {
 export function DashboardStatCards() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const { session, isLoading: isAuthLoading } = useMemberAuth()
 
   useEffect(() => {
+    const accessToken = session?.access_token
+    if (isAuthLoading) return
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     async function fetchStats() {
       try {
-        const res = await fetch('/api/members/dashboard/stats?period=month')
+        const res = await fetch('/api/members/dashboard/stats?period=month', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
         const data = await res.json()
         if (data.success && data.data) {
           setStats(data.data)
@@ -42,7 +55,7 @@ export function DashboardStatCards() {
       }
     }
     fetchStats()
-  }, [])
+  }, [isAuthLoading, session?.access_token])
 
   if (loading) {
     return (
