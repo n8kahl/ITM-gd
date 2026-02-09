@@ -18,6 +18,18 @@ export interface SetupStatusUpdate {
   evaluatedAt: string;
 }
 
+export interface SetupDetectedUpdate {
+  trackedSetupId: string;
+  detectedSetupId: string;
+  userId: string;
+  symbol: string;
+  setupType: string;
+  direction: 'bullish' | 'bearish' | 'neutral';
+  confidence: number | null;
+  currentPrice: number | null;
+  detectedAt: string;
+}
+
 export type SetupPushEvent =
   | {
       type: 'heartbeat';
@@ -26,6 +38,10 @@ export type SetupPushEvent =
   | {
       type: 'setup_update';
       payload: SetupStatusUpdate;
+    }
+  | {
+      type: 'setup_detected';
+      payload: SetupDetectedUpdate;
     };
 
 type SetupPushListener = (event: SetupPushEvent) => void;
@@ -59,6 +75,22 @@ export function publishSetupStatusUpdate(payload: SetupStatusUpdate): void {
   if (listeners.size === 0) return;
 
   const event: SetupPushEvent = { type: 'setup_update', payload };
+
+  for (const listener of listeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      logger.warn('Setup push listener failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+export function publishSetupDetected(payload: SetupDetectedUpdate): void {
+  if (listeners.size === 0) return;
+
+  const event: SetupPushEvent = { type: 'setup_detected', payload };
 
   for (const listener of listeners) {
     try {

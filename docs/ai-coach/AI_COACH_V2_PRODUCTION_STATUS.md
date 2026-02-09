@@ -49,6 +49,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Publishes user-targeted `setup_update` events to WebSocket channel `setups:{userId}`
   - `/Users/natekahl/ITM-gd/backend/src/workers/setupPushWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+- Real-time setup detector service:
+  - Implements ORB, break-retest, VWAP play, and gap-fill detectors
+  - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`
+  - Auto-creates tracked setups for watchlist users (1 setup per symbol/user per 5 min) and publishes `setup_detected` events
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/detectors.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/orb.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/breakRetest.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/vwap.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/gapFill.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupPushChannel.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 
 ### Frontend
 - Opportunity Scanner:
@@ -67,7 +80,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Status filters (`active/triggered/invalidated/archived/all`)
   - Lifecycle actions (trigger/invalidate/archive/reopen)
   - Notes editing + delete + AI follow-up action
-  - Live refresh via WebSocket `setups:{userId}` subscription
+  - Live refresh via WebSocket `setups:{userId}` for both `setup_update` and `setup_detected` events
   - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
 - Typed API client coverage:
   - watchlist/brief/tracked-setups methods
@@ -95,9 +108,12 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/setupPushWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/setupPushChannel.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/morningBriefWorker.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/detectors.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/service.test.ts`
 
 ### Commands
 - `npm test -- --runInBand src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts`
+- `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
 
@@ -111,15 +127,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Setup push worker is running with startup/shutdown hooks and automated status transitions.
 - WebSocket setup channels now deliver user-targeted setup updates (`setups:{userId}`).
 - Morning brief scheduled worker is in place with idempotent writes.
+- Setup detector service is running with ORB/break-retest/VWAP/gap-fill detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
+- WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 
 ### Needs Completion
-- Full setup detector engine (ORB/break-retest/VWAP/gap) feeding tracked setup updates at scale.
+- Extend detector coverage to remaining rebuild-spec modules (volume climax, level-test) and tune quality thresholds against live staging telemetry.
 - Full E2E path:
-  - scanner -> track setup -> manage tracked setup -> morning brief consume.
+  - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 
 ## 4) Surgical Next Plan
 
-1. Add detector modules (ORB/break-retest/VWAP/gap) and feed their signals into tracked setup lifecycle.
-2. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update -> brief consume.
+1. Add remaining detector modules (volume climax + level-test), then tune current detector thresholds using staged market sessions.
+2. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. Add production alerting/metrics for worker health (setup + morning brief workers).

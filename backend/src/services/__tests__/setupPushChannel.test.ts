@@ -1,5 +1,6 @@
 import {
   subscribeSetupPushEvents,
+  publishSetupDetected,
   publishSetupPushHeartbeat,
   publishSetupStatusUpdate,
 } from '../setupPushChannel';
@@ -73,5 +74,39 @@ describe('setupPushChannel', () => {
     });
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('broadcasts setup_detected events to subscribers', () => {
+    const listener = jest.fn();
+    const unsubscribe = subscribeSetupPushEvents(listener);
+
+    publishSetupDetected({
+      trackedSetupId: 'tracked-1',
+      detectedSetupId: 'det-1',
+      userId: 'user-1',
+      symbol: 'SPX',
+      setupType: 'orb_breakout',
+      direction: 'bullish',
+      confidence: 84,
+      currentPrice: 6011.75,
+      detectedAt: '2026-02-09T15:15:00.000Z',
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      type: 'setup_detected',
+      payload: {
+        trackedSetupId: 'tracked-1',
+        detectedSetupId: 'det-1',
+        userId: 'user-1',
+        symbol: 'SPX',
+        setupType: 'orb_breakout',
+        direction: 'bullish',
+        confidence: 84,
+        currentPrice: 6011.75,
+        detectedAt: '2026-02-09T15:15:00.000Z',
+      },
+    });
+
+    unsubscribe();
   });
 });
