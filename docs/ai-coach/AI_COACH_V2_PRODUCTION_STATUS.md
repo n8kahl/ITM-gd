@@ -37,6 +37,21 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Uses user watchlist symbols when query symbols are omitted
   - `/Users/natekahl/ITM-gd/backend/src/routes/scanner.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+- Symbol unlock + search API (Phase 1 foundation hardening):
+  - Removed SPX/NDX-only gating from levels/options/GEX route layer and scanner/chat defaults now use a broader popular watchlist set
+  - WebSocket symbol subscriptions now accept any validated ticker format instead of a fixed allowlist
+  - Added `GET /api/symbols/search?q=<query>&limit=20` with 24h Redis caching and Massive reference ticker lookup
+  - Added shared symbol normalization/validation utilities for route/service consistency
+  - `/Users/natekahl/ITM-gd/backend/src/routes/levels.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/scanner.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/symbols.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/gexCalculator.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/lib/symbols.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/symbolsValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Setup push worker scaffolding (timing + lifecycle hooks):
   - Adaptive polling worker with start/stop during server lifecycle
   - Heartbeat event channel for future setup-delivery integration
@@ -166,6 +181,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+- SymbolSearch UX integration (spec alignment):
+  - Added reusable symbol autocomplete component with debounce, favorites, recents, and categorized suggestions
+  - Wired into options chain symbol selector, position analysis form symbol selector, chart toolbar symbol selector, and scanner watchlist edit flow
+  - Uses backend `GET /api/symbols/search` when authenticated with popular-symbol fallback
+  - `/Users/natekahl/ITM-gd/components/ai-coach/symbol-search.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/position-form.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/chart-toolbar.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/opportunity-scanner.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - E2E deterministic auth/scanner harness for middleware-protected AI Coach routes:
   - Test-only auth bypass in middleware and member auth context, enabled by explicit E2E env flags
   - Development/E2E CSP `connect-src` now allows local AI Coach backend (`localhost:3001`) outside production
@@ -220,6 +245,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/workerHealthAlertWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
   - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
 
@@ -230,8 +256,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
+- `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
 - `npm test -- --runInBand src/middleware/__tests__/auth.test.ts`
+- `pnpm exec tsc --noEmit -p /tmp/tsconfig.ai-coach-symbols.json` (scoped frontend type-check for symbol-search integration files)
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
 - `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (passing; scanner -> track -> tracked live updates -> brief workflow)

@@ -24,7 +24,6 @@ const GEX_CACHE_TTL_SECONDS = 300;
 const DEFAULT_STRIKE_RANGE = 30;
 const DEFAULT_MAX_EXPIRATIONS = 6;
 const MAX_EXPIRATIONS_ALLOWED = 12;
-const SUPPORTED_SYMBOLS = new Set(['SPX', 'NDX']);
 
 function roundNumber(value: number, decimals: number = 2): number {
   return Number(value.toFixed(decimals));
@@ -130,9 +129,6 @@ export async function calculateGEXProfile(
   options?: CalculateGEXOptions,
 ): Promise<GEXProfile> {
   const symbol = symbolInput.toUpperCase();
-  if (!SUPPORTED_SYMBOLS.has(symbol)) {
-    throw new Error(`Symbol '${symbol}' is not supported for GEX analysis. Supported symbols: SPX, NDX`);
-  }
 
   const strikeRange = Math.max(5, Math.min(50, options?.strikeRange ?? DEFAULT_STRIKE_RANGE));
   const maxExpirations = Math.max(1, Math.min(MAX_EXPIRATIONS_ALLOWED, options?.maxExpirations ?? DEFAULT_MAX_EXPIRATIONS));

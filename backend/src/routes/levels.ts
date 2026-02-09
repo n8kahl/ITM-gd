@@ -7,9 +7,6 @@ import { levelsParamSchema, levelsQuerySchema } from '../schemas/levelsValidatio
 
 const router = Router();
 
-// Supported symbols
-const SUPPORTED_SYMBOLS = ['SPX', 'NDX'];
-
 /**
  * GET /api/levels/:symbol
  *
@@ -28,15 +25,6 @@ router.get(
     try {
       const symbol = req.params.symbol.toUpperCase();
       const timeframe = (req.query.timeframe as string) || 'intraday';
-
-      // Validate symbol
-      if (!SUPPORTED_SYMBOLS.includes(symbol)) {
-        return res.status(404).json({
-          error: 'Symbol not found',
-          message: `Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`
-        });
-      }
-
 
       // Calculate levels
       const levels = await calculateLevels(symbol, timeframe);

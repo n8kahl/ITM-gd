@@ -66,6 +66,19 @@ export interface ChartDataResponse {
   cached: boolean
 }
 
+export type SymbolSearchType = 'index' | 'etf' | 'stock'
+
+export interface SymbolSearchItem {
+  symbol: string
+  name: string
+  type: SymbolSearchType
+  exchange: string | null
+}
+
+export interface SymbolSearchResponse {
+  results: SymbolSearchItem[]
+}
+
 export interface SessionMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -390,6 +403,34 @@ export async function getChartData(
 ): Promise<ChartDataResponse> {
   const response = await fetchWithAuth(
     `${API_BASE}/api/chart/${symbol}?timeframe=${timeframe}`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Search symbols for autocomplete workflows.
+ */
+export async function searchSymbols(
+  query: string,
+  token: string,
+  limit: number = 20,
+  signal?: AbortSignal
+): Promise<SymbolSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/symbols/search?${params}`,
     { headers: {} },
     token,
     signal

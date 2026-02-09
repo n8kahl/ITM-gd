@@ -1,5 +1,6 @@
 import { runTechnicalScan, TechnicalSetup } from './technicalScanner';
 import { runOptionsScan, OptionsSetup } from './optionsScanner';
+import { POPULAR_SYMBOLS } from '../../lib/symbols';
 
 /**
  * Opportunity Scanner - orchestrates all scanning algorithms
@@ -136,7 +137,7 @@ function optionsToOpportunity(setup: OptionsSetup): Opportunity {
  * Run full scan across symbols
  */
 export async function scanOpportunities(
-  symbols: string[] = ['SPX', 'NDX'],
+  symbols: string[] = [...POPULAR_SYMBOLS],
   includeOptions: boolean = true,
 ): Promise<ScanResult> {
   const startTime = Date.now();

@@ -20,8 +20,6 @@ import {
 
 const router = Router();
 
-const SUPPORTED_SYMBOLS = ['SPX', 'NDX'];
-
 router.get(
   '/:symbol/chain',
   authenticateToken,
@@ -33,10 +31,6 @@ router.get(
       const symbol = req.params.symbol.toUpperCase();
       const expiry = req.query.expiry as string | undefined;
       const strikeRange = req.query.strikeRange ? parseInt(req.query.strikeRange as string) : 10;
-
-      if (!SUPPORTED_SYMBOLS.includes(symbol)) {
-        return res.status(404).json({ error: 'Symbol not found', message: `Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}` });
-      }
 
       const chain = await fetchOptionsChain(symbol, expiry, strikeRange);
       return res.json(chain);
@@ -58,9 +52,6 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
-      if (!SUPPORTED_SYMBOLS.includes(symbol)) {
-        return res.status(404).json({ error: 'Symbol not found', message: `Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}` });
-      }
       const expirations = await fetchExpirationDates(symbol);
       return res.json({ symbol, expirations, count: expirations.length });
     } catch (error: any) {
@@ -80,12 +71,6 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
-      if (!SUPPORTED_SYMBOLS.includes(symbol)) {
-        return res.status(404).json({
-          error: 'Symbol not found',
-          message: `Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`,
-        });
-      }
 
       const validatedQuery = (req as any).validatedQuery as {
         expiry?: string;
@@ -165,7 +150,6 @@ function validatePosition(position: any): boolean {
   if (!position || typeof position !== 'object') return false;
   const required = ['symbol', 'type', 'quantity', 'entryPrice', 'entryDate'];
   for (const field of required) { if (!(field in position)) return false; }
-  if (!SUPPORTED_SYMBOLS.includes(position.symbol.toUpperCase())) return false;
   const validTypes = ['call', 'put', 'call_spread', 'put_spread', 'iron_condor', 'stock'];
   if (!validTypes.includes(position.type)) return false;
   if (position.type !== 'stock' && (!position.strike || !position.expiry)) return false;

@@ -35,6 +35,7 @@ import {
   AICoachAPIError,
   type ScanOpportunity,
 } from '@/lib/api/ai-coach'
+import { SymbolSearch } from './symbol-search'
 
 // ============================================
 // TYPES
@@ -99,6 +100,7 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false)
   const [isEditingWatchlist, setIsEditingWatchlist] = useState(false)
   const [watchlistInput, setWatchlistInput] = useState('SPX, NDX')
+  const [watchlistSymbolPicker, setWatchlistSymbolPicker] = useState('SPY')
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
   const [trackStatusById, setTrackStatusById] = useState<Record<string, TrackStatus>>({})
 
@@ -240,6 +242,28 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
     }
   }, [token])
 
+  const handleAddWatchlistSymbol = useCallback(() => {
+    const nextSymbol = watchlistSymbolPicker.trim().toUpperCase()
+    if (!/^[A-Z0-9._:-]{1,10}$/.test(nextSymbol)) {
+      setWatchlistError('Select a valid symbol before adding.')
+      return
+    }
+
+    const existing = watchlistInput
+      .split(',')
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean)
+
+    if (existing.includes(nextSymbol)) {
+      setWatchlistError(`${nextSymbol} is already in your watchlist.`)
+      return
+    }
+
+    const updated = [...existing, nextSymbol].slice(0, 20)
+    setWatchlistInput(updated.join(', '))
+    setWatchlistError(null)
+  }, [watchlistInput, watchlistSymbolPicker])
+
   const filteredOpportunities = opportunities.filter(opp => {
     if (filterDirection !== 'all' && opp.direction !== filterDirection) return false
     if (filterType !== 'all' && opp.type !== filterType) return false
@@ -297,25 +321,40 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
             </button>
           </div>
           {isEditingWatchlist && (
-            <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <input
-                value={watchlistInput}
-                onChange={(e) => setWatchlistInput(e.target.value)}
-                placeholder="SPX, NDX, AAPL"
-                className="flex-1 h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white placeholder:text-white/35 focus:outline-none focus:border-emerald-500/40"
-              />
-              <button
-                onClick={handleSaveWatchlist}
-                disabled={isSavingWatchlist}
-                className={cn(
-                  'h-8 px-3 rounded-md text-xs border transition-all',
-                  isSavingWatchlist
-                    ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
-                    : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20'
-                )}
-              >
-                {isSavingWatchlist ? 'Saving...' : 'Save'}
-              </button>
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  value={watchlistInput}
+                  onChange={(e) => setWatchlistInput(e.target.value)}
+                  placeholder="SPX, NDX, AAPL"
+                  className="flex-1 h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white placeholder:text-white/35 focus:outline-none focus:border-emerald-500/40"
+                />
+                <button
+                  onClick={handleSaveWatchlist}
+                  disabled={isSavingWatchlist}
+                  className={cn(
+                    'h-8 px-3 rounded-md text-xs border transition-all',
+                    isSavingWatchlist
+                      ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
+                      : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20'
+                  )}
+                >
+                  {isSavingWatchlist ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <SymbolSearch
+                  value={watchlistSymbolPicker}
+                  onChange={setWatchlistSymbolPicker}
+                  className="flex-1"
+                />
+                <button
+                  onClick={handleAddWatchlistSymbol}
+                  className="h-8 px-3 rounded-md text-xs border text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20 transition-all"
+                >
+                  Add Symbol
+                </button>
+              </div>
             </div>
           )}
           {watchlistError && (

@@ -22,6 +22,7 @@ import {
   type GEXProfileResponse,
 } from '@/lib/api/ai-coach'
 import { GEXChart } from './gex-chart'
+import { SymbolSearch } from './symbol-search'
 
 // ============================================
 // TYPES
@@ -39,7 +40,7 @@ type SortDir = 'asc' | 'desc'
 // COMPONENT
 // ============================================
 
-export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsChainProps) {
+export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsChainProps) {
   const { session } = useMemberAuth()
   const {
     activeSymbol,
@@ -83,7 +84,6 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
   useEffect(() => {
     const workflowSymbol = activeSymbol
     if (!workflowSymbol || workflowSymbol === symbol) return
-    if (!['SPX', 'NDX'].includes(workflowSymbol)) return
     setPendingSyncSymbol(workflowSymbol)
   }, [activeSymbol, symbol])
 
@@ -215,31 +215,21 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
       {/* Toolbar */}
       <div className="border-b border-white/5 p-3 flex flex-wrap items-center gap-3">
         {/* Symbol */}
-        <div className="flex items-center gap-1">
-          {['SPX', 'NDX'].map(s => (
-            <button
-              key={s}
-              onClick={() => {
-                setSymbol(s)
-                setExpiry('')
-                setChain(null)
-                setGexProfile(null)
-                setGexError(null)
-                setWorkflowSymbol(s)
-                setCenterView('options')
-                setWorkflowStrike(null)
-                setPendingSyncSymbol(null)
-              }}
-              className={cn(
-                'px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
-                symbol === s
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'text-white/40 hover:text-white/70 border border-transparent'
-              )}
-            >
-              {s}
-            </button>
-          ))}
+        <div className="w-56">
+          <SymbolSearch
+            value={symbol}
+            onChange={(nextSymbol) => {
+              setSymbol(nextSymbol)
+              setExpiry('')
+              setChain(null)
+              setGexProfile(null)
+              setGexError(null)
+              setWorkflowSymbol(nextSymbol)
+              setCenterView('options')
+              setWorkflowStrike(null)
+              setPendingSyncSymbol(null)
+            }}
+          />
         </div>
 
         <div className="w-px h-6 bg-white/10" />

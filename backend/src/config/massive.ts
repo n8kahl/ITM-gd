@@ -158,6 +158,21 @@ export interface OptionsSnapshotResponse {
   results: OptionsSnapshot[];
 }
 
+export interface MassiveTickerReference {
+  ticker: string;
+  name?: string;
+  market?: string;
+  type?: string;
+  locale?: string;
+  primary_exchange?: string;
+}
+
+interface MassiveTickerSearchResponse {
+  status: string;
+  count?: number;
+  results?: MassiveTickerReference[];
+}
+
 // Get options contracts for an underlying symbol
 export async function getOptionsContracts(
   underlyingTicker: string,
@@ -216,6 +231,33 @@ export async function getOptionsExpirations(
     return expirations.sort();
   } catch (error: any) {
     logger.error(`Failed to fetch expirations for ${underlyingTicker}`, { error: error.message });
+    throw error;
+  }
+}
+
+export async function searchReferenceTickers(
+  query: string,
+  limit: number = 20,
+): Promise<MassiveTickerReference[]> {
+  try {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    const response = await massiveClient.get<MassiveTickerSearchResponse>(
+      '/v3/reference/tickers',
+      {
+        params: {
+          search: trimmed,
+          active: true,
+          sort: 'ticker',
+          limit,
+        },
+      },
+    );
+
+    return response.data.results || [];
+  } catch (error: any) {
+    logger.error(`Failed to search ticker references for query "${query}"`, { error: error.message });
     throw error;
   }
 }

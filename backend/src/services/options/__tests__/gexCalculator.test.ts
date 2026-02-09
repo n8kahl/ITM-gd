@@ -106,7 +106,21 @@ describe('gexCalculator', () => {
     expect(mockCacheSet).not.toHaveBeenCalled();
   });
 
-  it('throws for unsupported symbols', async () => {
-    await expect(calculateGEXProfile('AAPL')).rejects.toThrow("Symbol 'AAPL' is not supported for GEX analysis");
+  it('supports non-index symbols when options data is available', async () => {
+    mockFetchExpirationDates.mockResolvedValue(['2026-02-10']);
+    mockFetchOptionsChain.mockResolvedValue({
+      symbol: 'AAPL',
+      currentPrice: 220,
+      expiry: '2026-02-10',
+      daysToExpiry: 2,
+      options: {
+        calls: [{ strike: 220, openInterest: 1000, gamma: 0.02 }],
+        puts: [{ strike: 220, openInterest: 900, gamma: 0.018 }],
+      },
+    } as any);
+
+    const profile = await calculateGEXProfile('AAPL');
+    expect(profile.symbol).toBe('AAPL');
+    expect(mockFetchExpirationDates).toHaveBeenCalledWith('AAPL');
   });
 });

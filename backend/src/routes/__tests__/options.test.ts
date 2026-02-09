@@ -44,9 +44,9 @@ describe('Options Routes', () => {
   });
 
   describe('GET /api/options/:symbol/gex', () => {
-    it('returns gamma exposure profile for supported symbols', async () => {
+    it('returns gamma exposure profile for any valid symbol', async () => {
       mockCalculateGEXProfile.mockResolvedValue({
-        symbol: 'SPX',
+        symbol: 'AAPL',
         spotPrice: 6010,
         gexByStrike: [],
         flipPoint: 6000,
@@ -59,24 +59,16 @@ describe('Options Routes', () => {
       });
 
       const res = await request(app)
-        .get('/api/options/spx/gex?strikeRange=20&maxExpirations=4&forceRefresh=true');
+        .get('/api/options/aapl/gex?strikeRange=20&maxExpirations=4&forceRefresh=true');
 
       expect(res.status).toBe(200);
-      expect(res.body.symbol).toBe('SPX');
-      expect(mockCalculateGEXProfile).toHaveBeenCalledWith('SPX', {
+      expect(res.body.symbol).toBe('AAPL');
+      expect(mockCalculateGEXProfile).toHaveBeenCalledWith('AAPL', {
         expiry: undefined,
         strikeRange: 20,
         maxExpirations: 4,
         forceRefresh: true,
       });
-    });
-
-    it('returns 404 for unsupported symbols', async () => {
-      const res = await request(app).get('/api/options/aapl/gex');
-
-      expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Symbol not found');
-      expect(mockCalculateGEXProfile).not.toHaveBeenCalled();
     });
 
     it('returns 400 for invalid query parameters', async () => {
