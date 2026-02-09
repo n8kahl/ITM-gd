@@ -260,7 +260,7 @@ serve(async (req) => {
     // Always scope to the authenticated user's entries
     if (entryId) {
       const { error: updateError } = await supabase
-        .from('trading_journal_entries')
+        .from('journal_entries')
         .update({
           ai_analysis: analysis,
           tags: analysis.tags || [],

@@ -12,8 +12,7 @@ function getSupabaseAdmin() {
 }
 
 /**
- * Get authenticated user ID from Supabase session
- * Returns null if not authenticated
+ * Get authenticated user ID from Supabase session (server-validated via getUser)
  */
 async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -24,14 +23,12 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
     return null
   }
 
-  // Get the access token from Authorization header or cookies
   const authHeader = request.headers.get('authorization')
   let accessToken: string | null = null
 
   if (authHeader?.startsWith('Bearer ')) {
     accessToken = authHeader.substring(7)
   } else {
-    // Try to get from Supabase auth cookie
     const cookies = request.cookies.getAll()
     const authCookie = cookies.find(c => c.name.includes('-auth-token'))
     if (authCookie) {
@@ -48,7 +45,6 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
     return null
   }
 
-  // Verify the token with Supabase
   const supabase = createClient(url, anonKey, {
     global: {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -63,6 +59,12 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
 
   return user.id
 }
+
+// ============================================
+// CANONICAL TABLE: journal_entries
+// Field names match lib/types/journal.ts:
+//   direction, pnl, pnl_percentage, position_size
+// ============================================
 
 // GET - Fetch journal entries for user
 export async function GET(request: NextRequest) {
@@ -83,7 +85,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     let query = supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .select('*')
       .eq('user_id', userId)
       .order('trade_date', { ascending: false })
@@ -140,15 +142,17 @@ export async function POST(request: NextRequest) {
     }
     const body = await request.json()
 
+    // Accept both canonical and legacy field names for backwards compatibility
+    const direction = body.direction || body.trade_type || null
+    const pnl = body.pnl ?? body.profit_loss ?? null
+    const pnl_percentage = body.pnl_percentage ?? body.profit_loss_percent ?? null
+
     const {
       trade_date,
       symbol,
-      trade_type,
       entry_price,
       exit_price,
       position_size,
-      profit_loss,
-      profit_loss_percent,
       screenshot_url,
       setup_notes,
       execution_notes,
@@ -156,30 +160,35 @@ export async function POST(request: NextRequest) {
       tags,
       rating,
       is_winner,
+      ai_analysis,
     } = body
+
+    if (!symbol || !symbol.trim()) {
+      return NextResponse.json({ error: 'Symbol is required' }, { status: 400 })
+    }
 
     const supabase = getSupabaseAdmin()
 
-    // Insert journal entry
     const { data: entry, error } = await supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .insert({
         user_id: userId,
-        trade_date: trade_date || new Date().toISOString().split('T')[0],
-        symbol,
-        trade_type,
-        entry_price,
-        exit_price,
-        position_size,
-        profit_loss,
-        profit_loss_percent,
-        screenshot_url,
-        setup_notes,
-        execution_notes,
-        lessons_learned,
+        trade_date: trade_date ? new Date(trade_date).toISOString() : new Date().toISOString(),
+        symbol: symbol.toUpperCase(),
+        direction,
+        entry_price: entry_price != null ? parseFloat(entry_price) : null,
+        exit_price: exit_price != null ? parseFloat(exit_price) : null,
+        position_size: position_size != null ? parseFloat(position_size) : null,
+        pnl: pnl != null ? parseFloat(pnl) : null,
+        pnl_percentage: pnl_percentage != null ? parseFloat(pnl_percentage) : null,
+        screenshot_url: screenshot_url || null,
+        setup_notes: setup_notes || null,
+        execution_notes: execution_notes || null,
+        lessons_learned: lessons_learned || null,
         tags: tags || [],
-        rating,
+        rating: rating || null,
         is_winner,
+        ai_analysis: ai_analysis || null,
       })
       .select()
       .single()
@@ -212,16 +221,31 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, ...rawUpdates } = body
 
     if (!id) {
       return NextResponse.json({ error: 'Entry ID is required' }, { status: 400 })
     }
 
+    // Map any legacy field names to canonical names
+    const updates: Record<string, unknown> = { ...rawUpdates }
+    if ('trade_type' in updates) {
+      updates.direction = updates.trade_type
+      delete updates.trade_type
+    }
+    if ('profit_loss' in updates) {
+      updates.pnl = updates.profit_loss
+      delete updates.profit_loss
+    }
+    if ('profit_loss_percent' in updates) {
+      updates.pnl_percentage = updates.profit_loss_percent
+      delete updates.profit_loss_percent
+    }
+
     const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .update(updates)
       .eq('id', id)
       .eq('user_id', userId)
@@ -265,7 +289,7 @@ export async function DELETE(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     const { error } = await supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .delete()
       .eq('id', id)
       .eq('user_id', userId)
@@ -295,7 +319,6 @@ async function updateStreaks(
   const today = new Date().toISOString().split('T')[0]
   const entryDate = tradeDate || today
 
-  // Get current streak data
   const { data: current } = await supabase
     .from('journal_streaks')
     .select('*')
@@ -303,7 +326,6 @@ async function updateStreaks(
     .single()
 
   if (!current) {
-    // Create new streak record
     await supabase
       .from('journal_streaks')
       .insert({
@@ -318,7 +340,6 @@ async function updateStreaks(
     return
   }
 
-  // Calculate streak
   let newStreak = current.current_streak
   const lastDate = current.last_entry_date ? new Date(current.last_entry_date) : null
   const newDate = new Date(entryDate)
@@ -326,13 +347,10 @@ async function updateStreaks(
   if (lastDate) {
     const diffDays = Math.floor((newDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
     if (diffDays === 1) {
-      // Consecutive day
       newStreak = current.current_streak + 1
     } else if (diffDays > 1) {
-      // Streak broken
       newStreak = 1
     }
-    // diffDays === 0: same day, keep streak
   }
 
   const longestStreak = Math.max(newStreak, current.longest_streak)
@@ -356,15 +374,13 @@ async function recalculateStreaks(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   userId: string
 ) {
-  // Get all entries for user
   const { data: entries } = await supabase
-    .from('trading_journal_entries')
+    .from('journal_entries')
     .select('trade_date, is_winner')
     .eq('user_id', userId)
     .order('trade_date', { ascending: true })
 
   if (!entries || entries.length === 0) {
-    // Delete streak record if no entries
     await supabase
       .from('journal_streaks')
       .delete()
@@ -372,14 +388,11 @@ async function recalculateStreaks(
     return
   }
 
-  // Calculate stats
   const totalEntries = entries.length
   const totalWinners = entries.filter(e => e.is_winner === true).length
   const totalLosers = entries.filter(e => e.is_winner === false).length
   const lastDate = entries[entries.length - 1].trade_date
 
-  // Calculate streaks
-  let currentStreak = 1
   let longestStreak = 1
   let tempStreak = 1
 
@@ -397,9 +410,8 @@ async function recalculateStreaks(
     longestStreak = Math.max(longestStreak, tempStreak)
   }
 
-  currentStreak = tempStreak
+  const currentStreak = tempStreak
 
-  // Upsert streak record
   await supabase
     .from('journal_streaks')
     .upsert({
