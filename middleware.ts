@@ -25,13 +25,28 @@ function isValidRedirect(path: string): boolean {
  * - object-src, base-uri, form-action locked down
  */
 function buildCSP(nonce: string): string {
+  const connectSrc = [
+    "'self'",
+    'https://*.supabase.co',
+    'wss://*.supabase.co',
+    'https://api.openai.com',
+    'https://*.up.railway.app',
+    'wss://*.up.railway.app',
+    'https://*.ingest.sentry.io',
+  ]
+
+  // Local AI Coach backend for development and E2E.
+  if (process.env.NODE_ENV !== 'production') {
+    connectSrc.push('http://localhost:3001', 'ws://localhost:3001', 'http://127.0.0.1:3001', 'ws://127.0.0.1:3001')
+  }
+
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://static.cloudflareinsights.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://*.up.railway.app wss://*.up.railway.app https://*.ingest.sentry.io",
+    `connect-src ${connectSrc.join(' ')}`,
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
@@ -73,6 +88,17 @@ export async function middleware(request: NextRequest) {
   // Clone request headers and add nonce so layout/components can read it
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+
+  // E2E auth bypass for deterministic Playwright coverage on middleware-protected routes.
+  // Only active when explicitly enabled via env + request header.
+  const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
+  const e2eBypassHeader = request.headers.get('x-e2e-bypass-auth') === '1'
+  if (e2eBypassEnabled && e2eBypassHeader && pathname.startsWith('/members')) {
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    })
+    return addSecurityHeaders(response, nonce)
+  }
 
   // For routes that don't need auth, pass through with security headers only
   if (!requiresAuth(pathname)) {

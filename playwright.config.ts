@@ -51,7 +51,12 @@ export default defineConfig({
     {
       name: 'ai-coach',
       testMatch: /ai-coach.*\.spec\.ts/,
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        extraHTTPHeaders: {
+          'x-e2e-bypass-auth': '1',
+        },
+      },
     },
     // All other tests
     {
@@ -67,7 +72,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev',
+    command: 'E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true pnpm dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

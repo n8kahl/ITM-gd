@@ -152,6 +152,13 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+- E2E deterministic auth/scanner harness for middleware-protected AI Coach routes:
+  - Test-only auth bypass in middleware and member auth context, enabled by explicit E2E env flags
+  - Development/E2E CSP `connect-src` now allows local AI Coach backend (`localhost:3001`) outside production
+  - `/Users/natekahl/ITM-gd/middleware.ts`
+  - `/Users/natekahl/ITM-gd/contexts/MemberAuthContext.tsx`
+  - `/Users/natekahl/ITM-gd/playwright.config.ts`
+  - `/Users/natekahl/ITM-gd/e2e/helpers/member-auth.ts`
 
 ### Database
 - Applied to staging:
@@ -199,10 +206,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
-- `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (Next now boots without Sentry dependency; current failure is E2E auth bootstrap not reaching `/members/ai-coach`)
+- `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (passing; scanner -> track -> tracked live updates -> brief workflow)
 - `npm run build` (backend compile passes after making Sentry optional/no-op when package is not installed)
 - Targeted TS checks run on changed backend/frontend files before merge.
-- Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment now starts; remaining blocker is authenticated E2E bootstrap).
+- Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment boots in current setup).
 - Added scanner workflow smoke spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow.spec.ts` (mocked scanner/tracked/brief/WebSocket flow).
 
 ## 3) Production Gates (Current)
@@ -219,16 +226,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
+- AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
 
 ### Needs Completion
-- Stabilize authenticated E2E bootstrap so AI Coach workflow specs consistently reach `/members/ai-coach` (middleware currently redirects to `/login` in test mode).
 - Expand backend-integrated E2E coverage from mocked workflow smoke to authenticated staging data path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 - Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Add deterministic E2E auth bootstrap for middleware-protected member routes so AI Coach workflow specs execute reliably.
-2. Run the new workflow smoke spec + existing AI Coach view/api specs in CI and staging (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
+1. Convert AI Coach E2E from mocked API routes to staging-integrated validation for scanner/tracked/brief flows with seeded test users.
+2. Run AI Coach spec suite in CI and staging with production-like env wiring (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
