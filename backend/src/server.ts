@@ -29,6 +29,7 @@ import trackedSetupsRouter from './routes/trackedSetups';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
+import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
 
@@ -178,6 +179,7 @@ async function start() {
     startMorningBriefWorker();
     startSetupPushWorker();
     startSetupDetectorService();
+    startWorkerHealthAlertWorker();
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -197,6 +199,7 @@ async function gracefulShutdown(signal: string) {
     stopMorningBriefWorker();
     stopSetupPushWorker();
     stopSetupDetectorService();
+    stopWorkerHealthAlertWorker();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();

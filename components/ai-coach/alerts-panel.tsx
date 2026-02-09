@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import {
   getAlerts,
   createAlert,
@@ -54,6 +55,7 @@ const ALERT_TYPES: { value: AlertType; label: string; icon: typeof TrendingUp; d
 
 export function AlertsPanel({ onClose }: AlertsPanelProps) {
   const { session } = useMemberAuth()
+  const { pendingAlert, clearPendingAlert } = useAICoachWorkflow()
   const [alerts, setAlerts] = useState<AlertEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -86,6 +88,11 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
     fetchAlerts()
   }, [fetchAlerts])
 
+  useEffect(() => {
+    if (!pendingAlert) return
+    setShowForm(true)
+  }, [pendingAlert])
+
   const handleCancel = useCallback(async (id: string) => {
     if (!token) return
     try {
@@ -116,8 +123,9 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
 
   const handleCreated = useCallback(() => {
     setShowForm(false)
+    clearPendingAlert()
     fetchAlerts()
-  }, [fetchAlerts])
+  }, [fetchAlerts, clearPendingAlert])
 
   return (
     <div className="h-full flex flex-col">
@@ -150,7 +158,15 @@ export function AlertsPanel({ onClose }: AlertsPanelProps) {
         {/* New Alert Form */}
         {showForm && (
           <div className="p-4 border-b border-white/5">
-            <AlertForm token={token} onCreated={handleCreated} onCancel={() => setShowForm(false)} />
+            <AlertForm
+              token={token}
+              initialPrefill={pendingAlert}
+              onCreated={handleCreated}
+              onCancel={() => {
+                setShowForm(false)
+                clearPendingAlert()
+              }}
+            />
           </div>
         )}
 
@@ -311,10 +327,17 @@ function AlertCard({
 
 function AlertForm({
   token,
+  initialPrefill,
   onCreated,
   onCancel,
 }: {
   token?: string
+  initialPrefill?: {
+    symbol: string
+    targetValue: number
+    alertType: AlertType
+    notes?: string
+  } | null
   onCreated: () => void
   onCancel: () => void
 }) {
@@ -324,6 +347,14 @@ function AlertForm({
   const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!initialPrefill) return
+    setSymbol(initialPrefill.symbol)
+    setTargetValue(initialPrefill.targetValue.toString())
+    setAlertType(initialPrefill.alertType)
+    setNotes(initialPrefill.notes || '')
+  }, [initialPrefill])
 
   const handleSubmit = useCallback(async () => {
     if (!token || !targetValue) return

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Target,
+  CandlestickChart,
   Loader2,
   X,
   RefreshCw,
@@ -17,6 +18,17 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { WidgetActionBar } from './widget-action-bar'
+import { WidgetContextMenu } from './widget-context-menu'
+import {
+  alertAction,
+  analyzeAction,
+  chartAction,
+  chatAction,
+  copyAction,
+  optionsAction,
+  type WidgetAction,
+} from './widget-actions'
 import {
   getTrackedSetups,
   updateTrackedSetup,
@@ -52,6 +64,117 @@ const DIRECTION_STYLES: Record<'bullish' | 'bearish' | 'neutral', string> = {
   bullish: 'text-emerald-400',
   bearish: 'text-red-400',
   neutral: 'text-amber-400',
+}
+
+interface SetupTradePlan {
+  entry: number | null
+  stopLoss: number | null
+  target: number | null
+  strike: number | null
+  expiry: string | null
+}
+
+function parseNumeric(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^0-9.+-]/g, '')
+    const parsed = Number(cleaned)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function extractTradePlan(setup: TrackedSetup): SetupTradePlan {
+  const opportunityData = asRecord(setup.opportunity_data)
+  const suggestedTrade = asRecord(opportunityData.suggestedTrade)
+  const metadata = asRecord(opportunityData.metadata)
+
+  const strikes = Array.isArray(suggestedTrade.strikes) ? suggestedTrade.strikes : []
+  const parsedStrikes = strikes
+    .map((value) => parseNumeric(value))
+    .filter((value): value is number => value != null)
+
+  const entry = parseNumeric(suggestedTrade.entry)
+    ?? parseNumeric(opportunityData.entry)
+    ?? parseNumeric(opportunityData.currentPrice)
+  const stopLoss = parseNumeric(suggestedTrade.stopLoss)
+    ?? parseNumeric(opportunityData.stopLoss)
+    ?? parseNumeric(metadata.stop_loss)
+  const target = parseNumeric(suggestedTrade.target)
+    ?? parseNumeric(opportunityData.target)
+    ?? parseNumeric(metadata.target)
+  const strike = parsedStrikes[0]
+    ?? parseNumeric(opportunityData.strike)
+    ?? entry
+  const expiry = typeof suggestedTrade.expiry === 'string'
+    ? suggestedTrade.expiry
+    : typeof opportunityData.expiry === 'string'
+      ? opportunityData.expiry
+      : null
+
+  return { entry, stopLoss, target, strike, expiry }
+}
+
+function buildChartOverlayAction(setup: TrackedSetup, plan: SetupTradePlan): WidgetAction {
+  return {
+    label: 'Chart Overlay',
+    icon: CandlestickChart,
+    variant: 'primary',
+    action: () => {
+      chartAction(
+        setup.symbol,
+        plan.entry ?? plan.strike ?? undefined,
+        '15m',
+        `${setup.setup_type} setup`,
+      ).action()
+
+      const support: Array<{ name: string; price: number }> = []
+      const resistance: Array<{ name: string; price: number }> = []
+
+      if (plan.entry != null) {
+        if (setup.direction === 'bearish') {
+          resistance.push({ name: 'Entry', price: plan.entry })
+        } else {
+          support.push({ name: 'Entry', price: plan.entry })
+        }
+      }
+
+      if (plan.stopLoss != null) {
+        if (setup.direction === 'bearish') {
+          support.push({ name: 'Stop', price: plan.stopLoss })
+        } else {
+          resistance.push({ name: 'Stop', price: plan.stopLoss })
+        }
+      }
+
+      if (plan.target != null) {
+        if (setup.direction === 'bearish') {
+          support.push({ name: 'Target', price: plan.target })
+        } else {
+          resistance.push({ name: 'Target', price: plan.target })
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+          detail: {
+            symbol: setup.symbol,
+            timeframe: '15m',
+            levels: {
+              support: support.length > 0 ? support : undefined,
+              resistance: resistance.length > 0 ? resistance : undefined,
+            },
+          },
+        }))
+      }
+    },
+  }
 }
 
 export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanelProps) {
@@ -300,146 +423,178 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
               const score = typeof setup.opportunity_data?.score === 'number'
                 ? setup.opportunity_data.score
                 : null
+              const plan = extractTradePlan(setup)
+              const alertPrice = plan.entry ?? plan.strike
+              const askPrompt = `Review my ${setup.setup_type} setup on ${setup.symbol}. It's currently ${setup.status}. Give me key risk/reward checkpoints and what to monitor next.`
+              const workflowActions: WidgetAction[] = [
+                buildChartOverlayAction(setup, plan),
+                optionsAction(setup.symbol, plan.strike ?? undefined, plan.expiry ?? undefined),
+                ...(alertPrice != null
+                  ? [alertAction(
+                      setup.symbol,
+                      alertPrice,
+                      setup.direction === 'bearish' ? 'price_below' : 'price_above',
+                      `${setup.setup_type} (${setup.status})`,
+                    )]
+                  : []),
+                analyzeAction({
+                  symbol: setup.symbol,
+                  type: setup.direction === 'bearish' ? 'put' : setup.direction === 'bullish' ? 'call' : 'stock',
+                  strike: plan.strike ?? undefined,
+                  expiry: plan.expiry ?? undefined,
+                  quantity: 1,
+                  entryPrice: plan.entry ?? 1,
+                  entryDate: new Date().toISOString().slice(0, 10),
+                }),
+                chatAction(askPrompt),
+              ]
+              const contextActions = [
+                ...workflowActions,
+                copyAction(`${setup.symbol} ${setup.setup_type} ${setup.status}`),
+              ]
 
               return (
-                <div
-                  key={setup.id}
-                  className="glass-card-heavy rounded-lg p-3 border border-white/10"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center flex-wrap gap-2">
-                        <span className="text-sm font-semibold text-white">{setup.symbol}</span>
-                        <span className="text-[11px] text-white/50 uppercase tracking-wide">{setup.setup_type}</span>
-                        <span className={cn('text-[11px] font-medium capitalize', DIRECTION_STYLES[setup.direction])}>
-                          {setup.direction}
-                        </span>
-                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded border capitalize', STATUS_BADGE_STYLES[setup.status])}>
-                          {setup.status}
-                        </span>
-                        {score !== null && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/70">
-                            Score {score}
+                <WidgetContextMenu key={setup.id} actions={contextActions}>
+                  <div
+                    className="glass-card-heavy rounded-lg p-3 border border-white/10"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center flex-wrap gap-2">
+                          <span className="text-sm font-semibold text-white">{setup.symbol}</span>
+                          <span className="text-[11px] text-white/50 uppercase tracking-wide">{setup.setup_type}</span>
+                          <span className={cn('text-[11px] font-medium capitalize', DIRECTION_STYLES[setup.direction])}>
+                            {setup.direction}
                           </span>
-                        )}
+                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded border capitalize', STATUS_BADGE_STYLES[setup.status])}>
+                            {setup.status}
+                          </span>
+                          {score !== null && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/70">
+                              Score {score}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-white/35 mt-1">
+                          Tracked {new Date(setup.tracked_at).toLocaleString()}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-white/35 mt-1">
-                        Tracked {new Date(setup.tracked_at).toLocaleString()}
-                      </p>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {onSendPrompt && (
+                          <button
+                            onClick={() => onSendPrompt(askPrompt)}
+                            className="text-white/30 hover:text-emerald-400 transition-colors"
+                            title="Ask AI about this setup"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDelete(setup.id)}
+                          disabled={isMutating}
+                          className={cn(
+                            'transition-colors',
+                            isMutating ? 'text-white/20 cursor-not-allowed' : 'text-white/30 hover:text-red-400',
+                          )}
+                          title="Delete setup"
+                        >
+                          {isMutating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      {onSendPrompt && (
+                    <WidgetActionBar actions={workflowActions} className="mt-2" />
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {setup.status !== 'triggered' && (
+                        <StatusActionButton
+                          label="Mark Triggered"
+                          icon={CheckCircle2}
+                          onClick={() => handleStatusChange(setup.id, 'triggered')}
+                          disabled={isMutating}
+                          tone="positive"
+                        />
+                      )}
+                      {setup.status !== 'invalidated' && (
+                        <StatusActionButton
+                          label="Mark Invalidated"
+                          icon={XCircle}
+                          onClick={() => handleStatusChange(setup.id, 'invalidated')}
+                          disabled={isMutating}
+                          tone="danger"
+                        />
+                      )}
+                      {setup.status !== 'archived' && (
+                        <StatusActionButton
+                          label="Archive"
+                          icon={Archive}
+                          onClick={() => handleStatusChange(setup.id, 'archived')}
+                          disabled={isMutating}
+                          tone="muted"
+                        />
+                      )}
+                      {setup.status !== 'active' && (
+                        <StatusActionButton
+                          label="Reopen"
+                          icon={RotateCcw}
+                          onClick={() => handleStatusChange(setup.id, 'active')}
+                          disabled={isMutating}
+                          tone="primary"
+                        />
+                      )}
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-white/5">
+                      {isEditingNotes ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={notesDraft}
+                            onChange={(event) => setNotesDraft(event.target.value)}
+                            placeholder="Add setup notes..."
+                            rows={3}
+                            className="w-full rounded-md bg-white/5 border border-white/10 px-2.5 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/35 resize-none"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSaveNotes(setup.id)}
+                              disabled={isMutating}
+                              className={cn(
+                                'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-colors',
+                                isMutating
+                                  ? 'text-white/35 border-white/10 cursor-not-allowed'
+                                  : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15',
+                              )}
+                            >
+                              <Save className="w-3 h-3" />
+                              Save Notes
+                            </button>
+                            <button
+                              onClick={cancelEditingNotes}
+                              disabled={isMutating}
+                              className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-white/50 hover:text-white/70 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                         <button
-                          onClick={() => onSendPrompt(`Review my ${setup.setup_type} setup on ${setup.symbol}. It's currently ${setup.status}. Give me key risk/reward checkpoints and what to monitor next.`)}
-                          className="text-white/30 hover:text-emerald-400 transition-colors"
-                          title="Ask AI about this setup"
+                          onClick={() => startEditingNotes(setup)}
+                          className="w-full text-left text-xs rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-2 transition-colors"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span className="flex items-center gap-1.5 text-white/45 mb-1">
+                            <Edit3 className="w-3 h-3" />
+                            Notes
+                          </span>
+                          <span className="text-white/70">
+                            {setup.notes?.trim() ? setup.notes : 'Add notes for this tracked setup...'}
+                          </span>
                         </button>
                       )}
-                      <button
-                        onClick={() => handleDelete(setup.id)}
-                        disabled={isMutating}
-                        className={cn(
-                          'transition-colors',
-                          isMutating ? 'text-white/20 cursor-not-allowed' : 'text-white/30 hover:text-red-400',
-                        )}
-                        title="Delete setup"
-                      >
-                        {isMutating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      </button>
                     </div>
                   </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {setup.status !== 'triggered' && (
-                      <StatusActionButton
-                        label="Mark Triggered"
-                        icon={CheckCircle2}
-                        onClick={() => handleStatusChange(setup.id, 'triggered')}
-                        disabled={isMutating}
-                        tone="positive"
-                      />
-                    )}
-                    {setup.status !== 'invalidated' && (
-                      <StatusActionButton
-                        label="Mark Invalidated"
-                        icon={XCircle}
-                        onClick={() => handleStatusChange(setup.id, 'invalidated')}
-                        disabled={isMutating}
-                        tone="danger"
-                      />
-                    )}
-                    {setup.status !== 'archived' && (
-                      <StatusActionButton
-                        label="Archive"
-                        icon={Archive}
-                        onClick={() => handleStatusChange(setup.id, 'archived')}
-                        disabled={isMutating}
-                        tone="muted"
-                      />
-                    )}
-                    {setup.status !== 'active' && (
-                      <StatusActionButton
-                        label="Reopen"
-                        icon={RotateCcw}
-                        onClick={() => handleStatusChange(setup.id, 'active')}
-                        disabled={isMutating}
-                        tone="primary"
-                      />
-                    )}
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-white/5">
-                    {isEditingNotes ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={notesDraft}
-                          onChange={(event) => setNotesDraft(event.target.value)}
-                          placeholder="Add setup notes..."
-                          rows={3}
-                          className="w-full rounded-md bg-white/5 border border-white/10 px-2.5 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/35 resize-none"
-                        />
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleSaveNotes(setup.id)}
-                            disabled={isMutating}
-                            className={cn(
-                              'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-colors',
-                              isMutating
-                                ? 'text-white/35 border-white/10 cursor-not-allowed'
-                                : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15',
-                            )}
-                          >
-                            <Save className="w-3 h-3" />
-                            Save Notes
-                          </button>
-                          <button
-                            onClick={cancelEditingNotes}
-                            disabled={isMutating}
-                            className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-white/50 hover:text-white/70 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => startEditingNotes(setup)}
-                        className="w-full text-left text-xs rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-2 transition-colors"
-                      >
-                        <span className="flex items-center gap-1.5 text-white/45 mb-1">
-                          <Edit3 className="w-3 h-3" />
-                          Notes
-                        </span>
-                        <span className="text-white/70">
-                          {setup.notes?.trim() ? setup.notes : 'Add notes for this tracked setup...'}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                </div>
+                </WidgetContextMenu>
               )
             })}
           </div>

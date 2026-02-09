@@ -58,6 +58,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/morningBriefWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/setupPushWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
+- Worker health external alerting (Discord-first, Sentry optional):
+  - New worker monitors `workerHealth` telemetry and sends Discord incident alerts for stale/unresolved-failure workers
+  - Includes cooldown-based de-duplication and recovery notifications
+  - Optional Sentry incident messages tied to worker name/type
+  - Configurable via env (`WORKER_ALERTS_*`)
+  - `/Users/natekahl/ITM-gd/backend/src/workers/workerHealthAlertWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/workerHealthAlerting.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/discordNotifier.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
 - GEX profile API + AI function:
   - `GET /api/options/:symbol/gex` with validated query params (`expiry`, `strikeRange`, `maxExpirations`, `forceRefresh`) and 5-min cached calculator service
   - ChatKit function `get_gamma_exposure` wired to return regime, flip point, max GEX strike, key levels, and strike-by-strike GEX
@@ -118,6 +129,29 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
   - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Cross-widget workflow/action framework (production pass):
+  - Shared workflow context with symbol/strike/expiry sync, center-view routing, breadcrumb path, and alert prefill state
+  - Reusable widget action primitives (`widget-actions`, `widget-action-bar`, `widget-context-menu`) wired into key widgets
+  - Key levels, options, scanner, current price, alerts, and GEX cards now expose chart/options/alert/analyze/chat actions via a unified action layer
+  - Options panel now supports workflow symbol-sync prompts and workflow strike highlighting
+  - Alerts panel consumes workflow prefill for one-click alert creation from widgets
+  - `/Users/natekahl/ITM-gd/contexts/AICoachWorkflowContext.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-actions.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-action-bar.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-context-menu.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/alerts-panel.tsx`
+  - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Non-widget workflow action extension (scanner/tracked/chart surfaces):
+  - Opportunity Scanner cards now support context-menu + action-bar workflow handoffs (chart/options/alerts/analyze/chat)
+  - Tracked Setups cards now support setup-overlay chart actions (entry/stop/target), context actions, and production handoffs to options/alerts/analyze/chat
+  - Chart view now exposes native right-click workflow actions at hovered price (chart focus/options/alert/chat)
+  - `/Users/natekahl/ITM-gd/components/ai-coach/opportunity-scanner.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
 
 ### Database
 - Applied to staging:
@@ -148,6 +182,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/indexSpecific.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/service.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/workerHealth.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/workerHealthAlerting.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/discordNotifier.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/workerHealthAlertWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
@@ -159,8 +196,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
+- `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
+- `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
+- `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
+- `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (Next now boots without Sentry dependency; current failure is E2E auth bootstrap not reaching `/members/ai-coach`)
+- `npm run build` (backend compile passes after making Sentry optional/no-op when package is not installed)
 - Targeted TS checks run on changed backend/frontend files before merge.
-- Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
+- Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment now starts; remaining blocker is authenticated E2E bootstrap).
+- Added scanner workflow smoke spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow.spec.ts` (mocked scanner/tracked/brief/WebSocket flow).
 
 ## 3) Production Gates (Current)
 
@@ -175,15 +218,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Setup detector service is running with ORB/break-retest/VWAP/gap-fill/volume-climax/level-test/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
+- Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 
 ### Needs Completion
-- Implement the broader interactive widget action system from spec (`widget-actions`, context menus, workflow context wiring across all widget types).
-- Full E2E path:
+- Stabilize authenticated E2E bootstrap so AI Coach workflow specs consistently reach `/members/ai-coach` (middleware currently redirects to `/login` in test mode).
+- Expand backend-integrated E2E coverage from mocked workflow smoke to authenticated staging data path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
+- Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
-2. Implement cross-widget action framework (`widget-action-bar`, context menus, workflow context) so GEX/earnings/scanner cards share consistent chart/options/alert actions.
-3. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
-4. Run staging verification against pending hardening migrations from `main` before production cut.
+1. Add deterministic E2E auth bootstrap for middleware-protected member routes so AI Coach workflow specs execute reliably.
+2. Run the new workflow smoke spec + existing AI Coach view/api specs in CI and staging (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
+3. Run staging verification against pending hardening migrations from `main` before production cut.
+4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.

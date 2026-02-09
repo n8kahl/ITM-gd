@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return value;
+}, z.boolean());
+
 /**
  * Environment variable schema and validation.
  * Validates ALL required env vars at startup, failing fast with clear messages.
@@ -37,6 +47,15 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  // Worker Health Alerting (Discord + Sentry)
+  WORKER_ALERTS_ENABLED: booleanFromEnv.default(false),
+  WORKER_ALERTS_DISCORD_WEBHOOK_URL: z.string().url().optional(),
+  WORKER_ALERTS_POLL_INTERVAL_MS: z.string().default('60000').transform(Number),
+  WORKER_ALERTS_STALE_THRESHOLD_MS: z.string().default('1200000').transform(Number),
+  WORKER_ALERTS_STARTUP_GRACE_MS: z.string().default('300000').transform(Number),
+  WORKER_ALERTS_COOLDOWN_MS: z.string().default('900000').transform(Number),
+  WORKER_ALERTS_SENTRY_ENABLED: booleanFromEnv.default(false),
 
   // Rate Limiting
   RATE_LIMIT_GENERAL: z.string().default('100').transform(Number),
