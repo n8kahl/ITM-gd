@@ -67,7 +67,15 @@ Branch: `codex/trade-journal-implementation`
   - `app/api/members/insights/behavioral/dismiss/route.ts`
   - `components/journal/behavioral-insights.tsx`
 
-### Phase 5 - Journal-AI Coach Bridge (Journal-side foundations)
+### Phase 5 - Journal-AI Coach Bridge
+- [x] Contextual trade logging from AI Coach
+  - `lib/journal/ai-coach-bridge.ts`
+  - `components/ai-coach/chat-message.tsx`
+  - `hooks/use-ai-coach-chat.ts`
+  - `app/members/journal/page.tsx`
+  - `components/journal/trade-entry-sheet.tsx`
+  - `app/api/members/journal/session-context/[sessionId]/route.ts`
+  - `components/journal/entry-detail-sheet.tsx`
 - [x] Draft generation and review workflow APIs + UI
   - `app/api/members/journal/draft-from-session/route.ts`
   - `app/api/members/journal/drafts/route.ts`
@@ -76,11 +84,20 @@ Branch: `codex/trade-journal-implementation`
 - [x] Journal insights/history endpoints for AI bridge
   - `app/api/members/journal/insights/route.ts`
   - `app/api/members/journal/history/[symbol]/route.ts`
+- [x] AI Coach function bridge for journal-aware responses
+  - `backend/src/chatkit/functions.ts`
+  - `backend/src/chatkit/functionHandlers.ts`
+  - `backend/src/chatkit/systemPrompt.ts`
+  - `backend/src/chatkit/__tests__/functionHandlers.test.ts`
 
 ### Phase 6 - Enhanced Visualization & Dashboard
 - [x] Dashboard layout persistence API + schema field
   - `app/api/members/dashboard/layout/route.ts`
   - `supabase/migrations/20260307000000_trade_journal_spec_phase2_7.sql`
+- [x] Customizable drag/drop analytics widget grid
+  - `components/dashboard/customizable-dashboard.tsx`
+  - `components/journal/analytics-dashboard.tsx`
+  - `app/members/journal/analytics/page.tsx`
 
 ## Implemented
 - Advanced analytics service with fallback calculations and chart-ready payloads.
@@ -91,12 +108,12 @@ Branch: `codex/trade-journal-implementation`
 - Broker CSV import pipeline with duplicate detection and import history tracking.
 - Draft-from-session generation + pending draft confirm/dismiss UI.
 - Behavioral insights API + dismiss action + analytics-page insight cards.
-- Journal analytics page with KPI cards and execution/risk/timing/strategy tabs.
-- Dashboard layout preference endpoints (`GET/PUT`) for future widget layout UI.
+- Journal analytics dashboard with persisted drag/drop/resizable widgets and preset layouts.
+- AI Coach bridge for one-click trade logging with prefill/session linking and entry-level session replay context.
+- ChatKit journal-aware tools (`get_journal_insights`, `get_trade_history_for_symbol`) wired with tests and prompt guidance.
 
 ## Remaining
-- AI Coach surface-level bridge UX (e.g., in-chat "Log This Trade" button and chat widget integration) is not added in this slice to keep journal scope isolated and avoid AI Coach polish files.
-- Customizable drag/drop analytics widget grid (`react-grid-layout`) is not implemented; only layout persistence API/schema is in place.
+- End-of-day auto-journal automation (4:05 PM ET extraction job + notification flow + auto-dismiss lifecycle) is not implemented.
 - Enhanced calendar heatmap and trade replay upgrades are not implemented in this slice.
 - Phase 7 mobile gesture/offline/PWA and comprehensive WCAG hardening remain.
 
@@ -106,11 +123,11 @@ Branch: `codex/trade-journal-implementation`
 - Options-chain enrichment currently performs lightweight contract parsing; full Greeks/IV chain hydration depends on expanding enrichment providers and rate-limit strategy.
 
 ## Next Steps
-1. Implement AI Coach UI bridge actions using existing journal endpoints (`draft-from-session`, insights/history) without broad AI Coach refactors.
+1. Implement end-of-day auto-journal scheduling/notification pipeline and draft expiry handling for Phase 5.3.
 2. Add async/background jobs for grading, import enrichment queues, and weekly behavioral insight generation.
 3. Replace synchronous materialized view refresh trigger with queued refresh/job scheduling.
-4. Implement customizable analytics widget layout UI backed by `/api/members/dashboard/layout`.
-5. Complete Phase 6-7 visuals, replay upgrades, accessibility pass, and offline/PWA enhancements.
+4. Complete remaining Phase 6 visuals (enhanced heatmap + replay upgrades).
+5. Complete Phase 7 accessibility/mobile/PWA hardening.
 
 ## Migration Notes
 - Apply migration:
