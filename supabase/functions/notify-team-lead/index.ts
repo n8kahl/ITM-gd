@@ -1,9 +1,37 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
+
+// Rate limit: max 20 notifications per minute per caller
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 20
+
+function corsHeaders(origin: string | null) {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
+}
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(key)
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return true
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false
+  }
+
+  entry.count++
+  return true
 }
 
 interface ApplicationMetadata {
@@ -27,12 +55,26 @@ interface NotificationPayload {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const headers = corsHeaders(origin)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers })
   }
 
   try {
+    // Rate limit by IP (this is a public-facing contact/application form endpoint)
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     req.headers.get('cf-connecting-ip') ||
+                     'unknown'
+    if (!checkRateLimit(clientIp)) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { headers: { ...headers, 'Content-Type': 'application/json' }, status: 429 }
+      )
+    }
+
     const payload: NotificationPayload = await req.json()
     const { type, name, email, phone, message, source, metadata, submission_id } = payload
 
@@ -40,7 +82,24 @@ serve(async (req) => {
     if (!type || !name || !email || !message) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields: type, name, email, message' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...headers, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    // Validate type
+    const allowedTypes = ['contact', 'application', 'cohort_application']
+    if (!allowedTypes.includes(type)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid notification type' }),
+        { headers: { ...headers, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    // Basic email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email address' }),
+        { headers: { ...headers, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
@@ -61,22 +120,15 @@ serve(async (req) => {
       console.log('Discord webhook URL not configured - skipping notification')
       return new Response(
         JSON.stringify({ success: true, message: 'Discord webhook not configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...headers, 'Content-Type': 'application/json' } }
       )
     }
 
     // Determine notification type
     const isCohortApplication = type === 'cohort_application'
     const isLegacyApplication = type === 'application'
-    const isAnyApplication = isCohortApplication || isLegacyApplication
-
-    // Note: cohort_applications insert is now handled directly in addContactSubmission()
-    // This function only handles Discord notifications
 
     // Embed colors
-    // Emerald (#10B981 = 1095553) for cohort applications
-    // Champagne (#E8E4D9 = 15262937) for legacy applications
-    // Blue (#3B82F6 = 3899126) for contacts
     const embedColor = isCohortApplication ? 1095553 : (isLegacyApplication ? 15262937 : 3899126)
 
     const title = isCohortApplication
@@ -86,26 +138,25 @@ serve(async (req) => {
         : '📬 New Contact Inquiry'
 
     const fields: Array<{ name: string; value: string; inline: boolean }> = [
-      { name: '👤 Name', value: name, inline: true },
-      { name: '📧 Email', value: email, inline: true },
+      { name: '👤 Name', value: name.substring(0, 256), inline: true },
+      { name: '📧 Email', value: email.substring(0, 256), inline: true },
     ]
 
     // Add rich metadata fields for cohort applications
     if (isCohortApplication && metadata) {
       if (metadata.discord_handle) {
-        fields.push({ name: '💬 Discord', value: metadata.discord_handle, inline: true })
+        fields.push({ name: '💬 Discord', value: metadata.discord_handle.substring(0, 256), inline: true })
       }
       if (metadata.experience_level) {
-        fields.push({ name: '📊 Experience', value: metadata.experience_level, inline: true })
+        fields.push({ name: '📊 Experience', value: metadata.experience_level.substring(0, 256), inline: true })
       }
       if (metadata.account_size) {
-        // Highlight high-value applicants
         const isHighValue = metadata.account_size === '$25k+'
         const valueDisplay = isHighValue ? `${metadata.account_size} 💰` : metadata.account_size
-        fields.push({ name: '💵 Capital', value: valueDisplay, inline: true })
+        fields.push({ name: '💵 Capital', value: valueDisplay.substring(0, 256), inline: true })
       }
       if (metadata.primary_struggle) {
-        fields.push({ name: '🎯 Struggle', value: metadata.primary_struggle, inline: true })
+        fields.push({ name: '🎯 Struggle', value: metadata.primary_struggle.substring(0, 256), inline: true })
       }
       if (metadata.short_term_goal) {
         const truncatedGoal = metadata.short_term_goal.length > 500
@@ -114,14 +165,12 @@ serve(async (req) => {
         fields.push({ name: '🏆 12-Month Goal', value: truncatedGoal, inline: false })
       }
     } else {
-      // Legacy format - add phone and source
       if (phone) {
-        fields.push({ name: '📱 Phone', value: phone, inline: true })
+        fields.push({ name: '📱 Phone', value: phone.substring(0, 20), inline: true })
       }
       if (source) {
-        fields.push({ name: '📍 Source', value: source, inline: true })
+        fields.push({ name: '📍 Source', value: source.substring(0, 256), inline: true })
       }
-      // Truncate message if too long (Discord limit is 1024 for field values)
       const truncatedMessage = message.length > 800
         ? message.substring(0, 797) + '...'
         : message
@@ -136,7 +185,6 @@ serve(async (req) => {
       timestamp: new Date().toISOString(),
     }
 
-    // Add footer based on type
     if (isCohortApplication) {
       const isHighValue = metadata?.account_size === '$25k+'
       embed.footer = {
@@ -148,8 +196,7 @@ serve(async (req) => {
       embed.footer = { text: '⭐ High-value lead - Respond within 24 hours' }
     }
 
-    // Add admin panel link (admin must be logged in via Discord OAuth)
-    if (submission_id) {
+    if (submission_id && /^[0-9a-f-]{36}$/i.test(submission_id)) {
       const leadsUrl = `https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id}`
       embed.description = `[📋 Quick Review in Admin Panel](${leadsUrl})`
     }
@@ -170,7 +217,7 @@ serve(async (req) => {
       console.error('Discord webhook failed:', errorText)
       return new Response(
         JSON.stringify({ success: false, error: 'Discord notification failed' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        { headers: { ...headers, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
@@ -178,14 +225,15 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, type }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...headers, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Error sending notification:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ error: errorMessage }),
+      { headers: { ...headers, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })
