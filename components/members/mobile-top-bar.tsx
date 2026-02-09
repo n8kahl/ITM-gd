@@ -22,9 +22,12 @@ export function MobileTopBar() {
       <Link href="/members/profile" className="flex-shrink-0">
         <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/10">
           {profile?.discord_avatar ? (
-            <img
+            <Image
               src={`https://cdn.discordapp.com/avatars/${profile.discord_user_id}/${profile.discord_avatar}.png`}
               alt={profile.discord_username || 'User'}
+              width={32}
+              height={32}
+              unoptimized
               className="w-full h-full object-cover"
             />
           ) : (
