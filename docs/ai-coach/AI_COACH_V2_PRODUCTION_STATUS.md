@@ -611,8 +611,6 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Optional CI operationalization step:
   - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
-- Execute authenticated earnings endpoint validation against production after deploy:
-  - `pnpm ai-coach:staging:earnings https://<backend-url> SPY`
 
 ## 4) Surgical Next Plan
 
@@ -725,7 +723,8 @@ Earnings phase deployment status (2026-02-09, current):
     - `GET https://itm-gd-production.up.railway.app/health/detailed` -> `200`
   - Earnings route presence confirmed:
     - `GET https://itm-gd-production.up.railway.app/api/earnings/calendar` (unauthenticated) -> `401` (auth gate present; route deployed)
-  - Authenticated earnings validation remains pending for production:
-    - Bypass token validation returns `401 Invalid or expired token` in production.
-    - Complete with a valid production member JWT (or production-approved bypass mode) and rerun:
-      `pnpm ai-coach:staging:earnings https://itm-gd-production.up.railway.app SPY`
+  - Authenticated earnings validation completed for production:
+    - Validation completed using a temporary real Supabase member JWT (non-bypass), then user deleted:
+      - `GET /api/earnings/calendar` -> `PASS`
+      - `GET /api/earnings/SPY/analysis` -> `PASS`
+    - Operational note: production restart loop at `2026-02-09T20:58Z` was caused by invalid `WORKER_ALERTS_DISCORD_WEBHOOK_URL` placeholder value; resolved by setting a syntactically valid URL value and confirming `/health` recovery to `200`.
