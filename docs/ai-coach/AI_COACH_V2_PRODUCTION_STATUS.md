@@ -380,6 +380,24 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/alerts-panel.tsx`
   - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Phase 6 workflow polish slice (sequential continuation):
+  - Added reusable workflow breadcrumb component for center-panel navigation path rendering.
+  - Added persisted user preferences panel (`Prefs` tab + welcome quick action) with local defaults for:
+    - risk per trade
+    - opening range window
+    - default chart timeframe
+    - default chart overlays
+    - workflow symbol sync mode
+    - options defaults (strike range, GEX, 0DTE/IV visibility)
+  - Chart now consumes configurable opening-range window preference (`5/15/30` minutes).
+  - Options panel now supports preference-driven default toggles and auto-sync workflow symbol mode.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/workflow-breadcrumb.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/preferences-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/preferences.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/contexts/AICoachWorkflowContext.tsx`
 - Non-widget workflow action extension (scanner/tracked/chart surfaces):
   - Opportunity Scanner cards now support context-menu + action-bar workflow handoffs (chart/options/alerts/analyze/chat)
   - Tracked Setups cards now support setup-overlay chart actions (entry/stop/target), context actions, and production handoffs to options/alerts/analyze/chat

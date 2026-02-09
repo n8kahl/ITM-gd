@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Loader2,
   RefreshCw,
@@ -32,6 +32,7 @@ import { SymbolSearch } from './symbol-search'
 import { ZeroDTEDashboard } from './zero-dte-dashboard'
 import { IVDashboard } from './iv-dashboard'
 import { OptionsHeatmap, type HeatmapMode } from './options-heatmap'
+import type { AICoachPreferences } from './preferences'
 
 // ============================================
 // TYPES
@@ -40,6 +41,10 @@ import { OptionsHeatmap, type HeatmapMode } from './options-heatmap'
 interface OptionsChainProps {
   initialSymbol?: string
   initialExpiry?: string
+  preferences?: Pick<
+    AICoachPreferences,
+    'defaultOptionsStrikeRange' | 'defaultShowGex' | 'defaultShowVolAnalytics' | 'autoSyncWorkflowSymbol'
+  >
 }
 
 type SortField = 'strike' | 'last' | 'volume' | 'openInterest' | 'iv' | 'delta'
@@ -50,7 +55,7 @@ type OptionsDataView = 'chain' | 'heatmap'
 // COMPONENT
 // ============================================
 
-export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsChainProps) {
+export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences }: OptionsChainProps) {
   const { session } = useMemberAuth()
   const {
     activeSymbol,
@@ -60,6 +65,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
     setCenterView,
     setStrike: setWorkflowStrike,
     setExpiry: setWorkflowExpiry,
+    analyzeSetup,
   } = useAICoachWorkflow()
 
   const [symbol, setSymbol] = useState(initialSymbol)
@@ -90,6 +96,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
   const [isLoadingIv, setIsLoadingIv] = useState(false)
   const [ivError, setIvError] = useState<string | null>(null)
   const [pendingSyncSymbol, setPendingSyncSymbol] = useState<string | null>(null)
+  const defaultsAppliedRef = useRef(false)
 
   const token = session?.access_token
 
@@ -105,11 +112,34 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
     loadChain()
   }, [expiry, strikeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const applyWorkflowSymbol = useCallback((nextSymbol: string) => {
+    setSymbol(nextSymbol)
+    setExpiry('')
+    setChain(null)
+    setOptionsMatrix(null)
+    setMatrixError(null)
+    setGexProfile(null)
+    setGexError(null)
+    setZeroDteAnalysis(null)
+    setZeroDteError(null)
+    setIvAnalysis(null)
+    setIvError(null)
+    setWorkflowSymbol(nextSymbol)
+    setCenterView('options')
+    setPendingSyncSymbol(null)
+  }, [setWorkflowSymbol, setCenterView])
+
   useEffect(() => {
     const workflowSymbol = activeSymbol
     if (!workflowSymbol || workflowSymbol === symbol) return
+
+    if (preferences?.autoSyncWorkflowSymbol) {
+      applyWorkflowSymbol(workflowSymbol)
+      return
+    }
+
     setPendingSyncSymbol(workflowSymbol)
-  }, [activeSymbol, symbol])
+  }, [activeSymbol, symbol, preferences?.autoSyncWorkflowSymbol, applyWorkflowSymbol])
 
   useEffect(() => {
     if (!activeExpiry || activeSymbol !== symbol) return
@@ -266,17 +296,17 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
 
   const handleSyncSymbol = useCallback(() => {
     if (!pendingSyncSymbol) return
-    setSymbol(pendingSyncSymbol)
-    setExpiry('')
-    setChain(null)
-    setOptionsMatrix(null)
-    setMatrixError(null)
-    setGexProfile(null)
-    setGexError(null)
-    setWorkflowSymbol(pendingSyncSymbol)
-    setCenterView('options')
-    setPendingSyncSymbol(null)
-  }, [pendingSyncSymbol, setWorkflowSymbol, setCenterView])
+    applyWorkflowSymbol(pendingSyncSymbol)
+  }, [pendingSyncSymbol, applyWorkflowSymbol])
+
+  useEffect(() => {
+    if (!preferences || defaultsAppliedRef.current) return
+
+    setStrikeRange(preferences.defaultOptionsStrikeRange)
+    setShowGex(preferences.defaultShowGex)
+    setShowVolAnalytics(preferences.defaultShowVolAnalytics)
+    defaultsAppliedRef.current = true
+  }, [preferences])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -305,6 +335,30 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal
     })
   }
+
+  const handleAnalyzeContract = useCallback((contract: OptionContract, side: 'call' | 'put') => {
+    setWorkflowSymbol(symbol)
+    setWorkflowStrike(contract.strike)
+    setWorkflowExpiry(expiry || null)
+    setCenterView('position')
+
+    analyzeSetup({
+      symbol,
+      direction: side === 'call' ? 'bullish' : 'bearish',
+      setupType: 'options_contract',
+      strike: contract.strike,
+      expiry: expiry || undefined,
+      optionType: side,
+      entry: contract.last,
+      impliedVolatility: contract.impliedVolatility,
+      delta: contract.delta,
+      gamma: contract.gamma,
+      theta: contract.theta,
+      vega: contract.vega,
+      openInterest: contract.openInterest,
+      volume: contract.volume,
+    })
+  }, [setWorkflowSymbol, setWorkflowStrike, setWorkflowExpiry, setCenterView, analyzeSetup, symbol, expiry])
 
   return (
     <div className="h-full flex flex-col">
@@ -634,6 +688,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
                   sortField={sortField}
                   sortDir={sortDir}
                   onSort={handleSort}
+                  onSelectContract={handleAnalyzeContract}
                   isLoading={isLoading}
                 />
               </div>
@@ -657,6 +712,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
                   sortField={sortField}
                   sortDir={sortDir}
                   onSort={handleSort}
+                  onSelectContract={handleAnalyzeContract}
                   isLoading={isLoading}
                 />
               </div>
@@ -680,6 +736,7 @@ function OptionsTable({
   sortField,
   sortDir,
   onSort,
+  onSelectContract,
   isLoading,
 }: {
   contracts: OptionContract[]
@@ -689,6 +746,7 @@ function OptionsTable({
   sortField: SortField
   sortDir: SortDir
   onSort: (field: SortField) => void
+  onSelectContract: (contract: OptionContract, side: 'call' | 'put') => void
   isLoading: boolean
 }) {
   const columns: { key: SortField; label: string; width: string }[] = [
@@ -732,12 +790,22 @@ function OptionsTable({
           return (
             <tr
               key={contract.strike}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelectContract(contract, side)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onSelectContract(contract, side)
+                }
+              }}
               className={cn(
-                'border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors',
+                'border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors cursor-pointer focus:outline-none focus:bg-white/[0.04]',
                 isITM && (side === 'call' ? 'bg-emerald-500/[0.04]' : 'bg-red-500/[0.04]'),
                 isATM && 'border-l-2 border-l-emerald-500',
                 isFocused && 'ring-1 ring-violet-500/35 bg-violet-500/[0.08]'
               )}
+              title="Open position workflow with this contract"
             >
               <td className={cn(
                 'px-2 py-1.5 font-mono font-medium',

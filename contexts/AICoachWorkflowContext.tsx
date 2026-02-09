@@ -24,6 +24,7 @@ export type WorkflowCenterView =
   | 'leaps'
   | 'earnings'
   | 'macro'
+  | 'preferences'
 
 export interface WorkflowLevel {
   label?: string

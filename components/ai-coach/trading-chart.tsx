@@ -44,6 +44,7 @@ interface TradingChartProps {
   levels?: LevelAnnotation[]
   providerIndicators?: ChartProviderIndicators
   indicators?: IndicatorConfig
+  openingRangeMinutes?: 5 | 15 | 30
   positionOverlays?: PositionOverlay[]
   symbol: string
   timeframe: string
@@ -108,6 +109,7 @@ export function TradingChart({
   levels = [],
   providerIndicators,
   indicators = DEFAULT_INDICATOR_CONFIG,
+  openingRangeMinutes = 15,
   positionOverlays = [],
   symbol,
   timeframe,
@@ -679,7 +681,7 @@ export function TradingChart({
     const derivedLevels: LevelAnnotation[] = [...levels]
 
     if (indicators.openingRange) {
-      const openingRange = calculateOpeningRangeBox(safeBars, timeframe)
+      const openingRange = calculateOpeningRangeBox(safeBars, timeframe, openingRangeMinutes)
       if (openingRange) {
         derivedLevels.push({
           price: openingRange.high,
@@ -745,7 +747,7 @@ export function TradingChart({
 
     // Store for cleanup
     ;(series as any)._priceLines = newLines
-  }, [levels, indicators.openingRange, safeBars, timeframe, positionOverlays])
+  }, [levels, indicators.openingRange, safeBars, timeframe, openingRangeMinutes, positionOverlays])
 
   const showRSIPane = indicators.rsi
   const showMACDPane = indicators.macd

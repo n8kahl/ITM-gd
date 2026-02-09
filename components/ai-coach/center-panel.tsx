@@ -19,6 +19,7 @@ import {
   Calendar,
   Sunrise,
   ListChecks,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -38,6 +39,8 @@ import { Onboarding, hasCompletedOnboarding } from './onboarding'
 import { MorningBriefPanel } from './morning-brief'
 import { TrackedSetupsPanel } from './tracked-setups-panel'
 import { WidgetContextMenu } from './widget-context-menu'
+import { WorkflowBreadcrumb } from './workflow-breadcrumb'
+import { PreferencesPanel } from './preferences-panel'
 import {
   alertAction,
   chartAction,
@@ -55,6 +58,12 @@ import {
   DEFAULT_INDICATOR_CONFIG,
   type IndicatorConfig,
 } from './chart-indicators'
+import {
+  DEFAULT_AI_COACH_PREFERENCES,
+  loadAICoachPreferences,
+  saveAICoachPreferences,
+  type AICoachPreferences,
+} from './preferences'
 import {
   getChartData,
   AICoachAPIError,
@@ -102,6 +111,7 @@ type CenterView =
   | 'leaps'
   | 'earnings'
   | 'macro'
+  | 'preferences'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -152,6 +162,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'leaps', icon: Clock, label: 'LEAPS' },
   { view: 'earnings', icon: Calendar, label: 'Earnings' },
   { view: 'macro', icon: Globe, label: 'Macro' },
+  { view: 'preferences', icon: SlidersHorizontal, label: 'Prefs' },
 ]
 
 // Level annotation colors by type
@@ -210,12 +221,24 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const [chartIndicatorConfig, setChartIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [isLoadingChart, setIsLoadingChart] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+  const [preferences, setPreferences] = useState<AICoachPreferences>(DEFAULT_AI_COACH_PREFERENCES)
 
   useEffect(() => {
     if (activeCenterView && activeCenterView !== activeView) {
       setActiveView(activeCenterView as CenterView)
     }
   }, [activeCenterView, activeView])
+
+  useEffect(() => {
+    const loaded = loadAICoachPreferences()
+    setPreferences(loaded)
+    setChartTimeframe(loaded.defaultChartTimeframe)
+    setChartIndicatorConfig(loaded.defaultIndicators)
+  }, [])
+
+  useEffect(() => {
+    saveAICoachPreferences(preferences)
+  }, [preferences])
 
   useEffect(() => {
     if (activeSymbol && activeSymbol !== chartSymbol) {
@@ -403,29 +426,12 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   return (
     <div className="h-full flex flex-col">
-      {workflowPath.length > 0 && activeView !== 'onboarding' && (
-        <div className="border-b border-white/5 px-3 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-          {workflowPath.map((step, index) => (
-            <button
-              key={step.id}
-              onClick={() => goToWorkflowStep(index)}
-              className={cn(
-                'text-[10px] px-2 py-1 rounded border whitespace-nowrap transition-colors',
-                index === workflowPath.length - 1
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                  : 'border-white/10 bg-white/5 text-white/45 hover:text-white/65'
-              )}
-            >
-              {step.label}
-            </button>
-          ))}
-          <button
-            onClick={clearWorkflowPath}
-            className="text-[10px] px-2 py-1 rounded border border-white/10 bg-white/5 text-white/35 hover:text-white/60 transition-colors whitespace-nowrap"
-          >
-            Clear
-          </button>
-        </div>
+      {activeView !== 'onboarding' && (
+        <WorkflowBreadcrumb
+          path={workflowPath}
+          onStepClick={goToWorkflowStep}
+          onClear={clearWorkflowPath}
+        />
       )}
 
       {/* Tab bar — shown for non-welcome/non-onboarding views */}
@@ -523,6 +529,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
               setActiveView('macro')
               setCenterView('macro')
             }}
+            onShowPreferences={() => {
+              setActiveView('preferences')
+              setCenterView('preferences')
+            }}
           />
         )}
 
@@ -534,6 +544,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             levels={chartLevels}
             providerIndicators={chartProviderIndicators}
             indicators={chartIndicatorConfig}
+            openingRangeMinutes={preferences.orbMinutes}
             isLoading={isLoadingChart}
             error={chartError}
             onSymbolChange={handleSymbolChange}
@@ -544,7 +555,15 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
         )}
 
         {activeView === 'options' && (
-          <OptionsChain initialSymbol={chartSymbol} />
+          <OptionsChain
+            initialSymbol={chartSymbol}
+            preferences={{
+              defaultOptionsStrikeRange: preferences.defaultOptionsStrikeRange,
+              defaultShowGex: preferences.defaultShowGex,
+              defaultShowVolAnalytics: preferences.defaultShowVolAnalytics,
+              autoSyncWorkflowSymbol: preferences.autoSyncWorkflowSymbol,
+            }}
+          />
         )}
 
         {activeView === 'position' && (
@@ -637,6 +656,14 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             onSendPrompt={onSendPrompt}
           />
         )}
+
+        {activeView === 'preferences' && (
+          <PreferencesPanel
+            value={preferences}
+            onChange={setPreferences}
+            onReset={() => setPreferences(DEFAULT_AI_COACH_PREFERENCES)}
+          />
+        )}
       </div>
     </div>
   )
@@ -653,6 +680,7 @@ function ChartView({
   levels,
   providerIndicators,
   indicators,
+  openingRangeMinutes,
   isLoading,
   error,
   onSymbolChange,
@@ -666,6 +694,7 @@ function ChartView({
   levels: LevelAnnotation[]
   providerIndicators: ChartProviderIndicators | null
   indicators: IndicatorConfig
+  openingRangeMinutes: 5 | 15 | 30
   isLoading: boolean
   error: string | null
   onSymbolChange: (s: string) => void
@@ -738,6 +767,7 @@ function ChartView({
                 levels={levels}
                 providerIndicators={providerIndicators || undefined}
                 indicators={indicators}
+                openingRangeMinutes={openingRangeMinutes}
                 symbol={symbol}
                 timeframe={timeframe}
                 isLoading={isLoading}
@@ -771,6 +801,7 @@ function WelcomeView({
   onShowLeaps,
   onShowEarnings,
   onShowMacro,
+  onShowPreferences,
 }: {
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
@@ -784,6 +815,7 @@ function WelcomeView({
   onShowLeaps: () => void
   onShowEarnings: () => void
   onShowMacro: () => void
+  onShowPreferences: () => void
 }) {
   return (
     <div className="h-full flex flex-col">
@@ -820,6 +852,13 @@ function WelcomeView({
           >
             <Sunrise className="w-3.5 h-3.5" />
             Brief
+          </button>
+          <button
+            onClick={onShowPreferences}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Prefs
           </button>
         </div>
       </div>
