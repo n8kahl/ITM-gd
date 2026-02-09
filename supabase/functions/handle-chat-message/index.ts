@@ -252,7 +252,7 @@ serve(async (req) => {
             conversationId: conversation.id,
             reason: conversation.metadata.pending_escalation.reason
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...headers, 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -318,7 +318,7 @@ serve(async (req) => {
           conversationId: conversation.id,
           reason: `Sentiment detected: ${sentimentResult.sentiment}`
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...headers, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -349,7 +349,7 @@ serve(async (req) => {
             conversationId: conversation.id,
             reason: escalationCheck.reason
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...headers, 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -385,7 +385,7 @@ serve(async (req) => {
           conversationId: conversation.id,
           reason: 'Low AI confidence - human verification needed'
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...headers, 'Content-Type': 'application/json' } }
       )
     }
 
