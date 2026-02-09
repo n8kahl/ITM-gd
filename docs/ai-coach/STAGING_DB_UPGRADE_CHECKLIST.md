@@ -133,6 +133,9 @@ select
    - tracked setup with `suggestedTrade.target` is auto-marked `triggered` when price crosses target
    - tracked setup with `suggestedTrade.stopLoss` is auto-marked `invalidated` when price crosses stop
    - Tracked Setups panel refreshes in near real-time via WebSocket `setups:{userId}` updates
+14. Validate morning brief scheduler:
+   - after 7:00 AM ET on a trading day, `ai_coach_morning_briefs` has one row per active user/day
+   - re-running worker cycle does not duplicate rows for same `(user_id, market_date)`
 
 ## Step 6: Rollback plan (if needed)
 

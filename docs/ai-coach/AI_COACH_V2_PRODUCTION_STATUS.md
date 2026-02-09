@@ -23,6 +23,12 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Morning brief generation service:
   - Builds key levels, macro events, open-position risk summary, watch items
   - `/Users/natekahl/ITM-gd/backend/src/services/morningBrief/index.ts`
+- Morning brief scheduler worker:
+  - Runs at/after 7:00 AM ET on trading days
+  - Idempotent inserts by `(user_id, market_date)` (skips existing)
+  - Startup/shutdown lifecycle integrated in server
+  - `/Users/natekahl/ITM-gd/backend/src/workers/morningBriefWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Tracked setups API:
   - `GET/POST/PATCH/DELETE /api/tracked-setups`
   - Duplicate-safe behavior for active `source_opportunity_id`
@@ -88,9 +94,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/trackedSetups.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/setupPushWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/setupPushChannel.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/morningBriefWorker.test.ts`
 
 ### Commands
-- `npm test -- --runInBand src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts`
+- `npm test -- --runInBand src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts`
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
 
@@ -103,9 +110,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Tracked setups lifecycle UI is available in AI Coach center panel.
 - Setup push worker is running with startup/shutdown hooks and automated status transitions.
 - WebSocket setup channels now deliver user-targeted setup updates (`setups:{userId}`).
+- Morning brief scheduled worker is in place with idempotent writes.
 
 ### Needs Completion
-- Scheduled morning brief job (cron/worker path) with idempotency.
 - Full setup detector engine (ORB/break-retest/VWAP/gap) feeding tracked setup updates at scale.
 - Full E2E path:
   - scanner -> track setup -> manage tracked setup -> morning brief consume.
@@ -114,5 +121,5 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 
 1. Add detector modules (ORB/break-retest/VWAP/gap) and feed their signals into tracked setup lifecycle.
 2. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update -> brief consume.
-3. Implement scheduled morning brief generation job (7:00 AM ET trading days) with idempotent writes.
-4. Run staging verification against pending hardening migrations from `main` before production cut.
+3. Run staging verification against pending hardening migrations from `main` before production cut.
+4. Add production alerting/metrics for worker health (setup + morning brief workers).
