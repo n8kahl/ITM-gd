@@ -1,8 +1,10 @@
 import { detectBreakRetest } from './breakRetest';
 import { detectGapFill } from './gapFill';
 import { detectIndexOpeningDrive } from './indexSpecific';
+import { detectLevelTest } from './levelTest';
 import { detectOrbBreakout } from './orb';
 import { DetectorSnapshot, SetupSignal } from './types';
+import { detectVolumeClimax } from './volumeClimax';
 import { detectVWAPPlay } from './vwap';
 
 /**
@@ -12,8 +14,10 @@ export function detectSetupsFromSnapshot(snapshot: DetectorSnapshot): SetupSigna
   const detections: Array<SetupSignal | null> = [
     detectOrbBreakout(snapshot),
     detectBreakRetest(snapshot),
+    detectLevelTest(snapshot),
     detectVWAPPlay(snapshot),
     detectGapFill(snapshot),
+    detectVolumeClimax(snapshot),
     detectIndexOpeningDrive(snapshot),
   ];
 

@@ -50,13 +50,15 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/setupPushWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
 - Real-time setup detector service:
-  - Implements ORB, break-retest, VWAP play, gap-fill, gamma squeeze, and SPX/NDX opening-drive detectors
+  - Implements ORB, break-retest, VWAP play, gap-fill, volume climax, level-test, gamma squeeze, and SPX/NDX opening-drive detectors
   - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`
   - Auto-creates tracked setups for watchlist users (1 setup per symbol/user per 5 min) and publishes `setup_detected` events
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/detectors.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/gammaSqueeze.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/indexSpecific.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/volumeClimax.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/levelTest.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/orb.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/breakRetest.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/vwap.ts`
@@ -111,6 +113,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/setupPushChannel.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/morningBriefWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/detectors.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/volumeClimax.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/levelTest.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/gammaSqueeze.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/indexSpecific.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/service.test.ts`
@@ -119,6 +123,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts`
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
+- `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
 
@@ -132,17 +137,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Setup push worker is running with startup/shutdown hooks and automated status transitions.
 - WebSocket setup channels now deliver user-targeted setup updates (`setups:{userId}`).
 - Morning brief scheduled worker is in place with idempotent writes.
-- Setup detector service is running with ORB/break-retest/VWAP/gap-fill/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
+- Setup detector service is running with ORB/break-retest/VWAP/gap-fill/volume-climax/level-test/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 
 ### Needs Completion
-- Extend detector coverage to remaining rebuild-spec modules (volume climax, level-test) plus full GEX profile API/visualization from the rebuild spec.
+- Deliver full GEX profile API/visualization from the rebuild spec (beyond detector-level gamma squeeze signal).
 - Full E2E path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 
 ## 4) Surgical Next Plan
 
-1. Add remaining detector modules (volume climax + level-test), then tune current detector thresholds using staged market sessions.
+1. Tune detector thresholds (including new volume climax + level-test) using staged market sessions and telemetry.
 2. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. Add production alerting/metrics for worker health (setup + morning brief workers).

@@ -8,6 +8,8 @@ export type SetupSignalType =
   | 'vwap_bounce'
   | 'vwap_deviation'
   | 'gap_fill'
+  | 'volume_climax'
+  | 'level_test'
   | 'gamma_squeeze'
   | 'spx_opening_drive'
   | 'ndx_opening_drive';
