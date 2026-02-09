@@ -143,6 +143,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Tab accessibility and keyboard navigation:
   - Added ARIA tab semantics (`tablist`/`tab`/`tabpanel`) to center tools rail.
   - Added keyboard navigation support for tool tabs (`ArrowLeft`, `ArrowRight`, `Home`, `End`).
+  - Added desktop tab-rail scroll controls (left/right arrows) with state-aware enabled/disabled behavior.
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
 - Copy and labeling clarity pass:
   - Updated center navigation labels for clearer intent:

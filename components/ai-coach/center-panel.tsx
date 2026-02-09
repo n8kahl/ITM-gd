@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   BarChart3,
   Target,
@@ -23,6 +23,8 @@ import {
   Sunrise,
   ListChecks,
   SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -268,6 +270,9 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   const [activeView, setActiveView] = useState<CenterView>('welcome')
   const [isToolsSheetOpen, setIsToolsSheetOpen] = useState(false)
+  const tabRailRef = useRef<HTMLDivElement | null>(null)
+  const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
+  const [canScrollTabRight, setCanScrollTabRight] = useState(false)
 
   // Check onboarding status after mount (localStorage not available during SSR)
   useEffect(() => {
@@ -510,6 +515,34 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     fetchChartData(chartSymbol, chartTimeframe)
   }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView])
 
+  const updateTabRailScrollState = useCallback(() => {
+    const rail = tabRailRef.current
+    if (!rail) return
+
+    const maxScrollLeft = Math.max(0, rail.scrollWidth - rail.clientWidth)
+    setCanScrollTabLeft(rail.scrollLeft > 6)
+    setCanScrollTabRight(rail.scrollLeft < maxScrollLeft - 6)
+  }, [])
+
+  const scrollTabRailBy = useCallback((direction: 'left' | 'right') => {
+    const rail = tabRailRef.current
+    if (!rail) return
+    rail.scrollBy({
+      left: direction === 'left' ? -220 : 220,
+      behavior: 'smooth',
+    })
+  }, [])
+
+  useEffect(() => {
+    updateTabRailScrollState()
+  }, [activeView, updateTabRailScrollState])
+
+  useEffect(() => {
+    const handleResize = () => updateTabRailScrollState()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [updateTabRailScrollState])
+
   const activateTabView = useCallback((view: CenterView) => {
     setActiveView(view)
     setCenterView(view as Parameters<typeof setCenterView>[0])
@@ -569,9 +602,41 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             Home
           </motion.button>
           <div className="relative flex-1 min-w-0">
+            <motion.button
+              type="button"
+              onClick={() => scrollTabRailBy('left')}
+              className={cn(
+                'hidden lg:flex absolute left-1 top-1/2 -translate-y-1/2 z-20 h-7 w-7 items-center justify-center rounded-md border transition-colors',
+                canScrollTabLeft
+                  ? 'border-white/15 bg-white/8 text-white/65 hover:bg-white/12 hover:text-white'
+                  : 'border-white/10 bg-white/5 text-white/25 opacity-50 pointer-events-none'
+              )}
+              aria-label="Scroll tools left"
+              {...PRESSABLE_PROPS}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </motion.button>
+            <motion.button
+              type="button"
+              onClick={() => scrollTabRailBy('right')}
+              className={cn(
+                'hidden lg:flex absolute right-1 top-1/2 -translate-y-1/2 z-20 h-7 w-7 items-center justify-center rounded-md border transition-colors',
+                canScrollTabRight
+                  ? 'border-white/15 bg-white/8 text-white/65 hover:bg-white/12 hover:text-white'
+                  : 'border-white/10 bg-white/5 text-white/25 opacity-50 pointer-events-none'
+              )}
+              aria-label="Scroll tools right"
+              {...PRESSABLE_PROPS}
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </motion.button>
             <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-[#0B0D10] to-transparent z-10" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#0B0D10] to-transparent z-10" />
-            <div className="overflow-x-auto scrollbar-hide px-2">
+            <div
+              ref={tabRailRef}
+              onScroll={updateTabRailScrollState}
+              className="overflow-x-auto scrollbar-hide px-2"
+            >
             <div className="flex items-center gap-1 min-w-max" role="tablist" aria-label="AI Coach tools">
               {TABS.map((tab, index) => {
                 const Icon = tab.icon
