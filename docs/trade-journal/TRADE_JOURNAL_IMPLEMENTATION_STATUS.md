@@ -113,6 +113,17 @@ Branch: `codex/trade-journal-implementation`
   - `components/journal/trade-replay-chart.tsx`
   - `lib/types/journal.ts`
 
+### Phase 7 - Mobile & Accessibility (Partial)
+- [x] Mobile quick-entry FAB + bottom-sheet modal pattern for journal sheets
+  - `app/members/journal/page.tsx`
+  - `components/journal/trade-entry-sheet.tsx`
+  - `components/journal/entry-detail-sheet.tsx`
+  - `hooks/use-is-mobile.ts`
+- [x] Focus-trap and Escape-key modal accessibility for journal sheets
+  - `hooks/use-focus-trap.ts`
+  - `components/journal/trade-entry-sheet.tsx`
+  - `components/journal/entry-detail-sheet.tsx`
+
 ## Implemented
 - Advanced analytics service with fallback calculations and chart-ready payloads.
 - AI grading pipeline with structured grade storage in `ai_analysis`.
@@ -129,10 +140,11 @@ Branch: `codex/trade-journal-implementation`
 - Trade replay upgrades: skip-to-entry/exit controls, live P&L ticker, stop/target overlays, and MFE/MAE markers.
 - End-of-day auto-journal endpoint plus in-app post-close draft detection and pending-draft expiry auto-dismiss.
 - Accessibility hardening in journal modals: focus-trap behavior, Escape close, and dialog semantics.
+- Mobile-first journal improvements: floating quick-entry FAB and bottom-sheet behavior on small screens.
 
 ## Remaining
 - Server-side scheduled auto-journal execution + push-notification delivery at 4:05 PM ET is not yet wired (current flow auto-runs in-app post-close).
-- Phase 7 mobile gesture/offline/PWA and comprehensive WCAG hardening remain.
+- Phase 7 still needs swipe gestures, offline/PWA sync flow, and broader WCAG hardening beyond journal sheets.
 
 ## Risks
 - `journal_analytics_cache` is refreshed by trigger on every write; this is simple but can become expensive at higher write throughput.

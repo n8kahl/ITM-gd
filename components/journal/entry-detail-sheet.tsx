@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import type { JournalEntry, MarketContextSnapshot } from '@/lib/types/journal'
 import { TradeReplayChart } from '@/components/journal/trade-replay-chart'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
+import { useIsMobile } from '@/hooks/use-is-mobile'
 
 // ============================================
 // HELPERS
@@ -205,6 +206,7 @@ interface SessionContextMessage {
 
 export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDetailSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const isMobile = useIsMobile()
   const [sessionMessages, setSessionMessages] = useState<SessionContextMessage[]>([])
   const [sessionContextLoading, setSessionContextLoading] = useState(false)
   const [sessionContextError, setSessionContextError] = useState<string | null>(null)
@@ -279,7 +281,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
 
   return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex justify-end">
+      <div className={cn('fixed inset-0 z-50 flex', isMobile ? 'items-end justify-center' : 'justify-end')}>
         {/* Overlay */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -292,16 +294,26 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
         {/* Sheet */}
         <motion.div
           ref={panelRef}
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
+          initial={isMobile ? { y: '100%' } : { x: '100%' }}
+          animate={isMobile ? { y: 0 } : { x: 0 }}
+          exit={isMobile ? { y: '100%' } : { x: '100%' }}
           transition={{ type: 'spring', stiffness: 350, damping: 35 }}
           role="dialog"
           aria-modal="true"
           aria-label="Trade entry details"
           tabIndex={-1}
-          className="relative w-full max-w-[600px] h-[100dvh] max-h-[100dvh] bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
+          className={cn(
+            'relative w-full bg-[#0A0A0B] flex flex-col overflow-hidden',
+            isMobile
+              ? 'h-[92dvh] max-h-[92dvh] rounded-t-2xl border-t border-white/[0.08]'
+              : 'max-w-[600px] h-[100dvh] max-h-[100dvh] border-l border-white/[0.08]',
+          )}
         >
+          {isMobile && (
+            <div className="pt-2 flex justify-center">
+              <div className="h-1 w-12 rounded-full bg-white/20" />
+            </div>
+          )}
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
             <div>

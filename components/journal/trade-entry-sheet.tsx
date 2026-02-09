@@ -16,6 +16,7 @@ import { FullEntryForm } from '@/components/journal/full-entry-form'
 import type { AIFieldKey, AIFieldStatus, TradeEntryFormData } from '@/components/journal/trade-entry-types'
 import { createAppError, notifyAppError, type AppError } from '@/lib/error-handler'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
+import { useIsMobile } from '@/hooks/use-is-mobile'
 
 const QUICK_TAGS = [
   'Breakout',
@@ -173,6 +174,7 @@ export function TradeEntrySheet({
   onRequestEditEntry,
 }: TradeEntrySheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const isMobile = useIsMobile()
   const [form, setForm] = useState<TradeEntryFormData>(EMPTY_FORM)
   const [sourceSessionId, setSourceSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<'quick' | 'full'>('quick')
@@ -555,7 +557,7 @@ export function TradeEntrySheet({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className={cn('fixed inset-0 z-50 flex', isMobile ? 'items-end justify-center' : 'justify-end')}>
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -566,16 +568,26 @@ export function TradeEntrySheet({
 
         <motion.div
           ref={panelRef}
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
+          initial={isMobile ? { y: '100%' } : { x: '100%' }}
+          animate={isMobile ? { y: 0 } : { x: 0 }}
+          exit={isMobile ? { y: '100%' } : { x: '100%' }}
           transition={{ type: 'spring', stiffness: 350, damping: 35 }}
           role="dialog"
           aria-modal="true"
           aria-label={editEntry ? 'Edit trade entry' : 'Log trade entry'}
           tabIndex={-1}
-          className="relative w-full max-w-[680px] h-[100dvh] max-h-[100dvh] bg-[#0A0A0B] border-l border-white/[0.08] flex flex-col overflow-hidden"
+          className={cn(
+            'relative w-full bg-[#0A0A0B] flex flex-col overflow-hidden',
+            isMobile
+              ? 'h-[92dvh] max-h-[92dvh] rounded-t-2xl border-t border-white/[0.08]'
+              : 'max-w-[680px] h-[100dvh] max-h-[100dvh] border-l border-white/[0.08]',
+          )}
         >
+          {isMobile && (
+            <div className="pt-2 flex justify-center">
+              <div className="h-1 w-12 rounded-full bg-white/20" />
+            </div>
+          )}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
             <div className="space-y-1">
               <h2 className="text-base font-medium text-ivory">

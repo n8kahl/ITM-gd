@@ -431,6 +431,15 @@ export default function JournalPage() {
         />
       )}
 
+      <button
+        type="button"
+        onClick={handleNewEntry}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-[0_8px_30px_rgba(16,185,129,0.35)] transition-colors hover:bg-emerald-500 md:hidden"
+        aria-label="Log trade"
+      >
+        <Plus className="h-5 w-5" />
+      </button>
+
       <TradeEntrySheet
         open={entrySheetOpen}
         onClose={() => {
