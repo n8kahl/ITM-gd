@@ -76,6 +76,7 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
     if (filters.dateRange.preset !== 'all') count++
     if (filters.symbol) count++
     if (filters.direction !== 'all') count++
+    if (filters.contractType !== 'all') count++
     if (filters.pnlFilter !== 'all') count++
     if (filters.tags.length > 0) count++
     if (filters.aiGrade && filters.aiGrade.length > 0) count++
@@ -92,6 +93,7 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
       dateRange: { from: null, to: null, preset: 'all' },
       symbol: null,
       direction: 'all',
+      contractType: 'all',
       pnlFilter: 'all',
       tags: [],
       aiGrade: null,
@@ -238,6 +240,64 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           ))}
         </div>
 
+        {/* Contract Type Filter */}
+        <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">
+          {(['all', 'stock', 'call', 'put', 'spread'] as const).map((contractType) => (
+            <button
+              key={contractType}
+              onClick={() => updateFilter('contractType', contractType)}
+              className={cn(
+                'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
+                filters.contractType === contractType
+                  ? 'bg-white/[0.06] text-ivory'
+                  : 'text-muted-foreground hover:text-ivory'
+              )}
+            >
+              {contractType}
+            </button>
+          ))}
+        </div>
+
+        {/* Active filter pills */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {filters.symbol && (
+            <button
+              onClick={() => updateFilter('symbol', null)}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+            >
+              Symbol: {filters.symbol}
+              <X className="w-2.5 h-2.5" />
+            </button>
+          )}
+          {filters.direction !== 'all' && (
+            <button
+              onClick={() => updateFilter('direction', 'all')}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
+            >
+              Direction: {filters.direction}
+              <X className="w-2.5 h-2.5" />
+            </button>
+          )}
+          {filters.contractType !== 'all' && (
+            <button
+              onClick={() => updateFilter('contractType', 'all')}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
+            >
+              Type: {filters.contractType}
+              <X className="w-2.5 h-2.5" />
+            </button>
+          )}
+          {filters.pnlFilter !== 'all' && (
+            <button
+              onClick={() => updateFilter('pnlFilter', 'all')}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
+            >
+              P&L: {filters.pnlFilter}
+              <X className="w-2.5 h-2.5" />
+            </button>
+          )}
+        </div>
+
         {/* Tag chips (if any active) */}
         {filters.tags.length > 0 && (
           <div className="flex items-center gap-1">
@@ -261,7 +321,7 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
             onClick={resetFilters}
             className="text-xs text-muted-foreground hover:text-ivory transition-colors ml-auto"
           >
-            Reset ({activeFilterCount})
+            Clear All ({activeFilterCount})
           </button>
         )}
       </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { Upload, Sparkles, Loader2, Star, CheckCircle, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -163,13 +164,183 @@ export function FullEntryForm({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">
+            Stop Loss
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.stop_loss}
+            onChange={(e) => onFieldChange('stop_loss', e.target.value)}
+            placeholder="0.00"
+            className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">
+            Initial Target
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.initial_target}
+            onChange={(e) => onFieldChange('initial_target', e.target.value)}
+            placeholder="0.00"
+            className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">
+            Strategy / Playbook
+          </label>
+          <input
+            type="text"
+            value={form.strategy}
+            onChange={(e) => onFieldChange('strategy', e.target.value)}
+            placeholder="ORB, Break & Retest..."
+            className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+          />
+        </div>
+      </div>
+
+      <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3.5 space-y-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Options Details</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Optional for stock trades. DTE auto-updates when expiration is set.</p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Contract</label>
+            <select
+              value={form.contract_type}
+              onChange={(e) => onFieldChange('contract_type', e.target.value as TradeEntryFormData['contract_type'])}
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            >
+              <option value="stock">Stock</option>
+              <option value="call">Call</option>
+              <option value="put">Put</option>
+              <option value="spread">Spread</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Strike</label>
+            <input
+              type="number"
+              step="0.01"
+              value={form.strike_price}
+              onChange={(e) => onFieldChange('strike_price', e.target.value)}
+              placeholder="0.00"
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Expiration</label>
+            <input
+              type="date"
+              value={form.expiration_date}
+              onChange={(e) => onFieldChange('expiration_date', e.target.value)}
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">DTE @ Entry</label>
+            <input
+              type="number"
+              value={form.dte_at_entry}
+              onChange={(e) => onFieldChange('dte_at_entry', e.target.value)}
+              placeholder="Auto"
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3.5 space-y-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Psychology & Discipline</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Mood Before</label>
+            <select
+              value={form.mood_before}
+              onChange={(e) => onFieldChange('mood_before', e.target.value as TradeEntryFormData['mood_before'])}
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            >
+              <option value="">Not set</option>
+              <option value="confident">Confident</option>
+              <option value="neutral">Neutral</option>
+              <option value="anxious">Anxious</option>
+              <option value="frustrated">Frustrated</option>
+              <option value="excited">Excited</option>
+              <option value="fearful">Fearful</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Mood After</label>
+            <select
+              value={form.mood_after}
+              onChange={(e) => onFieldChange('mood_after', e.target.value as TradeEntryFormData['mood_after'])}
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            >
+              <option value="">Not set</option>
+              <option value="confident">Confident</option>
+              <option value="neutral">Neutral</option>
+              <option value="anxious">Anxious</option>
+              <option value="frustrated">Frustrated</option>
+              <option value="excited">Excited</option>
+              <option value="fearful">Fearful</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Discipline Score (1-5)</label>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={form.discipline_score}
+              onChange={(e) => onFieldChange('discipline_score', e.target.value)}
+              placeholder="3"
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Followed Plan?</label>
+            <select
+              value={form.followed_plan}
+              onChange={(e) => onFieldChange('followed_plan', e.target.value as TradeEntryFormData['followed_plan'])}
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            >
+              <option value="">Not set</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+        </div>
+        <textarea
+          value={form.deviation_notes}
+          onChange={(e) => onFieldChange('deviation_notes', e.target.value)}
+          rows={3}
+          placeholder="If you deviated from plan, what happened and what would you change?"
+          className="w-full px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory placeholder:text-muted-foreground/40 resize-y focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+        />
+      </section>
+
       <section>
         <label className="block text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">
           Screenshot
         </label>
         {screenshotPreview ? (
-          <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
-            <img src={screenshotPreview} alt="Trade screenshot" className="w-full max-h-[220px] object-contain bg-black/40" />
+          <div className="relative rounded-xl overflow-hidden border border-white/[0.08] bg-black/40 min-h-[220px]">
+            <Image
+              src={screenshotPreview}
+              alt="Trade screenshot"
+              fill
+              unoptimized
+              className="object-contain"
+            />
             <button
               type="button"
               onClick={onRemoveScreenshot}

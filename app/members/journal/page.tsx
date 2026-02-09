@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Plus, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
@@ -11,6 +12,9 @@ import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
 import { JournalTableView } from '@/components/journal/journal-table-view'
 import { JournalCardView } from '@/components/journal/journal-card-view'
+import { OpenPositionsWidget } from '@/components/journal/open-positions-widget'
+import { ImportWizard } from '@/components/journal/import-wizard'
+import { DraftEntriesPanel } from '@/components/journal/draft-entries-panel'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
 import {
@@ -38,6 +42,10 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
 
   if (filters.direction !== 'all') {
     filtered = filtered.filter((entry) => entry.direction === filters.direction)
+  }
+
+  if (filters.contractType !== 'all') {
+    filtered = filtered.filter((entry) => (entry.contract_type || 'stock') === filters.contractType)
   }
 
   if (filters.pnlFilter === 'winners') {
@@ -84,6 +92,7 @@ function countActiveFilters(filters: JournalFilters): number {
   if (filters.dateRange.preset !== 'all') count += 1
   if (filters.symbol) count += 1
   if (filters.direction !== 'all') count += 1
+  if (filters.contractType !== 'all') count += 1
   if (filters.pnlFilter !== 'all') count += 1
   if (filters.tags.length > 0) count += 1
   if (filters.aiGrade && filters.aiGrade.length > 0) count += 1
@@ -206,9 +215,15 @@ export default function JournalPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entryId: result.data.id }),
-      }).catch((error) => {
-        console.error('[Journal] Enrichment failed:', error)
       })
+        .then(() => fetch('/api/members/journal/grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entryId: result.data.id }),
+        }))
+        .catch((error) => {
+          console.error('[Journal] Enrichment/grading failed:', error)
+        })
     }
 
     await loadEntries()
@@ -288,14 +303,22 @@ export default function JournalPage() {
           />
         </div>
 
-        <button
-          onClick={handleNewEntry}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Log Trade</span>
-          <span className="sm:hidden">New</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/members/journal/analytics"
+            className="px-3.5 py-2.5 rounded-xl border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05] transition-colors"
+          >
+            Analytics
+          </Link>
+          <button
+            onClick={handleNewEntry}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Log Trade</span>
+            <span className="sm:hidden">New</span>
+          </button>
+        </div>
       </div>
 
       <JournalFilterBar
@@ -306,6 +329,10 @@ export default function JournalPage() {
       />
 
       <JournalSummaryStats entries={filteredEntries} />
+
+      <OpenPositionsWidget onUpdated={() => { void loadEntries() }} />
+      <DraftEntriesPanel onUpdated={() => { void loadEntries() }} />
+      <ImportWizard onImported={() => { void loadEntries() }} />
 
       {filteredEntries.length === 0 ? (
         <div className="glass-card-heavy rounded-2xl p-12 text-center">

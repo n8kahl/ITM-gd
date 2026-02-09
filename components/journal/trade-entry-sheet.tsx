@@ -31,9 +31,30 @@ const EMPTY_FORM: TradeEntryFormData = {
   trade_date: new Date().toISOString().split('T')[0],
   symbol: '',
   direction: 'long',
+  contract_type: 'stock',
+  strike_price: '',
+  expiration_date: '',
+  dte_at_entry: '',
+  dte_at_exit: '',
+  iv_at_entry: '',
+  iv_at_exit: '',
+  delta_at_entry: '',
+  theta_at_entry: '',
+  gamma_at_entry: '',
+  vega_at_entry: '',
+  underlying_at_entry: '',
+  underlying_at_exit: '',
   entry_price: '',
   exit_price: '',
   position_size: '',
+  stop_loss: '',
+  initial_target: '',
+  strategy: '',
+  mood_before: '',
+  mood_after: '',
+  discipline_score: '',
+  followed_plan: '',
+  deviation_notes: '',
   pnl: '',
   pnl_percentage: '',
   screenshot_url: '',
@@ -54,6 +75,21 @@ function parseMaybeNumber(value: string): number | null {
   if (!value || !value.trim()) return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseMaybeInteger(value: string): number | null {
+  const parsed = parseMaybeNumber(value)
+  if (parsed == null) return null
+  return Number.isInteger(parsed) ? parsed : Math.round(parsed)
+}
+
+function calculateDte(dateText: string, tradeDateText: string): number | null {
+  if (!dateText || !tradeDateText) return null
+  const expiry = new Date(`${dateText}T00:00:00Z`)
+  const trade = new Date(`${tradeDateText}T00:00:00Z`)
+  if (Number.isNaN(expiry.getTime()) || Number.isNaN(trade.getTime())) return null
+  const ms = expiry.getTime() - trade.getTime()
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)))
 }
 
 function calculatePnl(
@@ -149,9 +185,30 @@ export function TradeEntrySheet({
         trade_date: editEntry.trade_date?.split('T')[0] || new Date().toISOString().split('T')[0],
         symbol: editEntry.symbol || '',
         direction: editEntry.direction === 'short' ? 'short' : 'long',
+        contract_type: editEntry.contract_type || 'stock',
+        strike_price: editEntry.strike_price?.toString() || '',
+        expiration_date: editEntry.expiration_date || '',
+        dte_at_entry: editEntry.dte_at_entry?.toString() || '',
+        dte_at_exit: editEntry.dte_at_exit?.toString() || '',
+        iv_at_entry: editEntry.iv_at_entry?.toString() || '',
+        iv_at_exit: editEntry.iv_at_exit?.toString() || '',
+        delta_at_entry: editEntry.delta_at_entry?.toString() || '',
+        theta_at_entry: editEntry.theta_at_entry?.toString() || '',
+        gamma_at_entry: editEntry.gamma_at_entry?.toString() || '',
+        vega_at_entry: editEntry.vega_at_entry?.toString() || '',
+        underlying_at_entry: editEntry.underlying_at_entry?.toString() || '',
+        underlying_at_exit: editEntry.underlying_at_exit?.toString() || '',
         entry_price: editEntry.entry_price?.toString() || '',
         exit_price: editEntry.exit_price?.toString() || '',
         position_size: editEntry.position_size?.toString() || '',
+        stop_loss: editEntry.stop_loss?.toString() || '',
+        initial_target: editEntry.initial_target?.toString() || '',
+        strategy: editEntry.strategy || '',
+        mood_before: editEntry.mood_before || '',
+        mood_after: editEntry.mood_after || '',
+        discipline_score: editEntry.discipline_score?.toString() || '',
+        followed_plan: editEntry.followed_plan == null ? '' : editEntry.followed_plan ? 'yes' : 'no',
+        deviation_notes: editEntry.deviation_notes || '',
         pnl: editEntry.pnl?.toString() || '',
         pnl_percentage: editEntry.pnl_percentage?.toString() || '',
         screenshot_url: editEntry.screenshot_url || '',
@@ -214,7 +271,16 @@ export function TradeEntrySheet({
     field: keyof TradeEntryFormData,
     value: string | string[] | number,
   ) => {
-    setForm((prev) => ({ ...prev, [field]: value }))
+    setForm((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === 'expiration_date' || field === 'trade_date') {
+        const dte = calculateDte(String(next.expiration_date || ''), String(next.trade_date || ''))
+        if (dte != null) {
+          next.dte_at_entry = String(dte)
+        }
+      }
+      return next
+    })
   }, [])
 
   const quickPnlPreview = useMemo(() => {
@@ -349,7 +415,29 @@ export function TradeEntrySheet({
 
     if (saveMode === 'full' || editEntry) {
       const notes = splitNotes(form.notes)
+      const derivedDteAtEntry = calculateDte(form.expiration_date, form.trade_date)
       payload.position_size = parseMaybeNumber(form.position_size)
+      payload.stop_loss = parseMaybeNumber(form.stop_loss)
+      payload.initial_target = parseMaybeNumber(form.initial_target)
+      payload.strategy = form.strategy.trim() || null
+      payload.contract_type = form.contract_type
+      payload.strike_price = parseMaybeNumber(form.strike_price)
+      payload.expiration_date = form.expiration_date || null
+      payload.dte_at_entry = parseMaybeInteger(form.dte_at_entry) ?? derivedDteAtEntry
+      payload.dte_at_exit = parseMaybeInteger(form.dte_at_exit)
+      payload.iv_at_entry = parseMaybeNumber(form.iv_at_entry)
+      payload.iv_at_exit = parseMaybeNumber(form.iv_at_exit)
+      payload.delta_at_entry = parseMaybeNumber(form.delta_at_entry)
+      payload.theta_at_entry = parseMaybeNumber(form.theta_at_entry)
+      payload.gamma_at_entry = parseMaybeNumber(form.gamma_at_entry)
+      payload.vega_at_entry = parseMaybeNumber(form.vega_at_entry)
+      payload.underlying_at_entry = parseMaybeNumber(form.underlying_at_entry)
+      payload.underlying_at_exit = parseMaybeNumber(form.underlying_at_exit)
+      payload.mood_before = form.mood_before || null
+      payload.mood_after = form.mood_after || null
+      payload.discipline_score = parseMaybeInteger(form.discipline_score)
+      payload.followed_plan = form.followed_plan === '' ? null : form.followed_plan === 'yes'
+      payload.deviation_notes = form.deviation_notes.trim() || null
       payload.screenshot_url = form.screenshot_url || null
       payload.screenshot_storage_path = uploadStatus?.storagePath || editEntry?.screenshot_storage_path || null
       payload.setup_notes = notes.setup_notes
