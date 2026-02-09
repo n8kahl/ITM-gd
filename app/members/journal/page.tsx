@@ -4,64 +4,60 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { Plus, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_FILTERS } from '@/lib/types/journal'
+import { Breadcrumb } from '@/components/ui/breadcrumb'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
 import { JournalTableView } from '@/components/journal/journal-table-view'
 import { JournalCardView } from '@/components/journal/journal-card-view'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
-
-// ============================================
-// FILTERING + SORTING LOGIC
-// ============================================
+import {
+  createAppError,
+  createAppErrorFromResponse,
+  notifyAppError,
+  withExponentialBackoff,
+  type AppError,
+} from '@/lib/error-handler'
 
 function applyFilters(entries: JournalEntry[], filters: JournalFilters): JournalEntry[] {
   let filtered = [...entries]
 
-  // Date range
   if (filters.dateRange.from) {
-    filtered = filtered.filter(e => e.trade_date >= filters.dateRange.from!)
+    filtered = filtered.filter((entry) => entry.trade_date >= filters.dateRange.from!)
   }
   if (filters.dateRange.to) {
-    filtered = filtered.filter(e => e.trade_date.split('T')[0] <= filters.dateRange.to!)
+    filtered = filtered.filter((entry) => entry.trade_date.split('T')[0] <= filters.dateRange.to!)
   }
 
-  // Symbol
   if (filters.symbol) {
-    const sym = filters.symbol.toUpperCase()
-    filtered = filtered.filter(e => e.symbol?.toUpperCase().includes(sym))
+    const symbol = filters.symbol.toUpperCase()
+    filtered = filtered.filter((entry) => entry.symbol?.toUpperCase().includes(symbol))
   }
 
-  // Direction
   if (filters.direction !== 'all') {
-    filtered = filtered.filter(e => e.direction === filters.direction)
+    filtered = filtered.filter((entry) => entry.direction === filters.direction)
   }
 
-  // P&L
   if (filters.pnlFilter === 'winners') {
-    filtered = filtered.filter(e => (e.pnl ?? 0) > 0)
+    filtered = filtered.filter((entry) => (entry.pnl ?? 0) > 0)
   } else if (filters.pnlFilter === 'losers') {
-    filtered = filtered.filter(e => (e.pnl ?? 0) < 0)
+    filtered = filtered.filter((entry) => (entry.pnl ?? 0) < 0)
   }
 
-  // Tags
   if (filters.tags.length > 0) {
-    filtered = filtered.filter(e =>
-      filters.tags.some(tag => e.tags.includes(tag) || e.smart_tags.includes(tag))
-    )
+    filtered = filtered.filter((entry) => (
+      filters.tags.some((tag) => entry.tags.includes(tag) || entry.smart_tags.includes(tag))
+    ))
   }
 
-  // AI Grade
   if (filters.aiGrade && filters.aiGrade.length > 0) {
-    filtered = filtered.filter(e =>
-      e.ai_analysis?.grade && filters.aiGrade!.includes(e.ai_analysis.grade)
-    )
+    filtered = filtered.filter((entry) => (
+      entry.ai_analysis?.grade && filters.aiGrade!.includes(entry.ai_analysis.grade)
+    ))
   }
 
-  // Sort
   filtered.sort((a, b) => {
     switch (filters.sortBy) {
       case 'date-asc':
@@ -81,106 +77,169 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
   return filtered
 }
 
-// ============================================
-// JOURNAL PAGE
-// ============================================
+const VIEW_PREFERENCE_KEY = 'journal-view-preference'
+
+function countActiveFilters(filters: JournalFilters): number {
+  let count = 0
+  if (filters.dateRange.preset !== 'all') count += 1
+  if (filters.symbol) count += 1
+  if (filters.direction !== 'all') count += 1
+  if (filters.pnlFilter !== 'all') count += 1
+  if (filters.tags.length > 0) count += 1
+  if (filters.aiGrade && filters.aiGrade.length > 0) count += 1
+  return count
+}
+
+function getStoredViewPreference(): JournalFilters['view'] {
+  if (typeof window === 'undefined') return DEFAULT_FILTERS.view
+  const stored = window.localStorage.getItem(VIEW_PREFERENCE_KEY)
+  return stored === 'cards' || stored === 'table' ? stored : DEFAULT_FILTERS.view
+}
 
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<JournalFilters>(() => {
-    // Default to card view on small screens
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return { ...DEFAULT_FILTERS, view: 'cards' }
-    }
-    return DEFAULT_FILTERS
-  })
+  const [preferredDesktopView, setPreferredDesktopView] = useState<JournalFilters['view']>(DEFAULT_FILTERS.view)
+  const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
 
-  // Sheet states
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<JournalEntry | null>(null)
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
 
-  // Load entries
+  useEffect(() => {
+    const stored = getStoredViewPreference()
+    const initialView = window.innerWidth < 768 ? 'cards' : stored
+    setPreferredDesktopView(stored)
+    setFilters((prev) => ({ ...prev, view: initialView }))
+  }, [])
+
+  useEffect(() => {
+    const syncViewForViewport = () => {
+      setFilters((prev) => {
+        if (window.innerWidth < 768) {
+          return prev.view === 'cards' ? prev : { ...prev, view: 'cards' }
+        }
+        return prev.view === preferredDesktopView ? prev : { ...prev, view: preferredDesktopView }
+      })
+    }
+
+    syncViewForViewport()
+    window.addEventListener('resize', syncViewForViewport)
+    return () => window.removeEventListener('resize', syncViewForViewport)
+  }, [preferredDesktopView])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.innerWidth < 768) return
+    setPreferredDesktopView(filters.view)
+    window.localStorage.setItem(VIEW_PREFERENCE_KEY, filters.view)
+  }, [filters.view])
+
   const loadEntries = useCallback(async () => {
     try {
-      const res = await fetch('/api/members/journal?limit=500')
-      if (!res.ok) {
-        throw new Error(`Failed to load trades (${res.status})`)
+      const response = await withExponentialBackoff(
+        () => fetch('/api/members/journal?limit=500'),
+        { retries: 2, baseDelayMs: 400 },
+      )
+
+      if (!response.ok) {
+        throw await createAppErrorFromResponse(response)
       }
-      const data = await res.json()
-      if (data.success && Array.isArray(data.data)) {
-        setEntries(data.data)
+
+      const result = await response.json()
+      if (!result.success || !Array.isArray(result.data)) {
+        throw createAppError('Journal response format was invalid.')
       }
-    } catch (err) {
-      console.error('[Journal] loadEntries failed:', err)
-      toast.error('Failed to load your trades. Please refresh.')
+
+      setEntries(result.data)
+    } catch (error) {
+      const appError = (error && typeof error === 'object' && 'category' in error)
+        ? error as AppError
+        : createAppError(error)
+
+      notifyAppError(appError, {
+        onRetry: () => {
+          window.location.reload()
+        },
+        retryLabel: 'Refresh',
+      })
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { loadEntries() }, [loadEntries])
+  useEffect(() => {
+    void loadEntries()
+  }, [loadEntries])
 
-  // Apply filters
   const filteredEntries = useMemo(() => applyFilters(entries, filters), [entries, filters])
+  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters])
 
-  // Collect available tags
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>()
-    entries.forEach(e => {
-      e.tags?.forEach(t => tagSet.add(t))
-      e.smart_tags?.forEach(t => tagSet.add(t))
+    entries.forEach((entry) => {
+      entry.tags?.forEach((tag) => tagSet.add(tag))
+      entry.smart_tags?.forEach((tag) => tagSet.add(tag))
     })
     return Array.from(tagSet).sort()
   }, [entries])
 
-  // Save trade (create or update)
   const handleSave = useCallback(async (data: Record<string, unknown>) => {
     const method = data.id ? 'PATCH' : 'POST'
-    const res = await fetch('/api/members/journal', {
+    const response = await fetch('/api/members/journal', {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}))
-      throw new Error(errBody.error || `Save failed (${res.status})`)
-    }
-    const result = await res.json()
 
-    if (result.success && result.data) {
-      toast.success(data.id ? 'Trade updated' : 'Trade saved')
-      // Trigger enrichment in background
-      if (!data.id) {
-        fetch('/api/members/journal/enrich', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entryId: result.data.id }),
-        }).catch(err => console.error('[Journal] Enrichment failed:', err))
-      }
+    if (!response.ok) {
+      throw await createAppErrorFromResponse(response)
+    }
+
+    const result = await response.json()
+    if (!result.success || !result.data) {
+      throw createAppError('Journal save did not return entry data.')
+    }
+
+    if (!data.id) {
+      fetch('/api/members/journal/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryId: result.data.id }),
+      }).catch((error) => {
+        console.error('[Journal] Enrichment failed:', error)
+      })
     }
 
     await loadEntries()
+    return result.data as JournalEntry
   }, [loadEntries])
 
-  // Delete trade
   const handleDelete = useCallback(async (entryId: string) => {
     if (!confirm('Delete this trade? This action cannot be undone.')) return
+
     try {
-      const res = await fetch(`/api/members/journal?id=${entryId}`, { method: 'DELETE' })
-      if (!res.ok) {
-        throw new Error(`Delete failed (${res.status})`)
+      const response = await fetch(`/api/members/journal?id=${entryId}`, { method: 'DELETE' })
+      if (!response.ok) {
+        throw await createAppErrorFromResponse(response)
       }
+
       toast.success('Trade deleted')
       await loadEntries()
-    } catch (err) {
-      console.error('[Journal] handleDelete failed:', err)
-      toast.error('Failed to delete trade. Please try again.')
+    } catch (error) {
+      const appError = (error && typeof error === 'object' && 'category' in error)
+        ? error as AppError
+        : createAppError(error)
+
+      notifyAppError(appError, {
+        onRetry: () => {
+          window.location.reload()
+        },
+        retryLabel: 'Refresh',
+      })
     }
   }, [loadEntries])
 
-  // Open entry sheet for new/edit
   const handleNewEntry = useCallback(() => {
     setEditEntry(null)
     setEntrySheetOpen(true)
@@ -195,7 +254,6 @@ export default function JournalPage() {
     setSelectedEntry(entry)
   }, [])
 
-  // Loading
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -211,8 +269,7 @@ export default function JournalPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl lg:text-2xl font-serif text-ivory font-medium tracking-tight flex items-center gap-2.5">
             <BookOpen className="w-6 h-6 text-emerald-400" />
@@ -221,6 +278,14 @@ export default function JournalPage() {
           <p className="text-sm text-muted-foreground mt-0.5">
             {entries.length} trade{entries.length !== 1 ? 's' : ''} logged
           </p>
+          <Breadcrumb
+            className="mt-2"
+            items={[
+              { label: 'Dashboard', href: '/members' },
+              { label: 'Journal', href: '/members/journal' },
+              ...(activeFilterCount > 0 ? [{ label: `Filters (${activeFilterCount})` }] : []),
+            ]}
+          />
         </div>
 
         <button
@@ -233,7 +298,6 @@ export default function JournalPage() {
         </button>
       </div>
 
-      {/* Filter Bar */}
       <JournalFilterBar
         filters={filters}
         onChange={setFilters}
@@ -241,10 +305,8 @@ export default function JournalPage() {
         totalFiltered={filteredEntries.length}
       />
 
-      {/* Summary Stats */}
       <JournalSummaryStats entries={filteredEntries} />
 
-      {/* Entries */}
       {filteredEntries.length === 0 ? (
         <div className="glass-card-heavy rounded-2xl p-12 text-center">
           <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] inline-block mb-4">
@@ -284,15 +346,17 @@ export default function JournalPage() {
         />
       )}
 
-      {/* Trade Entry Sheet */}
       <TradeEntrySheet
         open={entrySheetOpen}
         onClose={() => { setEntrySheetOpen(false); setEditEntry(null) }}
         onSave={handleSave}
         editEntry={editEntry}
+        onRequestEditEntry={(entry) => {
+          setEditEntry(entry)
+          setEntrySheetOpen(true)
+        }}
       />
 
-      {/* Entry Detail Sheet */}
       <EntryDetailSheet
         entry={selectedEntry}
         onClose={() => setSelectedEntry(null)}

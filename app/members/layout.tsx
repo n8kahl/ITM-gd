@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
 import { MemberSidebar } from '@/components/members/member-sidebar'
 import { MobileTopBar } from '@/components/members/mobile-top-bar'
-import { MobileDrawer } from '@/components/members/mobile-drawer'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
 
 // ============================================
@@ -52,13 +51,10 @@ export default function MembersLayout({
 function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const {
-    profile,
     isLoading,
     isAuthenticated,
-    error,
     isNotMember,
   } = useMemberAuth()
 
@@ -122,17 +118,14 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       <MemberSidebar />
 
       {/* Mobile Top Bar */}
-      <MobileTopBar onMenuOpen={() => setDrawerOpen(true)} />
-
-      {/* Mobile Drawer */}
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <MobileTopBar />
 
       {/* Main Content Area */}
       <div className={cn(
         'min-h-screen',
         'lg:pl-[280px]', // offset for sidebar
       )}>
-        <main className="px-4 py-4 lg:px-8 lg:py-6 pb-24 lg:pb-8">
+        <main className="px-4 py-4 lg:px-8 lg:py-6 pb-28 lg:pb-8">
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}

@@ -2,26 +2,14 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { Menu } from 'lucide-react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
-interface MobileTopBarProps {
-  onMenuOpen: () => void
-}
-
-export function MobileTopBar({ onMenuOpen }: MobileTopBarProps) {
+export function MobileTopBar() {
   const { profile } = useMemberAuth()
 
   return (
     <header className="sticky top-0 z-40 lg:hidden h-14 flex items-center justify-between px-4 bg-[#0A0A0B]/95 backdrop-blur-[20px] border-b border-white/[0.06]">
-      {/* Hamburger */}
-      <button
-        onClick={onMenuOpen}
-        className="p-2 -ml-2 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors"
-        aria-label="Open menu"
-      >
-        <Menu className="w-5 h-5" />
-      </button>
+      <div className="w-8 h-8" />
 
       {/* Logo */}
       <Link href="/members" className="absolute left-1/2 -translate-x-1/2">
