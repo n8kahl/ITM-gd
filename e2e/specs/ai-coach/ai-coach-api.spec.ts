@@ -3,6 +3,7 @@ import {
   e2eBackendUrl,
   getAICoachAuthHeaders,
   isAICoachLiveMode,
+  requireAICoachLiveReadiness,
 } from '../../helpers/ai-coach-live'
 
 /**
@@ -156,13 +157,17 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
 
   async function assertLiveBackendReadyOrSkip(request: APIRequestContext) {
     const healthResponse = await request.get(`${e2eBackendUrl}/health/detailed`)
-    if (!healthResponse.ok()) {
+    if (requireAICoachLiveReadiness) {
+      expect(healthResponse.ok()).toBe(true)
+    } else if (!healthResponse.ok()) {
       test.skip(true, `Live backend not healthy at ${e2eBackendUrl}`)
       return null
     }
 
     const healthPayload = await healthResponse.json().catch(() => null)
-    if (healthPayload?.services?.database === false) {
+    if (requireAICoachLiveReadiness) {
+      expect(healthPayload?.services?.database).not.toBe(false)
+    } else if (healthPayload?.services?.database === false) {
       test.skip(true, 'Live backend database/service-role prerequisites are not ready for authenticated E2E')
       return null
     }
@@ -171,7 +176,9 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
       headers: getAICoachAuthHeaders(),
     })
 
-    if (watchlistResponse.status() !== 200) {
+    if (requireAICoachLiveReadiness) {
+      expect(watchlistResponse.status()).toBe(200)
+    } else if (watchlistResponse.status() !== 200) {
       const payload = await watchlistResponse.json().catch(() => ({}))
       const reason = typeof payload?.message === 'string'
         ? payload.message
@@ -255,5 +262,35 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
     expect(deleteResponse.status()).toBe(200)
     const deletePayload = await deleteResponse.json()
     expect(deletePayload.success).toBe(true)
+  })
+
+  test('detector simulation endpoint should auto-track and broadcast-ready payloads', async ({ request }) => {
+    const authHeaders = getAICoachAuthHeaders()
+    const simulationNote = `E2E detector simulation API ${Date.now()}`
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+
+    const simulateResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups/e2e/simulate-detected`, {
+      headers: authHeaders,
+      data: {
+        symbol: 'SPX',
+        setup_type: 'gamma_squeeze',
+        direction: 'bullish',
+        confidence: 77,
+        notes: simulationNote,
+      },
+    })
+    expect(simulateResponse.status()).toBe(201)
+    const simulatePayload = await simulateResponse.json()
+    expect(simulatePayload?.detectedSetup?.id).toBeTruthy()
+    expect(simulatePayload?.trackedSetup?.id).toBeTruthy()
+    expect(simulatePayload?.trackedSetup?.notes).toContain('E2E detector simulation')
+
+    const trackedSetupId = simulatePayload?.trackedSetup?.id as string
+    const deleteResponse = await request.delete(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
+      headers: authHeaders,
+    })
+    expect(deleteResponse.status()).toBe(200)
   })
 })

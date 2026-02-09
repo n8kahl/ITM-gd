@@ -4,6 +4,7 @@ import {
   e2eBackendUrl,
   getAICoachAuthHeaders,
   isAICoachLiveMode,
+  requireAICoachLiveReadiness,
 } from '../../helpers/ai-coach-live'
 
 const AI_COACH_URL = '/members/ai-coach'
@@ -13,7 +14,7 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
 
   test('scanner -> tracked management -> brief using live backend', async ({ page, request }) => {
     const authHeaders = getAICoachAuthHeaders()
-    const sourceOpportunityId = `e2e-live-workflow-${Date.now()}`
+    const liveSetupNote = `E2E detector simulation ${Date.now()}`
     let trackedSetupId: string | null = null
 
     try {
@@ -23,16 +24,22 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       await authenticateAsE2EBypassMember(page)
 
       const healthResponse = await request.get(`${e2eBackendUrl}/health/detailed`)
-      if (!healthResponse.ok()) {
+      if (requireAICoachLiveReadiness) {
+        expect(healthResponse.ok()).toBe(true)
+      } else if (!healthResponse.ok()) {
         test.skip(true, `Live backend not healthy at ${e2eBackendUrl}`)
       }
       const healthPayload = await healthResponse.json().catch(() => null)
-      if (healthPayload?.services?.database === false) {
+      if (requireAICoachLiveReadiness) {
+        expect(healthPayload?.services?.database).not.toBe(false)
+      } else if (healthPayload?.services?.database === false) {
         test.skip(true, 'Live backend database/service-role prerequisites are not ready for workflow E2E')
       }
 
       const watchlistResponse = await request.get(`${e2eBackendUrl}/api/watchlist`, { headers: authHeaders })
-      if (watchlistResponse.status() !== 200) {
+      if (requireAICoachLiveReadiness) {
+        expect(watchlistResponse.status()).toBe(200)
+      } else if (watchlistResponse.status() !== 200) {
         const payload = await watchlistResponse.json().catch(() => ({}))
         const reason = typeof payload?.message === 'string'
           ? payload.message
@@ -40,31 +47,6 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
         test.skip(true, `Live auth bypass preflight failed: ${reason}`)
       }
       expect(watchlistResponse.status()).toBe(200)
-
-      const createTrackedResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups`, {
-        headers: authHeaders,
-        data: {
-          source_opportunity_id: sourceOpportunityId,
-          symbol: 'SPX',
-          setup_type: 'gamma_squeeze',
-          direction: 'bullish',
-          opportunity_data: {
-            score: 74,
-            suggestedTrade: {
-              entry: 5200,
-              stopLoss: 5180,
-              target: 5235,
-              strikes: [5200, 5225],
-              expiry: '2026-02-20',
-            },
-          },
-          notes: 'Live workflow seed',
-        },
-      })
-      expect([200, 201]).toContain(createTrackedResponse.status())
-      const createTrackedPayload = await createTrackedResponse.json()
-      trackedSetupId = (createTrackedPayload?.trackedSetup?.id as string) || null
-      expect(typeof trackedSetupId).toBe('string')
 
       await page.goto(AI_COACH_URL)
       await page.waitForLoadState('networkidle')
@@ -83,11 +65,27 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
 
       await page.getByRole('button', { name: 'Tracked' }).first().click()
       await expect(page.getByText('Tracked Setups')).toBeVisible()
-      await expect(page.getByText('SPX').first()).toBeVisible({ timeout: 15000 })
+      const simulateDetectionResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups/e2e/simulate-detected`, {
+        headers: authHeaders,
+        data: {
+          symbol: 'SPX',
+          setup_type: 'gamma_squeeze',
+          direction: 'bullish',
+          confidence: 79,
+          notes: liveSetupNote,
+        },
+      })
+      expect(simulateDetectionResponse.status()).toBe(201)
+      const simulateDetectionPayload = await simulateDetectionResponse.json()
+      trackedSetupId = (simulateDetectionPayload?.trackedSetup?.id as string) || null
+      expect(typeof trackedSetupId).toBe('string')
 
-      await page.getByRole('button', { name: 'Mark Triggered' }).first().click()
+      const trackedSetupCard = page.locator('div.glass-card-heavy').filter({ hasText: liveSetupNote }).first()
+      await expect(trackedSetupCard).toBeVisible({ timeout: 15000 })
+
+      await trackedSetupCard.getByRole('button', { name: 'Mark Triggered' }).click()
       await page.getByRole('button', { name: 'Triggered' }).click()
-      await expect(page.getByText('SPX').first()).toBeVisible({ timeout: 10000 })
+      await expect(page.getByText(liveSetupNote)).toBeVisible({ timeout: 10000 })
 
       const briefResponsePromise = page.waitForResponse((response) => (
         response.url().includes('/api/brief/today') && response.request().method() === 'GET'

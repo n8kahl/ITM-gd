@@ -16,7 +16,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:auth": "playwright test --project=auth-critical --project=auth-flow",
     "test:e2e:health": "playwright test --project=auth-critical",
-    "test:e2e:mobile": "playwright test --project=mobile"
+    "test:e2e:mobile": "playwright test --project=mobile",
+    "test:e2e:ai-coach-live": "E2E_AI_COACH_MODE=live playwright test e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts e2e/specs/ai-coach/ai-coach-api.spec.ts --project=ai-coach"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

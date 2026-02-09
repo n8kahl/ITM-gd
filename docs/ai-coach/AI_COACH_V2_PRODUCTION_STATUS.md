@@ -96,12 +96,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
   - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Backend-integrated E2E auth bypass lane (non-production only):
-  - `authenticateToken` now supports `Bearer e2e:<uuid>` when `E2E_BYPASS_AUTH=true` and auto-provisions the bypass UUID in Supabase Auth for FK-safe watchlist/tracked/brief flows
-  - Env-gated by `E2E_BYPASS_AUTH` and `E2E_BYPASS_TOKEN_PREFIX`
+  - `authenticateToken` now supports `Bearer e2e:<uuid>` (or `Bearer e2e:<shared-secret>:<uuid>` when secret is configured) when `E2E_BYPASS_AUTH=true`
+  - Auto-provisions the bypass UUID in Supabase Auth for FK-safe watchlist/tracked/brief flows
+  - Env-gated by `E2E_BYPASS_AUTH`, `E2E_BYPASS_TOKEN_PREFIX`, and optional `E2E_BYPASS_SHARED_SECRET`
   - `/Users/natekahl/ITM-gd/backend/src/middleware/auth.ts`
   - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
   - `/Users/natekahl/ITM-gd/backend/.env.example`
   - `/Users/natekahl/ITM-gd/backend/README.md`
+- Deterministic detector auto-track E2E hook (non-production only):
+  - `POST /api/tracked-setups/e2e/simulate-detected` creates `ai_coach_detected_setups` + `ai_coach_tracked_setups`, then emits `setup_detected`
+  - Hard-gated to non-production and requires `E2E_BYPASS_AUTH=true`
+  - Used by live workflow to validate detector-driven tracked setup flow without direct tracked setup API seeding
+  - `/Users/natekahl/ITM-gd/backend/src/routes/trackedSetups.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/trackedSetupsValidation.ts`
 
 ### Frontend
 - Opportunity Scanner:
@@ -170,10 +177,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Shared live-mode test helper (`E2E_AI_COACH_MODE=live`, backend URL/auth headers)
   - New live workflow spec executes scanner -> tracked lifecycle -> brief against real backend APIs (no route mocks)
   - API health spec now includes authenticated watchlist/scanner/brief + tracked lifecycle checks in live mode
+  - Strict CI gate mode via `E2E_AI_COACH_REQUIRE_LIVE=true` (fails instead of skip when live prerequisites are missing)
+  - Dedicated workflow dispatch gate for staging live E2E
+  - Live workflow now validates detector path through simulated `setup_detected` auto-track hook before status management and brief flow
   - `/Users/natekahl/ITM-gd/e2e/helpers/ai-coach-live.ts`
   - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts`
   - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts`
   - `/Users/natekahl/ITM-gd/playwright.config.ts`
+  - `/Users/natekahl/ITM-gd/.github/workflows/ai-coach-live-e2e.yml`
 
 ### Database
 - Applied to staging:
@@ -224,6 +235,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
 - `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (passing; scanner -> track -> tracked live updates -> brief workflow)
+- `pnpm test:e2e:ai-coach-live` (runs live lane; skips when live prerequisites are unavailable)
+- `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true pnpm test:e2e:ai-coach-live` (strict gating mode; fails when live prerequisites are unavailable)
 - `npm run build` (backend compile passes after making Sentry optional/no-op when package is not installed)
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment boots in current setup).
@@ -247,15 +260,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
+- Staging live E2E workflow gate is defined in GitHub Actions (`ai-coach-live-e2e.yml`) with strict readiness mode support.
+- Deterministic detector auto-track validation path is wired into live workflow/API specs via `/api/tracked-setups/e2e/simulate-detected`.
 
 ### Needs Completion
-- Promote live backend-integrated E2E lane to staging CI with seeded test user rotation and execution evidence:
-  - scanner -> track/manage tracked setup -> detector auto-track -> morning brief consume.
+- Execute the new staging live E2E workflow with staging secrets/tokens and capture execution evidence:
+  - scanner -> detector auto-track (simulated `setup_detected`) -> track/manage tracked setup -> morning brief consume.
 - Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Enable `E2E_AI_COACH_MODE=live` in staging CI and execute `ai-coach-workflow-live.spec.ts` plus live API checks in `ai-coach-api.spec.ts`.
-2. Add detector auto-track assertion path in live workflow (validate `setup_detected` appears without API seeding when market conditions produce events).
+1. Configure staging GitHub secrets for live gate (`E2E_BYPASS_TOKEN`, optional `E2E_BYPASS_SHARED_SECRET`, `NEXT_PUBLIC_SUPABASE_*`) and execute `ai-coach-live-e2e.yml`.
+2. Capture and archive staging run evidence from the live workflow (including detector auto-track simulation step and artifacts).
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.

@@ -2,14 +2,23 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate';
 import { supabase } from '../config/database';
+import { getEnv } from '../config/env';
+import { publishSetupDetected } from '../services/setupPushChannel';
 import {
   createTrackedSetupSchema,
   updateTrackedSetupSchema,
   trackedSetupIdSchema,
   getTrackedSetupsQuerySchema,
+  simulateDetectedSetupSchema,
 } from '../schemas/trackedSetupsValidation';
 
 const router = Router();
+
+function toDetectedDirection(direction: 'bullish' | 'bearish' | 'neutral'): 'long' | 'short' | 'neutral' {
+  if (direction === 'bullish') return 'long';
+  if (direction === 'bearish') return 'short';
+  return 'neutral';
+}
 
 /**
  * GET /api/tracked-setups
@@ -111,6 +120,126 @@ router.post(
       });
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to track setup', message: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/tracked-setups/e2e/simulate-detected
+ * Non-production helper for deterministic detector auto-track E2E validation.
+ */
+router.post(
+  '/e2e/simulate-detected',
+  authenticateToken,
+  validateBody(simulateDetectedSetupSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const env = getEnv();
+      if (env.NODE_ENV === 'production' || !env.E2E_BYPASS_AUTH) {
+        res.status(404).json({ error: 'Not found', message: 'Route not found' });
+        return;
+      }
+
+      const userId = req.user!.id;
+      const body = (req as any).validatedBody as {
+        symbol: string;
+        setup_type: string;
+        direction: 'bullish' | 'bearish' | 'neutral';
+        confidence: number;
+        current_price?: number;
+        description?: string;
+        notes?: string;
+        trade_suggestion?: Record<string, unknown>;
+      };
+
+      const symbol = body.symbol.toUpperCase();
+      const detectedAt = new Date().toISOString();
+      const description = body.description || `${symbol} ${body.setup_type.replace(/_/g, ' ')}`;
+
+      const { data: detectedSetup, error: detectedError } = await supabase
+        .from('ai_coach_detected_setups')
+        .insert({
+          symbol,
+          setup_type: body.setup_type,
+          direction: toDetectedDirection(body.direction),
+          signal_data: {
+            source: 'e2e_simulated_detector',
+            description,
+            currentPrice: body.current_price ?? null,
+          },
+          trade_suggestion: body.trade_suggestion ?? null,
+          confidence: body.confidence,
+          detected_at: detectedAt,
+        })
+        .select('id, symbol, setup_type, direction, confidence, detected_at, signal_data, trade_suggestion')
+        .single();
+
+      if (detectedError || !detectedSetup) {
+        throw new Error(`Failed to create detected setup: ${detectedError?.message || 'unknown error'}`);
+      }
+
+      const opportunityData: Record<string, unknown> = {
+        id: `det-${detectedSetup.id}`,
+        type: 'technical',
+        setupType: body.setup_type,
+        symbol,
+        direction: body.direction,
+        score: body.confidence,
+        confidence: Number((body.confidence / 100).toFixed(2)),
+        currentPrice: body.current_price ?? null,
+        description,
+        suggestedTrade: body.trade_suggestion ?? null,
+        metadata: {
+          source: 'setup_detector_e2e_simulation',
+          detectedSetupId: detectedSetup.id,
+        },
+        scannedAt: detectedAt,
+      };
+
+      const { data: trackedSetup, error: trackedError } = await supabase
+        .from('ai_coach_tracked_setups')
+        .insert({
+          user_id: userId,
+          source_opportunity_id: detectedSetup.id,
+          symbol,
+          setup_type: body.setup_type,
+          direction: body.direction,
+          status: 'active',
+          opportunity_data: opportunityData,
+          notes: body.notes || 'Auto-detected by AI Coach setup engine (E2E simulated event)',
+        })
+        .select('*')
+        .single();
+
+      if (trackedError || !trackedSetup) {
+        await supabase
+          .from('ai_coach_detected_setups')
+          .delete()
+          .eq('id', detectedSetup.id);
+        throw new Error(`Failed to create tracked setup from detected setup: ${trackedError?.message || 'unknown error'}`);
+      }
+
+      publishSetupDetected({
+        trackedSetupId: trackedSetup.id,
+        detectedSetupId: detectedSetup.id,
+        userId,
+        symbol,
+        setupType: body.setup_type,
+        direction: body.direction,
+        confidence: body.confidence,
+        currentPrice: body.current_price ?? null,
+        detectedAt,
+      });
+
+      res.status(201).json({
+        detectedSetup,
+        trackedSetup,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        error: 'Failed to simulate detected setup',
+        message: error.message,
+      });
     }
   }
 );

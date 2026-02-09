@@ -2,6 +2,7 @@ import { e2eBypassToken, e2eBypassUserId } from './member-auth'
 
 export const e2eAICoachMode = process.env.E2E_AI_COACH_MODE || 'mock'
 export const isAICoachLiveMode = e2eAICoachMode === 'live'
+export const requireAICoachLiveReadiness = process.env.E2E_AI_COACH_REQUIRE_LIVE === 'true'
 
 export const e2eBackendUrl = process.env.E2E_BACKEND_URL
   || process.env.NEXT_PUBLIC_AI_COACH_API_URL

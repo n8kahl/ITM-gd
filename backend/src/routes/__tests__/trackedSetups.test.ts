@@ -12,11 +12,21 @@ jest.mock('../../lib/logger', () => ({
 }));
 
 const mockFrom = jest.fn() as jest.Mock<any, any>;
+const mockGetEnv = jest.fn();
+const mockPublishSetupDetected = jest.fn();
 
 jest.mock('../../config/database', () => ({
   supabase: {
     from: (...args: any[]) => mockFrom(...args),
   },
+}));
+
+jest.mock('../../config/env', () => ({
+  getEnv: (...args: any[]) => mockGetEnv(...args),
+}));
+
+jest.mock('../../services/setupPushChannel', () => ({
+  publishSetupDetected: (...args: any[]) => mockPublishSetupDetected(...args),
 }));
 
 jest.mock('../../middleware/auth', () => ({
@@ -35,6 +45,7 @@ app.use('/api/tracked-setups', trackedSetupsRouter);
 describe('Tracked Setups Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetEnv.mockReturnValue({ NODE_ENV: 'test', E2E_BYPASS_AUTH: true });
   });
 
   describe('GET /api/tracked-setups', () => {
@@ -211,6 +222,90 @@ describe('Tracked Setups Routes', () => {
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('Not found');
+    });
+  });
+
+  describe('POST /api/tracked-setups/e2e/simulate-detected', () => {
+    it('returns 404 when bypass mode is disabled', async () => {
+      mockGetEnv.mockReturnValue({ NODE_ENV: 'test', E2E_BYPASS_AUTH: false });
+
+      const res = await request(app)
+        .post('/api/tracked-setups/e2e/simulate-detected')
+        .send({ symbol: 'SPX' });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Not found');
+    });
+
+    it('creates detected + tracked setup and publishes setup_detected event', async () => {
+      const detectedInsertChain: any = {
+        select: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: {
+            id: 'det-sim-1',
+            symbol: 'SPX',
+            setup_type: 'gamma_squeeze',
+            direction: 'long',
+            confidence: 81,
+            detected_at: '2026-02-09T15:00:00.000Z',
+            signal_data: {},
+            trade_suggestion: null,
+          },
+          error: null,
+        }),
+      };
+
+      const trackedInsertChain: any = {
+        select: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: {
+            id: 'tracked-sim-1',
+            user_id: 'test-user-123',
+            symbol: 'SPX',
+            setup_type: 'gamma_squeeze',
+            direction: 'bullish',
+            status: 'active',
+            notes: 'Auto-detected by AI Coach setup engine (E2E simulated event)',
+          },
+          error: null,
+        }),
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'ai_coach_detected_setups') {
+          return {
+            insert: jest.fn().mockReturnValue(detectedInsertChain),
+            delete: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({}) }),
+          };
+        }
+
+        if (table === 'ai_coach_tracked_setups') {
+          return {
+            insert: jest.fn().mockReturnValue(trackedInsertChain),
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      });
+
+      const res = await request(app)
+        .post('/api/tracked-setups/e2e/simulate-detected')
+        .send({
+          symbol: 'spx',
+          setup_type: 'gamma_squeeze',
+          direction: 'bullish',
+          confidence: 81,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.detectedSetup.id).toBe('det-sim-1');
+      expect(res.body.trackedSetup.id).toBe('tracked-sim-1');
+      expect(mockPublishSetupDetected).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'test-user-123',
+        symbol: 'SPX',
+        setupType: 'gamma_squeeze',
+        direction: 'bullish',
+      }));
     });
   });
 

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'crypto';
 import { logger } from '../lib/logger';
 import { supabase } from '../config/database';
 import { getEnv } from '../config/env';
@@ -17,6 +18,13 @@ declare global {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ensuredE2EUsers = new Set<string>();
+
+function isValidSharedSecret(expected: string, provided: string): boolean {
+  const expectedBuf = Buffer.from(expected);
+  const providedBuf = Buffer.from(provided);
+  if (expectedBuf.length !== providedBuf.length) return false;
+  return timingSafeEqual(expectedBuf, providedBuf);
+}
 
 async function ensureE2EUserExists(userId: string): Promise<void> {
   if (ensuredE2EUsers.has(userId)) return;
@@ -72,7 +80,30 @@ export async function authenticateToken(
     const bypassEnabled = env.E2E_BYPASS_AUTH && env.NODE_ENV !== 'production';
     const bypassPrefix = env.E2E_BYPASS_TOKEN_PREFIX;
     if (bypassEnabled && token.startsWith(bypassPrefix)) {
-      const userId = token.slice(bypassPrefix.length).trim();
+      const bypassPayload = token.slice(bypassPrefix.length).trim();
+      let userId = bypassPayload;
+
+      if (env.E2E_BYPASS_SHARED_SECRET) {
+        const separatorIndex = bypassPayload.indexOf(':');
+        if (separatorIndex <= 0 || separatorIndex >= bypassPayload.length - 1) {
+          res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Invalid E2E bypass token format'
+          });
+          return;
+        }
+
+        const providedSecret = bypassPayload.slice(0, separatorIndex);
+        userId = bypassPayload.slice(separatorIndex + 1);
+        if (!isValidSharedSecret(env.E2E_BYPASS_SHARED_SECRET, providedSecret)) {
+          res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Invalid E2E bypass token format'
+          });
+          return;
+        }
+      }
+
       if (!UUID_REGEX.test(userId)) {
         res.status(401).json({
           error: 'Unauthorized',

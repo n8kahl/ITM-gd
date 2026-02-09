@@ -35,7 +35,10 @@ export const mockSupabaseSession = {
 }
 
 export const e2eBypassUserId = '00000000-0000-4000-8000-000000000001'
-export const e2eBypassToken = `e2e:${e2eBypassUserId}`
+const e2eBypassSharedSecret = process.env.E2E_BYPASS_SHARED_SECRET
+export const e2eBypassToken = e2eBypassSharedSecret
+  ? `e2e:${e2eBypassSharedSecret}:${e2eBypassUserId}`
+  : `e2e:${e2eBypassUserId}`
 
 export const e2eBypassSession = {
   ...mockSupabaseSession,
