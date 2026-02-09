@@ -34,6 +34,20 @@ export const mockSupabaseSession = {
   },
 }
 
+export const e2eBypassUserId = '00000000-0000-4000-8000-000000000001'
+export const e2eBypassToken = `e2e:${e2eBypassUserId}`
+
+export const e2eBypassSession = {
+  ...mockSupabaseSession,
+  access_token: e2eBypassToken,
+  refresh_token: 'e2e-refresh-token',
+  user: {
+    ...mockSupabaseSession.user,
+    id: e2eBypassUserId,
+    email: 'e2e-member@example.com',
+  },
+}
+
 /**
  * Mock Discord profile data (what's stored after role sync)
  */
@@ -97,6 +111,13 @@ export async function authenticateAsMember(page: Page): Promise<void> {
       expiresAt: session.expires_at,
     }))
   }, { session: mockSupabaseSession, keys: storageKeys })
+}
+
+/**
+ * Authenticate using backend E2E bypass token (for backend-integrated test mode).
+ */
+export async function authenticateAsE2EBypassMember(page: Page): Promise<void> {
+  await authenticateWithSession(page, e2eBypassSession)
 }
 
 /**

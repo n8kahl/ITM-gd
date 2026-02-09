@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../lib/logger';
 import { supabase } from '../config/database';
+import { getEnv } from '../config/env';
 
 // Extend Express Request type to include user
 declare global {
@@ -11,6 +12,40 @@ declare global {
         email?: string;
       };
     }
+  }
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ensuredE2EUsers = new Set<string>();
+
+async function ensureE2EUserExists(userId: string): Promise<void> {
+  if (ensuredE2EUsers.has(userId)) return;
+
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+  if (data?.user) {
+    ensuredE2EUsers.add(userId);
+    return;
+  }
+
+  if (error && !/user.*not.*found/i.test(error.message)) {
+    throw new Error(`Failed to verify E2E user: ${error.message}`);
+  }
+
+  const email = `e2e+${userId}@tradeitm.local`;
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({
+    id: userId,
+    email,
+    email_confirm: true,
+    user_metadata: { full_name: 'E2E Member' },
+    app_metadata: { provider: 'e2e', providers: ['e2e'] },
+  });
+
+  if (createError && !/already|exists|registered/i.test(createError.message)) {
+    throw new Error(`Failed to create E2E user: ${createError.message}`);
+  }
+
+  if (created?.user || !createError) {
+    ensuredE2EUsers.add(userId);
   }
 }
 
@@ -32,6 +67,41 @@ export async function authenticateToken(
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const env = getEnv();
+
+    const bypassEnabled = env.E2E_BYPASS_AUTH && env.NODE_ENV !== 'production';
+    const bypassPrefix = env.E2E_BYPASS_TOKEN_PREFIX;
+    if (bypassEnabled && token.startsWith(bypassPrefix)) {
+      const userId = token.slice(bypassPrefix.length).trim();
+      if (!UUID_REGEX.test(userId)) {
+        res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Invalid E2E bypass token format'
+        });
+        return;
+      }
+
+      try {
+        await ensureE2EUserExists(userId);
+      } catch (e) {
+        logger.error('E2E user provisioning failed', {
+          userId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        res.status(500).json({
+          error: 'Internal server error',
+          message: 'E2E auth bootstrap failed'
+        });
+        return;
+      }
+
+      req.user = {
+        id: userId,
+        email: `e2e+${userId}@tradeitm.local`
+      };
+      next();
+      return;
+    }
 
     // Verify token with Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);

@@ -61,6 +61,10 @@ const envSchema = z.object({
   RATE_LIMIT_GENERAL: z.string().default('100').transform(Number),
   RATE_LIMIT_CHAT: z.string().default('20').transform(Number),
   RATE_LIMIT_SCREENSHOT: z.string().default('5').transform(Number),
+
+  // E2E auth bypass (non-production only; for Playwright/backend-integrated tests)
+  E2E_BYPASS_AUTH: booleanFromEnv.default(false),
+  E2E_BYPASS_TOKEN_PREFIX: z.string().default('e2e:'),
 });
 
 export type Env = z.infer<typeof envSchema>;

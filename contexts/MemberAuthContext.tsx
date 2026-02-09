@@ -94,13 +94,14 @@ interface MemberAuthContextValue extends MemberAuthState {
 }
 
 const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
+const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 
 function createE2EBypassAuthState(): MemberAuthState {
   const nowIso = new Date().toISOString()
   const expiresIn = 60 * 60
 
   const user = {
-    id: 'e2e-member-user',
+    id: E2E_BYPASS_USER_ID,
     email: 'e2e-member@example.com',
     app_metadata: { provider: 'discord', providers: ['discord'] },
     user_metadata: { full_name: 'E2E Member' },
@@ -111,7 +112,7 @@ function createE2EBypassAuthState(): MemberAuthState {
   } as User
 
   const session = {
-    access_token: 'e2e-access-token',
+    access_token: `e2e:${E2E_BYPASS_USER_ID}`,
     refresh_token: 'e2e-refresh-token',
     token_type: 'bearer',
     expires_in: expiresIn,
@@ -125,7 +126,7 @@ function createE2EBypassAuthState(): MemberAuthState {
     profile: {
       id: user.id,
       email: user.email ?? null,
-      discord_user_id: 'e2e-discord-user',
+      discord_user_id: '000000000000000001',
       discord_username: 'E2E Member',
       discord_avatar: null,
       discord_roles: ['role-member', 'role-pro'],

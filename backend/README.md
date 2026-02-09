@@ -310,6 +310,15 @@ WORKER_ALERTS_COOLDOWN_MS=900000
 WORKER_ALERTS_SENTRY_ENABLED=false
 ```
 
+E2E auth bypass is available for Playwright/backend-integrated tests in non-production only:
+
+```bash
+E2E_BYPASS_AUTH=true
+E2E_BYPASS_TOKEN_PREFIX=e2e:
+```
+
+Do not enable `E2E_BYPASS_AUTH` in production.
+
 ## Troubleshooting
 
 ### "Massive.com API returns 401"

@@ -95,6 +95,13 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/setupPushChannel.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
   - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+- Backend-integrated E2E auth bypass lane (non-production only):
+  - `authenticateToken` now supports `Bearer e2e:<uuid>` when `E2E_BYPASS_AUTH=true` and auto-provisions the bypass UUID in Supabase Auth for FK-safe watchlist/tracked/brief flows
+  - Env-gated by `E2E_BYPASS_AUTH` and `E2E_BYPASS_TOKEN_PREFIX`
+  - `/Users/natekahl/ITM-gd/backend/src/middleware/auth.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/backend/README.md`
 
 ### Frontend
 - Opportunity Scanner:
@@ -159,6 +166,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/contexts/MemberAuthContext.tsx`
   - `/Users/natekahl/ITM-gd/playwright.config.ts`
   - `/Users/natekahl/ITM-gd/e2e/helpers/member-auth.ts`
+- Live backend-integrated AI Coach test lane (opt-in):
+  - Shared live-mode test helper (`E2E_AI_COACH_MODE=live`, backend URL/auth headers)
+  - New live workflow spec executes scanner -> tracked lifecycle -> brief against real backend APIs (no route mocks)
+  - API health spec now includes authenticated watchlist/scanner/brief + tracked lifecycle checks in live mode
+  - `/Users/natekahl/ITM-gd/e2e/helpers/ai-coach-live.ts`
+  - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts`
+  - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts`
+  - `/Users/natekahl/ITM-gd/playwright.config.ts`
 
 ### Database
 - Applied to staging:
@@ -195,6 +210,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
+  - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
 
 ### Commands
 - `npm test -- --runInBand src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts`
@@ -204,6 +220,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
+- `npm test -- --runInBand src/middleware/__tests__/auth.test.ts`
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
 - `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (passing; scanner -> track -> tracked live updates -> brief workflow)
@@ -211,6 +228,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment boots in current setup).
 - Added scanner workflow smoke spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow.spec.ts` (mocked scanner/tracked/brief/WebSocket flow).
+- Added live backend-integrated workflow spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts` (runs when `E2E_AI_COACH_MODE=live`).
+- `E2E_AI_COACH_MODE=live pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts e2e/specs/ai-coach/ai-coach-api.spec.ts --project=ai-coach`
+  - Live authenticated checks now execute when backend/service-role prerequisites are healthy; otherwise they self-skip with explicit preflight reason.
 
 ## 3) Production Gates (Current)
 
@@ -229,13 +249,13 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
 
 ### Needs Completion
-- Expand backend-integrated E2E coverage from mocked workflow smoke to authenticated staging data path:
-  - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
+- Promote live backend-integrated E2E lane to staging CI with seeded test user rotation and execution evidence:
+  - scanner -> track/manage tracked setup -> detector auto-track -> morning brief consume.
 - Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Convert AI Coach E2E from mocked API routes to staging-integrated validation for scanner/tracked/brief flows with seeded test users.
-2. Run AI Coach spec suite in CI and staging with production-like env wiring (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
+1. Enable `E2E_AI_COACH_MODE=live` in staging CI and execute `ai-coach-workflow-live.spec.ts` plus live API checks in `ai-coach-api.spec.ts`.
+2. Add detector auto-track assertion path in live workflow (validate `setup_detected` appears without API seeding when market conditions produce events).
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
