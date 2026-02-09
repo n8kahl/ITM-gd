@@ -58,6 +58,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/morningBriefWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/setupPushWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
+- Worker health external alerting (Discord + Sentry hooks):
+  - New worker monitors `workerHealth` telemetry and sends Discord incident alerts for stale/unresolved-failure workers
+  - Includes cooldown-based de-duplication and recovery notifications
+  - Optional Sentry incident messages tied to worker name/type
+  - Configurable via env (`WORKER_ALERTS_*`)
+  - `/Users/natekahl/ITM-gd/backend/src/workers/workerHealthAlertWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/workerHealthAlerting.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/discordNotifier.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
 - GEX profile API + AI function:
   - `GET /api/options/:symbol/gex` with validated query params (`expiry`, `strikeRange`, `maxExpirations`, `forceRefresh`) and 5-min cached calculator service
   - ChatKit function `get_gamma_exposure` wired to return regime, flip point, max GEX strike, key levels, and strike-by-strike GEX
@@ -171,6 +182,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/indexSpecific.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/service.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/workerHealth.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/workerHealthAlerting.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/discordNotifier.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/workerHealthAlertWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
@@ -182,9 +196,11 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
+- `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
 - `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (blocked in this environment due missing `@sentry/nextjs` import in `next.config.mjs`)
+- `npm run build` (backend compile blocked in this environment by missing local module resolution for `@sentry/node`)
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
 - Added scanner workflow smoke spec `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow.spec.ts` (mocked scanner/tracked/brief/WebSocket flow).
@@ -202,16 +218,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Setup detector service is running with ORB/break-retest/VWAP/gap-fill/volume-climax/level-test/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
+- Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 
 ### Needs Completion
 - Enable full E2E execution in this repo by resolving frontend startup dependency issue (`@sentry/nextjs` import in `next.config.mjs`) so new workflow smoke specs run in CI/staging.
 - Expand backend-integrated E2E coverage from mocked workflow smoke to authenticated staging data path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
-- Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
+- Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
 1. Resolve `@sentry/nextjs` runtime dependency in local/CI Playwright web server boot so AI Coach E2E specs execute.
 2. Run the new workflow smoke spec + existing AI Coach view/api specs in CI and staging (`ai-coach-workflow.spec.ts`, `ai-coach-views.spec.ts`, `ai-coach-api.spec.ts`).
-3. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
-4. Run staging verification against pending hardening migrations from `main` before production cut.
+3. Run staging verification against pending hardening migrations from `main` before production cut.
+4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.

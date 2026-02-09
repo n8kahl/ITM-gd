@@ -28,7 +28,7 @@ export function initSentry(app: Application): void {
       'Request timeout',
     ],
 
-    beforeSend(event) {
+    beforeSend(event: any) {
       // Strip any sensitive headers that might leak into error reports
       if (event.request?.headers) {
         delete event.request.headers['authorization'];

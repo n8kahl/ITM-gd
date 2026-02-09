@@ -298,6 +298,18 @@ ATR = 14-period moving average of True Range
 ### Environment Variables for Production
 Make sure to set all variables from `.env.example` in your production environment.
 
+Worker-health incident alerting (Discord) is optional and disabled by default. To enable:
+
+```bash
+WORKER_ALERTS_ENABLED=true
+WORKER_ALERTS_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+WORKER_ALERTS_POLL_INTERVAL_MS=60000
+WORKER_ALERTS_STALE_THRESHOLD_MS=1200000
+WORKER_ALERTS_STARTUP_GRACE_MS=300000
+WORKER_ALERTS_COOLDOWN_MS=900000
+WORKER_ALERTS_SENTRY_ENABLED=true
+```
+
 ## Troubleshooting
 
 ### "Massive.com API returns 401"
