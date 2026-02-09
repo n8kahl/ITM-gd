@@ -158,7 +158,7 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
         {/* ITM Logo mark - Bottom right */}
         <div className="absolute bottom-3 right-4">
           <span className={cn(
-            "text-xs font-mono tracking-widest uppercase",
+            "text-xs font-semibold font-mono tracking-widest uppercase",
             tier === "pro" ? "text-onyx/60" : "text-white/60"
           )}>
             ITM
