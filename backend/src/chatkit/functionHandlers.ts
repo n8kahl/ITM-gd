@@ -110,6 +110,7 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
     case 'get_journal_insights':
       return await handleGetJournalInsights(typedArgs, context?.userId);
 
+    case 'get_trade_history_for_symbol':
     case 'get_trade_history':
       return await handleGetTradeHistory(typedArgs, context?.userId);
 
@@ -839,8 +840,8 @@ async function handleGetJournalInsights(
 }
 
 /**
- * Handler: get_trade_history
- * Queries the user's trade journal for recent trades and performance stats
+ * Handler: get_trade_history_for_symbol
+ * Queries the user's journal entries for recent trades and performance stats
  */
 async function handleGetTradeHistory(
   args: { symbol?: string; limit?: number },
@@ -850,52 +851,93 @@ async function handleGetTradeHistory(
     return { error: 'User not authenticated' };
   }
 
-  const { symbol, limit = 10 } = args;
+  const normalizedSymbol = typeof args.symbol === 'string'
+    ? args.symbol.trim().toUpperCase()
+    : '';
+  const symbol = normalizedSymbol && /^[A-Z0-9._:-]{1,16}$/.test(normalizedSymbol)
+    ? normalizedSymbol
+    : undefined;
+  const safeLimit = Number.isFinite(args.limit)
+    ? Math.min(100, Math.max(1, Math.round(Number(args.limit))))
+    : 10;
 
   try {
     let query = supabase
-      .from('ai_coach_trades')
-      .select('*')
+      .from('journal_entries')
+      .select('symbol, direction, contract_type, strategy, trade_date, entry_price, exit_price, position_size, pnl, pnl_percentage, is_open, is_winner')
       .eq('user_id', userId);
 
     if (symbol) {
-      query = query.eq('symbol', symbol.toUpperCase());
+      query = query.eq('symbol', symbol);
     }
 
     const { data: trades, error } = await query
-      .order('entry_date', { ascending: false })
-      .limit(limit);
+      .order('trade_date', { ascending: false })
+      .limit(safeLimit);
 
     if (error) throw new Error(error.message);
 
     const allTrades = trades || [];
-    const closedTrades = allTrades.filter(t => t.trade_outcome != null);
-    const wins = closedTrades.filter(t => t.trade_outcome === 'win');
+    const closedTrades = allTrades.filter((trade) => {
+      const isOpen = Boolean(trade.is_open);
+      return !isOpen;
+    });
+    const wins = closedTrades.filter((trade) => {
+      if (trade.is_winner === true) return true;
+      const pnl = toFiniteNumber(trade.pnl);
+      return pnl !== null && pnl > 0;
+    });
+    const losses = closedTrades.filter((trade) => {
+      if (trade.is_winner === false) return true;
+      const pnl = toFiniteNumber(trade.pnl);
+      return pnl !== null && pnl < 0;
+    });
+    const totalPnl = closedTrades.reduce((sum, trade) => {
+      const pnl = toFiniteNumber(trade.pnl);
+      return sum + (pnl || 0);
+    }, 0);
 
     return {
-      trades: allTrades.map(t => ({
-        symbol: t.symbol,
-        type: t.position_type,
-        strategy: t.strategy,
-        entryDate: t.entry_date,
-        entryPrice: t.entry_price,
-        exitDate: t.exit_date,
-        exitPrice: t.exit_price,
-        quantity: t.quantity,
-        pnl: t.pnl != null ? `$${t.pnl.toFixed(2)}` : 'Open',
-        pnlPct: t.pnl_pct != null ? `${t.pnl_pct.toFixed(1)}%` : null,
-        outcome: t.trade_outcome || 'open',
-      })),
+      symbol,
+      trades: allTrades.map((trade) => {
+        const pnl = toFiniteNumber(trade.pnl);
+        const pnlPct = toFiniteNumber(trade.pnl_percentage);
+        const outcome = trade.is_open
+          ? 'open'
+          : trade.is_winner === true
+            ? 'win'
+            : trade.is_winner === false
+              ? 'loss'
+              : pnl !== null && pnl > 0
+                ? 'win'
+                : pnl !== null && pnl < 0
+                  ? 'loss'
+                  : 'closed';
+
+        return {
+          symbol: trade.symbol,
+          direction: trade.direction,
+          type: trade.contract_type || 'stock',
+          strategy: trade.strategy,
+          tradeDate: trade.trade_date,
+          entryPrice: toFiniteNumber(trade.entry_price),
+          exitPrice: toFiniteNumber(trade.exit_price),
+          quantity: toFiniteNumber(trade.position_size),
+          pnl: pnl != null ? `$${pnl.toFixed(2)}` : trade.is_open ? 'Open' : '—',
+          pnlPct: pnlPct != null ? `${pnlPct.toFixed(1)}%` : null,
+          outcome,
+        };
+      }),
       summary: {
         totalTrades: allTrades.length,
         closedTrades: closedTrades.length,
         openTrades: allTrades.length - closedTrades.length,
         wins: wins.length,
-        losses: closedTrades.filter(t => t.trade_outcome === 'loss').length,
+        losses: losses.length,
         winRate: closedTrades.length > 0
           ? `${((wins.length / closedTrades.length) * 100).toFixed(1)}%`
           : 'N/A',
-        totalPnl: `$${closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0).toFixed(2)}`,
+        totalPnl: `$${totalPnl.toFixed(2)}`,
       },
     };
   } catch (error: any) {

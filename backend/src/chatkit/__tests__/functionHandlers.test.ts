@@ -960,34 +960,36 @@ describe('Function Handlers', () => {
     });
   });
 
-  describe('get_trade_history', () => {
+  describe('get_trade_history_for_symbol', () => {
     it('should return trades and summary for authenticated user', async () => {
       const mockTrades = [
         {
           symbol: 'SPX',
-          position_type: 'call',
+          direction: 'long',
+          contract_type: 'call',
           strategy: '0DTE Scalp',
-          entry_date: '2026-02-01',
+          trade_date: '2026-02-01',
           entry_price: 5.50,
-          exit_date: '2026-02-01',
           exit_price: 8.20,
-          quantity: 2,
+          position_size: 2,
           pnl: 540,
-          pnl_pct: 49.09,
-          trade_outcome: 'win',
+          pnl_percentage: 49.09,
+          is_open: false,
+          is_winner: true,
         },
         {
           symbol: 'SPX',
-          position_type: 'put',
+          direction: 'short',
+          contract_type: 'put',
           strategy: 'Credit Spread',
-          entry_date: '2026-01-28',
+          trade_date: '2026-01-28',
           entry_price: 3.00,
-          exit_date: '2026-01-28',
           exit_price: 1.50,
-          quantity: 1,
+          position_size: 1,
           pnl: -150,
-          pnl_pct: -50,
-          trade_outcome: 'loss',
+          pnl_percentage: -50,
+          is_open: false,
+          is_winner: false,
         },
       ];
 
@@ -1000,11 +1002,12 @@ describe('Function Handlers', () => {
       mockSupabaseFrom.mockReturnValue({ select: selectFn });
 
       const result = await executeFunctionCall(
-        { name: 'get_trade_history', arguments: JSON.stringify({ limit: 10 }) },
+        { name: 'get_trade_history_for_symbol', arguments: JSON.stringify({ symbol: 'SPX', limit: 10 }) },
         { userId: 'user-123' }
       );
 
       expect(result.trades).toHaveLength(2);
+      expect(result).toHaveProperty('symbol', 'SPX');
       expect(result.trades[0].symbol).toBe('SPX');
       expect(result.summary.totalTrades).toBe(2);
       expect(result.summary.closedTrades).toBe(2);
@@ -1024,7 +1027,7 @@ describe('Function Handlers', () => {
       mockSupabaseFrom.mockReturnValue({ select: selectFn });
 
       await executeFunctionCall(
-        { name: 'get_trade_history', arguments: JSON.stringify({ symbol: 'NDX', limit: 5 }) },
+        { name: 'get_trade_history_for_symbol', arguments: JSON.stringify({ symbol: 'NDX', limit: 5 }) },
         { userId: 'user-123' }
       );
 
@@ -1035,10 +1038,28 @@ describe('Function Handlers', () => {
 
     it('should return error when userId is not provided', async () => {
       const result = await executeFunctionCall(
-        { name: 'get_trade_history', arguments: JSON.stringify({}) }
+        { name: 'get_trade_history_for_symbol', arguments: JSON.stringify({ symbol: 'SPX' }) }
       );
 
       expect(result).toHaveProperty('error', 'User not authenticated');
+    });
+
+    it('should continue supporting legacy get_trade_history name', async () => {
+      const chain: any = {
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+      const selectFn = jest.fn().mockReturnValue(chain);
+      mockSupabaseFrom.mockReturnValue({ select: selectFn });
+
+      const result = await executeFunctionCall(
+        { name: 'get_trade_history', arguments: JSON.stringify({ symbol: 'SPX' }) },
+        { userId: 'user-123' }
+      );
+
+      expect(result.summary.totalTrades).toBe(0);
+      expect(result.summary.winRate).toBe('N/A');
     });
 
     it('should handle database errors gracefully', async () => {
@@ -1051,7 +1072,7 @@ describe('Function Handlers', () => {
       mockSupabaseFrom.mockReturnValue({ select: selectFn });
 
       const result = await executeFunctionCall(
-        { name: 'get_trade_history', arguments: JSON.stringify({}) },
+        { name: 'get_trade_history_for_symbol', arguments: JSON.stringify({ symbol: 'SPX' }) },
         { userId: 'user-123' }
       );
 

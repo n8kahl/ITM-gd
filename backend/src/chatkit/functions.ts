@@ -346,21 +346,22 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
-      name: 'get_trade_history',
-      description: 'Get the user\'s recent trade history and performance analytics. Use this when the user asks about their past trades, win rate, P&L history, or trading performance.',
+      name: 'get_trade_history_for_symbol',
+      description: 'Get the user\'s historical trade performance for a specific ticker symbol from the journal. Use this when discussing a ticker the user has traded before.',
       parameters: {
         type: 'object',
         properties: {
           symbol: {
             type: 'string',
-            description: 'Filter by symbol (optional)'
+            description: 'Ticker symbol (e.g., SPX, AAPL, NDX)'
           },
           limit: {
             type: 'number',
             description: 'Number of recent trades to return (default: 10)',
             default: 10
           }
-        }
+        },
+        required: ['symbol'],
       }
     }
   },
