@@ -504,3 +504,14 @@ Production deployment evidence (`main`, 2026-02-09):
   - `GET /api/watchlist` (unauthenticated) -> `401` (expected)
   - `GET /api/options/:symbol/0dte` (unauthenticated) -> `401` (expected auth gate)
   - `GET /api/options/:symbol/iv` (unauthenticated) -> `401` (expected auth gate)
+
+Earnings phase deployment status (2026-02-09, current):
+
+- Commit: `a17821b` (`feat(ai-coach): ship phase 3 earnings module`)
+- Git push: `main -> origin/main` complete.
+- Backend deploy attempts:
+  - `railway up --ci -s ITM-gd -e staging` retried multiple times.
+  - `railway up --ci -s ITM-gd -e production` retried multiple times.
+  - Result: blocked by Railway transport errors during upload (`received fatal alert: BadRecordMac` / `Broken pipe`).
+- Live endpoint check while deploy is blocked:
+  - `GET /api/earnings/calendar` on staging/production currently returns `404` (expected until new backend image is deployed).
