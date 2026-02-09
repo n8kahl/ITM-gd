@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TITM Trade Card — All Formats</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #070708;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #F5F5F0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 60px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: #F5F5F0;
+    text-align: center;
+  }
+  h1 span { color: #10B981; }
+
+  h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 500;
+    color: rgba(245,245,240,0.6);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .format-label {
+    font-family: 'Geist Mono', monospace;
+    font-size: 12px;
+    color: rgba(245,245,240,0.3);
+    text-align: center;
+    margin-top: -4px;
+  }
+
+  .label {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(245, 245, 240, 0.4);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+  }
+
+  .format-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 50px;
+    margin-bottom: 40px;
+  }
+
+  .divider {
+    width: 100%;
+    max-width: 500px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(16,185,129,0.3), transparent);
+  }
+
+  .big-divider {
+    width: 100%;
+    max-width: 600px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(16,185,129,0.5), transparent);
+    margin: 20px 0;
+  }
+
+  /* ============================= */
+  /* SHARED TIER VARIABLES         */
+  /* ============================= */
+  .tier-core {
+    --glow-color: rgba(16, 185, 129, 0.15);
+    --border-color: rgba(16, 185, 129, 0.25);
+    --accent: #10B981;
+    --accent-dim: #047857;
+    --accent-bright: #34d399;
+  }
+  .tier-pro {
+    --glow-color: rgba(243, 229, 171, 0.12);
+    --border-color: rgba(243, 229, 171, 0.25);
+    --accent: #F3E5AB;
+    --accent-dim: #E8D992;
+    --accent-bright: #F8F0CD;
+  }
+  .tier-executive {
+    --glow-color: rgba(232, 228, 217, 0.12);
+    --border-color: rgba(232, 228, 217, 0.25);
+    --accent: #E8E4D9;
+    --accent-dim: #A1A1AA;
+    --accent-bright: #E4E4E7;
+  }
+
+  /* ============================= */
+  /* SHARED CARD BASE STYLES       */
+  /* ============================= */
+  .card-base {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0A0A0B 0%, #0F1117 40%, #0A0A0B 100%);
+  }
+
+  /* Radial glow */
+  .card-base::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -20%;
+    width: 140%;
+    height: 200%;
+    background: radial-gradient(ellipse at 30% 50%, var(--glow-color) 0%, transparent 60%);
+    opacity: 0.08;
+    pointer-events: none;
+  }
+
+  /* Grid pattern */
+  .card-base::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .glow-border {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid var(--border-color);
+    box-shadow:
+      0 0 30px var(--glow-color),
+      inset 0 0 30px rgba(0,0,0,0.5);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ===== WATERMARK LOGO ===== */
+  .watermark {
+    position: absolute;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0.08;
+    filter: grayscale(100%) brightness(3);
+  }
+
+  /* Landscape watermark — large, right-center */
+  .card-landscape .watermark {
+    width: 420px;
+    height: auto;
+    right: -30px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  /* Story watermark — large, centered behind content */
+  .card-story .watermark {
+    width: 340px;
+    height: auto;
+    left: 50%;
+    top: 42%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Square watermark — centered behind content */
+  .card-square .watermark {
+    width: 320px;
+    height: auto;
+    left: 50%;
+    top: 46%;
+    transform: translate(-50%, -50%);
+  }
+
+  .corner-accent {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    z-index: 10;
+    opacity: 0.15;
+  }
+  .corner-accent.top-right {
+    top: 12px; right: 12px;
+    border-top: 1px solid var(--accent);
+    border-right: 1px solid var(--accent);
+  }
+  .corner-accent.bottom-left {
+    bottom: 12px; left: 12px;
+    border-bottom: 1px solid var(--accent);
+    border-left: 1px solid var(--accent);
+  }
+
+  .accent-line {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+    z-index: 10;
+  }
+
+  .card-logo {
+    filter: drop-shadow(0 0 12px var(--glow-color));
+  }
+
+  .badge-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0.7;
+  }
+
+  .achievement-title {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: #F5F5F0;
+  }
+
+  .tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-color);
+    color: var(--accent);
+    backdrop-filter: blur(8px);
+  }
+
+  .tier-diamond { font-size: 8px; opacity: 0.8; }
+
+  .stat-value {
+    font-family: 'Geist Mono', monospace;
+    font-weight: 500;
+    color: #F5F5F0;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  .stat-label {
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(245, 245, 240, 0.35);
+  }
+
+  .member-name {
+    font-weight: 500;
+    color: rgba(245, 245, 240, 0.85);
+  }
+
+  .member-date {
+    font-family: 'Geist Mono', monospace;
+    color: rgba(245, 245, 240, 0.35);
+    letter-spacing: 0.02em;
+  }
+
+  .verify-label {
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(245, 245, 240, 0.25);
+  }
+
+  .verify-url {
+    font-family: 'Geist Mono', monospace;
+    color: var(--accent);
+    opacity: 0.6;
+    letter-spacing: 0.01em;
+  }
+
+  /* Courses list styles */
+  .courses-section { display: flex; flex-direction: column; }
+  .courses-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0.6;
+    margin-bottom: 4px;
+  }
+  .course-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: rgba(245, 245, 240, 0.65);
+    line-height: 1.6;
+  }
+  .course-check {
+    color: var(--accent);
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .course-more {
+    color: rgba(245, 245, 240, 0.3);
+    font-style: italic;
+    font-size: 11px;
+    line-height: 1.6;
+    padding-left: 17px;
+  }
+
+
+  /* ============================================= */
+  /* FORMAT 1: LANDSCAPE 1200x630                  */
+  /* (displayed at 600x315, rendered at 2x)        */
+  /* ============================================= */
+  .card-landscape {
+    width: 600px;
+    height: 315px;
+    border-radius: 16px;
+  }
+
+  .card-landscape .card-content {
+    position: relative;
+    z-index: 5;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 28px 32px;
+    gap: 16px;
+  }
+
+  .card-landscape .card-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .card-landscape .card-logo {
+    width: 140px;
+    height: auto;
+  }
+
+  .card-landscape .achievement-title {
+    font-size: 24px;
+  }
+
+  .card-landscape .achievement-icon {
+    font-size: 18px;
+    margin-right: 5px;
+  }
+
+  .card-landscape .member-name { font-size: 14px; }
+  .card-landscape .member-date { font-size: 10px; }
+
+  .card-landscape .card-right {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .card-landscape .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 18px;
+    text-align: right;
+  }
+
+  .card-landscape .stat-value { font-size: 18px; }
+  .card-landscape .stat-label { font-size: 8px; }
+
+  .card-landscape .courses-section {
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .card-landscape .courses-label {
+    font-size: 8px;
+    text-align: right;
+  }
+
+  .card-landscape .course-item {
+    font-size: 9.5px;
+    line-height: 1.5;
+    justify-content: flex-end;
+    flex-direction: row-reverse;
+    gap: 4px;
+  }
+
+  .card-landscape .course-check { font-size: 8px; }
+
+  .card-landscape .verify-label { font-size: 8px; }
+  .card-landscape .verify-url { font-size: 9px; }
+
+
+  /* ============================================= */
+  /* FORMAT 2: STORY / REEL  1080x1920             */
+  /* (displayed at 360x640)                        */
+  /* ============================================= */
+  .card-story {
+    width: 360px;
+    height: 640px;
+    border-radius: 20px;
+  }
+
+  .card-story::before {
+    top: -30%;
+    left: -30%;
+    width: 160%;
+    height: 160%;
+    background: radial-gradient(ellipse at 50% 30%, var(--glow-color) 0%, transparent 60%);
+    opacity: 0.1;
+  }
+
+  .card-story .card-content {
+    position: relative;
+    z-index: 5;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 26px 24px;
+    gap: 0;
+    justify-content: space-between;
+  }
+
+  .card-story .card-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .card-story .card-logo {
+    width: 140px;
+    height: auto;
+  }
+
+  .card-story .achievement-section {
+    text-align: center;
+  }
+
+  .card-story .badge-label { font-size: 10px; }
+
+  .card-story .achievement-title {
+    font-size: 28px;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  .card-story .achievement-icon {
+    font-size: 22px;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .card-story .tier-badge {
+    padding: 5px 16px;
+    font-size: 11px;
+  }
+
+  /* Stats row */
+  .card-story .stats-row {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    padding: 12px 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .card-story .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .card-story .stat-value { font-size: 20px; }
+  .card-story .stat-label { font-size: 8px; }
+
+  /* Courses list — story */
+  .card-story .courses-section {
+    padding: 0 4px;
+    gap: 1px;
+  }
+
+  .card-story .courses-label { font-size: 9px; margin-bottom: 3px; }
+
+  .card-story .course-item {
+    font-size: 11.5px;
+    line-height: 1.45;
+    padding-left: 2px;
+  }
+
+  .card-story .course-check { font-size: 10px; }
+  .card-story .course-more { font-size: 11px; padding-left: 17px; line-height: 1.45; }
+
+  /* Bottom section */
+  .card-story .card-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    text-align: center;
+  }
+
+  .card-story .member-name { font-size: 15px; }
+  .card-story .member-date { font-size: 10px; }
+  .card-story .verify-label { font-size: 8px; }
+  .card-story .verify-url { font-size: 9px; }
+
+
+  /* ============================================= */
+  /* FORMAT 3: SQUARE  1080x1080                   */
+  /* (displayed at 400x400)                        */
+  /* ============================================= */
+  .card-square {
+    width: 400px;
+    height: 400px;
+    border-radius: 18px;
+  }
+
+  .card-square::before {
+    top: -40%;
+    left: -20%;
+    width: 140%;
+    height: 180%;
+    background: radial-gradient(ellipse at 40% 30%, var(--glow-color) 0%, transparent 60%);
+    opacity: 0.09;
+  }
+
+  .card-square .card-content {
+    position: relative;
+    z-index: 5;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 26px;
+    gap: 0;
+    justify-content: space-between;
+  }
+
+  .card-square .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .card-square .card-logo {
+    width: 120px;
+    height: auto;
+  }
+
+  .card-square .tier-badge {
+    font-size: 10px;
+    padding: 4px 12px;
+  }
+
+  .card-square .achievement-section {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .card-square .badge-label { font-size: 10px; }
+
+  .card-square .achievement-title {
+    font-size: 26px;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  .card-square .achievement-icon {
+    font-size: 22px;
+    margin-right: 5px;
+  }
+
+  /* Stats row — square */
+  .card-square .stats-row {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    padding: 10px 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .card-square .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .card-square .stat-value { font-size: 18px; }
+  .card-square .stat-label { font-size: 8px; }
+
+  /* Courses — square */
+  .card-square .courses-section {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 5px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .card-square .courses-label {
+    width: 100%;
+    text-align: center;
+    font-size: 8px;
+    margin-bottom: 1px;
+  }
+
+  .card-square .course-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 8.5px;
+    color: rgba(245, 245, 240, 0.6);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    white-space: nowrap;
+  }
+
+  .card-square .course-pill .pill-check {
+    color: var(--accent);
+    font-size: 7px;
+  }
+
+  /* Bottom — square */
+  .card-square .card-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .card-square .member-info { display: flex; flex-direction: column; gap: 1px; }
+  .card-square .member-name { font-size: 13px; }
+  .card-square .member-date { font-size: 9px; }
+  .card-square .verification { text-align: right; }
+  .card-square .verify-label { font-size: 8px; }
+  .card-square .verify-url { font-size: 9px; }
+
+
+  /* ============== TIER-SPECIFIC ROW ============ */
+  .tier-row {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>TITM Academy <span>Trade Cards</span></h1>
+<p style="font-family:'Geist Mono',monospace; font-size:12px; color:rgba(245,245,240,0.3); text-align:center; margin-top:-8px;">All Social Formats &mdash; with Courses Taken</p>
+
+<!-- ============================================================== -->
+<!--  FORMAT 1 : LANDSCAPE  1200 x 630  (Twitter / LinkedIn / OG)   -->
+<!-- ============================================================== -->
+<div class="big-divider"></div>
+<h2>Landscape Format</h2>
+<p class="format-label">1200 &times; 630 &mdash; Twitter / LinkedIn / Discord / OG</p>
+
+<div class="format-section">
+
+  <!-- CORE LANDSCAPE -->
+  <div class="section">
+    <p class="label">Core Tier</p>
+    <div class="card-landscape card-base tier-core" id="landscape-core">
+      <div class="glow-border"></div>
+      <img src="public/hero_logo_card.png" alt="" class="watermark">
+      <div class="corner-accent top-right"></div>
+      <div class="corner-accent bottom-left"></div>
+      <div class="accent-line"></div>
+      <div class="card-content">
+        <div class="card-left">
+          <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+          <div class="achievement-section">
+            <span class="badge-label">TITM Academy</span>
+            <div class="achievement-title">
+              <span class="achievement-icon">&#x1F393;</span>Foundations<br>Certified
+            </div>
+          </div>
+          <div class="member-info">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">Feb 2026 &bull; Sniper Apprentice</span>
+          </div>
+        </div>
+        <div class="card-right">
+          <span class="tier-badge"><span class="tier-diamond">&#x25C6;</span> Core Sniper</span>
+          <div class="stats-grid">
+            <div class="stat-item"><span class="stat-value">5/5</span><span class="stat-label">Courses</span></div>
+            <div class="stat-item"><span class="stat-value">92%</span><span class="stat-label">Quiz Avg</span></div>
+            <div class="stat-item"><span class="stat-value">25</span><span class="stat-label">Lessons</span></div>
+            <div class="stat-item"><span class="stat-value">14</span><span class="stat-label">Day Streak</span></div>
+          </div>
+          <div class="courses-section">
+            <span class="courses-label">Courses Completed</span>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Options 101</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Broker & Platform Setup</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Risk Management Fundamentals</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Reading the Chain</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Your First Scalp</div>
+          </div>
+          <div class="verification">
+            <span class="verify-label">Verified</span>
+            <span class="verify-url">tradeinthemoney.com/verify/a3f8c1d2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRO LANDSCAPE -->
+  <div class="section">
+    <p class="label">Pro Tier</p>
+    <div class="card-landscape card-base tier-pro" id="landscape-pro">
+      <div class="glow-border"></div>
+      <img src="public/hero_logo_card.png" alt="" class="watermark">
+      <div class="corner-accent top-right"></div>
+      <div class="corner-accent bottom-left"></div>
+      <div class="accent-line"></div>
+      <div class="card-content">
+        <div class="card-left">
+          <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+          <div class="achievement-section">
+            <span class="badge-label">TITM Academy</span>
+            <div class="achievement-title">
+              <span class="achievement-icon">&#x1F4C8;</span>Advanced<br>Strategist
+            </div>
+          </div>
+          <div class="member-info">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">Feb 2026 &bull; Certified Sniper</span>
+          </div>
+        </div>
+        <div class="card-right">
+          <span class="tier-badge"><span class="tier-diamond">&#x25C6;&#x25C6;</span> Pro Sniper</span>
+          <div class="stats-grid">
+            <div class="stat-item"><span class="stat-value">11/11</span><span class="stat-label">Courses</span></div>
+            <div class="stat-item"><span class="stat-value">88%</span><span class="stat-label">Quiz Avg</span></div>
+            <div class="stat-item"><span class="stat-value">54</span><span class="stat-label">Lessons</span></div>
+            <div class="stat-item"><span class="stat-value">30</span><span class="stat-label">Day Streak</span></div>
+          </div>
+          <div class="courses-section">
+            <span class="courses-label">Latest Courses</span>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Greek Mastery</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Scalping SPX/NDX</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Swing Trade Setups</div>
+            <div class="course-item" style="color:rgba(245,245,240,0.35); font-style:italic; font-size:9px;">+8 more completed</div>
+          </div>
+          <div class="verification">
+            <span class="verify-label">Verified</span>
+            <span class="verify-url">tradeinthemoney.com/verify/b7e2f9a1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXECUTIVE LANDSCAPE -->
+  <div class="section">
+    <p class="label">Executive Tier</p>
+    <div class="card-landscape card-base tier-executive" id="landscape-exec">
+      <div class="glow-border"></div>
+      <img src="public/hero_logo_card.png" alt="" class="watermark">
+      <div class="corner-accent top-right"></div>
+      <div class="corner-accent bottom-left"></div>
+      <div class="accent-line"></div>
+      <div class="card-content">
+        <div class="card-left">
+          <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+          <div class="achievement-section">
+            <span class="badge-label">TITM Academy</span>
+            <div class="achievement-title">
+              <span class="achievement-icon">&#x1F525;</span>Elite<br>Operator
+            </div>
+          </div>
+          <div class="member-info">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">Feb 2026 &bull; Elite Operator</span>
+          </div>
+        </div>
+        <div class="card-right">
+          <span class="tier-badge"><span class="tier-diamond">&#x25C6;&#x25C6;&#x25C6;</span> Executive Sniper</span>
+          <div class="stats-grid">
+            <div class="stat-item"><span class="stat-value">14/14</span><span class="stat-label">Courses</span></div>
+            <div class="stat-item"><span class="stat-value">95%</span><span class="stat-label">Quiz Avg</span></div>
+            <div class="stat-item"><span class="stat-value">71</span><span class="stat-label">Lessons</span></div>
+            <div class="stat-item"><span class="stat-value">60</span><span class="stat-label">Day Streak</span></div>
+          </div>
+          <div class="courses-section">
+            <span class="courses-label">Latest Courses</span>
+            <div class="course-item"><span class="course-check">&#x2713;</span> SPX Elite Scalping</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> LEAPS Portfolio Strategy</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> NDX Precision Entries</div>
+            <div class="course-item" style="color:rgba(245,245,240,0.35); font-style:italic; font-size:9px;">+11 more completed</div>
+          </div>
+          <div class="verification">
+            <span class="verify-label">Verified</span>
+            <span class="verify-url">tradeinthemoney.com/verify/c9d4e1f3</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================== -->
+<!--  FORMAT 2 : STORY / REEL  1080 x 1920  (IG Stories / Reels)    -->
+<!-- ============================================================== -->
+<div class="big-divider"></div>
+<h2>Story / Reel Format</h2>
+<p class="format-label">1080 &times; 1920 &mdash; Instagram Stories / Reels / TikTok</p>
+
+<div class="format-section">
+  <div class="tier-row">
+
+    <!-- CORE STORY -->
+    <div class="section" style="max-width:380px;">
+      <p class="label">Core Tier</p>
+      <div class="card-story card-base tier-core" id="story-core">
+        <div class="glow-border"></div>
+        <div class="corner-accent top-right"></div>
+        <div class="corner-accent bottom-left"></div>
+        <div class="accent-line"></div>
+        <div class="card-content">
+          <div class="card-top">
+            <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+            <span class="tier-badge"><span class="tier-diamond">&#x25C6;</span> Core Sniper</span>
+            <div class="achievement-section">
+              <span class="badge-label">TITM Academy</span>
+              <div class="achievement-title">
+                <span class="achievement-icon">&#x1F393;</span><br>Foundations<br>Certified
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-row">
+            <div class="stat-item"><span class="stat-value">5/5</span><span class="stat-label">Courses</span></div>
+            <div class="stat-item"><span class="stat-value">92%</span><span class="stat-label">Quiz Avg</span></div>
+            <div class="stat-item"><span class="stat-value">25</span><span class="stat-label">Lessons</span></div>
+            <div class="stat-item"><span class="stat-value">14</span><span class="stat-label">Streak</span></div>
+          </div>
+
+          <div class="courses-section">
+            <span class="courses-label">Courses Completed</span>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Options 101</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Broker & Platform Setup</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Risk Management Fundamentals</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Reading the Chain</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Your First Scalp</div>
+          </div>
+
+          <div class="card-bottom">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">February 2026 &bull; Sniper Apprentice</span>
+            <div style="margin-top:6px;">
+              <span class="verify-label">Verified Credential</span>
+              <span class="verify-url" style="display:block;">tradeinthemoney.com/verify/a3f8c1d2</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRO STORY -->
+    <div class="section" style="max-width:380px;">
+      <p class="label">Pro Tier</p>
+      <div class="card-story card-base tier-pro" id="story-pro">
+        <div class="glow-border"></div>
+        <div class="corner-accent top-right"></div>
+        <div class="corner-accent bottom-left"></div>
+        <div class="accent-line"></div>
+        <div class="card-content">
+          <div class="card-top">
+            <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+            <span class="tier-badge"><span class="tier-diamond">&#x25C6;&#x25C6;</span> Pro Sniper</span>
+            <div class="achievement-section">
+              <span class="badge-label">TITM Academy</span>
+              <div class="achievement-title">
+                <span class="achievement-icon">&#x1F4C8;</span><br>Advanced<br>Strategist
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-row">
+            <div class="stat-item"><span class="stat-value">11/11</span><span class="stat-label">Courses</span></div>
+            <div class="stat-item"><span class="stat-value">88%</span><span class="stat-label">Quiz Avg</span></div>
+            <div class="stat-item"><span class="stat-value">54</span><span class="stat-label">Lessons</span></div>
+            <div class="stat-item"><span class="stat-value">30</span><span class="stat-label">Streak</span></div>
+          </div>
+
+          <div class="courses-section">
+            <span class="courses-label">11 Courses Completed</span>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Options 101</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Broker & Platform Setup</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Risk Management</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Greek Mastery</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Scalping SPX/NDX</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Swing Trade Setups</div>
+            <div class="course-more">+5 more courses</div>
+          </div>
+
+          <div class="card-bottom">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">February 2026 &bull; Certified Sniper</span>
+            <div style="margin-top:4px;">
+              <span class="verify-label">Verified Credential</span>
+              <span class="verify-url" style="display:block;">tradeinthemoney.com/verify/b7e2f9a1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXECUTIVE STORY -->
+    <div class="section" style="max-width:380px;">
+      <p class="label">Executive Tier</p>
+      <div class="card-story card-base tier-executive" id="story-exec">
+        <div class="glow-border"></div>
+        <div class="corner-accent top-right"></div>
+        <div class="corner-accent bottom-left"></div>
+        <div class="accent-line"></div>
+        <div class="card-content">
+          <div class="card-top">
+            <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+            <span class="tier-badge"><span class="tier-diamond">&#x25C6;&#x25C6;&#x25C6;</span> Executive Sniper</span>
+            <div class="achievement-section">
+              <span class="badge-label">TITM Academy</span>
+              <div class="achievement-title">
+                <span class="achievement-icon">&#x1F525;</span><br>Elite<br>Operator
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-row">
+            <div class="stat-item"><span class="stat-value">14/14</span><span class="stat-label">Courses</span></div>
+            <div class="stat-item"><span class="stat-value">95%</span><span class="stat-label">Quiz Avg</span></div>
+            <div class="stat-item"><span class="stat-value">71</span><span class="stat-label">Lessons</span></div>
+            <div class="stat-item"><span class="stat-value">60</span><span class="stat-label">Streak</span></div>
+          </div>
+
+          <div class="courses-section">
+            <span class="courses-label">14 Courses Completed</span>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Options 101</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Greek Mastery</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> Scalping SPX/NDX</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> SPX Elite Scalping</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> LEAPS Portfolio Strategy</div>
+            <div class="course-item"><span class="course-check">&#x2713;</span> NDX Precision Entries</div>
+            <div class="course-more">+8 more courses</div>
+          </div>
+
+          <div class="card-bottom">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">February 2026 &bull; Elite Operator</span>
+            <div style="margin-top:4px;">
+              <span class="verify-label">Verified Credential</span>
+              <span class="verify-url" style="display:block;">tradeinthemoney.com/verify/c9d4e1f3</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================== -->
+<!--  FORMAT 3 : SQUARE  1080 x 1080  (IG Feed / Facebook)          -->
+<!-- ============================================================== -->
+<div class="big-divider"></div>
+<h2>Square Format</h2>
+<p class="format-label">1080 &times; 1080 &mdash; Instagram Feed / Facebook</p>
+
+<div class="format-section">
+
+  <!-- CORE SQUARE -->
+  <div class="section">
+    <p class="label">Core Tier</p>
+    <div class="card-square card-base tier-core" id="square-core">
+      <div class="glow-border"></div>
+      <img src="public/hero_logo_card.png" alt="" class="watermark">
+      <div class="corner-accent top-right"></div>
+      <div class="corner-accent bottom-left"></div>
+      <div class="accent-line"></div>
+      <div class="card-content">
+        <div class="card-header">
+          <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+          <span class="tier-badge"><span class="tier-diamond">&#x25C6;</span> Core Sniper</span>
+        </div>
+
+        <div class="achievement-section">
+          <span class="badge-label">TITM Academy</span>
+          <div class="achievement-title">
+            <span class="achievement-icon">&#x1F393;</span>Foundations Certified
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-item"><span class="stat-value">5/5</span><span class="stat-label">Courses</span></div>
+          <div class="stat-item"><span class="stat-value">92%</span><span class="stat-label">Quiz Avg</span></div>
+          <div class="stat-item"><span class="stat-value">25</span><span class="stat-label">Lessons</span></div>
+          <div class="stat-item"><span class="stat-value">14</span><span class="stat-label">Streak</span></div>
+        </div>
+
+        <div class="courses-section">
+          <span class="courses-label">Courses Completed</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Options 101</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Broker Setup</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Risk Mgmt</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> The Chain</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> First Scalp</span>
+        </div>
+
+        <div class="card-bottom">
+          <div class="member-info">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">Feb 2026 &bull; Sniper Apprentice</span>
+          </div>
+          <div class="verification">
+            <span class="verify-label">Verified</span>
+            <span class="verify-url">tradeinthemoney.com/verify/a3f8c1d2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRO SQUARE -->
+  <div class="section">
+    <p class="label">Pro Tier</p>
+    <div class="card-square card-base tier-pro" id="square-pro">
+      <div class="glow-border"></div>
+      <img src="public/hero_logo_card.png" alt="" class="watermark">
+      <div class="corner-accent top-right"></div>
+      <div class="corner-accent bottom-left"></div>
+      <div class="accent-line"></div>
+      <div class="card-content">
+        <div class="card-header">
+          <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+          <span class="tier-badge"><span class="tier-diamond">&#x25C6;&#x25C6;</span> Pro Sniper</span>
+        </div>
+
+        <div class="achievement-section">
+          <span class="badge-label">TITM Academy</span>
+          <div class="achievement-title">
+            <span class="achievement-icon">&#x1F4C8;</span>Advanced Strategist
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-item"><span class="stat-value">11/11</span><span class="stat-label">Courses</span></div>
+          <div class="stat-item"><span class="stat-value">88%</span><span class="stat-label">Quiz Avg</span></div>
+          <div class="stat-item"><span class="stat-value">54</span><span class="stat-label">Lessons</span></div>
+          <div class="stat-item"><span class="stat-value">30</span><span class="stat-label">Streak</span></div>
+        </div>
+
+        <div class="courses-section">
+          <span class="courses-label">11 Courses Completed</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Greek Mastery</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Scalping SPX</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Swing Setups</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Order Flow</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Volatility</span>
+          <span class="course-pill" style="color:rgba(245,245,240,0.3); border-color:rgba(255,255,255,0.03);"><span class="pill-check" style="color:rgba(245,245,240,0.2);">+</span> 6 more</span>
+        </div>
+
+        <div class="card-bottom">
+          <div class="member-info">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">Feb 2026 &bull; Certified Sniper</span>
+          </div>
+          <div class="verification">
+            <span class="verify-label">Verified</span>
+            <span class="verify-url">tradeinthemoney.com/verify/b7e2f9a1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXECUTIVE SQUARE -->
+  <div class="section">
+    <p class="label">Executive Tier</p>
+    <div class="card-square card-base tier-executive" id="square-exec">
+      <div class="glow-border"></div>
+      <img src="public/hero_logo_card.png" alt="" class="watermark">
+      <div class="corner-accent top-right"></div>
+      <div class="corner-accent bottom-left"></div>
+      <div class="accent-line"></div>
+      <div class="card-content">
+        <div class="card-header">
+          <img src="public/hero_logo_card.png" alt="TITM" class="card-logo">
+          <span class="tier-badge"><span class="tier-diamond">&#x25C6;&#x25C6;&#x25C6;</span> Executive Sniper</span>
+        </div>
+
+        <div class="achievement-section">
+          <span class="badge-label">TITM Academy</span>
+          <div class="achievement-title">
+            <span class="achievement-icon">&#x1F525;</span>Elite Operator
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-item"><span class="stat-value">14/14</span><span class="stat-label">Courses</span></div>
+          <div class="stat-item"><span class="stat-value">95%</span><span class="stat-label">Quiz Avg</span></div>
+          <div class="stat-item"><span class="stat-value">71</span><span class="stat-label">Lessons</span></div>
+          <div class="stat-item"><span class="stat-value">60</span><span class="stat-label">Streak</span></div>
+        </div>
+
+        <div class="courses-section">
+          <span class="courses-label">14 Courses Completed</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> SPX Elite</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> LEAPS Strategy</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> NDX Precision</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Greek Mastery</span>
+          <span class="course-pill"><span class="pill-check">&#x2713;</span> Volatility</span>
+          <span class="course-pill" style="color:rgba(245,245,240,0.3); border-color:rgba(255,255,255,0.03);"><span class="pill-check" style="color:rgba(245,245,240,0.2);">+</span> 9 more</span>
+        </div>
+
+        <div class="card-bottom">
+          <div class="member-info">
+            <span class="member-name">Nate K.</span>
+            <span class="member-date">Feb 2026 &bull; Elite Operator</span>
+          </div>
+          <div class="verification">
+            <span class="verify-label">Verified</span>
+            <span class="verify-url">tradeinthemoney.com/verify/c9d4e1f3</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
