@@ -5,6 +5,15 @@ import { calculateLevels } from '../levels';
 import { fetchDailyData, fetchIntradayData } from '../levels/fetcher';
 import { getMarketStatus } from '../marketHours';
 import { fetchOptionsChain } from '../options/optionsChainFetcher';
+import {
+  markWorkerCycleFailed,
+  markWorkerCycleStarted,
+  markWorkerCycleSucceeded,
+  markWorkerNextRun,
+  markWorkerStarted,
+  markWorkerStopped,
+  registerWorker,
+} from '../workerHealth';
 import { detectSetupsFromSnapshot } from './detectors';
 import { detectGammaSqueeze } from './gammaSqueeze';
 import { SetupDirection, SetupSignal, toShortDirection } from './types';
@@ -38,12 +47,14 @@ interface SetupDetectorDeps {
 const DEFAULT_SYMBOLS = ['SPX', 'NDX'];
 const GAMMA_SETUP_SYMBOLS = new Set(['SPX', 'NDX']);
 const MAX_SYMBOLS_PER_CYCLE = 20;
+const WORKER_NAME = 'setup_detector_worker';
 
 export const SETUP_DETECTOR_INITIAL_DELAY = 10_000;
 export const SETUP_DETECTOR_POLL_INTERVAL_OPEN = 15_000;
 export const SETUP_DETECTOR_POLL_INTERVAL_EXTENDED = 60_000;
 export const SETUP_DETECTOR_POLL_INTERVAL_CLOSED = 300_000;
 export const SETUP_DETECTOR_COOLDOWN_MS = 5 * 60 * 1000;
+registerWorker(WORKER_NAME);
 
 function sanitizeSymbols(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -183,12 +194,14 @@ export class SetupDetectorService {
     }
 
     this.isRunning = true;
+    markWorkerStarted(WORKER_NAME);
     logger.info('Setup detector service started');
     this.scheduleNext(SETUP_DETECTOR_INITIAL_DELAY);
   }
 
   public stop(): void {
     this.isRunning = false;
+    markWorkerStopped(WORKER_NAME);
 
     if (this.timer) {
       clearTimeout(this.timer);
@@ -249,10 +262,14 @@ export class SetupDetectorService {
   private scheduleNext(delayMs: number): void {
     if (!this.isRunning) return;
 
+    markWorkerNextRun(WORKER_NAME, delayMs);
     this.timer = setTimeout(async () => {
+      const cycleStartedAt = markWorkerCycleStarted(WORKER_NAME);
       try {
         await this.runCycleOnce();
+        markWorkerCycleSucceeded(WORKER_NAME, cycleStartedAt);
       } catch (error) {
+        markWorkerCycleFailed(WORKER_NAME, cycleStartedAt, error);
         logger.error('Setup detector service cycle failed', {
           error: error instanceof Error ? error.message : String(error),
         });

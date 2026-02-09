@@ -26,7 +26,7 @@ This rollout includes:
   - `session_context`
 - Journal API routes switched to canonical `journal_entries`
 - Setup detector runtime:
-  - ORB / break-retest / VWAP / gap-fill / gamma-squeeze / SPX-NDX opening-drive detection
+  - ORB / break-retest / VWAP / gap-fill / volume-climax / level-test / gamma-squeeze / SPX-NDX opening-drive detection
   - persistence to `ai_coach_detected_setups`
   - auto-track creation for watchlist users via `ai_coach_tracked_setups`
   - WebSocket `setup_detected` delivery on `setups:{userId}`
@@ -147,6 +147,11 @@ select
    - watchlist users receive new auto-created `active` rows in `ai_coach_tracked_setups`
    - Tracked Setups panel refreshes when receiving WebSocket `setup_detected` on `setups:{userId}`
    - SPX/NDX sessions can produce `gamma_squeeze`, `spx_opening_drive`, and `ndx_opening_drive` setup types when conditions are met
+   - all sessions can produce `volume_climax` and `level_test` setup types when thresholds are met
+16. Validate worker telemetry:
+   - `GET /health/workers` returns all active worker records (`alert_worker`, `morning_brief_worker`, `setup_push_worker`, `setup_detector_worker`)
+   - response `summary.stale` remains `0` under normal operation
+   - each worker shows moving `lastCycleCompletedAt` and non-null `pollIntervalMs` / `nextRunAt` while running
 
 ## Step 6: Rollback plan (if needed)
 

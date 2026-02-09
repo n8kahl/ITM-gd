@@ -4,6 +4,7 @@ import { testRedisConnection } from '../config/redis';
 import { testMassiveConnection, getDailyAggregates, getMinuteAggregates, getOptionsContracts, getOptionsExpirations } from '../config/massive';
 import { testOpenAIConnection, openaiClient, CHAT_MODEL } from '../config/openai';
 import { logger } from '../lib/logger';
+import { getWorkerHealthSnapshot } from '../services/workerHealth';
 
 const router = Router();
 
@@ -83,6 +84,34 @@ router.get('/ready', async (_req: Request, res: Response) => {
     logger.warn('Health check failed', { checks });
   }
   return res.status(statusCode).json(response);
+});
+
+router.get('/workers', (_req: Request, res: Response) => {
+  const workers = getWorkerHealthSnapshot();
+  const nowMs = Date.now();
+  const staleThresholdMs = 20 * 60 * 1000; // 20 minutes
+
+  const staleWorkers = workers.filter((worker) => {
+    if (!worker.isRunning) return false;
+    if (!worker.lastCycleCompletedAt) return false;
+
+    const lastCycleMs = Date.parse(worker.lastCycleCompletedAt);
+    return Number.isFinite(lastCycleMs) && nowMs - lastCycleMs > staleThresholdMs;
+  });
+
+  const response = {
+    status: staleWorkers.length === 0 ? 'healthy' : 'degraded',
+    timestamp: new Date().toISOString(),
+    summary: {
+      total: workers.length,
+      running: workers.filter((worker) => worker.isRunning).length,
+      stale: staleWorkers.length,
+    },
+    staleThresholdMs,
+    workers,
+  };
+
+  return res.status(staleWorkers.length === 0 ? 200 : 503).json(response);
 });
 
 router.get('/diagnose', async (_req: Request, res: Response) => {
