@@ -62,6 +62,13 @@ export interface ChartRequest {
       atr14?: number
     }
   }
+  gexProfile?: {
+    symbol?: string
+    spotPrice?: number
+    flipPoint?: number | null
+    maxGEXStrike?: number | null
+    keyLevels?: Array<{ strike: number; gexValue: number; type: 'support' | 'resistance' | 'magnet' }>
+  }
 }
 
 type CenterView =
@@ -144,6 +151,11 @@ const LEVEL_COLORS: Record<string, string> = {
   PDC: '#a78bfa',
   PP: '#f3e5ab',
   VWAP: '#eab308',
+  GEX_FLIP: '#facc15',
+  GEX_MAX: '#a855f7',
+  GEX_SUPPORT: '#22c55e',
+  GEX_RESISTANCE: '#f97316',
+  GEX_MAGNET: '#a855f7',
 }
 
 // ============================================
@@ -233,6 +245,55 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     return annotations
   }, [])
 
+  const buildGEXAnnotations = useCallback((request: ChartRequest): LevelAnnotation[] => {
+    if (!request.gexProfile) return []
+
+    const annotations: LevelAnnotation[] = []
+    const seenPrices = new Set<number>()
+    const addLine = (annotation: LevelAnnotation) => {
+      const rounded = Number(annotation.price.toFixed(2))
+      if (seenPrices.has(rounded)) return
+      seenPrices.add(rounded)
+      annotations.push(annotation)
+    }
+
+    if (request.gexProfile.flipPoint != null) {
+      addLine({
+        price: request.gexProfile.flipPoint,
+        label: 'GEX Flip',
+        color: LEVEL_COLORS.GEX_FLIP,
+        lineWidth: 3,
+        lineStyle: 'dashed',
+      })
+    }
+
+    if (request.gexProfile.maxGEXStrike != null) {
+      addLine({
+        price: request.gexProfile.maxGEXStrike,
+        label: 'Max GEX',
+        color: LEVEL_COLORS.GEX_MAX,
+        lineWidth: 3,
+        lineStyle: 'solid',
+      })
+    }
+
+    for (const level of request.gexProfile.keyLevels || []) {
+      addLine({
+        price: level.strike,
+        label: `GEX ${level.type === 'magnet' ? 'Magnet' : level.type === 'support' ? 'Support' : 'Resistance'}`,
+        color: level.type === 'support'
+          ? LEVEL_COLORS.GEX_SUPPORT
+          : level.type === 'resistance'
+          ? LEVEL_COLORS.GEX_RESISTANCE
+          : LEVEL_COLORS.GEX_MAGNET,
+        lineWidth: level.type === 'magnet' ? 2 : 1,
+        lineStyle: level.type === 'magnet' ? 'solid' : 'dotted',
+      })
+    }
+
+    return annotations
+  }, [])
+
   // Handle chart request from AI
   useEffect(() => {
     if (!chartRequest) return
@@ -241,15 +302,37 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     setChartSymbol(chartRequest.symbol)
     setChartTimeframe(chartRequest.timeframe)
 
-    if (chartRequest.levels) {
-      setChartLevels(buildLevelAnnotations(chartRequest))
-    }
+    const levelAnnotations = buildLevelAnnotations(chartRequest)
+    const gexAnnotations = buildGEXAnnotations(chartRequest)
+    setChartLevels([...levelAnnotations, ...gexAnnotations])
 
     fetchChartData(chartRequest.symbol, chartRequest.timeframe)
-  }, [chartRequest, fetchChartData, buildLevelAnnotations])
+  }, [chartRequest, fetchChartData, buildLevelAnnotations, buildGEXAnnotations])
+
+  useEffect(() => {
+    const handleChartEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<ChartRequest>
+      const request = customEvent.detail
+      if (!request?.symbol || !request?.timeframe) return
+
+      setActiveView('chart')
+      setChartSymbol(request.symbol)
+      setChartTimeframe(request.timeframe)
+
+      const levelAnnotations = buildLevelAnnotations(request)
+      const gexAnnotations = buildGEXAnnotations(request)
+      setChartLevels([...levelAnnotations, ...gexAnnotations])
+
+      fetchChartData(request.symbol, request.timeframe)
+    }
+
+    window.addEventListener('ai-coach-show-chart', handleChartEvent)
+    return () => window.removeEventListener('ai-coach-show-chart', handleChartEvent)
+  }, [buildLevelAnnotations, buildGEXAnnotations, fetchChartData])
 
   const handleSymbolChange = useCallback((symbol: string) => {
     setChartSymbol(symbol)
+    setChartLevels([])
     fetchChartData(symbol, chartTimeframe)
   }, [chartTimeframe, fetchChartData])
 

@@ -7,16 +7,20 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowUpDown,
+  Target,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   getOptionsChain,
   getExpirations,
+  getGammaExposure,
   AICoachAPIError,
   type OptionsChainResponse,
   type OptionContract,
+  type GEXProfileResponse,
 } from '@/lib/api/ai-coach'
+import { GEXChart } from './gex-chart'
 
 // ============================================
 // TYPES
@@ -46,6 +50,10 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('strike')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [showGex, setShowGex] = useState(true)
+  const [gexProfile, setGexProfile] = useState<GEXProfileResponse | null>(null)
+  const [isLoadingGex, setIsLoadingGex] = useState(false)
+  const [gexError, setGexError] = useState<string | null>(null)
 
   const token = session?.access_token
 
@@ -91,6 +99,51 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
     }
   }, [token, symbol, expiry, strikeRange])
 
+  const loadGex = useCallback(async (forceRefresh: boolean = false) => {
+    if (!token || !showGex) return
+
+    setIsLoadingGex(true)
+    setGexError(null)
+    try {
+      const data = await getGammaExposure(symbol, token, {
+        expiry: expiry || undefined,
+        strikeRange: Math.max(15, strikeRange),
+        maxExpirations: expiry ? 1 : 6,
+        forceRefresh,
+      })
+      setGexProfile(data)
+    } catch (err) {
+      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load gamma exposure'
+      setGexError(msg)
+      setGexProfile(null)
+    } finally {
+      setIsLoadingGex(false)
+    }
+  }, [token, showGex, symbol, expiry, strikeRange])
+
+  useEffect(() => {
+    if (!token || !showGex) return
+    loadGex(false)
+  }, [token, showGex, symbol, expiry, strikeRange, loadGex])
+
+  const handleShowGexOnChart = useCallback(() => {
+    if (!gexProfile || typeof window === 'undefined') return
+
+    window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+      detail: {
+        symbol,
+        timeframe: '1D',
+        gexProfile: {
+          symbol: gexProfile.symbol,
+          spotPrice: gexProfile.spotPrice,
+          flipPoint: gexProfile.flipPoint,
+          maxGEXStrike: gexProfile.maxGEXStrike,
+          keyLevels: gexProfile.keyLevels,
+        },
+      },
+    }))
+  }, [gexProfile, symbol])
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
@@ -128,7 +181,13 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
           {['SPX', 'NDX'].map(s => (
             <button
               key={s}
-              onClick={() => { setSymbol(s); setExpiry(''); setChain(null); }}
+              onClick={() => {
+                setSymbol(s)
+                setExpiry('')
+                setChain(null)
+                setGexProfile(null)
+                setGexError(null)
+              }}
               className={cn(
                 'px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
                 symbol === s
@@ -175,6 +234,29 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
           <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
         </button>
 
+        <button
+          onClick={() => setShowGex(prev => !prev)}
+          className={cn(
+            'px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors',
+            showGex
+              ? 'border-violet-500/40 bg-violet-500/10 text-violet-300'
+              : 'border-white/10 bg-white/5 text-white/50 hover:text-white/70'
+          )}
+        >
+          GEX {showGex ? 'On' : 'Off'}
+        </button>
+
+        {showGex && (
+          <button
+            onClick={() => loadGex(true)}
+            disabled={isLoadingGex}
+            className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-violet-300 transition-colors disabled:opacity-30"
+            title="Refresh GEX"
+          >
+            <RefreshCw className={cn('w-4 h-4', isLoadingGex && 'animate-spin')} />
+          </button>
+        )}
+
         {chain && (
           <div className="ml-auto flex items-center gap-3 text-xs text-white/40">
             <span>Price: <span className="text-white font-medium">${chain.currentPrice.toLocaleString()}</span></span>
@@ -184,6 +266,17 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
                 'font-medium',
                 chain.ivRank > 50 ? 'text-red-400' : 'text-emerald-400'
               )}>{chain.ivRank}%</span></span>
+            )}
+            {showGex && gexProfile && (
+              <span>
+                GEX:
+                <span className={cn(
+                  'ml-1 font-medium',
+                  gexProfile.regime === 'positive_gamma' ? 'text-emerald-300' : 'text-red-300'
+                )}>
+                  {gexProfile.regime === 'positive_gamma' ? 'Positive' : 'Negative'}
+                </span>
+              </span>
             )}
           </div>
         )}
@@ -211,48 +304,104 @@ export function OptionsChain({ initialSymbol = 'SPX', initialExpiry }: OptionsCh
         )}
 
         {chain && (
-          <div className="flex gap-0">
-            {/* CALLS */}
-            <div className="flex-1 min-w-0">
-              <div className="sticky top-0 bg-[#0F0F10] border-b border-white/5 px-3 py-2">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  CALLS
+          <>
+            {showGex && (
+              <div className="border-b border-white/5 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-violet-300" />
+                    <span className="text-xs font-medium text-white">Gamma Exposure (GEX)</span>
+                    {gexProfile?.regime && (
+                      <span className={cn(
+                        'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                        gexProfile.regime === 'positive_gamma'
+                          ? 'bg-emerald-500/10 text-emerald-300'
+                          : 'bg-red-500/10 text-red-300'
+                      )}>
+                        {gexProfile.regime === 'positive_gamma' ? 'Positive' : 'Negative'}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleShowGexOnChart}
+                    disabled={!gexProfile}
+                    className="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-medium text-violet-300 hover:bg-violet-500/15 disabled:opacity-40"
+                  >
+                    Show on Chart
+                  </button>
                 </div>
+
+                {gexError && (
+                  <p className="mb-2 text-[11px] text-amber-400">{gexError}</p>
+                )}
+
+                {isLoadingGex && !gexProfile && (
+                  <div className="flex h-24 items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-violet-300 animate-spin" />
+                  </div>
+                )}
+
+                {gexProfile && (
+                  <>
+                    <GEXChart
+                      data={gexProfile.gexByStrike}
+                      spotPrice={gexProfile.spotPrice}
+                      flipPoint={gexProfile.flipPoint}
+                      maxGEXStrike={gexProfile.maxGEXStrike}
+                      maxRows={18}
+                    />
+                    {gexProfile.implication && (
+                      <p className="mt-2 text-[10px] text-white/45">{gexProfile.implication}</p>
+                    )}
+                  </>
+                )}
               </div>
-              <OptionsTable
-                contracts={sortContracts(chain.options.calls)}
-                currentPrice={chain.currentPrice}
-                side="call"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={handleSort}
-                isLoading={isLoading}
-              />
-            </div>
+            )}
 
-            {/* Strike Column (shared center) */}
-            <div className="w-px bg-emerald-500/20" />
-
-            {/* PUTS */}
-            <div className="flex-1 min-w-0">
-              <div className="sticky top-0 bg-[#0F0F10] border-b border-white/5 px-3 py-2">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-red-400">
-                  <TrendingDown className="w-3.5 h-3.5" />
-                  PUTS
+            <div className="flex gap-0">
+              {/* CALLS */}
+              <div className="flex-1 min-w-0">
+                <div className="sticky top-0 bg-[#0F0F10] border-b border-white/5 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    CALLS
+                  </div>
                 </div>
+                <OptionsTable
+                  contracts={sortContracts(chain.options.calls)}
+                  currentPrice={chain.currentPrice}
+                  side="call"
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  isLoading={isLoading}
+                />
               </div>
-              <OptionsTable
-                contracts={sortContracts(chain.options.puts)}
-                currentPrice={chain.currentPrice}
-                side="put"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={handleSort}
-                isLoading={isLoading}
-              />
+
+              {/* Strike Column (shared center) */}
+              <div className="w-px bg-emerald-500/20" />
+
+              {/* PUTS */}
+              <div className="flex-1 min-w-0">
+                <div className="sticky top-0 bg-[#0F0F10] border-b border-white/5 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-red-400">
+                    <TrendingDown className="w-3.5 h-3.5" />
+                    PUTS
+                  </div>
+                </div>
+                <OptionsTable
+                  contracts={sortContracts(chain.options.puts)}
+                  currentPrice={chain.currentPrice}
+                  side="put"
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  isLoading={isLoading}
+                />
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

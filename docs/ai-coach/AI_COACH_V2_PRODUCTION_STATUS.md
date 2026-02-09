@@ -58,6 +58,15 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/morningBriefWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/workers/setupPushWorker.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
+- GEX profile API + AI function:
+  - `GET /api/options/:symbol/gex` with validated query params (`expiry`, `strikeRange`, `maxExpirations`, `forceRefresh`) and 5-min cached calculator service
+  - ChatKit function `get_gamma_exposure` wired to return regime, flip point, max GEX strike, key levels, and strike-by-strike GEX
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/gexCalculator.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Real-time setup detector service:
   - Implements ORB, break-retest, VWAP play, gap-fill, volume climax, level-test, gamma squeeze, and SPX/NDX opening-drive detectors
   - Runs on market-aware cadence and persists deduplicated detections to `ai_coach_detected_setups`
@@ -98,6 +107,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Typed API client coverage:
   - watchlist/brief/tracked-setups methods
   - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- GEX frontend visualization + chart overlay wiring:
+  - Reusable GEX visualization component `GEXChart`
+  - Chat widget card rendering for `get_gamma_exposure` with regime/flip/max/key levels and a `Show on Chart` action
+  - Options panel now loads `/api/options/:symbol/gex` and renders embedded GEX profile + chart handoff action
+  - Center panel chart request plumbing now accepts GEX payloads and renders flip/max/key overlays on `TradingChart`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/gex-chart.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 
 ### Database
 - Applied to staging:
@@ -128,6 +148,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/indexSpecific.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/service.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/workerHealth.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
 
 ### Commands
 - `npm test -- --runInBand src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts`
@@ -135,6 +158,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
+- `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution blocked in this environment due missing `@sentry/nextjs` dependency).
 
@@ -150,15 +174,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Morning brief scheduled worker is in place with idempotent writes.
 - Setup detector service is running with ORB/break-retest/VWAP/gap-fill/volume-climax/level-test/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
+- GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 
 ### Needs Completion
-- Deliver full GEX profile API/visualization from the rebuild spec (beyond detector-level gamma squeeze signal).
+- Implement the broader interactive widget action system from spec (`widget-actions`, context menus, workflow context wiring across all widget types).
 - Full E2E path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 
 ## 4) Surgical Next Plan
 
-1. Tune detector thresholds (including new volume climax + level-test) using staged market sessions and telemetry.
-2. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
-3. Run staging verification against pending hardening migrations from `main` before production cut.
-4. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
+1. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
+2. Implement cross-widget action framework (`widget-action-bar`, context menus, workflow context) so GEX/earnings/scanner cards share consistent chart/options/alert actions.
+3. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
+4. Run staging verification against pending hardening migrations from `main` before production cut.

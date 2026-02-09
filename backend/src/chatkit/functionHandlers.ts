@@ -1,6 +1,7 @@
 import { calculateLevels } from '../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../services/levels/fetcher';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
+import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
@@ -70,6 +71,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_options_chain':
       return await handleGetOptionsChain(typedArgs);
+
+    case 'get_gamma_exposure':
+      return await handleGetGammaExposure(typedArgs);
 
     case 'analyze_position':
       return await handleAnalyzePosition(typedArgs);
@@ -283,6 +287,56 @@ async function handleGetOptionsChain(args: {
     return {
       error: 'Failed to fetch options chain',
       message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: get_gamma_exposure
+ * Calculates options gamma exposure profile for SPX/NDX
+ */
+async function handleGetGammaExposure(args: {
+  symbol: string;
+  expiry?: string;
+  strikeRange?: number;
+  maxExpirations?: number;
+  forceRefresh?: boolean;
+}) {
+  const {
+    symbol,
+    expiry,
+    strikeRange,
+    maxExpirations,
+    forceRefresh = false,
+  } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
+  try {
+    const profile = await withTimeout(
+      () => calculateGEXProfile(symbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
+      FUNCTION_TIMEOUT_MS,
+      'get_gamma_exposure',
+    );
+
+    return {
+      symbol: profile.symbol,
+      spotPrice: profile.spotPrice,
+      regime: profile.regime,
+      flipPoint: profile.flipPoint,
+      maxGEXStrike: profile.maxGEXStrike,
+      keyLevels: profile.keyLevels,
+      implication: profile.implication,
+      expirationsAnalyzed: profile.expirationsAnalyzed,
+      calculatedAt: profile.calculatedAt,
+      gexByStrike: profile.gexByStrike,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to calculate gamma exposure',
+      message: error.message,
     };
   }
 }

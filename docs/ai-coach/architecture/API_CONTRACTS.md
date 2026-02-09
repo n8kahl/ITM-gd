@@ -339,6 +339,52 @@ Authorization: Bearer {token}
 }
 ```
 
+### GET /api/options/:symbol/gex
+
+**Purpose**: Retrieve gamma exposure (GEX) profile for SPX/NDX
+
+**Request**:
+```http
+GET /api/options/SPX/gex?strikeRange=30&maxExpirations=6 HTTP/1.1
+Host: api.titm.com
+Authorization: Bearer {token}
+```
+
+**Query Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| expiry | string (YYYY-MM-DD) | No | Analyze only one expiration. If omitted, aggregates multiple nearby expirations |
+| strikeRange | integer | No | Number of strikes above/below spot per expiration (default: 30, min: 5, max: 50) |
+| maxExpirations | integer | No | Number of expirations to aggregate when `expiry` is omitted (default: 6, max: 12) |
+| forceRefresh | boolean | No | Bypass cache and force fresh calculation (default: false) |
+
+**Response** (200 OK):
+```json
+{
+  "symbol": "SPX",
+  "spotPrice": 6012.50,
+  "gexByStrike": [
+    {
+      "strike": 6000,
+      "gexValue": 1523400,
+      "callGamma": 0.0042,
+      "putGamma": 0.0039,
+      "callOI": 12000,
+      "putOI": 10500
+    }
+  ],
+  "flipPoint": 5990,
+  "maxGEXStrike": 6000,
+  "keyLevels": [
+    { "strike": 6000, "gexValue": 1523400, "type": "magnet" }
+  ],
+  "regime": "positive_gamma",
+  "implication": "Positive gamma regime: market makers are more likely to dampen moves.",
+  "calculatedAt": "2026-02-09T17:00:00.000Z",
+  "expirationsAnalyzed": ["2026-02-10", "2026-02-11"]
+}
+```
+
 ---
 
 ## 4. Position Analysis API

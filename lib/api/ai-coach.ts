@@ -125,6 +125,34 @@ export interface ExpirationsResponse {
   count: number
 }
 
+export interface GEXStrikeData {
+  strike: number
+  gexValue: number
+  callGamma: number
+  putGamma: number
+  callOI: number
+  putOI: number
+}
+
+export interface GEXKeyLevel {
+  strike: number
+  gexValue: number
+  type: 'support' | 'resistance' | 'magnet'
+}
+
+export interface GEXProfileResponse {
+  symbol: string
+  spotPrice: number
+  gexByStrike: GEXStrikeData[]
+  flipPoint: number | null
+  maxGEXStrike: number | null
+  keyLevels: GEXKeyLevel[]
+  regime: 'positive_gamma' | 'negative_gamma'
+  implication: string
+  calculatedAt: string
+  expirationsAnalyzed: string[]
+}
+
 export type PositionType = 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock'
 
 export interface PositionInput {
@@ -425,6 +453,43 @@ export async function getExpirations(
       headers: { 'Authorization': `Bearer ${token}` },
     }
   )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get gamma exposure profile for an options symbol
+ */
+export async function getGammaExposure(
+  symbol: string,
+  token: string,
+  options?: {
+    expiry?: string
+    strikeRange?: number
+    maxExpirations?: number
+    forceRefresh?: boolean
+  }
+): Promise<GEXProfileResponse> {
+  const params = new URLSearchParams()
+  if (options?.expiry) params.set('expiry', options.expiry)
+  if (options?.strikeRange) params.set('strikeRange', options.strikeRange.toString())
+  if (options?.maxExpirations) params.set('maxExpirations', options.maxExpirations.toString())
+  if (options?.forceRefresh) params.set('forceRefresh', 'true')
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/gex${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({

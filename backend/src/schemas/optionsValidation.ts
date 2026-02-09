@@ -9,6 +9,23 @@ export const optionsChainQuerySchema = z.object({
   strikeRange: z.coerce.number().int().min(1).max(50).optional().default(10),
 });
 
+const booleanQuerySchema = z.preprocess((value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return value;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'false' || normalized === '0') return false;
+  return value;
+}, z.boolean());
+
+export const gexQuerySchema = z.object({
+  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  strikeRange: z.coerce.number().int().min(5).max(50).optional().default(30),
+  maxExpirations: z.coerce.number().int().min(1).max(12).optional().default(6),
+  forceRefresh: booleanQuerySchema.optional().default(false),
+});
+
 export const analyzePositionSchema = z.object({
   position: z.object({
     symbol: z.string().min(1).max(10),
