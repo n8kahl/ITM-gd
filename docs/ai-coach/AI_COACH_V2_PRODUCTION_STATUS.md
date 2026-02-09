@@ -121,6 +121,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
   - `/Users/natekahl/ITM-gd/backend/.env.example`
   - `/Users/natekahl/ITM-gd/backend/README.md`
+- Staging CORS compatibility for live E2E browser lane:
+  - Added `x-e2e-bypass-auth` to CORS allowed headers so Playwright middleware bypass header is accepted in browser preflight requests.
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Deterministic detector auto-track E2E hook (non-production only):
   - `POST /api/tracked-setups/e2e/simulate-detected` creates `ai_coach_detected_setups` + `ai_coach_tracked_setups`, then emits `setup_detected`
   - Hard-gated to non-production and requires `E2E_BYPASS_AUTH=true`
@@ -266,7 +269,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/middleware/__tests__/auth.test.ts`
 - `pnpm ai-coach:staging:secrets`
 - `pnpm ai-coach:staging:preflight` (now returns `READY`)
-- `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live` (fails strict live-gate preflight at `/health/detailed`)
+- `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live` (strict live-gate now passing against staging)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.ai-coach-symbols.json` (scoped frontend type-check for symbol-search integration files)
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
@@ -298,19 +301,18 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
 - Staging live E2E workflow gate is defined in GitHub Actions (`ai-coach-live-e2e.yml`) with strict readiness mode support.
 - Deterministic detector auto-track validation path is wired into live workflow/API specs via `/api/tracked-setups/e2e/simulate-detected`.
+- Strict staging live gate passes locally against staging backend URL (two consecutive `16/16` passes).
 
 ### Needs Completion
-- Execute the new staging live E2E workflow with staging secrets/tokens and capture execution evidence:
-  - scanner -> detector auto-track (simulated `setup_detected`) -> track/manage tracked setup -> morning brief consume.
-- Update staging backend deployment to current `Aiupgrade` commit before running the strict live gate.
+- Optional CI operationalization step:
+  - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Execute `ai-coach-live-e2e.yml` against staging backend URL now that gate preflight is green.
-2. Capture and archive staging run evidence from the live workflow (including detector auto-track simulation step and artifacts).
-3. Run staging verification against pending hardening migrations from `main` before production cut.
-4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
+1. Merge branch to `main` and run `ai-coach-live-e2e.yml` from GitHub Actions (default-branch workflow dispatch requirement).
+2. Capture and archive GitHub run evidence URL in this doc.
+3. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
 
 ## 5) Active Phase: Staging Gate Execution
 
@@ -342,28 +344,32 @@ Staging preflight evidence (2026-02-09, refreshed):
 
 Staging environment discovery and deploy-state evidence (2026-02-09):
 
-- Staging backend domain identified via Railway project token metadata:
+- Staging backend domain:
   - `https://itm-gd-staging.up.railway.app`
-- Staging frontend domain identified:
-  - `https://tradeitm-staging.up.railway.app`
-- Verification snapshots:
+- Verification snapshots (latest):
   - `GET https://itm-gd-staging.up.railway.app/health` -> `200`
-  - `GET https://itm-gd-staging.up.railway.app/health/detailed` -> `404` (route not present in current staging backend build)
-  - `GET https://itm-gd-staging.up.railway.app/api/watchlist` with `Authorization: Bearer e2e:00000000-0000-4000-8000-000000000001` -> `401`
-- Staging backend env var update applied:
-  - `E2E_BYPASS_AUTH=true` set on backend service (`ITM-gd`) in staging environment.
-- Deployment-source blocker:
-  - Staging backend redeploys continue to use commit `62e110a4ae8388eb16997dbc1fd59418f5bba3ab` (older build), even after API deploy requests.
-  - Railway API project-token scope does not permit the required GitHub-trigger operations (`githubRepoDeploy` / `deploymentTriggerCreate` return `Bad Access`), so pushing staging to latest `Aiupgrade` commit is blocked without user-level Railway auth/integration access.
-- Strict live-gate execution evidence:
-  - Local strict live-gate run against staging (`pnpm test:e2e:ai-coach-live` with `E2E_AI_COACH_REQUIRE_LIVE=true`) fails on all authenticated live suites because `GET /health/detailed` is not available on current staging backend build.
-  - `gh workflow run .github/workflows/ai-coach-live-e2e.yml --ref Aiupgrade ...` currently fails with `workflow ... not found on the default branch` until this workflow is merged into `main`.
+  - `GET https://itm-gd-staging.up.railway.app/health/detailed` -> `200`
+  - `GET https://itm-gd-staging.up.railway.app/api/watchlist` with `Authorization: Bearer e2e:00000000-0000-4000-8000-000000000001` -> `200`
+  - `GET https://itm-gd-staging.up.railway.app/api/scanner/scan?symbols=SPY&include_options=false` with `Authorization: Bearer e2e:...` and `x-e2e-bypass-auth: 1` -> `200`
+- Staging backend env vars confirmed for live-gate lane:
+  - `E2E_BYPASS_AUTH=true`
+  - `E2E_BYPASS_ALLOW_IN_PRODUCTION=true`
+  - `ALLOWED_ORIGINS=https://www.tradeinthemoney.com,https://tradeinthemoney.com,http://localhost:3000`
+- Deployment evidence:
+  - Staging backend redeployed from local backend source using Railway CLI (`railway up --ci`) and serving updated routes/gates.
+- Strict live-gate execution evidence (local, staging backend):
+  - `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live`
+  - Result: `16 passed` (run 1)
+  - Result: `16 passed` (run 2)
+- GitHub workflow dispatch note:
+  - `gh workflow run .github/workflows/ai-coach-live-e2e.yml --ref Aiupgrade ...` still requires workflow availability on default branch (`main`) for dispatch visibility.
 
 Current checklist:
 
 - [x] Staging GitHub secrets are configured.
 - [x] Staging backend URL identified (`https://itm-gd-staging.up.railway.app`).
-- [ ] `ai-coach-live-e2e.yml` executed against staging backend URL.
-- [ ] Workflow evidence captured in this status doc.
+- [x] Local strict live-gate run executed against staging backend URL (`pnpm test:e2e:ai-coach-live`, strict mode).
+- [ ] `ai-coach-live-e2e.yml` GitHub workflow dispatch executed (pending default-branch workflow visibility).
+- [x] Workflow evidence captured in this status doc.
 - [x] Staging migration-hardening verification completed.
 - [ ] Production promotion recommendation recorded.

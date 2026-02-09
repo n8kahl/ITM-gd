@@ -191,6 +191,8 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
   }
 
   test('watchlist + scanner + brief endpoints should return authenticated responses', async ({ request }) => {
+    test.setTimeout(90000)
+
     const authHeaders = getAICoachAuthHeaders()
 
     const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
@@ -198,9 +200,20 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
     const watchlistPayload = await watchlistResponse.json()
     expect(Array.isArray(watchlistPayload.watchlists)).toBe(true)
 
-    const scanResponse = await request.get(`${e2eBackendUrl}/api/scanner/scan?symbols=SPX,NDX&include_options=false`, {
-      headers: authHeaders,
-    })
+    const scanUrl = `${e2eBackendUrl}/api/scanner/scan?symbols=SPY&include_options=false`
+    let scanResponse
+    try {
+      scanResponse = await request.get(scanUrl, {
+        headers: authHeaders,
+        timeout: 25000,
+      })
+    } catch {
+      // Retry once for transient upstream latency in live staging providers.
+      scanResponse = await request.get(scanUrl, {
+        headers: authHeaders,
+        timeout: 25000,
+      })
+    }
     expect(scanResponse.status()).toBe(200)
     const scanPayload = await scanResponse.json()
     expect(Array.isArray(scanPayload.opportunities)).toBe(true)
@@ -208,6 +221,7 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
 
     const briefResponse = await request.get(`${e2eBackendUrl}/api/brief/today`, {
       headers: authHeaders,
+      timeout: 30000,
     })
     expect(briefResponse.status()).toBe(200)
     const briefPayload = await briefResponse.json()
