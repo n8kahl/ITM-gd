@@ -160,6 +160,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Mode updates automatically every minute to keep context accurate as market session changes.
   - Added mobile pull-to-refresh gesture at top-of-scroll for faster brief refresh without tapping header controls.
   - Replaced placeholder gamma status in SPX Focus with real SPX GEX regime summary (`positive/negative`, flip point, max GEX strike) from options gamma API.
+  - Added watchlist overnight gap percent context on symbol chips.
+  - Added high-impact economic event countdown and one-click reminder actions.
+  - Added earnings preview section with expected move, IV rank bar, and strategy-oriented suggestion text.
   - `/Users/natekahl/ITM-gd/components/ai-coach/morning-brief.tsx`
 - Widget action accessibility + micro-interactions:
   - Added explicit tooltips/aria-labels for widget action buttons.

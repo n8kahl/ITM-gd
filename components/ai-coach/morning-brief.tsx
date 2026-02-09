@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Sunrise, RefreshCw, Loader2, X, Sparkles, Activity } from 'lucide-react'
+import { Sunrise, RefreshCw, Loader2, X, Sparkles, Activity, Bell } from 'lucide-react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   getMorningBrief,
@@ -70,6 +70,39 @@ function asNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed
   }
   return null
+}
+
+function parseEventDateTime(marketDate: string, eventTime: string): Date | null {
+  const match = eventTime.match(/(\d{1,2}):(\d{2})/)
+  if (!match) return null
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null
+
+  const [year, month, day] = marketDate.split('-').map((part) => Number(part))
+  if (!year || !month || !day) return null
+
+  // Build timestamp for ET by using UTC offset proxy via Intl roundtrip.
+  const utcDate = new Date(Date.UTC(year, month - 1, day, hour + 5, minute))
+  if (Number.isNaN(utcDate.getTime())) return null
+  return utcDate
+}
+
+function formatCountdown(target: Date, now: Date = new Date()): string {
+  const diffMs = target.getTime() - now.getTime()
+  if (diffMs <= 0) return 'now'
+  const totalMinutes = Math.floor(diffMs / (1000 * 60))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours <= 0) return `${minutes}m`
+  return `${hours}h ${minutes}m`
+}
+
+function earningsSuggestion(ivRank: number | null): string {
+  if (ivRank == null) return 'No IV rank available. Use defined-risk sizing around the event.'
+  if (ivRank >= 70) return 'Elevated IV: consider defined-risk premium-selling structures.'
+  if (ivRank <= 30) return 'Compressed IV: directional/debit structures can offer cleaner convexity.'
+  return 'Balanced IV: favor directional setups with disciplined event risk.'
 }
 
 export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelProps) {
@@ -225,6 +258,20 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
     const price = asNumber(row.currentPrice)
     if (symbol && price !== null) watchlistPriceMap.set(symbol, price)
   }
+  const watchlistGapMap = new Map<string, number>()
+  for (const gap of brief?.overnightSummary?.gapAnalysis || []) {
+    watchlistGapMap.set(String(gap.symbol || '').toUpperCase(), Number(gap.gapPct || 0))
+  }
+
+  const highImpactEvents = (brief?.economicEvents || [])
+    .filter((event) => String(event.impact || '').toUpperCase() === 'HIGH')
+    .map((event) => ({
+      eventName: String(event.event || 'Event'),
+      dateTime: parseEventDateTime(brief?.marketDate || marketDate, String(event.time || '')),
+    }))
+  const nextHighImpact = highImpactEvents
+    .filter((event) => event.dateTime && event.dateTime.getTime() > Date.now())
+    .sort((a, b) => (a.dateTime?.getTime() || 0) - (b.dateTime?.getTime() || 0))[0]
 
   if (isLoading) {
     return <BriefSkeleton />
@@ -465,13 +512,24 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
             {(brief?.watchlist || []).map((symbol) => {
               const symbolUpper = symbol.toUpperCase()
               const price = watchlistPriceMap.get(symbolUpper)
+              const gapPct = watchlistGapMap.get(symbolUpper)
+              const gapClass = gapPct == null
+                ? 'text-white/50'
+                : gapPct >= 0
+                  ? 'text-emerald-300'
+                  : 'text-red-300'
               return (
                 <button
                   key={symbol}
                   onClick={() => onSendPrompt?.(`Show me key levels and current setup context for ${symbol}.`)}
-                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-200 text-xs hover:bg-emerald-500/20 transition-colors"
+                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs hover:bg-emerald-500/20 transition-colors"
                 >
-                  {symbolUpper}{price != null ? ` ${price.toFixed(2)}` : ''}
+                  <span className="text-emerald-200">{symbolUpper}{price != null ? ` ${price.toFixed(2)}` : ''}</span>
+                  {gapPct != null && (
+                    <span className={cn('ml-1 text-[10px]', gapClass)}>
+                      {gapPct >= 0 ? '+' : ''}{gapPct.toFixed(2)}%
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -480,6 +538,11 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
 
         <section className="glass-card-heavy rounded-xl p-4 border border-white/10">
           <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Economic Events</p>
+          {nextHighImpact?.dateTime && (
+            <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+              Next high-impact event in {formatCountdown(nextHighImpact.dateTime)}: {nextHighImpact.eventName}
+            </div>
+          )}
           <div className="space-y-2">
             {(brief?.economicEvents || []).map((event: Record<string, unknown>, idx: number) => {
               const impact = String(event.impact || 'LOW').toUpperCase()
@@ -496,11 +559,56 @@ export function MorningBriefPanel({ onClose, onSendPrompt }: MorningBriefPanelPr
                     <span className={cn('text-[10px] px-1.5 py-0.5 rounded', impactClass)}>{impact}</span>
                   </div>
                   <p className="text-[11px] text-white/45 mt-1">{String(event.tradingImplication || '')}</p>
+                  <button
+                    onClick={() => onSendPrompt?.(`Set a reminder workflow for ${String(event.event || 'this event')} around ${String(event.time || 'event time')} ET and tell me what setups are most sensitive to it.`)}
+                    className="mt-2 inline-flex items-center gap-1 text-[10px] text-amber-300 hover:text-amber-200 transition-colors"
+                  >
+                    <Bell className="w-3 h-3" />
+                    Set reminder
+                  </button>
                 </div>
               )
             })}
             {(brief?.economicEvents || []).length === 0 && (
               <p className="text-xs text-white/40">No major scheduled events detected.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="glass-card-heavy rounded-xl p-4 border border-white/10">
+          <p className="text-[10px] text-white/35 uppercase tracking-wide mb-2">Earnings Preview</p>
+          <div className="space-y-2">
+            {(brief?.earningsToday || []).map((earning: Record<string, unknown>, idx: number) => {
+              const symbol = String(earning.symbol || '')
+              const expectedMove = asNumber(earning.expectedMove)
+              const ivRank = asNumber(earning.ivRank)
+              const ivWidth = ivRank != null ? Math.max(0, Math.min(100, ivRank)) : 0
+              return (
+                <div key={`${symbol}-${idx}`} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-white/80">
+                      {symbol} <span className="text-white/40">{String(earning.time || '')}</span>
+                    </p>
+                    <span className="text-[11px] text-white/60">
+                      {expectedMove != null ? `EM ±${expectedMove.toFixed(2)}%` : 'EM N/A'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-white/50 mt-1">{String(earning.consensus || '')}</p>
+                  <div className="mt-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-white/40 mb-1">
+                      <span>IV Rank</span>
+                      <span>{ivRank != null ? ivRank.toFixed(0) : 'N/A'}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full bg-emerald-400/80" style={{ width: `${ivWidth}%` }} />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-white/45 mt-1.5">{earningsSuggestion(ivRank)}</p>
+                </div>
+              )
+            })}
+            {(brief?.earningsToday || []).length === 0 && (
+              <p className="text-xs text-white/40">No watchlist earnings events in this window.</p>
             )}
           </div>
         </section>
