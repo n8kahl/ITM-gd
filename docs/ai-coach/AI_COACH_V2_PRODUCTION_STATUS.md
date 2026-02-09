@@ -274,3 +274,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 2. Capture and archive staging run evidence from the live workflow (including detector auto-track simulation step and artifacts).
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
+
+## 5) Active Phase: Staging Gate Execution
+
+Execution runbook:
+
+- `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_STAGING_GATE_RUNBOOK.md`
+
+Current checklist:
+
+- [ ] Staging GitHub secrets are configured.
+- [ ] `ai-coach-live-e2e.yml` executed against staging backend URL.
+- [ ] Workflow evidence captured in this status doc.
+- [ ] Staging migration-hardening verification completed.
+- [ ] Production promotion recommendation recorded.
