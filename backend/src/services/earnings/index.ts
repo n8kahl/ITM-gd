@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { massiveClient, getDailyAggregates } from '../../config/massive';
 import { supabase } from '../../config/database';
 import { POPULAR_SYMBOLS, formatMassiveTicker, sanitizeSymbols } from '../../lib/symbols';
@@ -90,16 +91,40 @@ interface MoveResult {
   direction: 'up' | 'down';
 }
 
+interface AlphaVantageEarningsEvent {
+  symbol?: string;
+  reportDate?: string;
+}
+
+interface AlphaVantageEarningsResponse {
+  quarterlyEarnings?: Array<{
+    reportedDate?: string;
+    surprise?: string;
+    surprisePercentage?: string;
+  }>;
+  Note?: string;
+  Information?: string;
+  ['Error Message']?: string;
+}
+
 const DEFAULT_DAYS_AHEAD = 14;
 const MAX_DAYS_AHEAD = 60;
 const HISTORY_LOOKBACK_DAYS = 900;
 const HISTORY_MAX_QUARTERS = 8;
 const DEFAULT_WATCHLIST = [...POPULAR_SYMBOLS].slice(0, 6);
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+const ALPHA_VANTAGE_BASE_URL = process.env.ALPHA_VANTAGE_BASE_URL || 'https://www.alphavantage.co/query';
+const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
+const ALPHA_VANTAGE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const CORPORATE_EVENT_ENDPOINTS = [
   '/tmx/vX/reference/corporate-events',
   '/fmx/vX/reference/corporate-events',
 ] as const;
+const alphaCalendarCache = new Map<string, { expiresAt: number; events: EarningsCalendarEvent[] }>();
+const alphaHistoryCache = new Map<string, {
+  expiresAt: number;
+  events: Array<{ date: string; timing: EarningsTiming; surprise: EarningsHistoricalMove['surprise'] }>;
+}>();
 
 function round(value: number, digits: number = 2): number {
   if (!Number.isFinite(value)) return 0;
@@ -171,6 +196,87 @@ function sanitizeWatchlist(symbols?: string[]): string[] {
   return sanitized.length > 0 ? sanitized : DEFAULT_WATCHLIST;
 }
 
+function getAlphaVantageHorizon(daysAhead: number): '3month' | '6month' | '12month' {
+  if (daysAhead <= 90) return '3month';
+  if (daysAhead <= 180) return '6month';
+  return '12month';
+}
+
+function parseCsvRows(csvText: string): string[][] {
+  const rows: string[][] = [];
+  let current: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i += 1) {
+    const char = csvText[i];
+    const next = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      current.push(field);
+      field = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i += 1;
+      current.push(field);
+      field = '';
+      if (current.some((value) => value.length > 0)) {
+        rows.push(current);
+      }
+      current = [];
+      continue;
+    }
+
+    field += char;
+  }
+
+  current.push(field);
+  if (current.some((value) => value.length > 0)) {
+    rows.push(current);
+  }
+
+  return rows;
+}
+
+function extractAlphaCalendarEvents(csvText: string): AlphaVantageEarningsEvent[] {
+  const rows = parseCsvRows(csvText);
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map((header) => header.trim());
+  const symbolIndex = headers.findIndex((header) => header.toLowerCase() === 'symbol');
+  const reportDateIndex = headers.findIndex((header) => header.toLowerCase() === 'reportdate');
+
+  if (symbolIndex === -1 || reportDateIndex === -1) {
+    return [];
+  }
+
+  return rows.slice(1).map((row) => ({
+    symbol: row[symbolIndex]?.trim(),
+    reportDate: row[reportDateIndex]?.trim(),
+  }));
+}
+
+function parseAlphaSurprise(value: string | undefined): EarningsHistoricalMove['surprise'] {
+  if (!value) return 'unknown';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 'unknown';
+  if (numeric > 0.00001) return 'beat';
+  if (numeric < -0.00001) return 'miss';
+  return 'in-line';
+}
+
 function pickAtmContract(contracts: OptionContract[], spotPrice: number): OptionContract | null {
   const valid = contracts.filter((contract) => Number.isFinite(contract.strike) && contract.strike > 0);
   if (valid.length === 0) return null;
@@ -187,6 +293,138 @@ function markPrice(contract: OptionContract | null): number {
   const mid = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0;
   if (mid > 0) return mid;
   return Number.isFinite(contract.last) && contract.last > 0 ? contract.last : 0;
+}
+
+async function fetchAlphaVantageCalendar(options: CalendarFetchOptions): Promise<EarningsCalendarEvent[]> {
+  if (!ALPHA_VANTAGE_API_KEY) return [];
+
+  const horizon = getAlphaVantageHorizon(
+    Math.max(1, Math.ceil((new Date(`${options.toDate}T00:00:00.000Z`).getTime() - new Date(`${options.fromDate}T00:00:00.000Z`).getTime()) / (24 * 60 * 60 * 1000))),
+  );
+
+  const events: EarningsCalendarEvent[] = [];
+
+  for (const symbol of options.symbols) {
+    const cacheKey = `${symbol}:${horizon}`;
+    const now = Date.now();
+    const cached = alphaCalendarCache.get(cacheKey);
+
+    if (cached && cached.expiresAt > now) {
+      events.push(...cached.events.filter((event) => event.date >= options.fromDate && event.date <= options.toDate));
+      continue;
+    }
+
+    try {
+      const response = await axios.get<string>(ALPHA_VANTAGE_BASE_URL, {
+        params: {
+          function: 'EARNINGS_CALENDAR',
+          symbol,
+          horizon,
+          apikey: ALPHA_VANTAGE_API_KEY,
+        },
+        responseType: 'text',
+        timeout: 15000,
+      });
+
+      const rawBody = typeof response.data === 'string' ? response.data.trim() : '';
+      if (!rawBody) continue;
+
+      if (rawBody.startsWith('{')) {
+        const payload = JSON.parse(rawBody) as Record<string, unknown>;
+        if (payload.Note || payload.Information || payload['Error Message']) {
+          logger.warn('Alpha Vantage earnings calendar returned info/error payload', {
+            symbol,
+            message: payload.Note || payload.Information || payload['Error Message'],
+          });
+          continue;
+        }
+      }
+
+      const parsed = extractAlphaCalendarEvents(rawBody)
+        .map((row) => ({
+          symbol: String(row.symbol || '').toUpperCase(),
+          date: String(row.reportDate || '').slice(0, 10),
+          time: 'DURING' as EarningsTiming,
+          confirmed: true,
+        }))
+        .filter((event) => (
+          event.symbol === symbol
+          && /^\d{4}-\d{2}-\d{2}$/.test(event.date)
+          && event.date >= options.fromDate
+          && event.date <= options.toDate
+        ));
+
+      alphaCalendarCache.set(cacheKey, {
+        events: parsed,
+        expiresAt: now + ALPHA_VANTAGE_CACHE_TTL_MS,
+      });
+
+      events.push(...parsed);
+    } catch (error: any) {
+      logger.warn('Alpha Vantage earnings calendar request failed', {
+        symbol,
+        error: error?.message || String(error),
+      });
+    }
+  }
+
+  return events;
+}
+
+async function fetchAlphaVantageHistoricalEvents(
+  symbol: string,
+  todayIso: string,
+): Promise<Array<{ date: string; timing: EarningsTiming; surprise: EarningsHistoricalMove['surprise'] }>> {
+  if (!ALPHA_VANTAGE_API_KEY) return [];
+
+  const now = Date.now();
+  const cached = alphaHistoryCache.get(symbol);
+  if (cached && cached.expiresAt > now) {
+    return cached.events.filter((event) => event.date < todayIso).slice(0, HISTORY_MAX_QUARTERS);
+  }
+
+  try {
+    const response = await axios.get<AlphaVantageEarningsResponse>(ALPHA_VANTAGE_BASE_URL, {
+      params: {
+        function: 'EARNINGS',
+        symbol,
+        apikey: ALPHA_VANTAGE_API_KEY,
+      },
+      timeout: 15000,
+    });
+
+    const payload = response.data;
+    if (payload.Note || payload.Information || payload['Error Message']) {
+      logger.warn('Alpha Vantage earnings history returned info/error payload', {
+        symbol,
+        message: payload.Note || payload.Information || payload['Error Message'],
+      });
+      return [];
+    }
+
+    const events = (payload.quarterlyEarnings || [])
+      .map((quarter) => {
+        const date = String(quarter.reportedDate || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+        const surprise = parseAlphaSurprise(quarter.surprise ?? quarter.surprisePercentage);
+        return { date, timing: 'DURING' as EarningsTiming, surprise };
+      })
+      .filter((entry): entry is { date: string; timing: EarningsTiming; surprise: EarningsHistoricalMove['surprise'] } => entry != null)
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    alphaHistoryCache.set(symbol, {
+      events,
+      expiresAt: now + ALPHA_VANTAGE_CACHE_TTL_MS,
+    });
+
+    return events.filter((event) => event.date < todayIso).slice(0, HISTORY_MAX_QUARTERS);
+  } catch (error: any) {
+    logger.warn('Alpha Vantage earnings history request failed', {
+      symbol,
+      error: error?.message || String(error),
+    });
+    return [];
+  }
 }
 
 async function fetchCorporateEvents(options: CalendarFetchOptions): Promise<CorporateEventRecord[]> {
@@ -463,6 +701,18 @@ export class EarningsService {
     const fromDate = formatDate(today);
     const toDate = formatDate(addDays(today, safeDaysAhead));
 
+    const alphaEvents = await fetchAlphaVantageCalendar({
+      symbols,
+      fromDate,
+      toDate,
+    });
+
+    if (alphaEvents.length > 0) {
+      return Array.from(new Map(
+        alphaEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
+      ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+    }
+
     const rawEvents = await fetchCorporateEvents({
       symbols,
       fromDate,
@@ -490,12 +740,7 @@ export class EarningsService {
       return parsedEvents;
     }
 
-    return symbols.map((symbol, index) => ({
-      symbol,
-      date: formatDate(addDays(today, Math.min(safeDaysAhead, index + 1))),
-      time: 'AMC' as EarningsTiming,
-      confirmed: false,
-    }));
+    return [];
   }
 
   async getEarningsAnalysis(symbolInput: string): Promise<EarningsAnalysis> {
@@ -529,28 +774,34 @@ export class EarningsService {
     const straddle = markPrice(atmCall) + markPrice(atmPut);
     const expectedMovePct = chain.currentPrice > 0 ? (straddle / chain.currentPrice) * 100 : 0;
 
+    const todayIso = formatDate(today);
     const historyFrom = formatDate(addDays(today, -HISTORY_LOOKBACK_DAYS));
-    const historyTo = formatDate(today);
-    const rawHistory = await fetchCorporateEvents({
-      symbols: [symbol],
-      fromDate: historyFrom,
-      toDate: historyTo,
-    });
+    const historyTo = todayIso;
 
-    const historicalEvents = rawHistory
-      .map((event) => {
-        const date = getEventDate(event);
-        if (!date || date >= formatDate(today)) return null;
+    let historicalEvents = await fetchAlphaVantageHistoricalEvents(symbol, todayIso);
 
-        return {
-          date,
-          timing: classifyEarningsTiming(event),
-          surprise: parseEarningsSurprise(event),
-        };
-      })
-      .filter((event): event is { date: string; timing: EarningsTiming; surprise: EarningsHistoricalMove['surprise'] } => event != null)
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, HISTORY_MAX_QUARTERS);
+    if (historicalEvents.length === 0) {
+      const rawHistory = await fetchCorporateEvents({
+        symbols: [symbol],
+        fromDate: historyFrom,
+        toDate: historyTo,
+      });
+
+      historicalEvents = rawHistory
+        .map((event) => {
+          const date = getEventDate(event);
+          if (!date || date >= todayIso) return null;
+
+          return {
+            date,
+            timing: classifyEarningsTiming(event),
+            surprise: parseEarningsSurprise(event),
+          };
+        })
+        .filter((event): event is { date: string; timing: EarningsTiming; surprise: EarningsHistoricalMove['surprise'] } => event != null)
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, HISTORY_MAX_QUARTERS);
+    }
 
     const historicalMoves: EarningsHistoricalMove[] = [];
 
@@ -724,4 +975,8 @@ export async function getEarningsAnalysis(symbol: string): Promise<EarningsAnaly
 export const __testables = {
   classifyEarningsTiming,
   buildSuggestedStrategies,
+  getAlphaVantageHorizon,
+  parseCsvRows,
+  extractAlphaCalendarEvents,
+  parseAlphaSurprise,
 };

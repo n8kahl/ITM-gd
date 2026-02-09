@@ -38,6 +38,8 @@ const envSchema = z.object({
 
   // Massive.com
   MASSIVE_API_KEY: z.string().optional(),
+  ALPHA_VANTAGE_API_KEY: z.string().optional(),
+  ALPHA_VANTAGE_BASE_URL: z.string().url().optional(),
 
   // Sentry
   SENTRY_DSN: z.string().url().optional(),

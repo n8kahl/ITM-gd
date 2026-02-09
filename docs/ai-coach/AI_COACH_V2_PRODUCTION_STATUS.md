@@ -126,6 +126,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Earnings module backend slice (Phase 3 sequential completion):
   - New service `EarningsService` with:
     - upcoming earnings calendar discovery (watchlist + days window)
+    - free-source primary calendar feed via Alpha Vantage (`ALPHA_VANTAGE_API_KEY`) with Massive TMX fallback
     - symbol-level earnings analysis (expected move, historical move comparison, IV context, strategy suggestions)
     - Supabase-backed analysis caching via `ai_coach_earnings_cache` (4-hour TTL)
   - New API routes:
@@ -356,6 +357,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `pnpm --filter titm-ai-coach-backend test -- src/services/options/__tests__/optionsChainFetcher.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/chart.test.ts src/routes/__tests__/options.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/services/earnings/__tests__/index.test.ts src/routes/__tests__/earnings.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/routes/__tests__/options.test.ts`
+- `pnpm --filter titm-ai-coach-backend test -- src/services/earnings/__tests__/index.test.ts src/routes/__tests__/earnings.test.ts src/config/__tests__/env.test.ts`
 - `pnpm --filter titm-ai-coach-backend build`
 - `pnpm build` (frontend Next.js production build passes with options + earnings dashboard surfaces)
 - `cd backend && LOG_LEVEL=error pnpm exec tsx -e "import { fetchOptionsChain } from './src/services/options/optionsChainFetcher'; const run=async()=>{for (const s of ['SPX','NDX','SPY','AAPL']){const c=await fetchOptionsChain(s, undefined, 2); console.log(JSON.stringify({symbol:s,expiry:c.expiry,calls:c.options.calls.length,puts:c.options.puts.length,current:c.currentPrice}));}}; run().catch((e)=>{console.error(e?.message||e);process.exit(1);});"`

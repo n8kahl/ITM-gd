@@ -245,6 +245,40 @@ describe('Environment Validation', () => {
 
       expect(env.MASSIVE_API_KEY).toBe('massive-test-key');
     });
+
+    it('should allow optional ALPHA_VANTAGE_API_KEY', () => {
+      process.env.OPENAI_API_KEY = 'sk-proj-abcdefghijklmnopqrstuvwxyz';
+      process.env.SUPABASE_URL = 'https://example.supabase.co';
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
+      delete process.env.ALPHA_VANTAGE_API_KEY;
+
+      const { validateEnv: validate } = require('../env');
+      const env = validate();
+
+      expect(env).toBeDefined();
+    });
+
+    it('should set ALPHA_VANTAGE_API_KEY when provided', () => {
+      process.env.OPENAI_API_KEY = 'sk-proj-abcdefghijklmnopqrstuvwxyz';
+      process.env.SUPABASE_URL = 'https://example.supabase.co';
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
+      process.env.ALPHA_VANTAGE_API_KEY = 'alpha-test-key';
+
+      const { validateEnv: validate } = require('../env');
+      const env = validate();
+
+      expect(env.ALPHA_VANTAGE_API_KEY).toBe('alpha-test-key');
+    });
+
+    it('should reject invalid ALPHA_VANTAGE_BASE_URL when provided', () => {
+      process.env.OPENAI_API_KEY = 'sk-proj-abcdefghijklmnopqrstuvwxyz';
+      process.env.SUPABASE_URL = 'https://example.supabase.co';
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
+      process.env.ALPHA_VANTAGE_BASE_URL = 'not-a-url';
+
+      const { validateEnv: validate } = require('../env');
+      expect(() => validate()).toThrow('process.exit called');
+    });
   });
 
   describe('getEnv function', () => {

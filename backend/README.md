@@ -41,6 +41,8 @@ Backend server for the TITM AI Coach trading platform, providing real-time marke
    ```bash
    # Massive.com API
    MASSIVE_API_KEY=your_massive_api_key
+   # Optional free earnings calendar source (used by AI Coach earnings module)
+   ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key
 
    # Supabase (from existing TITM project)
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -291,6 +293,7 @@ ATR = 14-period moving average of True Range
 5. Set environment variables:
    ```bash
    railway variables set MASSIVE_API_KEY=xxx
+   railway variables set ALPHA_VANTAGE_API_KEY=xxx
    railway variables set NEXT_PUBLIC_SUPABASE_URL=xxx
    # ... set all other variables
    ```
@@ -330,6 +333,10 @@ Do not enable `E2E_BYPASS_AUTH` in production unless this is an explicit staging
   ```bash
   curl "https://api.massive.com/v2/aggs/ticker/I:SPX/range/1/day/2024-01-01/2024-01-31?apiKey=YOUR_KEY"
   ```
+
+### "Earnings calendar missing or stale"
+- Set `ALPHA_VANTAGE_API_KEY` to enable free earnings-calendar ingestion
+- Free tier is rate-limited; calendar responses are cached in-process to reduce calls
 
 ### "Redis connection failed"
 - Make sure Redis is running: `redis-cli ping` (should return "PONG")
