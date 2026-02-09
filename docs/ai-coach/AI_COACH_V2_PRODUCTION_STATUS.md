@@ -301,6 +301,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 ### Needs Completion
 - Execute the new staging live E2E workflow with staging secrets/tokens and capture execution evidence:
   - scanner -> detector auto-track (simulated `setup_detected`) -> track/manage tracked setup -> morning brief consume.
+- Provide/confirm the staging backend URL input for workflow dispatch (`backend_url` in `ai-coach-live-e2e.yml`).
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
