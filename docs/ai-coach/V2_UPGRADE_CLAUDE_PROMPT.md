@@ -10,17 +10,19 @@ You are a senior full-stack engineer implementing the V2 upgrade for the TradeIT
 
 ### Your Mission
 
-Surgically upgrade this repo by following the phased implementation plan in `docs/ai-coach/V2_UPGRADE_FEASIBILITY_ANALYSIS.md`. You will work **one phase at a time**, verifying each phase is complete and all existing tests pass before moving to the next.
+Surgically upgrade this repo to match `docs/ai-coach/AI_COACH_V2_REBUILD_SPEC.md`, using the phased execution plan in `docs/ai-coach/V2_UPGRADE_FEASIBILITY_ANALYSIS.md`. You will work **one phase at a time**, verifying each phase is complete and all existing tests pass before moving to the next.
 
 ### Required Reading (Do This First)
 
 Before writing ANY code, read these documents in order. They are your source of truth:
 
-1. `docs/ai-coach/V2_UPGRADE_FEASIBILITY_ANALYSIS.md` — **PRIMARY GUIDE**. Contains the 9-phase upgrade plan, feature overlap matrix, redundancy analysis, database migrations, effort estimates, risk register, and what NOT to touch. Follow this document phase by phase.
+1. `docs/ai-coach/AI_COACH_V2_REBUILD_SPEC.md` — **CANONICAL IMPLEMENTATION SPEC** (markdown import of the approved rebuild PDF). This is the feature/build target and acceptance reference for AI Coach V2.
 
-2. `docs/ai-coach/PHASE_2_IMPLEMENTATION_SPEC.md` — AI Coach Phase 2 remaining work (SSE streaming, screenshot-to-chat, alert worker, user profile, Sentry, E2E). Phase 2 WP1 (SSE Streaming) is a **prerequisite** for V2 Phase B. WP2 (Screenshot-to-Chat) should be done before Phase D.
+2. `docs/ai-coach/V2_UPGRADE_FEASIBILITY_ANALYSIS.md` — **EXECUTION/DELIVERY GUIDE**. Contains the phased upgrade plan, overlap matrix, migration strategy, estimates, risk register, and what NOT to touch. Use this for sequencing and scope control.
 
-3. `docs/specs/TITM_MEMBER_ADMIN_REDESIGN_SPEC.md` — The full V2 Member/Admin Redesign specification (134KB, 22 sections). This is the **detailed feature spec** for everything you're building. Reference specific sections when implementing each phase:
+3. `docs/ai-coach/PHASE_2_IMPLEMENTATION_SPEC.md` — AI Coach Phase 2 remaining work (SSE streaming, screenshot-to-chat, alert worker, user profile, Sentry, E2E). Phase 2 WP1 (SSE Streaming) is a **prerequisite** for V2 Phase B. WP2 (Screenshot-to-Chat) should be done before Phase D.
+
+4. `docs/specs/TITM_MEMBER_ADMIN_REDESIGN_SPEC.md` — The full V2 Member/Admin Redesign specification (134KB, 22 sections). This is the **detailed feature spec** for everything you're building. Reference specific sections when implementing each phase:
    - Section 7: Trade Journal (Phase C, D, E)
    - Section 8: Social Trade Cards (Phase G)
    - Section 9: Massive.com Integration (Phase A, B, C, D)
@@ -31,7 +33,7 @@ Before writing ANY code, read these documents in order. They are your source of 
    - Section 16: Database Schema (Phase A)
    - Section 17: API Routes (Phase C)
 
-4. `docs/ai-coach/MASTER_SPEC.md` — Original AI Coach spec. Understand what was built and why.
+5. `docs/ai-coach/MASTER_SPEC.md` — Original AI Coach spec. Understand what was built and why.
 
 ### Codebase Orientation
 

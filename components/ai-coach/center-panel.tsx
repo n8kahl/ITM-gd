@@ -17,6 +17,7 @@ import {
   Clock,
   Globe,
   Sunrise,
+  ListChecks,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -32,6 +33,7 @@ import { LEAPSDashboard } from './leaps-dashboard'
 import { MacroContext } from './macro-context'
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
 import { MorningBriefPanel } from './morning-brief'
+import { TrackedSetupsPanel } from './tracked-setups-panel'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -62,7 +64,20 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'onboarding' | 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts' | 'brief' | 'scanner' | 'leaps' | 'macro'
+type CenterView =
+  | 'onboarding'
+  | 'welcome'
+  | 'chart'
+  | 'options'
+  | 'position'
+  | 'screenshot'
+  | 'journal'
+  | 'alerts'
+  | 'brief'
+  | 'scanner'
+  | 'tracked'
+  | 'leaps'
+  | 'macro'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -109,6 +124,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'alerts', icon: Bell, label: 'Alerts' },
   { view: 'brief', icon: Sunrise, label: 'Brief' },
   { view: 'scanner', icon: Search, label: 'Scanner' },
+  { view: 'tracked', icon: ListChecks, label: 'Tracked' },
   { view: 'leaps', icon: Clock, label: 'LEAPS' },
   { view: 'macro', icon: Globe, label: 'Macro' },
 ]
@@ -310,6 +326,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             onShowAlerts={() => setActiveView('alerts')}
             onShowBrief={() => setActiveView('brief')}
             onShowScanner={() => setActiveView('scanner')}
+            onShowTracked={() => setActiveView('tracked')}
             onShowLeaps={() => setActiveView('leaps')}
             onShowMacro={() => setActiveView('macro')}
           />
@@ -354,6 +371,13 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'scanner' && (
           <OpportunityScanner
+            onClose={() => setActiveView('welcome')}
+            onSendPrompt={onSendPrompt}
+          />
+        )}
+
+        {activeView === 'tracked' && (
+          <TrackedSetupsPanel
             onClose={() => setActiveView('welcome')}
             onSendPrompt={onSendPrompt}
           />
@@ -466,6 +490,7 @@ function WelcomeView({
   onShowAlerts,
   onShowBrief,
   onShowScanner,
+  onShowTracked,
   onShowLeaps,
   onShowMacro,
 }: {
@@ -477,6 +502,7 @@ function WelcomeView({
   onShowAlerts: () => void
   onShowBrief: () => void
   onShowScanner: () => void
+  onShowTracked: () => void
   onShowLeaps: () => void
   onShowMacro: () => void
 }) {
@@ -622,6 +648,14 @@ function WelcomeView({
               <Search className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-white">Scanner</p>
               <p className="text-[10px] text-white/30 mt-0.5">Find Setups</p>
+            </button>
+            <button
+              onClick={onShowTracked}
+              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <ListChecks className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-medium text-white">Tracked</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Manage Setups</p>
             </button>
             <button
               onClick={onShowLeaps}

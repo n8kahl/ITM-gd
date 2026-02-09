@@ -27,6 +27,7 @@ import watchlistRouter from './routes/watchlist';
 import briefRouter from './routes/brief';
 import trackedSetupsRouter from './routes/trackedSetups';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
+import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 
 const app: Application = express();
@@ -171,6 +172,7 @@ async function start() {
 
     // Start background alert worker
     startAlertWorker();
+    startSetupPushWorker();
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -187,6 +189,7 @@ async function gracefulShutdown(signal: string) {
   try {
     // Stop background services
     stopAlertWorker();
+    stopSetupPushWorker();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();
