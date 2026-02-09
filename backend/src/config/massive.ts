@@ -110,6 +110,167 @@ export async function getMinuteAggregates(
   return response.results || [];
 }
 
+export type MassiveIndicatorTimespan = 'minute' | 'hour' | 'day' | 'week' | 'month';
+type MassiveIndicatorOrder = 'asc' | 'desc';
+type MassiveIndicatorSeriesType = 'open' | 'high' | 'low' | 'close' | 'volume';
+
+export interface MassiveSingleIndicatorValue {
+  timestamp: number;
+  value: number;
+}
+
+export interface MassiveMACDIndicatorValue {
+  timestamp: number;
+  value: number;
+  signal: number;
+  histogram: number;
+}
+
+interface MassiveSingleIndicatorResponse {
+  status: string;
+  results?: {
+    values?: MassiveSingleIndicatorValue[];
+  };
+}
+
+interface MassiveMACDIndicatorResponse {
+  status: string;
+  results?: {
+    values?: MassiveMACDIndicatorValue[];
+  };
+}
+
+interface MassiveIndicatorQueryOptions {
+  timespan?: MassiveIndicatorTimespan;
+  seriesType?: MassiveIndicatorSeriesType;
+  limit?: number;
+  order?: MassiveIndicatorOrder;
+  adjusted?: boolean;
+  timestamp?: string | number;
+  timestampGte?: string | number;
+  timestampGt?: string | number;
+  timestampLte?: string | number;
+  timestampLt?: string | number;
+}
+
+interface MassiveMovingAverageQueryOptions extends MassiveIndicatorQueryOptions {
+  window?: number;
+}
+
+interface MassiveMACDQueryOptions extends MassiveIndicatorQueryOptions {
+  shortWindow?: number;
+  longWindow?: number;
+  signalWindow?: number;
+}
+
+function toIndicatorQueryParams(options: MassiveIndicatorQueryOptions): Record<string, unknown> {
+  const params: Record<string, unknown> = {
+    adjusted: options.adjusted ?? true,
+    order: options.order ?? 'asc',
+    series_type: options.seriesType ?? 'close',
+    timespan: options.timespan ?? 'day',
+    expand_underlying: false,
+  };
+
+  if (typeof options.limit === 'number' && Number.isFinite(options.limit)) {
+    params.limit = Math.min(Math.max(Math.floor(options.limit), 1), 5000);
+  }
+
+  if (options.timestamp !== undefined) {
+    params.timestamp = options.timestamp;
+  }
+  if (options.timestampGte !== undefined) {
+    params['timestamp.gte'] = options.timestampGte;
+  }
+  if (options.timestampGt !== undefined) {
+    params['timestamp.gt'] = options.timestampGt;
+  }
+  if (options.timestampLte !== undefined) {
+    params['timestamp.lte'] = options.timestampLte;
+  }
+  if (options.timestampLt !== undefined) {
+    params['timestamp.lt'] = options.timestampLt;
+  }
+
+  return params;
+}
+
+async function getSingleIndicator(
+  endpoint: 'ema' | 'sma' | 'rsi',
+  ticker: string,
+  options: MassiveMovingAverageQueryOptions = {}
+): Promise<MassiveSingleIndicatorValue[]> {
+  try {
+    const params = toIndicatorQueryParams(options);
+    if (typeof options.window === 'number' && Number.isFinite(options.window)) {
+      params.window = Math.max(Math.floor(options.window), 1);
+    }
+
+    const response = await massiveClient.get<MassiveSingleIndicatorResponse>(
+      `/v1/indicators/${endpoint}/${ticker}`,
+      { params },
+    );
+
+    return response.data.results?.values || [];
+  } catch (error: any) {
+    logger.error(`Failed to fetch ${endpoint.toUpperCase()} indicator for ${ticker}`, {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+export async function getEMAIndicator(
+  ticker: string,
+  options: MassiveMovingAverageQueryOptions = {}
+): Promise<MassiveSingleIndicatorValue[]> {
+  return getSingleIndicator('ema', ticker, options);
+}
+
+export async function getSMAIndicator(
+  ticker: string,
+  options: MassiveMovingAverageQueryOptions = {}
+): Promise<MassiveSingleIndicatorValue[]> {
+  return getSingleIndicator('sma', ticker, options);
+}
+
+export async function getRSIIndicator(
+  ticker: string,
+  options: MassiveMovingAverageQueryOptions = {}
+): Promise<MassiveSingleIndicatorValue[]> {
+  return getSingleIndicator('rsi', ticker, options);
+}
+
+export async function getMACDIndicator(
+  ticker: string,
+  options: MassiveMACDQueryOptions = {}
+): Promise<MassiveMACDIndicatorValue[]> {
+  try {
+    const params = toIndicatorQueryParams(options);
+    if (typeof options.shortWindow === 'number' && Number.isFinite(options.shortWindow)) {
+      params.short_window = Math.max(Math.floor(options.shortWindow), 1);
+    }
+    if (typeof options.longWindow === 'number' && Number.isFinite(options.longWindow)) {
+      params.long_window = Math.max(Math.floor(options.longWindow), 1);
+    }
+    if (typeof options.signalWindow === 'number' && Number.isFinite(options.signalWindow)) {
+      params.signal_window = Math.max(Math.floor(options.signalWindow), 1);
+    }
+
+    const response = await massiveClient.get<MassiveMACDIndicatorResponse>(
+      `/v1/indicators/macd/${ticker}`,
+      { params },
+    );
+
+    return response.data.results?.values || [];
+  } catch (error: any) {
+    logger.error(`Failed to fetch MACD indicator for ${ticker}`, {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
 // Options-related types
 export interface OptionsContract {
   ticker: string;
@@ -189,9 +350,10 @@ export async function getOptionsContracts(
 ): Promise<OptionsContract[]> {
   try {
     const MAX_PAGES = 20;
+    const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 1000);
     const params: any = {
       underlying_ticker: underlyingTicker,
-      limit,
+      limit: safeLimit,
       sort: 'strike_price'
     };
 
@@ -292,15 +454,47 @@ export async function getOptionsExpirations(
   underlyingTicker: string
 ): Promise<string[]> {
   try {
-    // Keep this intentionally lightweight. Most consumers only need near-term expirations.
-    const contracts = await getOptionsContracts(underlyingTicker);
     const today = new Date().toISOString().split('T')[0];
-    const expirations = [...new Set(
-      contracts
-        .map((contract) => contract.expiration_date)
-        .filter((expiration) => expiration >= today),
-    )];
-    return expirations.sort();
+    const MAX_PAGES = 20;
+    const expirations = new Set<string>();
+
+    let page = 0;
+    let nextUrl: string | undefined;
+
+    do {
+      const response = page === 0
+        ? await massiveClient.get<OptionsContractsResponse>(
+          '/v3/reference/options/contracts',
+          {
+            params: {
+              underlying_ticker: underlyingTicker,
+              sort: 'expiration_date',
+              order: 'asc',
+              'expiration_date.gte': today,
+              limit: 1000,
+            },
+          },
+        )
+        : await massiveClient.get<OptionsContractsResponse>(nextUrl as string);
+
+      for (const contract of response.data.results || []) {
+        if (contract.expiration_date >= today) {
+          expirations.add(contract.expiration_date);
+        }
+      }
+
+      nextUrl = response.data.next_url;
+      page += 1;
+    } while (nextUrl && page < MAX_PAGES);
+
+    if (nextUrl) {
+      logger.warn(`Options expirations pagination truncated for ${underlyingTicker}`, {
+        pagesFetched: page,
+        maxPages: MAX_PAGES,
+      });
+    }
+
+    return Array.from(expirations).sort();
   } catch (error: any) {
     logger.error(`Failed to fetch expirations for ${underlyingTicker}`, { error: error.message });
     throw error;
@@ -339,6 +533,7 @@ export async function searchReferenceTickers(
   try {
     const trimmed = query.trim();
     if (!trimmed) return [];
+    const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 1000);
 
     const response = await massiveClient.get<MassiveTickerSearchResponse>(
       '/v3/reference/tickers',
@@ -347,7 +542,7 @@ export async function searchReferenceTickers(
           search: trimmed,
           active: true,
           sort: 'ticker',
-          limit,
+          limit: safeLimit,
         },
       },
     );

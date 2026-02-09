@@ -1,4 +1,5 @@
 import { executeFunctionCall } from '../functionHandlers';
+const mockExitAdvisorGenerateAdvice = jest.fn();
 
 // Mock logger
 jest.mock('../../lib/logger', () => ({
@@ -61,7 +62,22 @@ jest.mock('../../services/earnings', () => ({
 
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
-  analyzePortfolio: jest.fn()
+  analyzePortfolio: jest.fn(),
+  getUserPositions: jest.fn(),
+  getPositionById: jest.fn(),
+}));
+
+jest.mock('../../services/positions/exitAdvisor', () => ({
+  ExitAdvisor: jest.fn().mockImplementation(() => ({
+    generateAdvice: (...args: any[]) => mockExitAdvisorGenerateAdvice(...args),
+  })),
+}));
+
+const mockGetJournalInsightsForUser = jest.fn();
+jest.mock('../../services/journal/patternAnalyzer', () => ({
+  journalPatternAnalyzer: {
+    getJournalInsightsForUser: (...args: any[]) => mockGetJournalInsightsForUser(...args),
+  },
 }));
 
 import { calculateLevels } from '../../services/levels';
@@ -71,7 +87,12 @@ import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../../services/options/zeroDTE';
 import { analyzeIVProfile } from '../../services/options/ivAnalysis';
 import { getEarningsAnalysis, getEarningsCalendar } from '../../services/earnings';
-import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
+import {
+  analyzePosition,
+  analyzePortfolio,
+  getPositionById,
+  getUserPositions,
+} from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
 const mockFetchIntradayData = fetchIntradayData as jest.MockedFunction<typeof fetchIntradayData>;
@@ -84,10 +105,14 @@ const mockGetEarningsCalendar = getEarningsCalendar as jest.MockedFunction<typeo
 const mockGetEarningsAnalysis = getEarningsAnalysis as jest.MockedFunction<typeof getEarningsAnalysis>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
+const mockGetPositionById = getPositionById as jest.MockedFunction<typeof getPositionById>;
+const mockGetUserPositions = getUserPositions as jest.MockedFunction<typeof getUserPositions>;
 
 describe('Function Handlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockExitAdvisorGenerateAdvice.mockReset();
+    mockGetJournalInsightsForUser.mockReset();
   });
 
   describe('get_key_levels', () => {
@@ -692,6 +717,124 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to analyze position');
       expect(result).toHaveProperty('message', 'Failed to fetch data');
+    });
+  });
+
+  describe('get_position_advice', () => {
+    it('should return advice for all open positions', async () => {
+      mockGetUserPositions.mockResolvedValue([
+        {
+          id: 'pos-1',
+          symbol: 'SPX',
+          type: 'call',
+          strike: 6000,
+          expiry: '2026-02-20',
+          quantity: 1,
+          entryPrice: 30,
+          entryDate: '2026-02-01',
+        } as any,
+      ]);
+
+      mockAnalyzePosition.mockResolvedValue({
+        position: {
+          id: 'pos-1',
+          symbol: 'SPX',
+          type: 'call',
+          strike: 6000,
+          expiry: '2026-02-20',
+          quantity: 1,
+          entryPrice: 30,
+          entryDate: '2026-02-01',
+        },
+        currentValue: 4200,
+        costBasis: 3000,
+        pnl: 1200,
+        pnlPct: 40,
+        daysHeld: 8,
+        daysToExpiry: 11,
+        maxGain: 'unlimited',
+        maxLoss: 3000,
+        greeks: {
+          delta: 35,
+          gamma: 0.1,
+          theta: -55,
+          vega: 20,
+        },
+      } as any);
+
+      mockExitAdvisorGenerateAdvice.mockReturnValue([
+        {
+          positionId: 'pos-1',
+          type: 'spread_conversion',
+          urgency: 'medium',
+          message: 'Consider selling a higher strike call to convert to a spread.',
+          suggestedAction: {
+            action: 'sell_call_against_long',
+            shortStrike: 6050,
+          },
+        },
+      ]);
+
+      const result = await executeFunctionCall(
+        {
+          name: 'get_position_advice',
+          arguments: JSON.stringify({}),
+        },
+        { userId: 'user-1' },
+      );
+
+      expect(mockGetUserPositions).toHaveBeenCalledWith('user-1');
+      expect(mockAnalyzePosition).toHaveBeenCalledTimes(1);
+      expect(result).toHaveProperty('adviceCount', 1);
+      expect(result.advice[0]).toHaveProperty('type', 'spread_conversion');
+    });
+
+    it('should return no advice when no open position matches', async () => {
+      mockGetPositionById.mockResolvedValue(null);
+
+      const result = await executeFunctionCall(
+        {
+          name: 'get_position_advice',
+          arguments: JSON.stringify({ position_id: '2bcf11a2-5c35-4613-bf43-980886f58f1b' }),
+        },
+        { userId: 'user-1' },
+      );
+
+      expect(mockGetPositionById).toHaveBeenCalledWith('2bcf11a2-5c35-4613-bf43-980886f58f1b', 'user-1');
+      expect(result).toHaveProperty('adviceCount', 0);
+      expect(result).toHaveProperty('advice');
+      expect(result.advice).toEqual([]);
+    });
+  });
+
+  describe('get_journal_insights', () => {
+    it('should return journal insights for authenticated user', async () => {
+      mockGetJournalInsightsForUser.mockResolvedValue({
+        userId: 'user-1',
+        period: { start: '2026-01-11', end: '2026-02-09', days: 30 },
+        cached: true,
+        insights: {
+          tradeCount: 22,
+          summary: 'Best window: 10:00-11:00.',
+          timeOfDay: { summary: 'time summary' },
+          setupAnalysis: { summary: 'setup summary' },
+          behavioral: { revengeTradingIncidents: 1 },
+          riskManagement: { summary: 'risk summary' },
+        },
+      });
+
+      const result = await executeFunctionCall(
+        {
+          name: 'get_journal_insights',
+          arguments: JSON.stringify({ period: '30d' }),
+        },
+        { userId: 'user-1' },
+      );
+
+      expect(mockGetJournalInsightsForUser).toHaveBeenCalledWith('user-1', 30);
+      expect(result).toHaveProperty('tradeCount', 22);
+      expect(result).toHaveProperty('cached', true);
+      expect(result).toHaveProperty('summary', 'Best window: 10:00-11:00.');
     });
   });
 

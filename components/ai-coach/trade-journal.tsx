@@ -29,6 +29,7 @@ import {
   type PositionType,
   type TradeOutcome,
 } from '@/lib/api/ai-coach'
+import { JournalInsights } from './journal-insights'
 
 // ============================================
 // TYPES
@@ -196,7 +197,12 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
         )}
 
         {activeTab === 'analytics' && (
-          <AnalyticsDashboard analytics={analytics} />
+          <div className="space-y-0">
+            <div className="px-4 pt-4">
+              <JournalInsights token={token} />
+            </div>
+            <AnalyticsDashboard analytics={analytics} />
+          </div>
         )}
       </div>
     </div>

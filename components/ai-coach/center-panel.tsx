@@ -26,7 +26,7 @@ import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import dynamic from 'next/dynamic'
 import type { LevelAnnotation } from './trading-chart'
 import { OptionsChain } from './options-chain'
-import { PositionForm } from './position-form'
+import { PositionTracker } from './position-tracker'
 import { ScreenshotUpload } from './screenshot-upload'
 import { TradeJournal } from './trade-journal'
 import { AlertsPanel } from './alerts-panel'
@@ -52,10 +52,15 @@ const TradingChart = dynamic(
 )
 import { ChartToolbar } from './chart-toolbar'
 import {
+  DEFAULT_INDICATOR_CONFIG,
+  type IndicatorConfig,
+} from './chart-indicators'
+import {
   getChartData,
   AICoachAPIError,
   type ChartTimeframe,
   type ChartBar,
+  type ChartProviderIndicators,
 } from '@/lib/api/ai-coach'
 
 // ============================================
@@ -137,7 +142,7 @@ const EXAMPLE_PROMPTS = [
 const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[] = [
   { view: 'chart', icon: CandlestickChart, label: 'Chart' },
   { view: 'options', icon: TableProperties, label: 'Options' },
-  { view: 'position', icon: Calculator, label: 'Analyze' },
+  { view: 'position', icon: Calculator, label: 'Positions' },
   { view: 'journal', icon: BookOpen, label: 'Journal' },
   { view: 'screenshot', icon: Camera, label: 'Screenshot' },
   { view: 'alerts', icon: Bell, label: 'Alerts' },
@@ -201,6 +206,8 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const [chartTimeframe, setChartTimeframe] = useState<ChartTimeframe>('1D')
   const [chartBars, setChartBars] = useState<ChartBar[]>([])
   const [chartLevels, setChartLevels] = useState<LevelAnnotation[]>([])
+  const [chartProviderIndicators, setChartProviderIndicators] = useState<ChartProviderIndicators | null>(null)
+  const [chartIndicatorConfig, setChartIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [isLoadingChart, setIsLoadingChart] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
 
@@ -225,14 +232,18 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     setChartError(null)
 
     try {
-      const data = await getChartData(symbol, timeframe, token)
+      const data = await getChartData(symbol, timeframe, token, undefined, {
+        includeIndicators: true,
+      })
       setChartBars(data.bars)
+      setChartProviderIndicators(data.providerIndicators ?? null)
     } catch (error) {
       const message = error instanceof AICoachAPIError
         ? error.apiError.message
         : 'Failed to load chart data'
       setChartError(message)
       setChartBars([])
+      setChartProviderIndicators(null)
     } finally {
       setIsLoadingChart(false)
     }
@@ -521,10 +532,13 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             timeframe={chartTimeframe}
             bars={chartBars}
             levels={chartLevels}
+            providerIndicators={chartProviderIndicators}
+            indicators={chartIndicatorConfig}
             isLoading={isLoadingChart}
             error={chartError}
             onSymbolChange={handleSymbolChange}
             onTimeframeChange={handleTimeframeChange}
+            onIndicatorsChange={setChartIndicatorConfig}
             onRetry={() => fetchChartData(chartSymbol, chartTimeframe)}
           />
         )}
@@ -534,10 +548,13 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
         )}
 
         {activeView === 'position' && (
-          <PositionForm onClose={() => {
-            setActiveView('welcome')
-            setCenterView(null)
-          }} />
+          <PositionTracker
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
+            onSendPrompt={onSendPrompt}
+          />
         )}
 
         {activeView === 'journal' && (
@@ -634,20 +651,26 @@ function ChartView({
   timeframe,
   bars,
   levels,
+  providerIndicators,
+  indicators,
   isLoading,
   error,
   onSymbolChange,
   onTimeframeChange,
+  onIndicatorsChange,
   onRetry,
 }: {
   symbol: string
   timeframe: ChartTimeframe
   bars: ChartBar[]
   levels: LevelAnnotation[]
+  providerIndicators: ChartProviderIndicators | null
+  indicators: IndicatorConfig
   isLoading: boolean
   error: string | null
   onSymbolChange: (s: string) => void
   onTimeframeChange: (t: ChartTimeframe) => void
+  onIndicatorsChange: (next: IndicatorConfig) => void
   onRetry: () => void
 }) {
   const [hoveredPrice, setHoveredPrice] = useState<number | null>(null)
@@ -691,6 +714,8 @@ function ChartView({
           timeframe={timeframe}
           onSymbolChange={onSymbolChange}
           onTimeframeChange={onTimeframeChange}
+          indicators={indicators}
+          onIndicatorsChange={onIndicatorsChange}
           isLoading={isLoading}
         />
       </div>
@@ -711,6 +736,8 @@ function ChartView({
               <TradingChart
                 bars={bars}
                 levels={levels}
+                providerIndicators={providerIndicators || undefined}
+                indicators={indicators}
                 symbol={symbol}
                 timeframe={timeframe}
                 isLoading={isLoading}

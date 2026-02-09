@@ -28,6 +28,20 @@ jest.mock('../../middleware/auth', () => ({
   },
 }));
 
+const mockGenerateDraftsForUser = jest.fn();
+jest.mock('../../services/journal/autoPopulate', () => ({
+  journalAutoPopulateService: {
+    generateDraftsForUser: (...args: any[]) => mockGenerateDraftsForUser(...args),
+  },
+}));
+
+const mockGetJournalInsightsForUser = jest.fn();
+jest.mock('../../services/journal/patternAnalyzer', () => ({
+  journalPatternAnalyzer: {
+    getJournalInsightsForUser: (...args: any[]) => mockGetJournalInsightsForUser(...args),
+  },
+}));
+
 // Import after mocks
 import journalRouter from '../journal';
 
@@ -39,6 +53,8 @@ app.use('/api/journal', journalRouter);
 describe('Journal Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGenerateDraftsForUser.mockReset();
+    mockGetJournalInsightsForUser.mockReset();
   });
 
   // ============================================
@@ -107,6 +123,19 @@ describe('Journal Routes', () => {
       expect(chain.eq).toHaveBeenCalledWith('trade_outcome', 'win');
     });
 
+    it('should filter by draft_status', async () => {
+      const chain: any = {
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null, count: 0 }),
+      };
+      mockFrom.mockReturnValue({ select: jest.fn().mockReturnValue(chain) });
+
+      await request(app).get('/api/journal/trades?draft_status=draft');
+
+      expect(chain.eq).toHaveBeenCalledWith('draft_status', 'draft');
+    });
+
     it('should return 500 on database error', async () => {
       const chain: any = {
         eq: jest.fn().mockReturnThis(),
@@ -119,6 +148,47 @@ describe('Journal Routes', () => {
 
       expect(res.status).toBe(500);
       expect(res.body.error).toBe('Internal server error');
+    });
+  });
+
+  describe('GET /api/journal/drafts', () => {
+    it('should return auto-generated draft trades', async () => {
+      const chain: any = {
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({
+          data: [{ id: 'd1', draft_status: 'draft', auto_generated: true }],
+          error: null,
+          count: 1,
+        }),
+      };
+      mockFrom.mockReturnValue({ select: jest.fn().mockReturnValue(chain) });
+
+      const res = await request(app).get('/api/journal/drafts?status=draft&limit=50');
+
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(1);
+      expect(chain.eq).toHaveBeenCalledWith('auto_generated', true);
+      expect(chain.eq).toHaveBeenCalledWith('draft_status', 'draft');
+    });
+  });
+
+  describe('POST /api/journal/drafts/generate', () => {
+    it('should generate drafts for the authenticated user', async () => {
+      mockGenerateDraftsForUser.mockResolvedValue({
+        userId: 'test-user-123',
+        marketDate: '2026-02-09',
+        generated: 4,
+        skippedExisting: 1,
+      });
+
+      const res = await request(app)
+        .post('/api/journal/drafts/generate')
+        .send({ marketDate: '2026-02-09' });
+
+      expect(res.status).toBe(201);
+      expect(mockGenerateDraftsForUser).toHaveBeenCalledWith('test-user-123', '2026-02-09');
+      expect(res.body.generated).toBe(4);
     });
   });
 
@@ -262,6 +332,25 @@ describe('Journal Routes', () => {
     });
   });
 
+  describe('PATCH /api/journal/trades/:id/draft-status', () => {
+    it('should update draft status', async () => {
+      const chain: any = {
+        eq: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: { id: 'd1', draft_status: 'reviewed' }, error: null }),
+      };
+      mockFrom.mockReturnValue({ update: jest.fn().mockReturnValue(chain) });
+
+      const res = await request(app)
+        .patch('/api/journal/trades/a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4/draft-status')
+        .send({ draft_status: 'reviewed' });
+
+      expect(res.status).toBe(200);
+      expect(chain.eq).toHaveBeenCalledWith('user_id', 'test-user-123');
+      expect(res.body.draft_status).toBe('reviewed');
+    });
+  });
+
   // ============================================
   // DELETE /api/journal/trades/:id
   // ============================================
@@ -356,6 +445,26 @@ describe('Journal Routes', () => {
       const res = await request(app).get('/api/journal/analytics');
 
       expect(res.status).toBe(500);
+    });
+  });
+
+  describe('GET /api/journal/insights', () => {
+    it('should return journal insights for period', async () => {
+      mockGetJournalInsightsForUser.mockResolvedValue({
+        userId: 'test-user-123',
+        period: { start: '2026-01-10', end: '2026-02-09', days: 30 },
+        cached: false,
+        insights: {
+          summary: 'Test summary',
+          tradeCount: 15,
+        },
+      });
+
+      const res = await request(app).get('/api/journal/insights?period=30d');
+
+      expect(res.status).toBe(200);
+      expect(mockGetJournalInsightsForUser).toHaveBeenCalledWith('test-user-123', 30, { forceRefresh: false });
+      expect(res.body.insights.tradeCount).toBe(15);
     });
   });
 

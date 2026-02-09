@@ -5,7 +5,12 @@ import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../services/options/zeroDTE';
 import { analyzeIVProfile } from '../services/options/ivAnalysis';
 import { getEarningsAnalysis, getEarningsCalendar } from '../services/earnings';
-import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
+import {
+  analyzePosition,
+  analyzePortfolio,
+  getPositionById,
+  getUserPositions,
+} from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
 import { getMarketStatus as getMarketStatusService } from '../services/marketHours';
@@ -15,6 +20,8 @@ import { generateGreeksProjection, assessGreeksTrend } from '../services/leaps/g
 import { calculateRoll } from '../services/leaps/rollCalculator';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
+import { ExitAdvisor } from '../services/positions/exitAdvisor';
+import { journalPatternAnalyzer } from '../services/journal/patternAnalyzer';
 import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
@@ -93,6 +100,12 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'analyze_position':
       return await handleAnalyzePosition(typedArgs);
+
+    case 'get_position_advice':
+      return await handleGetPositionAdvice(typedArgs, context?.userId);
+
+    case 'get_journal_insights':
+      return await handleGetJournalInsights(typedArgs, context?.userId);
 
     case 'get_trade_history':
       return await handleGetTradeHistory(typedArgs, context?.userId);
@@ -575,6 +588,95 @@ async function handleAnalyzePosition(args: {
     return {
       error: 'Failed to analyze position',
       message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: get_position_advice
+ * Generates proactive management advice for open positions
+ */
+async function handleGetPositionAdvice(
+  args: { position_id?: string; positionId?: string },
+  userId?: string,
+) {
+  if (!userId) {
+    return { error: 'User not authenticated' };
+  }
+
+  try {
+    const positionId = typeof args.position_id === 'string'
+      ? args.position_id
+      : typeof args.positionId === 'string'
+        ? args.positionId
+        : undefined;
+
+    const positions = positionId
+      ? await (async () => {
+          const one = await getPositionById(positionId, userId);
+          return one ? [one] : [];
+        })()
+      : await getUserPositions(userId);
+
+    if (positions.length === 0) {
+      return {
+        adviceCount: 0,
+        advice: [],
+        message: positionId
+          ? 'No open position found for the provided position_id.'
+          : 'No open positions available for advice.',
+      };
+    }
+
+    const analyses = await Promise.all(positions.map((position) => analyzePosition(position)));
+    const advisor = new ExitAdvisor();
+    const advice = advisor.generateAdvice(analyses);
+
+    return {
+      adviceCount: advice.length,
+      generatedAt: new Date().toISOString(),
+      advice,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to generate position advice',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_journal_insights
+ * Returns pattern-analysis insights for journal performance
+ */
+async function handleGetJournalInsights(
+  args: { period?: '7d' | '30d' | '90d' },
+  userId?: string,
+) {
+  if (!userId) {
+    return { error: 'User not authenticated' };
+  }
+
+  try {
+    const period = args.period || '30d';
+    const periodDays = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+
+    const result = await journalPatternAnalyzer.getJournalInsightsForUser(userId, periodDays);
+
+    return {
+      period: result.period,
+      cached: result.cached,
+      tradeCount: result.insights.tradeCount,
+      summary: result.insights.summary,
+      timeOfDay: result.insights.timeOfDay,
+      setupAnalysis: result.insights.setupAnalysis,
+      behavioral: result.insights.behavioral,
+      riskManagement: result.insights.riskManagement,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch journal insights',
+      message: error.message,
     };
   }
 }

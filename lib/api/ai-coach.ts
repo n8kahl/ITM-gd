@@ -57,6 +57,25 @@ export interface ChartBar {
   volume: number
 }
 
+export interface ChartIndicatorPoint {
+  time: number
+  value: number
+}
+
+export interface ChartMACDPoint extends ChartIndicatorPoint {
+  signal: number
+  histogram: number
+}
+
+export interface ChartProviderIndicators {
+  source: 'massive'
+  timespan: 'minute' | 'hour' | 'day' | 'week' | 'month'
+  ema8: ChartIndicatorPoint[]
+  ema21: ChartIndicatorPoint[]
+  rsi14: ChartIndicatorPoint[]
+  macd: ChartMACDPoint[]
+}
+
 export interface ChartDataResponse {
   symbol: string
   timeframe: ChartTimeframe
@@ -64,6 +83,7 @@ export interface ChartDataResponse {
   count: number
   timestamp: string
   cached: boolean
+  providerIndicators?: ChartProviderIndicators
 }
 
 export type SymbolSearchType = 'index' | 'etf' | 'stock'
@@ -136,6 +156,31 @@ export interface ExpirationsResponse {
   symbol: string
   expirations: string[]
   count: number
+}
+
+export interface OptionsMatrixCellMetrics {
+  volume: number
+  openInterest: number
+  impliedVolatility: number | null
+  gex: number
+}
+
+export interface OptionsMatrixCell {
+  expiry: string
+  strike: number
+  call: OptionContract | null
+  put: OptionContract | null
+  metrics: OptionsMatrixCellMetrics
+}
+
+export interface OptionsMatrixResponse {
+  symbol: string
+  currentPrice: number
+  expirations: string[]
+  strikes: number[]
+  cells: OptionsMatrixCell[]
+  generatedAt: string
+  cacheKey: string
 }
 
 export interface GEXStrikeData {
@@ -349,6 +394,59 @@ export interface PositionAnalysis {
   }
 }
 
+export type PositionAdviceType = 'take_profit' | 'stop_loss' | 'time_decay' | 'spread_conversion' | 'roll'
+export type PositionAdviceUrgency = 'low' | 'medium' | 'high'
+
+export interface PositionAdvice {
+  positionId: string
+  type: PositionAdviceType
+  urgency: PositionAdviceUrgency
+  message: string
+  suggestedAction: Record<string, unknown>
+}
+
+export interface PositionLiveSnapshot {
+  id: string
+  symbol: string
+  type: PositionType
+  strike?: number
+  expiry?: string
+  quantity: number
+  entryPrice: number
+  entryDate: string
+  currentPrice: number
+  currentValue: number
+  costBasis: number
+  pnl: number
+  pnlPct: number
+  daysHeld: number
+  daysToExpiry?: number
+  breakeven?: number
+  maxGain?: number | string
+  maxLoss?: number | string
+  riskRewardRatio?: number
+  greeks?: {
+    delta: number
+    gamma: number
+    theta: number
+    vega: number
+    rho?: number
+  }
+  updatedAt: string
+}
+
+export interface LivePositionsResponse {
+  positions: PositionLiveSnapshot[]
+  count: number
+  timestamp: string
+}
+
+export interface PositionAdviceResponse {
+  advice: PositionAdvice[]
+  count: number
+  generatedAt: string
+}
+
 export interface PortfolioAnalysis {
   positions: PositionAnalysis[]
   portfolio: {
@@ -548,10 +646,18 @@ export async function getChartData(
   symbol: string,
   timeframe: ChartTimeframe,
   token: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: {
+    includeIndicators?: boolean
+  },
 ): Promise<ChartDataResponse> {
+  const params = new URLSearchParams({ timeframe })
+  if (options?.includeIndicators) {
+    params.set('includeIndicators', 'true')
+  }
+
   const response = await fetchWithAuth(
-    `${API_BASE}/api/chart/${symbol}?timeframe=${timeframe}`,
+    `${API_BASE}/api/chart/${symbol}?${params.toString()}`,
     { headers: {} },
     token,
     signal
@@ -643,6 +749,39 @@ export async function getExpirations(
       headers: { 'Authorization': `Bearer ${token}` },
     }
   )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get multi-expiration options matrix for heatmap workflows.
+ */
+export async function getOptionsMatrix(
+  symbol: string,
+  token: string,
+  options?: {
+    expirations?: number
+    strikes?: number
+  }
+): Promise<OptionsMatrixResponse> {
+  const params = new URLSearchParams()
+  if (typeof options?.expirations === 'number') params.set('expirations', String(options.expirations))
+  if (typeof options?.strikes === 'number') params.set('strikes', String(options.strikes))
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/matrix${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -869,6 +1008,57 @@ export async function analyzePortfolio(
   return response.json()
 }
 
+/**
+ * Refresh and fetch all live open positions for the current user.
+ */
+export async function getLivePositions(
+  token: string
+): Promise<LivePositionsResponse> {
+  const response = await fetch(`${API_BASE}/api/positions/live`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Fetch proactive position management advice for one position or all open positions.
+ */
+export async function getPositionAdvice(
+  token: string,
+  positionId?: string
+): Promise<PositionAdviceResponse> {
+  const params = new URLSearchParams()
+  if (positionId) params.set('positionId', positionId)
+  const query = params.toString()
+
+  const response = await fetch(`${API_BASE}/api/positions/advice${query ? `?${query}` : ''}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
 // ============================================
 // SCREENSHOT API
 // ============================================
@@ -945,6 +1135,9 @@ export interface TradeEntry {
   exit_reason?: string
   lessons_learned?: string
   tags: string[]
+  draft_status?: 'draft' | 'reviewed' | 'published'
+  auto_generated?: boolean
+  session_context?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -988,6 +1181,69 @@ export interface TradeAnalyticsResponse {
   byStrategy: Record<string, { count: number; pnl: number; winRate: number }>
 }
 
+export interface DraftTradesResponse {
+  drafts: TradeEntry[]
+  total: number
+}
+
+export interface JournalInsightsSummary {
+  summary: string
+  tradeCount: number
+  timeOfDay: {
+    summary: string
+    buckets?: Array<{
+      bucket: string
+      trades: number
+      wins: number
+      losses: number
+      winRate: number
+      avgPnl: number
+    }>
+  }
+  setupAnalysis: {
+    summary: string
+    setups?: Array<{
+      setup: string
+      trades: number
+      wins: number
+      losses: number
+      winRate: number
+      avgPnl: number
+    }>
+  }
+  behavioral: {
+    revengeTradingIncidents?: number
+    overtrading?: {
+      summary: string
+      thresholdPerDay: number
+      winRateHighActivity: number | null
+      winRateLowActivity: number | null
+    }
+    holdTime?: {
+      summary: string
+      avgWinnerHoldDays: number
+      avgLoserHoldDays: number
+    }
+  }
+  riskManagement: {
+    summary: string
+    avgRealizedRiskReward?: number | null
+    stopAdherencePct?: number | null
+    positionSizingCv?: number | null
+  }
+}
+
+export interface JournalInsightsResponse {
+  userId: string
+  period: {
+    start: string
+    end: string
+    days: number
+  }
+  insights: JournalInsightsSummary
+  cached: boolean
+}
+
 /**
  * Get trades with optional filters
  */
@@ -999,6 +1255,7 @@ export async function getTrades(
     symbol?: string
     strategy?: string
     outcome?: TradeOutcome
+    draft_status?: 'draft' | 'reviewed' | 'published'
   }
 ): Promise<TradesListResponse> {
   const params = new URLSearchParams()
@@ -1007,9 +1264,94 @@ export async function getTrades(
   if (options?.symbol) params.set('symbol', options.symbol)
   if (options?.strategy) params.set('strategy', options.strategy)
   if (options?.outcome) params.set('outcome', options.outcome)
+  if (options?.draft_status) params.set('draft_status', options.draft_status)
 
   const response = await fetch(`${API_BASE}/api/journal/trades?${params}`, {
     headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get draft/reviewed journal trades generated by auto-population.
+ */
+export async function getDraftTrades(
+  token: string,
+  options?: {
+    status?: 'draft' | 'reviewed' | 'published' | 'all'
+    limit?: number
+  },
+): Promise<DraftTradesResponse> {
+  const params = new URLSearchParams()
+  if (options?.status) params.set('status', options.status)
+  if (typeof options?.limit === 'number') params.set('limit', String(options.limit))
+
+  const response = await fetch(`${API_BASE}/api/journal/drafts?${params}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Trigger auto-generation of journal drafts for the provided market date or today's ET date.
+ */
+export async function generateJournalDrafts(
+  token: string,
+  marketDate?: string,
+): Promise<{ generated: number; skippedExisting: number; marketDate: string }> {
+  const response = await fetch(`${API_BASE}/api/journal/drafts/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(marketDate ? { marketDate } : {}),
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Update a trade's draft workflow state.
+ */
+export async function updateTradeDraftStatus(
+  id: string,
+  status: 'draft' | 'reviewed' | 'published',
+  token: string,
+): Promise<TradeEntry> {
+  const response = await fetch(`${API_BASE}/api/journal/trades/${id}/draft-status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ draft_status: status }),
   })
 
   if (!response.ok) {
@@ -1108,6 +1450,35 @@ export async function getTradeAnalytics(
   token: string
 ): Promise<TradeAnalyticsResponse> {
   const response = await fetch(`${API_BASE}/api/journal/analytics`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get journal pattern insights for a lookback period.
+ */
+export async function getJournalInsights(
+  token: string,
+  options?: {
+    period?: '7d' | '30d' | '90d'
+    forceRefresh?: boolean
+  },
+): Promise<JournalInsightsResponse> {
+  const params = new URLSearchParams()
+  if (options?.period) params.set('period', options.period)
+  if (options?.forceRefresh) params.set('forceRefresh', 'true')
+
+  const response = await fetch(`${API_BASE}/api/journal/insights?${params}`, {
     headers: { 'Authorization': `Bearer ${token}` },
   })
 

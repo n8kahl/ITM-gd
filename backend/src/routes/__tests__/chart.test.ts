@@ -7,6 +7,9 @@ jest.mock('../../middleware/auth', () => ({
 
 jest.mock('../../config/massive', () => ({
   getAggregates: jest.fn(),
+  getEMAIndicator: jest.fn(),
+  getRSIIndicator: jest.fn(),
+  getMACDIndicator: jest.fn(),
 }));
 
 jest.mock('../../config/redis', () => ({
@@ -19,12 +22,17 @@ jest.mock('../../services/charts/chartDataService', () => ({
 }));
 
 import chartRouter from '../chart';
-import { getAggregates } from '../../config/massive';
+import { getAggregates, getEMAIndicator, getRSIIndicator, getMACDIndicator } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
+import { getChartData } from '../../services/charts/chartDataService';
 
 const mockGetAggregates = getAggregates as jest.MockedFunction<typeof getAggregates>;
+const mockGetEMAIndicator = getEMAIndicator as jest.MockedFunction<typeof getEMAIndicator>;
+const mockGetRSIIndicator = getRSIIndicator as jest.MockedFunction<typeof getRSIIndicator>;
+const mockGetMACDIndicator = getMACDIndicator as jest.MockedFunction<typeof getMACDIndicator>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
+const mockGetChartData = getChartData as jest.MockedFunction<typeof getChartData>;
 
 const app = express();
 app.use(express.json());
@@ -35,6 +43,31 @@ describe('Chart Routes', () => {
     jest.clearAllMocks();
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockResolvedValue();
+    mockGetEMAIndicator.mockResolvedValue([]);
+    mockGetRSIIndicator.mockResolvedValue([]);
+    mockGetMACDIndicator.mockResolvedValue([]);
+    mockGetChartData.mockResolvedValue({
+      symbol: 'SPX',
+      timeframe: 'weekly',
+      currentPrice: 6910.98,
+      candles: [
+        { time: 1770230400, open: 6800, high: 6920, low: 6780, close: 6910.98, volume: 0 },
+      ],
+      indicators: {
+        ema50: 6820,
+        ema200: 6500,
+        pivots: {
+          pp: 6870,
+          r1: 6940,
+          r2: 7010,
+          s1: 6800,
+          s2: 6730,
+        },
+      },
+      count: 1,
+      timestamp: new Date().toISOString(),
+      cached: false,
+    } as any);
   });
 
   it('normalizes missing index volume to zero for intraday bars', async () => {
@@ -102,4 +135,155 @@ describe('Chart Routes', () => {
     expect(res.body.error).toBe('VALIDATION_ERROR');
     expect(mockGetAggregates).not.toHaveBeenCalled();
   });
+
+  it('returns Massive provider indicators when includeIndicators=true', async () => {
+    mockGetAggregates.mockResolvedValue({
+      status: 'OK',
+      ticker: 'I:SPX',
+      queryCount: 1,
+      resultsCount: 1,
+      adjusted: true,
+      request_id: 'test',
+      count: 1,
+      results: [
+        {
+          t: 1770647400000,
+          o: 6917.26,
+          h: 6919.4,
+          l: 6906.01,
+          c: 6910.98,
+          v: 1234,
+        } as any,
+      ],
+    } as any);
+    mockGetEMAIndicator.mockResolvedValue([
+      { timestamp: 1770647400000, value: 6908.12 },
+    ] as any);
+    mockGetRSIIndicator.mockResolvedValue([
+      { timestamp: 1770647400000, value: 58.4 },
+    ] as any);
+    mockGetMACDIndicator.mockResolvedValue([
+      { timestamp: 1770647400000, value: 12.4, signal: 10.7, histogram: 1.7 },
+    ] as any);
+
+    const res = await request(app).get('/api/chart/spx?timeframe=1m&includeIndicators=true');
+
+    expect(res.status).toBe(200);
+    expect(res.body.providerIndicators).toBeDefined();
+    expect(res.body.providerIndicators.source).toBe('massive');
+    expect(res.body.providerIndicators.timespan).toBe('minute');
+    expect(res.body.providerIndicators.ema8[0].value).toBe(6908.12);
+    expect(res.body.providerIndicators.rsi14[0].value).toBe(58.4);
+    expect(res.body.providerIndicators.macd[0].signal).toBe(10.7);
+    expect(mockGetEMAIndicator).toHaveBeenCalled();
+    expect(mockGetRSIIndicator).toHaveBeenCalled();
+    expect(mockGetMACDIndicator).toHaveBeenCalled();
+    expect(mockGetEMAIndicator).toHaveBeenCalledWith('I:SPX', expect.objectContaining({
+      timespan: 'minute',
+      order: 'asc',
+      timestampGte: expect.any(String),
+      timestampLte: expect.any(String),
+    }));
+  });
+
+  it('degrades gracefully when indicator requests fail', async () => {
+    mockGetAggregates.mockResolvedValue({
+      status: 'OK',
+      ticker: 'I:SPX',
+      queryCount: 1,
+      resultsCount: 1,
+      adjusted: true,
+      request_id: 'test',
+      count: 1,
+      results: [
+        {
+          t: 1770647400000,
+          o: 6917.26,
+          h: 6919.4,
+          l: 6906.01,
+          c: 6910.98,
+          v: 1234,
+        } as any,
+      ],
+    } as any);
+    mockGetEMAIndicator.mockRejectedValue(new Error('indicator unavailable'));
+    mockGetRSIIndicator.mockRejectedValue(new Error('indicator unavailable'));
+    mockGetMACDIndicator.mockRejectedValue(new Error('indicator unavailable'));
+
+    const res = await request(app).get('/api/chart/spx?timeframe=1m&includeIndicators=true');
+
+    expect(res.status).toBe(200);
+    expect(res.body.providerIndicators).toBeDefined();
+    expect(res.body.providerIndicators.ema8).toEqual([]);
+    expect(res.body.providerIndicators.rsi14).toEqual([]);
+    expect(res.body.providerIndicators.macd).toEqual([]);
+  });
+
+  it.each(['1m', '5m', '15m', '1h', '4h', '1D'])(
+    'returns bars for %s timeframe',
+    async (timeframe) => {
+      mockGetAggregates.mockResolvedValue({
+        status: 'OK',
+        ticker: 'I:SPX',
+        queryCount: 1,
+        resultsCount: 1,
+        adjusted: true,
+        request_id: 'test',
+        count: 1,
+        results: [
+          {
+            t: 1770647400000,
+            o: 6917.26,
+            h: 6919.4,
+            l: 6906.01,
+            c: 6910.98,
+            v: 1234,
+          } as any,
+        ],
+      } as any);
+
+      const res = await request(app).get(`/api/chart/spx?timeframe=${timeframe}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.timeframe).toBe(timeframe);
+      expect(Array.isArray(res.body.bars)).toBe(true);
+      expect(res.body.bars.length).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(['1W', '1M'])(
+    'returns bars for %s timeframe via chart data service',
+    async (timeframe) => {
+      mockGetChartData.mockResolvedValue({
+        symbol: 'SPX',
+        timeframe: timeframe === '1W' ? 'weekly' : 'monthly',
+        currentPrice: 6910.98,
+        candles: [
+          { time: 1770230400, open: 6800, high: 6920, low: 6780, close: 6910.98, volume: 0 },
+        ],
+        indicators: {
+          ema50: 6820,
+          ema200: 6500,
+          pivots: {
+            pp: 6870,
+            r1: 6940,
+            r2: 7010,
+            s1: 6800,
+            s2: 6730,
+          },
+        },
+        count: 1,
+        timestamp: new Date().toISOString(),
+        cached: false,
+      } as any);
+
+      const res = await request(app).get(`/api/chart/spx?timeframe=${timeframe}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.timeframe).toBe(timeframe);
+      expect(Array.isArray(res.body.bars)).toBe(true);
+      expect(res.body.bars.length).toBeGreaterThan(0);
+      expect(mockGetChartData).toHaveBeenCalled();
+    },
+  );
 });

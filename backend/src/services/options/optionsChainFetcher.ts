@@ -11,6 +11,8 @@ import { getDailyAggregates } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 import {
   OptionContract,
+  OptionsMatrixCell,
+  OptionsMatrixResponse,
   OptionsChainResponse,
   BlackScholesInputs
 } from './types';
@@ -52,6 +54,10 @@ const DEFAULT_DIVIDEND_YIELD = 0.005;
 
 // Cache TTL for options chain (5 minutes during market hours)
 const OPTIONS_CHAIN_CACHE_TTL = 300; // 5 minutes
+const OPTIONS_MATRIX_CACHE_TTL = 180; // 3 minutes
+const DEFAULT_MATRIX_EXPIRATIONS = 5;
+const DEFAULT_MATRIX_STRIKE_RANGE = 50;
+const MATRIX_FETCH_CONCURRENCY = 2;
 
 /**
  * Get current price for underlying symbol
@@ -123,6 +129,46 @@ function filterStrikesByRange(
   const endIdx = Math.min(sortedStrikes.length, closestStrikeIndex + range + 1);
 
   return sortedStrikes.slice(startIdx, endIdx);
+}
+
+function calculateContractGex(
+  gamma: number | undefined,
+  openInterest: number,
+  spotPrice: number,
+): number {
+  if (!gamma || gamma <= 0 || !Number.isFinite(openInterest) || openInterest <= 0 || !Number.isFinite(spotPrice) || spotPrice <= 0) {
+    return 0;
+  }
+
+  return gamma * openInterest * 100 * spotPrice * spotPrice * 0.01;
+}
+
+function calculateCellMetrics(
+  call: OptionContract | null,
+  put: OptionContract | null,
+  spotPrice: number,
+): OptionsMatrixCell['metrics'] {
+  const callVolume = call?.volume ?? 0;
+  const putVolume = put?.volume ?? 0;
+  const callOi = call?.openInterest ?? 0;
+  const putOi = put?.openInterest ?? 0;
+
+  const ivCandidates = [call?.impliedVolatility ?? 0, put?.impliedVolatility ?? 0]
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  const impliedVolatility = ivCandidates.length > 0
+    ? ivCandidates.reduce((sum, value) => sum + value, 0) / ivCandidates.length
+    : null;
+
+  const callGex = calculateContractGex(call?.gamma, callOi, spotPrice);
+  const putGex = calculateContractGex(put?.gamma, putOi, spotPrice);
+
+  return {
+    volume: Math.round(callVolume + putVolume),
+    openInterest: Math.round(callOi + putOi),
+    impliedVolatility,
+    gex: callGex - putGex,
+  };
 }
 
 /**
@@ -399,6 +445,111 @@ export async function fetchExpirationDates(symbol: string): Promise<string[]> {
     logger.error(`Failed to fetch expirations for ${symbol}`, { error: error.message });
     throw new Error(`Failed to fetch expirations: ${error.message}`);
   }
+}
+
+async function fetchMatrixChains(
+  symbol: string,
+  expirations: string[],
+  strikeRange: number,
+): Promise<OptionsChainResponse[]> {
+  const chains: OptionsChainResponse[] = [];
+
+  for (let i = 0; i < expirations.length; i += MATRIX_FETCH_CONCURRENCY) {
+    const batch = expirations.slice(i, i + MATRIX_FETCH_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((expiry) => fetchOptionsChain(symbol, expiry, strikeRange)),
+    );
+    chains.push(...batchResults);
+  }
+
+  return chains;
+}
+
+export async function fetchOptionsMatrix(
+  symbolInput: string,
+  options?: {
+    expirations?: number;
+    strikes?: number;
+  },
+): Promise<OptionsMatrixResponse> {
+  const symbol = symbolInput.toUpperCase();
+  const expirationsCount = Math.max(1, Math.min(10, options?.expirations ?? DEFAULT_MATRIX_EXPIRATIONS));
+  const strikeRange = Math.max(10, Math.min(80, options?.strikes ?? DEFAULT_MATRIX_STRIKE_RANGE));
+  const cacheKey = `options_matrix:${symbol}:exp:${expirationsCount}:strikes:${strikeRange}`;
+
+  const cached = await cacheGet<OptionsMatrixResponse>(cacheKey);
+  if (cached) {
+    logger.info(`Options matrix cache hit: ${cacheKey}`);
+    return cached;
+  }
+
+  const availableExpirations = await fetchExpirationDates(symbol);
+  const selectedExpirations = availableExpirations.slice(0, expirationsCount);
+
+  if (selectedExpirations.length === 0) {
+    throw new Error(`No options expirations found for ${symbol}`);
+  }
+
+  const chains = await fetchMatrixChains(symbol, selectedExpirations, strikeRange);
+  if (chains.length === 0) {
+    throw new Error(`No options chain data found for ${symbol}`);
+  }
+
+  const currentPrice = chains[0].currentPrice;
+  const cellMap = new Map<string, { expiry: string; strike: number; call: OptionContract | null; put: OptionContract | null }>();
+  const strikesSet = new Set<number>();
+
+  for (const chain of chains) {
+    for (const call of chain.options.calls) {
+      const key = `${chain.expiry}:${call.strike}`;
+      const existing = cellMap.get(key) || { expiry: chain.expiry, strike: call.strike, call: null, put: null };
+      existing.call = call;
+      cellMap.set(key, existing);
+      strikesSet.add(call.strike);
+    }
+
+    for (const put of chain.options.puts) {
+      const key = `${chain.expiry}:${put.strike}`;
+      const existing = cellMap.get(key) || { expiry: chain.expiry, strike: put.strike, call: null, put: null };
+      existing.put = put;
+      cellMap.set(key, existing);
+      strikesSet.add(put.strike);
+    }
+  }
+
+  const strikes = Array.from(strikesSet.values()).sort((a, b) => a - b);
+  const cells: OptionsMatrixCell[] = Array.from(cellMap.values())
+    .map((cell) => ({
+      expiry: cell.expiry,
+      strike: cell.strike,
+      call: cell.call,
+      put: cell.put,
+      metrics: calculateCellMetrics(cell.call, cell.put, currentPrice),
+    }))
+    .sort((a, b) => {
+      if (a.strike !== b.strike) return a.strike - b.strike;
+      return selectedExpirations.indexOf(a.expiry) - selectedExpirations.indexOf(b.expiry);
+    });
+
+  const response: OptionsMatrixResponse = {
+    symbol,
+    currentPrice,
+    expirations: selectedExpirations,
+    strikes,
+    cells,
+    generatedAt: new Date().toISOString(),
+    cacheKey,
+  };
+
+  await cacheSet(cacheKey, response, OPTIONS_MATRIX_CACHE_TTL);
+  logger.info('Options matrix generated', {
+    symbol,
+    expirations: selectedExpirations.length,
+    strikes: strikes.length,
+    cells: cells.length,
+  });
+
+  return response;
 }
 
 /**

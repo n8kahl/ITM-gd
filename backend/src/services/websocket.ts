@@ -9,8 +9,10 @@
  *   Client → Server:
  *     { "type": "subscribe",   "symbols": ["SPX", "NDX"] }
  *     { "type": "subscribe",   "channels": ["setups:user-123"] }
+ *     { "type": "subscribe",   "channels": ["positions:user-123"] }
  *     { "type": "unsubscribe", "symbols": ["SPX"] }
  *     { "type": "unsubscribe", "channels": ["setups:user-123"] }
+ *     { "type": "unsubscribe", "channels": ["positions:user-123"] }
  *     { "type": "ping" }
  *
  *   Server → Client:
@@ -18,6 +20,8 @@
  *     { "type": "status", "marketStatus": "open", "session": "regular", ... }
  *     { "type": "setup_update", "channel": "setups:user-123", "data": { ... } }
  *     { "type": "setup_detected", "channel": "setups:user-123", "data": { ... } }
+ *     { "type": "position_update", "channel": "positions:user-123", "data": { ... } }
+ *     { "type": "position_advice", "channel": "positions:user-123", "data": { ... } }
  *     { "type": "pong" }
  *     { "type": "error",  "message": "..." }
  *
@@ -38,6 +42,11 @@ import {
   type SetupDetectedUpdate,
   type SetupStatusUpdate,
 } from './setupPushChannel';
+import {
+  subscribePositionPushEvents,
+  type PositionAdviceUpdate,
+  type PositionLiveUpdate,
+} from './positionPushChannel';
 
 // ============================================
 // TYPES
@@ -73,6 +82,8 @@ const POLL_INTERVALS = {
 };
 const SETUP_CHANNEL_PREFIX = 'setups:';
 const SETUP_CHANNEL_PATTERN = /^setups:[a-zA-Z0-9_-]{3,64}$/;
+const POSITION_CHANNEL_PREFIX = 'positions:';
+const POSITION_CHANNEL_PATTERN = /^positions:[a-zA-Z0-9_-]{3,64}$/;
 
 function formatTicker(symbol: string): string {
   return formatMassiveTicker(symbol);
@@ -119,6 +130,7 @@ let wss: WebSocketServer | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeSetupEvents: (() => void) | null = null;
+let unsubscribePositionEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
 
 function isSymbolSubscription(value: string): boolean {
@@ -130,6 +142,17 @@ function normalizeSetupChannel(value: string): string | null {
   if (!normalized.startsWith(SETUP_CHANNEL_PREFIX)) return null;
   if (!SETUP_CHANNEL_PATTERN.test(normalized)) return null;
   return normalized;
+}
+
+function normalizePositionChannel(value: string): string | null {
+  const normalized = value.toLowerCase();
+  if (!normalized.startsWith(POSITION_CHANNEL_PREFIX)) return null;
+  if (!POSITION_CHANNEL_PATTERN.test(normalized)) return null;
+  return normalized;
+}
+
+function normalizeRealtimeChannel(value: string): string | null {
+  return normalizeSetupChannel(value) || normalizePositionChannel(value);
 }
 
 function getActiveSymbols(): Set<string> {
@@ -172,6 +195,36 @@ function broadcastSetupDetected(update: SetupDetectedUpdate): void {
   const channel = `${SETUP_CHANNEL_PREFIX}${update.userId}`;
   const message = JSON.stringify({
     type: 'setup_detected',
+    channel,
+    data: update,
+  });
+
+  for (const [ws, state] of clients) {
+    if (ws.readyState === WebSocket.OPEN && state.subscriptions.has(channel)) {
+      ws.send(message);
+    }
+  }
+}
+
+function broadcastPositionUpdate(update: PositionLiveUpdate): void {
+  const channel = `${POSITION_CHANNEL_PREFIX}${update.userId}`;
+  const message = JSON.stringify({
+    type: 'position_update',
+    channel,
+    data: update,
+  });
+
+  for (const [ws, state] of clients) {
+    if (ws.readyState === WebSocket.OPEN && state.subscriptions.has(channel)) {
+      ws.send(message);
+    }
+  }
+}
+
+function broadcastPositionAdvice(update: PositionAdviceUpdate): void {
+  const channel = `${POSITION_CHANNEL_PREFIX}${update.userId}`;
+  const message = JSON.stringify({
+    type: 'position_advice',
     channel,
     data: update,
   });
@@ -236,7 +289,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
         for (const channelCandidate of channels) {
           if (typeof channelCandidate !== 'string') continue;
 
-          const channel = normalizeSetupChannel(channelCandidate);
+          const channel = normalizeRealtimeChannel(channelCandidate);
           if (!channel) {
             sendToClient(ws, { type: 'error', message: `Invalid channel: ${String(channelCandidate)}` });
             continue;
@@ -262,7 +315,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
         }
         for (const channelCandidate of channels) {
           if (typeof channelCandidate !== 'string') continue;
-          const channel = normalizeSetupChannel(channelCandidate);
+          const channel = normalizeRealtimeChannel(channelCandidate);
           if (channel) {
             state.subscriptions.delete(channel);
           }
@@ -394,6 +447,15 @@ export function initWebSocket(server: HTTPServer): void {
       broadcastSetupDetected(event.payload);
     }
   });
+  unsubscribePositionEvents = subscribePositionPushEvents((event) => {
+    if (event.type === 'position_update') {
+      broadcastPositionUpdate(event.payload);
+      return;
+    }
+    if (event.type === 'position_advice') {
+      broadcastPositionAdvice(event.payload);
+    }
+  });
 
   logger.info('WebSocket price server initialized at /ws/prices');
 }
@@ -422,6 +484,10 @@ export function shutdownWebSocket(): void {
   if (unsubscribeSetupEvents) {
     unsubscribeSetupEvents();
     unsubscribeSetupEvents = null;
+  }
+  if (unsubscribePositionEvents) {
+    unsubscribePositionEvents();
+    unsubscribePositionEvents = null;
   }
   logger.info('WebSocket server shut down');
 }

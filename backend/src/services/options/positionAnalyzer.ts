@@ -1,4 +1,5 @@
 import { logger } from '../../lib/logger';
+import { supabase } from '../../config/database';
 import {
   Position,
   PositionAnalysis,
@@ -451,22 +452,132 @@ export async function analyzePortfolio(positions: Position[]): Promise<Portfolio
   };
 }
 
+interface PositionRow {
+  id: string;
+  user_id: string;
+  symbol: string;
+  position_type: string;
+  strike: number | string | null;
+  expiry: string | null;
+  quantity: number | string;
+  entry_price: number | string;
+  entry_date: string;
+  current_price: number | string | null;
+  greeks: Record<string, unknown> | null;
+  status: 'open' | 'closed' | 'expired';
+}
+
+const VALID_POSITION_TYPES = new Set<Position['type']>([
+  'call',
+  'put',
+  'call_spread',
+  'put_spread',
+  'iron_condor',
+  'stock',
+]);
+
+function parseNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed;
+}
+
+function parseDateOnly(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function parseGreeks(value: Record<string, unknown> | null): Greeks | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const delta = parseNumber(value.delta) ?? 0;
+  const gamma = parseNumber(value.gamma) ?? 0;
+  const theta = parseNumber(value.theta) ?? 0;
+  const vega = parseNumber(value.vega) ?? 0;
+  const rho = parseNumber(value.rho) ?? 0;
+
+  return { delta, gamma, theta, vega, rho };
+}
+
+function mapPositionType(positionType: string): Position['type'] {
+  const normalized = positionType.toLowerCase() as Position['type'];
+  if (VALID_POSITION_TYPES.has(normalized)) return normalized;
+  return 'stock';
+}
+
+function mapRowToPosition(row: PositionRow): Position {
+  return {
+    id: row.id,
+    symbol: row.symbol.toUpperCase(),
+    type: mapPositionType(row.position_type),
+    strike: parseNumber(row.strike),
+    expiry: parseDateOnly(row.expiry),
+    quantity: parseNumber(row.quantity) ?? 0,
+    entryPrice: parseNumber(row.entry_price) ?? 0,
+    entryDate: parseDateOnly(row.entry_date) ?? new Date().toISOString().slice(0, 10),
+    currentPrice: parseNumber(row.current_price),
+    greeks: parseGreeks(row.greeks),
+  };
+}
+
 /**
  * Get position by ID from database
  */
-export async function getPositionById(_positionId: string): Promise<Position | null> {
-  // This would query the ai_coach_positions table
-  // Implementation depends on database setup
-  // For now, return null - will be implemented when API routes are created
-  return null;
+export async function getPositionById(positionId: string, userId?: string): Promise<Position | null> {
+  let query = supabase
+    .from('ai_coach_positions')
+    .select('id, user_id, symbol, position_type, strike, expiry, quantity, entry_price, entry_date, current_price, greeks, status')
+    .eq('id', positionId)
+    .eq('status', 'open')
+    .limit(1);
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    logger.error('Failed to fetch position by id', {
+      positionId,
+      userId,
+      error: error.message,
+      code: (error as { code?: string }).code,
+    });
+    return null;
+  }
+
+  if (!data) return null;
+  return mapRowToPosition(data as PositionRow);
 }
 
 /**
  * Get all positions for a user
  */
-export async function getUserPositions(_userId: string): Promise<Position[]> {
-  // This would query the ai_coach_positions table
-  // Implementation depends on database setup
-  // For now, return empty array - will be implemented when API routes are created
-  return [];
+export async function getUserPositions(userId: string): Promise<Position[]> {
+  const { data, error } = await supabase
+    .from('ai_coach_positions')
+    .select('id, user_id, symbol, position_type, strike, expiry, quantity, entry_price, entry_date, current_price, greeks, status')
+    .eq('user_id', userId)
+    .eq('status', 'open')
+    .order('updated_at', { ascending: false })
+    .limit(200);
+
+  if (error) {
+    logger.error('Failed to fetch user positions', {
+      userId,
+      error: error.message,
+      code: (error as { code?: string }).code,
+    });
+    return [];
+  }
+
+  return (data || [])
+    .map((row) => mapRowToPosition(row as PositionRow))
+    .filter((position) => position.quantity !== 0 && position.entryPrice > 0);
 }

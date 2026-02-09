@@ -11,13 +11,17 @@ jest.mock('../../lib/logger', () => ({
 }));
 
 jest.mock('../../middleware/auth', () => ({
-  authenticateToken: (_req: any, _res: any, next: any) => next(),
+  authenticateToken: (req: any, _res: any, next: any) => {
+    req.user = { id: 'user-1' };
+    next();
+  },
   checkQueryLimit: (_req: any, _res: any, next: any) => next(),
 }));
 
 jest.mock('../../services/options/optionsChainFetcher', () => ({
   fetchOptionsChain: jest.fn(),
   fetchExpirationDates: jest.fn(),
+  fetchOptionsMatrix: jest.fn(),
 }));
 
 jest.mock('../../services/options/gexCalculator', () => ({
@@ -35,24 +39,86 @@ jest.mock('../../services/options/ivAnalysis', () => ({
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn(),
+  getUserPositions: jest.fn(),
+  getPositionById: jest.fn(),
+}));
+
+jest.mock('../../services/positions/liveTracker', () => ({
+  LivePositionTracker: jest.fn(),
+}));
+
+jest.mock('../../services/positions/exitAdvisor', () => ({
+  ExitAdvisor: jest.fn(),
 }));
 
 import optionsRouter from '../options';
 import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../../services/options/zeroDTE';
 import { analyzeIVProfile } from '../../services/options/ivAnalysis';
+import { fetchOptionsMatrix } from '../../services/options/optionsChainFetcher';
+import {
+  analyzePosition,
+  getPositionById,
+  getUserPositions,
+} from '../../services/options/positionAnalyzer';
+import { LivePositionTracker } from '../../services/positions/liveTracker';
+import { ExitAdvisor } from '../../services/positions/exitAdvisor';
 
 const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
 const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
 const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
+const mockFetchOptionsMatrix = fetchOptionsMatrix as jest.MockedFunction<typeof fetchOptionsMatrix>;
+const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
+const mockGetUserPositions = getUserPositions as jest.MockedFunction<typeof getUserPositions>;
+const mockGetPositionById = getPositionById as jest.MockedFunction<typeof getPositionById>;
+const MockLivePositionTracker = LivePositionTracker as unknown as jest.Mock;
+const MockExitAdvisor = ExitAdvisor as unknown as jest.Mock;
 
 const app = express();
 app.use(express.json());
 app.use('/api/options', optionsRouter);
+app.use('/api/positions', optionsRouter);
 
 describe('Options Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    MockLivePositionTracker.mockImplementation(() => ({
+      recalculateForUser: jest.fn().mockResolvedValue([]),
+    }));
+    MockExitAdvisor.mockImplementation(() => ({
+      generateAdvice: jest.fn().mockReturnValue([]),
+    }));
+  });
+
+  describe('GET /api/options/:symbol/matrix', () => {
+    it('returns options matrix for valid symbol/query', async () => {
+      mockFetchOptionsMatrix.mockResolvedValue({
+        symbol: 'SPY',
+        currentPrice: 512.4,
+        expirations: ['2026-02-20', '2026-02-27'],
+        strikes: [500, 505, 510],
+        cells: [],
+        generatedAt: '2026-02-09T18:00:00.000Z',
+        cacheKey: 'options_matrix:SPY',
+      } as any);
+
+      const res = await request(app).get('/api/options/spy/matrix?expirations=2&strikes=50');
+
+      expect(res.status).toBe(200);
+      expect(res.body.symbol).toBe('SPY');
+      expect(mockFetchOptionsMatrix).toHaveBeenCalledWith('SPY', {
+        expirations: 2,
+        strikes: 50,
+      });
+    });
+
+    it('returns 400 for invalid matrix query', async () => {
+      const res = await request(app).get('/api/options/spy/matrix?expirations=0&strikes=8');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect(mockFetchOptionsMatrix).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET /api/options/:symbol/gex', () => {
@@ -188,6 +254,163 @@ describe('Options Routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('VALIDATION_ERROR');
       expect(mockAnalyzeIVProfile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/positions/live', () => {
+    it('returns live snapshots for authenticated user', async () => {
+      const recalculateForUser = jest.fn().mockResolvedValue([
+        {
+          id: 'pos-1',
+          symbol: 'SPX',
+          type: 'call',
+          quantity: 1,
+          entryPrice: 24.5,
+          entryDate: '2026-02-01',
+          currentPrice: 36.1,
+          currentValue: 3610,
+          costBasis: 2450,
+          pnl: 1160,
+          pnlPct: 47.35,
+          daysHeld: 8,
+          daysToExpiry: 5,
+          updatedAt: '2026-02-09T16:00:00.000Z',
+        },
+      ]);
+
+      MockLivePositionTracker.mockImplementation(() => ({
+        recalculateForUser,
+      }));
+
+      const res = await request(app).get('/api/positions/live');
+
+      expect(res.status).toBe(200);
+      expect(recalculateForUser).toHaveBeenCalledWith('user-1');
+      expect(res.body.count).toBe(1);
+      expect(res.body.positions[0].id).toBe('pos-1');
+    });
+  });
+
+  describe('GET /api/positions/advice', () => {
+    it('returns advice for all open positions', async () => {
+      mockGetUserPositions.mockResolvedValue([
+        {
+          id: 'pos-1',
+          symbol: 'SPX',
+          type: 'call',
+          strike: 6000,
+          expiry: '2026-02-20',
+          quantity: 1,
+          entryPrice: 20,
+          entryDate: '2026-02-07',
+        } as any,
+      ]);
+
+      mockAnalyzePosition.mockResolvedValue({
+        position: {
+          id: 'pos-1',
+          symbol: 'SPX',
+          type: 'call',
+          strike: 6000,
+          expiry: '2026-02-20',
+          quantity: 1,
+          entryPrice: 20,
+          entryDate: '2026-02-07',
+        },
+        currentValue: 3200,
+        costBasis: 2000,
+        pnl: 1200,
+        pnlPct: 60,
+        daysHeld: 2,
+        daysToExpiry: 11,
+        maxGain: 'unlimited',
+        maxLoss: 2000,
+        greeks: {
+          delta: 45,
+          gamma: 0.2,
+          theta: -65,
+          vega: 22,
+        },
+      } as any);
+
+      const generateAdvice = jest.fn().mockReturnValue([
+        {
+          positionId: 'pos-1',
+          type: 'take_profit',
+          urgency: 'medium',
+          message: 'Consider taking partial profits.',
+          suggestedAction: { action: 'take_partial_profit', closePct: 50 },
+        },
+      ]);
+      MockExitAdvisor.mockImplementation(() => ({
+        generateAdvice,
+      }));
+
+      const res = await request(app).get('/api/positions/advice');
+
+      expect(res.status).toBe(200);
+      expect(mockGetUserPositions).toHaveBeenCalledWith('user-1');
+      expect(generateAdvice).toHaveBeenCalled();
+      expect(res.body.count).toBe(1);
+      expect(res.body.advice[0].type).toBe('take_profit');
+    });
+
+    it('returns 400 for invalid positionId query', async () => {
+      const res = await request(app).get('/api/positions/advice?positionId=not-a-uuid');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+
+    it('looks up a single position when positionId is provided', async () => {
+      mockGetPositionById.mockResolvedValue({
+        id: 'fae5e8d7-c7a2-4de7-b8df-4e23f4aabcf1',
+        symbol: 'NDX',
+        type: 'put',
+        strike: 21000,
+        expiry: '2026-03-20',
+        quantity: 1,
+        entryPrice: 120,
+        entryDate: '2026-02-01',
+      } as any);
+      mockAnalyzePosition.mockResolvedValue({
+        position: {
+          id: 'fae5e8d7-c7a2-4de7-b8df-4e23f4aabcf1',
+          symbol: 'NDX',
+          type: 'put',
+          strike: 21000,
+          expiry: '2026-03-20',
+          quantity: 1,
+          entryPrice: 120,
+          entryDate: '2026-02-01',
+        },
+        currentValue: 8000,
+        costBasis: 12000,
+        pnl: -4000,
+        pnlPct: -33.3,
+        daysHeld: 8,
+        daysToExpiry: 40,
+        maxGain: 2100000,
+        maxLoss: 12000,
+        greeks: {
+          delta: -35,
+          gamma: 0.08,
+          theta: -40,
+          vega: 30,
+        },
+      } as any);
+
+      const generateAdvice = jest.fn().mockReturnValue([]);
+      MockExitAdvisor.mockImplementation(() => ({
+        generateAdvice,
+      }));
+
+      const positionId = 'fae5e8d7-c7a2-4de7-b8df-4e23f4aabcf1';
+      const res = await request(app).get(`/api/positions/advice?positionId=${positionId}`);
+
+      expect(res.status).toBe(200);
+      expect(mockGetPositionById).toHaveBeenCalledWith(positionId, 'user-1');
+      expect(mockGetUserPositions).not.toHaveBeenCalled();
+      expect(res.body.count).toBe(0);
     });
   });
 });

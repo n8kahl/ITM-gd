@@ -3,11 +3,18 @@ import { logger } from '../lib/logger';
 import { authenticateToken } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate';
 import { supabase } from '../config/database';
+import { toEasternTime } from '../services/marketHours';
+import { journalAutoPopulateService } from '../services/journal/autoPopulate';
+import { journalPatternAnalyzer } from '../services/journal/patternAnalyzer';
 import {
   createTradeSchema,
   updateTradeSchema,
   tradeIdSchema,
   getTradesQuerySchema,
+  getDraftTradesQuerySchema,
+  generateDraftsSchema,
+  updateDraftStatusSchema,
+  getJournalInsightsQuerySchema,
   importTradesSchema,
 } from '../schemas/journalValidation';
 
@@ -25,11 +32,22 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const offset = parseInt(req.query.offset as string) || 0;
-      const symbol = req.query.symbol as string;
-      const strategy = req.query.strategy as string;
-      const outcome = req.query.outcome as 'win' | 'loss' | 'breakeven';
+      const validatedQuery = (req as any).validatedQuery as {
+        limit: number;
+        offset: number;
+        symbol?: string;
+        strategy?: string;
+        outcome?: 'win' | 'loss' | 'breakeven';
+        draft_status?: 'draft' | 'reviewed' | 'published';
+      };
+      const {
+        limit,
+        offset,
+        symbol,
+        strategy,
+        outcome,
+        draft_status,
+      } = validatedQuery;
 
       let query = supabase
         .from('ai_coach_trades')
@@ -40,6 +58,7 @@ router.get(
       if (symbol) query = query.eq('symbol', symbol.toUpperCase());
       if (strategy) query = query.eq('strategy', strategy);
       if (outcome) query = query.eq('trade_outcome', outcome);
+      if (draft_status) query = query.eq('draft_status', draft_status);
 
       const { data, error, count } = await query.range(offset, offset + limit - 1);
 
@@ -55,6 +74,75 @@ router.get(
       res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch trades' });
     }
   }
+);
+
+/**
+ * GET /api/journal/drafts
+ *
+ * List auto-generated journal drafts (or reviewed/published with status filter).
+ */
+router.get(
+  '/drafts',
+  authenticateToken,
+  validateQuery(getDraftTradesQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const validatedQuery = (req as any).validatedQuery as {
+        limit: number;
+        status: 'draft' | 'reviewed' | 'published' | 'all';
+      };
+
+      const { limit, status } = validatedQuery;
+
+      let query = supabase
+        .from('ai_coach_trades')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId)
+        .eq('auto_generated', true)
+        .order('created_at', { ascending: false });
+
+      if (status !== 'all') {
+        query = query.eq('draft_status', status);
+      }
+
+      const { data, error, count } = await query.range(0, limit - 1);
+      if (error) throw new Error(`Failed to fetch draft trades: ${error.message}`);
+
+      res.json({
+        drafts: data || [],
+        total: count || 0,
+      });
+    } catch (error: any) {
+      logger.error('Error fetching draft trades', { error: error?.message || String(error) });
+      res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch draft trades' });
+    }
+  },
+);
+
+/**
+ * POST /api/journal/drafts/generate
+ *
+ * Manually trigger draft generation for today's ET date (or provided marketDate).
+ */
+router.post(
+  '/drafts/generate',
+  authenticateToken,
+  validateBody(generateDraftsSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const validatedBody = (req as any).validatedBody as { marketDate?: string };
+      const marketDate = validatedBody.marketDate || toEasternTime(new Date()).dateStr;
+
+      const result = await journalAutoPopulateService.generateDraftsForUser(userId, marketDate);
+
+      res.status(201).json(result);
+    } catch (error: any) {
+      logger.error('Error generating draft trades', { error: error?.message || String(error) });
+      res.status(500).json({ error: 'Internal server error', message: 'Failed to generate draft trades' });
+    }
+  },
 );
 
 /**
@@ -173,6 +261,42 @@ router.put(
 );
 
 /**
+ * PATCH /api/journal/trades/:id/draft-status
+ *
+ * Update draft workflow status (draft -> reviewed -> published).
+ */
+router.patch(
+  '/trades/:id/draft-status',
+  authenticateToken,
+  validateParams(tradeIdSchema),
+  validateBody(updateDraftStatusSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { draft_status } = req.body as {
+        draft_status: 'draft' | 'reviewed' | 'published';
+      };
+
+      const { data, error } = await supabase
+        .from('ai_coach_trades')
+        .update({ draft_status })
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) throw new Error(`Failed to update draft status: ${error.message}`);
+
+      res.json(data);
+    } catch (error: any) {
+      logger.error('Error updating draft status', { error: error?.message || String(error) });
+      res.status(500).json({ error: 'Internal server error', message: 'Failed to update draft status' });
+    }
+  },
+);
+
+/**
  * DELETE /api/journal/trades/:id
  */
 router.delete(
@@ -281,6 +405,43 @@ router.get(
       res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch analytics' });
     }
   }
+);
+
+/**
+ * GET /api/journal/insights
+ *
+ * Returns journal pattern insights for the requested period.
+ */
+router.get(
+  '/insights',
+  authenticateToken,
+  validateQuery(getJournalInsightsQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const validatedQuery = (req as any).validatedQuery as {
+        period: '7d' | '30d' | '90d';
+        forceRefresh: boolean;
+      };
+
+      const periodDays = validatedQuery.period === '7d'
+        ? 7
+        : validatedQuery.period === '90d'
+          ? 90
+          : 30;
+
+      const insightResult = await journalPatternAnalyzer.getJournalInsightsForUser(
+        userId,
+        periodDays,
+        { forceRefresh: validatedQuery.forceRefresh },
+      );
+
+      res.json(insightResult);
+    } catch (error: any) {
+      logger.error('Error fetching journal insights', { error: error?.message || String(error) });
+      res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch journal insights' });
+    }
+  },
 );
 
 /**

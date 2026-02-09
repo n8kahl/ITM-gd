@@ -62,6 +62,8 @@ interface CorporateEventRecord {
   ticker?: string;
   symbol?: string;
   event_type?: string;
+  type?: string;
+  name?: string;
   execution_date?: string;
   event_date?: string;
   report_date?: string;
@@ -116,10 +118,15 @@ const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 const ALPHA_VANTAGE_BASE_URL = process.env.ALPHA_VANTAGE_BASE_URL || 'https://www.alphavantage.co/query';
 const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
 const ALPHA_VANTAGE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const ENABLE_TMX_CORPORATE_EVENTS = process.env.ENABLE_TMX_CORPORATE_EVENTS === 'true';
 const CORPORATE_EVENT_ENDPOINTS = [
-  '/tmx/vX/reference/corporate-events',
-  '/fmx/vX/reference/corporate-events',
+  '/tmx/v1/corporate-events',
 ] as const;
+const TMX_EARNINGS_TYPES = [
+  'earnings_announcement_date',
+  'earnings_results_announcement',
+  'earnings_conference_call',
+].join(',');
 const alphaCalendarCache = new Map<string, { expiresAt: number; events: EarningsCalendarEvent[] }>();
 const alphaHistoryCache = new Map<string, {
   expiresAt: number;
@@ -167,7 +174,7 @@ function getEventDate(event: CorporateEventRecord): string | null {
 }
 
 function classifyEarningsTiming(event: CorporateEventRecord): EarningsTiming {
-  const raw = String(event.event_timing || event.timing || event.session || event.time || '').toLowerCase();
+  const raw = String(event.event_timing || event.timing || event.session || event.time || event.name || '').toLowerCase();
 
   if (raw.includes('after') || raw.includes('amc') || raw.includes('post')) {
     return 'AMC';
@@ -429,10 +436,9 @@ async function fetchAlphaVantageHistoricalEvents(
 
 async function fetchCorporateEvents(options: CalendarFetchOptions): Promise<CorporateEventRecord[]> {
   const params = {
-    event_type: 'EA',
     limit: 200,
-    sort: 'execution_date',
-    order: 'asc',
+    sort: 'date.asc',
+    'type.any_of': TMX_EARNINGS_TYPES,
   } as Record<string, unknown>;
 
   const events: CorporateEventRecord[] = [];
@@ -441,8 +447,8 @@ async function fetchCorporateEvents(options: CalendarFetchOptions): Promise<Corp
     const symbolParams = {
       ...params,
       ticker: symbol,
-      'execution_date.gte': options.fromDate,
-      'execution_date.lte': options.toDate,
+      'date.gte': options.fromDate,
+      'date.lte': options.toDate,
     };
 
     let resolved = false;
@@ -713,6 +719,10 @@ export class EarningsService {
       ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
     }
 
+    if (!ENABLE_TMX_CORPORATE_EVENTS) {
+      return [];
+    }
+
     const rawEvents = await fetchCorporateEvents({
       symbols,
       fromDate,
@@ -780,7 +790,7 @@ export class EarningsService {
 
     let historicalEvents = await fetchAlphaVantageHistoricalEvents(symbol, todayIso);
 
-    if (historicalEvents.length === 0) {
+    if (historicalEvents.length === 0 && ENABLE_TMX_CORPORATE_EVENTS) {
       const rawHistory = await fetchCorporateEvents({
         symbols: [symbol],
         fromDate: historyFrom,
@@ -979,4 +989,5 @@ export const __testables = {
   parseCsvRows,
   extractAlphaCalendarEvents,
   parseAlphaSurprise,
+  ENABLE_TMX_CORPORATE_EVENTS,
 };

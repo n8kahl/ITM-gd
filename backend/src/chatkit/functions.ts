@@ -294,6 +294,40 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_position_advice',
+      description: 'Get proactive management advice for open positions, including profit-taking, stop-loss, theta decay, spread conversion, and roll suggestions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          position_id: {
+            type: 'string',
+            description: 'Optional position ID. If omitted, advice is generated for all open positions.'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_journal_insights',
+      description: 'Get AI-generated journal pattern insights (time-of-day edge, setup performance, behavioral/risk patterns) for the selected period.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['7d', '30d', '90d'],
+            description: 'Analysis lookback window (default: 30d)',
+            default: '30d',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_trade_history',
       description: 'Get the user\'s recent trade history and performance analytics. Use this when the user asks about their past trades, win rate, P&L history, or trading performance.',
       parameters: {

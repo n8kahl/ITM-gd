@@ -15,11 +15,13 @@ import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import {
   getOptionsChain,
   getExpirations,
+  getOptionsMatrix,
   getGammaExposure,
   getZeroDTEAnalysis,
   getIVAnalysis,
   AICoachAPIError,
   type OptionsChainResponse,
+  type OptionsMatrixResponse,
   type OptionContract,
   type GEXProfileResponse,
   type ZeroDTEAnalysisResponse,
@@ -29,6 +31,7 @@ import { GEXChart } from './gex-chart'
 import { SymbolSearch } from './symbol-search'
 import { ZeroDTEDashboard } from './zero-dte-dashboard'
 import { IVDashboard } from './iv-dashboard'
+import { OptionsHeatmap, type HeatmapMode } from './options-heatmap'
 
 // ============================================
 // TYPES
@@ -41,6 +44,7 @@ interface OptionsChainProps {
 
 type SortField = 'strike' | 'last' | 'volume' | 'openInterest' | 'iv' | 'delta'
 type SortDir = 'asc' | 'desc'
+type OptionsDataView = 'chain' | 'heatmap'
 
 // ============================================
 // COMPONENT
@@ -67,6 +71,13 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('strike')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [activeDataView, setActiveDataView] = useState<OptionsDataView>('chain')
+  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>('volume')
+  const [matrixExpirations, setMatrixExpirations] = useState(5)
+  const [matrixStrikes, setMatrixStrikes] = useState(50)
+  const [optionsMatrix, setOptionsMatrix] = useState<OptionsMatrixResponse | null>(null)
+  const [isLoadingMatrix, setIsLoadingMatrix] = useState(false)
+  const [matrixError, setMatrixError] = useState<string | null>(null)
   const [showGex, setShowGex] = useState(true)
   const [showVolAnalytics, setShowVolAnalytics] = useState(true)
   const [gexProfile, setGexProfile] = useState<GEXProfileResponse | null>(null)
@@ -137,6 +148,31 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
       setIsLoading(false)
     }
   }, [token, symbol, expiry, strikeRange])
+
+  const loadMatrix = useCallback(async () => {
+    if (!token) return
+
+    setIsLoadingMatrix(true)
+    setMatrixError(null)
+    try {
+      const data = await getOptionsMatrix(symbol, token, {
+        expirations: matrixExpirations,
+        strikes: matrixStrikes,
+      })
+      setOptionsMatrix(data)
+    } catch (err) {
+      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load options heatmap'
+      setMatrixError(msg)
+      setOptionsMatrix(null)
+    } finally {
+      setIsLoadingMatrix(false)
+    }
+  }, [token, symbol, matrixExpirations, matrixStrikes])
+
+  useEffect(() => {
+    if (!token || activeDataView !== 'heatmap') return
+    loadMatrix()
+  }, [token, activeDataView, symbol, matrixExpirations, matrixStrikes, loadMatrix])
 
   const loadGex = useCallback(async (forceRefresh: boolean = false) => {
     if (!token || !showGex) return
@@ -233,6 +269,8 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
     setSymbol(pendingSyncSymbol)
     setExpiry('')
     setChain(null)
+    setOptionsMatrix(null)
+    setMatrixError(null)
     setGexProfile(null)
     setGexError(null)
     setWorkflowSymbol(pendingSyncSymbol)
@@ -280,6 +318,8 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
               setSymbol(nextSymbol)
               setExpiry('')
               setChain(null)
+              setOptionsMatrix(null)
+              setMatrixError(null)
               setGexProfile(null)
               setGexError(null)
               setZeroDteAnalysis(null)
@@ -322,13 +362,70 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
           ))}
         </select>
 
+        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+          <button
+            type="button"
+            onClick={() => setActiveDataView('chain')}
+            className={cn(
+              'rounded px-2 py-1 text-[11px] font-medium transition-colors',
+              activeDataView === 'chain'
+                ? 'bg-emerald-500/15 text-emerald-300'
+                : 'text-white/45 hover:text-white/70'
+            )}
+          >
+            Chain
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDataView('heatmap')}
+            className={cn(
+              'rounded px-2 py-1 text-[11px] font-medium transition-colors',
+              activeDataView === 'heatmap'
+                ? 'bg-emerald-500/15 text-emerald-300'
+                : 'text-white/45 hover:text-white/70'
+            )}
+          >
+            Heatmap
+          </button>
+        </div>
+
+        {activeDataView === 'heatmap' && (
+          <>
+            <select
+              value={matrixExpirations}
+              onChange={(e) => setMatrixExpirations(parseInt(e.target.value))}
+              className="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+            >
+              {[3, 5, 7, 10].map((value) => (
+                <option key={value} value={value}>{value} expiries</option>
+              ))}
+            </select>
+
+            <select
+              value={matrixStrikes}
+              onChange={(e) => setMatrixStrikes(parseInt(e.target.value))}
+              className="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+            >
+              {[30, 40, 50, 60, 70].map((value) => (
+                <option key={value} value={value}>{value} strike range</option>
+              ))}
+            </select>
+          </>
+        )}
+
         <button
-          onClick={loadChain}
-          disabled={isLoading || !expiry}
+          onClick={() => {
+            if (activeDataView === 'heatmap') {
+              loadMatrix()
+              return
+            }
+            loadChain()
+          }}
+          disabled={(activeDataView === 'chain' && (isLoading || !expiry)) || (activeDataView === 'heatmap' && isLoadingMatrix)}
           className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-emerald-500 transition-colors disabled:opacity-30"
           title="Refresh"
         >
-          <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
+          <RefreshCw className={cn('w-4 h-4', (isLoading || isLoadingMatrix) && 'animate-spin')} />
         </button>
 
         <button
@@ -415,26 +512,37 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {error && (
+        {activeDataView === 'heatmap' && (
+          <OptionsHeatmap
+            matrix={optionsMatrix}
+            mode={heatmapMode}
+            onModeChange={setHeatmapMode}
+            isLoading={isLoadingMatrix}
+            error={matrixError}
+            onRefresh={loadMatrix}
+          />
+        )}
+
+        {activeDataView === 'chain' && error && (
           <div className="p-4 text-center">
             <p className="text-sm text-red-400 mb-2">{error}</p>
             <button onClick={loadChain} className="text-xs text-emerald-500 hover:text-emerald-400">Retry</button>
           </div>
         )}
 
-        {isLoading && !chain && (
+        {activeDataView === 'chain' && isLoading && !chain && (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
           </div>
         )}
 
-        {!chain && !isLoading && !error && (
+        {activeDataView === 'chain' && !chain && !isLoading && !error && (
           <div className="flex items-center justify-center h-full text-sm text-white/40">
             Select an expiration to view the options chain
           </div>
         )}
 
-        {chain && (
+        {activeDataView === 'chain' && chain && (
           <>
             {showGex && (
               <div className="border-b border-white/5 p-3">

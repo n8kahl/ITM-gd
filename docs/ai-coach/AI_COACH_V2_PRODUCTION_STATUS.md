@@ -123,6 +123,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
   - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+- Options matrix backend slice for heatmap workflows (Phase 4 sequential):
+  - New API route: `GET /api/options/:symbol/matrix?expirations=5&strikes=50`
+  - New service method `fetchOptionsMatrix(symbol, { expirations, strikes })`:
+    - aggregates chains across multiple expirations
+    - normalizes a strike/expiry matrix payload
+    - computes per-cell metrics (`volume`, `openInterest`, `impliedVolatility`, `gex`)
+    - caches matrix snapshots for heatmap rendering
+  - Added route validation + regression tests for matrix query handling.
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/optionsChainFetcher.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
 - Earnings module backend slice (Phase 3 sequential completion):
   - New service `EarningsService` with:
     - upcoming earnings calendar discovery (watchlist + days window)
@@ -150,6 +163,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/charts/chartDataService.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/chart.test.ts`
   - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+- Massive indicator endpoint integration (Phase 4 groundwork):
+  - Added typed Massive indicator clients for `EMA`, `SMA`, `RSI`, and `MACD` (`/v1/indicators/*`) with validated query shaping.
+  - Extended chart route with `includeIndicators=true` support and provider payload:
+    - `providerIndicators: { source, timespan, ema8, ema21, rsi14, macd }`
+  - Indicator failures now degrade gracefully to empty series while preserving successful chart-bar responses.
+  - Added chart route regression coverage for indicator inclusion and fallback behavior.
+  - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/chart.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/chartValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/chart.test.ts`
 - Options chain loading hotfix (Massive API contract alignment):
   - Fixed Massive single-contract snapshot parsing (`results` object vs array) so `/api/options/:symbol/chain` no longer drops all contracts.
   - Added safer snapshot field handling for partial payloads.
@@ -195,6 +218,65 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Used by live workflow to validate detector-driven tracked setup flow without direct tracked setup API seeding
   - `/Users/natekahl/ITM-gd/backend/src/routes/trackedSetups.ts`
   - `/Users/natekahl/ITM-gd/backend/src/schemas/trackedSetupsValidation.ts`
+- Phase 5 live position tracking + exit advisor backend slice:
+  - DB-backed open-position loading implemented in `positionAnalyzer` (`getUserPositions`, `getPositionById`)
+  - New live position tracker service with persisted `current_price/current_value/pnl/pnl_pct/greeks` refresh
+  - New exit advisor rules engine covering:
+    - profit taking
+    - loss management
+    - time-decay warnings
+    - spread conversion suggestions
+    - roll suggestions
+  - New position push channel + WebSocket fanout on `positions:{userId}`:
+    - `position_update`
+    - `position_advice`
+  - New adaptive polling worker `position_tracker_worker` (15s market-active / 60s closed) with `workerHealth` telemetry
+  - New APIs:
+    - `GET /api/positions/live`
+    - `GET /api/positions/advice?positionId=<uuid>`
+  - New ChatKit function:
+    - `get_position_advice`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/positionAnalyzer.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/liveTracker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/exitAdvisor.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positionPushChannel.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+- Phase 5 journal auto-population + pattern recognition backend slice (sequential continuation):
+  - New auto-population service for EOD draft journal generation (4:15 PM ET) from:
+    - tracked setups
+    - triggered alerts
+    - position lifecycle events
+    - AI conversation symbol mentions
+  - New weekly pattern analyzer for journal insights (Sunday evening) with:
+    - time-of-day win-rate/P&L buckets
+    - setup-level performance breakdown
+    - behavioral signals (revenge-trading and overtrading correlation)
+    - risk-management signals (realized R/R proxy, stop adherence, sizing consistency)
+  - New workers:
+    - `journal_autopopulate_worker`
+    - `journal_insights_worker`
+  - New journal APIs:
+    - `GET /api/journal/drafts`
+    - `POST /api/journal/drafts/generate`
+    - `PATCH /api/journal/trades/:id/draft-status`
+    - `GET /api/journal/insights`
+  - New ChatKit function:
+    - `get_journal_insights`
+  - `/Users/natekahl/ITM-gd/backend/src/services/journal/autoPopulate.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/journal/patternAnalyzer.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/journalAutoPopulateWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/journalInsightsWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/journal.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/journalValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 
 ### Frontend
 - Opportunity Scanner:
@@ -218,6 +300,30 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Typed API client coverage:
   - watchlist/brief/tracked-setups methods
   - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Phase 5 live position tracker frontend slice:
+  - Replaced static Position Analyze center view with a live Position Tracker panel
+  - New live API bindings:
+    - `getLivePositions`
+    - `getPositionAdvice`
+  - WebSocket subscription to `positions:{userId}` for in-session `position_update` and `position_advice` events
+  - Position cards now render live P&L/Greeks/DTE + actionable prompts:
+    - Close
+    - Roll
+    - Convert to Spread
+    - Set Stop
+  - `/Users/natekahl/ITM-gd/components/ai-coach/position-tracker.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Phase 5 journal insights frontend slice:
+  - New Journal Insights card in the Journal Analytics tab with period switch (`7d/30d/90d`) and refresh controls.
+  - New API client support for draft workflows and insights:
+    - `getDraftTrades`
+    - `generateJournalDrafts`
+    - `updateTradeDraftStatus`
+    - `getJournalInsights`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/journal-insights.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trade-journal.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - GEX frontend visualization + chart overlay wiring:
   - Reusable GEX visualization component `GEXChart`
   - Chat widget card rendering for `get_gamma_exposure` with regime/flip/max/key levels and a `Show on Chart` action
@@ -238,6 +344,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Updated integration:
     - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
     - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Options Heatmap frontend slice (Phase 4 sequential):
+  - Added new canvas-based `OptionsHeatmap` component with:
+    - 2D strike/expiry grid rendering
+    - mode selector (`Volume`, `Open Interest`, `IV`, `GEX`)
+    - hover tooltip + click-to-inspect contract detail panel
+    - mouse-wheel zoom on strike density
+  - Added Options sub-tab switching (`Chain` / `Heatmap`) and matrix controls (expirations + strike range).
+  - Added API client typing/binding for `/api/options/:symbol/matrix`.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-heatmap.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - Earnings dashboard integration (Phase 3 completion):
   - Added `Earnings` center-panel tab with event calendar + analysis view.
   - Added earnings dashboard with:
@@ -271,6 +388,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+- Chart overlay controls and indicator-state wiring:
+  - Added centralized indicator config (`EMA 8`, `EMA 21`, `VWAP`, `OR`, `RSI`, `MACD`) and toolbar panel toggles.
+  - Wired indicator config from center panel into chart toolbar + trading chart overlays.
+  - Promoted RSI/MACD from placeholder toggles to live chart panes with Massive provider data and local-calculation fallback.
+  - Added reusable chart-indicator utility module for EMA/VWAP/OR/RSI/MACD series calculations.
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/chart-toolbar.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/chart-indicators.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - SymbolSearch UX integration (spec alignment):
   - Added reusable symbol autocomplete component with debounce, favorites, recents, and categorized suggestions
   - Wired into options chain symbol selector, position analysis form symbol selector, chart toolbar symbol selector, and scanner watchlist edit flow
@@ -341,6 +468,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/macro.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure`, `get_zero_dte_analysis`, `get_iv_analysis` coverage)
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/positionPushChannel.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/__tests__/exitAdvisor.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/journalAutoPopulateWorker.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/journalInsightsWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/earnings.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/earnings/__tests__/index.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
@@ -358,6 +489,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/chart.test.ts src/routes/__tests__/options.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/services/earnings/__tests__/index.test.ts src/routes/__tests__/earnings.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/routes/__tests__/options.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/services/earnings/__tests__/index.test.ts src/routes/__tests__/earnings.test.ts src/config/__tests__/env.test.ts`
+- `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/services/__tests__/positionPushChannel.test.ts src/services/positions/__tests__/exitAdvisor.test.ts`
+- `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/journal.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/workers/__tests__/journalAutoPopulateWorker.test.ts src/workers/__tests__/journalInsightsWorker.test.ts`
 - `pnpm --filter titm-ai-coach-backend build`
 - `pnpm build` (frontend Next.js production build passes with options + earnings dashboard surfaces)
 - `cd backend && LOG_LEVEL=error pnpm exec tsx -e "import { fetchOptionsChain } from './src/services/options/optionsChainFetcher'; const run=async()=>{for (const s of ['SPX','NDX','SPY','AAPL']){const c=await fetchOptionsChain(s, undefined, 2); console.log(JSON.stringify({symbol:s,expiry:c.expiry,calls:c.options.calls.length,puts:c.options.puts.length,current:c.currentPrice}));}}; run().catch((e)=>{console.error(e?.message||e);process.exit(1);});"`
@@ -396,6 +529,18 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 - Earnings backend + UI surface from rebuild spec is now implemented (`/api/earnings/calendar`, `/api/earnings/:symbol/analysis`, `get_earnings_calendar`, `get_earnings_analysis`, `Earnings` tab/dashboard).
+- Phase 5 live position tracking + proactive position advice slice is implemented and passing targeted tests/build:
+  - `/api/positions/live`
+  - `/api/positions/advice`
+  - `get_position_advice`
+  - WebSocket `positions:{userId}` push path
+- Phase 5 journal auto-population + journal insights slice is implemented and passing targeted tests/build:
+  - `/api/journal/drafts`
+  - `/api/journal/drafts/generate`
+  - `/api/journal/trades/:id/draft-status`
+  - `/api/journal/insights`
+  - `get_journal_insights`
+  - workers: `journal_autopopulate_worker`, `journal_insights_worker`
 - Options chain service has been patched to align with Massive snapshot response schema and locally validated with non-empty chains for `SPX`, `NDX`, `SPY`, and `AAPL`.
 - Chart API/renderer path now normalized for index symbols and validated on staging for `SPX`/`NDX` (`1m`, `5m`, `15m`, `1h`, `4h`, `1D`) with stable payload shape.
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.

@@ -106,6 +106,31 @@ export interface OptionsChainResponse {
   };
 }
 
+export interface OptionsMatrixCellMetrics {
+  volume: number;
+  openInterest: number;
+  impliedVolatility: number | null;
+  gex: number;
+}
+
+export interface OptionsMatrixCell {
+  expiry: string;
+  strike: number;
+  call: OptionContract | null;
+  put: OptionContract | null;
+  metrics: OptionsMatrixCellMetrics;
+}
+
+export interface OptionsMatrixResponse {
+  symbol: string;
+  currentPrice: number;
+  expirations: string[];
+  strikes: number[];
+  cells: OptionsMatrixCell[];
+  generatedAt: string;
+  cacheKey: string;
+}
+
 export interface GEXStrikeData {
   strike: number;
   gexValue: number;

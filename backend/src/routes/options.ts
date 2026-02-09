@@ -2,24 +2,31 @@ import { Router, Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import {
   fetchOptionsChain,
-  fetchExpirationDates
+  fetchExpirationDates,
+  fetchOptionsMatrix,
 } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../services/options/zeroDTE';
 import { analyzeIVProfile } from '../services/options/ivAnalysis';
 import {
   analyzePosition,
-  analyzePortfolio
+  analyzePortfolio,
+  getPositionById,
+  getUserPositions,
 } from '../services/options/positionAnalyzer';
+import { LivePositionTracker } from '../services/positions/liveTracker';
+import { ExitAdvisor } from '../services/positions/exitAdvisor';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { validateParams, validateQuery, validateBody } from '../middleware/validate';
 import {
   symbolParamSchema,
   optionsChainQuerySchema,
+  optionsMatrixQuerySchema,
   gexQuerySchema,
   zeroDTEQuerySchema,
   ivAnalysisQuerySchema,
   analyzePositionSchema,
+  positionAdviceQuerySchema,
 } from '../schemas/optionsValidation';
 
 const router = Router();
@@ -44,6 +51,53 @@ router.get(
       if (error.message.includes('No price data')) { return res.status(503).json({ error: 'Data unavailable', message: 'Unable to fetch current price data. Please try again.', retryAfter: 30 }); }
       if (error.message.includes('Massive.com') || error.message.includes('fetch')) { return res.status(503).json({ error: 'Data provider error', message: 'Unable to fetch options data. Please try again in a moment.', retryAfter: 30 }); }
       return res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch options chain. Please try again.' });
+    }
+  }
+);
+
+router.get(
+  '/:symbol/matrix',
+  authenticateToken,
+  checkQueryLimit,
+  validateParams(symbolParamSchema),
+  validateQuery(optionsMatrixQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const validatedQuery = (req as any).validatedQuery as {
+        expirations: number;
+        strikes: number;
+      };
+
+      const matrix = await fetchOptionsMatrix(symbol, {
+        expirations: validatedQuery.expirations,
+        strikes: validatedQuery.strikes,
+      });
+
+      return res.json(matrix);
+    } catch (error: any) {
+      logger.error('Error in options matrix endpoint', { error: error?.message || String(error) });
+      if (error.message.includes('No options')) {
+        return res.status(404).json({ error: 'No options found', message: error.message });
+      }
+      if (error.message.includes('No price data')) {
+        return res.status(503).json({
+          error: 'Data unavailable',
+          message: 'Unable to fetch current price data. Please try again.',
+          retryAfter: 30,
+        });
+      }
+      if (error.message.includes('Massive.com') || error.message.includes('fetch')) {
+        return res.status(503).json({
+          error: 'Data provider error',
+          message: 'Unable to fetch options matrix right now. Please try again in a moment.',
+          retryAfter: 30,
+        });
+      }
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to fetch options matrix. Please try again.',
+      });
     }
   }
 );
@@ -228,6 +282,96 @@ router.post(
       return res.status(500).json({ error: 'Internal server error', message: 'Failed to analyze position(s). Please try again.' });
     }
   }
+);
+
+router.get(
+  '/live',
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'User not authenticated' });
+      }
+
+      const tracker = new LivePositionTracker();
+      const positions = await tracker.recalculateForUser(userId);
+
+      return res.json({
+        positions,
+        count: positions.length,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      logger.error('Error in live positions endpoint', {
+        error: error?.message || String(error),
+      });
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to refresh live positions. Please try again.',
+      });
+    }
+  },
+);
+
+router.get(
+  '/advice',
+  authenticateToken,
+  validateQuery(positionAdviceQuerySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'User not authenticated' });
+      }
+
+      const validatedQuery = (req as any).validatedQuery as {
+        positionId?: string;
+        position_id?: string;
+      };
+      const positionId = validatedQuery.positionId || validatedQuery.position_id;
+
+      const positions = positionId
+        ? await (async () => {
+            const one = await getPositionById(positionId, userId);
+            return one ? [one] : [];
+          })()
+        : await getUserPositions(userId);
+
+      if (positions.length === 0) {
+        return res.json({
+          advice: [],
+          count: 0,
+          generatedAt: new Date().toISOString(),
+        });
+      }
+
+      const analyses = await Promise.all(positions.map((position) => analyzePosition(position)));
+      const advisor = new ExitAdvisor();
+      const advice = advisor.generateAdvice(analyses);
+
+      return res.json({
+        advice,
+        count: advice.length,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      logger.error('Error in position advice endpoint', {
+        error: error?.message || String(error),
+      });
+      if (error.message.includes('fetch') || error.message.includes('Massive.com')) {
+        return res.status(503).json({
+          error: 'Data provider error',
+          message: 'Unable to fetch latest market data for advice. Please try again shortly.',
+          retryAfter: 30,
+        });
+      }
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to generate position advice. Please try again.',
+      });
+    }
+  },
 );
 
 function validatePosition(position: any): boolean {

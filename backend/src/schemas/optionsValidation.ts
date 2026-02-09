@@ -9,6 +9,11 @@ export const optionsChainQuerySchema = z.object({
   strikeRange: z.coerce.number().int().min(1).max(50).optional().default(10),
 });
 
+export const optionsMatrixQuerySchema = z.object({
+  expirations: z.coerce.number().int().min(1).max(10).optional().default(5),
+  strikes: z.coerce.number().int().min(10).max(80).optional().default(50),
+});
+
 const booleanQuerySchema = z.preprocess((value) => {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return value;
@@ -36,6 +41,11 @@ export const ivAnalysisQuerySchema = z.object({
   strikeRange: z.coerce.number().int().min(5).max(50).optional().default(20),
   maxExpirations: z.coerce.number().int().min(1).max(12).optional().default(6),
   forceRefresh: booleanQuerySchema.optional().default(false),
+});
+
+export const positionAdviceQuerySchema = z.object({
+  positionId: z.string().uuid().optional(),
+  position_id: z.string().uuid().optional(),
 });
 
 export const analyzePositionSchema = z.object({

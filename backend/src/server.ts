@@ -31,6 +31,9 @@ import earningsRouter from './routes/earnings';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
+import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
+import { startJournalAutoPopulateWorker, stopJournalAutoPopulateWorker } from './workers/journalAutoPopulateWorker';
+import { startJournalInsightsWorker, stopJournalInsightsWorker } from './workers/journalInsightsWorker';
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
@@ -130,8 +133,10 @@ app.get('/', (_req: Request, res: Response) => {
       optionsChain: '/api/options/:symbol/chain', optionsExpirations: '/api/options/:symbol/expirations',
       optionsGex: '/api/options/:symbol/gex', optionsZeroDte: '/api/options/:symbol/0dte', optionsIv: '/api/options/:symbol/iv',
       earningsCalendar: '/api/earnings/calendar', earningsAnalysis: '/api/earnings/:symbol/analysis',
-      positionsAnalyze: '/api/positions/analyze', chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
-      journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
+      positionsAnalyze: '/api/positions/analyze', positionsLive: '/api/positions/live', positionsAdvice: '/api/positions/advice',
+      chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
+      journalTrades: '/api/journal/trades', journalDrafts: '/api/journal/drafts', journalInsights: '/api/journal/insights',
+      journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
       leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
       scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today',
@@ -183,6 +188,9 @@ async function start() {
     startAlertWorker();
     startMorningBriefWorker();
     startSetupPushWorker();
+    startPositionTrackerWorker();
+    startJournalAutoPopulateWorker();
+    startJournalInsightsWorker();
     startSetupDetectorService();
     startWorkerHealthAlertWorker();
   } catch (error) {
@@ -203,6 +211,9 @@ async function gracefulShutdown(signal: string) {
     stopAlertWorker();
     stopMorningBriefWorker();
     stopSetupPushWorker();
+    stopPositionTrackerWorker();
+    stopJournalAutoPopulateWorker();
+    stopJournalInsightsWorker();
     stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
     shutdownWebSocket();

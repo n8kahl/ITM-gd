@@ -1,6 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { logger } from '../lib/logger';
-import { getAggregates, MassiveAggregate } from '../config/massive';
+import {
+  getAggregates,
+  getEMAIndicator,
+  getRSIIndicator,
+  getMACDIndicator,
+  MassiveAggregate,
+  MassiveIndicatorTimespan,
+  MassiveMACDIndicatorValue,
+  MassiveSingleIndicatorValue,
+} from '../config/massive';
 import { authenticateToken } from '../middleware/auth';
 import { validateParams, validateQuery } from '../middleware/validate';
 import { cacheGet, cacheSet } from '../config/redis';
@@ -21,6 +30,25 @@ interface TimeframeConfig {
   cacheTTL: number;
 }
 
+interface IndicatorPoint {
+  time: number;
+  value: number;
+}
+
+interface MACDPoint extends IndicatorPoint {
+  signal: number;
+  histogram: number;
+}
+
+interface ProviderIndicatorsPayload {
+  source: 'massive';
+  timespan: MassiveIndicatorTimespan;
+  ema8: IndicatorPoint[];
+  ema21: IndicatorPoint[];
+  rsi14: IndicatorPoint[];
+  macd: MACDPoint[];
+}
+
 function toSafeNumber(value: unknown, fallback: number = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -32,6 +60,17 @@ const TIMEFRAME_CONFIG: Record<string, TimeframeConfig> = {
   '1h':  { multiplier: 1,  timespan: 'hour',   daysBack: 30,  cacheTTL: 300 },
   '4h':  { multiplier: 4,  timespan: 'hour',   daysBack: 60,  cacheTTL: 300 },
   '1D':  { multiplier: 1,  timespan: 'day',    daysBack: 180, cacheTTL: 600 },
+};
+
+const TIMEFRAME_TO_INDICATOR_TIMESPAN: Record<ChartTimeframe, MassiveIndicatorTimespan> = {
+  '1m': 'minute',
+  '5m': 'minute',
+  '15m': 'minute',
+  '1h': 'hour',
+  '4h': 'hour',
+  '1D': 'day',
+  '1W': 'week',
+  '1M': 'month',
 };
 
 function normalizeSymbol(symbol: string): string {
@@ -47,6 +86,81 @@ function getDateRange(daysBack: number): { from: string; to: string } {
   return {
     from: from.toISOString().split('T')[0],
     to: to.toISOString().split('T')[0],
+  };
+}
+
+function toIndicatorPoints(values: MassiveSingleIndicatorValue[]): IndicatorPoint[] {
+  return values
+    .map((point) => ({
+      time: Math.floor(toSafeNumber(point.timestamp) / 1000),
+      value: toSafeNumber(point.value),
+    }))
+    .filter((point) => point.time > 0 && Number.isFinite(point.value));
+}
+
+function toMACDPoints(values: MassiveMACDIndicatorValue[]): MACDPoint[] {
+  return values
+    .map((point) => ({
+      time: Math.floor(toSafeNumber(point.timestamp) / 1000),
+      value: toSafeNumber(point.value),
+      signal: toSafeNumber(point.signal),
+      histogram: toSafeNumber(point.histogram),
+    }))
+    .filter((point) => point.time > 0 && Number.isFinite(point.value));
+}
+
+async function fetchSafeIndicator<T>(
+  label: string,
+  request: () => Promise<T[]>,
+): Promise<T[]> {
+  try {
+    return await request();
+  } catch (error: any) {
+    logger.warn(`Indicator request failed (${label})`, { error: error?.message || String(error) });
+    return [];
+  }
+}
+
+async function fetchProviderIndicators(
+  ticker: string,
+  timeframe: ChartTimeframe,
+  chartBarCount: number,
+  range?: {
+    from?: string;
+    to?: string;
+  },
+): Promise<ProviderIndicatorsPayload> {
+  const timespan = TIMEFRAME_TO_INDICATOR_TIMESPAN[timeframe];
+  const limit = Math.min(Math.max(chartBarCount + 60, 120), 5000);
+  const indicatorRange = range?.from || range?.to
+    ? {
+      timestampGte: range?.from,
+      timestampLte: range?.to,
+    }
+    : {};
+
+  const [ema8Raw, ema21Raw, rsi14Raw, macdRaw] = await Promise.all([
+    fetchSafeIndicator('EMA(8)', () => getEMAIndicator(ticker, { timespan, window: 8, limit, order: 'asc', ...indicatorRange })),
+    fetchSafeIndicator('EMA(21)', () => getEMAIndicator(ticker, { timespan, window: 21, limit, order: 'asc', ...indicatorRange })),
+    fetchSafeIndicator('RSI(14)', () => getRSIIndicator(ticker, { timespan, window: 14, limit, order: 'asc', ...indicatorRange })),
+    fetchSafeIndicator('MACD(12,26,9)', () => getMACDIndicator(ticker, {
+      timespan,
+      shortWindow: 12,
+      longWindow: 26,
+      signalWindow: 9,
+      limit,
+      order: 'asc',
+      ...indicatorRange,
+    })),
+  ]);
+
+  return {
+    source: 'massive',
+    timespan,
+    ema8: toIndicatorPoints(ema8Raw),
+    ema21: toIndicatorPoints(ema21Raw),
+    rsi14: toIndicatorPoints(rsi14Raw),
+    macd: toMACDPoints(macdRaw),
   };
 }
 
@@ -66,7 +180,13 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const symbol = req.params.symbol.toUpperCase();
-      const timeframe = (req.query.timeframe as ChartTimeframe) || '1D';
+      const validatedQuery = ((req as any).validatedQuery || {}) as {
+        timeframe?: ChartTimeframe;
+        bars?: number;
+        includeIndicators?: boolean;
+      };
+      const timeframe = validatedQuery.timeframe || '1D';
+      const includeIndicators = validatedQuery.includeIndicators === true;
 
       // Validate symbol format (1-10 uppercase letters)
       if (!/^[A-Z]{1,10}$/.test(symbol)) {
@@ -79,8 +199,19 @@ router.get(
       // Handle weekly/monthly via chart data service
       if (timeframe === '1W' || timeframe === '1M') {
         const tf = timeframe === '1W' ? 'weekly' : 'monthly';
-        const bars = parseInt(req.query.bars as string) || (tf === 'weekly' ? 260 : 60);
+        const bars = validatedQuery.bars || (tf === 'weekly' ? 260 : 60);
         const chartData = await getChartData(symbol, tf, bars);
+        const ticker = normalizeSymbol(symbol);
+        const providerIndicators = includeIndicators
+          ? await fetchProviderIndicators(ticker, timeframe, chartData.candles.length, {
+            from: chartData.candles.length > 0
+              ? new Date(chartData.candles[0].time * 1000).toISOString().split('T')[0]
+              : undefined,
+            to: chartData.candles.length > 0
+              ? new Date(chartData.candles[chartData.candles.length - 1].time * 1000).toISOString().split('T')[0]
+              : undefined,
+          })
+          : undefined;
 
         return res.json({
           symbol,
@@ -90,6 +221,7 @@ router.get(
           count: chartData.count,
           timestamp: chartData.timestamp,
           cached: chartData.cached,
+          providerIndicators,
         });
       }
 
@@ -99,8 +231,15 @@ router.get(
       const { from, to } = getDateRange(config.daysBack);
 
       // Check cache
-      const cacheKey = `chart:${symbol}:${timeframe}`;
-      const cached = await cacheGet<{ symbol: string; timeframe: string; bars: any[]; count: number; timestamp: string }>(cacheKey);
+      const cacheKey = `chart:${symbol}:${timeframe}:indicators:${includeIndicators ? '1' : '0'}`;
+      const cached = await cacheGet<{
+        symbol: string;
+        timeframe: string;
+        bars: any[];
+        count: number;
+        timestamp: string;
+        providerIndicators?: ProviderIndicatorsPayload;
+      }>(cacheKey);
       if (cached) {
         return res.json({ ...cached, cached: true });
       }
@@ -120,6 +259,10 @@ router.get(
         }))
         .filter((bar) => bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
 
+      const providerIndicators = includeIndicators
+        ? await fetchProviderIndicators(ticker, timeframe, bars.length, { from, to })
+        : undefined;
+
       const result = {
         symbol,
         timeframe,
@@ -127,6 +270,7 @@ router.get(
         count: bars.length,
         timestamp: new Date().toISOString(),
         cached: false,
+        providerIndicators,
       };
 
       // Cache result
