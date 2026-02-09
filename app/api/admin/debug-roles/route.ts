@@ -11,7 +11,7 @@ import { cookies } from 'next/headers'
  * - Current JWT claims
  * - What the sync would return
  *
- * Access: Must be authenticated
+ * Access: Must be authenticated AND have is_admin claim
  * URL: /api/admin/debug-roles
  */
 export async function GET(request: NextRequest) {
@@ -36,19 +36,30 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    // Get current session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    // SECURITY: Use getUser() instead of getSession() — validates JWT server-side
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    if (sessionError || !session) {
+    if (userError || !user) {
       return NextResponse.json({
         error: 'Not authenticated',
         message: 'You must be logged in to use this endpoint'
       }, { status: 401 })
     }
 
-    const userId = session.user.id
-    const email = session.user.email
-    const appMetadata = session.user.app_metadata || {}
+    // SECURITY: Require admin role — this endpoint exposes sensitive role mappings
+    const appMetadata = user.app_metadata || {}
+    if (appMetadata.is_admin !== true) {
+      return NextResponse.json({
+        error: 'Forbidden',
+        message: 'Admin access required'
+      }, { status: 403 })
+    }
+
+    const userId = user.id
+    const email = user.email
+
+    // Get session for access_token (needed for sync call)
+    const { data: { session } } = await supabase.auth.getSession()
 
     // Call Discord sync to see what it returns
     let syncResult: any = null
@@ -60,7 +71,7 @@ export async function GET(request: NextRequest) {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${session?.access_token || ''}`,
             'Content-Type': 'application/json',
           },
         }

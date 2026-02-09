@@ -2,6 +2,7 @@ import React from "react"
 import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { Geist_Mono } from 'next/font/google'
+import { headers } from 'next/headers'
 import { StructuredData } from '@/components/seo/structured-data'
 import Link from 'next/link'
 import { User } from 'lucide-react'
@@ -71,15 +72,18 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const headersList = await headers()
+  const nonce = headersList.get('x-nonce') || ''
+
   return (
     <html lang="en" className="dark">
       <head>
-        <StructuredData />
+        <StructuredData nonce={nonce} />
       </head>
       <body className={`${inter.variable} ${playfair.variable} ${geistMono.variable} font-sans antialiased`}>
         {/* Mobile Header Login Icon - visible only on mobile, hidden when navbar is present */}

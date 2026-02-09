@@ -100,17 +100,17 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
 
   return (
     <div className="glass-card rounded-xl p-3 lg:p-4 space-y-3">
-      {/* Top Row: Search + View Toggle */}
-      <div className="flex items-center gap-3">
+      {/* Top Row: Search + Sort + View Toggle */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
         {/* Symbol Search */}
-        <div className="relative flex-1 max-w-[240px]">
+        <div className="relative flex-1 sm:max-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search symbol..."
             value={filters.symbol || ''}
             onChange={(e) => updateFilter('symbol', e.target.value.toUpperCase() || null)}
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/20 transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/20 transition-colors min-h-[44px]"
           />
           {filters.symbol && (
             <button
@@ -122,73 +122,77 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           )}
         </div>
 
-        {/* Sort */}
-        <select
-          value={filters.sortBy}
-          onChange={(e) => updateFilter('sortBy', e.target.value as JournalFilters['sortBy'])}
-          className="px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-        >
-          <option value="date-desc">Newest</option>
-          <option value="date-asc">Oldest</option>
-          <option value="pnl-desc">Highest P&L</option>
-          <option value="pnl-asc">Lowest P&L</option>
-          <option value="rating-desc">Best Rating</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {/* Sort */}
+          <select
+            value={filters.sortBy}
+            onChange={(e) => updateFilter('sortBy', e.target.value as JournalFilters['sortBy'])}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-h-[44px]"
+          >
+            <option value="date-desc">Newest</option>
+            <option value="date-asc">Oldest</option>
+            <option value="pnl-desc">Highest P&L</option>
+            <option value="pnl-asc">Lowest P&L</option>
+            <option value="rating-desc">Best Rating</option>
+          </select>
 
-        {/* View Toggle */}
-        <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 ml-auto">
-          <button
-            onClick={() => updateFilter('view', 'table')}
-            className={cn(
-              'p-2 rounded-md transition-colors',
-              filters.view === 'table'
-                ? 'bg-emerald-900/30 text-emerald-400'
-                : 'text-muted-foreground hover:text-ivory'
-            )}
-            title="Table view"
-          >
-            <TableIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => updateFilter('view', 'cards')}
-            className={cn(
-              'p-2 rounded-md transition-colors',
-              filters.view === 'cards'
-                ? 'bg-emerald-900/30 text-emerald-400'
-                : 'text-muted-foreground hover:text-ivory'
-            )}
-            title="Card view"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+          {/* View Toggle */}
+          <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 sm:ml-auto">
+            <button
+              onClick={() => updateFilter('view', 'table')}
+              className={cn(
+                'p-2 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
+                filters.view === 'table'
+                  ? 'bg-emerald-900/30 text-emerald-400'
+                  : 'text-muted-foreground hover:text-ivory'
+              )}
+              title="Table view"
+            >
+              <TableIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => updateFilter('view', 'cards')}
+              className={cn(
+                'p-2 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
+                filters.view === 'cards'
+                  ? 'bg-emerald-900/30 text-emerald-400'
+                  : 'text-muted-foreground hover:text-ivory'
+              )}
+              title="Card view"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Filter Row */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:flex-wrap">
         {/* Date Presets */}
-        <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">
-          {DATE_PRESETS.map(preset => (
-            <button
-              key={preset.value}
-              onClick={() => {
-                const range = getDateRangeForPreset(preset.value)
-                updateFilter('dateRange', { ...range, preset: preset.value })
-              }}
-              className={cn(
-                'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                filters.dateRange.preset === preset.value
-                  ? 'bg-emerald-900/30 text-emerald-400'
-                  : 'text-muted-foreground hover:text-ivory'
-              )}
-            >
-              {preset.label}
-            </button>
-          ))}
+        <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
+          <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5 min-w-max">
+            {DATE_PRESETS.map(preset => (
+              <button
+                key={preset.value}
+                onClick={() => {
+                  const range = getDateRangeForPreset(preset.value)
+                  updateFilter('dateRange', { ...range, preset: preset.value })
+                }}
+                className={cn(
+                  'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px]',
+                  filters.dateRange.preset === preset.value
+                    ? 'bg-emerald-900/30 text-emerald-400'
+                    : 'text-muted-foreground hover:text-ivory'
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Divider */}
-        <div className="w-px h-6 bg-white/[0.08] hidden md:block" />
+        <div className="w-px h-6 bg-white/[0.08] hidden sm:block" />
 
         {/* Direction Filter */}
         <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">

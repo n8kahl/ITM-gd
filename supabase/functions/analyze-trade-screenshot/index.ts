@@ -3,6 +3,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
 
+// Rate limit: max 5 analysis requests per minute per user
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 5
+
 function corsHeaders(origin: string | null) {
   const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   return {
@@ -26,6 +31,23 @@ async function verifyJWT(req: Request, supabaseClient: any): Promise<{ user: any
   }
 
   return { user, error: null }
+}
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(userId)
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return true
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false
+  }
+
+  entry.count++
+  return true
 }
 
 function sanitizeInput(input: string | undefined, maxLength: number): string {
@@ -97,7 +119,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Verify JWT
+    // Verify JWT — userId is ALWAYS derived from the token, never from the request body
     const { user, error: authError } = await verifyJWT(req, supabase)
     if (authError) {
       return new Response(JSON.stringify({ error: authError }), {
@@ -106,9 +128,19 @@ serve(async (req) => {
       })
     }
 
+    // Derive userId from verified JWT — ignore any userId in the request body
+    const userId: string = user.id
+
+    // Rate limit per user
+    if (!checkRateLimit(userId)) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Max 5 analyses per minute.' }),
+        { status: 429, headers: { ...headers, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Parse request - can be JSON with base64 image or form data
     let imageBase64: string
-    let userId: string
     let entryId: string | null = null
     let additionalContext: string = ''
 
@@ -117,15 +149,11 @@ serve(async (req) => {
     if (contentType.includes('application/json')) {
       const body = await req.json()
       imageBase64 = body.image // base64 encoded image
-      userId = body.userId
       entryId = body.entryId || null
       additionalContext = sanitizeInput(body.context, 1000)
 
       if (!imageBase64) {
         throw new Error('Image data is required')
-      }
-      if (!userId) {
-        throw new Error('User ID is required')
       }
       if (imageBase64.length > 5242880) { // 5MB limit
         throw new Error('Image data exceeds maximum size (5MB)')
@@ -133,15 +161,11 @@ serve(async (req) => {
     } else if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData()
       const imageFile = formData.get('image') as File
-      userId = formData.get('userId') as string
       entryId = formData.get('entryId') as string || null
       additionalContext = sanitizeInput(formData.get('context') as string || '', 1000)
 
       if (!imageFile) {
         throw new Error('Image file is required')
-      }
-      if (!userId) {
-        throw new Error('User ID is required')
       }
       if (imageFile.size > 5242880) { // 5MB limit
         throw new Error('Image file exceeds maximum size (5MB)')
@@ -233,9 +257,10 @@ serve(async (req) => {
     analysis.model = 'gpt-4o'
 
     // If entryId provided, update the journal entry with analysis
+    // Always scope to the authenticated user's entries
     if (entryId) {
       const { error: updateError } = await supabase
-        .from('trading_journal_entries')
+        .from('journal_entries')
         .update({
           ai_analysis: analysis,
           tags: analysis.tags || [],

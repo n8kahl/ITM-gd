@@ -14,6 +14,7 @@ export interface JournalEntryInput {
   pnl_percentage?: number | null
   screenshot_url?: string | null
   screenshot_thumbnail_url?: string | null
+  screenshot_storage_path?: string | null
   ai_analysis?: any
   setup_notes?: string | null
   execution_notes?: string | null

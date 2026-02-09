@@ -77,7 +77,7 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
 
             {/* Breadcrumb / Page Title */}
             <div className="flex items-center gap-2">
-              <span className="text-white/40 font-mono text-xs uppercase tracking-widest hidden sm:inline">Admin /</span>
+              <span className="text-white/40 text-xs uppercase tracking-widest hidden sm:inline font-medium">Admin /</span>
               <h1 className="text-lg font-semibold text-white tracking-tight">
                 {pathname === '/admin' ? 'Command Center' :
                  pathname.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}

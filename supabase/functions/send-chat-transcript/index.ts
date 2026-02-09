@@ -3,6 +3,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
 
+// Rate limit: max 10 transcript sends per minute per user
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 10
+
 function corsHeaders(origin: string | null) {
   const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   return {
@@ -33,9 +38,21 @@ function validateEmail(email: string): boolean {
   return emailRegex.test(email) && email.length <= 255
 }
 
-function sanitizeInput(input: string | undefined, maxLength: number): string {
-  if (!input) return ''
-  return input.substring(0, maxLength).trim()
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(userId)
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return true
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false
+  }
+
+  entry.count++
+  return true
 }
 
 serve(async (req) => {
@@ -79,6 +96,24 @@ serve(async (req) => {
       })
     }
 
+    // Authorization: only admins and team members can send transcripts
+    const isAdmin = user.app_metadata?.is_admin === true
+    const isMember = user.app_metadata?.is_member === true
+    if (!isAdmin && !isMember) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: only admin/team members can send transcripts' }),
+        { status: 403, headers: { ...headers, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Rate limit per user
+    if (!checkRateLimit(user.id)) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Max 10 transcript sends per minute.' }),
+        { status: 429, headers: { ...headers, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // 1. Get conversation details
     const { data: conversation, error: convError } = await supabase
       .from('chat_conversations')
@@ -102,7 +137,22 @@ serve(async (req) => {
     }
 
     // Determine recipient email
-    const emailTo = recipientEmail || conversation.visitor_email
+    // Non-admin team members can only send to the visitor's email (not arbitrary addresses)
+    let emailTo: string
+    if (recipientEmail) {
+      if (!isAdmin) {
+        // Non-admin: only allow sending to the conversation's visitor email
+        if (recipientEmail !== conversation.visitor_email) {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: non-admin users can only send transcripts to the conversation visitor email' }),
+            { status: 403, headers: { ...headers, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+      emailTo = recipientEmail
+    } else {
+      emailTo = conversation.visitor_email
+    }
 
     if (!emailTo) {
       throw new Error('No recipient email provided and visitor email not available')
@@ -140,7 +190,7 @@ serve(async (req) => {
 
     const emailResult = await emailResponse.json()
 
-    // 5. Log the email send in the database (optional)
+    // 5. Log the email send in the database
     await supabase
       .from('chat_messages')
       .insert({
@@ -253,7 +303,7 @@ function generateTranscriptHtml(conversation: any, messages: any[]): string {
             Questions? Reply to this email or visit <a href="https://tradeitm.com" style="color: #047857;">tradeitm.com</a>
           </p>
           <p style="margin-top: 16px; opacity: 0.6;">
-            © ${new Date().getFullYear()} TradeITM. All rights reserved.
+            &copy; ${new Date().getFullYear()} TradeITM. All rights reserved.
           </p>
         </div>
       </div>
@@ -292,7 +342,7 @@ Visitor: ${visitorName}${conversation.visitor_email ? ` (${conversation.visitor_
 Thank you for chatting with TradeITM!
 Questions? Visit https://tradeitm.com
 
-© ${new Date().getFullYear()} TradeITM. All rights reserved.
+(c) ${new Date().getFullYear()} TradeITM. All rights reserved.
 `
 
   return header + messagesText + footer

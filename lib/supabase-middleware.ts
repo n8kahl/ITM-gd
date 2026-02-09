@@ -5,11 +5,14 @@ import { NextResponse, type NextRequest } from 'next/server'
  * Creates a Supabase client for use in Next.js middleware.
  * This client can read/refresh sessions from cookies.
  */
-export function createMiddlewareClient(request: NextRequest) {
+export function createMiddlewareClient(request: NextRequest, requestHeaders?: Headers) {
+  // Use custom headers if provided (e.g. with CSP nonce), otherwise use original
+  const headers = requestHeaders || request.headers
+
   // Create an unmodified response initially
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers,
     },
   })
 
@@ -26,10 +29,10 @@ export function createMiddlewareClient(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value)
           })
-          // Update response cookies
+          // Update response cookies (preserve custom headers)
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers,
             },
           })
           cookiesToSet.forEach(({ name, value, options }) => {

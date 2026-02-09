@@ -17,31 +17,73 @@ function isValidRedirect(path: string): boolean {
   return true;
 }
 
-// Security headers to add to all responses
-const securityHeaders = {
-  'X-Frame-Options': 'DENY',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'X-XSS-Protection': '1; mode=block',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://*.up.railway.app wss://*.up.railway.app https://*.ingest.sentry.io; frame-ancestors 'none';",
+/**
+ * Build a Content Security Policy header with a per-request nonce.
+ *
+ * - script-src uses nonce + strict-dynamic instead of unsafe-inline
+ * - style-src keeps unsafe-inline (required by React inline styles + Tailwind)
+ * - object-src, base-uri, form-action locked down
+ */
+function buildCSP(nonce: string): string {
+  const directives = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://static.cloudflareinsights.com`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://*.up.railway.app wss://*.up.railway.app https://*.ingest.sentry.io",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ];
+  return directives.join('; ') + ';';
 }
 
 /**
- * Adds security headers to a response
+ * Adds security headers (CSP, HSTS, etc.) to a response.
  */
-function addSecurityHeaders(response: NextResponse): NextResponse {
-  Object.entries(securityHeaders).forEach(([key, value]) => {
-    response.headers.set(key, value)
-  })
+function addSecurityHeaders(response: NextResponse, nonce: string): NextResponse {
+  response.headers.set('Content-Security-Policy', buildCSP(nonce))
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  // X-XSS-Protection set to 0: the legacy XSS filter was itself exploitable
+  // and has been removed from modern browsers. CSP replaces it.
+  response.headers.set('X-XSS-Protection', '0')
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   return response
+}
+
+// Prefixes that require authentication / authorization checks
+const AUTH_PREFIXES = ['/admin', '/members', '/join-discord', '/login', '/auth/callback', '/api/auth/callback']
+
+function requiresAuth(pathname: string): boolean {
+  return AUTH_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Generate a unique nonce per request for CSP
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
+
+  // Clone request headers and add nonce so layout/components can read it
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-nonce', nonce)
+
+  // For routes that don't need auth, pass through with security headers only
+  if (!requiresAuth(pathname)) {
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    })
+    return addSecurityHeaders(response, nonce)
+  }
+
   // Create Supabase middleware client to handle session refresh
-  const { supabase, response } = createMiddlewareClient(request)
+  const { supabase, response } = createMiddlewareClient(request, requestHeaders)
 
   // CRITICAL: Use getUser() instead of getSession() for authorization
   // getUser() validates the JWT with the server, preventing spoofing
@@ -85,11 +127,11 @@ export async function middleware(request: NextRequest) {
       // Not authorized - redirect to login
       const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
-      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
     // Admin authorized - proceed
-    return addSecurityHeaders(response)
+    return addSecurityHeaders(response, nonce)
   }
 
   // ============================================
@@ -100,11 +142,11 @@ export async function middleware(request: NextRequest) {
       // Not logged in - redirect to login
       const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
-      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
     // User is authenticated - proceed
-    return addSecurityHeaders(response)
+    return addSecurityHeaders(response, nonce)
   }
 
   // ============================================
@@ -116,11 +158,11 @@ export async function middleware(request: NextRequest) {
     if (!isAuthenticated) {
       const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
-      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
     // Authenticated users can access this page (even if not Discord members)
-    return addSecurityHeaders(response)
+    return addSecurityHeaders(response, nonce)
   }
 
   // ============================================
@@ -133,38 +175,28 @@ export async function middleware(request: NextRequest) {
       const redirectParam = request.nextUrl.searchParams.get('redirect')
 
       if (redirectParam && isValidRedirect(redirectParam)) {
-        return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(redirectParam, request)))
+        return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(redirectParam, request)), nonce)
       }
 
       // Default: send admins to /admin, members to /members
       const defaultRedirect = isAdmin ? '/admin' : '/members'
-      return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(defaultRedirect, request)))
+      return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(defaultRedirect, request)), nonce)
     }
 
     // Not authenticated - allow access to login page
-    return addSecurityHeaders(response)
+    return addSecurityHeaders(response, nonce)
   }
 
   // ============================================
-  // ALL OTHER ROUTES
+  // ALL OTHER AUTH ROUTES (auth/callback, etc.)
   // ============================================
-  return addSecurityHeaders(response)
+  return addSecurityHeaders(response, nonce)
 }
 
 // Configure which routes the middleware runs on
+// Broad matcher: all routes except Next.js internals and static assets
 export const config = {
   matcher: [
-    // Admin routes - protected by RBAC (is_admin claim from Discord roles)
-    '/admin/:path*',
-    // Members routes - protected by authentication
-    '/members/:path*',
-    // Join Discord page - for authenticated non-members
-    '/join-discord',
-    // Login page - redirect if already authenticated
-    '/login',
-    // Auth callback - needs session refresh
-    '/auth/callback',
-    // API auth callback - server-side OAuth handling
-    '/api/auth/callback',
+    '/((?!_next/static|_next/image|monitoring|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json|txt|xml|webmanifest)$).*)',
   ],
 }

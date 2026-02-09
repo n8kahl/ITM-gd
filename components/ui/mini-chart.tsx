@@ -264,13 +264,13 @@ export function CandlestickChart({ className }: CandlestickChartProps) {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#26a69a] opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#26a69a]"></span>
         </span>
-        <span className="text-[9px] font-mono text-white/50 uppercase tracking-wider">Live</span>
+        <span className="text-[9px] font-medium text-white/50 uppercase tracking-wider">Live</span>
       </div>
 
       {/* SMA indicator */}
       <div className="absolute top-2 right-2 flex items-center gap-1">
         <div className="w-3 h-[2px] rounded" style={{ backgroundColor: COLORS.sma }} />
-        <span className="text-[8px] font-mono text-white/30">SMA 7</span>
+        <span className="text-[8px] font-medium text-white/30">SMA 7</span>
       </div>
     </div>
   );
@@ -365,7 +365,7 @@ export function WinRateChart({ percentage = 87, className }: WinRateChartProps) 
         >
           {currentValue}%
         </span>
-        <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.25em] mt-1">
+        <span className="text-[10px] text-white/40 font-medium uppercase tracking-[0.25em] mt-1">
           Win Rate
         </span>
       </div>
@@ -485,11 +485,11 @@ export function SignalPulse({ className }: SignalPulseProps) {
       <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-6">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.bullish }} />
-          <span className="text-[9px] font-mono text-white/50 uppercase tracking-wider">Long</span>
+          <span className="text-[9px] font-medium text-white/50 uppercase tracking-wider">Long</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.bearish }} />
-          <span className="text-[9px] font-mono text-white/50 uppercase tracking-wider">Short</span>
+          <span className="text-[9px] font-medium text-white/50 uppercase tracking-wider">Short</span>
         </div>
       </div>
     </div>

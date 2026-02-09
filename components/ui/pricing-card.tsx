@@ -152,7 +152,7 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
 
         {/* ITM Logo mark - Bottom right */}
         <div className="absolute bottom-3 right-4">
-          <span className="text-xs font-mono tracking-widest uppercase text-white/60">
+          <span className="text-xs font-semibold tracking-widest uppercase text-white/60">
             ITM
           </span>
         </div>
@@ -364,7 +364,7 @@ export function PricingCard({
                     ></span>
                   </span>
                   <span
-                    className="text-xs font-semibold uppercase tracking-wider font-mono"
+                    className="text-xs font-semibold uppercase tracking-wider"
                     style={{ color: styles.accentColor }}
                   >
                     NOW AVAILABLE
@@ -381,7 +381,7 @@ export function PricingCard({
                     transition={{ duration: 2, repeat: Infinity }}
                   >
                     {spotsLeft && (
-                      <span className="text-xs font-bold text-red-400 font-mono">
+                      <span className="text-xs font-bold text-red-400">
                         ⚡ Only {spotsLeft} spots left this month
                       </span>
                     )}
@@ -499,7 +499,7 @@ export function PricingCard({
                 className={cn(
                   "w-full h-14 text-base font-bold rounded-xl transition-all duration-500",
                   "bg-gradient-to-r hover:-translate-y-0.5",
-                  "flex items-center justify-center gap-2 font-mono tracking-wide cursor-pointer",
+                  "flex items-center justify-center gap-2 tracking-wide cursor-pointer",
                   styles.buttonGradient,
                   // Executive tier has light platinum gradient, needs dark text
                   isExecutive ? "text-onyx" : "text-white"
