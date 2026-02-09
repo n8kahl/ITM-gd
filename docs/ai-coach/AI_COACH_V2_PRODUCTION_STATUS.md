@@ -208,6 +208,15 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
   - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Options Intelligence dashboard expansion (Phase 3 continuation):
+  - Added `0DTE` and `IV` dashboard cards to options panel with live backend wiring and refresh controls.
+  - Added API client bindings for `/api/options/:symbol/0dte` and `/api/options/:symbol/iv`.
+  - New components:
+    - `/Users/natekahl/ITM-gd/components/ai-coach/zero-dte-dashboard.tsx`
+    - `/Users/natekahl/ITM-gd/components/ai-coach/iv-dashboard.tsx`
+  - Updated integration:
+    - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+    - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - Cross-widget workflow/action framework (production pass):
   - Shared workflow context with symbol/strike/expiry sync, center-view routing, breadcrumb path, and alert prefill state
   - Reusable widget action primitives (`widget-actions`, `widget-action-bar`, `widget-context-menu`) wired into key widgets
@@ -315,6 +324,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `pnpm --filter titm-ai-coach-backend test -- src/services/options/__tests__/optionsChainFetcher.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/chart.test.ts src/routes/__tests__/options.test.ts`
 - `pnpm --filter titm-ai-coach-backend build`
+- `pnpm build` (frontend Next.js production build passes with new options dashboard surfaces)
 - `cd backend && LOG_LEVEL=error pnpm exec tsx -e "import { fetchOptionsChain } from './src/services/options/optionsChainFetcher'; const run=async()=>{for (const s of ['SPX','NDX','SPY','AAPL']){const c=await fetchOptionsChain(s, undefined, 2); console.log(JSON.stringify({symbol:s,expiry:c.expiry,calls:c.options.calls.length,puts:c.options.puts.length,current:c.currentPrice}));}}; run().catch((e)=>{console.error(e?.message||e);process.exit(1);});"`
 - `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`

@@ -16,13 +16,19 @@ import {
   getOptionsChain,
   getExpirations,
   getGammaExposure,
+  getZeroDTEAnalysis,
+  getIVAnalysis,
   AICoachAPIError,
   type OptionsChainResponse,
   type OptionContract,
   type GEXProfileResponse,
+  type ZeroDTEAnalysisResponse,
+  type IVAnalysisResponse,
 } from '@/lib/api/ai-coach'
 import { GEXChart } from './gex-chart'
 import { SymbolSearch } from './symbol-search'
+import { ZeroDTEDashboard } from './zero-dte-dashboard'
+import { IVDashboard } from './iv-dashboard'
 
 // ============================================
 // TYPES
@@ -62,9 +68,16 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
   const [sortField, setSortField] = useState<SortField>('strike')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [showGex, setShowGex] = useState(true)
+  const [showVolAnalytics, setShowVolAnalytics] = useState(true)
   const [gexProfile, setGexProfile] = useState<GEXProfileResponse | null>(null)
   const [isLoadingGex, setIsLoadingGex] = useState(false)
   const [gexError, setGexError] = useState<string | null>(null)
+  const [zeroDteAnalysis, setZeroDteAnalysis] = useState<ZeroDTEAnalysisResponse | null>(null)
+  const [isLoadingZeroDte, setIsLoadingZeroDte] = useState(false)
+  const [zeroDteError, setZeroDteError] = useState<string | null>(null)
+  const [ivAnalysis, setIvAnalysis] = useState<IVAnalysisResponse | null>(null)
+  const [isLoadingIv, setIsLoadingIv] = useState(false)
+  const [ivError, setIvError] = useState<string | null>(null)
   const [pendingSyncSymbol, setPendingSyncSymbol] = useState<string | null>(null)
 
   const token = session?.access_token
@@ -152,6 +165,51 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
     loadGex(false)
   }, [token, showGex, symbol, expiry, strikeRange, loadGex])
 
+  const loadZeroDTE = useCallback(async () => {
+    if (!token || !showVolAnalytics) return
+
+    setIsLoadingZeroDte(true)
+    setZeroDteError(null)
+    try {
+      const data = await getZeroDTEAnalysis(symbol, token)
+      setZeroDteAnalysis(data)
+    } catch (err) {
+      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load 0DTE analytics'
+      setZeroDteError(msg)
+      setZeroDteAnalysis(null)
+    } finally {
+      setIsLoadingZeroDte(false)
+    }
+  }, [token, showVolAnalytics, symbol])
+
+  const loadIV = useCallback(async (forceRefresh: boolean = false) => {
+    if (!token || !showVolAnalytics) return
+
+    setIsLoadingIv(true)
+    setIvError(null)
+    try {
+      const data = await getIVAnalysis(symbol, token, {
+        expiry: expiry || undefined,
+        strikeRange: Math.max(15, strikeRange),
+        maxExpirations: expiry ? 1 : 4,
+        forceRefresh,
+      })
+      setIvAnalysis(data)
+    } catch (err) {
+      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load IV analysis'
+      setIvError(msg)
+      setIvAnalysis(null)
+    } finally {
+      setIsLoadingIv(false)
+    }
+  }, [token, showVolAnalytics, symbol, expiry, strikeRange])
+
+  useEffect(() => {
+    if (!token || !showVolAnalytics) return
+    loadZeroDTE()
+    loadIV(false)
+  }, [token, showVolAnalytics, symbol, expiry, strikeRange, loadZeroDTE, loadIV])
+
   const handleShowGexOnChart = useCallback(() => {
     if (!gexProfile || typeof window === 'undefined') return
 
@@ -224,6 +282,10 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
               setChain(null)
               setGexProfile(null)
               setGexError(null)
+              setZeroDteAnalysis(null)
+              setZeroDteError(null)
+              setIvAnalysis(null)
+              setIvError(null)
               setWorkflowSymbol(nextSymbol)
               setCenterView('options')
               setWorkflowStrike(null)
@@ -279,6 +341,18 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
           )}
         >
           GEX {showGex ? 'On' : 'Off'}
+        </button>
+
+        <button
+          onClick={() => setShowVolAnalytics(prev => !prev)}
+          className={cn(
+            'px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors',
+            showVolAnalytics
+              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+              : 'border-white/10 bg-white/5 text-white/50 hover:text-white/70'
+          )}
+        >
+          0DTE/IV {showVolAnalytics ? 'On' : 'Off'}
         </button>
 
         {showGex && (
@@ -413,6 +487,25 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry }: OptionsCh
                     )}
                   </>
                 )}
+              </div>
+            )}
+
+            {showVolAnalytics && (
+              <div className="border-b border-white/5 p-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <ZeroDTEDashboard
+                    analysis={zeroDteAnalysis}
+                    isLoading={isLoadingZeroDte}
+                    error={zeroDteError}
+                    onRefresh={loadZeroDTE}
+                  />
+                  <IVDashboard
+                    profile={ivAnalysis}
+                    isLoading={isLoadingIv}
+                    error={ivError}
+                    onRefresh={() => loadIV(true)}
+                  />
+                </div>
               </div>
             )}
 

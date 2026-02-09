@@ -166,6 +166,99 @@ export interface GEXProfileResponse {
   expirationsAnalyzed: string[]
 }
 
+export interface ZeroDTEExpectedMove {
+  totalExpectedMove: number
+  usedMove: number
+  usedPct: number
+  remainingMove: number
+  remainingPct: number
+  minutesLeft: number
+  openPrice: number
+  currentPrice: number
+  atmStrike: number | null
+}
+
+export interface ZeroDTEThetaProjection {
+  time: string
+  estimatedValue: number
+  thetaDecay: number
+  pctRemaining: number
+}
+
+export interface ZeroDTEThetaClock {
+  strike: number
+  type: 'call' | 'put'
+  currentValue: number
+  thetaPerDay: number
+  projections: ZeroDTEThetaProjection[]
+}
+
+export interface ZeroDTEGammaProfile {
+  strike: number
+  type: 'call' | 'put'
+  currentDelta: number
+  gammaPerDollar: number
+  dollarDeltaChangePerPoint: number
+  leverageMultiplier: number
+  riskLevel: 'low' | 'moderate' | 'high' | 'extreme'
+}
+
+export interface ZeroDTEContractSnapshot {
+  strike: number
+  type: 'call' | 'put'
+  last: number
+  volume: number
+  openInterest: number
+  gamma: number | null
+  theta: number | null
+}
+
+export interface ZeroDTEAnalysisResponse {
+  symbol: string
+  marketDate: string
+  hasZeroDTE: boolean
+  message: string
+  expectedMove: ZeroDTEExpectedMove | null
+  thetaClock: ZeroDTEThetaClock | null
+  gammaProfile: ZeroDTEGammaProfile | null
+  topContracts: ZeroDTEContractSnapshot[]
+}
+
+export interface IVRankAnalysis {
+  currentIV: number | null
+  ivRank: number | null
+  ivPercentile: number | null
+  iv52wkHigh: number | null
+  iv52wkLow: number | null
+  ivTrend: 'rising' | 'falling' | 'stable' | 'unknown'
+}
+
+export interface IVSkewAnalysis {
+  skew25delta: number | null
+  skew10delta: number | null
+  skewDirection: 'put_heavy' | 'call_heavy' | 'balanced' | 'unknown'
+  interpretation: string
+}
+
+export interface IVTermStructurePoint {
+  date: string
+  dte: number
+  atmIV: number
+}
+
+export interface IVAnalysisResponse {
+  symbol: string
+  currentPrice: number
+  asOf: string
+  ivRank: IVRankAnalysis
+  skew: IVSkewAnalysis
+  termStructure: {
+    expirations: IVTermStructurePoint[]
+    shape: 'contango' | 'backwardation' | 'flat'
+    inversionPoint?: string
+  }
+}
+
 export type PositionType = 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock'
 
 export interface PositionInput {
@@ -527,6 +620,76 @@ export async function getGammaExposure(
 
   const query = params.toString()
   const url = `${API_BASE}/api/options/${symbol}/gex${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get 0DTE analytics for a symbol.
+ */
+export async function getZeroDTEAnalysis(
+  symbol: string,
+  token: string,
+  options?: {
+    strike?: number
+    type?: 'call' | 'put'
+  }
+): Promise<ZeroDTEAnalysisResponse> {
+  const params = new URLSearchParams()
+  if (typeof options?.strike === 'number') params.set('strike', options.strike.toString())
+  if (options?.type) params.set('type', options.type)
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/0dte${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get implied volatility analysis profile for a symbol.
+ */
+export async function getIVAnalysis(
+  symbol: string,
+  token: string,
+  options?: {
+    expiry?: string
+    strikeRange?: number
+    maxExpirations?: number
+    forceRefresh?: boolean
+  }
+): Promise<IVAnalysisResponse> {
+  const params = new URLSearchParams()
+  if (options?.expiry) params.set('expiry', options.expiry)
+  if (options?.strikeRange) params.set('strikeRange', options.strikeRange.toString())
+  if (options?.maxExpirations) params.set('maxExpirations', options.maxExpirations.toString())
+  if (options?.forceRefresh) params.set('forceRefresh', 'true')
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/iv${query ? `?${query}` : ''}`
 
   const response = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` },
