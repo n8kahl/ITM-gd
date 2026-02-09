@@ -45,6 +45,20 @@ gh secret set E2E_BYPASS_USER_ID --repo n8kahl/ITM-gd
 gh secret set E2E_BYPASS_SHARED_SECRET --repo n8kahl/ITM-gd
 ```
 
+One-command alternative (loads values from `.env.local` and writes required secrets):
+
+```bash
+cd /Users/natekahl/ITM-gd
+pnpm ai-coach:staging:secrets
+```
+
+Custom env file path:
+
+```bash
+cd /Users/natekahl/ITM-gd
+scripts/ai-coach/configure-staging-gate-secrets.sh n8kahl/ITM-gd .env.save
+```
+
 ## 3) Preflight Command
 
 Run this before dispatching the workflow:

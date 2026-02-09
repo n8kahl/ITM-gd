@@ -264,6 +264,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
 - `npm test -- --runInBand src/middleware/__tests__/auth.test.ts`
+- `pnpm ai-coach:staging:secrets`
+- `pnpm ai-coach:staging:preflight` (now returns `READY`)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.ai-coach-symbols.json` (scoped frontend type-check for symbol-search integration files)
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
@@ -303,7 +305,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 
 ## 4) Surgical Next Plan
 
-1. Configure staging GitHub secrets for live gate (`E2E_BYPASS_TOKEN`, optional `E2E_BYPASS_SHARED_SECRET`, `NEXT_PUBLIC_SUPABASE_*`) and execute `ai-coach-live-e2e.yml`.
+1. Execute `ai-coach-live-e2e.yml` against staging backend URL now that gate preflight is green.
 2. Capture and archive staging run evidence from the live workflow (including detector auto-track simulation step and artifacts).
 3. Run staging verification against pending hardening migrations from `main` before production cut.
 4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
@@ -314,28 +316,31 @@ Execution runbook:
 
 - `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_STAGING_GATE_RUNBOOK.md`
 
-Staging preflight evidence (2026-02-09):
+Staging preflight evidence (2026-02-09, refreshed):
 
 - Command: `pnpm ai-coach:staging:preflight`
-- Result: `NOT READY`
+- Result: `READY`
 - Passes:
   - workflow file exists on `Aiupgrade`
+  - required repository secrets are configured/visible (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_BYPASS_TOKEN`)
+  - optional `E2E_BYPASS_USER_ID` is configured
   - no pending `supabase/migrations` drift from `origin/main`
   - no extra `supabase/migrations` ahead of `origin/main`
-- Blocker:
-  - required repository secrets are not configured/visible (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_BYPASS_TOKEN`)
 - Warning:
   - workflow `.github/workflows/ai-coach-live-e2e.yml` is not on `main` yet (expected until merge)
+  - optional `E2E_BYPASS_SHARED_SECRET` not configured (only needed if staging backend enables shared-secret bypass mode)
 - Automation:
+  - secret bootstrap script: `/Users/natekahl/ITM-gd/scripts/ai-coach/configure-staging-gate-secrets.sh`
   - preflight script: `/Users/natekahl/ITM-gd/scripts/ai-coach/check-staging-gate-readiness.sh`
   - dispatch script: `/Users/natekahl/ITM-gd/scripts/ai-coach/run-staging-live-gate.sh`
   - npm commands:
+    - `pnpm ai-coach:staging:secrets`
     - `pnpm ai-coach:staging:preflight`
     - `pnpm ai-coach:staging:run https://<staging-api-host>`
 
 Current checklist:
 
-- [ ] Staging GitHub secrets are configured.
+- [x] Staging GitHub secrets are configured.
 - [ ] `ai-coach-live-e2e.yml` executed against staging backend URL.
 - [ ] Workflow evidence captured in this status doc.
 - [x] Staging migration-hardening verification completed.
