@@ -31,6 +31,7 @@ import { Server as HTTPServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { logger } from '../lib/logger';
 import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
+import { formatMassiveTicker, isValidSymbol, normalizeSymbol } from '../lib/symbols';
 import { getMarketStatus } from './marketHours';
 import {
   subscribeSetupPushEvents,
@@ -62,8 +63,6 @@ interface PriceUpdate {
 // ============================================
 
 const MAX_SUBSCRIPTIONS_PER_CLIENT = 10;
-const ALLOWED_SYMBOLS = new Set(['SPX', 'NDX', 'QQQ', 'SPY', 'IWM', 'DIA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'NVDA', 'META', 'TSLA']);
-const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'RUT']);
 const CLIENT_TIMEOUT = 5 * 60 * 1000; // 5 minutes inactivity
 const HEARTBEAT_INTERVAL = 30 * 1000;  // 30 seconds
 
@@ -76,7 +75,7 @@ const SETUP_CHANNEL_PREFIX = 'setups:';
 const SETUP_CHANNEL_PATTERN = /^setups:[a-zA-Z0-9_-]{3,64}$/;
 
 function formatTicker(symbol: string): string {
-  return INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
+  return formatMassiveTicker(symbol);
 }
 
 // ============================================
@@ -123,7 +122,7 @@ let unsubscribeSetupEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
 
 function isSymbolSubscription(value: string): boolean {
-  return ALLOWED_SYMBOLS.has(value);
+  return isValidSymbol(value);
 }
 
 function normalizeSetupChannel(value: string): string | null {
@@ -206,7 +205,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
 
         for (const sym of symbols) {
           if (typeof sym !== 'string') continue;
-          const upper = sym.toUpperCase();
+          const upper = normalizeSymbol(sym);
           if (!isSymbolSubscription(upper)) {
             sendToClient(ws, { type: 'error', message: `Unknown symbol: ${upper}` });
             continue;

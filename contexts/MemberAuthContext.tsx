@@ -95,6 +95,7 @@ interface MemberAuthContextValue extends MemberAuthState {
 
 const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
 const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
+const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
 
 function createE2EBypassAuthState(): MemberAuthState {
   const nowIso = new Date().toISOString()
@@ -112,7 +113,9 @@ function createE2EBypassAuthState(): MemberAuthState {
   } as User
 
   const session = {
-    access_token: `e2e:${E2E_BYPASS_USER_ID}`,
+    access_token: E2E_BYPASS_SHARED_SECRET
+      ? `e2e:${E2E_BYPASS_SHARED_SECRET}:${E2E_BYPASS_USER_ID}`
+      : `e2e:${E2E_BYPASS_USER_ID}`,
     refresh_token: 'e2e-refresh-token',
     token_type: 'bearer',
     expires_in: expiresIn,

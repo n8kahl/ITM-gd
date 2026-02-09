@@ -25,7 +25,7 @@ router.get('/', authenticateToken, async (_req: Request, res: Response) => {
  */
 router.get('/impact/:symbol', authenticateToken, validateParams(macroImpactParamSchema), async (req: Request, res: Response) => {
   try {
-    const symbol = req.params.symbol as string;
+    const { symbol } = (req as any).validatedParams as { symbol: string };
     const impact = assessMacroImpact(symbol);
     return res.json({ symbol, ...impact });
   } catch (error: any) {

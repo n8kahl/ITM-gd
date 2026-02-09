@@ -314,10 +314,12 @@ E2E auth bypass is available for Playwright/backend-integrated tests in non-prod
 
 ```bash
 E2E_BYPASS_AUTH=true
+E2E_BYPASS_ALLOW_IN_PRODUCTION=false
 E2E_BYPASS_TOKEN_PREFIX=e2e:
+E2E_BYPASS_SHARED_SECRET=replace-with-long-random-secret
 ```
 
-Do not enable `E2E_BYPASS_AUTH` in production.
+Do not enable `E2E_BYPASS_AUTH` in production unless this is an explicit staging/test environment and `E2E_BYPASS_ALLOW_IN_PRODUCTION=true` is set intentionally.
 
 ## Troubleshooting
 

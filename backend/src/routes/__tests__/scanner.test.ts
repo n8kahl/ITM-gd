@@ -32,6 +32,7 @@ jest.mock('../../middleware/auth', () => ({
 }));
 
 import scannerRouter from '../scanner';
+import { POPULAR_SYMBOLS } from '../../lib/symbols';
 
 const app = express();
 app.use(express.json());
@@ -104,7 +105,7 @@ describe('Scanner Routes', () => {
 
     mockScanOpportunities.mockResolvedValue({
       opportunities: [],
-      symbols: ['SPX', 'NDX'],
+      symbols: [...POPULAR_SYMBOLS],
       scanDurationMs: 70,
       scannedAt: new Date().toISOString(),
     });
@@ -112,6 +113,6 @@ describe('Scanner Routes', () => {
     const res = await request(app).get('/api/scanner/scan');
 
     expect(res.status).toBe(200);
-    expect(mockScanOpportunities).toHaveBeenCalledWith(['SPX', 'NDX'], true);
+    expect(mockScanOpportunities).toHaveBeenCalledWith([...POPULAR_SYMBOLS], true);
   });
 });

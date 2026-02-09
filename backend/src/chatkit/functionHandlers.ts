@@ -12,6 +12,7 @@ import { generateGreeksProjection, assessGreeksTrend } from '../services/leaps/g
 import { calculateRoll } from '../services/leaps/rollCalculator';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
+import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
@@ -620,16 +621,11 @@ async function handleGetAlerts(
 
 function normalizeScannerSymbols(symbols?: string[]): string[] {
   if (!Array.isArray(symbols)) return [];
-
-  const cleaned = symbols
-    .map((symbol) => (typeof symbol === 'string' ? symbol.trim().toUpperCase() : ''))
-    .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol));
-
-  return Array.from(new Set(cleaned)).slice(0, 20);
+  return sanitizeSymbols(symbols, 20);
 }
 
 async function getDefaultScannerSymbols(userId?: string): Promise<string[]> {
-  if (!userId) return ['SPX', 'NDX'];
+  if (!userId) return [...POPULAR_SYMBOLS];
 
   const { data } = await supabase
     .from('ai_coach_watchlists')
@@ -639,14 +635,14 @@ async function getDefaultScannerSymbols(userId?: string): Promise<string[]> {
     .order('updated_at', { ascending: false });
 
   const watchlists = data || [];
-  if (watchlists.length === 0) return ['SPX', 'NDX'];
+  if (watchlists.length === 0) return [...POPULAR_SYMBOLS];
 
   const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
   const symbols = Array.isArray(defaultWatchlist.symbols)
     ? normalizeScannerSymbols(defaultWatchlist.symbols)
     : [];
 
-  return symbols.length > 0 ? symbols : ['SPX', 'NDX'];
+  return symbols.length > 0 ? symbols : [...POPULAR_SYMBOLS];
 }
 
 /**

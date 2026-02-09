@@ -88,13 +88,13 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_gamma_exposure',
-      description: 'Get gamma exposure (GEX) profile for SPX or NDX. Returns GEX by strike, flip point, max GEX strike, key levels, and gamma regime.',
+      description: 'Get gamma exposure (GEX) profile for a symbol. Returns GEX by strike, flip point, max GEX strike, key levels, and gamma regime.',
       parameters: {
         type: 'object',
         properties: {
           symbol: {
             type: 'string',
-            description: 'Index symbol for GEX analysis (SPX or NDX)'
+            description: 'Symbol for GEX analysis (e.g., SPX, NDX, SPY, QQQ, AAPL)'
           },
           expiry: {
             type: 'string',
@@ -295,7 +295,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
           symbols: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Symbols to scan (default: SPX and NDX). Can include any stock or index symbol.'
+            description: 'Symbols to scan (defaults to a popular multi-symbol watchlist). Can include any stock, ETF, or index symbol.'
           },
           include_options: {
             type: 'boolean',

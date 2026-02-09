@@ -33,3 +33,14 @@ export const trackedSetupIdSchema = z.object({
 export const getTrackedSetupsQuerySchema = z.object({
   status: statusSchema.optional(),
 });
+
+export const simulateDetectedSetupSchema = z.object({
+  symbol: symbolSchema.default('SPX'),
+  setup_type: z.string().trim().min(1).max(100).default('gamma_squeeze'),
+  direction: z.enum(['bullish', 'bearish', 'neutral']).default('bullish'),
+  confidence: z.number().int().min(0).max(100).default(75),
+  current_price: z.number().finite().positive().optional(),
+  description: z.string().trim().min(1).max(240).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  trade_suggestion: z.record(z.unknown()).optional(),
+});

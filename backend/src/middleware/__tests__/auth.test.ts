@@ -43,7 +43,9 @@ describe('authenticateToken middleware', () => {
     mockGetEnv.mockReturnValue({
       NODE_ENV: 'development',
       E2E_BYPASS_AUTH: false,
+      E2E_BYPASS_ALLOW_IN_PRODUCTION: false,
       E2E_BYPASS_TOKEN_PREFIX: 'e2e:',
+      E2E_BYPASS_SHARED_SECRET: undefined,
     });
   });
 
@@ -90,7 +92,9 @@ describe('authenticateToken middleware', () => {
     mockGetEnv.mockReturnValue({
       NODE_ENV: 'development',
       E2E_BYPASS_AUTH: true,
+      E2E_BYPASS_ALLOW_IN_PRODUCTION: false,
       E2E_BYPASS_TOKEN_PREFIX: 'e2e:',
+      E2E_BYPASS_SHARED_SECRET: undefined,
     });
 
     await authenticateToken(req, res, next);
@@ -108,7 +112,9 @@ describe('authenticateToken middleware', () => {
     mockGetEnv.mockReturnValue({
       NODE_ENV: 'development',
       E2E_BYPASS_AUTH: true,
+      E2E_BYPASS_ALLOW_IN_PRODUCTION: false,
       E2E_BYPASS_TOKEN_PREFIX: 'e2e:',
+      E2E_BYPASS_SHARED_SECRET: undefined,
     });
 
     mockGetUserById.mockResolvedValue({
@@ -116,6 +122,79 @@ describe('authenticateToken middleware', () => {
       error: { message: 'User not found' },
     });
     mockCreateUser.mockResolvedValue({
+      data: { user: { id: userId } },
+      error: null,
+    });
+
+    await authenticateToken(req, res, next);
+
+    expect(req.user).toEqual({
+      id: userId,
+      email: `e2e+${userId}@tradeitm.local`,
+    });
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('requires matching E2E shared secret when configured', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const req: any = { headers: { authorization: `Bearer e2e:wrong-secret:${userId}` } };
+    const res = createRes();
+    const next = jest.fn();
+
+    mockGetEnv.mockReturnValue({
+      NODE_ENV: 'development',
+      E2E_BYPASS_AUTH: true,
+      E2E_BYPASS_ALLOW_IN_PRODUCTION: false,
+      E2E_BYPASS_TOKEN_PREFIX: 'e2e:',
+      E2E_BYPASS_SHARED_SECRET: 'expected-secret',
+    });
+
+    await authenticateToken(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('does not allow E2E bypass in production by default', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const req: any = { headers: { authorization: `Bearer e2e:${userId}` } };
+    const res = createRes();
+    const next = jest.fn();
+
+    mockGetEnv.mockReturnValue({
+      NODE_ENV: 'production',
+      E2E_BYPASS_AUTH: true,
+      E2E_BYPASS_ALLOW_IN_PRODUCTION: false,
+      E2E_BYPASS_TOKEN_PREFIX: 'e2e:',
+      E2E_BYPASS_SHARED_SECRET: undefined,
+    });
+
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'invalid token' },
+    });
+
+    await authenticateToken(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('allows E2E bypass in production only when explicitly enabled', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const req: any = { headers: { authorization: `Bearer e2e:${userId}` } };
+    const res = createRes();
+    const next = jest.fn();
+
+    mockGetEnv.mockReturnValue({
+      NODE_ENV: 'production',
+      E2E_BYPASS_AUTH: true,
+      E2E_BYPASS_ALLOW_IN_PRODUCTION: true,
+      E2E_BYPASS_TOKEN_PREFIX: 'e2e:',
+      E2E_BYPASS_SHARED_SECRET: undefined,
+    });
+
+    mockGetUserById.mockResolvedValue({
       data: { user: { id: userId } },
       error: null,
     });

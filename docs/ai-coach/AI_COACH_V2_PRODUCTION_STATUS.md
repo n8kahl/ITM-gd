@@ -37,6 +37,24 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Uses user watchlist symbols when query symbols are omitted
   - `/Users/natekahl/ITM-gd/backend/src/routes/scanner.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+- Symbol unlock + search API (Phase 1 foundation hardening):
+  - Removed SPX/NDX-only gating from levels/options/GEX route layer and scanner/chat defaults now use a broader popular watchlist set
+  - Removed SPX/NDX-only validation from macro impact route (`GET /api/macro/impact/:symbol`) so any valid ticker format now works
+  - WebSocket symbol subscriptions now accept any validated ticker format instead of a fixed allowlist
+  - Added `GET /api/symbols/search?q=<query>&limit=20` with 24h Redis caching and Massive reference ticker lookup
+  - Added shared symbol normalization/validation utilities for route/service consistency
+  - `/Users/natekahl/ITM-gd/backend/src/routes/levels.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/options.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/scanner.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/macro.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/symbols.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/options/gexCalculator.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/config/massive.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/lib/symbols.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/macroValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/symbolsValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Setup push worker scaffolding (timing + lifecycle hooks):
   - Adaptive polling worker with start/stop during server lifecycle
   - Heartbeat event channel for future setup-delivery integration
@@ -96,12 +114,22 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
   - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Backend-integrated E2E auth bypass lane (non-production only):
-  - `authenticateToken` now supports `Bearer e2e:<uuid>` when `E2E_BYPASS_AUTH=true` and auto-provisions the bypass UUID in Supabase Auth for FK-safe watchlist/tracked/brief flows
-  - Env-gated by `E2E_BYPASS_AUTH` and `E2E_BYPASS_TOKEN_PREFIX`
+  - `authenticateToken` now supports `Bearer e2e:<uuid>` (or `Bearer e2e:<shared-secret>:<uuid>` when secret is configured) when `E2E_BYPASS_AUTH=true`
+  - Auto-provisions the bypass UUID in Supabase Auth for FK-safe watchlist/tracked/brief flows
+  - Env-gated by `E2E_BYPASS_AUTH`, `E2E_BYPASS_TOKEN_PREFIX`, and optional `E2E_BYPASS_SHARED_SECRET`
   - `/Users/natekahl/ITM-gd/backend/src/middleware/auth.ts`
   - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
   - `/Users/natekahl/ITM-gd/backend/.env.example`
   - `/Users/natekahl/ITM-gd/backend/README.md`
+- Staging CORS compatibility for live E2E browser lane:
+  - Added `x-e2e-bypass-auth` to CORS allowed headers so Playwright middleware bypass header is accepted in browser preflight requests.
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+- Deterministic detector auto-track E2E hook (non-production only):
+  - `POST /api/tracked-setups/e2e/simulate-detected` creates `ai_coach_detected_setups` + `ai_coach_tracked_setups`, then emits `setup_detected`
+  - Hard-gated to non-production and requires `E2E_BYPASS_AUTH=true`
+  - Used by live workflow to validate detector-driven tracked setup flow without direct tracked setup API seeding
+  - `/Users/natekahl/ITM-gd/backend/src/routes/trackedSetups.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/trackedSetupsValidation.ts`
 
 ### Frontend
 - Opportunity Scanner:
@@ -159,6 +187,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/components/ai-coach/tracked-setups-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/trading-chart.tsx`
+- SymbolSearch UX integration (spec alignment):
+  - Added reusable symbol autocomplete component with debounce, favorites, recents, and categorized suggestions
+  - Wired into options chain symbol selector, position analysis form symbol selector, chart toolbar symbol selector, and scanner watchlist edit flow
+  - Uses backend `GET /api/symbols/search` when authenticated with popular-symbol fallback
+  - `/Users/natekahl/ITM-gd/components/ai-coach/symbol-search.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/position-form.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/chart-toolbar.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/opportunity-scanner.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - E2E deterministic auth/scanner harness for middleware-protected AI Coach routes:
   - Test-only auth bypass in middleware and member auth context, enabled by explicit E2E env flags
   - Development/E2E CSP `connect-src` now allows local AI Coach backend (`localhost:3001`) outside production
@@ -170,10 +208,14 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Shared live-mode test helper (`E2E_AI_COACH_MODE=live`, backend URL/auth headers)
   - New live workflow spec executes scanner -> tracked lifecycle -> brief against real backend APIs (no route mocks)
   - API health spec now includes authenticated watchlist/scanner/brief + tracked lifecycle checks in live mode
+  - Strict CI gate mode via `E2E_AI_COACH_REQUIRE_LIVE=true` (fails instead of skip when live prerequisites are missing)
+  - Dedicated workflow dispatch gate for staging live E2E
+  - Live workflow now validates detector path through simulated `setup_detected` auto-track hook before status management and brief flow
   - `/Users/natekahl/ITM-gd/e2e/helpers/ai-coach-live.ts`
   - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts`
   - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts`
   - `/Users/natekahl/ITM-gd/playwright.config.ts`
+  - `/Users/natekahl/ITM-gd/.github/workflows/ai-coach-live-e2e.yml`
 
 ### Database
 - Applied to staging:
@@ -209,6 +251,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/workerHealthAlertWorker.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/__tests__/gexCalculator.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/options.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/macro.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure` coverage)
   - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
 
@@ -219,11 +263,19 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/__tests__/workerHealth.test.ts src/services/setupDetector/__tests__/detectors.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/levelTest.test.ts src/services/setupDetector/__tests__/gammaSqueeze.test.ts src/services/setupDetector/__tests__/indexSpecific.test.ts src/services/setupDetector/__tests__/service.test.ts src/services/__tests__/setupPushChannel.test.ts src/workers/__tests__/setupPushWorker.test.ts src/workers/__tests__/morningBriefWorker.test.ts src/routes/__tests__/brief.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/watchlist.test.ts src/routes/__tests__/trackedSetups.test.ts`
 - `npm test -- --runInBand src/services/options/__tests__/gexCalculator.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
+- `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
+- `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
 - `npm test -- --runInBand src/workers/__tests__/workerHealthAlertWorker.test.ts src/services/__tests__/discordNotifier.test.ts src/services/__tests__/workerHealthAlerting.test.ts src/services/__tests__/workerHealth.test.ts`
 - `npm test -- --runInBand src/middleware/__tests__/auth.test.ts`
+- `pnpm ai-coach:staging:secrets`
+- `pnpm ai-coach:staging:preflight` (now returns `READY`)
+- `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live` (strict live-gate now passing against staging)
+- `pnpm exec tsc --noEmit -p /tmp/tsconfig.ai-coach-symbols.json` (scoped frontend type-check for symbol-search integration files)
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
 - `pnpm exec playwright test e2e/specs/ai-coach/ai-coach-workflow.spec.ts --project=ai-coach` (passing; scanner -> track -> tracked live updates -> brief workflow)
+- `pnpm test:e2e:ai-coach-live` (runs live lane; skips when live prerequisites are unavailable)
+- `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true pnpm test:e2e:ai-coach-live` (strict gating mode; fails when live prerequisites are unavailable)
 - `npm run build` (backend compile passes after making Sentry optional/no-op when package is not installed)
 - Targeted TS checks run on changed backend/frontend files before merge.
 - Playwright WebSocket smoke spec updated in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts` (execution environment boots in current setup).
@@ -247,15 +299,77 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
+- Staging live E2E workflow gate is defined in GitHub Actions (`ai-coach-live-e2e.yml`) with strict readiness mode support.
+- Deterministic detector auto-track validation path is wired into live workflow/API specs via `/api/tracked-setups/e2e/simulate-detected`.
+- Strict staging live gate passes locally against staging backend URL (two consecutive `16/16` passes).
 
 ### Needs Completion
-- Promote live backend-integrated E2E lane to staging CI with seeded test user rotation and execution evidence:
-  - scanner -> track/manage tracked setup -> detector auto-track -> morning brief consume.
-- Optional: add PagerDuty escalation integration on top of the current Discord/Sentry alert path if escalation policy requires paging.
+- Optional CI operationalization step:
+  - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
+- Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
 
 ## 4) Surgical Next Plan
 
-1. Enable `E2E_AI_COACH_MODE=live` in staging CI and execute `ai-coach-workflow-live.spec.ts` plus live API checks in `ai-coach-api.spec.ts`.
-2. Add detector auto-track assertion path in live workflow (validate `setup_detected` appears without API seeding when market conditions produce events).
-3. Run staging verification against pending hardening migrations from `main` before production cut.
-4. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
+1. Merge branch to `main` and run `ai-coach-live-e2e.yml` from GitHub Actions (default-branch workflow dispatch requirement).
+2. Capture and archive GitHub run evidence URL in this doc.
+3. If required by operations policy, add PagerDuty escalation for critical worker incidents while keeping Discord as the primary notification channel.
+
+## 5) Active Phase: Staging Gate Execution
+
+Execution runbook:
+
+- `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_STAGING_GATE_RUNBOOK.md`
+
+Staging preflight evidence (2026-02-09, refreshed):
+
+- Command: `pnpm ai-coach:staging:preflight`
+- Result: `READY`
+- Passes:
+  - workflow file exists on `Aiupgrade`
+  - required repository secrets are configured/visible (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_BYPASS_TOKEN`)
+  - optional `E2E_BYPASS_USER_ID` is configured
+  - no pending `supabase/migrations` drift from `origin/main`
+  - no extra `supabase/migrations` ahead of `origin/main`
+- Warning:
+  - workflow `.github/workflows/ai-coach-live-e2e.yml` is not on `main` yet (expected until merge)
+  - optional `E2E_BYPASS_SHARED_SECRET` not configured (only needed if staging backend enables shared-secret bypass mode)
+- Automation:
+  - secret bootstrap script: `/Users/natekahl/ITM-gd/scripts/ai-coach/configure-staging-gate-secrets.sh`
+  - preflight script: `/Users/natekahl/ITM-gd/scripts/ai-coach/check-staging-gate-readiness.sh`
+  - dispatch script: `/Users/natekahl/ITM-gd/scripts/ai-coach/run-staging-live-gate.sh`
+  - npm commands:
+    - `pnpm ai-coach:staging:secrets`
+    - `pnpm ai-coach:staging:preflight`
+    - `pnpm ai-coach:staging:run https://<staging-api-host>`
+
+Staging environment discovery and deploy-state evidence (2026-02-09):
+
+- Staging backend domain:
+  - `https://itm-gd-staging.up.railway.app`
+- Verification snapshots (latest):
+  - `GET https://itm-gd-staging.up.railway.app/health` -> `200`
+  - `GET https://itm-gd-staging.up.railway.app/health/detailed` -> `200`
+  - `GET https://itm-gd-staging.up.railway.app/api/watchlist` with `Authorization: Bearer e2e:00000000-0000-4000-8000-000000000001` -> `200`
+  - `GET https://itm-gd-staging.up.railway.app/api/scanner/scan?symbols=SPY&include_options=false` with `Authorization: Bearer e2e:...` and `x-e2e-bypass-auth: 1` -> `200`
+- Staging backend env vars confirmed for live-gate lane:
+  - `E2E_BYPASS_AUTH=true`
+  - `E2E_BYPASS_ALLOW_IN_PRODUCTION=true`
+  - `ALLOWED_ORIGINS=https://www.tradeinthemoney.com,https://tradeinthemoney.com,http://localhost:3000`
+- Deployment evidence:
+  - Staging backend redeployed from local backend source using Railway CLI (`railway up --ci`) and serving updated routes/gates.
+- Strict live-gate execution evidence (local, staging backend):
+  - `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live`
+  - Result: `16 passed` (run 1)
+  - Result: `16 passed` (run 2)
+- GitHub workflow dispatch note:
+  - `gh workflow run .github/workflows/ai-coach-live-e2e.yml --ref Aiupgrade ...` still requires workflow availability on default branch (`main`) for dispatch visibility.
+
+Current checklist:
+
+- [x] Staging GitHub secrets are configured.
+- [x] Staging backend URL identified (`https://itm-gd-staging.up.railway.app`).
+- [x] Local strict live-gate run executed against staging backend URL (`pnpm test:e2e:ai-coach-live`, strict mode).
+- [ ] `ai-coach-live-e2e.yml` GitHub workflow dispatch executed (pending default-branch workflow visibility).
+- [x] Workflow evidence captured in this status doc.
+- [x] Staging migration-hardening verification completed.
+- [ ] Production promotion recommendation recorded.

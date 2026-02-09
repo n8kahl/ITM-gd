@@ -3,17 +3,10 @@ import { logger } from '../lib/logger';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { scanOpportunities } from '../services/scanner';
 import { supabase } from '../config/database';
+import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 
 const router = Router();
-const DEFAULT_SYMBOLS = ['SPX', 'NDX'];
-
-function sanitizeSymbols(input: string[]): string[] {
-  const symbols = input
-    .map((symbol) => symbol.trim().toUpperCase())
-    .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol));
-
-  return Array.from(new Set(symbols)).slice(0, 20);
-}
+const DEFAULT_SYMBOLS = [...POPULAR_SYMBOLS];
 
 async function loadUserWatchlistSymbols(userId: string): Promise<string[]> {
   const { data, error } = await supabase
