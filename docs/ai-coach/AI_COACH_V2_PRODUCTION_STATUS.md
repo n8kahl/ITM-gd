@@ -391,6 +391,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
     - options defaults (strike range, GEX, 0DTE/IV visibility)
   - Chart now consumes configurable opening-range window preference (`5/15/30` minutes).
   - Options panel now supports preference-driven default toggles and auto-sync workflow symbol mode.
+  - Chart panel now supports preference-driven symbol sync behavior:
+    - `autoSyncWorkflowSymbol=true` auto-applies workflow symbol transitions
+    - otherwise shows an explicit sync prompt (`Yes/No`) when workflow symbol diverges
   - `/Users/natekahl/ITM-gd/components/ai-coach/workflow-breadcrumb.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/preferences-panel.tsx`
   - `/Users/natekahl/ITM-gd/components/ai-coach/preferences.ts`

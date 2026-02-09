@@ -221,6 +221,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const [chartIndicatorConfig, setChartIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [isLoadingChart, setIsLoadingChart] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+  const [pendingChartSyncSymbol, setPendingChartSyncSymbol] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<AICoachPreferences>(DEFAULT_AI_COACH_PREFERENCES)
 
   useEffect(() => {
@@ -242,9 +243,14 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   useEffect(() => {
     if (activeSymbol && activeSymbol !== chartSymbol) {
-      setChartSymbol(activeSymbol)
+      if (preferences.autoSyncWorkflowSymbol) {
+        setChartSymbol(activeSymbol)
+        setPendingChartSyncSymbol(null)
+      } else {
+        setPendingChartSyncSymbol(activeSymbol)
+      }
     }
-  }, [activeSymbol, chartSymbol])
+  }, [activeSymbol, chartSymbol, preferences.autoSyncWorkflowSymbol])
 
   // Fetch chart data
   const fetchChartData = useCallback(async (symbol: string, timeframe: ChartTimeframe) => {
@@ -405,9 +411,18 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const handleSymbolChange = useCallback((symbol: string) => {
     setChartSymbol(symbol)
     setSymbol(symbol)
+    setPendingChartSyncSymbol(null)
     setChartLevels([])
     fetchChartData(symbol, chartTimeframe)
   }, [chartTimeframe, fetchChartData, setSymbol])
+
+  const handleSyncChartSymbol = useCallback(() => {
+    if (!pendingChartSyncSymbol) return
+    setChartSymbol(pendingChartSyncSymbol)
+    setPendingChartSyncSymbol(null)
+    setChartLevels([])
+    fetchChartData(pendingChartSyncSymbol, chartTimeframe)
+  }, [pendingChartSyncSymbol, fetchChartData, chartTimeframe])
 
   const handleTimeframeChange = useCallback((timeframe: ChartTimeframe) => {
     setChartTimeframe(timeframe)
@@ -545,12 +560,15 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             providerIndicators={chartProviderIndicators}
             indicators={chartIndicatorConfig}
             openingRangeMinutes={preferences.orbMinutes}
+            pendingSyncSymbol={pendingChartSyncSymbol}
             isLoading={isLoadingChart}
             error={chartError}
             onSymbolChange={handleSymbolChange}
             onTimeframeChange={handleTimeframeChange}
             onIndicatorsChange={setChartIndicatorConfig}
             onRetry={() => fetchChartData(chartSymbol, chartTimeframe)}
+            onAcceptSync={handleSyncChartSymbol}
+            onDismissSync={() => setPendingChartSyncSymbol(null)}
           />
         )}
 
@@ -681,12 +699,15 @@ function ChartView({
   providerIndicators,
   indicators,
   openingRangeMinutes,
+  pendingSyncSymbol,
   isLoading,
   error,
   onSymbolChange,
   onTimeframeChange,
   onIndicatorsChange,
   onRetry,
+  onAcceptSync,
+  onDismissSync,
 }: {
   symbol: string
   timeframe: ChartTimeframe
@@ -695,12 +716,15 @@ function ChartView({
   providerIndicators: ChartProviderIndicators | null
   indicators: IndicatorConfig
   openingRangeMinutes: 5 | 15 | 30
+  pendingSyncSymbol: string | null
   isLoading: boolean
   error: string | null
   onSymbolChange: (s: string) => void
   onTimeframeChange: (t: ChartTimeframe) => void
   onIndicatorsChange: (next: IndicatorConfig) => void
   onRetry: () => void
+  onAcceptSync: () => void
+  onDismissSync: () => void
 }) {
   const [hoveredPrice, setHoveredPrice] = useState<number | null>(null)
   const roundedHoverPrice = useMemo(() => {
@@ -726,6 +750,27 @@ function ChartView({
 
   return (
     <div className="h-full flex flex-col">
+      {pendingSyncSymbol && pendingSyncSymbol !== symbol && (
+        <div className="border-b border-white/5 px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+          <p className="text-white/45">
+            Workflow symbol is <span className="text-white/70">{pendingSyncSymbol}</span>. Sync chart?
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onAcceptSync}
+              className="px-2 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+            >
+              Yes
+            </button>
+            <button
+              onClick={onDismissSync}
+              className="px-2 py-1 rounded border border-white/10 bg-white/5 text-white/45 hover:text-white/65"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
       <div className="border-b border-white/5">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-2">
