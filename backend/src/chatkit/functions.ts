@@ -185,6 +185,46 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_earnings_calendar',
+      description: 'Get upcoming earnings events for a watchlist. Returns symbol, date, timing (BMO/AMC/DURING), and confirmation status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          watchlist: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional symbols to check (e.g., [AAPL, NVDA, TSLA]). If omitted, uses the default watchlist.'
+          },
+          days_ahead: {
+            type: 'number',
+            description: 'Days forward to scan for earnings events (default: 14, max: 60).',
+            default: 14
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_earnings_analysis',
+      description: 'Analyze a symbol into earnings with expected move, historical earnings moves, IV context, and suggested strategies.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for earnings analysis (e.g., AAPL, NVDA, TSLA, SPY)'
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'analyze_position',
       description: 'Analyze an options position or portfolio. Calculates P&L, Greeks, max gain/loss, breakeven, and risk assessment. Use this when the user asks about their position performance or risk.',
       parameters: {

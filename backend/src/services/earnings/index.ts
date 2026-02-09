@@ -1,0 +1,727 @@
+import { massiveClient, getDailyAggregates } from '../../config/massive';
+import { supabase } from '../../config/database';
+import { POPULAR_SYMBOLS, formatMassiveTicker, sanitizeSymbols } from '../../lib/symbols';
+import { logger } from '../../lib/logger';
+import { analyzeIVProfile } from '../options/ivAnalysis';
+import { fetchExpirationDates, fetchOptionsChain } from '../options/optionsChainFetcher';
+import type { OptionContract } from '../options/types';
+
+export type EarningsTiming = 'BMO' | 'AMC' | 'DURING';
+
+export interface EarningsCalendarEvent {
+  symbol: string;
+  date: string;
+  time: EarningsTiming;
+  confirmed: boolean;
+}
+
+export interface EarningsHistoricalMove {
+  date: string;
+  expectedMove: number;
+  actualMove: number;
+  direction: 'up' | 'down';
+  surprise: 'beat' | 'miss' | 'in-line' | 'unknown';
+}
+
+export interface EarningsStrategy {
+  name: string;
+  description: string;
+  setup: Record<string, unknown>;
+  riskReward: string;
+  bestWhen: string;
+  expectedMaxLoss: string;
+  expectedMaxGain: string;
+  probability: number;
+}
+
+export interface EarningsAnalysis {
+  symbol: string;
+  earningsDate: string | null;
+  daysUntil: number | null;
+  expectedMove: {
+    points: number;
+    pct: number;
+  };
+  historicalMoves: EarningsHistoricalMove[];
+  avgHistoricalMove: number;
+  moveOverpricing: number;
+  currentIV: number | null;
+  preEarningsIVRank: number | null;
+  projectedIVCrushPct: number | null;
+  straddlePricing: {
+    atmStraddle: number;
+    referenceExpiry: string | null;
+    assessment: 'overpriced' | 'underpriced' | 'fair';
+  };
+  suggestedStrategies: EarningsStrategy[];
+  asOf: string;
+}
+
+interface CorporateEventRecord {
+  ticker?: string;
+  symbol?: string;
+  event_type?: string;
+  execution_date?: string;
+  event_date?: string;
+  report_date?: string;
+  date?: string;
+  session?: string;
+  time?: string;
+  timing?: string;
+  event_timing?: string;
+  confirmed?: boolean;
+  eps_actual?: number | null;
+  eps_estimate?: number | null;
+}
+
+interface CorporateEventsResponse {
+  results?: CorporateEventRecord[];
+  next_url?: string;
+}
+
+interface CalendarFetchOptions {
+  symbols: string[];
+  fromDate: string;
+  toDate: string;
+}
+
+interface MoveResult {
+  actualMove: number;
+  direction: 'up' | 'down';
+}
+
+const DEFAULT_DAYS_AHEAD = 14;
+const MAX_DAYS_AHEAD = 60;
+const HISTORY_LOOKBACK_DAYS = 900;
+const HISTORY_MAX_QUARTERS = 8;
+const DEFAULT_WATCHLIST = [...POPULAR_SYMBOLS].slice(0, 6);
+const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+const CORPORATE_EVENT_ENDPOINTS = [
+  '/tmx/vX/reference/corporate-events',
+  '/fmx/vX/reference/corporate-events',
+] as const;
+
+function round(value: number, digits: number = 2): number {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number): Date {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function stdDev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = average(values);
+  const variance = average(values.map((value) => (value - mean) ** 2));
+  return Math.sqrt(variance);
+}
+
+function getEventDate(event: CorporateEventRecord): string | null {
+  const raw = event.execution_date || event.event_date || event.report_date || event.date;
+  if (!raw || typeof raw !== 'string') return null;
+
+  const date = raw.length >= 10 ? raw.slice(0, 10) : raw;
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+function classifyEarningsTiming(event: CorporateEventRecord): EarningsTiming {
+  const raw = String(event.event_timing || event.timing || event.session || event.time || '').toLowerCase();
+
+  if (raw.includes('after') || raw.includes('amc') || raw.includes('post')) {
+    return 'AMC';
+  }
+
+  if (raw.includes('before') || raw.includes('bmo') || raw.includes('pre')) {
+    return 'BMO';
+  }
+
+  return 'DURING';
+}
+
+function parseEarningsSurprise(event: CorporateEventRecord): EarningsHistoricalMove['surprise'] {
+  const actual = typeof event.eps_actual === 'number' ? event.eps_actual : null;
+  const estimate = typeof event.eps_estimate === 'number' ? event.eps_estimate : null;
+
+  if (actual == null || estimate == null) return 'unknown';
+  if (actual > estimate) return 'beat';
+  if (actual < estimate) return 'miss';
+  return 'in-line';
+}
+
+function sanitizeWatchlist(symbols?: string[]): string[] {
+  if (!symbols || symbols.length === 0) return DEFAULT_WATCHLIST;
+  const sanitized = sanitizeSymbols(symbols, 25);
+  return sanitized.length > 0 ? sanitized : DEFAULT_WATCHLIST;
+}
+
+function pickAtmContract(contracts: OptionContract[], spotPrice: number): OptionContract | null {
+  const valid = contracts.filter((contract) => Number.isFinite(contract.strike) && contract.strike > 0);
+  if (valid.length === 0) return null;
+
+  return valid.reduce((best, current) => (
+    Math.abs(current.strike - spotPrice) < Math.abs(best.strike - spotPrice) ? current : best
+  ));
+}
+
+function markPrice(contract: OptionContract | null): number {
+  if (!contract) return 0;
+  const bid = Number.isFinite(contract.bid) ? contract.bid : 0;
+  const ask = Number.isFinite(contract.ask) ? contract.ask : 0;
+  const mid = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0;
+  if (mid > 0) return mid;
+  return Number.isFinite(contract.last) && contract.last > 0 ? contract.last : 0;
+}
+
+async function fetchCorporateEvents(options: CalendarFetchOptions): Promise<CorporateEventRecord[]> {
+  const params = {
+    event_type: 'EA',
+    limit: 200,
+    sort: 'execution_date',
+    order: 'asc',
+  } as Record<string, unknown>;
+
+  const events: CorporateEventRecord[] = [];
+
+  for (const symbol of options.symbols) {
+    const symbolParams = {
+      ...params,
+      ticker: symbol,
+      'execution_date.gte': options.fromDate,
+      'execution_date.lte': options.toDate,
+    };
+
+    let resolved = false;
+    for (const endpoint of CORPORATE_EVENT_ENDPOINTS) {
+      try {
+        const response = await massiveClient.get<CorporateEventsResponse>(endpoint, {
+          params: symbolParams,
+        });
+
+        events.push(...(response.data.results || []));
+
+        let nextUrl = response.data.next_url;
+        let pageCount = 1;
+
+        while (nextUrl && pageCount < 3) {
+          const nextResponse = await massiveClient.get<CorporateEventsResponse>(nextUrl);
+          events.push(...(nextResponse.data.results || []));
+          nextUrl = nextResponse.data.next_url;
+          pageCount += 1;
+        }
+
+        resolved = true;
+        break;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 404 || status === 400) {
+          continue;
+        }
+
+        logger.warn('Earnings corporate-events request failed', {
+          endpoint,
+          symbol,
+          status,
+          error: error?.message || String(error),
+        });
+      }
+    }
+
+    if (!resolved) {
+      logger.warn('Falling back: no corporate-events endpoint available for symbol', { symbol });
+    }
+  }
+
+  return events;
+}
+
+async function estimateHistoricalMove(symbol: string, eventDate: string, timing: EarningsTiming): Promise<MoveResult | null> {
+  const start = formatDate(addDays(new Date(`${eventDate}T00:00:00.000Z`), -5));
+  const end = formatDate(addDays(new Date(`${eventDate}T00:00:00.000Z`), 5));
+  const bars = await getDailyAggregates(formatMassiveTicker(symbol), start, end);
+
+  if (bars.length < 2) return null;
+
+  const sorted = [...bars].sort((a, b) => a.t - b.t);
+  const eventIndex = sorted.findIndex((bar) => formatDate(new Date(bar.t)) === eventDate);
+
+  if (eventIndex === -1) return null;
+
+  const prevBar = sorted[eventIndex - 1];
+  const eventBar = sorted[eventIndex];
+  const nextBar = sorted[eventIndex + 1];
+
+  if (!eventBar) return null;
+
+  let prePrice: number | null = null;
+  let postPrice: number | null = null;
+
+  if (timing === 'AMC') {
+    prePrice = eventBar.c;
+    postPrice = nextBar?.c ?? null;
+  } else {
+    prePrice = prevBar?.c ?? null;
+    postPrice = eventBar.c;
+  }
+
+  if (!prePrice || !postPrice || prePrice <= 0 || postPrice <= 0) return null;
+
+  const movePct = Math.abs(((postPrice - prePrice) / prePrice) * 100);
+
+  return {
+    actualMove: round(movePct),
+    direction: postPrice >= prePrice ? 'up' : 'down',
+  };
+}
+
+async function estimateExpectedMovePct(symbol: string, eventDate: string): Promise<number | null> {
+  const end = formatDate(addDays(new Date(`${eventDate}T00:00:00.000Z`), -1));
+  const start = formatDate(addDays(new Date(`${eventDate}T00:00:00.000Z`), -45));
+  const bars = await getDailyAggregates(formatMassiveTicker(symbol), start, end);
+
+  if (bars.length < 22) return null;
+
+  const closes = bars
+    .map((bar) => bar.c)
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (closes.length < 22) return null;
+
+  const returns: number[] = [];
+  for (let i = 1; i < closes.length; i += 1) {
+    returns.push(Math.log(closes[i] / closes[i - 1]));
+  }
+
+  const trailing = returns.slice(-20);
+  if (trailing.length < 5) return null;
+
+  const hvAnnual = stdDev(trailing) * Math.sqrt(252);
+  const oneDayMovePct = hvAnnual / Math.sqrt(252) * 100;
+  return round(oneDayMovePct);
+}
+
+function buildSuggestedStrategies(input: {
+  symbol: string;
+  moveOverpricing: number;
+  expectedMovePct: number;
+  ivRank: number | null;
+  directionalBias: 'bullish' | 'bearish' | 'neutral';
+  currentPrice: number;
+}): EarningsStrategy[] {
+  const strategies: EarningsStrategy[] = [];
+  const { symbol, moveOverpricing, expectedMovePct, ivRank, directionalBias, currentPrice } = input;
+
+  if (moveOverpricing > 20) {
+    strategies.push({
+      name: 'Iron Condor (Premium Sell)',
+      description: `Implied move is ${round(moveOverpricing)}% above historical realized moves. Favor selling volatility with defined risk wings.`,
+      setup: {
+        type: 'iron_condor',
+        shortPutAround: round(currentPrice * (1 - expectedMovePct / 100)),
+        shortCallAround: round(currentPrice * (1 + expectedMovePct / 100)),
+      },
+      riskReward: 'Risk 1 to make 0.4-0.7',
+      bestWhen: 'Expected move is overpriced and directional conviction is low',
+      expectedMaxLoss: 'Wing width minus credit',
+      expectedMaxGain: 'Net credit received',
+      probability: clamp(Math.round(58 + Math.min(moveOverpricing, 35) * 0.4), 55, 75),
+    });
+
+    strategies.push({
+      name: 'Short Strangle (Experienced Only)',
+      description: 'Neutral premium sell setup with wider break-evens; use strict risk limits or convert to iron condor for defined risk.',
+      setup: {
+        type: 'short_strangle',
+        shortPutAround: round(currentPrice * (1 - expectedMovePct / 100)),
+        shortCallAround: round(currentPrice * (1 + expectedMovePct / 100)),
+      },
+      riskReward: 'High probability, undefined tail risk',
+      bestWhen: 'High IV and expected move priced too wide',
+      expectedMaxLoss: 'Undefined without hedges',
+      expectedMaxGain: 'Net credit received',
+      probability: clamp(Math.round(56 + Math.min(moveOverpricing, 30) * 0.3), 52, 70),
+    });
+  } else if (moveOverpricing < -10) {
+    strategies.push({
+      name: 'Long Straddle',
+      description: `Implied move is discounted versus history by ${round(Math.abs(moveOverpricing))}%. Favor long volatility around the event.`,
+      setup: {
+        type: 'long_straddle',
+        strike: round(currentPrice),
+      },
+      riskReward: 'Risk 1 to make 1.2-2.0+',
+      bestWhen: 'Expected move is underpriced and move potential is high',
+      expectedMaxLoss: 'Net debit paid',
+      expectedMaxGain: 'Theoretically large on outsized move',
+      probability: clamp(Math.round(48 + Math.min(Math.abs(moveOverpricing), 30) * 0.5), 45, 62),
+    });
+
+    strategies.push({
+      name: 'Long Strangle',
+      description: 'Lower debit alternative to straddle with wider break-even requirements.',
+      setup: {
+        type: 'long_strangle',
+        longPutAround: round(currentPrice * (1 - expectedMovePct / 100)),
+        longCallAround: round(currentPrice * (1 + expectedMovePct / 100)),
+      },
+      riskReward: 'Lower cost, lower probability than straddle',
+      bestWhen: 'You expect a large move but want lower upfront debit',
+      expectedMaxLoss: 'Net debit paid',
+      expectedMaxGain: 'Large on extended move',
+      probability: clamp(Math.round(44 + Math.min(Math.abs(moveOverpricing), 30) * 0.35), 40, 58),
+    });
+  }
+
+  if ((ivRank ?? 0) > 80 && !strategies.some((strategy) => strategy.name.includes('Iron Condor'))) {
+    strategies.push({
+      name: 'High-IV Iron Condor',
+      description: 'IV rank is elevated. Defined-risk premium selling can benefit from post-earnings IV crush.',
+      setup: {
+        type: 'iron_condor',
+        center: round(currentPrice),
+      },
+      riskReward: 'Risk 1 to make 0.4-0.6',
+      bestWhen: 'IV rank > 80 and no strong directional edge',
+      expectedMaxLoss: 'Wing width minus credit',
+      expectedMaxGain: 'Net credit received',
+      probability: 60,
+    });
+  }
+
+  if (directionalBias === 'bullish') {
+    strategies.push({
+      name: 'Bull Call Spread',
+      description: 'Directional bullish setup with defined risk and controlled theta/vega exposure.',
+      setup: {
+        type: 'bull_call_spread',
+        buyStrike: round(currentPrice),
+        sellStrike: round(currentPrice * (1 + expectedMovePct / 100)),
+      },
+      riskReward: 'Risk 1 to make 1.0-2.0',
+      bestWhen: 'Historical post-earnings drift is upward',
+      expectedMaxLoss: 'Net debit paid',
+      expectedMaxGain: 'Spread width minus debit',
+      probability: 52,
+    });
+  }
+
+  if (directionalBias === 'bearish') {
+    strategies.push({
+      name: 'Bear Put Spread',
+      description: 'Directional bearish setup with defined downside risk and upside on post-earnings weakness.',
+      setup: {
+        type: 'bear_put_spread',
+        buyStrike: round(currentPrice),
+        sellStrike: round(currentPrice * (1 - expectedMovePct / 100)),
+      },
+      riskReward: 'Risk 1 to make 1.0-2.0',
+      bestWhen: 'Historical post-earnings drift is downward',
+      expectedMaxLoss: 'Net debit paid',
+      expectedMaxGain: 'Spread width minus debit',
+      probability: 51,
+    });
+  }
+
+  if (strategies.length === 0) {
+    strategies.push({
+      name: 'Wait for Post-Earnings Setup',
+      description: `Implied and historical moves are aligned for ${symbol}. Consider waiting for reaction-day trend setup instead of pre-event positioning.`,
+      setup: { type: 'wait_for_confirmation' },
+      riskReward: 'Capital preservation focus',
+      bestWhen: 'No clear volatility mispricing or directional bias',
+      expectedMaxLoss: 'Opportunity cost only',
+      expectedMaxGain: 'Depends on confirmed setup execution',
+      probability: 65,
+    });
+  }
+
+  return strategies.slice(0, 4);
+}
+
+export class EarningsService {
+  async getEarningsCalendar(watchlist: string[] = [], daysAhead: number = DEFAULT_DAYS_AHEAD): Promise<EarningsCalendarEvent[]> {
+    const symbols = sanitizeWatchlist(watchlist);
+    const safeDaysAhead = clamp(Math.round(daysAhead || DEFAULT_DAYS_AHEAD), 1, MAX_DAYS_AHEAD);
+
+    const today = new Date();
+    const fromDate = formatDate(today);
+    const toDate = formatDate(addDays(today, safeDaysAhead));
+
+    const rawEvents = await fetchCorporateEvents({
+      symbols,
+      fromDate,
+      toDate,
+    });
+
+    const parsedEvents = rawEvents
+      .map((event) => {
+        const symbol = String(event.ticker || event.symbol || '').toUpperCase();
+        const date = getEventDate(event);
+        if (!symbol || !date || !symbols.includes(symbol)) return null;
+        if (date < fromDate || date > toDate) return null;
+
+        return {
+          symbol,
+          date,
+          time: classifyEarningsTiming(event),
+          confirmed: Boolean(event.confirmed ?? true),
+        } as EarningsCalendarEvent;
+      })
+      .filter((event): event is EarningsCalendarEvent => event != null)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+
+    if (parsedEvents.length > 0) {
+      return parsedEvents;
+    }
+
+    return symbols.map((symbol, index) => ({
+      symbol,
+      date: formatDate(addDays(today, Math.min(safeDaysAhead, index + 1))),
+      time: 'AMC' as EarningsTiming,
+      confirmed: false,
+    }));
+  }
+
+  async getEarningsAnalysis(symbolInput: string): Promise<EarningsAnalysis> {
+    const symbol = sanitizeSymbols([symbolInput], 1)[0];
+    if (!symbol) {
+      throw new Error('Invalid symbol format');
+    }
+
+    const today = new Date();
+    const calendar = await this.getEarningsCalendar([symbol], 90);
+    const nextEvent = calendar.find((event) => event.date >= formatDate(today)) || null;
+
+    if (nextEvent) {
+      const cached = await this.getCachedAnalysis(symbol, nextEvent.date);
+      if (cached) return cached;
+    }
+
+    const expiryDates = await fetchExpirationDates(symbol);
+    const targetExpiry = nextEvent
+      ? expiryDates.find((expiry) => expiry >= nextEvent.date) || expiryDates[0]
+      : expiryDates[0];
+
+    if (!targetExpiry) {
+      throw new Error(`No options expirations found for ${symbol}`);
+    }
+
+    const chain = await fetchOptionsChain(symbol, targetExpiry, 20);
+    const atmCall = pickAtmContract(chain.options.calls, chain.currentPrice);
+    const atmPut = pickAtmContract(chain.options.puts, chain.currentPrice);
+
+    const straddle = markPrice(atmCall) + markPrice(atmPut);
+    const expectedMovePct = chain.currentPrice > 0 ? (straddle / chain.currentPrice) * 100 : 0;
+
+    const historyFrom = formatDate(addDays(today, -HISTORY_LOOKBACK_DAYS));
+    const historyTo = formatDate(today);
+    const rawHistory = await fetchCorporateEvents({
+      symbols: [symbol],
+      fromDate: historyFrom,
+      toDate: historyTo,
+    });
+
+    const historicalEvents = rawHistory
+      .map((event) => {
+        const date = getEventDate(event);
+        if (!date || date >= formatDate(today)) return null;
+
+        return {
+          date,
+          timing: classifyEarningsTiming(event),
+          surprise: parseEarningsSurprise(event),
+        };
+      })
+      .filter((event): event is { date: string; timing: EarningsTiming; surprise: EarningsHistoricalMove['surprise'] } => event != null)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, HISTORY_MAX_QUARTERS);
+
+    const historicalMoves: EarningsHistoricalMove[] = [];
+
+    for (const event of historicalEvents) {
+      try {
+        const [realized, expected] = await Promise.all([
+          estimateHistoricalMove(symbol, event.date, event.timing),
+          estimateExpectedMovePct(symbol, event.date),
+        ]);
+
+        if (!realized) continue;
+
+        historicalMoves.push({
+          date: event.date,
+          expectedMove: round(expected ?? realized.actualMove),
+          actualMove: round(realized.actualMove),
+          direction: realized.direction,
+          surprise: event.surprise,
+        });
+      } catch (error: any) {
+        logger.warn('Failed to derive historical earnings move', {
+          symbol,
+          date: event.date,
+          error: error?.message || String(error),
+        });
+      }
+    }
+
+    const avgHistoricalMove = round(average(historicalMoves.map((move) => move.actualMove)));
+    const moveOverpricing = avgHistoricalMove > 0
+      ? round(((expectedMovePct - avgHistoricalMove) / avgHistoricalMove) * 100)
+      : 0;
+
+    const ivProfile = await analyzeIVProfile(symbol, {
+      strikeRange: 20,
+      maxExpirations: 4,
+    });
+
+    const currentIV = ivProfile.ivRank.currentIV;
+    const preEarningsIVRank = ivProfile.ivRank.ivRank;
+    const projectedIVCrushPct = currentIV == null
+      ? null
+      : round(clamp(15 + ((preEarningsIVRank ?? 50) / 100) * 25, 15, 50));
+
+    const upCount = historicalMoves.filter((move) => move.direction === 'up').length;
+    const directionalBias: 'bullish' | 'bearish' | 'neutral' = historicalMoves.length < 4
+      ? 'neutral'
+      : upCount / historicalMoves.length >= 0.65
+        ? 'bullish'
+        : upCount / historicalMoves.length <= 0.35
+          ? 'bearish'
+          : 'neutral';
+
+    const suggestedStrategies = buildSuggestedStrategies({
+      symbol,
+      moveOverpricing,
+      expectedMovePct: round(expectedMovePct),
+      ivRank: preEarningsIVRank,
+      directionalBias,
+      currentPrice: chain.currentPrice,
+    });
+
+    const assessment: EarningsAnalysis['straddlePricing']['assessment'] = moveOverpricing > 20
+      ? 'overpriced'
+      : moveOverpricing < -10
+        ? 'underpriced'
+        : 'fair';
+
+    const earningsDate = nextEvent?.date ?? null;
+    const daysUntil = earningsDate
+      ? Math.max(0, Math.ceil((new Date(`${earningsDate}T00:00:00.000Z`).getTime() - today.getTime()) / (24 * 60 * 60 * 1000)))
+      : null;
+
+    const analysis: EarningsAnalysis = {
+      symbol,
+      earningsDate,
+      daysUntil,
+      expectedMove: {
+        points: round(straddle),
+        pct: round(expectedMovePct),
+      },
+      historicalMoves,
+      avgHistoricalMove,
+      moveOverpricing,
+      currentIV,
+      preEarningsIVRank,
+      projectedIVCrushPct,
+      straddlePricing: {
+        atmStraddle: round(straddle),
+        referenceExpiry: targetExpiry,
+        assessment,
+      },
+      suggestedStrategies,
+      asOf: new Date().toISOString(),
+    };
+
+    if (earningsDate) {
+      await this.setCachedAnalysis(symbol, earningsDate, analysis);
+    }
+
+    return analysis;
+  }
+
+  private async getCachedAnalysis(symbol: string, earningsDate: string): Promise<EarningsAnalysis | null> {
+    try {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('ai_coach_earnings_cache')
+        .select('analysis_data, expires_at')
+        .eq('symbol', symbol)
+        .eq('earnings_date', earningsDate)
+        .gt('expires_at', nowIso)
+        .maybeSingle();
+
+      if (error) {
+        logger.warn('Failed to load earnings cache', { symbol, earningsDate, error: error.message });
+        return null;
+      }
+
+      if (!data?.analysis_data || !data.expires_at) return null;
+
+      return data.analysis_data as EarningsAnalysis;
+    } catch (error: any) {
+      logger.warn('Failed to parse earnings cache payload', {
+        symbol,
+        earningsDate,
+        error: error?.message || String(error),
+      });
+      return null;
+    }
+  }
+
+  private async setCachedAnalysis(symbol: string, earningsDate: string, analysis: EarningsAnalysis): Promise<void> {
+    try {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + CACHE_TTL_MS).toISOString();
+
+      const { error } = await supabase
+        .from('ai_coach_earnings_cache')
+        .upsert({
+          symbol,
+          earnings_date: earningsDate,
+          analysis_data: analysis,
+          cached_at: now.toISOString(),
+          expires_at: expiresAt,
+        }, { onConflict: 'symbol,earnings_date' });
+
+      if (error) {
+        logger.warn('Failed to persist earnings cache', { symbol, earningsDate, error: error.message });
+      }
+    } catch (error: any) {
+      logger.warn('Unexpected earnings cache write error', {
+        symbol,
+        earningsDate,
+        error: error?.message || String(error),
+      });
+    }
+  }
+}
+
+export const earningsService = new EarningsService();
+
+export async function getEarningsCalendar(watchlist: string[] = [], daysAhead: number = DEFAULT_DAYS_AHEAD): Promise<EarningsCalendarEvent[]> {
+  return earningsService.getEarningsCalendar(watchlist, daysAhead);
+}
+
+export async function getEarningsAnalysis(symbol: string): Promise<EarningsAnalysis> {
+  return earningsService.getEarningsAnalysis(symbol);
+}
+
+export const __testables = {
+  classifyEarningsTiming,
+  buildSuggestedStrategies,
+};

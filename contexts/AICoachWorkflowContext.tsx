@@ -22,6 +22,7 @@ export type WorkflowCenterView =
   | 'scanner'
   | 'tracked'
   | 'leaps'
+  | 'earnings'
   | 'macro'
 
 export interface WorkflowLevel {

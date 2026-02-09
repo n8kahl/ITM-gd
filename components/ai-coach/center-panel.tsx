@@ -16,6 +16,7 @@ import {
   Search,
   Clock,
   Globe,
+  Calendar,
   Sunrise,
   ListChecks,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ import { AlertsPanel } from './alerts-panel'
 import { OpportunityScanner } from './opportunity-scanner'
 import { LEAPSDashboard } from './leaps-dashboard'
 import { MacroContext } from './macro-context'
+import { EarningsDashboard } from './earnings-dashboard'
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
 import { MorningBriefPanel } from './morning-brief'
 import { TrackedSetupsPanel } from './tracked-setups-panel'
@@ -93,6 +95,7 @@ type CenterView =
   | 'scanner'
   | 'tracked'
   | 'leaps'
+  | 'earnings'
   | 'macro'
 
 interface CenterPanelProps {
@@ -142,6 +145,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'scanner', icon: Search, label: 'Scanner' },
   { view: 'tracked', icon: ListChecks, label: 'Tracked' },
   { view: 'leaps', icon: Clock, label: 'LEAPS' },
+  { view: 'earnings', icon: Calendar, label: 'Earnings' },
   { view: 'macro', icon: Globe, label: 'Macro' },
 ]
 
@@ -500,6 +504,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
               setActiveView('leaps')
               setCenterView('leaps')
             }}
+            onShowEarnings={() => {
+              setActiveView('earnings')
+              setCenterView('earnings')
+            }}
             onShowMacro={() => {
               setActiveView('macro')
               setCenterView('macro')
@@ -585,6 +593,16 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'leaps' && (
           <LEAPSDashboard
+            onClose={() => {
+              setActiveView('welcome')
+              setCenterView(null)
+            }}
+            onSendPrompt={onSendPrompt}
+          />
+        )}
+
+        {activeView === 'earnings' && (
+          <EarningsDashboard
             onClose={() => {
               setActiveView('welcome')
               setCenterView(null)
@@ -724,6 +742,7 @@ function WelcomeView({
   onShowScanner,
   onShowTracked,
   onShowLeaps,
+  onShowEarnings,
   onShowMacro,
 }: {
   onSendPrompt?: (prompt: string) => void
@@ -736,6 +755,7 @@ function WelcomeView({
   onShowScanner: () => void
   onShowTracked: () => void
   onShowLeaps: () => void
+  onShowEarnings: () => void
   onShowMacro: () => void
 }) {
   return (
@@ -896,6 +916,14 @@ function WelcomeView({
               <Clock className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-white">LEAPS</p>
               <p className="text-[10px] text-white/30 mt-0.5">Long-Term</p>
+            </button>
+            <button
+              onClick={onShowEarnings}
+              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-medium text-white">Earnings</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Event Vol</p>
             </button>
             <button
               onClick={onShowMacro}

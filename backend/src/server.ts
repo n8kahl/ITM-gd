@@ -27,6 +27,7 @@ import watchlistRouter from './routes/watchlist';
 import briefRouter from './routes/brief';
 import trackedSetupsRouter from './routes/trackedSetups';
 import symbolsRouter from './routes/symbols';
+import earningsRouter from './routes/earnings';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
@@ -115,6 +116,7 @@ app.use('/api/watchlist', watchlistRouter);
 app.use('/api/brief', briefRouter);
 app.use('/api/tracked-setups', trackedSetupsRouter);
 app.use('/api/symbols', symbolsRouter);
+app.use('/api/earnings', earningsRouter);
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
@@ -127,6 +129,7 @@ app.get('/', (_req: Request, res: Response) => {
       sessions: '/api/chat/sessions', sessionMessages: '/api/chat/sessions/:sessionId/messages',
       optionsChain: '/api/options/:symbol/chain', optionsExpirations: '/api/options/:symbol/expirations',
       optionsGex: '/api/options/:symbol/gex', optionsZeroDte: '/api/options/:symbol/0dte', optionsIv: '/api/options/:symbol/iv',
+      earningsCalendar: '/api/earnings/calendar', earningsAnalysis: '/api/earnings/:symbol/analysis',
       positionsAnalyze: '/api/positions/analyze', chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',

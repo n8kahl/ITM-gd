@@ -54,6 +54,11 @@ jest.mock('../../services/options/ivAnalysis', () => ({
   analyzeIVProfile: jest.fn()
 }));
 
+jest.mock('../../services/earnings', () => ({
+  getEarningsCalendar: jest.fn(),
+  getEarningsAnalysis: jest.fn(),
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn()
@@ -65,6 +70,7 @@ import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../../services/options/zeroDTE';
 import { analyzeIVProfile } from '../../services/options/ivAnalysis';
+import { getEarningsAnalysis, getEarningsCalendar } from '../../services/earnings';
 import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
@@ -74,6 +80,8 @@ const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fe
 const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
 const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
 const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
+const mockGetEarningsCalendar = getEarningsCalendar as jest.MockedFunction<typeof getEarningsCalendar>;
+const mockGetEarningsAnalysis = getEarningsAnalysis as jest.MockedFunction<typeof getEarningsAnalysis>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 
@@ -461,6 +469,68 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to analyze implied volatility');
       expect(result).toHaveProperty('message', 'No options expirations found for SPX');
+    });
+  });
+
+  describe('get_earnings_calendar', () => {
+    it('should return earnings calendar for watchlist', async () => {
+      mockGetEarningsCalendar.mockResolvedValue([
+        { symbol: 'AAPL', date: '2026-02-12', time: 'AMC', confirmed: true },
+        { symbol: 'NVDA', date: '2026-02-13', time: 'BMO', confirmed: true },
+      ] as any);
+
+      const result = await executeFunctionCall({
+        name: 'get_earnings_calendar',
+        arguments: JSON.stringify({ watchlist: ['aapl', 'nvda'], days_ahead: 10 }),
+      });
+
+      expect(result).toHaveProperty('count', 2);
+      expect(result).toHaveProperty('daysAhead', 10);
+      expect(result.events[0]).toHaveProperty('symbol', 'AAPL');
+      expect(mockGetEarningsCalendar).toHaveBeenCalledWith(['AAPL', 'NVDA'], 10);
+    });
+  });
+
+  describe('get_earnings_analysis', () => {
+    it('should return earnings analysis payload', async () => {
+      mockGetEarningsAnalysis.mockResolvedValue({
+        symbol: 'AAPL',
+        earningsDate: '2026-02-12',
+        daysUntil: 3,
+        expectedMove: { points: 8.2, pct: 4.1 },
+        historicalMoves: [],
+        avgHistoricalMove: 3.8,
+        moveOverpricing: 7.9,
+        currentIV: 32.1,
+        preEarningsIVRank: 64.2,
+        projectedIVCrushPct: 28,
+        straddlePricing: {
+          atmStraddle: 8.2,
+          referenceExpiry: '2026-02-14',
+          assessment: 'fair',
+        },
+        suggestedStrategies: [],
+        asOf: '2026-02-09T00:00:00.000Z',
+      } as any);
+
+      const result = await executeFunctionCall({
+        name: 'get_earnings_analysis',
+        arguments: JSON.stringify({ symbol: 'AAPL' }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'AAPL');
+      expect(result).toHaveProperty('expectedMove');
+      expect(mockGetEarningsAnalysis).toHaveBeenCalledWith('AAPL');
+    });
+
+    it('should reject invalid symbol', async () => {
+      const result = await executeFunctionCall({
+        name: 'get_earnings_analysis',
+        arguments: JSON.stringify({ symbol: 'AAPL$' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Invalid symbol');
+      expect(mockGetEarningsAnalysis).not.toHaveBeenCalled();
     });
   });
 

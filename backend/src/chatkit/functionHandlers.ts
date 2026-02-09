@@ -4,6 +4,7 @@ import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../services/options/zeroDTE';
 import { analyzeIVProfile } from '../services/options/ivAnalysis';
+import { getEarningsAnalysis, getEarningsCalendar } from '../services/earnings';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
@@ -83,6 +84,12 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_iv_analysis':
       return await handleGetIVAnalysis(typedArgs);
+
+    case 'get_earnings_calendar':
+      return await handleGetEarningsCalendar(typedArgs);
+
+    case 'get_earnings_analysis':
+      return await handleGetEarningsAnalysis(typedArgs);
 
     case 'analyze_position':
       return await handleAnalyzePosition(typedArgs);
@@ -414,6 +421,66 @@ async function handleGetIVAnalysis(args: {
   } catch (error: any) {
     return {
       error: 'Failed to analyze implied volatility',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_earnings_calendar
+ * Returns upcoming earnings for a watchlist.
+ */
+async function handleGetEarningsCalendar(args: {
+  watchlist?: string[];
+  days_ahead?: number;
+}) {
+  const watchlist = Array.isArray(args.watchlist) ? sanitizeSymbols(args.watchlist, 25) : [];
+  const daysAheadRaw = typeof args.days_ahead === 'number' ? args.days_ahead : 14;
+  const daysAhead = Math.max(1, Math.min(60, Math.round(daysAheadRaw)));
+
+  try {
+    const events = await withTimeout(
+      () => getEarningsCalendar(watchlist, daysAhead),
+      FUNCTION_TIMEOUT_MS,
+      'get_earnings_calendar',
+    );
+
+    return {
+      watchlist,
+      daysAhead,
+      count: events.length,
+      events,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch earnings calendar',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_earnings_analysis
+ * Returns expected move + historical earnings move context for one symbol.
+ */
+async function handleGetEarningsAnalysis(args: { symbol: string }) {
+  const { symbol } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z0-9._:-]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters/numbers' };
+  }
+
+  try {
+    const analysis = await withTimeout(
+      () => getEarningsAnalysis(symbol.toUpperCase()),
+      FUNCTION_TIMEOUT_MS,
+      'get_earnings_analysis',
+    );
+
+    return analysis;
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch earnings analysis',
       message: error.message,
     };
   }

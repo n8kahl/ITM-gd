@@ -123,6 +123,23 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/services/options/types.ts`
   - `/Users/natekahl/ITM-gd/backend/src/schemas/optionsValidation.ts`
+- Earnings module backend slice (Phase 3 sequential completion):
+  - New service `EarningsService` with:
+    - upcoming earnings calendar discovery (watchlist + days window)
+    - symbol-level earnings analysis (expected move, historical move comparison, IV context, strategy suggestions)
+    - Supabase-backed analysis caching via `ai_coach_earnings_cache` (4-hour TTL)
+  - New API routes:
+    - `GET /api/earnings/calendar?watchlist=AAPL,NVDA&days=14`
+    - `GET /api/earnings/:symbol/analysis`
+  - New ChatKit functions:
+    - `get_earnings_calendar`
+    - `get_earnings_analysis`
+  - `/Users/natekahl/ITM-gd/backend/src/services/earnings/index.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/earnings.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/earningsValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functions.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
 - Chart timeframe stability hardening (index volume normalization + frontend guardrails):
   - Normalized missing Massive index volume (`SPX`/`NDX`) to `0` in chart API responses to keep response shape stable across all timeframes.
   - Added numeric bar sanitization in backend chart routes/services.
@@ -220,6 +237,16 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Updated integration:
     - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
     - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Earnings dashboard integration (Phase 3 completion):
+  - Added `Earnings` center-panel tab with event calendar + analysis view.
+  - Added earnings dashboard with:
+    - watchlist/date-window calendar control
+    - symbol-level expected move + historical move comparison
+    - strategy cards and IV-crush simulator
+  - `/Users/natekahl/ITM-gd/components/ai-coach/earnings-dashboard.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/contexts/AICoachWorkflowContext.tsx`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 - Cross-widget workflow/action framework (production pass):
   - Shared workflow context with symbol/strike/expiry sync, center-view routing, breadcrumb path, and alert prefill state
   - Reusable widget action primitives (`widget-actions`, `widget-action-bar`, `widget-context-menu`) wired into key widgets
@@ -313,6 +340,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/symbols.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/macro.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/__tests__/functionHandlers.test.ts` (`get_gamma_exposure`, `get_zero_dte_analysis`, `get_iv_analysis` coverage)
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/earnings.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/earnings/__tests__/index.test.ts`
   - `/Users/natekahl/ITM-gd/backend/src/middleware/__tests__/auth.test.ts` (JWT + E2E bypass auth middleware coverage)
 
 ### Commands
@@ -326,8 +355,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `npm test -- --runInBand src/services/options/__tests__/ivAnalysis.test.ts src/routes/__tests__/options.test.ts src/chatkit/__tests__/functionHandlers.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/services/options/__tests__/optionsChainFetcher.test.ts`
 - `pnpm --filter titm-ai-coach-backend test -- src/routes/__tests__/chart.test.ts src/routes/__tests__/options.test.ts`
+- `pnpm --filter titm-ai-coach-backend test -- src/services/earnings/__tests__/index.test.ts src/routes/__tests__/earnings.test.ts src/chatkit/__tests__/functionHandlers.test.ts src/routes/__tests__/options.test.ts`
 - `pnpm --filter titm-ai-coach-backend build`
-- `pnpm build` (frontend Next.js production build passes with new options dashboard surfaces)
+- `pnpm build` (frontend Next.js production build passes with options + earnings dashboard surfaces)
 - `cd backend && LOG_LEVEL=error pnpm exec tsx -e "import { fetchOptionsChain } from './src/services/options/optionsChainFetcher'; const run=async()=>{for (const s of ['SPX','NDX','SPY','AAPL']){const c=await fetchOptionsChain(s, undefined, 2); console.log(JSON.stringify({symbol:s,expiry:c.expiry,calls:c.options.calls.length,puts:c.options.puts.length,current:c.currentPrice}));}}; run().catch((e)=>{console.error(e?.message||e);process.exit(1);});"`
 - `npm test -- --runInBand src/routes/__tests__/options.test.ts src/routes/__tests__/scanner.test.ts src/routes/__tests__/symbols.test.ts src/services/options/__tests__/gexCalculator.test.ts`
 - `npm test -- --runInBand src/routes/__tests__/macro.test.ts src/services/macro/__tests__/macroContext.test.ts src/chatkit/__tests__/wp8Handlers.test.ts`
@@ -363,6 +393,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Setup detector service is running with ORB/break-retest/VWAP/gap-fill/volume-climax/level-test/gamma-squeeze/index-opening-drive detections, DB persistence, and watchlist-driven tracked-setup auto-creation.
 - WebSocket setup channels now deliver both `setup_update` and `setup_detected` events.
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
+- Earnings backend + UI surface from rebuild spec is now implemented (`/api/earnings/calendar`, `/api/earnings/:symbol/analysis`, `get_earnings_calendar`, `get_earnings_analysis`, `Earnings` tab/dashboard).
 - Options chain service has been patched to align with Massive snapshot response schema and locally validated with non-empty chains for `SPX`, `NDX`, `SPY`, and `AAPL`.
 - Chart API/renderer path now normalized for index symbols and validated on staging for `SPX`/`NDX` (`1m`, `5m`, `15m`, `1h`, `4h`, `1D`) with stable payload shape.
 - Worker-health external alerting now live through Discord webhooks with cooldown and recovery notices.
@@ -375,7 +406,9 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Optional CI operationalization step:
   - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
-- Deploy the options-chain hotfix to staging and production, then re-run authenticated `/api/options/:symbol/chain` validation on live hosts.
+- Deploy the earnings module updates to staging and production, then run authenticated validation for:
+  - `GET /api/earnings/calendar`
+  - `GET /api/earnings/:symbol/analysis`
 
 ## 4) Surgical Next Plan
 

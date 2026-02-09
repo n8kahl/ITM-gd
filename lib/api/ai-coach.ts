@@ -259,6 +259,62 @@ export interface IVAnalysisResponse {
   }
 }
 
+export interface EarningsCalendarEvent {
+  symbol: string
+  date: string
+  time: 'BMO' | 'AMC' | 'DURING'
+  confirmed: boolean
+}
+
+export interface EarningsCalendarResponse {
+  watchlist: string[]
+  daysAhead: number
+  count: number
+  events: EarningsCalendarEvent[]
+}
+
+export interface EarningsHistoricalMove {
+  date: string
+  expectedMove: number
+  actualMove: number
+  direction: 'up' | 'down'
+  surprise: 'beat' | 'miss' | 'in-line' | 'unknown'
+}
+
+export interface EarningsStrategy {
+  name: string
+  description: string
+  setup: Record<string, unknown>
+  riskReward: string
+  bestWhen: string
+  expectedMaxLoss: string
+  expectedMaxGain: string
+  probability: number
+}
+
+export interface EarningsAnalysisResponse {
+  symbol: string
+  earningsDate: string | null
+  daysUntil: number | null
+  expectedMove: {
+    points: number
+    pct: number
+  }
+  historicalMoves: EarningsHistoricalMove[]
+  avgHistoricalMove: number
+  moveOverpricing: number
+  currentIV: number | null
+  preEarningsIVRank: number | null
+  projectedIVCrushPct: number | null
+  straddlePricing: {
+    atmStraddle: number
+    referenceExpiry: string | null
+    assessment: 'overpriced' | 'underpriced' | 'fair'
+  }
+  suggestedStrategies: EarningsStrategy[]
+  asOf: string
+}
+
 export type PositionType = 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock'
 
 export interface PositionInput {
@@ -694,6 +750,59 @@ export async function getIVAnalysis(
   const response = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` },
   })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get upcoming earnings calendar for optional watchlist.
+ */
+export async function getEarningsCalendar(
+  token: string,
+  watchlist?: string[],
+  days: number = 14,
+): Promise<EarningsCalendarResponse> {
+  const params = new URLSearchParams()
+  if (Array.isArray(watchlist) && watchlist.length > 0) {
+    params.set('watchlist', watchlist.join(','))
+  }
+  params.set('days', String(days))
+
+  const response = await fetch(
+    `${API_BASE}/api/earnings/calendar?${params.toString()}`,
+    { headers: { 'Authorization': `Bearer ${token}` } },
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get symbol-specific earnings analysis.
+ */
+export async function getEarningsAnalysis(
+  symbol: string,
+  token: string,
+): Promise<EarningsAnalysisResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/earnings/${symbol}/analysis`,
+    { headers: { 'Authorization': `Bearer ${token}` } },
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
