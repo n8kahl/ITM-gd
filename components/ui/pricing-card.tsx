@@ -52,7 +52,7 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
     },
     pro: {
       // Champagne Gold - Premium & Value
-      gradient: "from-[#065F46] via-[#10B981] to-[#F3E5AB]",
+      gradient: "from-[#E8D992] via-[#F3E5AB] to-[#F8F0CD]",
       accent: "#F3E5AB",
       glow: "rgba(243, 229, 171, 0.3)",
       icon: "◆◆",
@@ -133,7 +133,7 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
         {/* Tier Icon - Top Left */}
         <div
           className="absolute top-4 left-4 text-sm font-medium tracking-widest"
-          style={{ color: colors.accent }}
+          style={{ color: tier === "pro" ? "#1a1a1a" : colors.accent }}
         >
           {colors.icon}
         </div>
@@ -141,9 +141,14 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
         {/* Tier Name - Centered */}
         <div className="absolute inset-0 flex items-center justify-center">
           <span
-            className="text-2xl md:text-3xl font-serif font-medium tracking-wide text-white drop-shadow-lg"
+            className={cn(
+              "text-2xl md:text-3xl font-serif font-medium tracking-wide drop-shadow-lg",
+              tier === "pro" ? "text-onyx" : "text-white"
+            )}
             style={{
-              textShadow: "0 2px 4px rgba(0,0,0,0.5)",
+              textShadow: tier === "pro"
+                ? "0 1px 2px rgba(243,229,171,0.3)"
+                : "0 2px 4px rgba(0,0,0,0.5)",
             }}
           >
             {name}
@@ -152,7 +157,10 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
 
         {/* ITM Logo mark - Bottom right */}
         <div className="absolute bottom-3 right-4">
-          <span className="text-xs font-semibold tracking-widest uppercase text-white/60">
+          <span className={cn(
+            "text-xs font-semibold font-mono tracking-widest uppercase",
+            tier === "pro" ? "text-onyx/60" : "text-white/60"
+          )}>
             ITM
           </span>
         </div>
@@ -247,7 +255,7 @@ export function PricingCard({
       borderColor: "rgba(243, 229, 171, 0.3)",
       glowColor: "rgba(243, 229, 171, 0.15)",
       accentColor: "#F3E5AB",
-      buttonGradient: "from-[#065F46] via-[#10B981] to-[#F3E5AB]",
+      buttonGradient: "from-[#E8D992] via-[#F3E5AB] to-[#F8F0CD]",
       checkBg: "bg-amber-500/10",
       checkColor: "text-amber-400",
     },
@@ -501,8 +509,8 @@ export function PricingCard({
                   "bg-gradient-to-r hover:-translate-y-0.5",
                   "flex items-center justify-center gap-2 tracking-wide cursor-pointer",
                   styles.buttonGradient,
-                  // Executive tier has light platinum gradient, needs dark text
-                  isExecutive ? "text-onyx" : "text-white"
+                  // Pro & Executive tiers have light gradients, need dark text
+                  (isExecutive || isPro) ? "text-onyx" : "text-white"
                 )}
                 style={{
                   boxShadow: isHovered ? `0 0 40px ${styles.glowColor}` : `0 0 20px ${styles.glowColor}`,
