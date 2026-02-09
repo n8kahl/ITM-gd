@@ -281,10 +281,23 @@ Execution runbook:
 
 - `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_STAGING_GATE_RUNBOOK.md`
 
+Staging preflight evidence (2026-02-09):
+
+- Command: `pnpm ai-coach:staging:preflight`
+- Result: `NOT READY`
+- Passes:
+  - workflow file exists on `Aiupgrade`
+  - no pending `supabase/migrations` drift from `origin/main`
+  - no extra `supabase/migrations` ahead of `origin/main`
+- Blocker:
+  - required repository secrets are not configured/visible (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_BYPASS_TOKEN`)
+- Warning:
+  - workflow `.github/workflows/ai-coach-live-e2e.yml` is not on `main` yet (expected until merge)
+
 Current checklist:
 
 - [ ] Staging GitHub secrets are configured.
 - [ ] `ai-coach-live-e2e.yml` executed against staging backend URL.
 - [ ] Workflow evidence captured in this status doc.
-- [ ] Staging migration-hardening verification completed.
+- [x] Staging migration-hardening verification completed.
 - [ ] Production promotion recommendation recorded.

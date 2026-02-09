@@ -35,7 +35,33 @@ Workflow input required at run time:
 
 1. `backend_url` (staging backend URL, for example `https://<staging-api-host>`)
 
-## 3) Execution Steps
+Secret setup commands (run once per repo):
+
+```bash
+gh secret set NEXT_PUBLIC_SUPABASE_URL --repo n8kahl/ITM-gd
+gh secret set NEXT_PUBLIC_SUPABASE_ANON_KEY --repo n8kahl/ITM-gd
+gh secret set E2E_BYPASS_TOKEN --repo n8kahl/ITM-gd
+gh secret set E2E_BYPASS_USER_ID --repo n8kahl/ITM-gd
+gh secret set E2E_BYPASS_SHARED_SECRET --repo n8kahl/ITM-gd
+```
+
+## 3) Preflight Command
+
+Run this before dispatching the workflow:
+
+```bash
+cd /Users/natekahl/ITM-gd
+pnpm ai-coach:staging:preflight
+```
+
+The preflight checks:
+
+1. GitHub CLI authentication.
+2. Presence of the live E2E workflow on target branch.
+3. Required repository secrets.
+4. Supabase migration drift versus `origin/main`.
+
+## 4) Execution Steps
 
 1. Open GitHub Actions for this repo.
 2. Select workflow `AI Coach Live E2E`.
@@ -45,7 +71,7 @@ Workflow input required at run time:
 6. Start run.
 7. Wait for completion and confirm all required jobs are green.
 
-## 4) Required Pass Criteria
+## 5) Required Pass Criteria
 
 The gate passes only if all are true:
 
@@ -54,7 +80,7 @@ The gate passes only if all are true:
 3. Live workflow spec passes scanner -> detector simulation -> tracked management -> brief.
 4. No critical backend startup/auth bypass bootstrap failures in workflow logs.
 
-## 5) Evidence Capture
+## 6) Evidence Capture
 
 After a successful run, update:
 
@@ -83,7 +109,7 @@ Use this evidence block template:
 - Notes: <important log notes or skip reasons>
 ```
 
-## 6) If Gate Fails
+## 7) If Gate Fails
 
 1. Do not proceed to production.
 2. Create a fix branch from the failing SHA.
@@ -91,7 +117,7 @@ Use this evidence block template:
 4. Re-run the same workflow with same `backend_url`.
 5. Replace evidence block with newest run details.
 
-## 7) Exit Criteria For Production Cut
+## 8) Exit Criteria For Production Cut
 
 All required conditions must be met:
 
