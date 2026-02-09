@@ -1,4 +1,10 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
+import {
+  e2eBackendUrl,
+  getAICoachAuthHeaders,
+  isAICoachLiveMode,
+  requireAICoachLiveReadiness,
+} from '../../helpers/ai-coach-live'
 
 /**
  * AI Coach E2E Tests — Backend API Health
@@ -98,7 +104,7 @@ test.describe('AI Coach — Rate Limiting', () => {
 })
 
 test.describe('AI Coach — WebSocket Connection', () => {
-  test('should accept WebSocket connections at /ws/prices', async ({ page }) => {
+  test('should accept WebSocket connections at /ws/prices with symbols and setup channels', async ({ page }) => {
     // Use the page to test WebSocket (Playwright can't directly connect to WebSockets via request API)
     const wsConnected = await page.evaluate(async (backendUrl) => {
       return new Promise<boolean>((resolve) => {
@@ -110,10 +116,21 @@ test.describe('AI Coach — WebSocket Connection', () => {
 
         ws.onopen = () => {
           clearTimeout(timeout)
-          // Send a subscribe message
+          // Send symbol + setup channel subscriptions
           ws.send(JSON.stringify({ type: 'subscribe', symbols: ['SPX'] }))
+          ws.send(JSON.stringify({ type: 'subscribe', channels: ['setups:user-123'] }))
           // Wait briefly for a response
-          ws.onmessage = () => {
+          ws.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.type === 'error') {
+                ws.close()
+                resolve(false)
+                return
+              }
+            } catch {
+              // ignore parse errors
+            }
             ws.close()
             resolve(true)
           }
@@ -132,5 +149,162 @@ test.describe('AI Coach — WebSocket Connection', () => {
     }, BACKEND_URL)
 
     expect(wsConnected).toBe(true)
+  })
+})
+
+test.describe('AI Coach — Backend API Live Authenticated', () => {
+  test.skip(!isAICoachLiveMode, 'Set E2E_AI_COACH_MODE=live to run backend-integrated AI Coach API checks')
+
+  async function assertLiveBackendReadyOrSkip(request: APIRequestContext) {
+    const healthResponse = await request.get(`${e2eBackendUrl}/health/detailed`)
+    if (requireAICoachLiveReadiness) {
+      expect(healthResponse.ok()).toBe(true)
+    } else if (!healthResponse.ok()) {
+      test.skip(true, `Live backend not healthy at ${e2eBackendUrl}`)
+      return null
+    }
+
+    const healthPayload = await healthResponse.json().catch(() => null)
+    if (requireAICoachLiveReadiness) {
+      expect(healthPayload?.services?.database).not.toBe(false)
+    } else if (healthPayload?.services?.database === false) {
+      test.skip(true, 'Live backend database/service-role prerequisites are not ready for authenticated E2E')
+      return null
+    }
+
+    const watchlistResponse = await request.get(`${e2eBackendUrl}/api/watchlist`, {
+      headers: getAICoachAuthHeaders(),
+    })
+
+    if (requireAICoachLiveReadiness) {
+      expect(watchlistResponse.status()).toBe(200)
+    } else if (watchlistResponse.status() !== 200) {
+      const payload = await watchlistResponse.json().catch(() => ({}))
+      const reason = typeof payload?.message === 'string'
+        ? payload.message
+        : `status ${watchlistResponse.status()}`
+      test.skip(true, `Live auth bypass preflight failed: ${reason}`)
+      return null
+    }
+
+    return watchlistResponse
+  }
+
+  test('watchlist + scanner + brief endpoints should return authenticated responses', async ({ request }) => {
+    test.setTimeout(90000)
+
+    const authHeaders = getAICoachAuthHeaders()
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+    const watchlistPayload = await watchlistResponse.json()
+    expect(Array.isArray(watchlistPayload.watchlists)).toBe(true)
+
+    const scanUrl = `${e2eBackendUrl}/api/scanner/scan?symbols=SPY&include_options=false`
+    let scanResponse
+    try {
+      scanResponse = await request.get(scanUrl, {
+        headers: authHeaders,
+        timeout: 25000,
+      })
+    } catch {
+      // Retry once for transient upstream latency in live staging providers.
+      scanResponse = await request.get(scanUrl, {
+        headers: authHeaders,
+        timeout: 25000,
+      })
+    }
+    expect(scanResponse.status()).toBe(200)
+    const scanPayload = await scanResponse.json()
+    expect(Array.isArray(scanPayload.opportunities)).toBe(true)
+    expect(Array.isArray(scanPayload.symbols)).toBe(true)
+
+    const briefResponse = await request.get(`${e2eBackendUrl}/api/brief/today`, {
+      headers: authHeaders,
+      timeout: 30000,
+    })
+    expect(briefResponse.status()).toBe(200)
+    const briefPayload = await briefResponse.json()
+    expect(typeof briefPayload.marketDate).toBe('string')
+    expect(typeof briefPayload.viewed).toBe('boolean')
+    expect(briefPayload.brief).toBeDefined()
+  })
+
+  test('tracked setup lifecycle should support create -> update -> delete', async ({ request }) => {
+    const authHeaders = getAICoachAuthHeaders()
+    const sourceOpportunityId = `e2e-live-${Date.now()}`
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+
+    const createResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups`, {
+      headers: authHeaders,
+      data: {
+        source_opportunity_id: sourceOpportunityId,
+        symbol: 'SPX',
+        setup_type: 'gamma_squeeze',
+        direction: 'bullish',
+        opportunity_data: {
+          score: 70,
+          suggestedTrade: {
+            entry: 5200,
+            stopLoss: 5180,
+            target: 5235,
+            strikes: [5200, 5225],
+            expiry: '2026-02-20',
+          },
+        },
+        notes: 'E2E live test seed',
+      },
+    })
+    expect([200, 201]).toContain(createResponse.status())
+    const createPayload = await createResponse.json()
+    const trackedSetupId = createPayload?.trackedSetup?.id as string
+    expect(typeof trackedSetupId).toBe('string')
+
+    const updateResponse = await request.patch(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
+      headers: authHeaders,
+      data: { status: 'triggered' },
+    })
+    expect(updateResponse.status()).toBe(200)
+    const updatePayload = await updateResponse.json()
+    expect(updatePayload?.trackedSetup?.status).toBe('triggered')
+
+    const deleteResponse = await request.delete(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
+      headers: authHeaders,
+    })
+    expect(deleteResponse.status()).toBe(200)
+    const deletePayload = await deleteResponse.json()
+    expect(deletePayload.success).toBe(true)
+  })
+
+  test('detector simulation endpoint should auto-track and broadcast-ready payloads', async ({ request }) => {
+    const authHeaders = getAICoachAuthHeaders()
+    const simulationNote = `E2E detector simulation API ${Date.now()}`
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+
+    const simulateResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups/e2e/simulate-detected`, {
+      headers: authHeaders,
+      data: {
+        symbol: 'SPX',
+        setup_type: 'gamma_squeeze',
+        direction: 'bullish',
+        confidence: 77,
+        notes: simulationNote,
+      },
+    })
+    expect(simulateResponse.status()).toBe(201)
+    const simulatePayload = await simulateResponse.json()
+    expect(simulatePayload?.detectedSetup?.id).toBeTruthy()
+    expect(simulatePayload?.trackedSetup?.id).toBeTruthy()
+    expect(simulatePayload?.trackedSetup?.notes).toContain('E2E detector simulation')
+
+    const trackedSetupId = simulatePayload?.trackedSetup?.id as string
+    const deleteResponse = await request.delete(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
+      headers: authHeaders,
+    })
+    expect(deleteResponse.status()).toBe(200)
   })
 })

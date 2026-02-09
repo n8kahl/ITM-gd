@@ -42,6 +42,23 @@ jest.mock('../../services/options/optionsChainFetcher', () => ({
   fetchOptionsChain: jest.fn()
 }));
 
+jest.mock('../../services/options/gexCalculator', () => ({
+  calculateGEXProfile: jest.fn()
+}));
+
+jest.mock('../../services/options/zeroDTE', () => ({
+  analyzeZeroDTE: jest.fn()
+}));
+
+jest.mock('../../services/options/ivAnalysis', () => ({
+  analyzeIVProfile: jest.fn()
+}));
+
+jest.mock('../../services/earnings', () => ({
+  getEarningsCalendar: jest.fn(),
+  getEarningsAnalysis: jest.fn(),
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn()
@@ -50,12 +67,21 @@ jest.mock('../../services/options/positionAnalyzer', () => ({
 import { calculateLevels } from '../../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../../services/levels/fetcher';
 import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
+import { calculateGEXProfile } from '../../services/options/gexCalculator';
+import { analyzeZeroDTE } from '../../services/options/zeroDTE';
+import { analyzeIVProfile } from '../../services/options/ivAnalysis';
+import { getEarningsAnalysis, getEarningsCalendar } from '../../services/earnings';
 import { analyzePosition, analyzePortfolio } from '../../services/options/positionAnalyzer';
 
 const mockCalculateLevels = calculateLevels as jest.MockedFunction<typeof calculateLevels>;
 const mockFetchIntradayData = fetchIntradayData as jest.MockedFunction<typeof fetchIntradayData>;
 const mockFetchDailyData = fetchDailyData as jest.MockedFunction<typeof fetchDailyData>;
 const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
+const mockCalculateGEXProfile = calculateGEXProfile as jest.MockedFunction<typeof calculateGEXProfile>;
+const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZeroDTE>;
+const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
+const mockGetEarningsCalendar = getEarningsCalendar as jest.MockedFunction<typeof getEarningsCalendar>;
+const mockGetEarningsAnalysis = getEarningsAnalysis as jest.MockedFunction<typeof getEarningsAnalysis>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 
@@ -278,6 +304,233 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to fetch options chain');
       expect(result).toHaveProperty('message', 'No options found');
+    });
+  });
+
+  describe('get_gamma_exposure', () => {
+    it('should return gamma exposure profile', async () => {
+      mockCalculateGEXProfile.mockResolvedValue({
+        symbol: 'SPX',
+        spotPrice: 6012.5,
+        gexByStrike: [
+          {
+            strike: 6000,
+            gexValue: 1500000,
+            callGamma: 0.0042,
+            putGamma: 0.0039,
+            callOI: 12000,
+            putOI: 10500,
+          },
+        ],
+        flipPoint: 5990,
+        maxGEXStrike: 6000,
+        keyLevels: [{ strike: 6000, gexValue: 1500000, type: 'magnet' }],
+        regime: 'positive_gamma',
+        implication: 'Positive gamma regime.',
+        calculatedAt: '2026-02-09T17:00:00.000Z',
+        expirationsAnalyzed: ['2026-02-10', '2026-02-11'],
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_gamma_exposure',
+        arguments: JSON.stringify({ symbol: 'SPX', strikeRange: 25 }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('spotPrice', 6012.5);
+      expect(result).toHaveProperty('regime', 'positive_gamma');
+      expect(result).toHaveProperty('flipPoint', 5990);
+      expect(result).toHaveProperty('maxGEXStrike', 6000);
+      expect(result.keyLevels).toHaveLength(1);
+      expect(result.gexByStrike).toHaveLength(1);
+      expect(mockCalculateGEXProfile).toHaveBeenCalledWith('SPX', {
+        expiry: undefined,
+        strikeRange: 25,
+        maxExpirations: undefined,
+        forceRefresh: false,
+      });
+    });
+
+    it('should handle calculation errors gracefully', async () => {
+      mockCalculateGEXProfile.mockRejectedValue(new Error('Symbol not supported'));
+
+      const result = await executeFunctionCall({
+        name: 'get_gamma_exposure',
+        arguments: JSON.stringify({ symbol: 'AAPL' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to calculate gamma exposure');
+      expect(result).toHaveProperty('message', 'Symbol not supported');
+    });
+  });
+
+  describe('get_zero_dte_analysis', () => {
+    it('should return 0DTE analysis payload', async () => {
+      mockAnalyzeZeroDTE.mockResolvedValue({
+        symbol: 'SPX',
+        marketDate: '2026-02-09',
+        hasZeroDTE: true,
+        message: '0DTE toolkit generated for SPX (2026-02-09).',
+        expectedMove: {
+          totalExpectedMove: 32.4,
+          usedMove: 12.1,
+          usedPct: 37.35,
+          remainingMove: 18.7,
+          remainingPct: 57.72,
+          minutesLeft: 170,
+          openPrice: 6000,
+          currentPrice: 6012.1,
+          atmStrike: 6010,
+        },
+        thetaClock: null,
+        gammaProfile: null,
+        topContracts: [],
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_zero_dte_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX', strike: 6000, type: 'call' }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('hasZeroDTE', true);
+      expect(mockAnalyzeZeroDTE).toHaveBeenCalledWith('SPX', {
+        strike: 6000,
+        type: 'call',
+      });
+    });
+
+    it('should handle 0DTE analysis errors gracefully', async () => {
+      mockAnalyzeZeroDTE.mockRejectedValue(new Error('No options contracts found'));
+
+      const result = await executeFunctionCall({
+        name: 'get_zero_dte_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to analyze 0DTE structure');
+      expect(result).toHaveProperty('message', 'No options contracts found');
+    });
+  });
+
+  describe('get_iv_analysis', () => {
+    it('should return IV analysis payload', async () => {
+      mockAnalyzeIVProfile.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 6011.25,
+        asOf: '2026-02-09T15:15:00.000Z',
+        ivRank: {
+          currentIV: 24.4,
+          ivRank: 58.1,
+          ivPercentile: 63.2,
+          iv52wkHigh: 44.7,
+          iv52wkLow: 10.8,
+          ivTrend: 'rising',
+        },
+        skew: {
+          skew25delta: 3.4,
+          skew10delta: 5.1,
+          skewDirection: 'put_heavy',
+          interpretation: 'Put-side IV is elevated versus calls, suggesting downside hedge demand.',
+        },
+        termStructure: {
+          expirations: [
+            { date: '2026-02-10', dte: 1, atmIV: 23.8 },
+            { date: '2026-02-12', dte: 3, atmIV: 24.6 },
+          ],
+          shape: 'contango',
+        },
+      });
+
+      const result = await executeFunctionCall({
+        name: 'get_iv_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX', strikeRange: 15, maxExpirations: 4 }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'SPX');
+      expect(result).toHaveProperty('ivRank');
+      expect(result).toHaveProperty('skew');
+      expect(result).toHaveProperty('termStructure');
+      expect(mockAnalyzeIVProfile).toHaveBeenCalledWith('SPX', {
+        expiry: undefined,
+        strikeRange: 15,
+        maxExpirations: 4,
+        forceRefresh: false,
+      });
+    });
+
+    it('should handle IV analysis errors gracefully', async () => {
+      mockAnalyzeIVProfile.mockRejectedValue(new Error('No options expirations found for SPX'));
+
+      const result = await executeFunctionCall({
+        name: 'get_iv_analysis',
+        arguments: JSON.stringify({ symbol: 'SPX' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Failed to analyze implied volatility');
+      expect(result).toHaveProperty('message', 'No options expirations found for SPX');
+    });
+  });
+
+  describe('get_earnings_calendar', () => {
+    it('should return earnings calendar for watchlist', async () => {
+      mockGetEarningsCalendar.mockResolvedValue([
+        { symbol: 'AAPL', date: '2026-02-12', time: 'AMC', confirmed: true },
+        { symbol: 'NVDA', date: '2026-02-13', time: 'BMO', confirmed: true },
+      ] as any);
+
+      const result = await executeFunctionCall({
+        name: 'get_earnings_calendar',
+        arguments: JSON.stringify({ watchlist: ['aapl', 'nvda'], days_ahead: 10 }),
+      });
+
+      expect(result).toHaveProperty('count', 2);
+      expect(result).toHaveProperty('daysAhead', 10);
+      expect(result.events[0]).toHaveProperty('symbol', 'AAPL');
+      expect(mockGetEarningsCalendar).toHaveBeenCalledWith(['AAPL', 'NVDA'], 10);
+    });
+  });
+
+  describe('get_earnings_analysis', () => {
+    it('should return earnings analysis payload', async () => {
+      mockGetEarningsAnalysis.mockResolvedValue({
+        symbol: 'AAPL',
+        earningsDate: '2026-02-12',
+        daysUntil: 3,
+        expectedMove: { points: 8.2, pct: 4.1 },
+        historicalMoves: [],
+        avgHistoricalMove: 3.8,
+        moveOverpricing: 7.9,
+        currentIV: 32.1,
+        preEarningsIVRank: 64.2,
+        projectedIVCrushPct: 28,
+        straddlePricing: {
+          atmStraddle: 8.2,
+          referenceExpiry: '2026-02-14',
+          assessment: 'fair',
+        },
+        suggestedStrategies: [],
+        asOf: '2026-02-09T00:00:00.000Z',
+      } as any);
+
+      const result = await executeFunctionCall({
+        name: 'get_earnings_analysis',
+        arguments: JSON.stringify({ symbol: 'AAPL' }),
+      });
+
+      expect(result).toHaveProperty('symbol', 'AAPL');
+      expect(result).toHaveProperty('expectedMove');
+      expect(mockGetEarningsAnalysis).toHaveBeenCalledWith('AAPL');
+    });
+
+    it('should reject invalid symbol', async () => {
+      const result = await executeFunctionCall({
+        name: 'get_earnings_analysis',
+        arguments: JSON.stringify({ symbol: 'AAPL$' }),
+      });
+
+      expect(result).toHaveProperty('error', 'Invalid symbol');
+      expect(mockGetEarningsAnalysis).not.toHaveBeenCalled();
     });
   });
 

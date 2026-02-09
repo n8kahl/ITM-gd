@@ -4,6 +4,7 @@ import { testRedisConnection } from '../config/redis';
 import { testMassiveConnection, getDailyAggregates, getMinuteAggregates, getOptionsContracts, getOptionsExpirations } from '../config/massive';
 import { testOpenAIConnection, openaiClient, CHAT_MODEL } from '../config/openai';
 import { logger } from '../lib/logger';
+import { getWorkerHealthSnapshot } from '../services/workerHealth';
 
 const router = Router();
 
@@ -19,6 +20,71 @@ interface HealthCheck {
   }>;
 }
 
+interface ReadinessResult {
+  checks: NonNullable<HealthCheck['checks']>;
+  overallHealthy: boolean;
+  services: {
+    database: boolean;
+    redis: boolean;
+    massive: boolean;
+    openai: boolean;
+  };
+}
+
+async function runReadinessChecks(): Promise<ReadinessResult> {
+  const checks: NonNullable<HealthCheck['checks']> = {};
+  let overallHealthy = true;
+
+  const dbStart = Date.now();
+  try {
+    const dbOk = await testDatabaseConnection();
+    checks.database = { status: dbOk ? 'pass' : 'fail', latency: Date.now() - dbStart };
+    if (!dbOk) overallHealthy = false;
+  } catch (_err) {
+    checks.database = { status: 'fail', latency: Date.now() - dbStart, message: 'Connection failed' };
+    overallHealthy = false;
+  }
+
+  const redisStart = Date.now();
+  try {
+    const redisOk = await testRedisConnection();
+    checks.redis = { status: redisOk ? 'pass' : 'fail', latency: Date.now() - redisStart };
+  } catch (_err) {
+    checks.redis = { status: 'fail', latency: Date.now() - redisStart, message: 'Connection failed' };
+  }
+
+  const massiveStart = Date.now();
+  try {
+    const massiveOk = await testMassiveConnection();
+    checks.massive = { status: massiveOk ? 'pass' : 'fail', latency: Date.now() - massiveStart };
+    if (!massiveOk) overallHealthy = false;
+  } catch (_err) {
+    checks.massive = { status: 'fail', latency: Date.now() - massiveStart, message: 'Connection failed' };
+    overallHealthy = false;
+  }
+
+  const aiStart = Date.now();
+  try {
+    const aiOk = await testOpenAIConnection();
+    checks.openai = { status: aiOk ? 'pass' : 'fail', latency: Date.now() - aiStart };
+    if (!aiOk) overallHealthy = false;
+  } catch (_err) {
+    checks.openai = { status: 'fail', latency: Date.now() - aiStart, message: 'Connection failed' };
+    overallHealthy = false;
+  }
+
+  return {
+    checks,
+    overallHealthy,
+    services: {
+      database: checks.database?.status === 'pass',
+      redis: checks.redis?.status === 'pass',
+      massive: checks.massive?.status === 'pass',
+      openai: checks.openai?.status === 'pass',
+    },
+  };
+}
+
 router.get('/', (_req: Request, res: Response) => {
   return res.status(200).json({
     status: 'healthy',
@@ -29,46 +95,7 @@ router.get('/', (_req: Request, res: Response) => {
 });
 
 router.get('/ready', async (_req: Request, res: Response) => {
-  const checks: HealthCheck['checks'] = {};
-  let overallHealthy = true;
-
-  const dbStart = Date.now();
-  try {
-    const dbOk = await testDatabaseConnection();
-    checks.database = { status: dbOk ? 'pass' : 'fail', latency: Date.now() - dbStart };
-    if (!dbOk) overallHealthy = false;
-  } catch (err) {
-    checks.database = { status: 'fail', latency: Date.now() - dbStart, message: 'Connection failed' };
-    overallHealthy = false;
-  }
-
-  const redisStart = Date.now();
-  try {
-    const redisOk = await testRedisConnection();
-    checks.redis = { status: redisOk ? 'pass' : 'fail', latency: Date.now() - redisStart };
-  } catch (err) {
-    checks.redis = { status: 'fail', latency: Date.now() - redisStart, message: 'Connection failed' };
-  }
-
-  const massiveStart = Date.now();
-  try {
-    const massiveOk = await testMassiveConnection();
-    checks.massive = { status: massiveOk ? 'pass' : 'fail', latency: Date.now() - massiveStart };
-    if (!massiveOk) overallHealthy = false;
-  } catch (err) {
-    checks.massive = { status: 'fail', latency: Date.now() - massiveStart, message: 'Connection failed' };
-    overallHealthy = false;
-  }
-
-  const aiStart = Date.now();
-  try {
-    const aiOk = await testOpenAIConnection();
-    checks.openai = { status: aiOk ? 'pass' : 'fail', latency: Date.now() - aiStart };
-    if (!aiOk) overallHealthy = false;
-  } catch (err) {
-    checks.openai = { status: 'fail', latency: Date.now() - aiStart, message: 'Connection failed' };
-    overallHealthy = false;
-  }
+  const { checks, overallHealthy } = await runReadinessChecks();
 
   const response: HealthCheck = {
     status: overallHealthy ? 'healthy' : 'unhealthy',
@@ -83,6 +110,52 @@ router.get('/ready', async (_req: Request, res: Response) => {
     logger.warn('Health check failed', { checks });
   }
   return res.status(statusCode).json(response);
+});
+
+router.get('/detailed', async (_req: Request, res: Response) => {
+  const { checks, overallHealthy, services } = await runReadinessChecks();
+  const response = {
+    status: overallHealthy ? 'healthy' : 'unhealthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
+    services,
+    checks,
+  };
+
+  const statusCode = overallHealthy ? 200 : 503;
+  if (!overallHealthy) {
+    logger.warn('Detailed health check failed', { checks });
+  }
+  return res.status(statusCode).json(response);
+});
+
+router.get('/workers', (_req: Request, res: Response) => {
+  const workers = getWorkerHealthSnapshot();
+  const nowMs = Date.now();
+  const staleThresholdMs = 20 * 60 * 1000; // 20 minutes
+
+  const staleWorkers = workers.filter((worker) => {
+    if (!worker.isRunning) return false;
+    if (!worker.lastCycleCompletedAt) return false;
+
+    const lastCycleMs = Date.parse(worker.lastCycleCompletedAt);
+    return Number.isFinite(lastCycleMs) && nowMs - lastCycleMs > staleThresholdMs;
+  });
+
+  const response = {
+    status: staleWorkers.length === 0 ? 'healthy' : 'degraded',
+    timestamp: new Date().toISOString(),
+    summary: {
+      total: workers.length,
+      running: workers.filter((worker) => worker.isRunning).length,
+      stale: staleWorkers.length,
+    },
+    staleThresholdMs,
+    workers,
+  };
+
+  return res.status(staleWorkers.length === 0 ? 200 : 503).json(response);
 });
 
 router.get('/diagnose', async (_req: Request, res: Response) => {

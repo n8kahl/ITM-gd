@@ -49,9 +49,9 @@ export async function GET(
     const { entryId } = await params
     const supabase = getSupabaseAdmin()
 
-    // Fetch the journal entry
+    // Fetch the journal entry from canonical table
     const { data: entry, error: entryError } = await supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .select('id, user_id, symbol, trade_date, entry_price, exit_price, entry_timestamp, exit_timestamp, direction')
       .eq('id', entryId)
       .eq('user_id', userId)

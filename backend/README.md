@@ -41,6 +41,8 @@ Backend server for the TITM AI Coach trading platform, providing real-time marke
    ```bash
    # Massive.com API
    MASSIVE_API_KEY=your_massive_api_key
+   # Optional free earnings calendar source (used by AI Coach earnings module)
+   ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key
 
    # Supabase (from existing TITM project)
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -291,12 +293,36 @@ ATR = 14-period moving average of True Range
 5. Set environment variables:
    ```bash
    railway variables set MASSIVE_API_KEY=xxx
+   railway variables set ALPHA_VANTAGE_API_KEY=xxx
    railway variables set NEXT_PUBLIC_SUPABASE_URL=xxx
    # ... set all other variables
    ```
 
 ### Environment Variables for Production
 Make sure to set all variables from `.env.example` in your production environment.
+
+Worker-health incident alerting (Discord) is optional and disabled by default. To enable:
+
+```bash
+WORKER_ALERTS_ENABLED=true
+WORKER_ALERTS_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+WORKER_ALERTS_POLL_INTERVAL_MS=60000
+WORKER_ALERTS_STALE_THRESHOLD_MS=1200000
+WORKER_ALERTS_STARTUP_GRACE_MS=300000
+WORKER_ALERTS_COOLDOWN_MS=900000
+WORKER_ALERTS_SENTRY_ENABLED=false
+```
+
+E2E auth bypass is available for Playwright/backend-integrated tests in non-production only:
+
+```bash
+E2E_BYPASS_AUTH=true
+E2E_BYPASS_ALLOW_IN_PRODUCTION=false
+E2E_BYPASS_TOKEN_PREFIX=e2e:
+E2E_BYPASS_SHARED_SECRET=replace-with-long-random-secret
+```
+
+Do not enable `E2E_BYPASS_AUTH` in production unless this is an explicit staging/test environment and `E2E_BYPASS_ALLOW_IN_PRODUCTION=true` is set intentionally.
 
 ## Troubleshooting
 
@@ -307,6 +333,10 @@ Make sure to set all variables from `.env.example` in your production environmen
   ```bash
   curl "https://api.massive.com/v2/aggs/ticker/I:SPX/range/1/day/2024-01-01/2024-01-31?apiKey=YOUR_KEY"
   ```
+
+### "Earnings calendar missing or stale"
+- Set `ALPHA_VANTAGE_API_KEY` to enable free earnings-calendar ingestion
+- Free tier is rate-limited; calendar responses are cached in-process to reduce calls
 
 ### "Redis connection failed"
 - Make sure Redis is running: `redis-cli ping` (should return "PONG")

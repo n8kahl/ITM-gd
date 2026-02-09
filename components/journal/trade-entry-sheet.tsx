@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { uploadScreenshot, type UploadProgress } from '@/lib/uploads/supabaseStorage'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 import type { JournalEntry, AITradeAnalysis } from '@/lib/types/journal'
 
 // ============================================
@@ -95,6 +98,7 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set())
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null)
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
+  const [uploadStatus, setUploadStatus] = useState<UploadProgress | null>(null)
 
   // Populate form when editing
   useEffect(() => {
@@ -123,38 +127,76 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
       setScreenshotFile(null)
       setScreenshotPreview(null)
       setAutoFilledFields(new Set())
+      setUploadStatus(null)
     }
   }, [editEntry, open])
+
+  // Upload screenshot to Supabase Storage on drop
+  const handleScreenshotDrop = useCallback(async (accepted: File[]) => {
+    if (accepted.length === 0) return
+    const file = accepted[0]
+    setScreenshotFile(file)
+    // Show instant local preview while uploading
+    setScreenshotPreview(URL.createObjectURL(file))
+    setUploadStatus({ status: 'validating' })
+
+    // Get current user for path namespacing
+    const supabase = createBrowserSupabase()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setUploadStatus({ status: 'error', error: 'You must be logged in to upload screenshots.' })
+      return
+    }
+
+    const result = await uploadScreenshot(
+      file,
+      user.id,
+      editEntry?.id,
+      (progress) => setUploadStatus(progress),
+    )
+
+    if (result.status === 'complete' && result.url) {
+      // Replace blob preview with real signed URL and store in form
+      setScreenshotPreview(result.url)
+      setForm(prev => ({ ...prev, screenshot_url: result.url! }))
+    }
+  }, [editEntry?.id])
 
   // Dropzone for screenshot
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] },
     maxSize: 5 * 1024 * 1024,
     maxFiles: 1,
-    onDrop: (accepted) => {
-      if (accepted.length > 0) {
-        const file = accepted[0]
-        setScreenshotFile(file)
-        setScreenshotPreview(URL.createObjectURL(file))
-      }
-    },
+    onDrop: handleScreenshotDrop,
   })
 
   const updateField = useCallback((field: keyof TradeEntryFormData, value: string | string[] | number) => {
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
 
-  // AI Analysis
+  // AI Analysis — uses the real storage URL (not blob)
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+
   const handleAnalyze = useCallback(async () => {
-    const imageUrl = screenshotPreview || form.screenshot_url
+    // Prefer the uploaded URL; fall back to manually pasted URL
+    const imageUrl = form.screenshot_url
     if (!imageUrl) return
+    if (imageUrl.startsWith('blob:')) {
+      setAnalyzeError('Screenshot is still uploading. Please wait for the upload to complete.')
+      return
+    }
     setAnalyzing(true)
+    setAnalyzeError(null)
     try {
       const res = await fetch('/api/members/journal/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl }),
       })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Analysis failed (${res.status})`)
+      }
       const data = await res.json()
       if (data.symbol || data.entry_price || data.pnl) {
         const filled = new Set<string>()
@@ -173,12 +215,12 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
           })
         }
       }
-    } catch {
-      // Silent fail
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : 'Analysis failed')
     } finally {
       setAnalyzing(false)
     }
-  }, [screenshotPreview, form.screenshot_url, form.symbol, updateField])
+  }, [form.screenshot_url, form.symbol, updateField])
 
   // Save
   const handleSave = useCallback(async () => {
@@ -189,13 +231,14 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
       const payload: Record<string, unknown> = {
         trade_date: form.trade_date,
         symbol: form.symbol.toUpperCase(),
-        trade_type: form.direction,
+        direction: form.direction,
         entry_price: parseFloat(form.entry_price) || null,
         exit_price: parseFloat(form.exit_price) || null,
         position_size: parseFloat(form.position_size) || null,
-        profit_loss: pnlNum,
-        profit_loss_percent: parseFloat(form.pnl_percentage) || null,
+        pnl: pnlNum,
+        pnl_percentage: parseFloat(form.pnl_percentage) || null,
         screenshot_url: form.screenshot_url || null,
+        screenshot_storage_path: uploadStatus?.storagePath || null,
         setup_notes: form.setup_notes || null,
         execution_notes: form.execution_notes || null,
         lessons_learned: form.lessons_learned || null,
@@ -211,8 +254,8 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
       }
       await onSave(payload)
       onClose()
-    } catch {
-      // Error handled by parent
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save trade')
     } finally {
       setSaving(false)
     }
@@ -317,11 +360,44 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
                   <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
                     <img src={screenshotPreview} alt="Trade screenshot" className="w-full max-h-[200px] object-contain bg-black/40" />
                     <button
-                      onClick={() => { setScreenshotFile(null); setScreenshotPreview(null) }}
+                      onClick={() => {
+                        setScreenshotFile(null)
+                        setScreenshotPreview(null)
+                        setUploadStatus(null)
+                        setForm(prev => ({ ...prev, screenshot_url: '' }))
+                      }}
                       className="absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white hover:bg-black/80"
                     >
                       <X className="w-4 h-4" />
                     </button>
+
+                    {/* Upload progress overlay */}
+                    {uploadStatus && uploadStatus.status !== 'complete' && uploadStatus.status !== 'error' && (
+                      <div className="absolute inset-x-0 bottom-0 bg-black/70 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                          <span className="text-[11px] text-ivory/80">
+                            {uploadStatus.status === 'validating' ? 'Validating...' : 'Uploading...'}
+                          </span>
+                        </div>
+                        {uploadStatus.status === 'uploading' && (
+                          <div className="mt-1.5 h-1 rounded-full bg-white/10 overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadStatus.percent ?? 0}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Upload complete badge */}
+                    {uploadStatus?.status === 'complete' && (
+                      <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-900/80 text-emerald-300">
+                        <CheckCircle className="w-3 h-3" />
+                        <span className="text-[10px] font-medium">Uploaded</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div
@@ -335,6 +411,14 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
                     <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
                     <p className="text-xs text-muted-foreground">Drop screenshot or click to upload</p>
                     <p className="text-[10px] text-muted-foreground/50 mt-1">PNG, JPG, WebP (max 5MB)</p>
+                  </div>
+                )}
+
+                {/* Upload error */}
+                {uploadStatus?.status === 'error' && (
+                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-red-950/30 border border-red-900/30">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <span className="text-[11px] text-red-300">{uploadStatus.error}</span>
                   </div>
                 )}
 
@@ -353,7 +437,7 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
                 {(screenshotPreview || form.screenshot_url) && (
                   <button
                     onClick={handleAnalyze}
-                    disabled={analyzing}
+                    disabled={analyzing || (uploadStatus != null && uploadStatus.status !== 'complete' && uploadStatus.status !== 'error')}
                     className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
                   >
                     {analyzing ? (
@@ -362,6 +446,14 @@ export function TradeEntrySheet({ open, onClose, onSave, editEntry }: TradeEntry
                       <><Sparkles className="w-4 h-4" /> Analyze with AI</>
                     )}
                   </button>
+                )}
+
+                {/* Analyze error */}
+                {analyzeError && (
+                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-red-950/30 border border-red-900/30">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <span className="text-[11px] text-red-300">{analyzeError}</span>
+                  </div>
                 )}
               </section>
 

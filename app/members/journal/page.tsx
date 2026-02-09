@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { Plus, BookOpen } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_FILTERS } from '@/lib/types/journal'
@@ -87,7 +88,13 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState<JournalFilters>(() => {
+    // Default to card view on small screens
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return { ...DEFAULT_FILTERS, view: 'cards' }
+    }
+    return DEFAULT_FILTERS
+  })
 
   // Sheet states
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)
@@ -98,12 +105,16 @@ export default function JournalPage() {
   const loadEntries = useCallback(async () => {
     try {
       const res = await fetch('/api/members/journal?limit=500')
+      if (!res.ok) {
+        throw new Error(`Failed to load trades (${res.status})`)
+      }
       const data = await res.json()
       if (data.success && Array.isArray(data.data)) {
         setEntries(data.data)
       }
-    } catch {
-      // Silent fail
+    } catch (err) {
+      console.error('[Journal] loadEntries failed:', err)
+      toast.error('Failed to load your trades. Please refresh.')
     } finally {
       setLoading(false)
     }
@@ -132,16 +143,21 @@ export default function JournalPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.error || `Save failed (${res.status})`)
+    }
     const result = await res.json()
 
     if (result.success && result.data) {
+      toast.success(data.id ? 'Trade updated' : 'Trade saved')
       // Trigger enrichment in background
       if (!data.id) {
         fetch('/api/members/journal/enrich', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ entryId: result.data.id }),
-        }).catch(() => {})
+        }).catch(err => console.error('[Journal] Enrichment failed:', err))
       }
     }
 
@@ -151,8 +167,17 @@ export default function JournalPage() {
   // Delete trade
   const handleDelete = useCallback(async (entryId: string) => {
     if (!confirm('Delete this trade? This action cannot be undone.')) return
-    await fetch(`/api/members/journal?id=${entryId}`, { method: 'DELETE' })
-    await loadEntries()
+    try {
+      const res = await fetch(`/api/members/journal?id=${entryId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        throw new Error(`Delete failed (${res.status})`)
+      }
+      toast.success('Trade deleted')
+      await loadEntries()
+    } catch (err) {
+      console.error('[Journal] handleDelete failed:', err)
+      toast.error('Failed to delete trade. Please try again.')
+    }
   }, [loadEntries])
 
   // Open entry sheet for new/edit

@@ -21,6 +21,10 @@ interface TimeframeConfig {
   cacheTTL: number;
 }
 
+function toSafeNumber(value: unknown, fallback: number = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 const TIMEFRAME_CONFIG: Record<string, TimeframeConfig> = {
   '1m':  { multiplier: 1,  timespan: 'minute', daysBack: 1,   cacheTTL: 60 },
   '5m':  { multiplier: 5,  timespan: 'minute', daysBack: 5,   cacheTTL: 60 },
@@ -104,14 +108,17 @@ router.get(
       // Fetch from Massive.com
       const response = await getAggregates(ticker, config.multiplier, config.timespan, from, to);
 
-      const bars = (response.results || []).map((bar: MassiveAggregate) => ({
-        time: Math.floor(bar.t / 1000), // Convert ms to seconds for lightweight-charts
-        open: bar.o,
-        high: bar.h,
-        low: bar.l,
-        close: bar.c,
-        volume: bar.v,
-      }));
+      const bars = (response.results || [])
+        .map((bar: MassiveAggregate) => ({
+          time: Math.floor(toSafeNumber(bar.t) / 1000), // Convert ms to seconds for lightweight-charts
+          open: toSafeNumber(bar.o),
+          high: toSafeNumber(bar.h),
+          low: toSafeNumber(bar.l),
+          close: toSafeNumber(bar.c),
+          // Index feeds (SPX/NDX) can omit volume; normalize to zero for chart compatibility.
+          volume: toSafeNumber(bar.v),
+        }))
+        .filter((bar) => bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
 
       const result = {
         symbol,

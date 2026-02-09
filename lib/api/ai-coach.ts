@@ -66,6 +66,19 @@ export interface ChartDataResponse {
   cached: boolean
 }
 
+export type SymbolSearchType = 'index' | 'etf' | 'stock'
+
+export interface SymbolSearchItem {
+  symbol: string
+  name: string
+  type: SymbolSearchType
+  exchange: string | null
+}
+
+export interface SymbolSearchResponse {
+  results: SymbolSearchItem[]
+}
+
 export interface SessionMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -123,6 +136,183 @@ export interface ExpirationsResponse {
   symbol: string
   expirations: string[]
   count: number
+}
+
+export interface GEXStrikeData {
+  strike: number
+  gexValue: number
+  callGamma: number
+  putGamma: number
+  callOI: number
+  putOI: number
+}
+
+export interface GEXKeyLevel {
+  strike: number
+  gexValue: number
+  type: 'support' | 'resistance' | 'magnet'
+}
+
+export interface GEXProfileResponse {
+  symbol: string
+  spotPrice: number
+  gexByStrike: GEXStrikeData[]
+  flipPoint: number | null
+  maxGEXStrike: number | null
+  keyLevels: GEXKeyLevel[]
+  regime: 'positive_gamma' | 'negative_gamma'
+  implication: string
+  calculatedAt: string
+  expirationsAnalyzed: string[]
+}
+
+export interface ZeroDTEExpectedMove {
+  totalExpectedMove: number
+  usedMove: number
+  usedPct: number
+  remainingMove: number
+  remainingPct: number
+  minutesLeft: number
+  openPrice: number
+  currentPrice: number
+  atmStrike: number | null
+}
+
+export interface ZeroDTEThetaProjection {
+  time: string
+  estimatedValue: number
+  thetaDecay: number
+  pctRemaining: number
+}
+
+export interface ZeroDTEThetaClock {
+  strike: number
+  type: 'call' | 'put'
+  currentValue: number
+  thetaPerDay: number
+  projections: ZeroDTEThetaProjection[]
+}
+
+export interface ZeroDTEGammaProfile {
+  strike: number
+  type: 'call' | 'put'
+  currentDelta: number
+  gammaPerDollar: number
+  dollarDeltaChangePerPoint: number
+  leverageMultiplier: number
+  riskLevel: 'low' | 'moderate' | 'high' | 'extreme'
+}
+
+export interface ZeroDTEContractSnapshot {
+  strike: number
+  type: 'call' | 'put'
+  last: number
+  volume: number
+  openInterest: number
+  gamma: number | null
+  theta: number | null
+}
+
+export interface ZeroDTEAnalysisResponse {
+  symbol: string
+  marketDate: string
+  hasZeroDTE: boolean
+  message: string
+  expectedMove: ZeroDTEExpectedMove | null
+  thetaClock: ZeroDTEThetaClock | null
+  gammaProfile: ZeroDTEGammaProfile | null
+  topContracts: ZeroDTEContractSnapshot[]
+}
+
+export interface IVRankAnalysis {
+  currentIV: number | null
+  ivRank: number | null
+  ivPercentile: number | null
+  iv52wkHigh: number | null
+  iv52wkLow: number | null
+  ivTrend: 'rising' | 'falling' | 'stable' | 'unknown'
+}
+
+export interface IVSkewAnalysis {
+  skew25delta: number | null
+  skew10delta: number | null
+  skewDirection: 'put_heavy' | 'call_heavy' | 'balanced' | 'unknown'
+  interpretation: string
+}
+
+export interface IVTermStructurePoint {
+  date: string
+  dte: number
+  atmIV: number
+}
+
+export interface IVAnalysisResponse {
+  symbol: string
+  currentPrice: number
+  asOf: string
+  ivRank: IVRankAnalysis
+  skew: IVSkewAnalysis
+  termStructure: {
+    expirations: IVTermStructurePoint[]
+    shape: 'contango' | 'backwardation' | 'flat'
+    inversionPoint?: string
+  }
+}
+
+export interface EarningsCalendarEvent {
+  symbol: string
+  date: string
+  time: 'BMO' | 'AMC' | 'DURING'
+  confirmed: boolean
+}
+
+export interface EarningsCalendarResponse {
+  watchlist: string[]
+  daysAhead: number
+  count: number
+  events: EarningsCalendarEvent[]
+}
+
+export interface EarningsHistoricalMove {
+  date: string
+  expectedMove: number
+  actualMove: number
+  direction: 'up' | 'down'
+  surprise: 'beat' | 'miss' | 'in-line' | 'unknown'
+}
+
+export interface EarningsStrategy {
+  name: string
+  description: string
+  setup: Record<string, unknown>
+  riskReward: string
+  bestWhen: string
+  expectedMaxLoss: string
+  expectedMaxGain: string
+  probability: number
+}
+
+export interface EarningsAnalysisResponse {
+  symbol: string
+  earningsDate: string | null
+  daysUntil: number | null
+  expectedMove: {
+    points: number
+    pct: number
+  }
+  historicalMoves: EarningsHistoricalMove[]
+  avgHistoricalMove: number
+  moveOverpricing: number
+  currentIV: number | null
+  preEarningsIVRank: number | null
+  projectedIVCrushPct: number | null
+  straddlePricing: {
+    atmStraddle: number
+    referenceExpiry: string | null
+    assessment: 'overpriced' | 'underpriced' | 'fair'
+  }
+  suggestedStrategies: EarningsStrategy[]
+  asOf: string
 }
 
 export type PositionType = 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock'
@@ -378,6 +568,34 @@ export async function getChartData(
   return response.json()
 }
 
+/**
+ * Search symbols for autocomplete workflows.
+ */
+export async function searchSymbols(
+  query: string,
+  token: string,
+  limit: number = 20,
+  signal?: AbortSignal
+): Promise<SymbolSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/symbols/search?${params}`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
 // ============================================
 // OPTIONS API FUNCTIONS
 // ============================================
@@ -424,6 +642,166 @@ export async function getExpirations(
     {
       headers: { 'Authorization': `Bearer ${token}` },
     }
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get gamma exposure profile for an options symbol
+ */
+export async function getGammaExposure(
+  symbol: string,
+  token: string,
+  options?: {
+    expiry?: string
+    strikeRange?: number
+    maxExpirations?: number
+    forceRefresh?: boolean
+  }
+): Promise<GEXProfileResponse> {
+  const params = new URLSearchParams()
+  if (options?.expiry) params.set('expiry', options.expiry)
+  if (options?.strikeRange) params.set('strikeRange', options.strikeRange.toString())
+  if (options?.maxExpirations) params.set('maxExpirations', options.maxExpirations.toString())
+  if (options?.forceRefresh) params.set('forceRefresh', 'true')
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/gex${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get 0DTE analytics for a symbol.
+ */
+export async function getZeroDTEAnalysis(
+  symbol: string,
+  token: string,
+  options?: {
+    strike?: number
+    type?: 'call' | 'put'
+  }
+): Promise<ZeroDTEAnalysisResponse> {
+  const params = new URLSearchParams()
+  if (typeof options?.strike === 'number') params.set('strike', options.strike.toString())
+  if (options?.type) params.set('type', options.type)
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/0dte${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get implied volatility analysis profile for a symbol.
+ */
+export async function getIVAnalysis(
+  symbol: string,
+  token: string,
+  options?: {
+    expiry?: string
+    strikeRange?: number
+    maxExpirations?: number
+    forceRefresh?: boolean
+  }
+): Promise<IVAnalysisResponse> {
+  const params = new URLSearchParams()
+  if (options?.expiry) params.set('expiry', options.expiry)
+  if (options?.strikeRange) params.set('strikeRange', options.strikeRange.toString())
+  if (options?.maxExpirations) params.set('maxExpirations', options.maxExpirations.toString())
+  if (options?.forceRefresh) params.set('forceRefresh', 'true')
+
+  const query = params.toString()
+  const url = `${API_BASE}/api/options/${symbol}/iv${query ? `?${query}` : ''}`
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get upcoming earnings calendar for optional watchlist.
+ */
+export async function getEarningsCalendar(
+  token: string,
+  watchlist?: string[],
+  days: number = 14,
+): Promise<EarningsCalendarResponse> {
+  const params = new URLSearchParams()
+  if (Array.isArray(watchlist) && watchlist.length > 0) {
+    params.set('watchlist', watchlist.join(','))
+  }
+  params.set('days', String(days))
+
+  const response = await fetch(
+    `${API_BASE}/api/earnings/calendar?${params.toString()}`,
+    { headers: { 'Authorization': `Bearer ${token}` } },
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get symbol-specific earnings analysis.
+ */
+export async function getEarningsAnalysis(
+  symbol: string,
+  token: string,
+): Promise<EarningsAnalysisResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/earnings/${symbol}/analysis`,
+    { headers: { 'Authorization': `Bearer ${token}` } },
   )
 
   if (!response.ok) {
@@ -961,6 +1339,337 @@ export async function scanOpportunities(
     `${API_BASE}/api/scanner/scan?${params}`,
     { headers: {} },
     token,
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// WATCHLIST API
+// ============================================
+
+export interface Watchlist {
+  id: string
+  user_id: string
+  name: string
+  symbols: string[]
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface WatchlistResponse {
+  watchlists: Watchlist[]
+  defaultWatchlist?: Watchlist
+}
+
+export async function getWatchlists(
+  token: string,
+  signal?: AbortSignal
+): Promise<WatchlistResponse> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function createWatchlist(
+  token: string,
+  payload: { name: string; symbols: string[]; isDefault?: boolean }
+): Promise<{ watchlist: Watchlist; watchlists: Watchlist[]; defaultWatchlist?: Watchlist }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function updateWatchlist(
+  id: string,
+  token: string,
+  payload: { name?: string; symbols?: string[]; isDefault?: boolean }
+): Promise<{ watchlist: Watchlist; watchlists: Watchlist[]; defaultWatchlist?: Watchlist }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist/${id}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function deleteWatchlist(
+  id: string,
+  token: string
+): Promise<{ success: boolean; watchlists: Watchlist[]; defaultWatchlist?: Watchlist }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist/${id}`,
+    {
+      method: 'DELETE',
+      headers: {},
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// MORNING BRIEF API
+// ============================================
+
+export interface MorningBrief {
+  generatedAt: string
+  marketDate: string
+  marketStatus?: {
+    status: string
+    session: string
+    message: string
+    nextOpen?: string
+    timeUntilOpen?: string
+    timeSinceOpen?: string
+    closingTime?: string
+  }
+  watchlist: string[]
+  overnightSummary?: Record<string, unknown>
+  keyLevelsToday?: Array<Record<string, unknown>>
+  economicEvents?: Array<Record<string, unknown>>
+  earningsToday?: Array<Record<string, unknown>>
+  openPositionStatus?: Array<Record<string, unknown>>
+  watchItems?: string[]
+  aiSummary?: string
+}
+
+export interface MorningBriefResponse {
+  brief: MorningBrief
+  marketDate: string
+  viewed: boolean
+  cached: boolean
+}
+
+export async function getMorningBrief(
+  token: string,
+  options?: { force?: boolean },
+  signal?: AbortSignal
+): Promise<MorningBriefResponse> {
+  const params = new URLSearchParams()
+  if (options?.force) params.set('force', 'true')
+
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/brief/today${params.toString() ? `?${params}` : ''}`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function setMorningBriefViewed(
+  token: string,
+  viewed: boolean
+): Promise<{ success: boolean; marketDate: string; viewed: boolean }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/brief/today`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ viewed }),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// TRACKED SETUPS API
+// ============================================
+
+export type TrackedSetupStatus = 'active' | 'triggered' | 'invalidated' | 'archived'
+
+export interface TrackedSetup {
+  id: string
+  user_id: string
+  source_opportunity_id: string | null
+  symbol: string
+  setup_type: string
+  direction: 'bullish' | 'bearish' | 'neutral'
+  status: TrackedSetupStatus
+  opportunity_data: Record<string, unknown>
+  notes: string | null
+  tracked_at: string
+  triggered_at: string | null
+  invalidated_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getTrackedSetups(
+  token: string,
+  options?: { status?: TrackedSetupStatus },
+  signal?: AbortSignal
+): Promise<{ trackedSetups: TrackedSetup[] }> {
+  const params = new URLSearchParams()
+  if (options?.status) params.set('status', options.status)
+
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups${params.toString() ? `?${params}` : ''}`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function trackSetup(
+  token: string,
+  payload: {
+    source_opportunity_id?: string
+    symbol: string
+    setup_type: string
+    direction: 'bullish' | 'bearish' | 'neutral'
+    opportunity_data: Record<string, unknown>
+    notes?: string | null
+  }
+): Promise<{ trackedSetup: TrackedSetup | null; duplicate?: boolean }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function updateTrackedSetup(
+  id: string,
+  token: string,
+  payload: { status?: TrackedSetupStatus; notes?: string | null }
+): Promise<{ trackedSetup: TrackedSetup }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function deleteTrackedSetup(
+  id: string,
+  token: string
+): Promise<{ success: boolean }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups/${id}`,
+    {
+      method: 'DELETE',
+      headers: {},
+    },
+    token
   )
 
   if (!response.ok) {

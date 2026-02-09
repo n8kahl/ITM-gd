@@ -16,6 +16,15 @@ import { logger } from '../lib/logger';
 import { supabase } from '../config/database';
 import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { getMarketStatus } from '../services/marketHours';
+import {
+  markWorkerCycleFailed,
+  markWorkerCycleStarted,
+  markWorkerCycleSucceeded,
+  markWorkerNextRun,
+  markWorkerStarted,
+  markWorkerStopped,
+  registerWorker,
+} from '../services/workerHealth';
 
 // ============================================
 // TYPES
@@ -46,9 +55,11 @@ const POLL_INTERVAL_MARKET_OPEN = 2 * 60 * 1000;   // 2 minutes
 const POLL_INTERVAL_MARKET_CLOSED = 15 * 60 * 1000; // 15 minutes
 const LEVEL_APPROACH_THRESHOLD = 0.005;              // 0.5% proximity threshold
 const VOLUME_SPIKE_MULTIPLIER = 2.0;                 // 2x average volume = spike
+const WORKER_NAME = 'alert_worker';
 
 // Symbols that get index prefix for Massive.com API
 const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'RUT']);
+registerWorker(WORKER_NAME);
 
 function formatTicker(symbol: string): string {
   return INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
@@ -239,10 +250,20 @@ function getPollingInterval(): number {
 async function runCycle(): Promise<void> {
   if (!isRunning) return;
 
-  await pollAlerts();
+  const cycleStartedAt = markWorkerCycleStarted(WORKER_NAME);
+  try {
+    await pollAlerts();
+    markWorkerCycleSucceeded(WORKER_NAME, cycleStartedAt);
+  } catch (error) {
+    markWorkerCycleFailed(WORKER_NAME, cycleStartedAt, error);
+    logger.error('Alert worker: cycle failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   // Schedule next cycle with adaptive interval
   const interval = getPollingInterval();
+  markWorkerNextRun(WORKER_NAME, interval);
   pollingTimer = setTimeout(runCycle, interval);
 }
 
@@ -257,9 +278,11 @@ export function startAlertWorker(): void {
   }
 
   isRunning = true;
+  markWorkerStarted(WORKER_NAME);
   logger.info('Alert worker started');
 
   // Initial delay of 10 seconds to let the server fully initialize
+  markWorkerNextRun(WORKER_NAME, 10_000);
   pollingTimer = setTimeout(runCycle, 10_000);
 }
 
@@ -269,6 +292,7 @@ export function startAlertWorker(): void {
  */
 export function stopAlertWorker(): void {
   isRunning = false;
+  markWorkerStopped(WORKER_NAME);
   if (pollingTimer) {
     clearTimeout(pollingTimer);
     pollingTimer = null;

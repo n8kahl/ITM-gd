@@ -38,6 +38,10 @@ export interface ChartDataResult {
   cached: boolean;
 }
 
+function toSafeNumber(value: unknown, fallback: number = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 // Known index symbols that need the I: prefix for Massive.com aggregates
 const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'VIX', 'RUT', 'COMP', 'DJIA']);
 
@@ -129,14 +133,17 @@ export async function getChartData(
   const allResults = response.results || [];
   const results = allResults.slice(-bars); // Take the most recent N bars
 
-  const candles: ChartCandle[] = results.map((bar: MassiveAggregate) => ({
-    time: Math.floor(bar.t / 1000),
-    open: bar.o,
-    high: bar.h,
-    low: bar.l,
-    close: bar.c,
-    volume: bar.v,
-  }));
+  const candles: ChartCandle[] = results
+    .map((bar: MassiveAggregate) => ({
+      time: Math.floor(toSafeNumber(bar.t) / 1000),
+      open: toSafeNumber(bar.o),
+      high: toSafeNumber(bar.h),
+      low: toSafeNumber(bar.l),
+      close: toSafeNumber(bar.c),
+      // Index feeds can omit volume. Keep payload shape stable for UI charts.
+      volume: toSafeNumber(bar.v),
+    }))
+    .filter((bar) => bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
 
   // Calculate indicators
   const closes = candles.map(c => c.close);

@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import type { ChartTimeframe } from '@/lib/api/ai-coach'
+import { SymbolSearch } from './symbol-search'
 
 // ============================================
 // TYPES
@@ -14,12 +15,6 @@ interface ChartToolbarProps {
   onTimeframeChange: (timeframe: ChartTimeframe) => void
   isLoading?: boolean
 }
-
-// ============================================
-// CONSTANTS
-// ============================================
-
-const SYMBOLS = ['SPX', 'NDX'] as const
 
 const TIMEFRAMES: { value: ChartTimeframe; label: string }[] = [
   { value: '1m',  label: '1m' },
@@ -44,22 +39,12 @@ export function ChartToolbar({
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5">
       {/* Symbol Selector */}
-      <div className="flex gap-1">
-        {SYMBOLS.map((sym) => (
-          <button
-            key={sym}
-            onClick={() => onSymbolChange(sym)}
-            disabled={isLoading}
-            className={cn(
-              'px-2.5 py-1 text-xs font-mono font-medium rounded transition-all',
-              symbol === sym
-                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                : 'text-white/40 hover:text-white/60 border border-transparent'
-            )}
-          >
-            {sym}
-          </button>
-        ))}
+      <div className="w-56">
+        <SymbolSearch
+          value={symbol}
+          onChange={onSymbolChange}
+          className={cn(isLoading && 'pointer-events-none opacity-60')}
+        />
       </div>
 
       {/* Divider */}
@@ -73,7 +58,7 @@ export function ChartToolbar({
             onClick={() => onTimeframeChange(tf.value)}
             disabled={isLoading}
             className={cn(
-              'px-2 py-1 text-xs font-mono rounded transition-all',
+              'px-2 py-1 text-xs rounded transition-all',
               timeframe === tf.value
                 ? 'bg-emerald-500/15 text-emerald-500'
                 : 'text-white/30 hover:text-white/50'

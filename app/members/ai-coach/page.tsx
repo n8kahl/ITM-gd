@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 import {
   BrainCircuit,
@@ -23,6 +23,7 @@ import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-ima
 import { CenterPanel } from '@/components/ai-coach/center-panel'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
 import { analyzeScreenshot as apiAnalyzeScreenshot } from '@/lib/api/ai-coach'
 import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
@@ -39,43 +40,76 @@ export default function AICoachPage() {
 
   return (
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
-      {/* Full-height container — fills available space inside member layout */}
-      <div className="flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
-        {/* Mobile View Toggle */}
-        <div className="flex gap-1 p-1 mx-4 mt-2 rounded-lg bg-white/5 border border-white/10 lg:hidden">
-          <button
-            onClick={() => setMobileView('chat')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
-              mobileView === 'chat'
-                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                : 'text-white/60 hover:text-white border border-transparent'
-            )}
-          >
-            <MessageSquare className="w-4 h-4" />
-            Chat
-          </button>
-          <button
-            onClick={() => setMobileView('center')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
-              mobileView === 'center'
-                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                : 'text-white/60 hover:text-white border border-transparent'
-            )}
-          >
-            <CandlestickChart className="w-4 h-4" />
-            Chart
-          </button>
-        </div>
+      <AICoachWorkflowProvider onSendPrompt={handleSendPrompt}>
+        {/* Full-height container — fills available space inside member layout */}
+        <div className="flex flex-col h-[calc(100dvh-10.5rem)] lg:h-[calc(100dvh-3.5rem)]">
+          {/* Mobile View Toggle */}
+          <div className="flex gap-1 p-1 mx-4 mt-2 rounded-lg bg-white/5 border border-white/10 lg:hidden">
+            <button
+              onClick={() => setMobileView('chat')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
+                mobileView === 'chat'
+                  ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                  : 'text-white/60 hover:text-white border border-transparent'
+              )}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Chat
+            </button>
+            <button
+              onClick={() => setMobileView('center')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
+                mobileView === 'center'
+                  ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                  : 'text-white/60 hover:text-white border border-transparent'
+              )}
+            >
+              <CandlestickChart className="w-4 h-4" />
+              Chart
+            </button>
+          </div>
 
-        {/* Main Content — full remaining height */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {/* Desktop: Resizable Split Panels */}
-          <div className="hidden lg:block h-full">
-            <PanelGroup direction="horizontal">
-              {/* Chat Panel (40% default, more room for messages) */}
-              <Panel defaultSize={40} minSize={30} maxSize={55}>
+          {/* Main Content — full remaining height */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {/* Desktop: Resizable Split Panels */}
+            <div className="hidden lg:block h-full">
+              <PanelGroup direction="horizontal">
+                {/* Chat Panel (40% default, more room for messages) */}
+                <Panel defaultSize={40} minSize={30} maxSize={55}>
+                  <ChatArea
+                    messages={chat.messages}
+                    sessions={chat.sessions}
+                    currentSessionId={chat.currentSessionId}
+                    isSending={chat.isSending}
+                    isLoadingSessions={chat.isLoadingSessions}
+                    isLoadingMessages={chat.isLoadingMessages}
+                    error={chat.error}
+                    rateLimitInfo={chat.rateLimitInfo}
+                    onSendMessage={chat.sendMessage}
+                    onNewSession={chat.newSession}
+                    onSelectSession={chat.selectSession}
+                    onDeleteSession={chat.deleteSession}
+                    onClearError={chat.clearError}
+                  />
+                </Panel>
+
+                {/* Resize Handle */}
+                <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
+                </PanelResizeHandle>
+
+                {/* Center Panel (60%) */}
+                <Panel defaultSize={60} minSize={35}>
+                  <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
+                </Panel>
+              </PanelGroup>
+            </div>
+
+            {/* Mobile: Toggled View */}
+            <div className="lg:hidden h-full">
+              {mobileView === 'chat' ? (
                 <ChatArea
                   messages={chat.messages}
                   sessions={chat.sessions}
@@ -91,44 +125,13 @@ export default function AICoachPage() {
                   onDeleteSession={chat.deleteSession}
                   onClearError={chat.clearError}
                 />
-              </Panel>
-
-              {/* Resize Handle */}
-              <PanelResizeHandle className="w-1.5 bg-transparent hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors cursor-col-resize relative group">
-                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/5 group-hover:bg-emerald-500/40 transition-colors" />
-              </PanelResizeHandle>
-
-              {/* Center Panel (60%) */}
-              <Panel defaultSize={60} minSize={35}>
+              ) : (
                 <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-              </Panel>
-            </PanelGroup>
-          </div>
-
-          {/* Mobile: Toggled View */}
-          <div className="lg:hidden h-full">
-            {mobileView === 'chat' ? (
-              <ChatArea
-                messages={chat.messages}
-                sessions={chat.sessions}
-                currentSessionId={chat.currentSessionId}
-                isSending={chat.isSending}
-                isLoadingSessions={chat.isLoadingSessions}
-                isLoadingMessages={chat.isLoadingMessages}
-                error={chat.error}
-                rateLimitInfo={chat.rateLimitInfo}
-                onSendMessage={chat.sendMessage}
-                onNewSession={chat.newSession}
-                onSelectSession={chat.selectSession}
-                onDeleteSession={chat.deleteSession}
-                onClearError={chat.clearError}
-              />
-            ) : (
-              <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </AICoachWorkflowProvider>
     </AICoachErrorBoundary>
   )
 }
@@ -164,22 +167,34 @@ function ChatArea({
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
+  const isUserScrolledUp = useRef(false)
 
-  // Auto-scroll on new messages
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, 50)
+  // Track whether user has scrolled away from bottom
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    isUserScrolledUp.current = !atBottom
   }, [])
 
-  // Effect for auto-scrolling
-  if (messages.length > previousMessageCount.current) {
+  // Auto-scroll on new messages (only if user hasn't scrolled up)
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  useEffect(() => {
+    if (messages.length > previousMessageCount.current && !isUserScrolledUp.current) {
+      const timer = setTimeout(scrollToBottom, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [messages.length, scrollToBottom])
+
+  useEffect(() => {
     previousMessageCount.current = messages.length
-    setTimeout(() => scrollToBottom(), 50)
-  }
-  previousMessageCount.current = messages.length
+  }, [messages.length])
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -193,6 +208,8 @@ function ChatArea({
       onSendMessage(text)
     }
     setInputValue('')
+    // Reset textarea height
+    if (inputRef.current) inputRef.current.style.height = 'auto'
   }
 
   const handleImageAnalysis = async (userMessage: string) => {
@@ -347,7 +364,11 @@ function ChatArea({
         </AnimatePresence>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+        <div
+          ref={messagesScrollRef}
+          onScroll={handleMessagesScroll}
+          className="flex-1 overflow-y-auto px-4 py-6 space-y-6"
+        >
           {isLoadingMessages ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
@@ -379,14 +400,18 @@ function ChatArea({
             <textarea
               ref={inputRef}
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => {
+                setInputValue(e.target.value)
+                // Auto-resize textarea
+                e.target.style.height = 'auto'
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
+              }}
               onKeyDown={handleKeyDown}
               placeholder={isSending ? 'Waiting for response...' : 'Ask about any ticker, levels, options...'}
               disabled={isSending}
               maxLength={2000}
               rows={1}
               className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all disabled:opacity-40 resize-none min-h-[44px] max-h-[120px]"
-              style={{ fieldSizing: 'content' } as React.CSSProperties}
             />
             <Button
               type="submit"

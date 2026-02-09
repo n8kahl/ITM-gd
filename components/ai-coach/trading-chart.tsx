@@ -34,6 +34,7 @@ interface TradingChartProps {
   symbol: string
   timeframe: string
   isLoading?: boolean
+  onHoverPrice?: (price: number | null) => void
 }
 
 // ============================================
@@ -65,11 +66,30 @@ export function TradingChart({
   symbol,
   timeframe,
   isLoading,
+  onHoverPrice,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const safeBars = bars
+    .filter((bar) => (
+      Number.isFinite(bar.time)
+      && Number.isFinite(bar.open)
+      && Number.isFinite(bar.high)
+      && Number.isFinite(bar.low)
+      && Number.isFinite(bar.close)
+    ))
+    .sort((a, b) => a.time - b.time)
+    .reduce<ChartBar[]>((acc, bar) => {
+      const prev = acc[acc.length - 1]
+      if (prev?.time === bar.time) {
+        acc[acc.length - 1] = bar
+      } else {
+        acc.push(bar)
+      }
+      return acc
+    }, [])
 
   // Initialize chart
   const initChart = useCallback(() => {
@@ -85,7 +105,7 @@ export function TradingChart({
       layout: {
         background: { type: ColorType.Solid, color: CHART_COLORS.background },
         textColor: CHART_COLORS.textColor,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontFamily: "'Inter', system-ui, sans-serif",
         fontSize: 11,
       },
       grid: {
@@ -163,10 +183,10 @@ export function TradingChart({
 
   // Update data when bars change
   useEffect(() => {
-    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || bars.length === 0) return
+    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || safeBars.length === 0) return
 
     // Format candlestick data
-    const candleData: CandlestickData<Time>[] = bars.map(bar => ({
+    const candleData: CandlestickData<Time>[] = safeBars.map(bar => ({
       time: bar.time as Time,
       open: bar.open,
       high: bar.high,
@@ -175,9 +195,9 @@ export function TradingChart({
     }))
 
     // Format volume data with color based on candle direction
-    const volumeData: HistogramData<Time>[] = bars.map(bar => ({
+    const volumeData: HistogramData<Time>[] = safeBars.map(bar => ({
       time: bar.time as Time,
-      value: bar.volume,
+      value: Number.isFinite(bar.volume) ? bar.volume : 0,
       color: bar.close >= bar.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
     }))
 
@@ -186,7 +206,42 @@ export function TradingChart({
 
     // Fit content to view
     chartRef.current?.timeScale().fitContent()
-  }, [bars])
+  }, [safeBars])
+
+  useEffect(() => {
+    if (!chartRef.current || !candlestickSeriesRef.current || !onHoverPrice) return
+
+    const chart = chartRef.current
+    const series = candlestickSeriesRef.current
+    const handleCrosshairMove = (param: any) => {
+      if (!param?.point || !param?.time) {
+        onHoverPrice(null)
+        return
+      }
+
+      const seriesData = param.seriesData?.get(series)
+      if (seriesData && typeof seriesData.close === 'number') {
+        onHoverPrice(seriesData.close)
+        return
+      }
+
+      if (typeof param.point.y === 'number') {
+        const coordinatePrice = series.coordinateToPrice(param.point.y)
+        if (typeof coordinatePrice === 'number' && Number.isFinite(coordinatePrice)) {
+          onHoverPrice(coordinatePrice)
+          return
+        }
+      }
+
+      onHoverPrice(null)
+    }
+
+    chart.subscribeCrosshairMove(handleCrosshairMove)
+    return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove)
+      onHoverPrice(null)
+    }
+  }, [onHoverPrice])
 
   // Update level annotations
   useEffect(() => {
@@ -233,7 +288,7 @@ export function TradingChart({
       )}
 
       {/* Empty state */}
-      {!isLoading && bars.length === 0 && (
+      {!isLoading && safeBars.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <p className="text-sm text-white/30">No chart data available</p>
         </div>

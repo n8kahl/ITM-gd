@@ -2,8 +2,33 @@ import { Router, Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { scanOpportunities } from '../services/scanner';
+import { supabase } from '../config/database';
+import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 
 const router = Router();
+const DEFAULT_SYMBOLS = [...POPULAR_SYMBOLS];
+
+async function loadUserWatchlistSymbols(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('ai_coach_watchlists')
+    .select('symbols, is_default, updated_at')
+    .eq('user_id', userId)
+    .order('is_default', { ascending: false })
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load watchlist symbols: ${error.message}`);
+  }
+
+  const watchlists = data || [];
+  if (watchlists.length === 0) return DEFAULT_SYMBOLS;
+
+  const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
+  if (!Array.isArray(defaultWatchlist.symbols)) return DEFAULT_SYMBOLS;
+
+  const symbols = sanitizeSymbols(defaultWatchlist.symbols);
+  return symbols.length > 0 ? symbols : DEFAULT_SYMBOLS;
+}
 
 /**
  * GET /api/scanner/scan
@@ -17,21 +42,21 @@ router.get(
   checkQueryLimit,
   async (req: Request, res: Response) => {
     try {
-      const symbolsParam = (req.query.symbols as string) || 'SPX,NDX';
-      const symbols = symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      const symbolsParam = (req.query.symbols as string | undefined)?.trim();
       const includeOptions = req.query.include_options !== 'false';
+      let symbols: string[] = [];
 
-      // Validate symbols
-      const validSymbols = ['SPX', 'NDX', 'QQQ', 'SPY', 'IWM', 'DIA'];
-      const filtered = symbols.filter(s => validSymbols.includes(s));
-      if (filtered.length === 0) {
-        return res.status(400).json({
-          error: 'Invalid symbols',
-          message: `Supported symbols: ${validSymbols.join(', ')}`,
-        });
+      if (symbolsParam) {
+        symbols = sanitizeSymbols(symbolsParam.split(','));
+      } else if (req.user?.id) {
+        symbols = await loadUserWatchlistSymbols(req.user.id);
       }
 
-      const result = await scanOpportunities(filtered, includeOptions);
+      if (symbols.length === 0) {
+        symbols = DEFAULT_SYMBOLS;
+      }
+
+      const result = await scanOpportunities(symbols, includeOptions);
 
       return res.json(result);
     } catch (error: any) {

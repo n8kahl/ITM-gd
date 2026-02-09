@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch the entry
     const { data: entry, error: entryError } = await supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .select('*')
       .eq('id', entryId)
       .eq('user_id', userId)
@@ -71,8 +71,6 @@ export async function POST(request: NextRequest) {
     }
 
     const ticker = entry.symbol
-    const entryPrice = entry.entry_price || entry.profit_loss ? 0 : 0
-    const exitPrice = entry.exit_price || 0
 
     // Fetch minute bars for the trade date
     const from = new Date(`${tradeDate}T04:00:00-05:00`).getTime()
@@ -258,7 +256,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { error: updateError } = await supabase
-      .from('trading_journal_entries')
+      .from('journal_entries')
       .update(updateData)
       .eq('id', entryId)
       .eq('user_id', userId)

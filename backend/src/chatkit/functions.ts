@@ -87,6 +87,144 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_gamma_exposure',
+      description: 'Get gamma exposure (GEX) profile for a symbol. Returns GEX by strike, flip point, max GEX strike, key levels, and gamma regime.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for GEX analysis (e.g., SPX, NDX, SPY, QQQ, AAPL)'
+          },
+          expiry: {
+            type: 'string',
+            description: 'Optional specific expiry date (YYYY-MM-DD). If omitted, analyzes multiple nearby expirations.'
+          },
+          strikeRange: {
+            type: 'number',
+            description: 'Number of strikes above/below spot to include per expiration (default: 30)',
+            default: 30
+          },
+          maxExpirations: {
+            type: 'number',
+            description: 'Maximum nearby expirations to aggregate when expiry is omitted (default: 6)',
+            default: 6
+          },
+          forceRefresh: {
+            type: 'boolean',
+            description: 'Bypass cache and force fresh calculation (default: false)',
+            default: false
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_zero_dte_analysis',
+      description: 'Analyze 0DTE option structure for a symbol. Returns expected move usage, remaining move, theta decay projections, and gamma risk profile.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for 0DTE analysis (e.g., SPX, NDX, SPY, QQQ)'
+          },
+          strike: {
+            type: 'number',
+            description: 'Optional strike to focus the theta/gamma analysis. If omitted, uses ATM.'
+          },
+          type: {
+            type: 'string',
+            enum: ['call', 'put'],
+            description: 'Optional contract type to focus the analysis.'
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_iv_analysis',
+      description: 'Analyze implied volatility structure for a symbol. Returns IV rank/percentile, put-call skew, and term structure shape.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for IV analysis (e.g., SPX, NDX, AAPL, QQQ)'
+          },
+          expiry: {
+            type: 'string',
+            description: 'Optional expiry date (YYYY-MM-DD) to focus skew analysis.'
+          },
+          strikeRange: {
+            type: 'number',
+            description: 'Number of strikes above/below spot for each expiry (default: 20)',
+            default: 20
+          },
+          maxExpirations: {
+            type: 'number',
+            description: 'Max expirations for term-structure analysis when expiry is omitted (default: 6)',
+            default: 6
+          },
+          forceRefresh: {
+            type: 'boolean',
+            description: 'Bypass cache and force fresh calculation (default: false)',
+            default: false
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_earnings_calendar',
+      description: 'Get upcoming earnings events for a watchlist. Returns symbol, date, timing (BMO/AMC/DURING), and confirmation status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          watchlist: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional symbols to check (e.g., [AAPL, NVDA, TSLA]). If omitted, uses the default watchlist.'
+          },
+          days_ahead: {
+            type: 'number',
+            description: 'Days forward to scan for earnings events (default: 14, max: 60).',
+            default: 14
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_earnings_analysis',
+      description: 'Analyze a symbol into earnings with expected move, historical earnings moves, IV context, and suggested strategies.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Symbol for earnings analysis (e.g., AAPL, NVDA, TSLA, SPY)'
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'analyze_position',
       description: 'Analyze an options position or portfolio. Calculates P&L, Greeks, max gain/loss, breakeven, and risk assessment. Use this when the user asks about their position performance or risk.',
       parameters: {
@@ -259,7 +397,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
           symbols: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Symbols to scan (default: SPX and NDX). Can include any stock or index symbol.'
+            description: 'Symbols to scan (defaults to a popular multi-symbol watchlist). Can include any stock, ETF, or index symbol.'
           },
           include_options: {
             type: 'boolean',

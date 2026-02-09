@@ -106,6 +106,135 @@ export interface OptionsChainResponse {
   };
 }
 
+export interface GEXStrikeData {
+  strike: number;
+  gexValue: number;
+  callGamma: number;
+  putGamma: number;
+  callOI: number;
+  putOI: number;
+}
+
+export interface GEXKeyLevel {
+  strike: number;
+  gexValue: number;
+  type: 'support' | 'resistance' | 'magnet';
+}
+
+export interface GEXProfile {
+  symbol: string;
+  spotPrice: number;
+  gexByStrike: GEXStrikeData[];
+  flipPoint: number | null;
+  maxGEXStrike: number | null;
+  keyLevels: GEXKeyLevel[];
+  regime: 'positive_gamma' | 'negative_gamma';
+  implication: string;
+  calculatedAt: string;
+  expirationsAnalyzed: string[];
+}
+
+export interface ZeroDTEExpectedMove {
+  totalExpectedMove: number;
+  usedMove: number;
+  usedPct: number;
+  remainingMove: number;
+  remainingPct: number;
+  minutesLeft: number;
+  openPrice: number;
+  currentPrice: number;
+  atmStrike: number | null;
+}
+
+export interface ZeroDTEThetaProjection {
+  time: string;
+  estimatedValue: number;
+  thetaDecay: number;
+  pctRemaining: number;
+}
+
+export interface ZeroDTEThetaClock {
+  strike: number;
+  type: 'call' | 'put';
+  currentValue: number;
+  thetaPerDay: number;
+  projections: ZeroDTEThetaProjection[];
+}
+
+export interface ZeroDTEGammaProfile {
+  strike: number;
+  type: 'call' | 'put';
+  currentDelta: number;
+  gammaPerDollar: number;
+  dollarDeltaChangePerPoint: number;
+  leverageMultiplier: number;
+  riskLevel: 'low' | 'moderate' | 'high' | 'extreme';
+}
+
+export interface ZeroDTEContractSnapshot {
+  strike: number;
+  type: 'call' | 'put';
+  last: number;
+  volume: number;
+  openInterest: number;
+  gamma: number | null;
+  theta: number | null;
+}
+
+export interface ZeroDTEAnalysis {
+  symbol: string;
+  marketDate: string;
+  hasZeroDTE: boolean;
+  message: string;
+  expectedMove: ZeroDTEExpectedMove | null;
+  thetaClock: ZeroDTEThetaClock | null;
+  gammaProfile: ZeroDTEGammaProfile | null;
+  topContracts: ZeroDTEContractSnapshot[];
+}
+
+export interface ZeroDTEAnalysisRequest {
+  strike?: number;
+  type?: 'call' | 'put';
+  now?: Date;
+}
+
+export interface IVRankAnalysis {
+  currentIV: number | null;
+  ivRank: number | null;
+  ivPercentile: number | null;
+  iv52wkHigh: number | null;
+  iv52wkLow: number | null;
+  ivTrend: 'rising' | 'falling' | 'stable' | 'unknown';
+}
+
+export interface IVSkewAnalysis {
+  skew25delta: number | null;
+  skew10delta: number | null;
+  skewDirection: 'put_heavy' | 'call_heavy' | 'balanced' | 'unknown';
+  interpretation: string;
+}
+
+export interface IVTermStructurePoint {
+  date: string;
+  dte: number;
+  atmIV: number;
+}
+
+export interface IVTermStructureAnalysis {
+  expirations: IVTermStructurePoint[];
+  shape: 'contango' | 'backwardation' | 'flat';
+  inversionPoint?: string;
+}
+
+export interface IVAnalysisProfile {
+  symbol: string;
+  currentPrice: number;
+  asOf: string;
+  ivRank: IVRankAnalysis;
+  skew: IVSkewAnalysis;
+  termStructure: IVTermStructureAnalysis;
+}
+
 // Black-Scholes inputs
 export interface BlackScholesInputs {
   spotPrice: number;        // Current underlying price

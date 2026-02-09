@@ -1,6 +1,10 @@
 import { calculateLevels } from '../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../services/levels/fetcher';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
+import { calculateGEXProfile } from '../services/options/gexCalculator';
+import { analyzeZeroDTE } from '../services/options/zeroDTE';
+import { analyzeIVProfile } from '../services/options/ivAnalysis';
+import { getEarningsAnalysis, getEarningsCalendar } from '../services/earnings';
 import { analyzePosition, analyzePortfolio } from '../services/options/positionAnalyzer';
 import { Position } from '../services/options/types';
 import { supabase } from '../config/database';
@@ -11,6 +15,7 @@ import { generateGreeksProjection, assessGreeksTrend } from '../services/leaps/g
 import { calculateRoll } from '../services/leaps/rollCalculator';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
+import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
@@ -71,6 +76,21 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
     case 'get_options_chain':
       return await handleGetOptionsChain(typedArgs);
 
+    case 'get_gamma_exposure':
+      return await handleGetGammaExposure(typedArgs);
+
+    case 'get_zero_dte_analysis':
+      return await handleGetZeroDTEAnalysis(typedArgs);
+
+    case 'get_iv_analysis':
+      return await handleGetIVAnalysis(typedArgs);
+
+    case 'get_earnings_calendar':
+      return await handleGetEarningsCalendar(typedArgs);
+
+    case 'get_earnings_analysis':
+      return await handleGetEarningsAnalysis(typedArgs);
+
     case 'analyze_position':
       return await handleAnalyzePosition(typedArgs);
 
@@ -84,7 +104,7 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
       return await handleGetAlerts(typedArgs, context?.userId);
 
     case 'scan_opportunities':
-      return await handleScanOpportunities(typedArgs);
+      return await handleScanOpportunities(typedArgs, context?.userId);
 
     case 'show_chart':
       return await handleShowChart(typedArgs);
@@ -283,6 +303,185 @@ async function handleGetOptionsChain(args: {
     return {
       error: 'Failed to fetch options chain',
       message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: get_gamma_exposure
+ * Calculates options gamma exposure profile for SPX/NDX
+ */
+async function handleGetGammaExposure(args: {
+  symbol: string;
+  expiry?: string;
+  strikeRange?: number;
+  maxExpirations?: number;
+  forceRefresh?: boolean;
+}) {
+  const {
+    symbol,
+    expiry,
+    strikeRange,
+    maxExpirations,
+    forceRefresh = false,
+  } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
+  try {
+    const profile = await withTimeout(
+      () => calculateGEXProfile(symbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
+      FUNCTION_TIMEOUT_MS,
+      'get_gamma_exposure',
+    );
+
+    return {
+      symbol: profile.symbol,
+      spotPrice: profile.spotPrice,
+      regime: profile.regime,
+      flipPoint: profile.flipPoint,
+      maxGEXStrike: profile.maxGEXStrike,
+      keyLevels: profile.keyLevels,
+      implication: profile.implication,
+      expirationsAnalyzed: profile.expirationsAnalyzed,
+      calculatedAt: profile.calculatedAt,
+      gexByStrike: profile.gexByStrike,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to calculate gamma exposure',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_zero_dte_analysis
+ * Returns expected move usage, theta clock, and gamma profile for current-day expiration.
+ */
+async function handleGetZeroDTEAnalysis(args: {
+  symbol: string;
+  strike?: number;
+  type?: 'call' | 'put';
+}) {
+  const { symbol, strike, type } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
+  try {
+    const analysis = await withTimeout(
+      () => analyzeZeroDTE(symbol, { strike, type }),
+      FUNCTION_TIMEOUT_MS,
+      'get_zero_dte_analysis',
+    );
+
+    return analysis;
+  } catch (error: any) {
+    return {
+      error: 'Failed to analyze 0DTE structure',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_iv_analysis
+ * Returns IV rank, skew, and term-structure profile for a symbol.
+ */
+async function handleGetIVAnalysis(args: {
+  symbol: string;
+  expiry?: string;
+  strikeRange?: number;
+  maxExpirations?: number;
+  forceRefresh?: boolean;
+}) {
+  const {
+    symbol,
+    expiry,
+    strikeRange,
+    maxExpirations,
+    forceRefresh = false,
+  } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  }
+
+  try {
+    const profile = await withTimeout(
+      () => analyzeIVProfile(symbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
+      FUNCTION_TIMEOUT_MS,
+      'get_iv_analysis',
+    );
+    return profile;
+  } catch (error: any) {
+    return {
+      error: 'Failed to analyze implied volatility',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_earnings_calendar
+ * Returns upcoming earnings for a watchlist.
+ */
+async function handleGetEarningsCalendar(args: {
+  watchlist?: string[];
+  days_ahead?: number;
+}) {
+  const watchlist = Array.isArray(args.watchlist) ? sanitizeSymbols(args.watchlist, 25) : [];
+  const daysAheadRaw = typeof args.days_ahead === 'number' ? args.days_ahead : 14;
+  const daysAhead = Math.max(1, Math.min(60, Math.round(daysAheadRaw)));
+
+  try {
+    const events = await withTimeout(
+      () => getEarningsCalendar(watchlist, daysAhead),
+      FUNCTION_TIMEOUT_MS,
+      'get_earnings_calendar',
+    );
+
+    return {
+      watchlist,
+      daysAhead,
+      count: events.length,
+      events,
+    };
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch earnings calendar',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_earnings_analysis
+ * Returns expected move + historical earnings move context for one symbol.
+ */
+async function handleGetEarningsAnalysis(args: { symbol: string }) {
+  const { symbol } = args;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Z0-9._:-]{1,10}$/.test(symbol.toUpperCase())) {
+    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters/numbers' };
+  }
+
+  try {
+    const analysis = await withTimeout(
+      () => getEarningsAnalysis(symbol.toUpperCase()),
+      FUNCTION_TIMEOUT_MS,
+      'get_earnings_analysis',
+    );
+
+    return analysis;
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch earnings analysis',
+      message: error.message,
     };
   }
 }
@@ -564,6 +763,32 @@ async function handleGetAlerts(
   }
 }
 
+function normalizeScannerSymbols(symbols?: string[]): string[] {
+  if (!Array.isArray(symbols)) return [];
+  return sanitizeSymbols(symbols, 20);
+}
+
+async function getDefaultScannerSymbols(userId?: string): Promise<string[]> {
+  if (!userId) return [...POPULAR_SYMBOLS];
+
+  const { data } = await supabase
+    .from('ai_coach_watchlists')
+    .select('symbols, is_default, updated_at')
+    .eq('user_id', userId)
+    .order('is_default', { ascending: false })
+    .order('updated_at', { ascending: false });
+
+  const watchlists = data || [];
+  if (watchlists.length === 0) return [...POPULAR_SYMBOLS];
+
+  const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
+  const symbols = Array.isArray(defaultWatchlist.symbols)
+    ? normalizeScannerSymbols(defaultWatchlist.symbols)
+    : [];
+
+  return symbols.length > 0 ? symbols : [...POPULAR_SYMBOLS];
+}
+
 /**
  * Handler: scan_opportunities
  * Scans for trading opportunities across symbols
@@ -571,12 +796,17 @@ async function handleGetAlerts(
 async function handleScanOpportunities(args: {
   symbols?: string[];
   include_options?: boolean;
-}) {
-  const { symbols = ['SPX', 'NDX'], include_options = true } = args;
+}, userId?: string) {
+  const { symbols: inputSymbols, include_options = true } = args;
 
   try {
+    const normalizedSymbols = normalizeScannerSymbols(inputSymbols);
+    const scanSymbols = normalizedSymbols.length > 0
+      ? normalizedSymbols
+      : await getDefaultScannerSymbols(userId);
+
     const result = await withTimeout(
-      () => scanOpportunities(symbols, include_options),
+      () => scanOpportunities(scanSymbols, include_options),
       15000, // Scanner needs more time
       'scan_opportunities'
     );
@@ -597,8 +827,8 @@ async function handleScanOpportunities(args: {
       symbols: result.symbols,
       scanDurationMs: result.scanDurationMs,
       message: result.opportunities.length > 0
-        ? `Found ${result.opportunities.length} opportunity${result.opportunities.length > 1 ? 'ies' : 'y'} across ${symbols.join(', ')}`
-        : `No opportunities found across ${symbols.join(', ')} at this time`,
+        ? `Found ${result.opportunities.length} opportunity${result.opportunities.length > 1 ? 'ies' : 'y'} across ${scanSymbols.join(', ')}`
+        : `No opportunities found across ${scanSymbols.join(', ')} at this time`,
     };
   } catch (error: any) {
     return {

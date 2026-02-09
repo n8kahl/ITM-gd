@@ -23,8 +23,17 @@ import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
 import scannerRouter from './routes/scanner';
+import watchlistRouter from './routes/watchlist';
+import briefRouter from './routes/brief';
+import trackedSetupsRouter from './routes/trackedSetups';
+import symbolsRouter from './routes/symbols';
+import earningsRouter from './routes/earnings';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
+import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
+import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
+import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
+import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -56,7 +65,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'x-e2e-bypass-auth'],
   maxAge: 86400,
 }));
 
@@ -103,6 +112,11 @@ app.use('/api/alerts', alertsRouter);
 app.use('/api/leaps', leapsRouter);
 app.use('/api/macro', macroRouter);
 app.use('/api/scanner', scannerRouter);
+app.use('/api/watchlist', watchlistRouter);
+app.use('/api/brief', briefRouter);
+app.use('/api/tracked-setups', trackedSetupsRouter);
+app.use('/api/symbols', symbolsRouter);
+app.use('/api/earnings', earningsRouter);
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
@@ -114,11 +128,14 @@ app.get('/', (_req: Request, res: Response) => {
       health: '/health', healthReady: '/health/ready', levels: '/api/levels/:symbol', chat: '/api/chat/message',
       sessions: '/api/chat/sessions', sessionMessages: '/api/chat/sessions/:sessionId/messages',
       optionsChain: '/api/options/:symbol/chain', optionsExpirations: '/api/options/:symbol/expirations',
+      optionsGex: '/api/options/:symbol/gex', optionsZeroDte: '/api/options/:symbol/0dte', optionsIv: '/api/options/:symbol/iv',
+      earningsCalendar: '/api/earnings/calendar', earningsAnalysis: '/api/earnings/:symbol/analysis',
       positionsAnalyze: '/api/positions/analyze', chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
       leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
-      scannerScan: '/api/scanner/scan', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
+      scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today',
+      trackedSetups: '/api/tracked-setups', symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
     }
   });
 });
@@ -164,6 +181,10 @@ async function start() {
 
     // Start background alert worker
     startAlertWorker();
+    startMorningBriefWorker();
+    startSetupPushWorker();
+    startSetupDetectorService();
+    startWorkerHealthAlertWorker();
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -180,6 +201,10 @@ async function gracefulShutdown(signal: string) {
   try {
     // Stop background services
     stopAlertWorker();
+    stopMorningBriefWorker();
+    stopSetupPushWorker();
+    stopSetupDetectorService();
+    stopWorkerHealthAlertWorker();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();

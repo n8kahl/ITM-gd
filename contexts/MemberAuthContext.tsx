@@ -93,6 +93,63 @@ interface MemberAuthContextValue extends MemberAuthState {
   getMobileTabs: () => TabConfig[]
 }
 
+const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
+const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
+const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
+
+function createE2EBypassAuthState(): MemberAuthState {
+  const nowIso = new Date().toISOString()
+  const expiresIn = 60 * 60
+
+  const user = {
+    id: E2E_BYPASS_USER_ID,
+    email: 'e2e-member@example.com',
+    app_metadata: { provider: 'discord', providers: ['discord'] },
+    user_metadata: { full_name: 'E2E Member' },
+    aud: 'authenticated',
+    role: 'authenticated',
+    created_at: nowIso,
+    updated_at: nowIso,
+  } as User
+
+  const session = {
+    access_token: E2E_BYPASS_SHARED_SECRET
+      ? `e2e:${E2E_BYPASS_SHARED_SECRET}:${E2E_BYPASS_USER_ID}`
+      : `e2e:${E2E_BYPASS_USER_ID}`,
+    refresh_token: 'e2e-refresh-token',
+    token_type: 'bearer',
+    expires_in: expiresIn,
+    expires_at: Math.floor(Date.now() / 1000) + expiresIn,
+    user,
+  } as Session
+
+  return {
+    user,
+    session,
+    profile: {
+      id: user.id,
+      email: user.email ?? null,
+      discord_user_id: '000000000000000001',
+      discord_username: 'E2E Member',
+      discord_avatar: null,
+      discord_roles: ['role-member', 'role-pro'],
+      membership_tier: 'pro',
+    },
+    permissions: [{
+      id: 'e2e-access-ai-coach',
+      name: 'access_ai_coach',
+      description: 'Playwright E2E bypass permission',
+      granted_by_role: 'role-pro',
+    }],
+    allowedTabs: ['dashboard', 'ai-coach', 'journal', 'library', 'profile'],
+    tabConfigs: [],
+    isLoading: false,
+    isAuthenticated: true,
+    error: null,
+    errorCode: null,
+  }
+}
+
 // ============================================
 // CONTEXT
 // ============================================
@@ -747,6 +804,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Refresh auth state (reset guard so initializeAuth can run again)
   const refresh = useCallback(async () => {
+    if (E2E_BYPASS_AUTH_ENABLED) {
+      setState(createE2EBypassAuthState())
+      return
+    }
+
     isInitializingRef.current = false
     setState(prev => ({ ...prev, isLoading: true }))
     await initializeAuth()
@@ -754,6 +816,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize on mount
   useEffect(() => {
+    if (E2E_BYPASS_AUTH_ENABLED) {
+      isAuthenticatedRef.current = true
+      setState(createE2EBypassAuthState())
+      return
+    }
+
     initializeAuth()
 
     // Listen for auth state changes

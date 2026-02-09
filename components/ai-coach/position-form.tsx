@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { SymbolSearch } from './symbol-search'
 import {
   analyzePosition,
   AICoachAPIError,
@@ -53,7 +54,7 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
     entryPrice: string
     entryDate: string
   }>({
-    symbol: 'SPX',
+    symbol: 'SPY',
     type: 'call',
     strike: '',
     strike2: '',
@@ -142,22 +143,10 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-white/50 mb-1.5">Symbol</label>
-            <div className="flex gap-1">
-              {['SPX', 'NDX'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => handleChange('symbol', s)}
-                  className={cn(
-                    'flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all',
-                    form.symbol === s
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-white/5 text-white/40 border border-white/10 hover:text-white/60'
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            <SymbolSearch
+              value={form.symbol}
+              onChange={(symbol) => handleChange('symbol', symbol)}
+            />
           </div>
 
           <div>
