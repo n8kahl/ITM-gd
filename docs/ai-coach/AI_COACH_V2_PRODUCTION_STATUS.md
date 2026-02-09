@@ -7,7 +7,7 @@
 
 All phase decisions, testing gates, and acceptance criteria in this status document should be interpreted against the rebuild spec above.
 
-## 1) Delivered on `Aiupgrade`
+## 1) Delivered on `main` (merged from `Aiupgrade`)
 
 ### Backend
 - Watchlist API with default recovery:
@@ -555,6 +555,8 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - `pnpm ai-coach:staging:secrets`
 - `pnpm ai-coach:staging:preflight` (now returns `READY`)
 - `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live` (strict live-gate now passing against staging)
+- `railway up --detach` (staging deploy to `TradeITM / staging / ITM-gd`, deployment `8ef4a95f-b995-436b-b013-9a7cc9c7c209`)
+- `E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm ai-coach:staging:earnings https://itm-gd-staging.up.railway.app SPY` (PASS)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.ai-coach-symbols.json` (scoped frontend type-check for symbol-search integration files)
 - `pnpm exec tsc --noEmit -p tsconfig.codex-temp.json` (scoped frontend type-check for workflow/action framework touched files)
 - `pnpm exec tsc --noEmit -p /tmp/tsconfig.codex-nextphase.json` (scoped type-check for scanner/tracked/chart workflow surface upgrades)
@@ -601,13 +603,13 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - AI Coach workflow Playwright smoke (`ai-coach-workflow.spec.ts`) now passes end-to-end in deterministic E2E mode.
 - Staging live E2E workflow gate is defined in GitHub Actions (`ai-coach-live-e2e.yml`) with strict readiness mode support.
 - Deterministic detector auto-track validation path is wired into live workflow/API specs via `/api/tracked-setups/e2e/simulate-detected`.
-- Strict staging live gate passes locally against staging backend URL (two consecutive `16/16` passes).
+- Strict staging live gate passes locally against staging backend URL (`17/17` latest strict run).
 
 ### Needs Completion
 - Optional CI operationalization step:
   - execute the GitHub Actions workflow dispatch (`ai-coach-live-e2e.yml`) after it is available on default branch (`main`), then archive that run URL as additional evidence.
 - Optional: add PagerDuty escalation integration on top of the current Discord alert path if escalation policy requires paging.
-- Execute authenticated earnings endpoint validation against staging and production after deploy:
+- Execute authenticated earnings endpoint validation against production after deploy:
   - `pnpm ai-coach:staging:earnings https://<backend-url> SPY`
 
 ## 4) Surgical Next Plan
@@ -628,13 +630,12 @@ Staging preflight evidence (2026-02-09, refreshed):
 - Command: `pnpm ai-coach:staging:preflight`
 - Result: `READY`
 - Passes:
-  - workflow file exists on `Aiupgrade`
+  - workflow file exists on `main`
   - required repository secrets are configured/visible (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_BYPASS_TOKEN`)
   - optional `E2E_BYPASS_USER_ID` is configured
   - no pending `supabase/migrations` drift from `origin/main`
   - no extra `supabase/migrations` ahead of `origin/main`
 - Warning:
-  - workflow `.github/workflows/ai-coach-live-e2e.yml` is not on `main` yet (expected until merge)
   - optional `E2E_BYPASS_SHARED_SECRET` not configured (only needed if staging backend enables shared-secret bypass mode)
 - Automation:
   - secret bootstrap script: `/Users/natekahl/ITM-gd/scripts/ai-coach/configure-staging-gate-secrets.sh`
@@ -659,13 +660,15 @@ Staging environment discovery and deploy-state evidence (2026-02-09):
   - `E2E_BYPASS_ALLOW_IN_PRODUCTION=true`
   - `ALLOWED_ORIGINS=https://www.tradeinthemoney.com,https://tradeinthemoney.com,http://localhost:3000`
 - Deployment evidence:
-  - Staging backend redeployed from local backend source using Railway CLI (`railway up --ci`) and serving updated routes/gates.
+  - Staging backend redeployed from local backend source using Railway CLI (`railway up --detach`) and serving updated routes/gates.
 - Strict live-gate execution evidence (local, staging backend):
   - `E2E_AI_COACH_MODE=live E2E_AI_COACH_REQUIRE_LIVE=true E2E_BACKEND_URL=https://itm-gd-staging.up.railway.app NEXT_PUBLIC_AI_COACH_API_URL=https://itm-gd-staging.up.railway.app E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm test:e2e:ai-coach-live`
-  - Result: `16 passed` (run 1)
-  - Result: `16 passed` (run 2)
+  - Result: `17 passed` (latest strict run with earnings endpoint coverage)
+- Earnings endpoint validation evidence (staging backend):
+  - `E2E_BYPASS_TOKEN=e2e:00000000-0000-4000-8000-000000000001 pnpm ai-coach:staging:earnings https://itm-gd-staging.up.railway.app SPY`
+  - Result: `PASS` (`GET /api/earnings/calendar` and `GET /api/earnings/SPY/analysis`)
 - GitHub workflow dispatch note:
-  - `gh workflow run .github/workflows/ai-coach-live-e2e.yml --ref Aiupgrade ...` still requires workflow availability on default branch (`main`) for dispatch visibility.
+  - Local dispatch attempt in this shell was blocked by `gh` auth state; fallback strict local gate was used for this cycle.
 
 Current checklist:
 
@@ -684,7 +687,7 @@ GitHub live-gate evidence (`main`, 2026-02-09):
 - Commit SHA: `9224cdfdf468e9eaae4dbd0ecb39be6282e6aa47`
 - Trigger: `workflow_dispatch` with `backend_url=https://itm-gd-staging.up.railway.app`
 - Result: `success` (`ai-coach-live` job passed)
-- Notable test annotation: `16 passed`
+- Notable test annotation: `16 passed` (historical run)
 
 Production promotion recommendation:
 
@@ -708,11 +711,10 @@ Production deployment evidence (`main`, 2026-02-09):
 
 Earnings phase deployment status (2026-02-09, current):
 
-- Commit: `a17821b` (`feat(ai-coach): ship phase 3 earnings module`)
-- Git push: `main -> origin/main` complete.
-- Backend deploy attempts:
-  - `railway up --ci -s ITM-gd -e staging` retried multiple times.
-  - `railway up --ci -s ITM-gd -e production` retried multiple times.
-  - Result: blocked by Railway transport errors during upload (`received fatal alert: BadRecordMac` / `Broken pipe`).
-- Live endpoint check while deploy is blocked:
-  - `GET /api/earnings/calendar` on staging/production currently returns `404` (expected until new backend image is deployed).
+- Staging deploy:
+  - `railway up --detach` completed to `TradeITM / staging / ITM-gd` (deployment `8ef4a95f-b995-436b-b013-9a7cc9c7c209`).
+  - Authenticated staging earnings validation now passes:
+    - `GET /api/earnings/calendar`
+    - `GET /api/earnings/SPY/analysis`
+- Production deploy:
+  - Pending next explicit promotion run to `TradeITM / production / ITM-gd`, then run `pnpm ai-coach:staging:earnings https://itm-gd-production.up.railway.app SPY`.
