@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Target,
   Loader2,
@@ -57,6 +57,7 @@ const DIRECTION_STYLES: Record<'bullish' | 'bearish' | 'neutral', string> = {
 export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanelProps) {
   const { session } = useMemberAuth()
   const token = session?.access_token
+  const userId = session?.user?.id
 
   const [trackedSetups, setTrackedSetups] = useState<TrackedSetup[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -65,6 +66,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
   const [mutatingIds, setMutatingIds] = useState<Record<string, boolean>>({})
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
+  const wsRef = useRef<WebSocket | null>(null)
 
   const fetchSetups = useCallback(async () => {
     if (!token) return
@@ -90,6 +92,48 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
   useEffect(() => {
     void fetchSetups()
   }, [fetchSetups])
+
+  useEffect(() => {
+    if (!userId) return
+
+    const setupChannel = `setups:${userId}`
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || ''
+    let wsUrl = `${protocol}//${window.location.host}/ws/prices`
+    if (backendUrl) {
+      try {
+        wsUrl = `${protocol}//${new URL(backendUrl).host}/ws/prices`
+      } catch {
+        wsUrl = `${protocol}//${window.location.host}/ws/prices`
+      }
+    }
+
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', channels: [setupChannel] }))
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        if (message?.type === 'setup_update' && message?.channel === setupChannel) {
+          void fetchSetups()
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    }
+
+    return () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'unsubscribe', channels: [setupChannel] }))
+      }
+      wsRef.current?.close()
+      wsRef.current = null
+    }
+  }, [fetchSetups, userId])
 
   const setMutating = useCallback((id: string, value: boolean) => {
     setMutatingIds((prev) => ({ ...prev, [id]: value }))

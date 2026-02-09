@@ -129,6 +129,10 @@ select
    - brief loads from `/api/brief/today`
    - `Mark Viewed` updates state with `PATCH /api/brief/today`
    - optional watchlist preview works with `GET /api/brief/today?watchlist=AAPL,NVDA`
+13. Validate setup transition automation (during live market or with controlled test data):
+   - tracked setup with `suggestedTrade.target` is auto-marked `triggered` when price crosses target
+   - tracked setup with `suggestedTrade.stopLoss` is auto-marked `invalidated` when price crosses stop
+   - Tracked Setups panel refreshes in near real-time via WebSocket `setups:{userId}` updates
 
 ## Step 6: Rollback plan (if needed)
 

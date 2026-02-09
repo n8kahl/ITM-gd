@@ -6,10 +6,27 @@ export interface SetupPushHeartbeat {
   uniqueUsers: number;
 }
 
-export interface SetupPushEvent {
-  type: 'heartbeat';
-  payload: SetupPushHeartbeat;
+export interface SetupStatusUpdate {
+  setupId: string;
+  userId: string;
+  symbol: string;
+  setupType: string;
+  previousStatus: 'active';
+  status: 'triggered' | 'invalidated';
+  currentPrice: number;
+  reason: 'target_reached' | 'stop_loss_hit';
+  evaluatedAt: string;
 }
+
+export type SetupPushEvent =
+  | {
+      type: 'heartbeat';
+      payload: SetupPushHeartbeat;
+    }
+  | {
+      type: 'setup_update';
+      payload: SetupStatusUpdate;
+    };
 
 type SetupPushListener = (event: SetupPushEvent) => void;
 
@@ -26,6 +43,22 @@ export function publishSetupPushHeartbeat(payload: SetupPushHeartbeat): void {
   if (listeners.size === 0) return;
 
   const event: SetupPushEvent = { type: 'heartbeat', payload };
+
+  for (const listener of listeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      logger.warn('Setup push listener failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+export function publishSetupStatusUpdate(payload: SetupStatusUpdate): void {
+  if (listeners.size === 0) return;
+
+  const event: SetupPushEvent = { type: 'setup_update', payload };
 
   for (const listener of listeners) {
     try {

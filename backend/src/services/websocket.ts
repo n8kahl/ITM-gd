@@ -8,12 +8,15 @@
  *
  *   Client → Server:
  *     { "type": "subscribe",   "symbols": ["SPX", "NDX"] }
+ *     { "type": "subscribe",   "channels": ["setups:user-123"] }
  *     { "type": "unsubscribe", "symbols": ["SPX"] }
+ *     { "type": "unsubscribe", "channels": ["setups:user-123"] }
  *     { "type": "ping" }
  *
  *   Server → Client:
  *     { "type": "price",  "symbol": "SPX", "price": 5842.50, "change": 12.30, "changePct": 0.21, "volume": 1234567, "timestamp": "..." }
  *     { "type": "status", "marketStatus": "open", "session": "regular", ... }
+ *     { "type": "setup_update", "channel": "setups:user-123", "data": { ... } }
  *     { "type": "pong" }
  *     { "type": "error",  "message": "..." }
  *
@@ -28,6 +31,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { logger } from '../lib/logger';
 import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { getMarketStatus } from './marketHours';
+import { subscribeSetupPushEvents, type SetupStatusUpdate } from './setupPushChannel';
 
 // ============================================
 // TYPES
@@ -63,6 +67,8 @@ const POLL_INTERVALS = {
   extended: 60_000,  // 60s during extended hours
   closed: 300_000,   // 5 min when closed
 };
+const SETUP_CHANNEL_PREFIX = 'setups:';
+const SETUP_CHANNEL_PATTERN = /^setups:[a-zA-Z0-9_-]{3,64}$/;
 
 function formatTicker(symbol: string): string {
   return INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
@@ -108,13 +114,27 @@ async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevCl
 let wss: WebSocketServer | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let unsubscribeSetupEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
+
+function isSymbolSubscription(value: string): boolean {
+  return ALLOWED_SYMBOLS.has(value);
+}
+
+function normalizeSetupChannel(value: string): string | null {
+  const normalized = value.toLowerCase();
+  if (!normalized.startsWith(SETUP_CHANNEL_PREFIX)) return null;
+  if (!SETUP_CHANNEL_PATTERN.test(normalized)) return null;
+  return normalized;
+}
 
 function getActiveSymbols(): Set<string> {
   const symbols = new Set<string>();
   for (const state of clients.values()) {
     for (const sym of state.subscriptions) {
-      symbols.add(sym);
+      if (isSymbolSubscription(sym)) {
+        symbols.add(sym);
+      }
     }
   }
   return symbols;
@@ -124,6 +144,21 @@ function broadcastPrice(update: PriceUpdate): void {
   const message = JSON.stringify(update);
   for (const [ws, state] of clients) {
     if (ws.readyState === WebSocket.OPEN && state.subscriptions.has(update.symbol)) {
+      ws.send(message);
+    }
+  }
+}
+
+function broadcastSetupUpdate(update: SetupStatusUpdate): void {
+  const channel = `${SETUP_CHANNEL_PREFIX}${update.userId}`;
+  const message = JSON.stringify({
+    type: 'setup_update',
+    channel,
+    data: update,
+  });
+
+  for (const [ws, state] of clients) {
+    if (ws.readyState === WebSocket.OPEN && state.subscriptions.has(channel)) {
       ws.send(message);
     }
   }
@@ -147,10 +182,12 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
     switch (msg.type) {
       case 'subscribe': {
         const symbols = Array.isArray(msg.symbols) ? msg.symbols : [];
+        const channels = Array.isArray(msg.channels) ? msg.channels : [];
+
         for (const sym of symbols) {
           if (typeof sym !== 'string') continue;
           const upper = sym.toUpperCase();
-          if (!ALLOWED_SYMBOLS.has(upper)) {
+          if (!isSymbolSubscription(upper)) {
             sendToClient(ws, { type: 'error', message: `Unknown symbol: ${upper}` });
             continue;
           }
@@ -176,14 +213,39 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
             });
           }
         }
+
+        for (const channelCandidate of channels) {
+          if (typeof channelCandidate !== 'string') continue;
+
+          const channel = normalizeSetupChannel(channelCandidate);
+          if (!channel) {
+            sendToClient(ws, { type: 'error', message: `Invalid channel: ${String(channelCandidate)}` });
+            continue;
+          }
+
+          if (state.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_CLIENT) {
+            sendToClient(ws, { type: 'error', message: `Maximum ${MAX_SUBSCRIPTIONS_PER_CLIENT} subscriptions` });
+            break;
+          }
+
+          state.subscriptions.add(channel);
+        }
         break;
       }
 
       case 'unsubscribe': {
         const symbols = Array.isArray(msg.symbols) ? msg.symbols : [];
+        const channels = Array.isArray(msg.channels) ? msg.channels : [];
         for (const sym of symbols) {
           if (typeof sym === 'string') {
             state.subscriptions.delete(sym.toUpperCase());
+          }
+        }
+        for (const channelCandidate of channels) {
+          if (typeof channelCandidate !== 'string') continue;
+          const channel = normalizeSetupChannel(channelCandidate);
+          if (channel) {
+            state.subscriptions.delete(channel);
           }
         }
         break;
@@ -304,6 +366,10 @@ export function initWebSocket(server: HTTPServer): void {
 
   startPolling();
   startHeartbeat();
+  unsubscribeSetupEvents = subscribeSetupPushEvents((event) => {
+    if (event.type !== 'setup_update') return;
+    broadcastSetupUpdate(event.payload);
+  });
 
   logger.info('WebSocket price server initialized at /ws/prices');
 }
@@ -328,6 +394,10 @@ export function shutdownWebSocket(): void {
     clients.clear();
     wss.close();
     wss = null;
+  }
+  if (unsubscribeSetupEvents) {
+    unsubscribeSetupEvents();
+    unsubscribeSetupEvents = null;
   }
   logger.info('WebSocket server shut down');
 }
