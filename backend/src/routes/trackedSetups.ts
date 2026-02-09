@@ -135,7 +135,9 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const env = getEnv();
-      if (env.NODE_ENV === 'production' || !env.E2E_BYPASS_AUTH) {
+      const e2eRouteEnabled = env.E2E_BYPASS_AUTH
+        && (env.NODE_ENV !== 'production' || env.E2E_BYPASS_ALLOW_IN_PRODUCTION);
+      if (!e2eRouteEnabled) {
         res.status(404).json({ error: 'Not found', message: 'Route not found' });
         return;
       }
