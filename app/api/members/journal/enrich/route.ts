@@ -71,8 +71,6 @@ export async function POST(request: NextRequest) {
     }
 
     const ticker = entry.symbol
-    const entryPrice = entry.entry_price || 0
-    const exitPrice = entry.exit_price || 0
 
     // Fetch minute bars for the trade date
     const from = new Date(`${tradeDate}T04:00:00-05:00`).getTime()

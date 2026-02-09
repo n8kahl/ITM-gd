@@ -975,6 +975,337 @@ export async function scanOpportunities(
 }
 
 // ============================================
+// WATCHLIST API
+// ============================================
+
+export interface Watchlist {
+  id: string
+  user_id: string
+  name: string
+  symbols: string[]
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface WatchlistResponse {
+  watchlists: Watchlist[]
+  defaultWatchlist?: Watchlist
+}
+
+export async function getWatchlists(
+  token: string,
+  signal?: AbortSignal
+): Promise<WatchlistResponse> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function createWatchlist(
+  token: string,
+  payload: { name: string; symbols: string[]; isDefault?: boolean }
+): Promise<{ watchlist: Watchlist; watchlists: Watchlist[]; defaultWatchlist?: Watchlist }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function updateWatchlist(
+  id: string,
+  token: string,
+  payload: { name?: string; symbols?: string[]; isDefault?: boolean }
+): Promise<{ watchlist: Watchlist; watchlists: Watchlist[]; defaultWatchlist?: Watchlist }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist/${id}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function deleteWatchlist(
+  id: string,
+  token: string
+): Promise<{ success: boolean; watchlists: Watchlist[]; defaultWatchlist?: Watchlist }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/watchlist/${id}`,
+    {
+      method: 'DELETE',
+      headers: {},
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// MORNING BRIEF API
+// ============================================
+
+export interface MorningBrief {
+  generatedAt: string
+  marketDate: string
+  marketStatus?: {
+    status: string
+    session: string
+    message: string
+    nextOpen?: string
+    timeUntilOpen?: string
+    timeSinceOpen?: string
+    closingTime?: string
+  }
+  watchlist: string[]
+  overnightSummary?: Record<string, unknown>
+  keyLevelsToday?: Array<Record<string, unknown>>
+  economicEvents?: Array<Record<string, unknown>>
+  earningsToday?: Array<Record<string, unknown>>
+  openPositionStatus?: Array<Record<string, unknown>>
+  watchItems?: string[]
+  aiSummary?: string
+}
+
+export interface MorningBriefResponse {
+  brief: MorningBrief
+  marketDate: string
+  viewed: boolean
+  cached: boolean
+}
+
+export async function getMorningBrief(
+  token: string,
+  options?: { force?: boolean },
+  signal?: AbortSignal
+): Promise<MorningBriefResponse> {
+  const params = new URLSearchParams()
+  if (options?.force) params.set('force', 'true')
+
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/brief/today${params.toString() ? `?${params}` : ''}`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function setMorningBriefViewed(
+  token: string,
+  viewed: boolean
+): Promise<{ success: boolean; marketDate: string; viewed: boolean }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/brief/today`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ viewed }),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
+// TRACKED SETUPS API
+// ============================================
+
+export type TrackedSetupStatus = 'active' | 'triggered' | 'invalidated' | 'archived'
+
+export interface TrackedSetup {
+  id: string
+  user_id: string
+  source_opportunity_id: string | null
+  symbol: string
+  setup_type: string
+  direction: 'bullish' | 'bearish' | 'neutral'
+  status: TrackedSetupStatus
+  opportunity_data: Record<string, unknown>
+  notes: string | null
+  tracked_at: string
+  triggered_at: string | null
+  invalidated_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getTrackedSetups(
+  token: string,
+  options?: { status?: TrackedSetupStatus },
+  signal?: AbortSignal
+): Promise<{ trackedSetups: TrackedSetup[] }> {
+  const params = new URLSearchParams()
+  if (options?.status) params.set('status', options.status)
+
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups${params.toString() ? `?${params}` : ''}`,
+    { headers: {} },
+    token,
+    signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function trackSetup(
+  token: string,
+  payload: {
+    source_opportunity_id?: string
+    symbol: string
+    setup_type: string
+    direction: 'bullish' | 'bearish' | 'neutral'
+    opportunity_data: Record<string, unknown>
+    notes?: string | null
+  }
+): Promise<{ trackedSetup: TrackedSetup | null; duplicate?: boolean }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function updateTrackedSetup(
+  id: string,
+  token: string,
+  payload: { status?: TrackedSetupStatus; notes?: string | null }
+): Promise<{ trackedSetup: TrackedSetup }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function deleteTrackedSetup(
+  id: string,
+  token: string
+): Promise<{ success: boolean }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups/${id}`,
+    {
+      method: 'DELETE',
+      headers: {},
+    },
+    token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+// ============================================
 // STREAMING CHAT API
 // ============================================
 

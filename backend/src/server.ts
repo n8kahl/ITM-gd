@@ -23,6 +23,9 @@ import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
 import scannerRouter from './routes/scanner';
+import watchlistRouter from './routes/watchlist';
+import briefRouter from './routes/brief';
+import trackedSetupsRouter from './routes/trackedSetups';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 
@@ -103,6 +106,9 @@ app.use('/api/alerts', alertsRouter);
 app.use('/api/leaps', leapsRouter);
 app.use('/api/macro', macroRouter);
 app.use('/api/scanner', scannerRouter);
+app.use('/api/watchlist', watchlistRouter);
+app.use('/api/brief', briefRouter);
+app.use('/api/tracked-setups', trackedSetupsRouter);
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
@@ -118,7 +124,8 @@ app.get('/', (_req: Request, res: Response) => {
       journalTrades: '/api/journal/trades', journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
       leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
-      scannerScan: '/api/scanner/scan', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
+      scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today',
+      trackedSetups: '/api/tracked-setups', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
     }
   });
 });

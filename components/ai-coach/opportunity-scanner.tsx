@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Search,
   X,
@@ -12,13 +12,19 @@ import {
   BarChart3,
   Activity,
   Zap,
-  ArrowUpRight,
-  ArrowDownRight,
   RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { scanOpportunities as apiScanOpportunities, AICoachAPIError, type ScanOpportunity } from '@/lib/api/ai-coach'
+import {
+  scanOpportunities as apiScanOpportunities,
+  getWatchlists,
+  createWatchlist,
+  updateWatchlist,
+  trackSetup,
+  AICoachAPIError,
+  type ScanOpportunity,
+} from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -30,6 +36,7 @@ interface OpportunityScannerProps {
 }
 
 type Opportunity = ScanOpportunity
+type TrackStatus = 'idle' | 'saving' | 'saved' | 'duplicate' | 'error'
 
 // ============================================
 // COMPONENT
@@ -43,8 +50,56 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
   const [lastScanTime, setLastScanTime] = useState<string | null>(null)
   const [filterDirection, setFilterDirection] = useState<'all' | 'bullish' | 'bearish' | 'neutral'>('all')
   const [filterType, setFilterType] = useState<'all' | 'technical' | 'options'>('all')
+  const [scanSymbols, setScanSymbols] = useState<string[]>(['SPX', 'NDX'])
+  const [defaultWatchlistId, setDefaultWatchlistId] = useState<string | null>(null)
+  const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(false)
+  const [isSavingWatchlist, setIsSavingWatchlist] = useState(false)
+  const [isEditingWatchlist, setIsEditingWatchlist] = useState(false)
+  const [watchlistInput, setWatchlistInput] = useState('SPX, NDX')
+  const [watchlistError, setWatchlistError] = useState<string | null>(null)
+  const [trackStatusById, setTrackStatusById] = useState<Record<string, TrackStatus>>({})
 
   const token = session?.access_token
+
+  useEffect(() => {
+    if (!token) return
+
+    let cancelled = false
+
+    const loadWatchlist = async () => {
+      setIsLoadingWatchlist(true)
+      setWatchlistError(null)
+
+      try {
+        const result = await getWatchlists(token)
+        const symbols = result.defaultWatchlist?.symbols?.filter(Boolean) || []
+        const watchlistId = result.defaultWatchlist?.id || null
+
+        if (!cancelled && symbols.length > 0) {
+          setScanSymbols(symbols)
+          setDefaultWatchlistId(watchlistId)
+          setWatchlistInput(symbols.join(', '))
+        }
+      } catch (err) {
+        if (cancelled) return
+        const message = err instanceof AICoachAPIError
+          ? err.apiError.message
+          : 'Unable to load your watchlist. Using defaults.'
+        setWatchlistError(message)
+        setScanSymbols(['SPX', 'NDX'])
+      } finally {
+        if (!cancelled) {
+          setIsLoadingWatchlist(false)
+        }
+      }
+    }
+
+    void loadWatchlist()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   const runScan = useCallback(async () => {
     if (!token) return
@@ -53,7 +108,7 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
 
     try {
       const result = await apiScanOpportunities(token, {
-        symbols: ['SPX', 'NDX'],
+        symbols: scanSymbols,
         includeOptions: true,
       })
 
@@ -66,6 +121,79 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
       setScanError(message)
     } finally {
       setIsScanning(false)
+    }
+  }, [scanSymbols, token])
+
+  const handleSaveWatchlist = useCallback(async () => {
+    if (!token) return
+
+    const parsedSymbols = watchlistInput
+      .split(',')
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol))
+
+    const uniqueSymbols = Array.from(new Set(parsedSymbols)).slice(0, 20)
+    if (uniqueSymbols.length === 0) {
+      setWatchlistError('Enter at least one valid symbol (e.g., SPX, AAPL, NVDA).')
+      return
+    }
+
+    setIsSavingWatchlist(true)
+    setWatchlistError(null)
+
+    try {
+      if (defaultWatchlistId) {
+        const result = await updateWatchlist(defaultWatchlistId, token, {
+          symbols: uniqueSymbols,
+          isDefault: true,
+        })
+        const defaultSymbols = result.defaultWatchlist?.symbols || uniqueSymbols
+        setDefaultWatchlistId(result.defaultWatchlist?.id || defaultWatchlistId)
+        setScanSymbols(defaultSymbols)
+        setWatchlistInput(defaultSymbols.join(', '))
+      } else {
+        const result = await createWatchlist(token, {
+          name: 'Default',
+          symbols: uniqueSymbols,
+          isDefault: true,
+        })
+        const defaultSymbols = result.defaultWatchlist?.symbols || uniqueSymbols
+        setDefaultWatchlistId(result.defaultWatchlist?.id || result.watchlist.id)
+        setScanSymbols(defaultSymbols)
+        setWatchlistInput(defaultSymbols.join(', '))
+      }
+
+      setIsEditingWatchlist(false)
+    } catch (err) {
+      const message = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to save watchlist.'
+      setWatchlistError(message)
+    } finally {
+      setIsSavingWatchlist(false)
+    }
+  }, [defaultWatchlistId, token, watchlistInput])
+
+  const handleTrackSetup = useCallback(async (opportunity: Opportunity) => {
+    if (!token) return
+
+    setTrackStatusById((prev) => ({ ...prev, [opportunity.id]: 'saving' }))
+
+    try {
+      const result = await trackSetup(token, {
+        source_opportunity_id: opportunity.id,
+        symbol: opportunity.symbol,
+        setup_type: opportunity.setupType,
+        direction: opportunity.direction,
+        opportunity_data: opportunity as unknown as Record<string, unknown>,
+      })
+
+      setTrackStatusById((prev) => ({
+        ...prev,
+        [opportunity.id]: result.duplicate ? 'duplicate' : 'saved',
+      }))
+    } catch {
+      setTrackStatusById((prev) => ({ ...prev, [opportunity.id]: 'error' }))
     }
   }, [token])
 
@@ -91,20 +219,20 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
         <div className="flex items-center gap-2">
           <button
             onClick={runScan}
-            disabled={isScanning}
+            disabled={isScanning || isLoadingWatchlist}
             className={cn(
               'flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all',
-              isScanning
+              isScanning || isLoadingWatchlist
                 ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
                 : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20'
             )}
           >
-            {isScanning ? (
+            {isScanning || isLoadingWatchlist ? (
               <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
               <RefreshCw className="w-3 h-3" />
             )}
-            {isScanning ? 'Scanning...' : 'Scan Now'}
+            {isLoadingWatchlist ? 'Loading...' : isScanning ? 'Scanning...' : 'Scan Now'}
           </button>
           <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
             <X className="w-4 h-4" />
@@ -113,6 +241,45 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        <div className="px-4 py-2 border-b border-white/5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-white/35">
+              Watchlist: <span className="text-white/60">{scanSymbols.join(', ')}</span>
+            </p>
+            <button
+              onClick={() => setIsEditingWatchlist((prev) => !prev)}
+              className="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              {isEditingWatchlist ? 'Cancel' : 'Edit'}
+            </button>
+          </div>
+          {isEditingWatchlist && (
+            <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                value={watchlistInput}
+                onChange={(e) => setWatchlistInput(e.target.value)}
+                placeholder="SPX, NDX, AAPL"
+                className="flex-1 h-8 rounded-md bg-white/5 border border-white/10 px-2 text-xs text-white placeholder:text-white/35 focus:outline-none focus:border-emerald-500/40"
+              />
+              <button
+                onClick={handleSaveWatchlist}
+                disabled={isSavingWatchlist}
+                className={cn(
+                  'h-8 px-3 rounded-md text-xs border transition-all',
+                  isSavingWatchlist
+                    ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
+                    : 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20'
+                )}
+              >
+                {isSavingWatchlist ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          )}
+          {watchlistError && (
+            <p className="text-[10px] text-amber-400 mt-1">{watchlistError}</p>
+          )}
+        </div>
+
         {/* Filters */}
         <div className="px-4 py-2 flex items-center gap-4 border-b border-white/5">
           <div className="flex items-center gap-1">
@@ -157,7 +324,7 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
             <Search className="w-10 h-10 text-white/10 mx-auto mb-3" />
             <p className="text-sm text-white/40 mb-2">No scan results yet</p>
             <p className="text-xs text-white/25 mb-6">
-              Scan SPX &amp; NDX for technical setups, options opportunities, and more
+              Scan {scanSymbols.join(', ')} for technical setups, options opportunities, and more
             </p>
             <button
               onClick={runScan}
@@ -195,9 +362,11 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
             )}
             {filteredOpportunities.map((opp, idx) => (
               <OpportunityCard
-                key={idx}
+                key={opp.id || idx}
                 opportunity={opp}
                 onAskAI={onSendPrompt}
+                onTrackSetup={handleTrackSetup}
+                trackStatus={trackStatusById[opp.id] || 'idle'}
               />
             ))}
           </div>
@@ -221,9 +390,13 @@ export function OpportunityScanner({ onClose, onSendPrompt }: OpportunityScanner
 function OpportunityCard({
   opportunity,
   onAskAI,
+  onTrackSetup,
+  trackStatus,
 }: {
   opportunity: Opportunity
   onAskAI?: (prompt: string) => void
+  onTrackSetup?: (opportunity: Opportunity) => void
+  trackStatus: TrackStatus
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -242,6 +415,17 @@ function OpportunityCard({
   const scoreColor = opportunity.score >= 70 ? 'text-emerald-400 bg-emerald-500/10'
     : opportunity.score >= 50 ? 'text-amber-400 bg-amber-500/10'
     : 'text-white/40 bg-white/5'
+
+  const isTrackDisabled = trackStatus === 'saving' || trackStatus === 'saved' || trackStatus === 'duplicate'
+  const trackLabel = trackStatus === 'saving'
+    ? 'Tracking...'
+    : trackStatus === 'saved'
+      ? 'Tracked'
+      : trackStatus === 'duplicate'
+        ? 'Already Tracked'
+        : trackStatus === 'error'
+          ? 'Retry Track'
+          : 'Track This Setup'
 
   return (
     <div
@@ -356,18 +540,39 @@ function OpportunityCard({
           )}
 
           {/* Ask AI button */}
-          {onAskAI && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onAskAI(`Tell me more about this ${opportunity.setupType} setup on ${opportunity.symbol}. What's the risk/reward and how should I trade it?`)
-              }}
-              className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 mt-1 transition-colors"
-            >
-              <Zap className="w-3 h-3" />
-              Ask AI for analysis
-            </button>
-          )}
+          <div className="flex items-center gap-2 pt-1">
+            {onAskAI && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAskAI(`Tell me more about this ${opportunity.setupType} setup on ${opportunity.symbol}. What's the risk/reward and how should I trade it?`)
+                }}
+                className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+              >
+                <Zap className="w-3 h-3" />
+                Ask AI
+              </button>
+            )}
+            {onTrackSetup && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTrackSetup(opportunity)
+                }}
+                disabled={isTrackDisabled}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs transition-colors',
+                  isTrackDisabled
+                    ? 'text-white/35 cursor-not-allowed'
+                    : 'text-emerald-500 hover:text-emerald-400',
+                  trackStatus === 'error' && 'text-red-400 hover:text-red-300'
+                )}
+              >
+                {trackStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Target className="w-3 h-3" />}
+                {trackLabel}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

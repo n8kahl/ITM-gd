@@ -84,7 +84,7 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
       return await handleGetAlerts(typedArgs, context?.userId);
 
     case 'scan_opportunities':
-      return await handleScanOpportunities(typedArgs);
+      return await handleScanOpportunities(typedArgs, context?.userId);
 
     case 'show_chart':
       return await handleShowChart(typedArgs);
@@ -564,6 +564,37 @@ async function handleGetAlerts(
   }
 }
 
+function normalizeScannerSymbols(symbols?: string[]): string[] {
+  if (!Array.isArray(symbols)) return [];
+
+  const cleaned = symbols
+    .map((symbol) => (typeof symbol === 'string' ? symbol.trim().toUpperCase() : ''))
+    .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol));
+
+  return Array.from(new Set(cleaned)).slice(0, 20);
+}
+
+async function getDefaultScannerSymbols(userId?: string): Promise<string[]> {
+  if (!userId) return ['SPX', 'NDX'];
+
+  const { data } = await supabase
+    .from('ai_coach_watchlists')
+    .select('symbols, is_default, updated_at')
+    .eq('user_id', userId)
+    .order('is_default', { ascending: false })
+    .order('updated_at', { ascending: false });
+
+  const watchlists = data || [];
+  if (watchlists.length === 0) return ['SPX', 'NDX'];
+
+  const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
+  const symbols = Array.isArray(defaultWatchlist.symbols)
+    ? normalizeScannerSymbols(defaultWatchlist.symbols)
+    : [];
+
+  return symbols.length > 0 ? symbols : ['SPX', 'NDX'];
+}
+
 /**
  * Handler: scan_opportunities
  * Scans for trading opportunities across symbols
@@ -571,12 +602,17 @@ async function handleGetAlerts(
 async function handleScanOpportunities(args: {
   symbols?: string[];
   include_options?: boolean;
-}) {
-  const { symbols = ['SPX', 'NDX'], include_options = true } = args;
+}, userId?: string) {
+  const { symbols: inputSymbols, include_options = true } = args;
 
   try {
+    const normalizedSymbols = normalizeScannerSymbols(inputSymbols);
+    const scanSymbols = normalizedSymbols.length > 0
+      ? normalizedSymbols
+      : await getDefaultScannerSymbols(userId);
+
     const result = await withTimeout(
-      () => scanOpportunities(symbols, include_options),
+      () => scanOpportunities(scanSymbols, include_options),
       15000, // Scanner needs more time
       'scan_opportunities'
     );
@@ -597,8 +633,8 @@ async function handleScanOpportunities(args: {
       symbols: result.symbols,
       scanDurationMs: result.scanDurationMs,
       message: result.opportunities.length > 0
-        ? `Found ${result.opportunities.length} opportunity${result.opportunities.length > 1 ? 'ies' : 'y'} across ${symbols.join(', ')}`
-        : `No opportunities found across ${symbols.join(', ')} at this time`,
+        ? `Found ${result.opportunities.length} opportunity${result.opportunities.length > 1 ? 'ies' : 'y'} across ${scanSymbols.join(', ')}`
+        : `No opportunities found across ${scanSymbols.join(', ')} at this time`,
     };
   } catch (error: any) {
     return {

@@ -11,6 +11,134 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
+function getFirstDefined<T>(...values: Array<T | undefined>): T | undefined {
+  return values.find((value) => value !== undefined)
+}
+
+function parseMaybeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseMaybeBoolean(value: unknown): boolean | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.toLowerCase().trim()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return null
+}
+
+function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.toLowerCase().trim()
+  if (['long', 'call', 'bullish', 'buy'].includes(normalized)) return 'long'
+  if (['short', 'put', 'bearish', 'sell'].includes(normalized)) return 'short'
+  if (normalized === 'neutral') return 'neutral'
+  return null
+}
+
+function normalizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+}
+
+function normalizeJournalWritePayload(
+  input: Record<string, unknown>,
+  mode: 'create' | 'update',
+) {
+  const payload: Record<string, unknown> = {}
+
+  const tradeDate = getFirstDefined<unknown>(input.trade_date, input.tradeDate)
+  if (tradeDate !== undefined) {
+    payload.trade_date = tradeDate
+  } else if (mode === 'create') {
+    payload.trade_date = new Date().toISOString()
+  }
+
+  if (input.symbol !== undefined) {
+    payload.symbol =
+      typeof input.symbol === 'string' && input.symbol.trim().length > 0
+        ? input.symbol.trim().toUpperCase()
+        : null
+  }
+
+  const directionInput = getFirstDefined<unknown>(input.direction, input.trade_type)
+  if (directionInput !== undefined) {
+    payload.direction = normalizeDirection(directionInput)
+  }
+
+  const entryPriceInput = getFirstDefined<unknown>(input.entry_price)
+  if (entryPriceInput !== undefined) {
+    payload.entry_price = parseMaybeNumber(entryPriceInput)
+  }
+
+  const exitPriceInput = getFirstDefined<unknown>(input.exit_price)
+  if (exitPriceInput !== undefined) {
+    payload.exit_price = parseMaybeNumber(exitPriceInput)
+  }
+
+  const positionSizeInput = getFirstDefined<unknown>(input.position_size)
+  if (positionSizeInput !== undefined) {
+    payload.position_size = parseMaybeNumber(positionSizeInput)
+  }
+
+  const pnlInput = getFirstDefined<unknown>(input.pnl, input.profit_loss)
+  if (pnlInput !== undefined) {
+    payload.pnl = parseMaybeNumber(pnlInput)
+  }
+
+  const pnlPctInput = getFirstDefined<unknown>(input.pnl_percentage, input.profit_loss_percent)
+  if (pnlPctInput !== undefined) {
+    payload.pnl_percentage = parseMaybeNumber(pnlPctInput)
+  }
+
+  if (input.screenshot_url !== undefined) {
+    payload.screenshot_url =
+      typeof input.screenshot_url === 'string' && input.screenshot_url.trim().length > 0
+        ? input.screenshot_url.trim()
+        : null
+  }
+
+  if (input.screenshot_thumbnail_url !== undefined) {
+    payload.screenshot_thumbnail_url =
+      typeof input.screenshot_thumbnail_url === 'string' && input.screenshot_thumbnail_url.trim().length > 0
+        ? input.screenshot_thumbnail_url.trim()
+        : null
+  }
+
+  if (input.setup_notes !== undefined) payload.setup_notes = input.setup_notes
+  if (input.execution_notes !== undefined) payload.execution_notes = input.execution_notes
+  if (input.lessons_learned !== undefined) payload.lessons_learned = input.lessons_learned
+
+  if (input.tags !== undefined) {
+    payload.tags = normalizeTags(input.tags)
+  } else if (mode === 'create') {
+    payload.tags = []
+  }
+
+  if (input.rating !== undefined) {
+    payload.rating = parseMaybeNumber(input.rating)
+  }
+
+  if (input.ai_analysis !== undefined) {
+    payload.ai_analysis = input.ai_analysis
+  }
+
+  if (input.is_winner !== undefined) {
+    payload.is_winner = parseMaybeBoolean(input.is_winner)
+  } else if (mode === 'create' && typeof payload.pnl === 'number') {
+    payload.is_winner = payload.pnl > 0 ? true : payload.pnl < 0 ? false : null
+  }
+
+  return payload
+}
+
 /**
  * Get authenticated user ID from Supabase session (server-validated via getUser)
  */
@@ -141,28 +269,8 @@ export async function POST(request: NextRequest) {
       )
     }
     const body = await request.json()
-
-    // Accept both canonical and legacy field names for backwards compatibility
-    const direction = body.direction || body.trade_type || null
-    const pnl = body.pnl ?? body.profit_loss ?? null
-    const pnl_percentage = body.pnl_percentage ?? body.profit_loss_percent ?? null
-
-    const {
-      trade_date,
-      symbol,
-      entry_price,
-      exit_price,
-      position_size,
-      screenshot_url,
-      setup_notes,
-      execution_notes,
-      lessons_learned,
-      tags,
-      rating,
-      is_winner,
-      ai_analysis,
-    } = body
-
+    const payload = normalizeJournalWritePayload(body, 'create')
+    const symbol = typeof payload.symbol === 'string' ? payload.symbol : ''
     if (!symbol || !symbol.trim()) {
       return NextResponse.json({ error: 'Symbol is required' }, { status: 400 })
     }
@@ -173,22 +281,7 @@ export async function POST(request: NextRequest) {
       .from('journal_entries')
       .insert({
         user_id: userId,
-        trade_date: trade_date ? new Date(trade_date).toISOString() : new Date().toISOString(),
-        symbol: symbol.toUpperCase(),
-        direction,
-        entry_price: entry_price != null ? parseFloat(entry_price) : null,
-        exit_price: exit_price != null ? parseFloat(exit_price) : null,
-        position_size: position_size != null ? parseFloat(position_size) : null,
-        pnl: pnl != null ? parseFloat(pnl) : null,
-        pnl_percentage: pnl_percentage != null ? parseFloat(pnl_percentage) : null,
-        screenshot_url: screenshot_url || null,
-        setup_notes: setup_notes || null,
-        execution_notes: execution_notes || null,
-        lessons_learned: lessons_learned || null,
-        tags: tags || [],
-        rating: rating || null,
-        is_winner,
-        ai_analysis: ai_analysis || null,
+        ...payload,
       })
       .select()
       .single()
@@ -198,7 +291,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Update streak data
-    await updateStreaks(supabase, userId, is_winner, trade_date)
+    await updateStreaks(
+      supabase,
+      userId,
+      typeof payload.is_winner === 'boolean' ? payload.is_winner : null,
+      typeof payload.trade_date === 'string' ? payload.trade_date : undefined,
+    )
 
     return NextResponse.json({ success: true, data: entry })
   } catch (error) {
@@ -244,9 +342,11 @@ export async function PATCH(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
+    const normalizedUpdates = normalizeJournalWritePayload(updates, 'update')
+
     const { data, error } = await supabase
       .from('journal_entries')
-      .update(updates)
+      .update(normalizedUpdates)
       .eq('id', id)
       .eq('user_id', userId)
       .select()
@@ -313,8 +413,8 @@ export async function DELETE(request: NextRequest) {
 async function updateStreaks(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   userId: string,
-  isWinner: boolean | undefined,
-  tradeDate: string
+  isWinner: boolean | null,
+  tradeDate?: string
 ) {
   const today = new Date().toISOString().split('T')[0]
   const entryDate = tradeDate || today
