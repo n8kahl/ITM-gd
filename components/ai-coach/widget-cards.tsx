@@ -15,12 +15,13 @@ import {
   Calendar,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { GEXChart } from './gex-chart'
 
 // ============================================
 // TYPES
 // ============================================
 
-export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview' | 'macro_context' | 'options_chain' | 'scan_results' | 'current_price'
+export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview' | 'macro_context' | 'options_chain' | 'gex_profile' | 'scan_results' | 'current_price'
 
 export interface WidgetData {
   type: WidgetType
@@ -47,6 +48,8 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
       return <MacroContextCard data={widget.data} />
     case 'options_chain':
       return <OptionsChainCard data={widget.data} />
+    case 'gex_profile':
+      return <GEXProfileCard data={widget.data} />
     case 'scan_results':
       return <ScanResultsCard data={widget.data} />
     case 'current_price':
@@ -483,6 +486,118 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
 }
 
 // ============================================
+// GEX PROFILE CARD
+// ============================================
+
+function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = (data.symbol as string) || 'SPX'
+  const spotPrice = data.spotPrice as number | undefined
+  const regime = (data.regime as string) || 'unknown'
+  const flipPoint = data.flipPoint as number | null | undefined
+  const maxGEXStrike = data.maxGEXStrike as number | null | undefined
+  const implication = (data.implication as string) || ''
+  const calculatedAt = data.calculatedAt as string | undefined
+  const keyLevels = (data.keyLevels as Array<{ strike: number; gexValue: number; type: string }>) || []
+  const gexByStrike = (data.gexByStrike as Array<{ strike: number; gexValue: number }>) || []
+
+  const regimeBadgeClass = regime === 'positive_gamma'
+    ? 'bg-emerald-500/10 text-emerald-300'
+    : regime === 'negative_gamma'
+    ? 'bg-red-500/10 text-red-300'
+    : 'bg-white/5 text-white/50'
+
+  const handleShowOnChart = () => {
+    if (typeof window === 'undefined') return
+
+    window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+      detail: {
+        symbol,
+        timeframe: '1D',
+        gexProfile: {
+          symbol,
+          spotPrice,
+          flipPoint,
+          maxGEXStrike,
+          keyLevels,
+        },
+      },
+    }))
+  }
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-xl">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <BarChart2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+          <span className="text-xs font-medium text-white">{symbol} Gamma Exposure</span>
+        </div>
+        <span className={cn('px-2 py-0.5 rounded text-[10px] font-medium', regimeBadgeClass)}>
+          {regime === 'positive_gamma' ? 'Positive Gamma' : regime === 'negative_gamma' ? 'Negative Gamma' : 'Unknown'}
+        </span>
+      </div>
+
+      <div className="mb-2 grid grid-cols-3 gap-2 text-[10px] text-white/45">
+        <div>
+          <p>Spot</p>
+          <p className="font-mono text-white/75">{spotPrice != null ? spotPrice.toLocaleString() : '—'}</p>
+        </div>
+        <div>
+          <p>Flip</p>
+          <p className="font-mono text-yellow-300">{flipPoint != null ? flipPoint.toLocaleString() : '—'}</p>
+        </div>
+        <div>
+          <p>Max GEX</p>
+          <p className="font-mono text-violet-300">{maxGEXStrike != null ? maxGEXStrike.toLocaleString() : '—'}</p>
+        </div>
+      </div>
+
+      <GEXChart
+        data={gexByStrike}
+        spotPrice={spotPrice}
+        flipPoint={flipPoint}
+        maxGEXStrike={maxGEXStrike}
+        maxRows={14}
+      />
+
+      {keyLevels.length > 0 && (
+        <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
+          {keyLevels.slice(0, 6).map((level) => (
+            <div key={`${level.strike}-${level.type}`} className="flex items-center justify-between rounded bg-white/5 px-2 py-1">
+              <span className={cn(
+                'capitalize',
+                level.type === 'support' ? 'text-emerald-300' :
+                level.type === 'resistance' ? 'text-red-300' :
+                'text-violet-300'
+              )}>
+                {level.type}
+              </span>
+              <span className="font-mono text-white/70">{level.strike.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {implication && (
+        <p className="mt-2 text-[10px] leading-relaxed text-white/50">{implication}</p>
+      )}
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={handleShowOnChart}
+          className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300 hover:bg-emerald-500/15"
+        >
+          Show on Chart
+        </button>
+        <span className="text-[9px] text-white/35">
+          {calculatedAt ? `Updated ${new Date(calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
 // SCAN RESULTS CARD
 // ============================================
 
@@ -603,6 +718,11 @@ export function extractWidgets(functionCalls?: Array<{
       case 'get_options_chain': {
         if (result.error) break
         widgets.push({ type: 'options_chain', data: result })
+        break
+      }
+      case 'get_gamma_exposure': {
+        if (result.error) break
+        widgets.push({ type: 'gex_profile', data: result })
         break
       }
       case 'scan_opportunities': {

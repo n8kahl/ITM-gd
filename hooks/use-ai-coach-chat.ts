@@ -104,21 +104,47 @@ export function useAICoachChat() {
   const extractChartRequest = useCallback((functionCalls: ChatMessageResponse['functionCalls']): ChartRequest | null => {
     if (!functionCalls) return null
     const showChartCall = functionCalls.find(fc => fc.function === 'show_chart')
-    if (!showChartCall) return null
+    const gexCall = functionCalls.find(fc => fc.function === 'get_gamma_exposure')
+    if (!showChartCall && !gexCall) return null
 
-    const args = showChartCall.arguments as { symbol?: string; timeframe?: string }
-    const result = showChartCall.result as {
-      symbol?: string; timeframe?: string;
+    const showChartArgs = showChartCall?.arguments as { symbol?: string; timeframe?: string } | undefined
+    const showChartResult = showChartCall?.result as {
+      symbol?: string
+      timeframe?: string
       levels?: {
         resistance?: Array<{ name: string; price: number; distance?: string }>
         support?: Array<{ name: string; price: number; distance?: string }>
         indicators?: { vwap?: number; atr14?: number }
       }
     } | undefined
+
+    const gexArgs = gexCall?.arguments as { symbol?: string } | undefined
+    const gexResult = gexCall?.result as {
+      symbol?: string
+      spotPrice?: number
+      flipPoint?: number | null
+      maxGEXStrike?: number | null
+      keyLevels?: Array<{ strike: number; gexValue: number; type: 'support' | 'resistance' | 'magnet' }>
+    } | undefined
+
+    const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || 'SPX'
+    const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '1D') as ChartTimeframe
+    const levels = showChartResult?.levels
+    const gexProfile = gexResult
+      ? {
+          symbol: gexResult.symbol || symbol,
+          spotPrice: gexResult.spotPrice,
+          flipPoint: gexResult.flipPoint,
+          maxGEXStrike: gexResult.maxGEXStrike,
+          keyLevels: gexResult.keyLevels,
+        }
+      : undefined
+
     return {
-      symbol: args.symbol || 'SPX',
-      timeframe: (args.timeframe || '1D') as ChartTimeframe,
-      levels: result?.levels,
+      symbol,
+      timeframe,
+      levels,
+      gexProfile,
     }
   }, [])
 

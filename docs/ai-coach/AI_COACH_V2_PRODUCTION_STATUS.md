@@ -107,6 +107,17 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Typed API client coverage:
   - watchlist/brief/tracked-setups methods
   - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- GEX frontend visualization + chart overlay wiring:
+  - Reusable GEX visualization component `GEXChart`
+  - Chat widget card rendering for `get_gamma_exposure` with regime/flip/max/key levels and a `Show on Chart` action
+  - Options panel now loads `/api/options/:symbol/gex` and renders embedded GEX profile + chart handoff action
+  - Center panel chart request plumbing now accepts GEX payloads and renders flip/max/key overlays on `TradingChart`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/gex-chart.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/options-chain.tsx`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
+  - `/Users/natekahl/ITM-gd/hooks/use-ai-coach-chat.ts`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
 
 ### Database
 - Applied to staging:
@@ -166,13 +177,13 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - GEX backend surface from rebuild spec is live (`/api/options/:symbol/gex`, `get_gamma_exposure`, calculator service + tests).
 
 ### Needs Completion
-- Deliver frontend GEX visualization widgets and chart overlays from rebuild spec (`gex-chart`, TradingChart annotations, card actions).
+- Implement the broader interactive widget action system from spec (`widget-actions`, context menus, workflow context wiring across all widget types).
 - Full E2E path:
   - scanner -> track setup -> manage tracked setup -> detector auto-track -> morning brief consume.
 
 ## 4) Surgical Next Plan
 
-1. Implement frontend GEX components: `gex-chart` widget, center-panel data fetch, and “show on chart” action wiring.
-2. Extend main TradingChart to render GEX flip/max/key levels as annotated overlays.
-3. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
-4. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
+1. Add Playwright E2E smoke for scanner -> track -> tracked-setups live update (`setup_update` + `setup_detected`) -> brief consume.
+2. Implement cross-widget action framework (`widget-action-bar`, context menus, workflow context) so GEX/earnings/scanner cards share consistent chart/options/alert actions.
+3. Add external alerting wiring (PagerDuty/Sentry/Slack) on top of `/health/workers` telemetry for stale/failing workers.
+4. Run staging verification against pending hardening migrations from `main` before production cut.
