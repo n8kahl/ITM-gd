@@ -16,6 +16,7 @@ import {
   Search,
   Clock,
   Globe,
+  Sunrise,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -30,6 +31,7 @@ import { OpportunityScanner } from './opportunity-scanner'
 import { LEAPSDashboard } from './leaps-dashboard'
 import { MacroContext } from './macro-context'
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
+import { MorningBriefPanel } from './morning-brief'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -60,7 +62,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView = 'onboarding' | 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts' | 'scanner' | 'leaps' | 'macro'
+type CenterView = 'onboarding' | 'welcome' | 'chart' | 'options' | 'position' | 'screenshot' | 'journal' | 'alerts' | 'brief' | 'scanner' | 'leaps' | 'macro'
 
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
@@ -105,6 +107,7 @@ const TABS: { view: CenterView; icon: typeof CandlestickChart; label: string }[]
   { view: 'journal', icon: BookOpen, label: 'Journal' },
   { view: 'screenshot', icon: Camera, label: 'Screenshot' },
   { view: 'alerts', icon: Bell, label: 'Alerts' },
+  { view: 'brief', icon: Sunrise, label: 'Brief' },
   { view: 'scanner', icon: Search, label: 'Scanner' },
   { view: 'leaps', icon: Clock, label: 'LEAPS' },
   { view: 'macro', icon: Globe, label: 'Macro' },
@@ -302,6 +305,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
             onShowPosition={() => setActiveView('position')}
             onShowJournal={() => setActiveView('journal')}
             onShowAlerts={() => setActiveView('alerts')}
+            onShowBrief={() => setActiveView('brief')}
             onShowScanner={() => setActiveView('scanner')}
             onShowLeaps={() => setActiveView('leaps')}
             onShowMacro={() => setActiveView('macro')}
@@ -336,6 +340,13 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
         {activeView === 'alerts' && (
           <AlertsPanel onClose={() => setActiveView('welcome')} />
+        )}
+
+        {activeView === 'brief' && (
+          <MorningBriefPanel
+            onClose={() => setActiveView('welcome')}
+            onSendPrompt={onSendPrompt}
+          />
         )}
 
         {activeView === 'scanner' && (
@@ -450,6 +461,7 @@ function WelcomeView({
   onShowPosition,
   onShowJournal,
   onShowAlerts,
+  onShowBrief,
   onShowScanner,
   onShowLeaps,
   onShowMacro,
@@ -460,6 +472,7 @@ function WelcomeView({
   onShowPosition: () => void
   onShowJournal: () => void
   onShowAlerts: () => void
+  onShowBrief: () => void
   onShowScanner: () => void
   onShowLeaps: () => void
   onShowMacro: () => void
@@ -492,6 +505,13 @@ function WelcomeView({
           >
             <Calculator className="w-3.5 h-3.5" />
             Analyze
+          </button>
+          <button
+            onClick={onShowBrief}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg transition-all"
+          >
+            <Sunrise className="w-3.5 h-3.5" />
+            Brief
           </button>
         </div>
       </div>
@@ -543,7 +563,7 @@ function WelcomeView({
           </div>
 
           {/* Quick Access Cards */}
-          <div className="grid grid-cols-4 md:grid-cols-4 gap-3 mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
             <button
               onClick={onShowChart}
               className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
@@ -583,6 +603,14 @@ function WelcomeView({
               <Bell className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-white">Alerts</p>
               <p className="text-[10px] text-white/30 mt-0.5">Price Watch</p>
+            </button>
+            <button
+              onClick={onShowBrief}
+              className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-3 text-center transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <Sunrise className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-medium text-white">Brief</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Pre-Market</p>
             </button>
             <button
               onClick={onShowScanner}
