@@ -85,6 +85,9 @@ The preflight checks:
 6. Start run.
 7. Wait for completion and confirm all required jobs are green.
 
+Note:
+- GitHub only exposes `workflow_dispatch` workflows that exist on the default branch. If `ai-coach-live-e2e.yml` is only on `Aiupgrade`, merge it to `main` first or run the strict live gate locally until merge.
+
 CLI alternative (recommended for repeatable runs):
 
 ```bash
