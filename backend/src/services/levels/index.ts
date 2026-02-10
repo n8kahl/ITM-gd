@@ -1,4 +1,5 @@
 import { logger } from '../../lib/logger';
+import type { MassiveAggregate } from '../../config/massive';
 import {
   fetchDailyData,
   fetchPreMarketData,
@@ -57,29 +58,6 @@ export interface LevelsResponse {
 }
 
 /**
- * Get current price (using most recent intraday data)
- */
-async function getCurrentPrice(symbol: string): Promise<number> {
-  try {
-    const intradayData = await fetchIntradayData(symbol);
-    if (intradayData.length > 0) {
-      return intradayData[intradayData.length - 1].c;
-    }
-
-    // Fallback to daily data if no intraday available (7 days covers weekends + holidays)
-    const dailyData = await fetchDailyData(symbol, 7);
-    if (dailyData.length > 0) {
-      return dailyData[dailyData.length - 1].c;
-    }
-
-    throw new Error('No price data available');
-  } catch (error) {
-    logger.error('Failed to get current price', { error: error instanceof Error ? error.message : String(error) });
-    throw error;
-  }
-}
-
-/**
  * Determine level strength based on distance
  */
 function determineLevelStrength(distanceATR: number): 'strong' | 'moderate' | 'weak' | 'critical' {
@@ -107,12 +85,39 @@ function calculateDistanceMetrics(currentPrice: number, levelPrice: number, atr1
   };
 }
 
-function splitBySide(level: LevelItem, resistance: LevelItem[], support: LevelItem[]): void {
-  if (level.distance >= 0) {
+function splitBySide(
+  level: LevelItem,
+  currentPrice: number,
+  resistance: LevelItem[],
+  support: LevelItem[],
+): void {
+  if (level.price >= currentPrice) {
     resistance.push(level);
     return;
   }
   support.push(level);
+}
+
+function resolveCurrentPrice(
+  symbol: string,
+  dailyData: MassiveAggregate[],
+  preMarketData: MassiveAggregate[],
+  intradayData: MassiveAggregate[],
+): number {
+  if (intradayData.length > 0) {
+    return intradayData[intradayData.length - 1].c;
+  }
+
+  // Use pre-market quote when regular session bars are not yet available.
+  if (preMarketData.length > 0) {
+    return preMarketData[preMarketData.length - 1].c;
+  }
+
+  if (dailyData.length > 0) {
+    return dailyData[dailyData.length - 1].c;
+  }
+
+  throw new Error(`No price data available for ${symbol}`);
 }
 
 /**
@@ -149,12 +154,13 @@ export async function calculateLevels(
 
   try {
     // Fetch all required data in parallel
-    const [dailyData, preMarketData, intradayData, currentPrice] = await Promise.all([
+    const [dailyData, preMarketData, intradayData] = await Promise.all([
       fetchDailyData(symbol, 30), // 30 days for ATR calculation
       fetchPreMarketData(symbol).catch(() => []), // Optional - may fail if market closed
       fetchIntradayData(symbol).catch(() => []), // Optional - may fail if market closed
-      getCurrentPrice(symbol)
     ]);
+
+    const currentPrice = resolveCurrentPrice(symbol, dailyData, preMarketData, intradayData);
 
     // Calculate previous day levels
     const prevDayLevels = calculatePreviousDayLevels(dailyData);
@@ -207,7 +213,7 @@ export async function calculateLevels(
         description: level.description,
         testsToday: 0,
         lastTest: null,
-      }, resistance, support);
+      }, currentPrice, resistance, support);
     }
 
     if (vwap) {
@@ -220,7 +226,7 @@ export async function calculateLevels(
         description: 'Volume Weighted Average Price',
         testsToday: 0,
         lastTest: null,
-      }, resistance, support);
+      }, currentPrice, resistance, support);
     }
 
     if (preMarketLevels) {
@@ -233,7 +239,7 @@ export async function calculateLevels(
         description: 'Pre-Market High',
         testsToday: 0,
         lastTest: null,
-      }, resistance, support);
+      }, currentPrice, resistance, support);
 
       const pmlMetrics = calculateDistanceMetrics(currentPrice, preMarketLevels.PML, atr14);
       splitBySide({
@@ -244,7 +250,7 @@ export async function calculateLevels(
         description: 'Pre-Market Low',
         testsToday: 0,
         lastTest: null,
-      }, resistance, support);
+      }, currentPrice, resistance, support);
     }
 
     // Sort resistance by distance (closest first)

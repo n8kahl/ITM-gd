@@ -1,5 +1,5 @@
 import { scanOpportunities } from '../index';
-import { runTechnicalScan } from '../technicalScanner';
+import { runTechnicalScan, scanResistanceRejection } from '../technicalScanner';
 import { runOptionsScan } from '../optionsScanner';
 
 // Mock all external dependencies
@@ -113,6 +113,52 @@ describe('Opportunity Scanner', () => {
 
       const setups = await runTechnicalScan('SPX');
       expect(setups).toEqual([]);
+    });
+
+    it('skips stale PDC proximity setups outside regular session', async () => {
+      mockCalculateLevels.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 5900,
+        levels: {
+          resistance: [{ type: 'PDC', price: 5900, distancePct: 0 }],
+          support: [{ type: 'PDC', price: 5900, distancePct: 0 }],
+          pivots: { standard: {}, camarilla: {}, fibonacci: {} },
+          indicators: { vwap: 5900, atr14: 45, atr7: 50 },
+        },
+        marketContext: { marketStatus: 'pre-market', sessionType: 'pre-market' },
+        timestamp: new Date().toISOString(),
+        cached: false,
+        cacheExpiresAt: null,
+      } as any);
+
+      mockFetchIntradayData.mockRejectedValue(new Error('test'));
+      mockFetchDailyData.mockRejectedValue(new Error('test'));
+
+      const setups = await runTechnicalScan('SPX');
+
+      expect(setups.find((setup) => setup.type === 'support_bounce')).toBeUndefined();
+      expect(setups.find((setup) => setup.type === 'resistance_rejection')).toBeUndefined();
+    });
+
+    it('formats tiny level distance without reporting 0.00%', async () => {
+      mockCalculateLevels.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 5900,
+        levels: {
+          resistance: [{ type: 'PDH', price: 5900.2, distancePct: 0.0034 }],
+          support: [],
+          pivots: { standard: {}, camarilla: {}, fibonacci: {} },
+          indicators: { vwap: 5895, atr14: 45, atr7: 50 },
+        },
+        marketContext: { marketStatus: 'open', sessionType: 'regular' },
+        timestamp: new Date().toISOString(),
+        cached: false,
+        cacheExpiresAt: null,
+      } as any);
+
+      const setup = await scanResistanceRejection('SPX');
+      expect(setup).not.toBeNull();
+      expect(setup?.description).toContain('<0.01% away');
     });
   });
 

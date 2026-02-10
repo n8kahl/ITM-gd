@@ -22,6 +22,70 @@ export interface TechnicalSetup {
   metadata: Record<string, any>;
 }
 
+const PROXIMITY_THRESHOLD_PCT = 0.5;
+const STALE_PDC_SKIP_DISTANCE_PCT = 0.01;
+
+type ScannerLevel = {
+  type: string;
+  price: number;
+  distancePct?: number;
+};
+
+type ProximityLevelCandidate = {
+  level: ScannerLevel;
+  distancePct: number;
+};
+
+function calculateDistancePct(currentPrice: number, levelPrice: number): number {
+  if (currentPrice <= 0) return 0;
+  return Math.abs(currentPrice - levelPrice) / currentPrice * 100;
+}
+
+function formatDistancePct(distancePct: number): string {
+  const abs = Math.abs(distancePct);
+  if (abs < 0.01) return '<0.01%';
+  if (abs < 1) return `${abs.toFixed(3)}%`;
+  return `${abs.toFixed(2)}%`;
+}
+
+function formatDistancePoints(distancePoints: number): string {
+  const abs = Math.abs(distancePoints);
+  if (abs < 0.01) return '<0.01';
+  if (abs < 1) return abs.toFixed(3);
+  return abs.toFixed(2);
+}
+
+function isStalePdcProximity(
+  levelType: string,
+  marketStatus: string | undefined,
+  distancePct: number,
+): boolean {
+  return (
+    levelType === 'PDC'
+    && marketStatus !== 'open'
+    && distancePct < STALE_PDC_SKIP_DISTANCE_PCT
+  );
+}
+
+function pickNearestProximityLevel(
+  levels: ScannerLevel[],
+  currentPrice: number,
+  side: 'support' | 'resistance',
+  marketStatus?: string,
+): ProximityLevelCandidate | null {
+  for (const level of levels) {
+    const distancePct = calculateDistancePct(currentPrice, level.price);
+    if (distancePct > PROXIMITY_THRESHOLD_PCT) continue;
+    if (level.distancePct != null && Math.abs(level.distancePct) > PROXIMITY_THRESHOLD_PCT) continue;
+    if (side === 'support' && currentPrice < level.price) continue;
+    if (side === 'resistance' && currentPrice > level.price) continue;
+    if (isStalePdcProximity(level.type, marketStatus, distancePct)) continue;
+    return { level, distancePct };
+  }
+
+  return null;
+}
+
 /**
  * Scan for support bounce: price approaching support with buying pressure
  */
@@ -30,20 +94,23 @@ export async function scanSupportBounce(symbol: string): Promise<TechnicalSetup 
     const levelsData = await calculateLevels(symbol, 'intraday');
     const { currentPrice, levels } = levelsData;
     const atr = levels.indicators.atr14 || 0;
+    const marketStatus = levelsData.marketContext?.marketStatus;
 
     if (!atr || levels.support.length === 0) return null;
 
-    // Find nearest support level within 0.5 ATR
-    const nearestSupport = levels.support[0];
-    const distancePct = Math.abs(currentPrice - nearestSupport.price) / currentPrice * 100;
+    const proximityCandidate = pickNearestProximityLevel(
+      levels.support as ScannerLevel[],
+      currentPrice,
+      'support',
+      marketStatus,
+    );
+    if (!proximityCandidate) return null;
 
-    if (nearestSupport.distancePct != null && Math.abs(nearestSupport.distancePct) > 0.5) return null;
-    if (distancePct > 0.5) return null;
+    const nearestSupport = proximityCandidate.level;
+    const distancePct = proximityCandidate.distancePct;
+    const distancePoints = Math.abs(currentPrice - nearestSupport.price);
 
-    // Check if price is above support (bounce scenario)
-    if (currentPrice < nearestSupport.price) return null;
-
-    const confidence = Math.max(0.3, Math.min(0.9, 1 - (distancePct / 0.5)));
+    const confidence = Math.max(0.3, Math.min(0.9, 1 - (distancePct / PROXIMITY_THRESHOLD_PCT)));
 
     return {
       type: 'support_bounce',
@@ -52,7 +119,7 @@ export async function scanSupportBounce(symbol: string): Promise<TechnicalSetup 
       confidence,
       currentPrice,
       triggerPrice: nearestSupport.price,
-      description: `${symbol} near ${nearestSupport.type} support at $${nearestSupport.price.toFixed(2)} (${distancePct.toFixed(2)}% away)`,
+      description: `${symbol} near ${nearestSupport.type} support at $${nearestSupport.price.toFixed(2)} (${formatDistancePct(distancePct)} away, ${formatDistancePoints(distancePoints)} pts)`,
       levels: {
         entry: currentPrice,
         stopLoss: nearestSupport.price - atr * 0.5,
@@ -78,18 +145,23 @@ export async function scanResistanceRejection(symbol: string): Promise<Technical
     const levelsData = await calculateLevels(symbol, 'intraday');
     const { currentPrice, levels } = levelsData;
     const atr = levels.indicators.atr14 || 0;
+    const marketStatus = levelsData.marketContext?.marketStatus;
 
     if (!atr || levels.resistance.length === 0) return null;
 
-    const nearestResistance = levels.resistance[0];
-    const distancePct = Math.abs(currentPrice - nearestResistance.price) / currentPrice * 100;
+    const proximityCandidate = pickNearestProximityLevel(
+      levels.resistance as ScannerLevel[],
+      currentPrice,
+      'resistance',
+      marketStatus,
+    );
+    if (!proximityCandidate) return null;
 
-    if (distancePct > 0.5) return null;
+    const nearestResistance = proximityCandidate.level;
+    const distancePct = proximityCandidate.distancePct;
+    const distancePoints = Math.abs(currentPrice - nearestResistance.price);
 
-    // Price should be below resistance
-    if (currentPrice > nearestResistance.price) return null;
-
-    const confidence = Math.max(0.3, Math.min(0.9, 1 - (distancePct / 0.5)));
+    const confidence = Math.max(0.3, Math.min(0.9, 1 - (distancePct / PROXIMITY_THRESHOLD_PCT)));
 
     return {
       type: 'resistance_rejection',
@@ -98,7 +170,7 @@ export async function scanResistanceRejection(symbol: string): Promise<Technical
       confidence,
       currentPrice,
       triggerPrice: nearestResistance.price,
-      description: `${symbol} near ${nearestResistance.type} resistance at $${nearestResistance.price.toFixed(2)} (${distancePct.toFixed(2)}% away)`,
+      description: `${symbol} near ${nearestResistance.type} resistance at $${nearestResistance.price.toFixed(2)} (${formatDistancePct(distancePct)} away, ${formatDistancePoints(distancePoints)} pts)`,
       levels: {
         entry: currentPrice,
         stopLoss: nearestResistance.price + atr * 0.5,
