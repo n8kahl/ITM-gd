@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils'
 
 interface MarketQuote {
   symbol: string
-  price: number
-  change: number
-  changePercent: number
+  price: number | null
+  change: number | null
+  changePercent: number | null
   updatedAt: number
 }
 
@@ -62,6 +62,7 @@ function getMarketStatusColor(status: MarketStatus): string {
 }
 
 function formatPrice(price: number): string {
+  if (!Number.isFinite(price)) return '—'
   return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -101,11 +102,14 @@ export function LiveMarketTicker() {
       if (data.success && data.data) {
         const newQuotes: Record<string, MarketQuote> = {}
         for (const q of data.data.quotes || []) {
+          const price = Number(q.price)
+          const change = Number(q.change)
+          const changePercent = Number(q.changePercent)
           newQuotes[q.symbol] = {
             symbol: q.symbol,
-            price: q.price,
-            change: q.change,
-            changePercent: q.changePercent,
+            price: Number.isFinite(price) ? price : null,
+            change: Number.isFinite(change) ? change : null,
+            changePercent: Number.isFinite(changePercent) ? changePercent : null,
             updatedAt: Date.now(),
           }
         }
@@ -154,15 +158,17 @@ export function LiveMarketTicker() {
         {/* Quotes */}
         {['SPX', 'NDX'].map(symbol => {
           const quote = quotes[symbol]
+          const hasQuotePrice = quote?.price != null
           const isUp = (quote?.change ?? 0) >= 0
+          const formattedPrice = hasQuotePrice && quote ? formatPrice(quote.price as number) : '—'
 
           return (
             <div key={symbol} className="flex items-center gap-2 flex-shrink-0">
               <span className="text-xs text-muted-foreground font-medium">{symbol}</span>
               <span className="font-mono text-sm font-semibold text-ivory tabular-nums">
-                {quote ? `$${formatPrice(quote.price)}` : '—'}
+                {hasQuotePrice ? `$${formattedPrice}` : '—'}
               </span>
-              {quote && (
+              {quote?.changePercent != null && (
                 <span className={cn(
                   'font-mono text-xs tabular-nums',
                   isUp ? 'text-emerald-400' : 'text-red-400'

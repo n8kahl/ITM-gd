@@ -10,7 +10,7 @@ interface RecentTrade {
   id: string
   symbol: string
   direction: 'long' | 'short'
-  pnl: number
+  pnl: number | null
   ai_grade?: string | null
   trade_date: string
   created_at: string
@@ -101,7 +101,9 @@ export function RecentTrades() {
         ) : (
           <div className="space-y-1">
             {trades.map((trade) => {
-              const isProfit = trade.pnl >= 0
+              const hasPnl = typeof trade.pnl === 'number' && Number.isFinite(trade.pnl)
+              const pnlValue = hasPnl ? Number(trade.pnl) : 0
+              const isProfit = pnlValue >= 0
               return (
                 <Link
                   key={trade.id}
@@ -126,9 +128,13 @@ export function RecentTrades() {
                   {/* P&L */}
                   <span className={cn(
                     'font-mono text-sm tabular-nums ml-auto',
-                    isProfit ? 'text-emerald-400' : 'text-red-400'
+                    hasPnl
+                      ? isProfit ? 'text-emerald-400' : 'text-red-400'
+                      : 'text-white/40'
                   )}>
-                    {isProfit ? '+' : ''}${trade.pnl.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                    {hasPnl
+                      ? `${isProfit ? '+' : ''}$${pnlValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
+                      : '—'}
                   </span>
 
                   {/* AI Grade */}

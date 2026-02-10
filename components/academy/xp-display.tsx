@@ -38,19 +38,24 @@ function getRank(xp: number): RankInfo {
 }
 
 export function XpDisplay({ currentXp, className }: XpDisplayProps) {
-  const rank = useMemo(() => getRank(currentXp), [currentXp])
+  const safeXp = useMemo(() => {
+    if (!Number.isFinite(currentXp)) return 0
+    return Math.max(0, currentXp)
+  }, [currentXp])
+
+  const rank = useMemo(() => getRank(safeXp), [safeXp])
 
   const progressInRank = useMemo(() => {
     if (rank.maxXp === Infinity) return 100
     const range = rank.maxXp - rank.minXp
-    const current = currentXp - rank.minXp
+    const current = safeXp - rank.minXp
     return Math.min(100, Math.round((current / range) * 100))
-  }, [currentXp, rank])
+  }, [safeXp, rank])
 
   const xpToNext = useMemo(() => {
     if (rank.maxXp === Infinity) return 0
-    return rank.maxXp - currentXp
-  }, [currentXp, rank])
+    return rank.maxXp - safeXp
+  }, [safeXp, rank])
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -63,7 +68,7 @@ export function XpDisplay({ currentXp, className }: XpDisplayProps) {
           </span>
         </div>
         <span className="text-xs text-white/40 font-mono tabular-nums">
-          {currentXp.toLocaleString()} XP
+          {safeXp.toLocaleString()} XP
         </span>
       </div>
 

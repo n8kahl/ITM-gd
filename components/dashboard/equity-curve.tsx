@@ -20,7 +20,7 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 interface EquityPoint {
   date: string
-  cumulative_pnl: number
+  cumulative_pnl: number | null
 }
 
 type TimeRange = '7d' | '30d' | '90d' | 'ytd' | 'all'
@@ -40,7 +40,8 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string; days: number }[] = 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.[0]) return null
 
-  const value = payload[0].value as number
+  const rawValue = payload[0].value
+  const value = typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : 0
   const isPositive = value >= 0
 
   return (
@@ -85,7 +86,14 @@ export function EquityCurve() {
         })
         const result = await res.json()
         if (result.success && Array.isArray(result.data)) {
-          setData(result.data)
+          const normalizedData = result.data.map((point: Partial<EquityPoint> & { date?: unknown; cumulative_pnl?: unknown }) => {
+            const cumulative = Number(point.cumulative_pnl)
+            return {
+              date: typeof point.date === 'string' ? point.date : '',
+              cumulative_pnl: Number.isFinite(cumulative) ? cumulative : 0,
+            }
+          })
+          setData(normalizedData)
         }
       } catch {
         // Silent fail
@@ -97,7 +105,8 @@ export function EquityCurve() {
   }, [timeRange, isAuthLoading, session?.access_token])
 
   const hasData = data.length > 0
-  const currentPnl = hasData ? data[data.length - 1].cumulative_pnl : 0
+  const lastPointValue = hasData ? Number(data[data.length - 1].cumulative_pnl) : 0
+  const currentPnl = Number.isFinite(lastPointValue) ? lastPointValue : 0
   const isPositive = currentPnl >= 0
 
   return (
