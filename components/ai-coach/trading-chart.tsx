@@ -37,6 +37,14 @@ export interface LevelAnnotation {
   color: string
   lineWidth?: number
   lineStyle?: 'solid' | 'dashed' | 'dotted'
+  type?: string
+  side?: 'resistance' | 'support'
+  strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+  description?: string
+  testsToday?: number
+  lastTest?: string | null
+  holdRate?: number | null
+  displayContext?: string
 }
 
 interface TradingChartProps {

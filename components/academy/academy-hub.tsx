@@ -1,20 +1,19 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import {
-  BookOpen,
-  TrendingUp,
   Award,
   ArrowRight,
 } from 'lucide-react'
 import Link from 'next/link'
-import { ContinueLearningCard } from '@/components/academy/continue-learning-card'
 import { CourseCard, type CourseCardData } from '@/components/academy/course-card'
 import { XpDisplay } from '@/components/academy/xp-display'
 import { StreakCalendar } from '@/components/academy/streak-calendar'
 import { AchievementCard } from '@/components/academy/achievement-card'
-import { ProgressRing } from '@/components/academy/progress-ring'
+import { MasteryArc } from '@/components/academy/mastery-arc'
+import { AIResumeCard } from '@/components/academy/ai-resume-card'
 
 // ============================================
 // TYPES
@@ -41,6 +40,20 @@ interface CurrentLesson {
   currentLesson: number
 }
 
+interface ResumeInsight {
+  message: string
+  source: string
+}
+
+interface CompetencyScores {
+  market_context: number
+  entry_validation: number
+  position_sizing: number
+  trade_management: number
+  exit_discipline: number
+  review_reflection: number
+}
+
 interface Achievement {
   id: string
   title: string
@@ -53,6 +66,7 @@ interface Achievement {
 interface AcademyHubProps {
   stats: DashboardStats
   currentLesson: CurrentLesson | null
+  resumeInsight?: ResumeInsight | null
   recommendedCourses: CourseCardData[]
   recentAchievements: Achievement[]
   username: string
@@ -81,15 +95,46 @@ const itemVariants = {
 export function AcademyHub({
   stats,
   currentLesson,
+  resumeInsight,
   recommendedCourses,
   recentAchievements,
   username,
   className,
 }: AcademyHubProps) {
-  const overallProgress =
-    stats.totalLessons > 0
-      ? Math.round((stats.lessonsCompleted / stats.totalLessons) * 100)
-      : 0
+  const [competencyScores, setCompetencyScores] = useState<CompetencyScores>({
+    market_context: 0,
+    entry_validation: 0,
+    position_sizing: 0,
+    trade_management: 0,
+    exit_discipline: 0,
+    review_reflection: 0,
+  })
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadCompetencyScores = async () => {
+      try {
+        const response = await fetch('/api/academy/competency-scores')
+        if (!response.ok) return
+        const payload = await response.json()
+        const nextScores = payload?.data?.scores
+        if (!mounted || !nextScores) return
+        setCompetencyScores((previous) => ({
+          ...previous,
+          ...nextScores,
+        }))
+      } catch {
+        // Keep zeroed scores on load failure.
+      }
+    }
+
+    loadCompetencyScores()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   return (
     <motion.div
@@ -112,50 +157,19 @@ export function AcademyHub({
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5">
         {/* ======== LEFT COLUMN (70%) ======== */}
         <div className="space-y-5">
-          {/* Continue learning */}
-          {currentLesson && (
-            <motion.div variants={itemVariants}>
-              <ContinueLearningCard
-                lessonId={currentLesson.lessonId}
-                lessonTitle={currentLesson.lessonTitle}
-                courseTitle={currentLesson.courseTitle}
-                courseSlug={currentLesson.courseSlug}
-                progress={currentLesson.progress}
-                totalLessons={currentLesson.totalLessons}
-                currentLesson={currentLesson.currentLesson}
-              />
-            </motion.div>
-          )}
-
-          {/* Stats grid */}
+          {/* AI resume */}
           <motion.div variants={itemVariants}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatBox
-                label="Courses"
-                value={`${stats.coursesCompleted}/${stats.totalCourses}`}
-                icon={<BookOpen className="w-4 h-4 text-emerald-400" />}
-              />
-              <StatBox
-                label="Lessons"
-                value={`${stats.lessonsCompleted}`}
-                icon={<TrendingUp className="w-4 h-4 text-emerald-400" />}
-              />
-              <StatBox
-                label="Quizzes Passed"
-                value={`${stats.quizzesPassed}`}
-                icon={<Award className="w-4 h-4 text-emerald-400" />}
-              />
-              <StatBox
-                label="Overall"
-                value={
-                  <ProgressRing
-                    progress={overallProgress}
-                    size={36}
-                    strokeWidth={3}
-                  />
-                }
-              />
-            </div>
+            <AIResumeCard
+              currentLesson={currentLesson ? {
+                id: currentLesson.lessonId,
+                title: currentLesson.lessonTitle,
+                courseTitle: currentLesson.courseTitle,
+                position: currentLesson.currentLesson,
+                totalLessons: currentLesson.totalLessons,
+                progress: currentLesson.progress,
+              } : null}
+              insight={resumeInsight || null}
+            />
           </motion.div>
 
           {/* Recommended courses */}
@@ -205,6 +219,11 @@ export function AcademyHub({
 
         {/* ======== RIGHT COLUMN (30%) ======== */}
         <div className="space-y-5">
+          {/* Mastery arc */}
+          <motion.div variants={itemVariants}>
+            <MasteryArc scores={competencyScores} className="h-full" />
+          </motion.div>
+
           {/* XP Display */}
           <motion.div
             variants={itemVariants}
@@ -255,40 +274,5 @@ export function AcademyHub({
         </div>
       </div>
     </motion.div>
-  )
-}
-
-// ============================================
-// STAT BOX
-// ============================================
-
-function StatBox({
-  label,
-  value,
-  icon,
-}: {
-  label: string
-  value: React.ReactNode
-  icon?: React.ReactNode
-}) {
-  return (
-    <div
-      className={cn(
-        'rounded-xl p-3',
-        'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5'
-      )}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] text-white/40 uppercase tracking-wider">
-          {label}
-        </span>
-        {icon}
-      </div>
-      {typeof value === 'string' || typeof value === 'number' ? (
-        <p className="text-lg font-semibold text-white">{value}</p>
-      ) : (
-        value
-      )}
-    </div>
   )
 }

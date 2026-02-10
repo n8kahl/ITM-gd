@@ -2,43 +2,63 @@ import { test, expect, type Page, type Route } from '@playwright/test'
 import { authenticateAsMember } from '../../helpers/member-auth'
 
 const AI_COACH_URL = '/members/ai-coach'
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+  'access-control-allow-headers': 'Authorization,Content-Type,x-e2e-bypass-auth',
+}
+
+async function fulfillJson(route: Route, body: unknown, status: number = 200) {
+  if (route.request().method() === 'OPTIONS') {
+    await route.fulfill({
+      status: 204,
+      headers: CORS_HEADERS,
+      body: '',
+    })
+    return
+  }
+
+  await route.fulfill({
+    status,
+    headers: {
+      ...CORS_HEADERS,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+}
 
 async function setupChatRoutes(page: Page) {
   await page.route('**/api/chat/sessions*', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ sessions: [], count: 0 }),
-    })
+    await fulfillJson(route, { sessions: [], count: 0 })
   })
 
   await page.route('**/api/chat/sessions/*', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ messages: [], total: 0, hasMore: false }),
-    })
+    await fulfillJson(route, { messages: [], total: 0, hasMore: false })
+  })
+
+  await page.route('**/api/chat/stream', async (route: Route) => {
+    await fulfillJson(route, {
+      error: 'stream_unavailable',
+      message: 'Streaming unavailable in mock mode',
+    }, 503)
   })
 
   await page.route('**/api/chat/message', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        sessionId: 'session-1',
-        messageId: 'assistant-1',
-        role: 'assistant',
-        content: [
-          'SPX is testing PDH at $5,950.25.',
-          'PDH tested 3x today (9:45 AM, 11:20 AM, 2:15 PM) with 100% hold rate.',
-          'Triple confluence near $5,920 (Fib 61.8%, VWAP, S1).',
-          'Invalidates on a 15m close below $5,915.',
-          'Nearest resistance is +1.8 ATR from current price.',
-        ].join(' '),
-        functionCalls: [],
-        tokensUsed: 420,
-        responseTime: 850,
-      }),
+    await fulfillJson(route, {
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      role: 'assistant',
+      content: [
+        'SPX is testing PDH at $5,950.25.',
+        'PDH tested 3x today (9:45 AM, 11:20 AM, 2:15 PM) with 100% hold rate.',
+        'Triple confluence near $5,920 (Fib 61.8%, VWAP, S1).',
+        'Invalidates on a 15m close below $5,915.',
+        'Nearest resistance is +1.8 ATR from current price.',
+      ].join(' '),
+      functionCalls: [],
+      tokensUsed: 420,
+      responseTime: 850,
     })
   })
 }

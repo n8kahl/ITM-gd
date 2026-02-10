@@ -3,8 +3,21 @@
 
 **Version:** 2.0  
 **Date:** February 10, 2026  
-**Status:** Ready for Engineering Execution  
+**Status:** Implemented in production codebase (Academy V2)  
 **Owner:** Product + Design + Frontend Engineering
+
+---
+
+## Implementation Status (2026-02-10)
+
+This specification has been implemented in the Academy V2 rebuild. Primary implementation references:
+
+- Navigation and layout: `components/academy/academy-sub-nav.tsx`, `components/members/member-sidebar.tsx`, `components/members/mobile-bottom-nav.tsx`
+- Lesson rendering and chunk flow: `components/academy/lesson-player.tsx`, `components/academy/lesson-chunk-renderer.tsx`, `components/academy/chunk-progress-dots.tsx`, `app/members/academy/learn/[id]/page.tsx`
+- Competency and mastery visualization: `components/academy/mastery-arc.tsx`, `app/api/academy/competency-scores/route.ts`, `components/academy/academy-hub.tsx`
+- Review queue system: `app/members/academy/review/page.tsx`, `components/academy/review-session.tsx`, `components/academy/review-session-header.tsx`, `components/academy/review-summary.tsx`, `app/api/academy/review/route.ts`, `app/api/academy/review/submit/route.ts`
+- Saved items system: `app/members/academy/saved/page.tsx`, `app/api/academy/saved/route.ts`, `components/academy/course-card.tsx`
+- Tutor context and intelligence: `app/api/academy/tutor/session/route.ts`, `app/api/academy/insights/route.ts`, `components/academy/ai-resume-card.tsx`
 
 ---
 
@@ -466,4 +479,3 @@ Phase 4: AI contextual integration and hardening
 
 Phase 5: QA, performance, and seeding validation
 - Device matrix pass, null-safety hardening, seed integrity checks
-

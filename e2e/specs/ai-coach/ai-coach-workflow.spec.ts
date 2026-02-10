@@ -360,7 +360,7 @@ test.describe('AI Coach — Scanner Workflow', () => {
     await page.goto(AI_COACH_URL)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('AI Coach Center').first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Ready to execute the session plan\?/i })).toBeVisible()
 
     await page.getByRole('button', { name: 'Scanner' }).first().click()
     await expect(page.getByText('Opportunity Scanner')).toBeVisible()

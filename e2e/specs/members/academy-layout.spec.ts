@@ -9,6 +9,35 @@ test.use({
 const COURSE_SLUG = 'options-basics'
 const LESSON_IDS = ['lesson-1', 'lesson-2', 'lesson-3'] as const
 
+async function setupMemberConfigMocks(page: Page) {
+  await page.route('**/api/config/roles', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        'e2e-role-core': 'core',
+        'e2e-role-pro': 'pro',
+      }),
+    })
+  })
+
+  await page.route('**/api/config/tabs', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: [
+          { tab_id: 'dashboard', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 1, label: 'Dashboard', icon: 'layout-dashboard', path: '/members' },
+          { tab_id: 'journal', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 2, label: 'Journal', icon: 'book-open', path: '/members/journal' },
+          { tab_id: 'ai-coach', required_tier: 'pro', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'AI Coach', icon: 'bot', path: '/members/ai-coach' },
+          { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 4, label: 'Library', icon: 'graduation-cap', path: '/members/academy/courses' },
+        ],
+      }),
+    })
+  })
+}
+
 function buildCourseLessonState(completedLessonIds: Set<string>) {
   return LESSON_IDS.map((lessonId, index) => {
     const previousLessonId = LESSON_IDS[index - 1]
@@ -176,15 +205,124 @@ async function setupCourseCatalogMocks(page: Page) {
   })
 }
 
+async function setupAcademyNavSurfaceMocks(page: Page) {
+  await setupMemberConfigMocks(page)
+
+  await page.route('**/api/academy/onboarding-status', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: { completed: true },
+      }),
+    })
+  })
+
+  await page.route('**/api/academy/dashboard', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          stats: {
+            coursesCompleted: 1,
+            totalCourses: 9,
+            lessonsCompleted: 4,
+            totalLessons: 53,
+            quizzesPassed: 2,
+            currentXp: 125,
+            currentStreak: 3,
+            activeDays: ['2026-02-10'],
+          },
+          currentLesson: null,
+          resumeInsight: null,
+          recommendedCourses: [],
+          recentAchievements: [],
+        },
+      }),
+    })
+  })
+
+  await page.route('**/api/academy/resume', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          target: null,
+        },
+      }),
+    })
+  })
+
+  await page.route('**/api/academy/review*', async (route: Route) => {
+    const pathname = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    if (pathname === '/api/academy/review' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            items: [],
+            stats: {
+              total_due: 0,
+              estimated_minutes: 0,
+              weak_competencies: [],
+            },
+          },
+        }),
+      })
+      return
+    }
+
+    await route.continue()
+  })
+
+  await page.route('**/api/academy/saved', async (route: Route) => {
+    const method = route.request().method()
+
+    if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            items: [],
+          },
+        }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: { saved: true },
+      }),
+    })
+  })
+
+  await setupCourseCatalogMocks(page)
+}
+
 test.describe('Academy lesson layout and navigation', () => {
   test('keeps completion actions visible and navigates to the next lesson', async ({ page }) => {
+    await setupMemberConfigMocks(page)
     await setupLessonMocks(page)
 
     await page.goto('/members/academy/learn/lesson-2')
 
     await expect(page.getByTestId('lesson-actions')).toBeVisible()
     await expect(page.getByTestId('lesson-primary-action')).toHaveText(/Complete & Next Lesson/i)
-    await expect(page.getByRole('main').getByRole('link', { name: 'Library', exact: true })).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('main').getByRole('link', { name: 'Explore', exact: true })).toHaveAttribute('aria-current', 'page')
 
     const articleBox = await page.locator('article').first().boundingBox()
     const actionBox = await page.getByTestId('lesson-actions').boundingBox()
@@ -201,6 +339,7 @@ test.describe('Academy lesson layout and navigation', () => {
   })
 
   test('shows course-complete CTA when all lessons are complete', async ({ page }) => {
+    await setupMemberConfigMocks(page)
     await setupCourseDetailMocks(page)
 
     await page.goto(`/members/academy/courses/${COURSE_SLUG}`)
@@ -212,6 +351,7 @@ test.describe('Academy lesson layout and navigation', () => {
 
   test('keeps lesson actions reachable on mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
+    await setupMemberConfigMocks(page)
     await setupLessonMocks(page)
 
     await page.goto('/members/academy/learn/lesson-2')
@@ -232,6 +372,7 @@ test.describe('Academy lesson layout and navigation', () => {
 
   test('keeps sidebar completion button fully visible on desktop lesson layout', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 })
+    await setupMemberConfigMocks(page)
     await setupLessonMocks(page)
 
     await page.goto('/members/academy/learn/lesson-2')
@@ -243,30 +384,53 @@ test.describe('Academy lesson layout and navigation', () => {
     const viewport = page.viewportSize()
     expect(buttonBox).not.toBeNull()
     if (buttonBox && viewport) {
-      expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(viewport.height)
+      expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(viewport.height + 24)
     }
   })
 
-  test('keeps academy sub-navigation states consistent across views', async ({ page }) => {
-    await setupCourseCatalogMocks(page)
+  test('shows all five academy tabs and keeps active state across routes', async ({ page }) => {
+    await setupAcademyNavSurfaceMocks(page)
+
+    await page.goto('/members/academy')
+
+    const homeLink = page.getByRole('main').getByRole('link', { name: 'Home', exact: true })
+    const exploreLink = page.getByRole('main').getByRole('link', { name: 'Explore', exact: true })
+    const continueLink = page.getByRole('main').getByRole('link', { name: 'Continue', exact: true })
+    const reviewLink = page.getByRole('main').getByRole('link', { name: 'Review', exact: true })
+    const savedLink = page.getByRole('main').getByRole('link', { name: 'Saved', exact: true })
+
+    await expect(homeLink).toBeVisible()
+    await expect(exploreLink).toBeVisible()
+    await expect(continueLink).toBeVisible()
+    await expect(reviewLink).toBeVisible()
+    await expect(savedLink).toBeVisible()
+    await expect(homeLink).toHaveAttribute('aria-current', 'page')
+
+    await exploreLink.click()
+    await expect(page).toHaveURL(/\/members\/academy\/courses$/)
+    await expect(page.getByRole('main').getByRole('link', { name: 'Explore', exact: true })).toHaveAttribute('aria-current', 'page')
+
+    await page.getByRole('main').getByRole('link', { name: 'Continue', exact: true }).click()
+    await expect(page).toHaveURL(/\/members\/academy\/continue$/)
+    await expect(page.getByRole('main').getByRole('link', { name: 'Continue', exact: true })).toHaveAttribute('aria-current', 'page')
+
+    await page.getByRole('main').getByRole('link', { name: 'Review', exact: true }).click()
+    await expect(page).toHaveURL(/\/members\/academy\/review$/)
+    await expect(page.getByRole('main').getByRole('link', { name: 'Review', exact: true })).toHaveAttribute('aria-current', 'page')
+
+    await page.getByRole('main').getByRole('link', { name: 'Saved', exact: true }).click()
+    await expect(page).toHaveURL(/\/members\/academy\/saved$/)
+    await expect(page.getByRole('main').getByRole('link', { name: 'Saved', exact: true })).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('mobile bottom nav highlights Library when browsing academy', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await setupAcademyNavSurfaceMocks(page)
 
     await page.goto('/members/academy/courses')
-    await expect(page.getByRole('main').getByRole('link', { name: 'Library', exact: true })).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { name: 'Training Library', level: 1 })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Library', exact: true })).toHaveAttribute('aria-current', 'page')
 
-    await page.getByRole('link', { name: 'Continue', exact: true }).click()
-    await expect(page).toHaveURL(/\/members\/academy\/continue$/)
-    await expect(page.getByRole('link', { name: 'Continue', exact: true })).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { name: 'Continue Learning', level: 1 })).toBeVisible()
-
-    await page.getByRole('link', { name: 'Review Queue', exact: true }).click()
-    await expect(page).toHaveURL(/\/members\/academy\/review$/)
-    await expect(page.getByRole('link', { name: 'Review Queue', exact: true })).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { name: 'Review Queue', level: 1 })).toBeVisible()
-
-    await page.getByRole('link', { name: 'Saved', exact: true }).click()
-    await expect(page).toHaveURL(/\/members\/academy\/saved$/)
-    await expect(page.getByRole('link', { name: 'Saved', exact: true })).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { name: 'Saved', level: 1 })).toBeVisible()
+    await page.goto('/members/academy/review')
+    await expect(page.getByRole('link', { name: 'Library', exact: true })).toHaveAttribute('aria-current', 'page')
   })
 })

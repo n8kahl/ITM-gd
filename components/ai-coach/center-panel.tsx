@@ -56,6 +56,7 @@ import {
   optionsAction,
   type WidgetAction,
 } from './widget-actions'
+import { ChartLevelLabels } from './chart-level-labels'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -90,8 +91,41 @@ export interface ChartRequest {
   symbol: string
   timeframe: ChartTimeframe
   levels?: {
-    resistance?: Array<{ name: string; price: number; distance?: string }>
-    support?: Array<{ name: string; price: number; distance?: string }>
+    resistance?: Array<{
+      name?: string
+      type?: string
+      price: number
+      distance?: string | number
+      distancePct?: number
+      distanceATR?: number
+      displayLabel?: string
+      displayContext?: string
+      side?: 'resistance' | 'support'
+      strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+      testsToday?: number
+      lastTest?: string | null
+      holdRate?: number | null
+    }>
+    support?: Array<{
+      name?: string
+      type?: string
+      price: number
+      distance?: string | number
+      distancePct?: number
+      distanceATR?: number
+      displayLabel?: string
+      displayContext?: string
+      side?: 'resistance' | 'support'
+      strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+      testsToday?: number
+      lastTest?: string | null
+      holdRate?: number | null
+    }>
+    fibonacci?: Array<{
+      name: string
+      price: number
+      isMajor?: boolean
+    }>
     indicators?: {
       vwap?: number
       atr14?: number
@@ -377,24 +411,54 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
     if (request.levels?.resistance) {
       for (const level of request.levels.resistance) {
+        const label = level.displayLabel || level.name || level.type || 'Resistance'
         annotations.push({
           price: level.price,
-          label: level.name,
-          color: LEVEL_COLORS[level.name] || '#ef4444',
+          label,
+          color: LEVEL_COLORS[(level.name || level.type || '').toUpperCase()] || '#ef4444',
           lineWidth: 1,
           lineStyle: 'dashed',
+          type: level.type || level.name || 'Resistance',
+          side: 'resistance',
+          strength: level.strength,
+          description: `${level.type || level.name || 'Resistance'} level`,
+          testsToday: level.testsToday,
+          lastTest: level.lastTest,
+          holdRate: level.holdRate,
+          displayContext: level.displayContext,
         })
       }
     }
 
     if (request.levels?.support) {
       for (const level of request.levels.support) {
+        const label = level.displayLabel || level.name || level.type || 'Support'
         annotations.push({
           price: level.price,
-          label: level.name,
-          color: LEVEL_COLORS[level.name] || '#10B981',
+          label,
+          color: LEVEL_COLORS[(level.name || level.type || '').toUpperCase()] || '#10B981',
           lineWidth: 1,
           lineStyle: 'dashed',
+          type: level.type || level.name || 'Support',
+          side: 'support',
+          strength: level.strength,
+          description: `${level.type || level.name || 'Support'} level`,
+          testsToday: level.testsToday,
+          lastTest: level.lastTest,
+          holdRate: level.holdRate,
+          displayContext: level.displayContext,
+        })
+      }
+    }
+
+    if (request.levels?.fibonacci) {
+      for (const fibLevel of request.levels.fibonacci) {
+        annotations.push({
+          price: fibLevel.price,
+          label: `Fib ${fibLevel.name}`,
+          color: fibLevel.isMajor ? '#a78bfa' : '#8b5cf6',
+          lineWidth: fibLevel.isMajor ? 2 : 1,
+          lineStyle: 'solid',
         })
       }
     }
@@ -1160,6 +1224,10 @@ function ChartView({
                 timeframe={timeframe}
                 isLoading={isLoading}
                 onHoverPrice={setHoveredPrice}
+              />
+              <ChartLevelLabels
+                levels={levels}
+                currentPrice={roundedHoverPrice ?? bars[bars.length - 1]?.close ?? 0}
               />
               <div className="pointer-events-none absolute right-3 top-3 rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-white/55 backdrop-blur">
                 Right-click chart for actions{roundedHoverPrice != null ? ` @ ${roundedHoverPrice.toFixed(2)}` : ''}

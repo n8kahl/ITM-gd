@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { GraduationCap, Sparkles } from 'lucide-react'
 import { CourseCatalog } from '@/components/academy/course-catalog'
 import type { CourseCardData } from '@/components/academy/course-card'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // ============================================
 // TYPES
@@ -58,7 +59,7 @@ export default function CoursesPage() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-              <Image src="/logo.png" alt="Loading" fill className="object-contain" />
+              <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
             </div>
             <p className="text-sm text-white/40">Loading courses...</p>
           </div>

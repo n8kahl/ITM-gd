@@ -16,6 +16,7 @@ interface ExtendedCourseRow extends BaseCourseRow {
   difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | null
   estimated_hours?: number | null
   learning_path_id?: string | null
+  competency_map?: Record<string, unknown> | null
 }
 
 interface LessonRow {
@@ -26,6 +27,24 @@ interface LessonRow {
 }
 
 const DIFFICULTY_VALUES = new Set(['beginner', 'intermediate', 'advanced'])
+const COMPETENCY_VALUES = new Set([
+  'market_context',
+  'entry_validation',
+  'position_sizing',
+  'trade_management',
+  'exit_discipline',
+  'review_reflection',
+])
+
+type CompetencyKey =
+  | 'market_context'
+  | 'entry_validation'
+  | 'position_sizing'
+  | 'trade_management'
+  | 'exit_discipline'
+  | 'review_reflection'
+
+type SortMode = 'default' | 'trending' | 'recommended'
 
 function normalizeDifficulty(value: string | null | undefined): 'beginner' | 'intermediate' | 'advanced' {
   if (value && DIFFICULTY_VALUES.has(value)) {
@@ -52,6 +71,23 @@ function inferSkills(title: string, description: string): string[] {
     .map((item) => item.label)
 
   return matched.length > 0 ? matched.slice(0, 3) : ['Execution Framework']
+}
+
+function parseMaxMinutes(value: string | null): number | null {
+  if (!value) return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.round(parsed)
+}
+
+function normalizeSort(value: string | null): SortMode {
+  if (value === 'trending' || value === 'recommended') return value
+  return 'default'
+}
+
+function normalizeCompetency(value: string | null): CompetencyKey | null {
+  if (!value || !COMPETENCY_VALUES.has(value)) return null
+  return value as CompetencyKey
 }
 
 async function fetchLessonsWithFallback(
@@ -97,6 +133,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const pathId = searchParams.get('path_id')
     const difficultyFilter = searchParams.get('difficulty')
+    const competencyFilter = normalizeCompetency(searchParams.get('competency'))
+    const maxMinutesFilter = parseMaxMinutes(searchParams.get('max_minutes'))
+    const sortMode = normalizeSort(searchParams.get('sort'))
 
     const extendedSelect = `
       id,
@@ -107,6 +146,7 @@ export async function GET(request: NextRequest) {
       difficulty_level,
       estimated_hours,
       learning_path_id,
+      competency_map,
       updated_at,
       display_order
     `
@@ -173,7 +213,8 @@ export async function GET(request: NextRequest) {
     }
 
     const courseIds = courses.map((course) => course.id)
-    const [lessonsResult, progressResult] = await Promise.all([
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const [lessonsResult, progressResult, trendingResult] = await Promise.all([
       fetchLessonsWithFallback(supabase, courseIds),
       courseIds.length > 0
         ? supabase
@@ -181,6 +222,13 @@ export async function GET(request: NextRequest) {
             .select('course_id, lesson_id, status')
             .eq('user_id', user.id)
             .in('course_id', courseIds)
+        : Promise.resolve({ data: [], error: null }),
+      courseIds.length > 0
+        ? supabase
+            .from('user_course_progress')
+            .select('course_id, started_at')
+            .in('course_id', courseIds)
+            .gte('started_at', sevenDaysAgo)
         : Promise.resolve({ data: [], error: null }),
     ])
 
@@ -193,6 +241,7 @@ export async function GET(request: NextRequest) {
     }
 
     const safeProgressRows = progressResult.error ? [] : progressResult.data || []
+    const safeTrendingRows = trendingResult.error ? [] : trendingResult.data || []
 
     const lessonCountByCourse = new Map<string, number>()
     const estimatedMinutesByCourse = new Map<string, number>()
@@ -219,38 +268,96 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const mappedCourses = courses.map((course) => {
+    const trendingStartsByCourse = new Map<string, number>()
+    for (const row of safeTrendingRows) {
+      if (!row.course_id) continue
+      trendingStartsByCourse.set(
+        row.course_id,
+        (trendingStartsByCourse.get(row.course_id) || 0) + 1
+      )
+    }
+
+    const courseById = new Map(courses.map((course) => [course.id, course]))
+
+    let mappedCourses = courses.map((course) => {
       const description = course.description || ''
       const path = course.learning_path_id
         ? pathNamesById.get(course.learning_path_id) || 'General'
         : 'General'
       const estimatedFromLessons = estimatedMinutesByCourse.get(course.id) || 0
+      const totalLessons = lessonCountByCourse.get(course.id) || 0
+      const completedLessons = completedLessonsByCourse.get(course.id) || 0
+      const trendingStarts = trendingStartsByCourse.get(course.id) || 0
+      const progressRatio = totalLessons > 0 ? completedLessons / totalLessons : 0
+      const recommendedScore =
+        (1 - progressRatio) * 60 +
+        trendingStarts * 6 +
+        (hasMicroLessonByCourse.get(course.id) ? 8 : 0)
 
       return {
+        id: course.id,
         slug: course.slug,
         title: course.title,
         description,
         thumbnailUrl: course.thumbnail_url,
         difficulty: normalizeDifficulty(course.difficulty_level),
         path,
-        totalLessons: lessonCountByCourse.get(course.id) || 0,
-        completedLessons: completedLessonsByCourse.get(course.id) || 0,
+        totalLessons,
+        completedLessons,
         estimatedMinutes:
           estimatedFromLessons || Math.round(((course.estimated_hours || 0) * 60)),
         skills: inferSkills(course.title, description),
         microLearningAvailable:
-          hasMicroLessonByCourse.get(course.id) || (lessonCountByCourse.get(course.id) || 0) > 0,
+          hasMicroLessonByCourse.get(course.id) || totalLessons > 0,
         lastUpdatedAt: course.updated_at || null,
+        _trendingStarts: trendingStarts,
+        _recommendedScore: recommendedScore,
       }
     })
 
+    if (competencyFilter) {
+      mappedCourses = mappedCourses.filter((course) => {
+        const row = courseById.get(course.id)
+        const competencyMap =
+          row?.competency_map && typeof row.competency_map === 'object'
+            ? row.competency_map
+            : null
+
+        if (competencyMap && competencyFilter in competencyMap) {
+          return true
+        }
+
+        const searchText = `${course.title} ${course.description}`.toLowerCase()
+        return searchText.includes(competencyFilter.replace('_', ' '))
+      })
+    }
+
+    if (maxMinutesFilter !== null) {
+      mappedCourses = mappedCourses.filter((course) => course.estimatedMinutes <= maxMinutesFilter)
+    }
+
+    if (sortMode === 'trending') {
+      mappedCourses.sort((a, b) => b._trendingStarts - a._trendingStarts)
+    } else if (sortMode === 'recommended') {
+      mappedCourses.sort((a, b) => b._recommendedScore - a._recommendedScore)
+    }
+
     const paths = Array.from(new Set(mappedCourses.map((course) => course.path))).sort()
+    const trending = [...mappedCourses]
+      .sort((a, b) => b._trendingStarts - a._trendingStarts)
+      .slice(0, 5)
+    const microLessons = mappedCourses.filter((course) => course.microLearningAvailable).slice(0, 8)
+    const coursesResponse = mappedCourses.map(({ _trendingStarts, _recommendedScore, ...course }) => course)
+    const trendingResponse = trending.map(({ _trendingStarts, _recommendedScore, ...course }) => course)
+    const microLessonsResponse = microLessons.map(({ _trendingStarts, _recommendedScore, ...course }) => course)
 
     return NextResponse.json({
       success: true,
       data: {
-        courses: mappedCourses,
+        courses: coursesResponse,
         paths,
+        trending: trendingResponse,
+        micro_lessons: microLessonsResponse,
       },
     })
   } catch (error) {

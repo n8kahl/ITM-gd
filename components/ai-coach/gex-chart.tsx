@@ -1,5 +1,6 @@
 'use client'
 
+import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface GEXStrikeRow {
@@ -91,6 +92,30 @@ export function GEXChart({
 
   return (
     <div className={cn('rounded-lg border border-white/10 bg-black/20 p-3', className)}>
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-medium text-white/90">Gamma Exposure (GEX)</h4>
+          <p className="mt-0.5 text-[10px] text-white/50">Dealer hedging pressure by strike</p>
+        </div>
+
+        <details className="group relative">
+          <summary className="cursor-pointer list-none rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white/80">
+            <Info className="h-3.5 w-3.5" />
+          </summary>
+          <div className="absolute right-0 z-30 mt-1 w-72 rounded border border-white/15 bg-black/95 p-2 text-[10px] text-white/75 shadow-2xl">
+            <p className="font-medium text-white/90">How to read GEX</p>
+            <p className="mt-1">
+              Positive GEX tends to dampen volatility; negative GEX can amplify directional moves.
+            </p>
+            <ul className="mt-1 space-y-0.5 text-white/65">
+              <li><span className="text-yellow-300">Flip:</span> Transition point between positive and negative gamma.</li>
+              <li><span className="text-violet-300">Max GEX:</span> Strike with strongest dealer hedge gravity.</li>
+              <li><span className="text-emerald-300">Use:</span> Combine with key levels for confluence zones.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+
       <div className="mb-2 flex items-center justify-between text-[10px] text-white/50">
         <span>Negative GEX</span>
         <span>Positive GEX</span>

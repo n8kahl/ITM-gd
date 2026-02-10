@@ -130,6 +130,10 @@ export async function POST(
         xpAwarded += XP_LESSON_COMPLETE
         await awardXp(supabaseAdmin, user.id, XP_LESSON_COMPLETE, 'lesson_complete', lessonId)
         await supabaseAdmin.rpc('update_streak', { p_user_id: user.id })
+        await supabaseAdmin.rpc('seed_review_items_for_lesson', {
+          p_user_id: user.id,
+          p_lesson_id: lessonId,
+        })
 
         const courseCompletion = await syncCourseCompletion(
           supabaseAdmin,
