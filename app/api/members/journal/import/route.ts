@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
+import { enqueueJournalAnalyticsRefresh } from '@/lib/journal/analytics-refresh-queue'
 import { importTradesSchema } from '@/lib/validation/journal-api'
 import { importBrokerNameSchema } from '@/lib/validation/journal-entry'
 
@@ -206,6 +207,9 @@ export async function POST(request: NextRequest) {
         errorCount = insertPayload.length
       } else {
         insertedCount = inserted?.length || 0
+        if (insertedCount > 0) {
+          enqueueJournalAnalyticsRefresh(userId)
+        }
       }
     }
 

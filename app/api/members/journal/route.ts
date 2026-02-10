@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
+import { enqueueJournalAnalyticsRefresh } from '@/lib/journal/analytics-refresh-queue'
 import { journalEntrySchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
 
 function getSupabaseAdmin() {
@@ -431,6 +432,8 @@ export async function POST(request: NextRequest) {
       typeof payload.trade_date === 'string' ? payload.trade_date : undefined,
     )
 
+    enqueueJournalAnalyticsRefresh(userId)
+
     return NextResponse.json({ success: true, data: sanitizeJournalEntry(entry, 'new-entry') })
   } catch (error) {
     if (error instanceof ZodError) {
@@ -505,6 +508,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
     }
 
+    enqueueJournalAnalyticsRefresh(userId)
+
     return NextResponse.json({ success: true, data: sanitizeJournalEntry(data[0], 'updated-entry') })
   } catch (error) {
     if (error instanceof ZodError) {
@@ -554,6 +559,8 @@ export async function DELETE(request: NextRequest) {
 
     // Recalculate streaks
     await recalculateStreaks(supabase, userId)
+
+    enqueueJournalAnalyticsRefresh(userId)
 
     return NextResponse.json({ success: true })
   } catch (error) {
