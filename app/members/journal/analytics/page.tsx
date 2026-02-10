@@ -1,23 +1,32 @@
 'use client'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { BarChart3 } from 'lucide-react'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
-import { AnalyticsDashboard } from '@/components/journal/analytics-dashboard'
-import { PlaybookManager } from '@/components/journal/playbook-manager'
-import { BehavioralInsights } from '@/components/journal/behavioral-insights'
+
+const AnalyticsDashboard = dynamic(
+  () => import('@/components/journal/analytics-dashboard').then((mod) => mod.AnalyticsDashboard),
+  {
+    loading: () => (
+      <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-muted-foreground">
+        Loading analytics...
+      </div>
+    ),
+  },
+)
 
 export default function JournalAnalyticsPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl lg:text-2xl font-serif text-ivory font-medium tracking-tight flex items-center gap-2.5">
-            <BarChart3 className="w-6 h-6 text-emerald-400" />
+          <h1 className="flex items-center gap-2.5 text-xl font-medium tracking-tight text-ivory lg:text-2xl">
+            <BarChart3 className="h-6 w-6 text-emerald-400" />
             Journal Analytics
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Advanced performance metrics, timing, and execution analysis
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Advanced performance metrics and trade analytics.
           </p>
           <Breadcrumb
             className="mt-2"
@@ -31,15 +40,13 @@ export default function JournalAnalyticsPage() {
 
         <Link
           href="/members/journal"
-          className="px-3.5 py-2 rounded-lg border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05]"
+          className="rounded-lg border border-white/10 px-3.5 py-2 text-sm text-ivory hover:bg-white/5"
         >
           Back To Journal
         </Link>
       </div>
 
       <AnalyticsDashboard />
-      <PlaybookManager />
-      <BehavioralInsights />
     </div>
   )
 }

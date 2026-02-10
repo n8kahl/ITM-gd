@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -11,24 +12,49 @@ import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { BentoCard } from "@/components/ui/bento-card";
 import { PricingCard } from "@/components/ui/pricing-card";
-import { FloatingNavbar } from "@/components/ui/floating-navbar";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
-import { MobileStickyCtA } from "@/components/ui/mobile-sticky-cta";
-import { PromoBanner } from "@/components/ui/promo-banner";
-import { CohortSection } from "@/components/ui/cohort-section";
-import { MentorshipSection } from "@/components/ui/mentorship-section";
-import { SubscribeModal } from "@/components/ui/subscribe-modal";
-import { ContactModal } from "@/components/ui/contact-modal";
-import { ChatWidget } from "@/components/ui/chat-widget";
 import { Analytics } from "@/lib/analytics";
 import { BillingToggle } from "@/components/ui/billing-toggle";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
 import SparkleLog from "@/components/ui/sparkle-logo";
+
+const FloatingNavbar = dynamic(
+  () => import("@/components/ui/floating-navbar").then((mod) => mod.FloatingNavbar),
+  { ssr: false },
+);
+const PromoBanner = dynamic(
+  () => import("@/components/ui/promo-banner").then((mod) => mod.PromoBanner),
+  { ssr: false },
+);
+const MobileStickyCtA = dynamic(
+  () => import("@/components/ui/mobile-sticky-cta").then((mod) => mod.MobileStickyCtA),
+  { ssr: false },
+);
+const CohortSection = dynamic(
+  () => import("@/components/ui/cohort-section").then((mod) => mod.CohortSection),
+  { ssr: false },
+);
+const MentorshipSection = dynamic(
+  () => import("@/components/ui/mentorship-section").then((mod) => mod.MentorshipSection),
+  { ssr: false },
+);
+const SubscribeModal = dynamic(
+  () => import("@/components/ui/subscribe-modal").then((mod) => mod.SubscribeModal),
+  { ssr: false },
+);
+const ContactModal = dynamic(
+  () => import("@/components/ui/contact-modal").then((mod) => mod.ContactModal),
+  { ssr: false },
+);
+const ChatWidget = dynamic(
+  () => import("@/components/ui/chat-widget").then((mod) => mod.ChatWidget),
+  { ssr: false },
+);
 
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
