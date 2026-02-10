@@ -6,6 +6,8 @@ import { AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
+import { getSafeRedirect } from '@/lib/safe-redirect'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 /**
  * Client-side OAuth callback page
@@ -35,6 +37,36 @@ function AuthCallbackContent() {
       apiUrl.searchParams.set(key, value)
     })
 
+    // If no explicit redirect was provided in the callback URL, fall back to the
+    // pre-auth destination stored by the login page.
+    const hasNext =
+      apiUrl.searchParams.has('next') ||
+      apiUrl.searchParams.has('redirect')
+
+    if (!hasNext) {
+      let stored: string | null = null
+      try {
+        stored = window.sessionStorage.getItem('post_auth_redirect')
+      } catch {}
+
+      if (!stored) {
+        try {
+          stored = window.localStorage.getItem('post_auth_redirect')
+        } catch {}
+      }
+
+      if (stored) {
+        const safe = getSafeRedirect(stored)
+        apiUrl.searchParams.set('redirect', safe)
+        try {
+          window.sessionStorage.removeItem('post_auth_redirect')
+        } catch {}
+        try {
+          window.localStorage.removeItem('post_auth_redirect')
+        } catch {}
+      }
+    }
+
     console.log('Forwarding OAuth callback to server-side handler:', apiUrl.pathname)
 
     // Immediate redirect to server-side handler
@@ -47,7 +79,7 @@ function AuthCallbackContent() {
       <div className="max-w-md w-full text-center">
         {/* Logo */}
         <div className="relative w-16 h-16 mx-auto mb-6">
-          <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
         </div>
 
         {/* Processing State */}
@@ -71,7 +103,7 @@ export default function AuthCallbackPage() {
       <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
           <div className="relative w-16 h-16 mx-auto mb-6">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
           </div>
           <div className="relative w-20 h-20 mx-auto mb-6">
             <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />

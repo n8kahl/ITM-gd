@@ -1,729 +1,284 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo, useRef, type TouchEvent } from 'react'
-import Image from 'next/image'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Plus, BookOpen, RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
-import * as Sentry from '@sentry/nextjs'
-import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
-import { DEFAULT_FILTERS } from '@/lib/types/journal'
-import { cn } from '@/lib/utils'
+import { BarChart3, Plus, Upload } from 'lucide-react'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
 import { JournalTableView } from '@/components/journal/journal-table-view'
 import { JournalCardView } from '@/components/journal/journal-card-view'
-import { OpenPositionsWidget } from '@/components/journal/open-positions-widget'
-import { ImportWizard } from '@/components/journal/import-wizard'
-import { JournalPwaPrompt } from '@/components/journal/journal-pwa-prompt'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
-import {
-  parseJournalPrefillFromSearchParams,
-  type JournalPrefillPayload,
-} from '@/lib/journal/ai-coach-bridge'
-import {
-  createAppError,
-  createAppErrorFromResponse,
-  notifyAppError,
-  withExponentialBackoff,
-  type AppError,
-} from '@/lib/error-handler'
-import { useIsMobile } from '@/hooks/use-is-mobile'
-import {
-  enqueueOfflineJournalMutation,
-  getOfflineMutationCount,
-  mergeServerEntriesWithPendingOffline,
-  readCachedJournalEntries,
-  readOfflineJournalMutations,
-  writeCachedJournalEntries,
-  writeOfflineJournalMutations,
-} from '@/lib/journal/offline-storage'
+import { ImportWizard } from '@/components/journal/import-wizard'
+import { readCachedJournalEntries, writeCachedJournalEntries } from '@/lib/journal/offline-storage'
 import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
+import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
+import { DEFAULT_JOURNAL_FILTERS } from '@/lib/types/journal'
 
-function normalizeDateKey(value: string | null | undefined): string | null {
-  if (!value) return null
-  const parsed = Date.parse(value)
-  if (Number.isNaN(parsed)) return null
-  return new Date(parsed).toISOString().split('T')[0]
+type FilterAction =
+  | { type: 'replace', value: JournalFilters }
+  | { type: 'patch', value: Partial<JournalFilters> }
+  | { type: 'clear' }
+
+function filterReducer(state: JournalFilters, action: FilterAction): JournalFilters {
+  switch (action.type) {
+    case 'replace':
+      return action.value
+    case 'patch':
+      return { ...state, ...action.value }
+    case 'clear':
+      return {
+        ...state,
+        startDate: null,
+        endDate: null,
+        symbol: '',
+        direction: 'all',
+        contractType: 'all',
+        isWinner: 'all',
+        isOpen: 'all',
+        tags: [],
+        sortBy: 'trade_date',
+        sortDir: 'desc',
+        limit: 100,
+        offset: 0,
+      }
+    default:
+      return state
+  }
 }
 
-function applyFilters(entries: JournalEntry[], filters: JournalFilters): JournalEntry[] {
-  let filtered = [...entries]
-  const filterFrom = normalizeDateKey(filters.dateRange.from)
-  const filterTo = normalizeDateKey(filters.dateRange.to)
+function toQueryString(filters: JournalFilters): string {
+  const params = new URLSearchParams()
 
-  if (filterFrom) {
-    filtered = filtered.filter((entry) => {
-      const entryDate = normalizeDateKey(entry.trade_date)
-      return entryDate ? entryDate >= filterFrom : false
-    })
-  }
-  if (filterTo) {
-    filtered = filtered.filter((entry) => {
-      const entryDate = normalizeDateKey(entry.trade_date)
-      return entryDate ? entryDate <= filterTo : false
-    })
-  }
+  if (filters.startDate) params.set('startDate', new Date(`${filters.startDate}T00:00:00.000Z`).toISOString())
+  if (filters.endDate) params.set('endDate', new Date(`${filters.endDate}T23:59:59.000Z`).toISOString())
+  if (filters.symbol) params.set('symbol', filters.symbol)
+  if (filters.direction !== 'all') params.set('direction', filters.direction)
+  if (filters.contractType !== 'all') params.set('contractType', filters.contractType)
+  if (filters.isWinner !== 'all') params.set('isWinner', filters.isWinner)
+  if (filters.isOpen !== 'all') params.set('isOpen', filters.isOpen)
+  if (filters.tags.length > 0) params.set('tags', filters.tags.join(','))
 
-  if (filters.symbol) {
-    const symbol = filters.symbol.toUpperCase()
-    filtered = filtered.filter((entry) => entry.symbol?.toUpperCase().includes(symbol))
-  }
+  params.set('sortBy', filters.sortBy)
+  params.set('sortDir', filters.sortDir)
+  params.set('limit', String(filters.limit))
+  params.set('offset', String(filters.offset))
 
-  if (filters.direction !== 'all') {
-    filtered = filtered.filter((entry) => entry.direction === filters.direction)
-  }
-
-  if (filters.contractType !== 'all') {
-    filtered = filtered.filter((entry) => (entry.contract_type || 'stock') === filters.contractType)
-  }
-
-  if (filters.pnlFilter === 'winners') {
-    filtered = filtered.filter((entry) => (entry.pnl ?? 0) > 0)
-  } else if (filters.pnlFilter === 'losers') {
-    filtered = filtered.filter((entry) => (entry.pnl ?? 0) < 0)
-  }
-
-  if (filters.tags.length > 0) {
-    filtered = filtered.filter((entry) => (
-      filters.tags.some((tag) => (
-        entry.tags?.includes(tag) || entry.smart_tags?.includes(tag)
-      ))
-    ))
-  }
-
-  if (filters.aiGrade && filters.aiGrade.length > 0) {
-    filtered = filtered.filter((entry) => (
-      entry.ai_analysis?.grade && filters.aiGrade!.includes(entry.ai_analysis.grade)
-    ))
-  }
-
-  filtered.sort((a, b) => {
-    switch (filters.sortBy) {
-      case 'date-asc':
-        return a.trade_date.localeCompare(b.trade_date)
-      case 'pnl-desc':
-        return (b.pnl ?? 0) - (a.pnl ?? 0)
-      case 'pnl-asc':
-        return (a.pnl ?? 0) - (b.pnl ?? 0)
-      case 'rating-desc':
-        return (b.rating ?? 0) - (a.rating ?? 0)
-      case 'date-desc':
-      default:
-        return b.trade_date.localeCompare(a.trade_date)
-    }
-  })
-
-  return filtered
+  return params.toString()
 }
 
-const VIEW_PREFERENCE_KEY = 'journal-view-preference'
-const DATE_FILTER_PARAM_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const PULL_REFRESH_THRESHOLD = 56
-const PULL_REFRESH_MAX_DISTANCE = 90
-
-function countActiveFilters(filters: JournalFilters): number {
-  let count = 0
-  if (filters.dateRange.preset !== 'all') count += 1
-  if (filters.symbol) count += 1
-  if (filters.direction !== 'all') count += 1
-  if (filters.contractType !== 'all') count += 1
-  if (filters.pnlFilter !== 'all') count += 1
-  if (filters.tags.length > 0) count += 1
-  if (filters.aiGrade && filters.aiGrade.length > 0) count += 1
-  return count
-}
-
-function getStoredViewPreference(): JournalFilters['view'] {
-  if (typeof window === 'undefined') return DEFAULT_FILTERS.view
-  const stored = window.localStorage.getItem(VIEW_PREFERENCE_KEY)
-  return stored === 'cards' || stored === 'table' ? stored : DEFAULT_FILTERS.view
-}
-
-function sanitizeDateFilterParam(value: string | null): string | null {
-  if (!value) return null
-  return DATE_FILTER_PARAM_PATTERN.test(value) ? value : null
+async function extractError(response: Response): Promise<string> {
+  const payload = await response.json().catch(() => null)
+  return payload?.error || payload?.message || `Request failed (${response.status})`
 }
 
 export default function JournalPage() {
-  const searchParams = useSearchParams()
-  const isMobile = useIsMobile()
-  const openedPrefillKeyRef = useRef<string | null>(null)
-  const pullStartYRef = useRef<number | null>(null)
-  const isPullingRef = useRef(false)
-  const [entries, setEntries] = useState<JournalEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [preferredDesktopView, setPreferredDesktopView] = useState<JournalFilters['view']>(DEFAULT_FILTERS.view)
-  const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
-  const [pullDistance, setPullDistance] = useState(0)
-  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
-  const [isOnline, setIsOnline] = useState(true)
-  const [isSyncingOfflineQueue, setIsSyncingOfflineQueue] = useState(false)
-  const [offlineQueueCount, setOfflineQueueCount] = useState(0)
-  const [showingCachedEntries, setShowingCachedEntries] = useState(false)
+  const [filters, dispatchFilters] = useReducer(filterReducer, DEFAULT_JOURNAL_FILTERS)
 
-  const [entrySheetOpen, setEntrySheetOpen] = useState(false)
-  const [entryPrefill, setEntryPrefill] = useState<JournalPrefillPayload | null>(null)
+  const [entries, setEntries] = useState<JournalEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [isOnline, setIsOnline] = useState(true)
+  const [showImportWizard, setShowImportWizard] = useState(false)
+
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<JournalEntry | null>(null)
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
 
-  useEffect(() => {
-    const stored = getStoredViewPreference()
-    const initialView = window.innerWidth < 768 ? 'cards' : stored
-    setPreferredDesktopView(stored)
-    setFilters((prev) => ({ ...prev, view: initialView }))
-  }, [])
-
-  useEffect(() => {
-    const syncViewForViewport = () => {
-      setFilters((prev) => {
-        if (window.innerWidth < 768) {
-          return prev.view === 'cards' ? prev : { ...prev, view: 'cards' }
-        }
-        return prev.view === preferredDesktopView ? prev : { ...prev, view: preferredDesktopView }
-      })
-    }
-
-    syncViewForViewport()
-    window.addEventListener('resize', syncViewForViewport)
-    return () => window.removeEventListener('resize', syncViewForViewport)
-  }, [preferredDesktopView])
+  const [deleteTarget, setDeleteTarget] = useState<JournalEntry | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   useEffect(() => {
     if (typeof navigator === 'undefined') return
 
-    const syncOnlineStatus = () => setIsOnline(navigator.onLine)
-    syncOnlineStatus()
-    setOfflineQueueCount(getOfflineMutationCount())
+    const updateOnline = () => {
+      setIsOnline(navigator.onLine)
 
-    const cachedEntries = readCachedJournalEntries()
-    const queuedOptimisticEntries = mergeServerEntriesWithPendingOffline([])
-    if (cachedEntries.length > 0 || queuedOptimisticEntries.length > 0) {
-      setEntries((prev) => {
-        if (prev.length > 0) return prev
-        const merged = mergeServerEntriesWithPendingOffline(cachedEntries)
-        return merged.length > 0 ? merged : prev
-      })
-      setShowingCachedEntries(cachedEntries.length > 0)
-      setLoading(false)
+      if (navigator.onLine && navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'JOURNAL_SYNC_NOW' })
+      }
     }
+    updateOnline()
 
-    window.addEventListener('online', syncOnlineStatus)
-    window.addEventListener('offline', syncOnlineStatus)
+    window.addEventListener('online', updateOnline)
+    window.addEventListener('offline', updateOnline)
+
     return () => {
-      window.removeEventListener('online', syncOnlineStatus)
-      window.removeEventListener('offline', syncOnlineStatus)
+      window.removeEventListener('online', updateOnline)
+      window.removeEventListener('offline', updateOnline)
     }
   }, [])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (window.innerWidth < 768) return
-    setPreferredDesktopView(filters.view)
-    window.localStorage.setItem(VIEW_PREFERENCE_KEY, filters.view)
-  }, [filters.view])
+  const loadEntries = useCallback(async () => {
+    if (!isOnline) {
+      const cached = readCachedJournalEntries()
+      setEntries(cached)
+      setTotal(cached.length)
+      setLoading(false)
+      return
+    }
 
-  useEffect(() => {
-    const prefill = parseJournalPrefillFromSearchParams(searchParams)
-    if (!prefill) return
+    setLoading(true)
+    setError(null)
 
-    const prefillKey = searchParams.toString()
-    if (openedPrefillKeyRef.current === prefillKey) return
-    openedPrefillKeyRef.current = prefillKey
-
-    setEditEntry(null)
-    setEntryPrefill(prefill)
-    setEntrySheetOpen(true)
-  }, [searchParams])
-
-  useEffect(() => {
-    const fromParam = sanitizeDateFilterParam(searchParams.get('from'))
-    const toParam = sanitizeDateFilterParam(searchParams.get('to'))
-    if (!fromParam && !toParam) return
-
-    const nextFrom = fromParam || toParam
-    const nextTo = toParam || fromParam
-    if (!nextFrom || !nextTo) return
-
-    setFilters((prev) => {
-      if (
-        prev.dateRange.preset === 'custom'
-        && prev.dateRange.from === nextFrom
-        && prev.dateRange.to === nextTo
-      ) {
-        return prev
-      }
-
-      return {
-        ...prev,
-        dateRange: {
-          from: nextFrom,
-          to: nextTo,
-          preset: 'custom',
-        },
-      }
-    })
-  }, [searchParams])
-
-  const loadEntries = useCallback(async (): Promise<boolean> => {
-    let succeeded = false
     try {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        const cachedEntries = mergeServerEntriesWithPendingOffline(readCachedJournalEntries())
-        setOfflineQueueCount(getOfflineMutationCount())
-        if (cachedEntries.length > 0) {
-          setEntries(cachedEntries)
-          setShowingCachedEntries(true)
-          succeeded = true
-        }
-        return succeeded
-      }
-
-      const response = await withExponentialBackoff(
-        () => fetch('/api/members/journal?limit=500'),
-        { retries: 2, baseDelayMs: 400 },
-      )
-
+      const response = await fetch(`/api/members/journal?${toQueryString(filters)}`, { cache: 'no-store' })
       if (!response.ok) {
-        throw await createAppErrorFromResponse(response)
+        throw new Error(await extractError(response))
       }
 
-      const result = await response.json()
-      if (!result.success || !Array.isArray(result.data)) {
-        throw createAppError('Journal response format was invalid.')
+      const payload = await response.json()
+      if (!payload.success) {
+        throw new Error(payload.error || 'Failed to load journal entries')
       }
 
-      const sanitizedEntries = sanitizeJournalEntries(result.data)
-      const mergedEntries = mergeServerEntriesWithPendingOffline(sanitizedEntries)
-      setEntries(mergedEntries)
-      writeCachedJournalEntries(sanitizedEntries)
-      setShowingCachedEntries(false)
-      setOfflineQueueCount(getOfflineMutationCount())
-      succeeded = true
-    } catch (error) {
-      const cachedEntries = mergeServerEntriesWithPendingOffline(readCachedJournalEntries())
-      if (cachedEntries.length > 0) {
-        setEntries(cachedEntries)
-        setShowingCachedEntries(true)
-        setOfflineQueueCount(getOfflineMutationCount())
+      const sanitized = sanitizeJournalEntries(payload.data)
+      setEntries(sanitized)
+      setTotal(typeof payload.meta?.total === 'number' ? payload.meta.total : sanitized.length)
+      writeCachedJournalEntries(sanitized)
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : 'Failed to load journal entries'
+      setError(message)
 
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          toast.info('Offline mode: showing cached journal entries')
-          succeeded = true
-          return succeeded
-        }
+      const cached = readCachedJournalEntries()
+      if (cached.length > 0) {
+        setEntries(cached)
+        setTotal(cached.length)
       }
-
-      const appError = (error && typeof error === 'object' && 'category' in error)
-        ? error as AppError
-        : createAppError(error)
-
-      notifyAppError(appError, {
-        onRetry: () => {
-          window.location.reload()
-        },
-        retryLabel: 'Refresh',
-      })
     } finally {
       setLoading(false)
     }
-    return succeeded
-  }, [])
+  }, [filters, isOnline])
 
   useEffect(() => {
     void loadEntries()
   }, [loadEntries])
 
-  const flushOfflineQueue = useCallback(async (): Promise<boolean> => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return false
-
-    const queuedMutations = readOfflineJournalMutations()
-    if (queuedMutations.length === 0) {
-      setOfflineQueueCount(0)
-      return true
-    }
-
-    setIsSyncingOfflineQueue(true)
-    const remaining: typeof queuedMutations = []
-    let syncedCount = 0
-
-    for (const queuedMutation of queuedMutations) {
-      try {
-        const response = await fetch('/api/members/journal', {
-          method: queuedMutation.method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(queuedMutation.payload),
-        })
-
-        if (!response.ok) {
-          throw await createAppErrorFromResponse(response)
-        }
-
-        const payload = await response.json()
-        if (!payload?.success) {
-          throw createAppError('Queued trade sync did not return success.')
-        }
-
-        syncedCount += 1
-
-        if (queuedMutation.method === 'POST' && payload?.data?.id) {
-          fetch('/api/members/journal/enrich', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entryId: payload.data.id }),
-          })
-            .then(() => fetch('/api/members/journal/grade', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ entryId: payload.data.id }),
-            }))
-            .catch((error) => {
-              console.error('[Journal] Deferred enrich/grade failed:', error)
-            })
-        }
-      } catch {
-        remaining.push(queuedMutation)
-      }
-    }
-
-    writeOfflineJournalMutations(remaining)
-    setOfflineQueueCount(remaining.length)
-    setIsSyncingOfflineQueue(false)
-
-    if (syncedCount > 0) {
-      toast.success(`Synced ${syncedCount} offline trade${syncedCount === 1 ? '' : 's'}`)
-      await loadEntries()
-    }
-
-    if (remaining.length > 0) {
-      toast.error(`${remaining.length} offline trade${remaining.length === 1 ? '' : 's'} still pending sync`)
-    }
-
-    return remaining.length === 0
-  }, [loadEntries])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const handleOnline = () => {
-      void flushOfflineQueue()
-    }
-
-    window.addEventListener('online', handleOnline)
-    if (navigator.onLine) {
-      void flushOfflineQueue()
-    }
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-    }
-  }, [flushOfflineQueue])
-
-  const filteredEntries = useMemo(() => applyFilters(entries, filters), [entries, filters])
-  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters])
-
   const availableTags = useMemo(() => {
-    const tagSet = new Set<string>()
-    entries.forEach((entry) => {
-      entry.tags?.forEach((tag) => tagSet.add(tag))
-      entry.smart_tags?.forEach((tag) => tagSet.add(tag))
-    })
-    return Array.from(tagSet).sort()
+    const set = new Set<string>()
+    for (const entry of entries) {
+      entry.tags.forEach((tag) => set.add(tag))
+    }
+    return Array.from(set).sort()
   }, [entries])
 
-  const handleSave = useCallback(async (data: Record<string, unknown>) => {
-    const method = data.id ? 'PATCH' : 'POST'
-
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      Sentry.addBreadcrumb({
-        category: 'journal',
-        message: method === 'POST' ? 'Trade creation queued offline' : 'Trade update queued offline',
-        level: 'info',
-      })
-      const queuedMutation = enqueueOfflineJournalMutation(method, data)
-      setOfflineQueueCount((prev) => prev + 1)
-      setShowingCachedEntries(true)
-
-      if (method === 'POST') {
-        const optimisticEntries = mergeServerEntriesWithPendingOffline(entries)
-        const optimistic = optimisticEntries.find((entry) => entry.offline_queue_id === queuedMutation.id) || null
-        if (optimistic) {
-          setEntries(optimisticEntries)
-          writeCachedJournalEntries(optimisticEntries)
-          toast.success('Trade saved offline. We will sync when you reconnect.')
-          return optimistic
-        }
-        return null
-      } else {
-        toast.success('Trade update queued. It will sync when you reconnect.')
-        const existingEntry = entries.find((entry) => entry.id === data.id) || null
-        return existingEntry
-      }
-    }
-
+  const handleSave = useCallback(async (input: Record<string, unknown>) => {
+    const method = editEntry ? 'PATCH' : 'POST'
     const response = await fetch('/api/members/journal', {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(editEntry ? { ...input, id: editEntry.id } : input),
     })
 
     if (!response.ok) {
-      throw await createAppErrorFromResponse(response)
+      throw new Error(await extractError(response))
     }
 
-    const result = await response.json()
-    if (!result.success || !result.data) {
-      throw createAppError('Journal save did not return entry data.')
+    const payload = await response.json()
+    if (!payload.success) {
+      throw new Error(payload.error || 'Failed to save entry')
     }
-    const sanitizedSavedEntry = sanitizeJournalEntry(result.data, 'saved-entry')
 
-    Sentry.addBreadcrumb({
-      category: 'journal',
-      message: method === 'POST' ? 'Trade created' : 'Trade updated',
-      level: 'info',
-      data: {
-        entryId: sanitizedSavedEntry.id,
-        symbol: sanitizedSavedEntry.symbol,
-        direction: sanitizedSavedEntry.direction,
-      },
+    if (payload.meta?.queued) {
+      setError('Offline mode: this trade was queued and will sync automatically when your connection returns.')
+      setEditEntry(null)
+      void loadEntries()
+      return {} as JournalEntry
+    }
+
+    const nextEntry = sanitizeJournalEntry(payload.data)
+
+    setEntries((prev) => {
+      if (editEntry) {
+        return prev.map((entry) => (entry.id === nextEntry.id ? nextEntry : entry))
+      }
+      return [nextEntry, ...prev]
     })
 
-    if (!data.id) {
-      fetch('/api/members/journal/enrich', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entryId: sanitizedSavedEntry.id }),
-      })
-        .then(() => fetch('/api/members/journal/grade', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entryId: sanitizedSavedEntry.id }),
-        }))
-        .catch((error) => {
-          console.error('[Journal] Enrichment/grading failed:', error)
-        })
-    }
+    setEditEntry(null)
+    void loadEntries()
+    return nextEntry
+  }, [editEntry, loadEntries])
 
-    await loadEntries()
-    return sanitizedSavedEntry
-  }, [entries, loadEntries])
+  const handleRequestDelete = useCallback((entryId: string) => {
+    const target = entries.find((entry) => entry.id === entryId)
+    if (!target) return
+    setDeleteTarget(target)
+  }, [entries])
 
-  const handleDelete = useCallback(async (entryId: string) => {
-    if (!confirm('Delete this trade? This action cannot be undone.')) return
+  const handleDeleteConfirmed = useCallback(async () => {
+    if (!deleteTarget || deleteBusy) return
+
+    setDeleteBusy(true)
 
     try {
-      const response = await fetch(`/api/members/journal?id=${entryId}`, { method: 'DELETE' })
+      const response = await fetch(`/api/members/journal?id=${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+
       if (!response.ok) {
-        throw await createAppErrorFromResponse(response)
+        throw new Error(await extractError(response))
       }
 
-      toast.success('Trade deleted')
-      await loadEntries()
-    } catch (error) {
-      const appError = (error && typeof error === 'object' && 'category' in error)
-        ? error as AppError
-        : createAppError(error)
+      const payload = await response.json()
+      if (!payload.success) {
+        throw new Error(payload.error || 'Failed to delete entry')
+      }
 
-      notifyAppError(appError, {
-        onRetry: () => {
-          window.location.reload()
-        },
-        retryLabel: 'Refresh',
-      })
+      setEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id))
+      setSelectedEntry((prev) => (prev?.id === deleteTarget.id ? null : prev))
+      setDeleteTarget(null)
+      void loadEntries()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete entry')
+    } finally {
+      setDeleteBusy(false)
     }
-  }, [loadEntries])
-
-  const handleNewEntry = useCallback(() => {
-    setEditEntry(null)
-    setEntryPrefill(null)
-    setEntrySheetOpen(true)
-  }, [])
-
-  const handleEditEntry = useCallback((entry: JournalEntry) => {
-    setEntryPrefill(null)
-    setEditEntry(entry)
-    setEntrySheetOpen(true)
-  }, [])
-
-  const handleSelectEntry = useCallback((entry: JournalEntry) => {
-    setSelectedEntry(entry)
-  }, [])
+  }, [deleteBusy, deleteTarget, loadEntries])
 
   const handleToggleFavorite = useCallback(async (entry: JournalEntry, nextValue?: boolean) => {
-    const resolved = typeof nextValue === 'boolean' ? nextValue : !Boolean(entry.is_favorite)
+    const response = await fetch('/api/members/journal', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: entry.id, is_favorite: nextValue ?? !entry.is_favorite }),
+    })
 
-    try {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        enqueueOfflineJournalMutation('PATCH', { id: entry.id, is_favorite: resolved })
-        setOfflineQueueCount((prev) => prev + 1)
-        setEntries((prev) => prev.map((item) => (
-          item.id === entry.id
-            ? { ...item, is_favorite: resolved, sync_status: 'pending_offline' }
-            : item
-        )))
-        toast.success(`${resolved ? 'Favorited' : 'Unfavorited'} offline. Pending sync.`)
-        return
-      }
-
-      const response = await fetch('/api/members/journal', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: entry.id, is_favorite: resolved }),
-      })
-
-      if (!response.ok) {
-        throw await createAppErrorFromResponse(response)
-      }
-
-      setEntries((prev) => prev.map((item) => (
-        item.id === entry.id
-          ? { ...item, is_favorite: resolved }
-          : item
-      )))
-      toast.success(resolved ? 'Marked as favorite' : 'Removed from favorites')
-    } catch (error) {
-      const appError = (error && typeof error === 'object' && 'category' in error)
-        ? error as AppError
-        : createAppError(error)
-
-      notifyAppError(appError)
+    if (!response.ok) {
+      setError(await extractError(response))
+      return
     }
+
+    const payload = await response.json()
+    if (!payload.success) {
+      setError(payload.error || 'Failed to update favorite state')
+      return
+    }
+
+    if (payload.meta?.queued) {
+      setError('Offline mode: favorite update queued and will sync automatically.')
+      return
+    }
+
+    const updated = sanitizeJournalEntry(payload.data)
+    setEntries((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
   }, [])
 
-  const refreshEntries = useCallback(async () => {
-    setIsPullRefreshing(true)
-    const success = await loadEntries()
-    if (success) {
-      toast.success('Journal refreshed')
-    }
-    setIsPullRefreshing(false)
-  }, [loadEntries])
-
-  const handleTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
-    if (!isMobile || entrySheetOpen || selectedEntry) return
-    if (window.scrollY > 0) return
-
-    pullStartYRef.current = event.touches[0]?.clientY ?? null
-    isPullingRef.current = pullStartYRef.current !== null
-  }, [entrySheetOpen, isMobile, selectedEntry])
-
-  const handleTouchMove = useCallback((event: TouchEvent<HTMLDivElement>) => {
-    if (!isMobile || !isPullingRef.current || pullStartYRef.current === null) return
-    if (window.scrollY > 0) return
-
-    const currentY = event.touches[0]?.clientY ?? pullStartYRef.current
-    const delta = currentY - pullStartYRef.current
-
-    if (delta <= 0) {
-      setPullDistance(0)
-      return
-    }
-
-    const dampened = Math.min(PULL_REFRESH_MAX_DISTANCE, delta * 0.42)
-    setPullDistance(dampened)
-
-    if (delta > 8) {
-      event.preventDefault()
-    }
-  }, [isMobile])
-
-  const handleTouchEnd = useCallback(() => {
-    if (!isMobile) return
-    isPullingRef.current = false
-    pullStartYRef.current = null
-
-    if (pullDistance >= PULL_REFRESH_THRESHOLD && !isPullRefreshing) {
-      setPullDistance(0)
-      void refreshEntries()
-      return
-    }
-
-    setPullDistance(0)
-  }, [isMobile, isPullRefreshing, pullDistance, refreshEntries])
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
-          </div>
-          <p className="text-muted-foreground text-sm" aria-live="polite">Loading your journal...</p>
-        </div>
-      </div>
-    )
-  }
+  const disableActions = false
 
   return (
-    <div
-      className="relative min-h-[calc(100dvh-7rem)] space-y-5"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-    >
-      {(pullDistance > 0 || isPullRefreshing) && (
-        <div className="pointer-events-none sticky top-0 z-20 flex justify-center" aria-live="polite">
-          <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-[#0A0A0B]/85 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
-            <RefreshCw className={cn('h-3.5 w-3.5', isPullRefreshing && 'animate-spin text-emerald-400')} />
-            {isPullRefreshing
-              ? 'Refreshing journal...'
-              : pullDistance >= PULL_REFRESH_THRESHOLD
-              ? 'Release to refresh'
-              : 'Pull to refresh'}
-          </div>
-        </div>
-      )}
-
-      {(showingCachedEntries || !isOnline || offlineQueueCount > 0) && (
-        <section className="glass-card rounded-xl border border-white/[0.1] px-4 py-3" aria-live="polite">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-ivory">
-                {!isOnline ? 'Offline mode enabled' : 'Pending offline sync'}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {offlineQueueCount > 0
-                  ? `${offlineQueueCount} trade${offlineQueueCount === 1 ? '' : 's'} waiting to sync.`
-                  : showingCachedEntries
-                  ? 'Showing cached journal entries while we revalidate.'
-                  : 'Connection restored.'}
-              </p>
-            </div>
-
-            {offlineQueueCount > 0 && (
-              <button
-                type="button"
-                onClick={() => { void flushOfflineQueue() }}
-                disabled={!isOnline || isSyncingOfflineQueue}
-                className="focus-champagne inline-flex h-10 items-center justify-center rounded-lg border border-white/[0.12] px-3 text-xs font-medium text-ivory transition-colors hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Sync offline trades now"
-              >
-                {isSyncingOfflineQueue ? 'Syncing...' : 'Sync now'}
-              </button>
-            )}
-          </div>
-        </section>
-      )}
-
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl lg:text-2xl font-serif text-ivory font-medium tracking-tight flex items-center gap-2.5">
-            <BookOpen className="w-6 h-6 text-emerald-400" />
-            Trade Journal
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {entries.length} trade{entries.length !== 1 ? 's' : ''} logged
-          </p>
+          <h1 className="text-2xl font-semibold text-ivory">Trade Journal</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Manual-first journaling with clean analytics and import workflows.</p>
           <Breadcrumb
             className="mt-2"
             items={[
               { label: 'Dashboard', href: '/members' },
-              { label: 'Journal', href: '/members/journal' },
-              ...(activeFilterCount > 0 ? [{ label: `Filters (${activeFilterCount})` }] : []),
+              { label: 'Journal' },
             ]}
           />
         </div>
@@ -731,107 +286,151 @@ export default function JournalPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/members/journal/analytics"
-            className="focus-champagne px-3.5 py-2.5 rounded-xl border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05] transition-colors"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5"
           >
+            <BarChart3 className="h-4 w-4" />
             Analytics
           </Link>
+
           <button
-            onClick={handleNewEntry}
-            className="focus-champagne flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
-            aria-label="Log a new trade"
+            type="button"
+            onClick={() => setShowImportWizard((prev) => !prev)}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5"
           >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Log Trade</span>
-            <span className="sm:hidden">New</span>
+            <Upload className="h-4 w-4" />
+            Import
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEditEntry(null)
+              setSheetOpen(true)
+            }}
+            disabled={disableActions}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="h-4 w-4" />
+            New Entry
           </button>
         </div>
       </div>
 
+      {!isOnline ? (
+        <div className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          You&apos;re offline. Journal mutations will be queued and synced automatically when your connection returns.
+        </div>
+      ) : null}
+
+      {showImportWizard ? (
+        <ImportWizard onImported={() => void loadEntries()} />
+      ) : null}
+
       <JournalFilterBar
         filters={filters}
-        onChange={setFilters}
+        onChange={(nextFilters) => dispatchFilters({ type: 'replace', value: nextFilters })}
         availableTags={availableTags}
-        totalFiltered={filteredEntries.length}
       />
 
-      <JournalSummaryStats entries={filteredEntries} />
+      <JournalSummaryStats entries={entries} />
 
-      <OpenPositionsWidget onUpdated={() => { void loadEntries() }} />
-      <JournalPwaPrompt />
-      <ImportWizard onImported={() => { void loadEntries() }} />
-
-      {filteredEntries.length === 0 ? (
-        <div className="glass-card-heavy rounded-2xl p-12 text-center">
-          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] inline-block mb-4">
-            <BookOpen className="w-8 h-8 text-champagne/50" />
-          </div>
-          <h3 className="text-base font-medium text-ivory mb-1">
-            {entries.length === 0 ? 'Your trading story starts here' : 'No trades match your filters'}
-          </h3>
-          <p className="text-sm text-muted-foreground mb-5 max-w-md mx-auto">
-            {entries.length === 0
-              ? 'Log your first trade and start building your performance history with AI-powered analysis.'
-              : 'Try adjusting your filters to see more trades.'}
-          </p>
-          {entries.length === 0 && (
-            <button
-              onClick={handleNewEntry}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
-            >
-              <Plus className="w-4 h-4 inline mr-1.5" />
-              Log Your First Trade
-            </button>
-          )}
+      {error ? (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          {error}
         </div>
-      ) : filters.view === 'table' ? (
-        <JournalTableView
-          entries={filteredEntries}
-          onSelectEntry={handleSelectEntry}
-          onEditEntry={handleEditEntry}
-          onDeleteEntry={handleDelete}
+      ) : null}
+
+      {loading ? (
+        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-sm text-muted-foreground">Loading entries...</div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-sm text-muted-foreground">
+          No journal entries found. Add your first trade to get started.
+        </div>
+      ) : filters.view === 'cards' ? (
+        <JournalCardView
+          entries={entries}
+          onSelectEntry={setSelectedEntry}
+          onEditEntry={(entry) => {
+            if (disableActions) return
+            setEditEntry(entry)
+            setSheetOpen(true)
+          }}
+          onDeleteEntry={(entryId) => {
+            if (disableActions) return
+            handleRequestDelete(entryId)
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          disableActions={disableActions}
         />
       ) : (
-        <JournalCardView
-          entries={filteredEntries}
-          onSelectEntry={handleSelectEntry}
-          onEditEntry={handleEditEntry}
-          onDeleteEntry={handleDelete}
-          onToggleFavorite={handleToggleFavorite}
+        <JournalTableView
+          entries={entries}
+          onSelectEntry={setSelectedEntry}
+          onEditEntry={(entry) => {
+            if (disableActions) return
+            setEditEntry(entry)
+            setSheetOpen(true)
+          }}
+          onDeleteEntry={(entryId) => {
+            if (disableActions) return
+            handleRequestDelete(entryId)
+          }}
+          disableActions={disableActions}
         />
       )}
 
-      <button
-        type="button"
-        onClick={handleNewEntry}
-        className="focus-champagne fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-[0_8px_30px_rgba(16,185,129,0.35)] transition-colors hover:bg-emerald-500 md:hidden"
-        aria-label="Log trade"
-      >
-        <Plus className="h-5 w-5" />
-      </button>
+      <p className="text-xs text-muted-foreground">Showing {entries.length} of {total} entries.</p>
 
       <TradeEntrySheet
-        open={entrySheetOpen}
+        open={sheetOpen}
         onClose={() => {
-          setEntrySheetOpen(false)
+          setSheetOpen(false)
           setEditEntry(null)
-          setEntryPrefill(null)
         }}
         onSave={handleSave}
         editEntry={editEntry}
-        prefill={entryPrefill}
-        onRequestEditEntry={(entry) => {
-          setEntryPrefill(null)
-          setEditEntry(entry)
-          setEntrySheetOpen(true)
-        }}
+        disabled={disableActions}
       />
 
       <EntryDetailSheet
         entry={selectedEntry}
         onClose={() => setSelectedEntry(null)}
-        onEdit={handleEditEntry}
-        onDelete={handleDelete}
+        onEdit={(entry) => {
+          setSelectedEntry(null)
+          setEditEntry(entry)
+          setSheetOpen(true)
+        }}
+        onDelete={(entryId) => handleRequestDelete(entryId)}
+        disableActions={disableActions}
       />
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-lg border border-white/10 bg-[#111416] p-4">
+            <h3 className="text-sm font-semibold text-ivory">Delete trade entry?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {deleteTarget.symbol} ({deleteTarget.trade_date.slice(0, 10)}) with P&L {deleteTarget.pnl ?? '—'} will be deleted.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteConfirmed()}
+                disabled={deleteBusy}
+                className="h-10 rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-60"
+              >
+                {deleteBusy ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

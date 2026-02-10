@@ -90,10 +90,11 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set('x-nonce', nonce)
 
   // E2E auth bypass for deterministic Playwright coverage on middleware-protected routes.
-  // Only active when explicitly enabled via env + request header.
+  // Production guard is required so test headers can never bypass auth in live environments.
   const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
   const e2eBypassHeader = request.headers.get('x-e2e-bypass-auth') === '1'
-  if (e2eBypassEnabled && e2eBypassHeader && pathname.startsWith('/members')) {
+  const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
+  if (e2eBypassAllowed && e2eBypassHeader && pathname.startsWith('/members')) {
     const response = NextResponse.next({
       request: { headers: requestHeaders },
     })

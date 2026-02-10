@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { playLuxuryPlink, isSoundEnabled } from '@/lib/sounds'
+import { BRAND_LOGO_SRC } from '@/lib/brand'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -335,12 +336,12 @@ function ChatManagementContent() {
       ? `${conv.visitor_name || 'Visitor'}: ${conv.escalation_reason}${isHighValue ? ` • Lead Score: ${conv.lead_score}` : ''}`
       : `${conv.visitor_name || 'Visitor'} ${reason || 'needs attention'}${isHighValue ? ` • Lead Score: ${conv.lead_score}` : ''}`
 
-    const notification = new Notification(title, {
-      body,
-      icon: '/hero-logo.png',
-      tag: `escalation-${conv.id}`,
-      requireInteraction: true
-    })
+	    const notification = new Notification(title, {
+	      body,
+	      icon: BRAND_LOGO_SRC,
+	      tag: `escalation-${conv.id}`,
+	      requireInteraction: true
+	    })
 
     notification.onclick = () => {
       window.focus()

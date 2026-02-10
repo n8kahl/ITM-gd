@@ -1,82 +1,78 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
+import { ZodError } from 'zod'
+import { errorResponse, successResponse } from '@/lib/api/response'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { sanitizeString, screenshotUploadSchema } from '@/lib/validation/journal-entry'
 
-const BUCKET = 'journal-screenshots'
-// Signed URLs last 7 days — entries persist, so regenerate on access
-const SIGNED_URL_EXPIRY_SECONDS = 7 * 24 * 60 * 60
+const CONTENT_TYPE_TO_EXTENSION: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+}
 
-/**
- * POST /api/members/journal/screenshot-url
- * Generates a signed URL for a private screenshot in Supabase Storage.
- *
- * Body: { storagePath: string }
- *
- * Security:
- * - Requires authenticated user
- * - Storage path must start with the user's own ID (no cross-user access)
- * - Uses service role to sign (anon key cannot sign private bucket objects)
- */
+function sanitizeFileName(fileName: string): string {
+  return sanitizeString(fileName, 255).replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
+
   try {
-    // Verify authentication via session cookies
-    const supabase = await createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const validated = screenshotUploadSchema.parse(await request.json())
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const sanitizedFileName = sanitizeFileName(validated.fileName)
+    const extension = sanitizedFileName.split('.').pop()?.toLowerCase() ?? ''
+    const expectedExtension = CONTENT_TYPE_TO_EXTENSION[validated.contentType]
+
+    const extensionMatches = (
+      extension === expectedExtension
+      || (validated.contentType === 'image/jpeg' && extension === 'jpeg')
+    )
+
+    if (!extensionMatches) {
+      return errorResponse('File extension does not match content type', 400)
     }
 
-    const body = await request.json()
-    const { storagePath } = body
+    const storagePath = `journal-screenshots/${user.id}/${crypto.randomUUID()}/${sanitizedFileName}`
 
-    if (!storagePath || typeof storagePath !== 'string') {
-      return NextResponse.json(
-        { error: 'storagePath is required' },
-        { status: 400 },
-      )
+    if (storagePath.includes('..')) {
+      return errorResponse('Invalid storage path', 400)
     }
 
-    // Security: ensure the path belongs to the requesting user
-    if (!storagePath.startsWith(`${user.id}/`)) {
-      return NextResponse.json(
-        { error: 'Access denied: path does not belong to this user' },
-        { status: 403 },
-      )
-    }
-
-    // Use service role client to generate signed URL (anon key lacks permission on private buckets)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!serviceRoleKey) {
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 },
-      )
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('Missing Supabase service role environment variables')
+      return errorResponse('Server configuration error', 500)
     }
 
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
-    )
+    const admin = createClient(supabaseUrl, serviceRoleKey)
 
-    const { data, error } = await adminSupabase.storage
-      .from(BUCKET)
-      .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SECONDS)
+    const { data, error } = await admin
+      .storage
+      .from('journal-screenshots')
+      .createSignedUploadUrl(storagePath)
 
-    if (error) {
-      console.error('Signed URL generation error:', error)
-      return NextResponse.json(
-        { error: 'Failed to generate signed URL' },
-        { status: 500 },
-      )
+    if (error || !data) {
+      console.error('Failed to create signed upload URL:', error)
+      return errorResponse('Failed to create upload URL', 500)
     }
 
-    return NextResponse.json({ signedUrl: data.signedUrl })
+    return successResponse({
+      uploadUrl: data.signedUrl,
+      storagePath,
+    })
   } catch (error) {
-    console.error('Screenshot URL API error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    )
+    if (error instanceof ZodError) {
+      return errorResponse('Invalid request', 400, error.flatten())
+    }
+
+    console.error('Screenshot URL route failed:', error)
+    return errorResponse('Internal server error', 500)
   }
 }

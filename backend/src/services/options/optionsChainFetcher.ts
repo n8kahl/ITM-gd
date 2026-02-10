@@ -53,9 +53,9 @@ const DIVIDEND_YIELDS: { [key: string]: number } = {
 // Default for unknown symbols — most large-caps pay ~0.5-1%
 const DEFAULT_DIVIDEND_YIELD = 0.005;
 
-// Cache TTL for options chain (5 minutes during market hours)
-const OPTIONS_CHAIN_CACHE_TTL = 300; // 5 minutes
-const OPTIONS_MATRIX_CACHE_TTL = 180; // 3 minutes
+// Market-data caching (Phase 3.7): keep options data very fresh.
+const OPTIONS_CHAIN_CACHE_TTL = 60; // 60 seconds
+const OPTIONS_MATRIX_CACHE_TTL = 60; // 60 seconds
 const DEFAULT_MATRIX_EXPIRATIONS = 5;
 const DEFAULT_MATRIX_STRIKE_RANGE = 50;
 const MATRIX_FETCH_CONCURRENCY = 2;

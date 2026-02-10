@@ -118,7 +118,7 @@ The **Studio Hub** is a viral content generation system that allows TradeITM mem
 - Data: `font-mono` (Geist Mono)
 
 **Branding:**
-- Always use `/logo.png` (never `<Sparkles />` icon)
+- Always use `/hero-logo.png` (never `<Sparkles />` icon)
 - Logo watermark: 60x60px at 50% opacity
 - Verified badge: `<BadgeCheck />` Lucide icon with emerald color
 

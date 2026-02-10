@@ -11,6 +11,7 @@ import { getSafeRedirect } from '@/lib/safe-redirect'
 import { AuroraBackground } from '@/components/ui/aurora-background'
 import SparkleLog from '@/components/ui/sparkle-logo'
 import { isIOSStandalone } from '@/lib/pwa-utils'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -82,13 +83,18 @@ function LoginContent() {
 
     try {
       const supabase = createBrowserSupabase()
+      // Preserve the intended in-app destination without putting it in the OAuth redirect URL.
+      // Supabase only allow-lists exact redirect URLs; query strings can cause it to fall back to site_url (/).
+      try {
+        window.sessionStorage.setItem('post_auth_redirect', redirectTo)
+      } catch {}
 
       // For iOS standalone mode, we need to open in Safari
       if (isStandalone) {
         const { data, error: signInError } = await supabase.auth.signInWithOAuth({
           provider: 'discord',
           options: {
-            redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+            redirectTo: `${window.location.origin}/auth/callback`,
             scopes: 'identify email guilds guilds.members.read',
             skipBrowserRedirect: true, // Get the URL instead of auto-redirecting
           },
@@ -110,7 +116,7 @@ function LoginContent() {
         const { data, error: signInError } = await supabase.auth.signInWithOAuth({
           provider: 'discord',
           options: {
-            redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+            redirectTo: `${window.location.origin}/auth/callback`,
             scopes: 'identify email guilds guilds.members.read',
           },
         })
@@ -135,8 +141,8 @@ function LoginContent() {
         <div className="text-center relative z-10">
           <div className="mx-auto mb-4">
             <SparkleLog
-              src="/logo.png"
-              alt="TradeITM"
+              src={BRAND_LOGO_SRC}
+              alt={BRAND_NAME}
               width={48}
               height={48}
               sparkleCount={8}
@@ -174,8 +180,8 @@ function LoginContent() {
           <div className="text-center mb-8">
             <div className="mx-auto mb-4 flex justify-center">
               <SparkleLog
-                src="/logo.png"
-                alt="TradeITM"
+                src={BRAND_LOGO_SRC}
+                alt={BRAND_NAME}
                 width={80}
                 height={80}
                 sparkleCount={12}
@@ -337,8 +343,8 @@ export default function LoginPage() {
         <div className="text-center relative z-10">
           <div className="mx-auto mb-4">
             <SparkleLog
-              src="/logo.png"
-              alt="TradeITM"
+              src={BRAND_LOGO_SRC}
+              alt={BRAND_NAME}
               width={48}
               height={48}
               sparkleCount={8}

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth, type TabConfig } from '@/contexts/MemberAuthContext'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // ============================================
 // ICON MAP (tab_id -> Lucide icon)
@@ -105,7 +106,7 @@ export function MemberSidebar() {
       <div className="px-5 pt-6 pb-4">
         <Link href="/members" className="flex items-center gap-3">
           <div className="relative w-8 h-8 flex-shrink-0">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
           </div>
           <div>
             <span className="text-base font-semibold text-ivory tracking-tight">TradeITM</span>

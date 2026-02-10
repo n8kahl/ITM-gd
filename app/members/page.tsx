@@ -1,14 +1,21 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { WelcomeHeader } from '@/components/dashboard/welcome-header'
 import { LiveMarketTicker } from '@/components/dashboard/live-market-ticker'
 import { DashboardStatCards } from '@/components/dashboard/dashboard-stat-cards'
-import { EquityCurve } from '@/components/dashboard/equity-curve'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 import { RecentTrades } from '@/components/dashboard/recent-trades'
 import { AIInsights } from '@/components/dashboard/ai-insights'
 import { CalendarHeatmap } from '@/components/dashboard/calendar-heatmap'
+
+const EquityCurve = dynamic(
+  () => import('@/components/dashboard/equity-curve').then((mod) => mod.EquityCurve),
+  {
+    loading: () => <div className="h-[320px] animate-pulse rounded-2xl bg-white/[0.03]" />,
+  },
+)
 
 export default function MemberDashboard() {
   const { profile } = useMemberAuth()

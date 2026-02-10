@@ -10,6 +10,7 @@ import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { addSubscriber } from "@/lib/supabase";
 import { Analytics, getSessionId } from "@/lib/analytics";
+import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
 
 // Form validation schema
 const subscribeSchema = z.object({
@@ -166,8 +167,8 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                       {/* Brand Logo */}
                       <div className="flex justify-center mb-4">
                         <Image
-                          src="/hero-logo.png"
-                          alt="TradeITM"
+                          src={BRAND_LOGO_SRC}
+                          alt={BRAND_NAME}
                           width={180}
                           height={60}
                           className="h-12 w-auto object-contain"

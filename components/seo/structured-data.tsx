@@ -1,4 +1,5 @@
 import React from "react";
+import { BRAND_LOGO_SRC } from "@/lib/brand";
 
 interface StructuredDataProps {
   baseUrl?: string;
@@ -41,7 +42,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     "@type": "Organization",
     "name": "Trade In The Money",
     "url": baseUrl,
-    "logo": `${baseUrl}/hero-logo.png`,
+    "logo": `${baseUrl}${BRAND_LOGO_SRC}`,
     "description": "Premium trade alerts and education platform for serious traders.",
     "sameAs": []
   };

@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { ImageUploader } from './image-uploader'
 import { BlurBox } from './blur-box'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 interface BlurBoxData {
   id: string
@@ -146,10 +147,10 @@ export function ScreenshotWrapper() {
             {/* Logo watermark */}
             <div className="absolute bottom-10 right-10 opacity-50 z-10">
               <Image
-                src="/logo.png"
+                src={BRAND_LOGO_SRC}
                 width={60}
                 height={60}
-                alt="TradeITM"
+                alt={BRAND_NAME}
                 className="pointer-events-none"
               />
             </div>
