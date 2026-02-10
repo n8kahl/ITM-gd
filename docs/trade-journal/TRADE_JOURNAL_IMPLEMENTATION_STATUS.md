@@ -95,6 +95,14 @@ Branch: `codex/trade-journal-implementation`
   - `app/api/members/journal/drafts/route.ts`
   - `components/journal/draft-entries-panel.tsx`
   - `lib/journal/draft-candidate-extractor.ts`
+- [x] Server-side scheduled auto-journal generation (4:05 PM ET) + in-app alert delivery
+  - `backend/src/workers/journalAutoPopulateWorker.ts`
+  - `backend/src/services/journal/autoPopulate.ts`
+  - `backend/src/services/journal/__tests__/autoPopulate.test.ts`
+  - `backend/src/workers/__tests__/journalAutoPopulateWorker.test.ts`
+  - `supabase/migrations/20260308000000_journal_notifications.sql`
+  - `app/api/members/journal/drafts/route.ts`
+  - `components/journal/draft-entries-panel.tsx`
 
 ### Phase 6 - Enhanced Visualization & Dashboard
 - [x] Dashboard layout persistence API + schema field
@@ -139,11 +147,12 @@ Branch: `codex/trade-journal-implementation`
 - Interactive calendar heatmap with month/quarter/year views, richer day-level stats, annotations, and journal day deep-linking.
 - Trade replay upgrades: skip-to-entry/exit controls, live P&L ticker, stop/target overlays, and MFE/MAE markers.
 - End-of-day auto-journal endpoint plus in-app post-close draft detection and pending-draft expiry auto-dismiss.
+- Server-side 4:05 PM ET auto-journal worker now writes canonical `journal_entries` drafts and emits in-app review notices.
 - Accessibility hardening in journal modals: focus-trap behavior, Escape close, and dialog semantics.
 - Mobile-first journal improvements: floating quick-entry FAB and bottom-sheet behavior on small screens.
 
 ## Remaining
-- Server-side scheduled auto-journal execution + push-notification delivery at 4:05 PM ET is not yet wired (current flow auto-runs in-app post-close).
+- Optional web-push transport for auto-journal notices is not wired yet (in-app notification delivery is implemented).
 - Phase 7 still needs swipe gestures, offline/PWA sync flow, and broader WCAG hardening beyond journal sheets.
 
 ## Risks
@@ -152,14 +161,16 @@ Branch: `codex/trade-journal-implementation`
 - Options-chain enrichment currently performs lightweight contract parsing; full Greeks/IV chain hydration depends on expanding enrichment providers and rate-limit strategy.
 
 ## Next Steps
-1. Wire server-side scheduler + push notification transport for 4:05 PM ET auto-journal runs.
-2. Add async/background jobs for grading, import enrichment queues, and weekly behavioral insight generation.
-3. Replace synchronous materialized view refresh trigger with queued refresh/job scheduling.
-4. Complete remaining Phase 6 polish on replay side-panel context/notes coupling.
-5. Complete Phase 7 accessibility/mobile/PWA hardening.
+1. Add async/background jobs for grading, import enrichment queues, and weekly behavioral insight generation.
+2. Replace synchronous materialized view refresh trigger with queued refresh/job scheduling.
+3. Complete remaining Phase 6 polish on replay side-panel context/notes coupling.
+4. Complete Phase 7 accessibility/mobile/PWA hardening.
+5. Optionally add web-push transport for journal notifications (current in-app alert path is production-ready).
 
 ## Migration Notes
 - Apply migration:
   - `supabase/migrations/20260307000000_trade_journal_spec_phase2_7.sql`
+  - `supabase/migrations/20260308000000_journal_notifications.sql`
 - This migration adds journal columns, new tables (`playbooks`, `ai_behavioral_insights`, `import_history`), materialized view `journal_analytics_cache`, trigger-based refresh, RPC `get_advanced_analytics`, and `dashboard_layout` on `ai_coach_user_preferences`.
+- The journal notification migration adds `journal_notifications` for server-generated in-app notices (auto-journal ready prompts) with RLS and unread indexing.
 - Post-deploy recommendation: validate trigger overhead in staging under write load and monitor refresh latency.
