@@ -22,6 +22,7 @@ import { Analytics } from "@/lib/analytics";
 import { BillingToggle } from "@/components/ui/billing-toggle";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
 import SparkleLog from "@/components/ui/sparkle-logo";
+import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
 
 const FloatingNavbar = dynamic(
   () => import("@/components/ui/floating-navbar").then((mod) => mod.FloatingNavbar),
@@ -144,8 +145,8 @@ export default function Home() {
               transition={{ duration: 1.2, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <SparkleLog
-                src="/hero-logo.png"
-                alt="TradeITM"
+                src={BRAND_LOGO_SRC}
+                alt={BRAND_NAME}
                 width={600}
                 height={200}
                 sparkleCount={20}

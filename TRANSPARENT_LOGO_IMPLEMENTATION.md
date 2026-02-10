@@ -6,8 +6,9 @@ This document outlines the implementation of a transparent ITM logo with sparkle
 ## 🎨 Current State (From Audit)
 
 ### Logo Files
-- **`/public/logo.png`** (1392x768, RGBA) - Main logo, used 8+ times
-- **`/public/hero-logo.png`** (3400x1800, 8-bit colormap) - Hero section, used 5+ times
+- **`/public/hero-logo.png`** (3400x1800, 8-bit colormap) - Canonical transparent logo used across the app UI
+- **`/public/logo.png`** (1392x768, RGBA) - Legacy logo (kept for reference; no longer used by the UI)
+- **`/lib/brand.ts`** - Single source of truth (`BRAND_LOGO_SRC`)
 
 ### Current Effects Applied
 1. **Emerald Glow**: `drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]`
@@ -16,13 +17,13 @@ This document outlines the implementation of a transparent ITM logo with sparkle
 4. **Radial Gradient Backlight**: Emerald + Gold pulsing halo
 
 ### Pages Using Logos
-- Hero page (`app/page.tsx`) - hero-logo.png with floating + backlight
-- Login page (`app/login/page.tsx`) - logo.png with emerald glow
-- Members layout (`app/members/layout.tsx`) - logo.png
-- Admin sidebar (`components/admin/admin-sidebar.tsx`) - logo.png
-- Subscribe modal (`components/ui/subscribe-modal.tsx`) - hero-logo.png
-- Skeleton loader (`components/ui/skeleton-loader.tsx`) - logo.png with glow
-- Service worker notifications - logo.png
+- Hero page (`app/page.tsx`) - SparkleLog using `BRAND_LOGO_SRC`
+- Login page (`app/login/page.tsx`) - SparkleLog using `BRAND_LOGO_SRC`
+- Members layout (`app/members/layout.tsx`) - loading/redirect states use `BRAND_LOGO_SRC`
+- Admin sidebar (`components/admin/admin-sidebar.tsx`) - header logo uses `BRAND_LOGO_SRC`
+- Subscribe modal (`components/ui/subscribe-modal.tsx`) - header logo uses `BRAND_LOGO_SRC`
+- Skeleton loader (`components/ui/skeleton-loader.tsx`) - screen variant uses `BRAND_LOGO_SRC`
+- Service worker notifications (`public/sw.js`) - icon uses `/hero-logo.png`
 
 ---
 

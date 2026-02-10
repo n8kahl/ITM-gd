@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 export function MobileTopBar() {
   const { profile } = useMemberAuth()
@@ -14,7 +15,7 @@ export function MobileTopBar() {
       {/* Logo */}
       <Link href="/members" className="absolute left-1/2 -translate-x-1/2">
         <div className="relative w-6 h-6">
-          <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
         </div>
       </Link>
 
