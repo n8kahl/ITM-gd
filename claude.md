@@ -15,7 +15,7 @@
 ## Refactoring Rules
 1.  **Mobile First:** Always ensure layouts stack correctly on mobile. Check `hidden md:flex` patterns.
 2.  **Branding:**
-    * Use `<Image src="/hero-logo.png" ... />` for branding (transparent canonical logo).
+    * Use `<Image src="/logo.png" ... />` for branding.
     * Never use `<Sparkles />` as a logo placeholder.
 3.  **Loading States:**
     * Use the "Pulsing Logo" skeleton pattern (`components/ui/skeleton-loader.tsx` variant="screen").
@@ -25,14 +25,6 @@
 * Use `var(--emerald-elite)` for primary actions.
 * Use `var(--champagne)` for subtle accents.
 * Use `glass-card-heavy` for containers.
-
-## Academy V2 Architecture
-* **Lesson Format:** Chunk-based micro-units stored in `lessons.chunk_data` (JSONB array).
-* **Competency System:** 6 competencies tracked in `user_competency_scores`.
-* **Review Queue:** FSRS-based spaced repetition in `review_queue_items`.
-* **Saved Items:** Bookmarks in `user_saved_items` (`entity_type` + `entity_id`).
-* **Intelligence Layer:** Insights in `user_learning_insights`.
-* **Content Types:** `video`, `rich_text`, `interactive`, `annotated_chart`, `scenario_walkthrough`, `quick_check`, `applied_drill`, `reflection`.
 
 ## Market Data API: Massive.com
 * **CRITICAL:** The market data provider is **Massive.com**. NEVER refer to it as "Polygon.io" or "Polygon" — that name is deprecated and causes significant issues.
