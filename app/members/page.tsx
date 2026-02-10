@@ -1,45 +1,58 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { WelcomeHeader } from '@/components/dashboard/welcome-header'
 import { LiveMarketTicker } from '@/components/dashboard/live-market-ticker'
 import { DashboardStatCards } from '@/components/dashboard/dashboard-stat-cards'
-import { EquityCurve } from '@/components/dashboard/equity-curve'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 import { RecentTrades } from '@/components/dashboard/recent-trades'
 import { AIInsights } from '@/components/dashboard/ai-insights'
 import { CalendarHeatmap } from '@/components/dashboard/calendar-heatmap'
+
+const EquityCurve = dynamic(
+  () => import('@/components/dashboard/equity-curve').then((mod) => mod.EquityCurve),
+  {
+    loading: () => <div className="h-[320px] animate-pulse rounded-2xl bg-white/[0.03]" />,
+  },
+)
 
 export default function MemberDashboard() {
   const { profile } = useMemberAuth()
 
   return (
     <div className="space-y-5 lg:space-y-6">
-      {/* Welcome Header */}
-      <WelcomeHeader
-        username={profile?.discord_username || profile?.email || 'Trader'}
-      />
+      <section role="region" aria-label="Dashboard welcome">
+        <WelcomeHeader
+          username={profile?.discord_username || profile?.email || 'Trader'}
+        />
+      </section>
 
-      {/* Live Market Ticker */}
-      <LiveMarketTicker />
+      <section role="region" aria-label="Live market ticker">
+        <LiveMarketTicker />
+      </section>
 
-      {/* Stat Cards — 5 across on desktop, 2x2 on mobile */}
-      <DashboardStatCards />
+      <section role="region" aria-label="Performance statistics">
+        <DashboardStatCards />
+      </section>
 
-      {/* Equity Curve + Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 lg:gap-5">
-        <EquityCurve />
-        <QuickActions />
-      </div>
+      <section role="region" aria-label="Equity and quick actions">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 lg:gap-5">
+          <EquityCurve />
+          <QuickActions />
+        </div>
+      </section>
 
-      {/* Recent Trades — full width */}
-      <RecentTrades />
+      <section role="region" aria-label="Recent trades">
+        <RecentTrades />
+      </section>
 
-      {/* AI Insights + Calendar Heatmap */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
-        <AIInsights />
-        <CalendarHeatmap />
-      </div>
+      <section role="region" aria-label="AI insights and calendar">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
+          <AIInsights />
+          <CalendarHeatmap />
+        </div>
+      </section>
     </div>
   )
 }

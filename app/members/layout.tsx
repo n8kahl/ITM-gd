@@ -10,6 +10,7 @@ import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
 import { MemberSidebar } from '@/components/members/member-sidebar'
 import { MobileTopBar } from '@/components/members/mobile-top-bar'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // ============================================
 // PAGE TRANSITION VARIANTS
@@ -79,7 +80,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center">
         <div className="text-center">
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
           </div>
           <p className="text-muted-foreground text-sm">Loading your dashboard...</p>
         </div>
@@ -93,7 +94,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center">
         <div className="text-center">
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
           </div>
           <p className="text-muted-foreground text-sm">Redirecting to login...</p>
         </div>
@@ -159,6 +160,3 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
-
-// Re-export hook for convenience
-export { useMemberAuth, useMemberAuth as useMemberSession } from '@/contexts/MemberAuthContext'

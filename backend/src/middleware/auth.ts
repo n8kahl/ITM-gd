@@ -15,6 +15,13 @@ declare global {
   }
 }
 
+interface QueryLimitRpcResult {
+  allowed: boolean;
+  query_count: number;
+  query_limit: number;
+  billing_period_end: string | null;
+}
+
 // Middleware to verify JWT token from Supabase
 export async function authenticateToken(
   req: Request,
@@ -73,59 +80,45 @@ export async function checkQueryLimit(
       return;
     }
 
-    // Atomic increment: only increments if under limit
-    // Uses RPC call to avoid race condition between read and write
+    // Atomic increment: only increments if under limit.
+    // The RPC is required to prevent race conditions under concurrency.
     const { data, error } = await supabase.rpc('increment_query_count_if_allowed', {
       p_user_id: req.user.id
     });
 
     if (error) {
-      // If RPC doesn't exist yet, fall back to basic check (log warning)
-      logger.warn('increment_query_count_if_allowed RPC not found, using fallback', { error: error.message });
+      logger.error('increment_query_count_if_allowed RPC failed', {
+        userId: req.user.id,
+        error: error.message,
+      });
 
-      // Fallback: SELECT ... FOR UPDATE pattern via raw query
-      const { data: profile, error: profileError } = await supabase
-        .from('ai_coach_users')
-        .select('query_count, query_limit, billing_period_end')
-        .eq('user_id', req.user.id)
-        .single();
-
-      if (profileError || !profile) {
-        // No profile = no limit enforced
-        next();
-        return;
-      }
-
-      if (profile.query_count >= profile.query_limit) {
-        res.status(429).json({
-          error: 'Query limit exceeded',
-          message: `You have reached your monthly limit of ${profile.query_limit} queries.`,
-          queryCount: profile.query_count,
-          queryLimit: profile.query_limit,
-          resetDate: profile.billing_period_end,
-        });
-        return;
-      }
-
-      // Non-atomic fallback increment (still better than before)
-      await supabase
-        .from('ai_coach_users')
-        .update({ query_count: profile.query_count + 1 })
-        .eq('user_id', req.user.id)
-        .eq('query_count', profile.query_count); // Optimistic lock
-
-      next();
+      res.status(503).json({
+        error: 'Rate limiting temporarily unavailable',
+        message: 'Please try again shortly.',
+      });
       return;
     }
 
-    // RPC returns: { allowed: boolean, query_count, query_limit, billing_period_end }
-    if (data && !data.allowed) {
+    const rpcResult = data as QueryLimitRpcResult | null;
+    if (!rpcResult || typeof rpcResult.allowed !== 'boolean') {
+      logger.error('increment_query_count_if_allowed returned invalid payload', {
+        userId: req.user.id,
+        payload: data,
+      });
+      res.status(503).json({
+        error: 'Rate limiting temporarily unavailable',
+        message: 'Please try again shortly.',
+      });
+      return;
+    }
+
+    if (!rpcResult.allowed) {
       res.status(429).json({
         error: 'Query limit exceeded',
-        message: `You have reached your monthly limit of ${data.query_limit} queries.`,
-        queryCount: data.query_count,
-        queryLimit: data.query_limit,
-        resetDate: data.billing_period_end,
+        message: `You have reached your monthly limit of ${rpcResult.query_limit} queries.`,
+        queryCount: rpcResult.query_count,
+        queryLimit: rpcResult.query_limit,
+        resetDate: rpcResult.billing_period_end,
       });
       return;
     }
@@ -133,7 +126,9 @@ export async function checkQueryLimit(
     next();
   } catch (error) {
     logger.error('Query limit check error', { error: error instanceof Error ? error.message : String(error) });
-    // Don't block request on error - but log for investigation
-    next();
+    res.status(503).json({
+      error: 'Rate limiting temporarily unavailable',
+      message: 'Please try again shortly.',
+    });
   }
 }

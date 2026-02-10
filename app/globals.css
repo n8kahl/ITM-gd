@@ -57,11 +57,11 @@
   --emerald-deep-hex: #064E3B;  /* HEX version for direct use */
 
   /* CHAMPAGNE - Accent Colors */
-  --champagne: 243 229 171;     /* #F3E5AB - Text/Border Accents (RGB) */
-  --champagne-hex: #F3E5AB;     /* HEX version - Warm champagne accent */
+  --champagne: 245 237 204;     /* #F5EDCC - Text/Border Accents (RGB) */
+  --champagne-hex: #F5EDCC;     /* HEX version - Warm champagne accent */
   --champagne-light: #F5F3ED;
   --champagne-dark: #B8B5AD;
-  --champagne-gold: #F3E5AB;    /* UPDATED: Use champagne instead of old gold */
+  --champagne-gold: #F5EDCC;    /* UPDATED: Use champagne instead of old gold */
 
   /* Wealth Emerald Variants */
   --wealth-emerald: #047857;
@@ -306,6 +306,20 @@
     line-height: 1.8;
     font-weight: 300;
     color: rgba(245, 245, 240, 0.85);
+  }
+
+  :where(
+    a[href],
+    button,
+    input,
+    textarea,
+    select,
+    summary,
+    [role='button'],
+    [role='tab']
+  ):focus-visible {
+    outline: 2px solid rgb(var(--emerald-elite));
+    outline-offset: 2px;
   }
 }
 
@@ -912,19 +926,19 @@
   }
 
   .text-champagne {
-    color: #F3E5AB;
+    color: #F5EDCC;
   }
 
   .text-champagne-gold {
-    color: #F3E5AB;  /* Updated to use champagne instead of old gold */
+    color: #F5EDCC;  /* Updated to use champagne instead of old gold */
   }
 
   .border-champagne {
-    border-color: #F3E5AB;
+    border-color: #F5EDCC;
   }
 
   .border-champagne-gold {
-    border-color: #F3E5AB;  /* Updated to use champagne instead of old gold */
+    border-color: #F5EDCC;  /* Updated to use champagne instead of old gold */
   }
 
   /* ============================================

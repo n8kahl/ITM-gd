@@ -127,11 +127,15 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { code } = await params
   const result = await getVerifiedAchievement(code)
+  const canonicalPath = `/verify/${code}`
 
   if (!result) {
     return {
       title: 'Achievement Not Found | TITM Academy',
       description: 'This verification code is invalid or the achievement does not exist.',
+      alternates: {
+        canonical: canonicalPath,
+      },
     }
   }
 
@@ -145,6 +149,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: `${title} | TITM Academy Verified`,
     description,
+    alternates: {
+      canonical: canonicalPath,
+    },
     openGraph: {
       title: `${title} - TITM Academy Achievement`,
       description,

@@ -1,5 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 /**
  * Creates a Supabase client for use in Server Components, Server Actions, and Route Handlers.
@@ -64,6 +64,15 @@ export async function getServerUser() {
  * Returns true if user has is_admin=true in app_metadata (set by Discord role sync).
  */
 export async function isAdminUser(): Promise<boolean> {
+  const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
+  const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
+  if (e2eBypassAllowed) {
+    const headerStore = await headers()
+    if (headerStore.get('x-e2e-bypass-auth') === '1') {
+      return true
+    }
+  }
+
   // Check RBAC claim from Discord OAuth
   const user = await getServerUser()
   return user?.appMetadata?.is_admin === true

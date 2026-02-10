@@ -6,6 +6,7 @@ import { logger } from '../../lib/logger';
 import { analyzeIVProfile } from '../options/ivAnalysis';
 import { fetchExpirationDates, fetchOptionsChain } from '../options/optionsChainFetcher';
 import type { OptionContract } from '../options/types';
+import { cacheGet, cacheSet } from '../../config/redis';
 
 export type EarningsTiming = 'BMO' | 'AMC' | 'DURING';
 
@@ -115,6 +116,7 @@ const HISTORY_LOOKBACK_DAYS = 900;
 const HISTORY_MAX_QUARTERS = 8;
 const DEFAULT_WATCHLIST = [...POPULAR_SYMBOLS].slice(0, 6);
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+const EARNINGS_REDIS_CACHE_TTL_SECONDS = 60 * 60;
 const ALPHA_VANTAGE_BASE_URL = process.env.ALPHA_VANTAGE_BASE_URL || 'https://www.alphavantage.co/query';
 const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
 const ALPHA_VANTAGE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -201,6 +203,15 @@ function sanitizeWatchlist(symbols?: string[]): string[] {
   if (!symbols || symbols.length === 0) return DEFAULT_WATCHLIST;
   const sanitized = sanitizeSymbols(symbols, 25);
   return sanitized.length > 0 ? sanitized : DEFAULT_WATCHLIST;
+}
+
+function buildEarningsCalendarCacheKey(symbols: string[], daysAhead: number): string {
+  const normalizedSymbols = [...symbols].sort().join(',');
+  return `earnings:calendar:${daysAhead}:${normalizedSymbols}`;
+}
+
+function buildEarningsAnalysisCacheKey(symbol: string): string {
+  return `earnings:analysis:${symbol}`;
 }
 
 function getAlphaVantageHorizon(daysAhead: number): '3month' | '6month' | '12month' {
@@ -671,6 +682,13 @@ export class EarningsService {
   async getEarningsCalendar(watchlist: string[] = [], daysAhead: number = DEFAULT_DAYS_AHEAD): Promise<EarningsCalendarEvent[]> {
     const symbols = sanitizeWatchlist(watchlist);
     const safeDaysAhead = clamp(Math.round(daysAhead || DEFAULT_DAYS_AHEAD), 1, MAX_DAYS_AHEAD);
+    const redisCacheKey = buildEarningsCalendarCacheKey(symbols, safeDaysAhead);
+
+    const cachedCalendar = await cacheGet<EarningsCalendarEvent[]>(redisCacheKey);
+    if (cachedCalendar) {
+      logger.info('Earnings calendar cache hit', { symbols: symbols.length, daysAhead: safeDaysAhead });
+      return cachedCalendar;
+    }
 
     const today = new Date();
     const fromDate = formatDate(today);
@@ -683,12 +701,15 @@ export class EarningsService {
     });
 
     if (alphaEvents.length > 0) {
-      return Array.from(new Map(
+      const deduped = Array.from(new Map(
         alphaEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
       ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+      await cacheSet(redisCacheKey, deduped, EARNINGS_REDIS_CACHE_TTL_SECONDS);
+      return deduped;
     }
 
     if (!ENABLE_TMX_CORPORATE_EVENTS) {
+      await cacheSet(redisCacheKey, [], EARNINGS_REDIS_CACHE_TTL_SECONDS);
       return [];
     }
 
@@ -716,9 +737,11 @@ export class EarningsService {
       .sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
 
     if (parsedEvents.length > 0) {
+      await cacheSet(redisCacheKey, parsedEvents, EARNINGS_REDIS_CACHE_TTL_SECONDS);
       return parsedEvents;
     }
 
+    await cacheSet(redisCacheKey, [], EARNINGS_REDIS_CACHE_TTL_SECONDS);
     return [];
   }
 
@@ -728,13 +751,23 @@ export class EarningsService {
       throw new Error('Invalid symbol format');
     }
 
+    const redisCacheKey = buildEarningsAnalysisCacheKey(symbol);
+    const cachedAnalysis = await cacheGet<EarningsAnalysis>(redisCacheKey);
+    if (cachedAnalysis) {
+      logger.info('Earnings analysis cache hit', { symbol });
+      return cachedAnalysis;
+    }
+
     const today = new Date();
     const calendar = await this.getEarningsCalendar([symbol], 90);
     const nextEvent = calendar.find((event) => event.date >= formatDate(today)) || null;
 
     if (nextEvent) {
       const cached = await this.getCachedAnalysis(symbol, nextEvent.date);
-      if (cached) return cached;
+      if (cached) {
+        await cacheSet(redisCacheKey, cached, EARNINGS_REDIS_CACHE_TTL_SECONDS);
+        return cached;
+      }
     }
 
     const expiryDates = await fetchExpirationDates(symbol);
@@ -880,6 +913,8 @@ export class EarningsService {
     if (earningsDate) {
       await this.setCachedAnalysis(symbol, earningsDate, analysis);
     }
+
+    await cacheSet(redisCacheKey, analysis, EARNINGS_REDIS_CACHE_TTL_SECONDS);
 
     return analysis;
   }

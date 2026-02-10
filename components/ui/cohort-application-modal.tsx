@@ -220,6 +220,8 @@ export function CohortApplicationModal({
                       )}
                     </div>
                     <button
+                      type="button"
+                      aria-label="Close cohort application modal"
                       onClick={handleClose}
                       className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition-colors"
                     >

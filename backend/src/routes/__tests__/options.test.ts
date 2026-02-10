@@ -18,6 +18,10 @@ jest.mock('../../middleware/auth', () => ({
   checkQueryLimit: (_req: any, _res: any, next: any) => next(),
 }));
 
+jest.mock('../../middleware/requireTier', () => ({
+  requireTier: () => (_req: any, _res: any, next: any) => next(),
+}));
+
 jest.mock('../../services/options/optionsChainFetcher', () => ({
   fetchOptionsChain: jest.fn(),
   fetchExpirationDates: jest.fn(),

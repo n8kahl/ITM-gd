@@ -52,6 +52,14 @@ export const e2eBypassSession = {
 }
 
 /**
+ * Enable or disable middleware auth bypass headers for E2E contexts.
+ * This mirrors the existing middleware bypass contract used in other suites.
+ */
+async function setE2EBypassHeader(page: Page, enabled: boolean): Promise<void> {
+  await page.context().setExtraHTTPHeaders(enabled ? { 'x-e2e-bypass-auth': '1' } : {})
+}
+
+/**
  * Mock Discord profile data (what's stored after role sync)
  */
 export const mockDiscordProfile = {
@@ -95,7 +103,13 @@ function getSupabaseStorageKeys(): string[] {
  * Authenticate as a member by setting up localStorage with mock Supabase session
  * This simulates what happens after successful Discord OAuth
  */
-export async function authenticateAsMember(page: Page): Promise<void> {
+export async function authenticateAsMember(
+  page: Page,
+  options: { bypassMiddleware?: boolean } = {},
+): Promise<void> {
+  const { bypassMiddleware = true } = options
+  await setE2EBypassHeader(page, bypassMiddleware)
+
   // Navigate to a page first to set localStorage for the correct origin
   await page.goto('/')
 
@@ -120,13 +134,20 @@ export async function authenticateAsMember(page: Page): Promise<void> {
  * Authenticate using backend E2E bypass token (for backend-integrated test mode).
  */
 export async function authenticateAsE2EBypassMember(page: Page): Promise<void> {
-  await authenticateWithSession(page, e2eBypassSession)
+  await authenticateWithSession(page, e2eBypassSession, { bypassMiddleware: true })
 }
 
 /**
  * Authenticate with custom session data
  */
-export async function authenticateWithSession(page: Page, session: typeof mockSupabaseSession): Promise<void> {
+export async function authenticateWithSession(
+  page: Page,
+  session: typeof mockSupabaseSession,
+  options: { bypassMiddleware?: boolean } = {},
+): Promise<void> {
+  const { bypassMiddleware = true } = options
+  await setE2EBypassHeader(page, bypassMiddleware)
+
   await page.goto('/')
   const storageKeys = getSupabaseStorageKeys()
 
@@ -145,6 +166,8 @@ export async function authenticateWithSession(page: Page, session: typeof mockSu
  * Clear member authentication (simulate logout)
  */
 export async function clearMemberAuth(page: Page): Promise<void> {
+  await setE2EBypassHeader(page, false)
+
   await page.evaluate(() => {
     // Clear all Supabase-related localStorage items
     const keysToRemove: string[] = []

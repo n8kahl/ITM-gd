@@ -43,7 +43,7 @@ Do not use flat colors for cards. Use the "Heavy Glass" utility.
 * **Premium/Highlight:** `border-champagne/30` (Holographic effect)
 
 ### Branding
-* **Logo:** Always use `public/logo.png`.
+* **Logo:** Always use `public/hero-logo.png` (transparent canonical wordmark).
 * **Iconography:** Lucide React icons. Stroke width `1.5` (thin/elegant).
 * **Prohibited:** Do not use the generic `Sparkles` icon as a logo substitute.
 
@@ -59,3 +59,10 @@ Do not use flat colors for cards. Use the "Heavy Glass" utility.
 * ❌ **Yellow Spinners:** Loading states must use the pulsing Logo or Emerald spinner.
 * ❌ **Pure White Backgrounds:** Never.
 * ❌ **Skeuomorphic Buttons:** No 3D bevels. Use flat + subtle glow.
+
+## 6. Academy Design Patterns
+* **Lesson Chunks:** Each chunk card uses `glass-card-heavy` with emerald left border for the active chunk.
+* **Quick Check Cards:** Emerald border, option buttons with 44px minimum height, and clear green/red feedback states.
+* **Mastery Arc:** Radar chart uses emerald fill at 30% opacity and champagne accent for top scores.
+* **Review Cards:** Flip-card style pattern with question on front and answer on back.
+* **Progress Dots:** 8px circles, emerald for completed, white/10 for remaining, and emerald ring for current.

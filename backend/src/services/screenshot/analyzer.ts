@@ -1,4 +1,5 @@
 import { openaiClient } from '../../config/openai';
+import { validateImagePayload } from '../../lib/sanitize-input';
 
 /**
  * Screenshot Position Analyzer
@@ -61,6 +62,11 @@ export async function analyzeScreenshot(
   mimeType: string = 'image/png'
 ): Promise<ScreenshotAnalysis> {
   try {
+    const imagePayload = `data:${mimeType};base64,${imageBase64}`;
+    if (!validateImagePayload(imagePayload)) {
+      throw new Error('Invalid image payload');
+    }
+
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
       messages: [
@@ -71,7 +77,7 @@ export async function analyzeScreenshot(
             {
               type: 'image_url',
               image_url: {
-                url: `data:${mimeType};base64,${imageBase64}`,
+                url: imagePayload,
                 detail: 'high',
               },
             },

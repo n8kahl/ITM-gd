@@ -6,6 +6,7 @@ import { earningsCalendarQuerySchema, earningsSymbolParamSchema } from '../schem
 import { supabase } from '../config/database';
 import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 import { logger } from '../lib/logger';
+import { requireTier } from '../middleware/requireTier';
 
 const router = Router();
 const DEFAULT_WATCHLIST = [...POPULAR_SYMBOLS].slice(0, 6);
@@ -84,6 +85,7 @@ router.get(
 router.get(
   '/:symbol/analysis',
   authenticateToken,
+  requireTier('pro'),
   checkQueryLimit,
   validateParams(earningsSymbolParamSchema),
   async (req: Request, res: Response) => {

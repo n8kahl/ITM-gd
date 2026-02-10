@@ -15,7 +15,7 @@ import {
  * These tests hit the backend directly (not through the frontend).
  */
 
-const BACKEND_URL = process.env.E2E_BACKEND_URL || 'http://localhost:3001'
+const BACKEND_URL = e2eBackendUrl
 
 type WebSocketProbeResult = {
   opened: boolean

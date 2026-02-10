@@ -1,9 +1,9 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import Image from 'next/image'
 import type { CSSProperties } from 'react'
 import SparkleLog from './sparkle-logo'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // Base Skeleton component with shimmer animation
 interface SkeletonProps {
@@ -24,8 +24,8 @@ export function Skeleton({
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050505]">
         <SparkleLog
-          src="/logo.png"
-          alt="Loading..."
+          src={BRAND_LOGO_SRC}
+          alt={BRAND_NAME}
           width={96}
           height={96}
           sparkleCount={15}

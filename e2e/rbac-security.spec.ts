@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { authenticateAsMember } from './helpers/member-auth'
 
 /**
  * RBAC Security & Permissions Test Suite
@@ -133,6 +134,8 @@ test.describe('Database Schema Validation', () => {
 
 test.describe('Permissions Context Integration', () => {
   test('should export useMemberAuth hook', async ({ page }) => {
+    await authenticateAsMember(page)
+
     // Navigate to a page that uses the hook
     await page.goto('/members')
 
@@ -140,7 +143,7 @@ test.describe('Permissions Context Integration', () => {
     await page.waitForLoadState('networkidle')
 
     // Check for auth-related elements
-    const hasAuthElements = await page.locator('button:has-text("Logout")').count() > 0 ||
+    const hasAuthElements = await page.locator('button:has-text("Sign Out")').count() > 0 ||
                             await page.locator('text=Loading').count() > 0 ||
                             await page.locator('text=Redirecting').count() > 0
 

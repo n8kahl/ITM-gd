@@ -1,5 +1,6 @@
 import { executeFunctionCall } from '../functionHandlers';
 const mockExitAdvisorGenerateAdvice = jest.fn();
+const mockHasRequiredTierForUser = jest.fn();
 
 // Mock logger
 jest.mock('../../lib/logger', () => ({
@@ -19,6 +20,10 @@ jest.mock('../../lib/circuitBreaker', () => ({
   massiveCircuit: {
     execute: jest.fn((fn) => fn()),
   },
+}));
+
+jest.mock('../../middleware/requireTier', () => ({
+  hasRequiredTierForUser: (...args: any[]) => mockHasRequiredTierForUser(...args),
 }));
 
 // Mock Supabase
@@ -73,13 +78,6 @@ jest.mock('../../services/positions/exitAdvisor', () => ({
   })),
 }));
 
-const mockGetJournalInsightsForUser = jest.fn();
-jest.mock('../../services/journal/patternAnalyzer', () => ({
-  journalPatternAnalyzer: {
-    getJournalInsightsForUser: (...args: any[]) => mockGetJournalInsightsForUser(...args),
-  },
-}));
-
 import { calculateLevels } from '../../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../../services/levels/fetcher';
 import { fetchOptionsChain } from '../../services/options/optionsChainFetcher';
@@ -112,7 +110,7 @@ describe('Function Handlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockExitAdvisorGenerateAdvice.mockReset();
-    mockGetJournalInsightsForUser.mockReset();
+    mockHasRequiredTierForUser.mockResolvedValue(true);
   });
 
   describe('get_key_levels', () => {
@@ -390,6 +388,24 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to calculate gamma exposure');
       expect(result).toHaveProperty('message', 'Symbol not supported');
+    });
+
+    it('enforces pro tier access for authenticated users', async () => {
+      mockHasRequiredTierForUser.mockResolvedValue(false);
+
+      const result = await executeFunctionCall(
+        {
+          name: 'get_gamma_exposure',
+          arguments: JSON.stringify({ symbol: 'SPX' }),
+        },
+        { userId: 'user-1' },
+      );
+
+      expect(result).toEqual({
+        error: 'This feature requires a Pro subscription',
+        requiredTier: 'pro',
+      });
+      expect(mockCalculateGEXProfile).not.toHaveBeenCalled();
     });
   });
 
@@ -876,19 +892,18 @@ describe('Function Handlers', () => {
 
   describe('get_journal_insights', () => {
     it('should return journal insights for authenticated user', async () => {
-      mockGetJournalInsightsForUser.mockResolvedValue({
-        userId: 'user-1',
-        period: { start: '2026-01-11', end: '2026-02-09', days: 30 },
-        cached: true,
-        insights: {
-          tradeCount: 22,
-          summary: 'Best window: 10:00-11:00.',
-          timeOfDay: { summary: 'time summary' },
-          setupAnalysis: { summary: 'setup summary' },
-          behavioral: { revengeTradingIncidents: 1 },
-          riskManagement: { summary: 'risk summary' },
-        },
-      });
+      const chain: any = {
+        eq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockResolvedValue({
+          data: [
+            { trade_date: '2026-02-01T14:30:00.000Z', pnl: 120, is_winner: true, followed_plan: true, discipline_score: 4 },
+            { trade_date: '2026-02-02T14:30:00.000Z', pnl: -50, is_winner: false, followed_plan: false, discipline_score: 2 },
+          ],
+          error: null,
+        }),
+      };
+      const selectFn = jest.fn().mockReturnValue(chain);
+      mockSupabaseFrom.mockReturnValue({ select: selectFn });
 
       const result = await executeFunctionCall(
         {
@@ -898,10 +913,10 @@ describe('Function Handlers', () => {
         { userId: 'user-1' },
       );
 
-      expect(mockGetJournalInsightsForUser).toHaveBeenCalledWith('user-1', 30);
-      expect(result).toHaveProperty('tradeCount', 22);
-      expect(result).toHaveProperty('cached', true);
-      expect(result).toHaveProperty('summary', 'Best window: 10:00-11:00.');
+      expect(chain.eq).toHaveBeenCalledWith('user_id', 'user-1');
+      expect(result).toHaveProperty('tradeCount', 2);
+      expect(result).toHaveProperty('cached', false);
+      expect(result).toHaveProperty('summary');
     });
   });
 

@@ -393,7 +393,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Discord Integration Card */}
-      <Card className="glass-card-heavy border-white/10">
+      <Card id="membership-tier-mapping" className="glass-card-heavy border-white/10">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-[#5865F2]" />

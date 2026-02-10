@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AcademyHub } from '@/components/academy/academy-hub'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // ============================================
 // TYPES
@@ -36,6 +37,10 @@ interface DashboardData {
     progress: number
     totalLessons: number
     currentLesson: number
+  } | null
+  resumeInsight?: {
+    message: string
+    source: string
   } | null
   recommendedCourses: Array<{
     slug: string
@@ -76,7 +81,7 @@ function AcademySkeleton() {
       <div className="flex items-center justify-center py-8">
         <div className="text-center">
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="Loading" fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
           </div>
           <p className="text-sm text-white/40">Loading Academy...</p>
         </div>
@@ -171,6 +176,7 @@ export default function AcademyPage() {
           activeDays: [],
         },
         currentLesson: null,
+        resumeInsight: null,
         recommendedCourses: [],
         recentAchievements: [],
       })
@@ -197,6 +203,7 @@ export default function AcademyPage() {
     <AcademyHub
       stats={dashboardData.stats}
       currentLesson={dashboardData.currentLesson}
+      resumeInsight={dashboardData.resumeInsight || null}
       recommendedCourses={dashboardData.recommendedCourses}
       recentAchievements={dashboardData.recentAchievements}
       username={username}

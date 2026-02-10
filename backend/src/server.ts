@@ -12,13 +12,13 @@ import { connectRedis } from './config/redis';
 import { requestIdMiddleware } from './middleware/requestId';
 import { validateEnv } from './config/env';
 import { generalLimiter, chatLimiter, screenshotLimiter } from './middleware/rateLimiter';
+import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
 import levelsRouter from './routes/levels';
 import chatRouter from './routes/chat';
 import optionsRouter from './routes/options';
 import chartRouter from './routes/chart';
 import screenshotRouter from './routes/screenshot';
-import journalRouter from './routes/journal';
 import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
 import macroRouter from './routes/macro';
@@ -28,12 +28,12 @@ import briefRouter from './routes/brief';
 import trackedSetupsRouter from './routes/trackedSetups';
 import symbolsRouter from './routes/symbols';
 import earningsRouter from './routes/earnings';
+import fibonacciRouter from './routes/fibonacci';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
-import { startJournalAutoPopulateWorker, stopJournalAutoPopulateWorker } from './workers/journalAutoPopulateWorker';
-import { startJournalInsightsWorker, stopJournalInsightsWorker } from './workers/journalInsightsWorker';
+import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
@@ -110,7 +110,6 @@ app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
 app.use('/api/chart', chartRouter);
 app.use('/api/screenshot', screenshotRouter);
-app.use('/api/journal', journalRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/leaps', leapsRouter);
 app.use('/api/macro', macroRouter);
@@ -120,6 +119,14 @@ app.use('/api/brief', briefRouter);
 app.use('/api/tracked-setups', trackedSetupsRouter);
 app.use('/api/symbols', symbolsRouter);
 app.use('/api/earnings', earningsRouter);
+app.use('/api/fibonacci', fibonacciRouter);
+// Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
+app.get('/api/journal/trades', authenticateToken, (_req: Request, res: Response) => {
+  res.status(410).json({
+    error: 'Endpoint moved',
+    message: 'Use members journal APIs for trade history.',
+  });
+});
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
@@ -135,12 +142,11 @@ app.get('/', (_req: Request, res: Response) => {
       earningsCalendar: '/api/earnings/calendar', earningsAnalysis: '/api/earnings/:symbol/analysis',
       positionsAnalyze: '/api/positions/analyze', positionsLive: '/api/positions/live', positionsAdvice: '/api/positions/advice',
       chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
-      journalTrades: '/api/journal/trades', journalDrafts: '/api/journal/drafts', journalInsights: '/api/journal/insights',
-      journalAnalytics: '/api/journal/analytics', journalImport: '/api/journal/import',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
       leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
       scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today',
-      trackedSetups: '/api/tracked-setups', symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices'
+      trackedSetups: '/api/tracked-setups', symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices',
+      fibonacci: '/api/fibonacci',
     }
   });
 });
@@ -189,8 +195,7 @@ async function start() {
     startMorningBriefWorker();
     startSetupPushWorker();
     startPositionTrackerWorker();
-    startJournalAutoPopulateWorker();
-    startJournalInsightsWorker();
+    startSessionCleanupWorker();
     startSetupDetectorService();
     startWorkerHealthAlertWorker();
   } catch (error) {
@@ -212,8 +217,7 @@ async function gracefulShutdown(signal: string) {
     stopMorningBriefWorker();
     stopSetupPushWorker();
     stopPositionTrackerWorker();
-    stopJournalAutoPopulateWorker();
-    stopJournalInsightsWorker();
+    stopSessionCleanupWorker();
     stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
     shutdownWebSocket();

@@ -12,8 +12,22 @@ export function getAbsoluteUrl(path: string, request: NextRequest): URL {
   // Use the host header if available (set by Railway proxy)
   const host = request.headers.get('host') || new URL(request.url).host
 
-  // Determine protocol: use https in production, http for localhost
-  const protocol = host.includes('localhost') ? 'http' : 'https'
+  // Prefer proxy-provided protocol when present.
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  const normalizedProto = forwardedProto === 'http' || forwardedProto === 'https'
+    ? forwardedProto
+    : null
+
+  // Local dev/test hosts should be http.
+  const hostLower = host.toLowerCase()
+  const isLoopbackHost =
+    hostLower.includes('localhost') ||
+    hostLower.startsWith('127.0.0.1') ||
+    hostLower.startsWith('0.0.0.0') ||
+    hostLower.startsWith('[::1]') ||
+    hostLower.startsWith('::1')
+
+  const protocol = normalizedProto || (isLoopbackHost ? 'http' : 'https')
 
   return new URL(path, `${protocol}://${host}`)
 }

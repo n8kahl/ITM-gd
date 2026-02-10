@@ -11,6 +11,7 @@ import { getSafeRedirect } from '@/lib/safe-redirect'
 import { AuroraBackground } from '@/components/ui/aurora-background'
 import SparkleLog from '@/components/ui/sparkle-logo'
 import { isIOSStandalone } from '@/lib/pwa-utils'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -28,7 +29,6 @@ function LoginContent() {
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [checkingAuth, setCheckingAuth] = useState(true)
   const [isStandalone, setIsStandalone] = useState(false)
   const [showIOSInfo, setShowIOSInfo] = useState(false)
 
@@ -37,12 +37,21 @@ function LoginContent() {
     setIsStandalone(isIOSStandalone())
   }, [])
 
-  // Check if user is already logged in
+  // Redirect authenticated users when session is readily available.
+  // This check is intentionally non-blocking; middleware remains the source of truth.
   useEffect(() => {
     const checkAuth = async () => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
       try {
         const supabase = createBrowserSupabase()
-        const { data: { session } } = await supabase.auth.getSession()
+        const getSessionWithTimeout = Promise.race([
+          supabase.auth.getSession(),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('getSession timeout')), 4000)
+          }),
+        ])
+
+        const { data: { session } } = await getSessionWithTimeout
         if (session) {
           // Already logged in - determine appropriate redirect
           // Check if user has admin access via app_metadata
@@ -61,7 +70,9 @@ function LoginContent() {
       } catch (err) {
         console.error('Auth check error:', err)
       } finally {
-        setCheckingAuth(false)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
       }
     }
 
@@ -82,13 +93,18 @@ function LoginContent() {
 
     try {
       const supabase = createBrowserSupabase()
+      // Preserve the intended in-app destination without putting it in the OAuth redirect URL.
+      // Supabase only allow-lists exact redirect URLs; query strings can cause it to fall back to site_url (/).
+      try {
+        window.sessionStorage.setItem('post_auth_redirect', redirectTo)
+      } catch {}
 
       // For iOS standalone mode, we need to open in Safari
       if (isStandalone) {
         const { data, error: signInError } = await supabase.auth.signInWithOAuth({
           provider: 'discord',
           options: {
-            redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+            redirectTo: `${window.location.origin}/auth/callback`,
             scopes: 'identify email guilds guilds.members.read',
             skipBrowserRedirect: true, // Get the URL instead of auto-redirecting
           },
@@ -110,7 +126,7 @@ function LoginContent() {
         const { data, error: signInError } = await supabase.auth.signInWithOAuth({
           provider: 'discord',
           options: {
-            redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+            redirectTo: `${window.location.origin}/auth/callback`,
             scopes: 'identify email guilds guilds.members.read',
           },
         })
@@ -126,29 +142,6 @@ function LoginContent() {
       setError(err instanceof Error ? err.message : 'Failed to connect to Discord')
       setIsLoading(false)
     }
-  }
-
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center relative overflow-hidden">
-        <AuroraBackground />
-        <div className="text-center relative z-10">
-          <div className="mx-auto mb-4">
-            <SparkleLog
-              src="/logo.png"
-              alt="TradeITM"
-              width={48}
-              height={48}
-              sparkleCount={8}
-              enableFloat={false}
-              enableGlow={true}
-              glowIntensity="medium"
-            />
-          </div>
-          <p className="text-white/60">Checking authentication...</p>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -174,8 +167,8 @@ function LoginContent() {
           <div className="text-center mb-8">
             <div className="mx-auto mb-4 flex justify-center">
               <SparkleLog
-                src="/logo.png"
-                alt="TradeITM"
+                src={BRAND_LOGO_SRC}
+                alt={BRAND_NAME}
                 width={80}
                 height={80}
                 sparkleCount={12}
@@ -287,7 +280,7 @@ function LoginContent() {
                 <div className="w-full border-t border-white/10" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="px-3 bg-[#0a0a0b] text-white/40">
+                <span className="px-3 bg-[#0a0a0b] text-white/60">
                   Not a member yet?
                 </span>
               </div>
@@ -337,8 +330,8 @@ export default function LoginPage() {
         <div className="text-center relative z-10">
           <div className="mx-auto mb-4">
             <SparkleLog
-              src="/logo.png"
-              alt="TradeITM"
+              src={BRAND_LOGO_SRC}
+              alt={BRAND_NAME}
               width={48}
               height={48}
               sparkleCount={8}

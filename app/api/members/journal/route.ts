@@ -1,647 +1,412 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
+import { z, ZodError } from 'zod'
+import { errorResponse } from '@/lib/api/response'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { contractTypeSchema, directionSchema, journalEntryCreateSchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
+import { sanitizeJournalEntries, sanitizeJournalEntry, sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+const listQuerySchema = z.object({
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  symbol: z.string().max(16).optional(),
+  direction: directionSchema.optional(),
+  contractType: contractTypeSchema.optional(),
+  isWinner: z.enum(['true', 'false']).optional(),
+  isOpen: z.enum(['true', 'false']).optional(),
+  tags: z.string().optional(),
+  sortBy: z.enum(['trade_date', 'pnl', 'symbol']).default('trade_date'),
+  sortDir: z.enum(['asc', 'desc']).default('desc'),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+})
 
-  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
-  if (!key) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+const deleteQuerySchema = z.object({
+  id: z.string().uuid(),
+})
 
-  return createClient(url, key)
-}
-
-function getFirstDefined<T>(...values: Array<T | undefined>): T | undefined {
-  return values.find((value) => value !== undefined)
-}
-
-function parseMaybeNumber(value: unknown): number | null {
+function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function parseMaybeBoolean(value: unknown): boolean | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'string') {
-    const normalized = value.toLowerCase().trim()
-    if (normalized === 'true') return true
-    if (normalized === 'false') return false
-  }
-  return null
+function toDateKey(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().split('T')[0]
+  return parsed.toISOString().split('T')[0]
 }
 
-function parseMaybeInteger(value: unknown): number | null {
-  const parsed = parseMaybeNumber(value)
-  if (parsed == null) return null
-  return Number.isInteger(parsed) ? parsed : Math.round(parsed)
+function addDays(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().split('T')[0]
 }
 
-function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.toLowerCase().trim()
-  if (['long', 'call', 'bullish', 'buy'].includes(normalized)) return 'long'
-  if (['short', 'put', 'bearish', 'sell'].includes(normalized)) return 'short'
-  if (normalized === 'neutral') return 'neutral'
-  return null
+function round(value: number, decimals = 2): number {
+  const factor = 10 ** decimals
+  return Math.round(value * factor) / factor
 }
 
-function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | 'spread' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.toLowerCase().trim()
-  if (['stock', 'equity'].includes(normalized)) return 'stock'
-  if (['call', 'calls'].includes(normalized)) return 'call'
-  if (['put', 'puts'].includes(normalized)) return 'put'
-  if (['spread', 'credit_spread', 'debit_spread'].includes(normalized)) return 'spread'
-  return null
+function calculatePnl(
+  direction: 'long' | 'short',
+  entryPrice: number | null,
+  exitPrice: number | null,
+  positionSize: number | null,
+): number | null {
+  if (entryPrice == null || exitPrice == null) return null
+  const size = positionSize && positionSize > 0 ? positionSize : 1
+  const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+  return round(perUnit * size, 2)
 }
 
-function normalizeMood(value: unknown): 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.toLowerCase().trim()
-  if (['confident', 'neutral', 'anxious', 'frustrated', 'excited', 'fearful'].includes(normalized)) {
-    return normalized as 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful'
-  }
-  return null
+function calculatePnlPercentage(
+  direction: 'long' | 'short',
+  entryPrice: number | null,
+  exitPrice: number | null,
+): number | null {
+  if (entryPrice == null || exitPrice == null || entryPrice === 0) return null
+  const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+  return round((perUnit / entryPrice) * 100, 4)
 }
 
-function normalizeTags(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean)
-}
+async function recalculateStreaks(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, userId: string) {
+  const { data, error } = await supabase
+    .from('journal_entries')
+    .select('trade_date')
+    .eq('user_id', userId)
+    .order('trade_date', { ascending: true })
 
-function normalizeJournalWritePayload(
-  input: Record<string, unknown>,
-  mode: 'create' | 'update',
-) {
-  const payload: Record<string, unknown> = {}
-
-  const tradeDate = getFirstDefined<unknown>(input.trade_date, input.tradeDate)
-  if (tradeDate !== undefined) {
-    payload.trade_date = tradeDate
-  } else if (mode === 'create') {
-    payload.trade_date = new Date().toISOString()
+  if (error) {
+    console.error('Failed to recalculate streaks (load entries):', error)
+    return
   }
 
-  if (input.symbol !== undefined) {
-    payload.symbol =
-      typeof input.symbol === 'string' && input.symbol.trim().length > 0
-        ? input.symbol.trim().toUpperCase()
-        : null
-  }
-
-  const directionInput = getFirstDefined<unknown>(input.direction, input.trade_type)
-  if (directionInput !== undefined) {
-    payload.direction = normalizeDirection(directionInput)
-  }
-
-  const entryPriceInput = getFirstDefined<unknown>(input.entry_price)
-  if (entryPriceInput !== undefined) {
-    payload.entry_price = parseMaybeNumber(entryPriceInput)
-  }
-
-  const exitPriceInput = getFirstDefined<unknown>(input.exit_price)
-  if (exitPriceInput !== undefined) {
-    payload.exit_price = parseMaybeNumber(exitPriceInput)
-  }
-
-  const positionSizeInput = getFirstDefined<unknown>(input.position_size)
-  if (positionSizeInput !== undefined) {
-    payload.position_size = parseMaybeNumber(positionSizeInput)
-  }
-
-  const pnlInput = getFirstDefined<unknown>(input.pnl, input.profit_loss)
-  if (pnlInput !== undefined) {
-    payload.pnl = parseMaybeNumber(pnlInput)
-  }
-
-  const pnlPctInput = getFirstDefined<unknown>(input.pnl_percentage, input.profit_loss_percent)
-  if (pnlPctInput !== undefined) {
-    payload.pnl_percentage = parseMaybeNumber(pnlPctInput)
-  }
-
-  if (input.stop_loss !== undefined) {
-    payload.stop_loss = parseMaybeNumber(input.stop_loss)
-  }
-
-  if (input.initial_target !== undefined) {
-    payload.initial_target = parseMaybeNumber(input.initial_target)
-  }
-
-  if (input.strategy !== undefined) {
-    payload.strategy = typeof input.strategy === 'string' && input.strategy.trim().length > 0
-      ? input.strategy.trim()
-      : null
-  }
-
-  if (input.hold_duration_min !== undefined) {
-    payload.hold_duration_min = parseMaybeInteger(input.hold_duration_min)
-  }
-
-  if (input.mfe_percent !== undefined) {
-    payload.mfe_percent = parseMaybeNumber(input.mfe_percent)
-  }
-
-  if (input.mae_percent !== undefined) {
-    payload.mae_percent = parseMaybeNumber(input.mae_percent)
-  }
-
-  if (input.contract_type !== undefined) {
-    payload.contract_type = normalizeContractType(input.contract_type)
-  }
-
-  if (input.strike_price !== undefined) {
-    payload.strike_price = parseMaybeNumber(input.strike_price)
-  }
-
-  if (input.expiration_date !== undefined) {
-    payload.expiration_date = typeof input.expiration_date === 'string' && input.expiration_date.trim().length > 0
-      ? input.expiration_date.trim()
-      : null
-  }
-
-  if (input.dte_at_entry !== undefined) {
-    payload.dte_at_entry = parseMaybeInteger(input.dte_at_entry)
-  }
-
-  if (input.dte_at_exit !== undefined) {
-    payload.dte_at_exit = parseMaybeInteger(input.dte_at_exit)
-  }
-
-  if (input.iv_at_entry !== undefined) {
-    payload.iv_at_entry = parseMaybeNumber(input.iv_at_entry)
-  }
-
-  if (input.iv_at_exit !== undefined) {
-    payload.iv_at_exit = parseMaybeNumber(input.iv_at_exit)
-  }
-
-  if (input.delta_at_entry !== undefined) {
-    payload.delta_at_entry = parseMaybeNumber(input.delta_at_entry)
-  }
-
-  if (input.theta_at_entry !== undefined) {
-    payload.theta_at_entry = parseMaybeNumber(input.theta_at_entry)
-  }
-
-  if (input.gamma_at_entry !== undefined) {
-    payload.gamma_at_entry = parseMaybeNumber(input.gamma_at_entry)
-  }
-
-  if (input.vega_at_entry !== undefined) {
-    payload.vega_at_entry = parseMaybeNumber(input.vega_at_entry)
-  }
-
-  if (input.underlying_at_entry !== undefined) {
-    payload.underlying_at_entry = parseMaybeNumber(input.underlying_at_entry)
-  }
-
-  if (input.underlying_at_exit !== undefined) {
-    payload.underlying_at_exit = parseMaybeNumber(input.underlying_at_exit)
-  }
-
-  if (input.mood_before !== undefined) {
-    payload.mood_before = normalizeMood(input.mood_before)
-  }
-
-  if (input.mood_after !== undefined) {
-    payload.mood_after = normalizeMood(input.mood_after)
-  }
-
-  if (input.discipline_score !== undefined) {
-    payload.discipline_score = parseMaybeInteger(input.discipline_score)
-  }
-
-  if (input.followed_plan !== undefined) {
-    payload.followed_plan = parseMaybeBoolean(input.followed_plan)
-  }
-
-  if (input.deviation_notes !== undefined) {
-    payload.deviation_notes = typeof input.deviation_notes === 'string' && input.deviation_notes.trim().length > 0
-      ? input.deviation_notes.trim()
-      : null
-  }
-
-  if (input.session_id !== undefined) {
-    payload.session_id = typeof input.session_id === 'string' && input.session_id.trim().length > 0
-      ? input.session_id.trim()
-      : null
-  }
-
-  if (input.is_favorite !== undefined) {
-    const maybeFavorite = parseMaybeBoolean(input.is_favorite)
-    if (maybeFavorite !== null) {
-      payload.is_favorite = maybeFavorite
+  const dateSet = new Set<string>()
+  for (const row of data ?? []) {
+    if (typeof row.trade_date === 'string') {
+      dateSet.add(toDateKey(row.trade_date))
     }
   }
 
-  if (input.screenshot_url !== undefined) {
-    payload.screenshot_url =
-      typeof input.screenshot_url === 'string' && input.screenshot_url.trim().length > 0
-        ? input.screenshot_url.trim()
-        : null
+  const dates = Array.from(dateSet).sort()
+
+  if (dates.length === 0) {
+    await supabase.from('journal_streaks').upsert({
+      user_id: userId,
+      current_streak: 0,
+      longest_streak: 0,
+      last_entry_date: null,
+      updated_at: new Date().toISOString(),
+    })
+    return
   }
 
-  if (input.screenshot_thumbnail_url !== undefined) {
-    payload.screenshot_thumbnail_url =
-      typeof input.screenshot_thumbnail_url === 'string' && input.screenshot_thumbnail_url.trim().length > 0
-        ? input.screenshot_thumbnail_url.trim()
-        : null
+  let longest = 1
+  let running = 1
+
+  for (let index = 1; index < dates.length; index += 1) {
+    const expected = addDays(dates[index - 1], 1)
+    if (dates[index] === expected) {
+      running += 1
+      longest = Math.max(longest, running)
+    } else {
+      running = 1
+    }
   }
 
-  if (input.setup_notes !== undefined) {
-    payload.setup_notes = typeof input.setup_notes === 'string' ? input.setup_notes : null
-  }
-  if (input.execution_notes !== undefined) {
-    payload.execution_notes = typeof input.execution_notes === 'string' ? input.execution_notes : null
-  }
-  if (input.lessons_learned !== undefined) {
-    payload.lessons_learned = typeof input.lessons_learned === 'string' ? input.lessons_learned : null
-  }
-
-  if (input.tags !== undefined) {
-    payload.tags = normalizeTags(input.tags)
-  } else if (mode === 'create') {
-    payload.tags = []
+  let current = 1
+  for (let index = dates.length - 1; index > 0; index -= 1) {
+    const expectedPrevious = addDays(dates[index], -1)
+    if (dates[index - 1] === expectedPrevious) {
+      current += 1
+    } else {
+      break
+    }
   }
 
-  if (input.rating !== undefined) {
-    payload.rating = parseMaybeNumber(input.rating)
-  }
-
-  if (input.ai_analysis !== undefined) {
-    payload.ai_analysis = input.ai_analysis
-  }
-
-  if (input.is_winner !== undefined) {
-    payload.is_winner = parseMaybeBoolean(input.is_winner)
-  } else if (mode === 'create' && typeof payload.pnl === 'number') {
-    payload.is_winner = payload.pnl > 0 ? true : payload.pnl < 0 ? false : null
-  }
-
-  // Draft entries are deprecated from the member journal flow.
-  // Always persist standard entries only.
-  payload.is_draft = false
-  payload.draft_status = null
-  payload.draft_expires_at = null
-
-  return payload
+  await supabase.from('journal_streaks').upsert({
+    user_id: userId,
+    current_streak: current,
+    longest_streak: longest,
+    last_entry_date: dates[dates.length - 1],
+    updated_at: new Date().toISOString(),
+  })
 }
 
-// ============================================
-// CANONICAL TABLE: journal_entries
-// Field names match lib/types/journal.ts:
-//   direction, pnl, pnl_percentage, position_size
-// ============================================
+function invalidRequest(error: ZodError) {
+  return errorResponse('Invalid request', 400, error.flatten())
+}
 
-// GET - Fetch journal entries for user
 export async function GET(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
+
   try {
-    const auth = await getAuthenticatedUserFromRequest(request)
-    const userId = auth?.user.id ?? null
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized - please log in' },
-        { status: 401 }
-      )
-    }
     const { searchParams } = new URL(request.url)
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-    const parsedLimit = Number.parseInt(searchParams.get('limit') || '50', 10)
-    const limit = Number.isFinite(parsedLimit)
-      ? Math.min(500, Math.max(parsedLimit, 1))
-      : 50
 
-    const supabase = getSupabaseAdmin()
+    const parsedQuery = listQuerySchema.parse({
+      startDate: searchParams.get('startDate') ?? undefined,
+      endDate: searchParams.get('endDate') ?? undefined,
+      symbol: searchParams.get('symbol') ?? undefined,
+      direction: searchParams.get('direction') ?? undefined,
+      contractType: searchParams.get('contractType') ?? undefined,
+      isWinner: searchParams.get('isWinner') ?? undefined,
+      isOpen: searchParams.get('isOpen') ?? undefined,
+      tags: searchParams.get('tags') ?? undefined,
+      sortBy: searchParams.get('sortBy') ?? undefined,
+      sortDir: searchParams.get('sortDir') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+      offset: searchParams.get('offset') ?? undefined,
+    })
+
+    const startDate = parsedQuery.startDate ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const endDate = parsedQuery.endDate ?? new Date().toISOString()
+    const tags = parsedQuery.tags
+      ? parsedQuery.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+      : []
 
     let query = supabase
       .from('journal_entries')
-      .select('*')
-      .eq('user_id', userId)
-      .or('is_draft.is.null,is_draft.eq.false')
-      .order('trade_date', { ascending: false })
-      .limit(limit)
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id)
+      .gte('trade_date', startDate)
+      .lte('trade_date', endDate)
 
-    if (startDate) {
-      query = query.gte('trade_date', startDate)
-    }
-    if (endDate) {
-      query = query.lte('trade_date', endDate)
+    if (parsedQuery.symbol) {
+      query = query.ilike('symbol', `%${parsedQuery.symbol.toUpperCase()}%`)
     }
 
-    const { data: entries, error } = await query
+    if (parsedQuery.direction) {
+      query = query.eq('direction', parsedQuery.direction)
+    }
+
+    if (parsedQuery.contractType) {
+      query = query.eq('contract_type', parsedQuery.contractType)
+    }
+
+    if (parsedQuery.isWinner) {
+      query = query.eq('is_winner', parsedQuery.isWinner === 'true')
+    }
+
+    if (parsedQuery.isOpen) {
+      query = query.eq('is_open', parsedQuery.isOpen === 'true')
+    }
+
+    if (tags.length > 0) {
+      query = query.overlaps('tags', tags)
+    }
+
+    const { data, error, count } = await query
+      .order(parsedQuery.sortBy, { ascending: parsedQuery.sortDir === 'asc' })
+      .range(parsedQuery.offset, parsedQuery.offset + parsedQuery.limit - 1)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Failed to list journal entries:', error)
+      return errorResponse('Failed to load journal entries', 500)
     }
 
-    // Also fetch streak data
-    const { data: streaks } = await supabase
+    const { data: streak } = await supabase
       .from('journal_streaks')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
+      .select('current_streak,longest_streak')
+      .eq('user_id', user.id)
+      .maybeSingle()
 
     return NextResponse.json({
       success: true,
-      data: sanitizeJournalEntries(entries || []),
-      streaks: streaks || {
-        current_streak: 0,
-        longest_streak: 0,
-        total_entries: 0,
-        total_winners: 0,
-        total_losers: 0,
+      data: sanitizeJournalEntries(data),
+      total: count ?? 0,
+      streaks: {
+        current_streak: streak?.current_streak ?? 0,
+        longest_streak: streak?.longest_streak ?? 0,
       },
     })
   } catch (error) {
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Internal server error',
-    }, { status: 500 })
+    if (error instanceof ZodError) return invalidRequest(error)
+
+    console.error('Journal GET failed:', error)
+    return errorResponse('Internal server error', 500)
   }
 }
 
-// POST - Create new journal entry
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
+
   try {
-    const auth = await getAuthenticatedUserFromRequest(request)
-    const userId = auth?.user.id ?? null
+    const rawBody = await request.json()
+    const validated = journalEntryCreateSchema.parse(rawBody)
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized - please log in' },
-        { status: 401 }
-      )
-    }
-    const body = await request.json().catch(() => null)
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
-    }
-    const payload = normalizeJournalWritePayload(body, 'create')
-    const symbol = typeof payload.symbol === 'string' ? payload.symbol : ''
-    if (!symbol || !symbol.trim()) {
-      return NextResponse.json({ error: 'Symbol is required' }, { status: 400 })
+    const payload = sanitizeJournalWriteInput(validated as unknown as Record<string, unknown>)
+
+    payload.user_id = user.id
+    payload.trade_date = payload.trade_date ?? new Date().toISOString()
+
+    const direction = (payload.direction as 'long' | 'short' | undefined) ?? 'long'
+    const entryPrice = toNumber(payload.entry_price)
+    const exitPrice = toNumber(payload.exit_price)
+    const positionSize = toNumber(payload.position_size)
+
+    if (payload.pnl == null) {
+      payload.pnl = calculatePnl(direction, entryPrice, exitPrice, positionSize)
     }
 
-    const supabase = getSupabaseAdmin()
-
-    const { data: entry, error } = await supabase
-      .from('journal_entries')
-      .insert({
-        user_id: userId,
-        ...payload,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (payload.pnl_percentage == null) {
+      payload.pnl_percentage = calculatePnlPercentage(direction, entryPrice, exitPrice)
     }
-
-    // Update streak data
-    await updateStreaks(
-      supabase,
-      userId,
-      typeof payload.is_winner === 'boolean' ? payload.is_winner : null,
-      typeof payload.trade_date === 'string' ? payload.trade_date : undefined,
-    )
-
-    return NextResponse.json({ success: true, data: sanitizeJournalEntry(entry, 'new-entry') })
-  } catch (error) {
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Internal server error',
-    }, { status: 500 })
-  }
-}
-
-// PATCH - Update journal entry
-export async function PATCH(request: NextRequest) {
-  try {
-    const auth = await getAuthenticatedUserFromRequest(request)
-    const userId = auth?.user.id ?? null
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized - please log in' },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json().catch(() => null)
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
-    }
-    const { id, ...rawUpdates } = body
-
-    if (!id) {
-      return NextResponse.json({ error: 'Entry ID is required' }, { status: 400 })
-    }
-
-    // Map any legacy field names to canonical names
-    const updates: Record<string, unknown> = { ...rawUpdates }
-    if ('trade_type' in updates) {
-      updates.direction = updates.trade_type
-      delete updates.trade_type
-    }
-    if ('profit_loss' in updates) {
-      updates.pnl = updates.profit_loss
-      delete updates.profit_loss
-    }
-    if ('profit_loss_percent' in updates) {
-      updates.pnl_percentage = updates.profit_loss_percent
-      delete updates.profit_loss_percent
-    }
-
-    const supabase = getSupabaseAdmin()
-
-    const normalizedUpdates = normalizeJournalWritePayload(updates, 'update')
 
     const { data, error } = await supabase
       .from('journal_entries')
-      .update(normalizedUpdates)
-      .eq('id', id)
-      .eq('user_id', userId)
-      .select()
+      .insert(payload)
+      .select('*')
+      .single()
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error || !data) {
+      console.error('Failed to create journal entry:', error)
+      return errorResponse('Failed to create journal entry', 500)
     }
 
-    if (!data || data.length === 0) {
-      return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
-    }
+    await recalculateStreaks(supabase, user.id)
 
-    return NextResponse.json({ success: true, data: sanitizeJournalEntry(data[0], 'updated-entry') })
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(data) })
   } catch (error) {
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Internal server error',
-    }, { status: 500 })
+    if (error instanceof ZodError) return invalidRequest(error)
+
+    console.error('Journal POST failed:', error)
+    return errorResponse('Internal server error', 500)
   }
 }
 
-// DELETE - Delete journal entry
-export async function DELETE(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
+
   try {
-    const auth = await getAuthenticatedUserFromRequest(request)
-    const userId = auth?.user.id ?? null
+    const rawBody = await request.json()
+    const validated = journalEntryUpdateSchema.parse(rawBody)
+    const { id } = validated
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized - please log in' },
-        { status: 401 }
-      )
+    const { data: existing, error: existingError } = await supabase
+      .from('journal_entries')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (existingError || !existing) {
+      return errorResponse('Entry not found', 404)
     }
 
+    const updatePayload = sanitizeJournalWriteInput(validated as unknown as Record<string, unknown>)
+
+    const nextDirection = (updatePayload.direction as 'long' | 'short' | undefined) ?? existing.direction
+    const nextEntryPrice = toNumber(updatePayload.entry_price ?? existing.entry_price)
+    const nextExitPrice = toNumber(updatePayload.exit_price ?? existing.exit_price)
+    const nextPositionSize = toNumber(updatePayload.position_size ?? existing.position_size)
+
+    const recalculationRequested = (
+      Object.prototype.hasOwnProperty.call(updatePayload, 'entry_price')
+      || Object.prototype.hasOwnProperty.call(updatePayload, 'exit_price')
+      || Object.prototype.hasOwnProperty.call(updatePayload, 'direction')
+      || Object.prototype.hasOwnProperty.call(updatePayload, 'position_size')
+    )
+
+    if (recalculationRequested && !Object.prototype.hasOwnProperty.call(updatePayload, 'pnl')) {
+      updatePayload.pnl = calculatePnl(nextDirection, nextEntryPrice, nextExitPrice, nextPositionSize)
+    }
+
+    if (recalculationRequested && !Object.prototype.hasOwnProperty.call(updatePayload, 'pnl_percentage')) {
+      updatePayload.pnl_percentage = calculatePnlPercentage(nextDirection, nextEntryPrice, nextExitPrice)
+    }
+
+    if (
+      existing.is_open
+      && updatePayload.exit_price != null
+      && !Object.prototype.hasOwnProperty.call(updatePayload, 'is_open')
+    ) {
+      updatePayload.is_open = false
+    }
+
+    const { data, error } = await supabase
+      .from('journal_entries')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('*')
+      .single()
+
+    if (error || !data) {
+      console.error('Failed to update journal entry:', error)
+      return errorResponse('Failed to update journal entry', 500)
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updatePayload, 'trade_date')
+      || Object.prototype.hasOwnProperty.call(updatePayload, 'pnl')
+    ) {
+      await recalculateStreaks(supabase, user.id)
+    }
+
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(data) })
+  } catch (error) {
+    if (error instanceof ZodError) return invalidRequest(error)
+
+    console.error('Journal PATCH failed:', error)
+    return errorResponse('Internal server error', 500)
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
+
+  try {
     const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
+    const parsed = deleteQuerySchema.parse({ id: searchParams.get('id') })
 
-    if (!id) {
-      return NextResponse.json({ error: 'Entry ID is required' }, { status: 400 })
+    const { data: existing, error: existingError } = await supabase
+      .from('journal_entries')
+      .select('id,screenshot_storage_path')
+      .eq('id', parsed.id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (existingError || !existing) {
+      return errorResponse('Entry not found', 404)
     }
 
-    const supabase = getSupabaseAdmin()
-
-    const { error } = await supabase
+    const { error: deleteError } = await supabase
       .from('journal_entries')
       .delete()
-      .eq('id', id)
-      .eq('user_id', userId)
+      .eq('id', parsed.id)
+      .eq('user_id', user.id)
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (deleteError) {
+      console.error('Failed to delete journal entry:', deleteError)
+      return errorResponse('Failed to delete journal entry', 500)
     }
 
-    // Recalculate streaks
-    await recalculateStreaks(supabase, userId)
+    if (typeof existing.screenshot_storage_path === 'string' && existing.screenshot_storage_path.length > 0) {
+      const { error: storageError } = await supabase
+        .storage
+        .from('journal-screenshots')
+        .remove([existing.screenshot_storage_path])
+
+      if (storageError) {
+        console.error('Failed to delete journal screenshot:', storageError)
+      }
+    }
+
+    await recalculateStreaks(supabase, user.id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Internal server error',
-    }, { status: 500 })
+    if (error instanceof ZodError) return invalidRequest(error)
+
+    console.error('Journal DELETE failed:', error)
+    return errorResponse('Internal server error', 500)
   }
-}
-
-// Helper: Update streak data after new entry
-async function updateStreaks(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  userId: string,
-  isWinner: boolean | null,
-  tradeDate?: string
-) {
-  const today = new Date().toISOString().split('T')[0]
-  const entryDate = tradeDate || today
-
-  const { data: current } = await supabase
-    .from('journal_streaks')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (!current) {
-    await supabase
-      .from('journal_streaks')
-      .insert({
-        user_id: userId,
-        current_streak: 1,
-        longest_streak: 1,
-        last_entry_date: entryDate,
-        total_entries: 1,
-        total_winners: isWinner ? 1 : 0,
-        total_losers: isWinner === false ? 1 : 0,
-      })
-    return
-  }
-
-  let newStreak = current.current_streak
-  const lastDate = current.last_entry_date ? new Date(current.last_entry_date) : null
-  const newDate = new Date(entryDate)
-
-  if (lastDate) {
-    const diffDays = Math.floor((newDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
-    if (diffDays === 1) {
-      newStreak = current.current_streak + 1
-    } else if (diffDays > 1) {
-      newStreak = 1
-    }
-  }
-
-  const longestStreak = Math.max(newStreak, current.longest_streak)
-
-  await supabase
-    .from('journal_streaks')
-    .update({
-      current_streak: newStreak,
-      longest_streak: longestStreak,
-      last_entry_date: entryDate,
-      total_entries: current.total_entries + 1,
-      total_winners: current.total_winners + (isWinner ? 1 : 0),
-      total_losers: current.total_losers + (isWinner === false ? 1 : 0),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-}
-
-// Helper: Recalculate all streak data
-async function recalculateStreaks(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  userId: string
-) {
-  const { data: entries } = await supabase
-    .from('journal_entries')
-    .select('trade_date, is_winner')
-    .eq('user_id', userId)
-    .or('is_draft.is.null,is_draft.eq.false')
-    .order('trade_date', { ascending: true })
-
-  if (!entries || entries.length === 0) {
-    await supabase
-      .from('journal_streaks')
-      .delete()
-      .eq('user_id', userId)
-    return
-  }
-
-  const totalEntries = entries.length
-  const totalWinners = entries.filter(e => e.is_winner === true).length
-  const totalLosers = entries.filter(e => e.is_winner === false).length
-  const lastDate = entries[entries.length - 1].trade_date
-
-  let longestStreak = 1
-  let tempStreak = 1
-
-  for (let i = 1; i < entries.length; i++) {
-    const prevDate = new Date(entries[i - 1].trade_date)
-    const currDate = new Date(entries[i].trade_date)
-    const diffDays = Math.floor((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 1) {
-      tempStreak++
-    } else if (diffDays > 1) {
-      tempStreak = 1
-    }
-
-    longestStreak = Math.max(longestStreak, tempStreak)
-  }
-
-  const currentStreak = tempStreak
-
-  await supabase
-    .from('journal_streaks')
-    .upsert({
-      user_id: userId,
-      current_streak: currentStreak,
-      longest_streak: longestStreak,
-      last_entry_date: lastDate,
-      total_entries: totalEntries,
-      total_winners: totalWinners,
-      total_losers: totalLosers,
-      updated_at: new Date().toISOString(),
-    })
 }

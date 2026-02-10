@@ -115,8 +115,9 @@ describe('Circuit Breaker', () => {
       }
 
       // Next call should fail immediately with CircuitBreakerError
-      await expect(circuit.execute(jest.fn())).rejects.toThrow(CircuitBreakerError);
-      await expect(circuit.execute(jest.fn())).rejects.toThrow('circuit is OPEN');
+      const openStateAttempt = circuit.execute(jest.fn());
+      await expect(openStateAttempt).rejects.toThrow(CircuitBreakerError);
+      await expect(openStateAttempt).rejects.toThrow('circuit is OPEN');
     });
   });
 

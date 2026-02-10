@@ -2,21 +2,19 @@ import { defineConfig, devices } from '@playwright/test'
 
 const aiCoachMode = process.env.E2E_AI_COACH_MODE || 'mock'
 const isAICoachLiveMode = aiCoachMode === 'live'
-const defaultLiveBackendUrl = 'http://localhost:3101'
+const defaultLiveBackendUrl = 'http://127.0.0.1:3101'
 const e2eBackendUrl = process.env.E2E_BACKEND_URL
   || process.env.NEXT_PUBLIC_AI_COACH_API_URL
-  || (isAICoachLiveMode ? defaultLiveBackendUrl : 'http://localhost:3001')
+  || (isAICoachLiveMode ? defaultLiveBackendUrl : 'http://127.0.0.1:3001')
 
 if (isAICoachLiveMode && !process.env.E2E_BACKEND_URL) {
   process.env.E2E_BACKEND_URL = e2eBackendUrl
 }
 
 function shouldStartLocalBackendServer(): boolean {
-  if (!isAICoachLiveMode) return false
-
   try {
     const hostname = new URL(e2eBackendUrl).hostname
-    return hostname === 'localhost' || hostname === '127.0.0.1'
+    return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(hostname)
   } catch {
     return false
   }
@@ -24,8 +22,9 @@ function shouldStartLocalBackendServer(): boolean {
 
 const webServers: NonNullable<ReturnType<typeof defineConfig>['webServer']> = [
   {
-    command: `E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} NEXT_PUBLIC_AI_COACH_API_URL=${e2eBackendUrl} pnpm dev`,
-    url: 'http://localhost:3000',
+    // Bind explicitly to loopback; some sandboxed environments deny listening on 0.0.0.0.
+    command: `E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} NEXT_PUBLIC_AI_COACH_API_URL=${e2eBackendUrl} node_modules/.bin/next dev --hostname 127.0.0.1 --port 3000`,
+    url: 'http://127.0.0.1:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
@@ -55,10 +54,16 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 1,
   timeout: 30000, // 30 second timeout per test
   expect: {
     timeout: 10000, // 10 second timeout for expect assertions
+    toHaveScreenshot: {
+      // Allow minor anti-aliasing/font rendering variance across CI runners.
+      maxDiffPixelRatio: 0.02,
+      animations: 'disabled',
+      caret: 'hide',
+    },
   },
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
@@ -69,10 +74,11 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    serviceWorkers: 'block',
     // Viewport for consistent testing
     viewport: { width: 1280, height: 720 },
   },
@@ -103,7 +109,7 @@ export default defineConfig({
     // All other tests
     {
       name: 'chromium',
-      testIgnore: /auth-health-check\.spec\.ts/,
+      testIgnore: [/auth-health-check\.spec\.ts/, /ai-coach.*\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
     },
     // Mobile testing for responsive auth

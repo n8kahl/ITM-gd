@@ -1,341 +1,383 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { analyticsPeriodSchema } from '@/lib/validation/journal-api'
-import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
+import { NextRequest } from 'next/server'
+import { ZodError } from 'zod'
+import { errorResponse, successResponse } from '@/lib/api/response'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import type { AdvancedAnalyticsResponse, JournalDirection } from '@/lib/types/journal'
+import { analyticsPeriodSchema } from '@/lib/validation/journal-entry'
 
-type Period = '7d' | '30d' | '90d' | '1y'
-
-interface RawEntry {
+interface AnalyticsRow {
   id: string
   trade_date: string
-  created_at: string
-  symbol: string | null
-  direction: 'long' | 'short' | 'neutral' | null
-  pnl: number | string | null
-  stop_loss: number | string | null
-  entry_price: number | string | null
-  exit_price: number | string | null
+  symbol: string
+  direction: JournalDirection
+  pnl: number | null
   hold_duration_min: number | null
-  mfe_percent: number | string | null
-  mae_percent: number | string | null
-  dte_at_entry: number | null
+  mfe_percent: number | null
+  mae_percent: number | null
+  entry_price: number | null
+  exit_price: number | null
+  stop_loss: number | null
 }
 
-function toNumber(value: number | string | null | undefined): number | null {
+function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function toIsoForSort(value: unknown): string {
-  if (typeof value !== 'string' || value.trim().length === 0) return ''
-  const parsed = Date.parse(value)
-  if (Number.isNaN(parsed)) return ''
-  return new Date(parsed).toISOString()
+function safeDivide(numerator: number, denominator: number): number | null {
+  if (denominator === 0) return null
+  const value = numerator / denominator
+  return Number.isFinite(value) ? value : null
 }
 
-function getPeriodStart(period: Period): Date {
-  const now = new Date()
+function safeAverage(values: number[]): number | null {
+  if (values.length === 0) return null
+  const total = values.reduce((sum, value) => sum + value, 0)
+  return safeDivide(total, values.length)
+}
+
+function sampleStdDev(values: number[]): number | null {
+  if (values.length < 2) return null
+  const mean = safeAverage(values)
+  if (mean == null) return null
+
+  const varianceNumerator = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0)
+  const variance = safeDivide(varianceNumerator, values.length - 1)
+  if (variance == null) return null
+
+  const stdDev = Math.sqrt(variance)
+  return Number.isFinite(stdDev) && stdDev > 0 ? stdDev : null
+}
+
+function getPeriodStart(period: '7d' | '30d' | '90d' | '1y' | 'all'): string {
+  if (period === 'all') {
+    return '1970-01-01T00:00:00.000Z'
+  }
+
+  const now = Date.now()
+  const day = 24 * 60 * 60 * 1000
+
   switch (period) {
     case '7d':
-      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      return new Date(now - (7 * day)).toISOString()
     case '90d':
-      return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+      return new Date(now - (90 * day)).toISOString()
     case '1y':
-      return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+      return new Date(now - (365 * day)).toISOString()
     case '30d':
     default:
-      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      return new Date(now - (30 * day)).toISOString()
   }
 }
 
-function computeRMultiple(entry: RawEntry): number | null {
-  const entryPrice = toNumber(entry.entry_price)
-  const exitPrice = toNumber(entry.exit_price)
-  const stopLoss = toNumber(entry.stop_loss)
-
-  if (entryPrice == null || exitPrice == null || stopLoss == null || !entry.direction) return null
-
-  if (entry.direction === 'long') {
-    const denominator = entryPrice - stopLoss
-    if (denominator === 0) return null
-    return (exitPrice - entryPrice) / denominator
-  }
-
-  if (entry.direction === 'short') {
-    const denominator = stopLoss - entryPrice
-    if (denominator === 0) return null
-    return (entryPrice - exitPrice) / denominator
-  }
-
-  return null
+function toNewYorkDate(dateIso: string): Date {
+  return new Date(new Date(dateIso).toLocaleString('en-US', { timeZone: 'America/New_York' }))
 }
 
-function computeSharpe(values: number[]): number {
-  if (values.length < 2) return 0
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length
-  const variance = values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / (values.length - 1)
-  const stdDev = Math.sqrt(variance)
-  if (stdDev === 0) return 0
-  return mean / stdDev
+function calculateRMultiple(row: AnalyticsRow): number | null {
+  const entryPrice = toNumber(row.entry_price)
+  const exitPrice = toNumber(row.exit_price)
+  const stopLoss = toNumber(row.stop_loss)
+
+  if (entryPrice == null || exitPrice == null || stopLoss == null) return null
+
+  const risk = row.direction === 'short'
+    ? stopLoss - entryPrice
+    : entryPrice - stopLoss
+
+  if (risk <= 0) return null
+
+  const reward = row.direction === 'short'
+    ? entryPrice - exitPrice
+    : exitPrice - entryPrice
+
+  return safeDivide(reward, risk)
 }
 
-function computeSortino(values: number[]): number {
-  if (values.length < 2) return 0
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length
-  const downside = values.filter((value) => value < 0)
-  if (downside.length < 2) return 0
-  const downsideMean = downside.reduce((sum, value) => sum + value, 0) / downside.length
-  const downsideVariance = downside.reduce((sum, value) => sum + Math.pow(value - downsideMean, 2), 0) / (downside.length - 1)
-  const downsideStdDev = Math.sqrt(downsideVariance)
-  if (downsideStdDev === 0) return 0
-  return mean / downsideStdDev
-}
-
-function buildFallbackAnalytics(entries: RawEntry[], period: Period) {
-  const closedEntries = entries.filter((entry) => toNumber(entry.pnl) != null)
-  const pnlValues = closedEntries.map((entry) => toNumber(entry.pnl) || 0)
-
-  const totalTrades = closedEntries.length
-  const winningTrades = closedEntries.filter((entry) => (toNumber(entry.pnl) || 0) > 0)
-  const losingTrades = closedEntries.filter((entry) => (toNumber(entry.pnl) || 0) < 0)
-  const winRate = totalTrades > 0 ? (winningTrades.length / totalTrades) * 100 : 0
-
-  const totalPnl = pnlValues.reduce((sum, pnl) => sum + pnl, 0)
-  const avgPnl = totalTrades > 0 ? totalPnl / totalTrades : 0
-  const avgWin = winningTrades.length > 0
-    ? winningTrades.reduce((sum, entry) => sum + (toNumber(entry.pnl) || 0), 0) / winningTrades.length
-    : 0
-  const avgLoss = losingTrades.length > 0
-    ? Math.abs(losingTrades.reduce((sum, entry) => sum + (toNumber(entry.pnl) || 0), 0) / losingTrades.length)
-    : 0
-  const expectancy = (winRate / 100) * avgWin - ((100 - winRate) / 100) * avgLoss
-
-  const grossProfit = winningTrades.reduce((sum, entry) => sum + (toNumber(entry.pnl) || 0), 0)
-  const grossLoss = Math.abs(losingTrades.reduce((sum, entry) => sum + (toNumber(entry.pnl) || 0), 0))
-  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Number.POSITIVE_INFINITY : 0
-
-  const rMultiples = closedEntries.map(computeRMultiple).filter((value): value is number => value != null)
-  const avgRMultiple = rMultiples.length > 0 ? rMultiples.reduce((sum, value) => sum + value, 0) / rMultiples.length : 0
-
-  let equity = 0
-  let runningPeak = 0
-  let maxDrawdown = 0
-  let currentDrawdownLength = 0
-  let maxDrawdownDuration = 0
-
-  const sortedForEquity = [...closedEntries].sort((a, b) => {
-    const tradeCompare = toIsoForSort(a.trade_date).localeCompare(toIsoForSort(b.trade_date))
-    if (tradeCompare !== 0) return tradeCompare
-    return toIsoForSort(a.created_at).localeCompare(toIsoForSort(b.created_at))
-  })
-
-  const equityCurve = sortedForEquity.map((entry) => {
-    equity += toNumber(entry.pnl) || 0
-    runningPeak = Math.max(runningPeak, equity)
-    const drawdown = equity - runningPeak
-    maxDrawdown = Math.min(maxDrawdown, drawdown)
-
-    if (drawdown < 0) {
-      currentDrawdownLength += 1
-      maxDrawdownDuration = Math.max(maxDrawdownDuration, currentDrawdownLength)
-    } else {
-      currentDrawdownLength = 0
-    }
-
-    return {
-      trade_date: entry.trade_date,
-      equity,
-      drawdown,
-    }
-  })
-
-  const hourlyMap = new Map<number, { hour_of_day: number; pnl: number; trade_count: number }>()
-  const weekdayMap = new Map<number, { day_of_week: number; pnl: number; trade_count: number }>()
-  const monthMap = new Map<string, { month: string; pnl: number; trade_count: number }>()
-  const symbolMap = new Map<string, { symbol: string; pnl: number; trade_count: number; wins: number }>()
-  const directionMap = new Map<string, { direction: string; pnl: number; trade_count: number; wins: number }>()
-  const dteMap = new Map<string, { bucket: string; pnl: number; trade_count: number; wins: number }>()
-  const rDistribution = new Map<string, number>()
-  const mfeMaeScatter: Array<{ id: string; mfe: number; mae: number; pnl: number }> = []
-
-  for (const entry of closedEntries) {
-    const pnl = toNumber(entry.pnl) || 0
-    const tradeDate = new Date(toIsoForSort(entry.trade_date))
-    if (Number.isNaN(tradeDate.getTime())) continue
-    const etDate = new Date(tradeDate.toLocaleString('en-US', { timeZone: 'America/New_York' }))
-    const hour = etDate.getHours()
-    const weekday = etDate.getDay()
-    const month = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}`
-
-    const hourly = hourlyMap.get(hour) || { hour_of_day: hour, pnl: 0, trade_count: 0 }
-    hourly.pnl += pnl
-    hourly.trade_count += 1
-    hourlyMap.set(hour, hourly)
-
-    const weekdayEntry = weekdayMap.get(weekday) || { day_of_week: weekday, pnl: 0, trade_count: 0 }
-    weekdayEntry.pnl += pnl
-    weekdayEntry.trade_count += 1
-    weekdayMap.set(weekday, weekdayEntry)
-
-    const monthly = monthMap.get(month) || { month, pnl: 0, trade_count: 0 }
-    monthly.pnl += pnl
-    monthly.trade_count += 1
-    monthMap.set(month, monthly)
-
-    if (entry.symbol) {
-      const symbolEntry = symbolMap.get(entry.symbol) || { symbol: entry.symbol, pnl: 0, trade_count: 0, wins: 0 }
-      symbolEntry.pnl += pnl
-      symbolEntry.trade_count += 1
-      symbolEntry.wins += pnl > 0 ? 1 : 0
-      symbolMap.set(entry.symbol, symbolEntry)
-    }
-
-    if (entry.direction) {
-      const directionEntry = directionMap.get(entry.direction) || { direction: entry.direction, pnl: 0, trade_count: 0, wins: 0 }
-      directionEntry.pnl += pnl
-      directionEntry.trade_count += 1
-      directionEntry.wins += pnl > 0 ? 1 : 0
-      directionMap.set(entry.direction, directionEntry)
-    }
-
-    const dte = entry.dte_at_entry
-    const dteBucket = dte == null ? 'unknown' : dte <= 7 ? '0-7' : dte <= 30 ? '8-30' : '31+'
-    const dteEntry = dteMap.get(dteBucket) || { bucket: dteBucket, pnl: 0, trade_count: 0, wins: 0 }
-    dteEntry.pnl += pnl
-    dteEntry.trade_count += 1
-    dteEntry.wins += pnl > 0 ? 1 : 0
-    dteMap.set(dteBucket, dteEntry)
-
-    const rMultiple = computeRMultiple(entry)
-    if (rMultiple != null) {
-      const bucket = `${Math.floor(rMultiple)}`
-      rDistribution.set(bucket, (rDistribution.get(bucket) || 0) + 1)
-    }
-
-    const mfe = toNumber(entry.mfe_percent)
-    const mae = toNumber(entry.mae_percent)
-    if (mfe != null && mae != null) {
-      mfeMaeScatter.push({ id: entry.id, mfe, mae, pnl })
-    }
+function toAnalyticsRow(value: Record<string, unknown>): AnalyticsRow | null {
+  if (
+    typeof value.id !== 'string'
+    || typeof value.trade_date !== 'string'
+    || typeof value.symbol !== 'string'
+    || (value.direction !== 'long' && value.direction !== 'short')
+  ) {
+    return null
   }
-
-  const symbolStats = Array.from(symbolMap.values())
-    .map((item) => ({
-      symbol: item.symbol,
-      pnl: item.pnl,
-      trade_count: item.trade_count,
-      win_rate: item.trade_count > 0 ? (item.wins / item.trade_count) * 100 : 0,
-    }))
-    .sort((a, b) => b.pnl - a.pnl)
-    .slice(0, 25)
-
-  const directionStats = Array.from(directionMap.values()).map((item) => ({
-    direction: item.direction,
-    pnl: item.pnl,
-    trade_count: item.trade_count,
-    win_rate: item.trade_count > 0 ? (item.wins / item.trade_count) * 100 : 0,
-  }))
-
-  const dteBuckets = Array.from(dteMap.values()).map((item) => ({
-    bucket: item.bucket,
-    pnl: item.pnl,
-    trade_count: item.trade_count,
-    win_rate: item.trade_count > 0 ? (item.wins / item.trade_count) * 100 : 0,
-  }))
 
   return {
-    period,
-    period_start: getPeriodStart(period).toISOString(),
-    total_trades: totalTrades,
-    closed_trades: totalTrades,
-    winning_trades: winningTrades.length,
-    losing_trades: losingTrades.length,
-    win_rate: winRate,
-    total_pnl: totalPnl,
-    avg_pnl: avgPnl,
-    expectancy,
-    profit_factor: Number.isFinite(profitFactor) ? profitFactor : null,
-    avg_r_multiple: avgRMultiple,
-    sharpe_ratio: computeSharpe(pnlValues),
-    sortino_ratio: computeSortino(pnlValues),
-    max_drawdown: maxDrawdown,
-    max_drawdown_duration_days: maxDrawdownDuration,
-    avg_hold_minutes: (() => {
-      const values = closedEntries
-        .map((entry) => entry.hold_duration_min)
-        .filter((value): value is number => Number.isFinite(value))
-      if (values.length === 0) return 0
-      return values.reduce((sum, value) => sum + value, 0) / values.length
-    })(),
-    avg_mfe_percent: (() => {
-      const values = closedEntries
-        .map((entry) => toNumber(entry.mfe_percent))
-        .filter((value): value is number => value != null)
-      if (values.length === 0) return 0
-      return values.reduce((sum, value) => sum + value, 0) / values.length
-    })(),
-    avg_mae_percent: (() => {
-      const values = closedEntries
-        .map((entry) => toNumber(entry.mae_percent))
-        .filter((value): value is number => value != null)
-      if (values.length === 0) return 0
-      return values.reduce((sum, value) => sum + value, 0) / values.length
-    })(),
-    hourly_pnl: Array.from(hourlyMap.values()).sort((a, b) => a.hour_of_day - b.hour_of_day),
-    day_of_week_pnl: Array.from(weekdayMap.values()).sort((a, b) => a.day_of_week - b.day_of_week),
-    monthly_pnl: Array.from(monthMap.values()).sort((a, b) => a.month.localeCompare(b.month)),
-    symbol_stats: symbolStats,
-    direction_stats: directionStats,
-    dte_buckets: dteBuckets,
-    equity_curve: equityCurve,
-    r_multiple_distribution: Array.from(rDistribution.entries()).map(([bucket, count]) => ({ bucket, count })),
-    mfe_mae_scatter: mfeMaeScatter,
+    id: value.id,
+    trade_date: value.trade_date,
+    symbol: value.symbol,
+    direction: value.direction,
+    pnl: toNumber(value.pnl),
+    hold_duration_min: toNumber(value.hold_duration_min),
+    mfe_percent: toNumber(value.mfe_percent),
+    mae_percent: toNumber(value.mae_percent),
+    entry_price: toNumber(value.entry_price),
+    exit_price: toNumber(value.exit_price),
+    stop_loss: toNumber(value.stop_loss),
   }
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const userId = await getRequestUserId(request)
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
 
+  try {
     const { searchParams } = new URL(request.url)
     const period = analyticsPeriodSchema.parse(searchParams.get('period') ?? '30d')
+    const periodStart = getPeriodStart(period)
 
-    const supabase = getSupabaseAdminClient()
-
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_advanced_analytics', {
-      target_user_id: userId,
-      period,
-    })
-
-    if (!rpcError && rpcData) {
-      return NextResponse.json({ success: true, data: rpcData })
-    }
-
-    const periodStart = getPeriodStart(period as Period).toISOString()
-    const { data: entries, error: entriesError } = await supabase
+    let query = supabase
       .from('journal_entries')
-      .select('id,trade_date,created_at,symbol,direction,pnl,stop_loss,entry_price,exit_price,hold_duration_min,mfe_percent,mae_percent,dte_at_entry')
-      .eq('user_id', userId)
-      .or('is_draft.is.null,is_draft.eq.false')
-      .gte('trade_date', periodStart)
+      .select('id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss')
+      .eq('user_id', user.id)
       .order('trade_date', { ascending: true })
 
-    if (entriesError) {
-      return NextResponse.json({ success: false, error: entriesError.message }, { status: 500 })
+    if (period !== 'all') {
+      query = query.gte('trade_date', periodStart)
     }
 
-    const fallback = buildFallbackAnalytics((entries || []) as RawEntry[], period as Period)
-    return NextResponse.json({ success: true, data: fallback, fallback: true })
-  } catch (error) {
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json({ success: false, error: 'Invalid analytics query' }, { status: 400 })
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Failed to load analytics rows:', error)
+      return errorResponse('Failed to load analytics', 500)
     }
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 },
+
+    const rows = (data ?? [])
+      .map((item) => toAnalyticsRow(item as Record<string, unknown>))
+      .filter((item): item is AnalyticsRow => Boolean(item))
+
+    const closed = rows.filter((row) => row.pnl != null)
+    const pnlSeries = closed.map((row) => row.pnl ?? 0)
+
+    const winning = closed.filter((row) => (row.pnl ?? 0) > 0)
+    const losing = closed.filter((row) => (row.pnl ?? 0) < 0)
+
+    const totalTrades = closed.length
+    const totalPnl = pnlSeries.reduce((sum, pnl) => sum + pnl, 0)
+
+    const winRate = totalTrades > 0
+      ? safeDivide(winning.length * 100, totalTrades)
+      : null
+
+    const avgPnl = totalTrades > 0
+      ? safeDivide(totalPnl, totalTrades)
+      : null
+
+    const avgWin = safeAverage(winning.map((row) => row.pnl ?? 0))
+    const avgLoss = safeAverage(losing.map((row) => row.pnl ?? 0))
+
+    const winProb = winRate == null ? null : winRate / 100
+    const lossProb = winProb == null ? null : 1 - winProb
+
+    const expectancy = (
+      winProb == null
+      || lossProb == null
+      || avgWin == null
+      || avgLoss == null
     )
+      ? null
+      : ((winProb * avgWin) + (lossProb * avgLoss))
+
+    const grossProfit = winning.reduce((sum, row) => sum + (row.pnl ?? 0), 0)
+    const grossLossAbs = Math.abs(losing.reduce((sum, row) => sum + (row.pnl ?? 0), 0))
+    const profitFactor = grossLossAbs === 0 ? null : safeDivide(grossProfit, grossLossAbs)
+
+    const sharpeRatio = pnlSeries.length < 2
+      ? null
+      : (() => {
+          const mean = safeAverage(pnlSeries)
+          const stdDev = sampleStdDev(pnlSeries)
+          if (mean == null || stdDev == null) return null
+          return safeDivide(mean, stdDev)
+        })()
+
+    const downside = pnlSeries.filter((value) => value < 0)
+    const sortinoRatio = pnlSeries.length < 2
+      ? null
+      : (() => {
+          const mean = safeAverage(pnlSeries)
+          const downsideStdDev = sampleStdDev(downside)
+          if (mean == null || downsideStdDev == null) return null
+          return safeDivide(mean, downsideStdDev)
+        })()
+
+    let equity = 0
+    let peak = 0
+    let maxDrawdown = 0
+    let drawdownStart: Date | null = null
+    let maxDrawdownDurationDays = 0
+
+    const equityCurve: { date: string, equity: number, drawdown: number }[] = []
+
+    for (const row of closed) {
+      equity += row.pnl ?? 0
+      peak = Math.max(peak, equity)
+      const drawdown = equity - peak
+      maxDrawdown = Math.min(maxDrawdown, drawdown)
+
+      const tradeDate = new Date(row.trade_date)
+      if (drawdown < 0 && drawdownStart == null) {
+        drawdownStart = tradeDate
+      }
+
+      if (drawdown === 0 && drawdownStart != null) {
+        const days = Math.ceil((tradeDate.getTime() - drawdownStart.getTime()) / (24 * 60 * 60 * 1000))
+        maxDrawdownDurationDays = Math.max(maxDrawdownDurationDays, Math.max(0, days))
+        drawdownStart = null
+      }
+
+      equityCurve.push({
+        date: row.trade_date,
+        equity,
+        drawdown,
+      })
+    }
+
+    if (drawdownStart && closed.length > 0) {
+      const lastTradeDate = new Date(closed[closed.length - 1].trade_date)
+      const days = Math.ceil((lastTradeDate.getTime() - drawdownStart.getTime()) / (24 * 60 * 60 * 1000))
+      maxDrawdownDurationDays = Math.max(maxDrawdownDurationDays, Math.max(0, days))
+    }
+
+    const holdMinutes = closed
+      .map((row) => row.hold_duration_min)
+      .filter((value): value is number => value != null)
+
+    const avgHoldMinutes = holdMinutes.length > 0
+      ? safeAverage(holdMinutes)
+      : null
+
+    const hourlyMap = new Map<number, { pnl: number, count: number }>()
+    const weekdayMap = new Map<number, { pnl: number, count: number }>()
+    const monthMap = new Map<string, { pnl: number, count: number }>()
+    const symbolMap = new Map<string, { pnl: number, count: number, wins: number }>()
+    const directionMap = new Map<JournalDirection, { pnl: number, count: number, wins: number }>()
+
+    const rDistributionMap = new Map<string, number>()
+    const mfeMaeScatter: { id: string, mfe: number, mae: number, pnl: number }[] = []
+
+    for (const row of closed) {
+      const pnl = row.pnl ?? 0
+      const nyDate = toNewYorkDate(row.trade_date)
+
+      const hour = nyDate.getHours()
+      const day = nyDate.getDay()
+      const month = `${nyDate.getFullYear()}-${String(nyDate.getMonth() + 1).padStart(2, '0')}`
+
+      const hourBucket = hourlyMap.get(hour) ?? { pnl: 0, count: 0 }
+      hourBucket.pnl += pnl
+      hourBucket.count += 1
+      hourlyMap.set(hour, hourBucket)
+
+      const dayBucket = weekdayMap.get(day) ?? { pnl: 0, count: 0 }
+      dayBucket.pnl += pnl
+      dayBucket.count += 1
+      weekdayMap.set(day, dayBucket)
+
+      const monthBucket = monthMap.get(month) ?? { pnl: 0, count: 0 }
+      monthBucket.pnl += pnl
+      monthBucket.count += 1
+      monthMap.set(month, monthBucket)
+
+      const symbolBucket = symbolMap.get(row.symbol) ?? { pnl: 0, count: 0, wins: 0 }
+      symbolBucket.pnl += pnl
+      symbolBucket.count += 1
+      symbolBucket.wins += pnl > 0 ? 1 : 0
+      symbolMap.set(row.symbol, symbolBucket)
+
+      const directionBucket = directionMap.get(row.direction) ?? { pnl: 0, count: 0, wins: 0 }
+      directionBucket.pnl += pnl
+      directionBucket.count += 1
+      directionBucket.wins += pnl > 0 ? 1 : 0
+      directionMap.set(row.direction, directionBucket)
+
+      const rMultiple = calculateRMultiple(row)
+      if (rMultiple != null) {
+        const bucket = `${Math.floor(rMultiple)}`
+        rDistributionMap.set(bucket, (rDistributionMap.get(bucket) ?? 0) + 1)
+      }
+
+      if (row.mfe_percent != null && row.mae_percent != null) {
+        mfeMaeScatter.push({
+          id: row.id,
+          mfe: row.mfe_percent,
+          mae: row.mae_percent,
+          pnl,
+        })
+      }
+    }
+
+    const hourlyPnl = Array.from(hourlyMap.entries())
+      .map(([hour, aggregate]) => ({ hour, pnl: aggregate.pnl, count: aggregate.count }))
+      .sort((a, b) => a.hour - b.hour)
+
+    const dayOfWeekPnl = Array.from(weekdayMap.entries())
+      .map(([day, aggregate]) => ({ day, pnl: aggregate.pnl, count: aggregate.count }))
+      .sort((a, b) => a.day - b.day)
+
+    const monthlyPnl = Array.from(monthMap.entries())
+      .map(([month, aggregate]) => ({ month, pnl: aggregate.pnl, count: aggregate.count }))
+      .sort((a, b) => a.month.localeCompare(b.month))
+
+    const symbolStats = Array.from(symbolMap.entries())
+      .map(([symbol, aggregate]) => ({
+        symbol,
+        pnl: aggregate.pnl,
+        count: aggregate.count,
+        win_rate: safeDivide(aggregate.wins * 100, aggregate.count) ?? 0,
+      }))
+      .sort((a, b) => b.pnl - a.pnl)
+
+    const directionStats = Array.from(directionMap.entries())
+      .map(([direction, aggregate]) => ({
+        direction,
+        pnl: aggregate.pnl,
+        count: aggregate.count,
+        win_rate: safeDivide(aggregate.wins * 100, aggregate.count) ?? 0,
+      }))
+
+    const rMultipleDistribution = Array.from(rDistributionMap.entries())
+      .map(([bucket, count]) => ({ bucket, count }))
+      .sort((a, b) => a.bucket.localeCompare(b.bucket))
+
+    const response: AdvancedAnalyticsResponse = {
+      period,
+      period_start: periodStart,
+      total_trades: totalTrades,
+      winning_trades: winning.length,
+      losing_trades: losing.length,
+      win_rate: winRate,
+      total_pnl: totalPnl,
+      avg_pnl: avgPnl,
+      expectancy: expectancy != null && Number.isFinite(expectancy) ? expectancy : null,
+      profit_factor: profitFactor,
+      sharpe_ratio: sharpeRatio,
+      sortino_ratio: sortinoRatio,
+      max_drawdown: maxDrawdown,
+      max_drawdown_duration_days: maxDrawdownDurationDays,
+      avg_hold_minutes: avgHoldMinutes,
+      hourly_pnl: hourlyPnl,
+      day_of_week_pnl: dayOfWeekPnl,
+      monthly_pnl: monthlyPnl,
+      symbol_stats: symbolStats,
+      direction_stats: directionStats,
+      equity_curve: equityCurve,
+      r_multiple_distribution: rMultipleDistribution,
+      mfe_mae_scatter: mfeMaeScatter,
+    }
+
+    return successResponse(response)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return errorResponse('Invalid request', 400, error.flatten())
+    }
+
+    console.error('Journal analytics failed:', error)
+    return errorResponse('Internal server error', 500)
   }
 }

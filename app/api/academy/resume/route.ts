@@ -51,9 +51,30 @@ export async function GET(request: NextRequest) {
       courseId: scopedCourse?.id,
     })
 
+    const canonicalPayload = target
+      ? {
+          next_lesson_id: target.lessonId,
+          course_slug: target.courseSlug,
+          course_title: target.courseTitle,
+          lesson_title: target.lessonTitle,
+          lesson_position: target.lessonNumber,
+          total_lessons: target.totalLessons,
+          source_reason: target.source_reason,
+        }
+      : {
+          next_lesson_id: null,
+          course_slug: null,
+          course_title: null,
+          lesson_title: null,
+          lesson_position: null,
+          total_lessons: null,
+          source_reason: null,
+        }
+
     return NextResponse.json({
       success: true,
       data: {
+        ...canonicalPayload,
         target,
         scope: scopedCourse ? 'course' : 'global',
         course: scopedCourse,

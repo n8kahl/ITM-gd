@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     const { user, supabase } = auth
 
-    const [xpResult, recentAchievementsResult, courseProgressResult, lessonProgressResult, coursesResult, activityResult, resumeTarget] = await Promise.all([
+    const [xpResult, recentAchievementsResult, courseProgressResult, lessonProgressResult, coursesResult, activityResult, resumeTarget, learningInsightsResult] = await Promise.all([
       supabase
         .from('user_xp')
         .select('total_xp, current_streak')
@@ -84,6 +84,14 @@ export async function GET(request: NextRequest) {
         .gte('created_at', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false }),
       resolveAcademyResumeTarget(supabase, { userId: user.id }),
+      supabase
+        .from('user_learning_insights')
+        .select('insight_type, insight_data, created_at')
+        .eq('user_id', user.id)
+        .eq('is_dismissed', false)
+        .eq('is_acted_on', false)
+        .order('created_at', { ascending: false })
+        .limit(1),
     ])
 
     const courses = (coursesResult.data || []) as DashboardCourse[]
@@ -144,6 +152,7 @@ export async function GET(request: NextRequest) {
       const totalLessonsForCourse = lessonCountByCourse.get(course.id) || 0
       const completedLessons = completedLessonsByCourse.get(course.id) || 0
       return {
+        id: course.id,
         slug: course.slug,
         title: course.title,
         description: course.description || '',
@@ -195,6 +204,21 @@ export async function GET(request: NextRequest) {
         }
       : null
 
+    const topInsight = learningInsightsResult.data?.[0] || null
+    const topInsightData = (topInsight?.insight_data || {}) as { message?: string; source?: string }
+    const resumeInsight = topInsight
+      ? {
+          message:
+            typeof topInsightData.message === 'string' && topInsightData.message.trim().length > 0
+              ? topInsightData.message
+              : 'Focus on your next lesson to reinforce your weakest competency.',
+          source:
+            typeof topInsightData.source === 'string' && topInsightData.source.trim().length > 0
+              ? topInsightData.source
+              : topInsight.insight_type || 'learning_signal',
+        }
+      : null
+
     return NextResponse.json({
       success: true,
       data: {
@@ -209,6 +233,7 @@ export async function GET(request: NextRequest) {
           activeDays: Array.from(activityDates),
         },
         currentLesson,
+        resumeInsight,
         recommendedCourses,
         recentAchievements,
       },

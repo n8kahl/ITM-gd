@@ -6,10 +6,11 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
-  BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity,
+  BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity, PanelTop,
   ChevronRight, LogOut, Wand2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 const navigation = [
   { name: 'Command Center', href: '/admin', icon: LayoutDashboard },
@@ -30,13 +31,14 @@ const navigation = [
       { name: 'Studio Hub', href: '/admin/studio', icon: Wand2 },
     ]
   },
-  {
-    group: 'System',
-    items: [
-      { name: 'Analytics', href: '/admin/analytics', icon: Activity },
-      { name: 'Settings', href: '/admin/settings', icon: Sliders },
-    ]
-  },
+      {
+        group: 'System',
+        items: [
+          { name: 'Analytics', href: '/admin/analytics', icon: Activity },
+          { name: 'Member Tabs', href: '/admin/tabs', icon: PanelTop },
+          { name: 'Settings', href: '/admin/settings', icon: Sliders },
+        ]
+      },
 ]
 
 export function AdminSidebar() {
@@ -49,8 +51,8 @@ export function AdminSidebar() {
         <div className="flex items-center gap-3">
            <div className="relative w-10 h-10">
              <Image
-               src="/logo.png"
-               alt="TradeITM Logo"
+               src={BRAND_LOGO_SRC}
+               alt={BRAND_NAME}
                fill
                className="object-contain"
              />

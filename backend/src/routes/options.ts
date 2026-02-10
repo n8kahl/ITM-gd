@@ -17,6 +17,7 @@ import {
 import { LivePositionTracker } from '../services/positions/liveTracker';
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
+import { requireTier } from '../middleware/requireTier';
 import { validateParams, validateQuery, validateBody } from '../middleware/validate';
 import {
   symbolParamSchema,
@@ -123,6 +124,7 @@ router.get(
 router.get(
   '/:symbol/0dte',
   authenticateToken,
+  requireTier('pro'),
   checkQueryLimit,
   validateParams(symbolParamSchema),
   validateQuery(zeroDTEQuerySchema),
@@ -160,6 +162,7 @@ router.get(
 router.get(
   '/:symbol/iv',
   authenticateToken,
+  requireTier('pro'),
   checkQueryLimit,
   validateParams(symbolParamSchema),
   validateQuery(ivAnalysisQuerySchema),
@@ -203,6 +206,7 @@ router.get(
 router.get(
   '/:symbol/gex',
   authenticateToken,
+  requireTier('pro'),
   checkQueryLimit,
   validateParams(symbolParamSchema),
   validateQuery(gexQuerySchema),

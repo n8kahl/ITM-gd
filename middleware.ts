@@ -68,7 +68,11 @@ function addSecurityHeaders(response: NextResponse, nonce: string): NextResponse
   // and has been removed from modern browsers. CSP replaces it.
   response.headers.set('X-XSS-Protection', '0')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  // Only send HSTS in production over HTTPS. Sending HSTS on localhost breaks
+  // local development and Playwright by forcing HTTP -> HTTPS upgrades.
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
   return response
 }
 
@@ -89,15 +93,30 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
 
+  // Canonical route for the legacy members library namespace.
+  if (pathname === '/members/library') {
+    return addSecurityHeaders(
+      NextResponse.redirect(getAbsoluteUrl('/members/academy/courses', request), 308),
+      nonce,
+    )
+  }
+
   // E2E auth bypass for deterministic Playwright coverage on middleware-protected routes.
-  // Only active when explicitly enabled via env + request header.
+  // Production guard is required so test headers can never bypass auth in live environments.
   const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
   const e2eBypassHeader = request.headers.get('x-e2e-bypass-auth') === '1'
-  if (e2eBypassEnabled && e2eBypassHeader && pathname.startsWith('/members')) {
-    const response = NextResponse.next({
-      request: { headers: requestHeaders },
-    })
-    return addSecurityHeaders(response, nonce)
+  const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
+  if (e2eBypassAllowed && e2eBypassHeader) {
+    const bypassPrefixes = ['/members', '/admin', '/join-discord']
+    const shouldBypass = bypassPrefixes.some((prefix) => (
+      pathname === prefix || pathname.startsWith(prefix + '/')
+    ))
+    if (shouldBypass) {
+      const response = NextResponse.next({
+        request: { headers: requestHeaders },
+      })
+      return addSecurityHeaders(response, nonce)
+    }
   }
 
   // For routes that don't need auth, pass through with security headers only

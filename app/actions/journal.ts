@@ -1,261 +1,248 @@
 'use server'
 
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { journalEntryCreateSchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
+import { sanitizeJournalEntry, sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
+import type { JournalDirection, JournalEntry } from '@/lib/types/journal'
 
-export interface JournalEntryInput {
-  trade_date?: string
-  symbol?: string | null
-  direction?: 'long' | 'short' | 'neutral' | null
-  entry_price?: number | null
-  exit_price?: number | null
-  position_size?: number | null
-  pnl?: number | null
-  pnl_percentage?: number | null
-  screenshot_url?: string | null
-  screenshot_thumbnail_url?: string | null
-  screenshot_storage_path?: string | null
-  ai_analysis?: any
-  setup_notes?: string | null
-  execution_notes?: string | null
-  lessons_learned?: string | null
-  tags?: string[]
-  rating?: number | null
-  is_winner?: boolean | null
+interface ActionResult<T> {
+  success: boolean
+  data?: T
+  error?: string
 }
 
-/**
- * Create a new journal entry
- */
-export async function createEntry(data: JournalEntryInput): Promise<{
-  success: boolean
-  data?: any
-  error?: string
-}> {
+const deleteEntrySchema = z.object({
+  id: z.string().uuid(),
+})
+
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function round(value: number, decimals = 2): number {
+  const factor = 10 ** decimals
+  return Math.round(value * factor) / factor
+}
+
+function calculatePnl(
+  direction: JournalDirection,
+  entryPrice: number | null,
+  exitPrice: number | null,
+  positionSize: number | null,
+): number | null {
+  if (entryPrice == null || exitPrice == null) return null
+  const size = positionSize && positionSize > 0 ? positionSize : 1
+  const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+  return round(perUnit * size, 2)
+}
+
+function calculatePnlPercentage(
+  direction: JournalDirection,
+  entryPrice: number | null,
+  exitPrice: number | null,
+): number | null {
+  if (entryPrice == null || exitPrice == null || entryPrice === 0) return null
+  const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+  return round((perUnit / entryPrice) * 100, 4)
+}
+
+export async function createEntry(input: unknown): Promise<ActionResult<JournalEntry>> {
   try {
     const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
+    if (!user) {
       return { success: false, error: 'Unauthorized' }
     }
 
-    // Insert entry
-    const { data: entry, error } = await supabase
+    const validated = journalEntryCreateSchema.safeParse(input)
+    if (!validated.success) {
+      return { success: false, error: 'Invalid journal entry payload' }
+    }
+
+    const payload = sanitizeJournalWriteInput(validated.data as unknown as Record<string, unknown>)
+
+    payload.user_id = user.id
+    payload.trade_date = payload.trade_date ?? new Date().toISOString()
+
+    const direction = (payload.direction as JournalDirection | undefined) ?? 'long'
+    const entryPrice = toNumber(payload.entry_price)
+    const exitPrice = toNumber(payload.exit_price)
+    const positionSize = toNumber(payload.position_size)
+
+    if (payload.pnl == null) {
+      payload.pnl = calculatePnl(direction, entryPrice, exitPrice, positionSize)
+    }
+
+    if (payload.pnl_percentage == null) {
+      payload.pnl_percentage = calculatePnlPercentage(direction, entryPrice, exitPrice)
+    }
+
+    const { data, error } = await supabase
       .from('journal_entries')
-      .insert({
-        user_id: user.id,
-        ...data,
-      })
-      .select()
+      .insert(payload)
+      .select('*')
       .single()
 
-    if (error) {
-      console.error('Create entry error:', error)
-      return { success: false, error: error.message }
+    if (error || !data) {
+      console.error('createEntry failed:', error)
+      return { success: false, error: 'Failed to create entry' }
     }
 
     revalidatePath('/members/journal')
+    revalidatePath('/members')
 
-    return { success: true, data: entry }
+    return {
+      success: true,
+      data: sanitizeJournalEntry(data),
+    }
   } catch (error) {
     console.error('createEntry error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create entry'
-    }
+    return { success: false, error: 'Failed to create entry' }
   }
 }
 
-/**
- * Update an existing journal entry
- */
-export async function updateEntry(
-  id: string,
-  data: JournalEntryInput
-): Promise<{
-  success: boolean
-  data?: any
-  error?: string
-}> {
+export async function updateEntry(input: unknown): Promise<ActionResult<JournalEntry>> {
   try {
     const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
+    if (!user) {
       return { success: false, error: 'Unauthorized' }
     }
 
-    // Update entry (RLS will ensure user owns it)
-    const { data: entry, error } = await supabase
+    const validated = journalEntryUpdateSchema.safeParse(input)
+    if (!validated.success) {
+      return { success: false, error: 'Invalid journal entry payload' }
+    }
+
+    const { id } = validated.data
+
+    const { data: existing, error: loadError } = await supabase
       .from('journal_entries')
-      .update(data)
+      .select('*')
       .eq('id', id)
       .eq('user_id', user.id)
-      .select()
       .single()
 
-    if (error) {
-      console.error('Update entry error:', error)
-      return { success: false, error: error.message }
+    if (loadError || !existing) {
+      return { success: false, error: 'Entry not found' }
+    }
+
+    const payload = sanitizeJournalWriteInput(validated.data as unknown as Record<string, unknown>)
+    delete payload.id
+
+    const direction = (payload.direction as JournalDirection | undefined) ?? existing.direction
+    const nextEntryPrice = toNumber(payload.entry_price ?? existing.entry_price)
+    const nextExitPrice = toNumber(payload.exit_price ?? existing.exit_price)
+    const nextPositionSize = toNumber(payload.position_size ?? existing.position_size)
+
+    const priceFieldsChanged = (
+      Object.prototype.hasOwnProperty.call(payload, 'entry_price')
+      || Object.prototype.hasOwnProperty.call(payload, 'exit_price')
+      || Object.prototype.hasOwnProperty.call(payload, 'direction')
+      || Object.prototype.hasOwnProperty.call(payload, 'position_size')
+    )
+
+    if (priceFieldsChanged && !Object.prototype.hasOwnProperty.call(payload, 'pnl')) {
+      payload.pnl = calculatePnl(direction, nextEntryPrice, nextExitPrice, nextPositionSize)
+    }
+
+    if (priceFieldsChanged && !Object.prototype.hasOwnProperty.call(payload, 'pnl_percentage')) {
+      payload.pnl_percentage = calculatePnlPercentage(direction, nextEntryPrice, nextExitPrice)
+    }
+
+    if (
+      existing.is_open
+      && payload.exit_price != null
+      && !Object.prototype.hasOwnProperty.call(payload, 'is_open')
+    ) {
+      payload.is_open = false
+    }
+
+    const { data, error } = await supabase
+      .from('journal_entries')
+      .update(payload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('*')
+      .single()
+
+    if (error || !data) {
+      console.error('updateEntry failed:', error)
+      return { success: false, error: 'Failed to update entry' }
     }
 
     revalidatePath('/members/journal')
+    revalidatePath('/members')
 
-    return { success: true, data: entry }
+    return {
+      success: true,
+      data: sanitizeJournalEntry(data),
+    }
   } catch (error) {
     console.error('updateEntry error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update entry'
-    }
+    return { success: false, error: 'Failed to update entry' }
   }
 }
 
-/**
- * Delete a journal entry
- */
-export async function deleteEntry(id: string): Promise<{
-  success: boolean
-  error?: string
-}> {
+export async function deleteEntry(input: unknown): Promise<ActionResult<null>> {
   try {
     const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
+    if (!user) {
       return { success: false, error: 'Unauthorized' }
     }
 
-    // Delete entry (RLS will ensure user owns it)
+    const validated = deleteEntrySchema.safeParse(input)
+    if (!validated.success) {
+      return { success: false, error: 'Invalid journal entry payload' }
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from('journal_entries')
+      .select('id,screenshot_storage_path')
+      .eq('id', validated.data.id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (existingError || !existing) {
+      return { success: false, error: 'Entry not found' }
+    }
+
     const { error } = await supabase
       .from('journal_entries')
       .delete()
-      .eq('id', id)
+      .eq('id', validated.data.id)
       .eq('user_id', user.id)
 
     if (error) {
-      console.error('Delete entry error:', error)
-      return { success: false, error: error.message }
+      console.error('deleteEntry failed:', error)
+      return { success: false, error: 'Failed to delete entry' }
+    }
+
+    if (typeof existing.screenshot_storage_path === 'string' && existing.screenshot_storage_path.length > 0) {
+      const { error: storageError } = await supabase
+        .storage
+        .from('journal-screenshots')
+        .remove([existing.screenshot_storage_path])
+
+      if (storageError) {
+        console.error('deleteEntry screenshot cleanup failed:', storageError)
+      }
     }
 
     revalidatePath('/members/journal')
+    revalidatePath('/members')
 
-    return { success: true }
+    return { success: true, data: null }
   } catch (error) {
     console.error('deleteEntry error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete entry'
-    }
-  }
-}
-
-/**
- * Get all journal entries for the current user
- */
-export async function getEntries(options?: {
-  limit?: number
-  offset?: number
-  orderBy?: 'trade_date' | 'created_at'
-  orderDirection?: 'asc' | 'desc'
-}): Promise<{
-  success: boolean
-  data?: any[]
-  error?: string
-}> {
-  try {
-    const supabase = await createServerSupabaseClient()
-
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return { success: false, error: 'Unauthorized' }
-    }
-
-    const {
-      limit = 50,
-      offset = 0,
-      orderBy = 'trade_date',
-      orderDirection = 'desc'
-    } = options || {}
-
-    // Fetch entries
-    let query = supabase
-      .from('journal_entries')
-      .select('*')
-      .eq('user_id', user.id)
-      .order(orderBy, { ascending: orderDirection === 'asc' })
-      .range(offset, offset + limit - 1)
-
-    const { data: entries, error } = await query
-
-    if (error) {
-      console.error('Get entries error:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data: entries }
-  } catch (error) {
-    console.error('getEntries error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch entries'
-    }
-  }
-}
-
-/**
- * Get journal statistics for the current user
- */
-export async function getJournalStats(): Promise<{
-  success: boolean
-  data?: any
-  error?: string
-}> {
-  try {
-    const supabase = await createServerSupabaseClient()
-
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return { success: false, error: 'Unauthorized' }
-    }
-
-    // Call RPC function
-    const { data, error } = await supabase
-      .rpc('get_journal_stats', { target_user_id: user.id })
-      .maybeSingle()
-
-    if (error) {
-      console.error('Get stats error:', error)
-      return { success: false, error: error.message }
-    }
-
-    // Return default stats when user has no journal entries
-    return {
-      success: true,
-      data: data ?? {
-        total_trades: 0,
-        winning_trades: 0,
-        losing_trades: 0,
-        win_rate: 0,
-        total_pnl: 0,
-        avg_pnl: 0,
-        best_trade: 0,
-        worst_trade: 0,
-        unique_symbols: 0,
-        last_trade_date: null,
-      },
-    }
-  } catch (error) {
-    console.error('getJournalStats error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch statistics'
-    }
+    return { success: false, error: 'Failed to delete entry' }
   }
 }

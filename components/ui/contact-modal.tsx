@@ -116,6 +116,8 @@ export function ContactModal({ isOpen, onClose, presetMessage }: ContactModalPro
               <div className="relative bg-[rgba(10,10,11,0.98)] backdrop-blur-xl rounded-2xl p-6 md:p-8">
                 {/* Close button */}
                 <button
+                  type="button"
+                  aria-label="Close contact modal"
                   onClick={handleClose}
                   className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition-colors"
                 >

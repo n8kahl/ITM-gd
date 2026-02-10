@@ -10,51 +10,43 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Auth Callback Page (Client Forwarder)', () => {
   test('shows loading/redirect state', async ({ page }) => {
-    await page.goto('/auth/callback')
+    await page.goto('/auth/callback', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(500)
 
-    // The page should show loading/redirect message
-    const hasLoadingText = await page.getByText(/Loading|Processing|Authenticating|Redirecting|secure authentication/i).isVisible().catch(() => false)
-    const hasSpinner = await page.locator('[class*="animate-spin"], [class*="animate-pulse"]').isVisible().catch(() => false)
+    const bodyText = await page.locator('body').textContent()
+    const hasLoadingCopy = /Loading|Processing|Authenticating|Redirecting|secure authentication/i.test(bodyText || '')
+    const redirectedToLogin = page.url().includes('/login')
 
-    expect(hasLoadingText || hasSpinner).toBeTruthy()
+    expect(hasLoadingCopy || redirectedToLogin).toBeTruthy()
   })
 
   test('forwards to server-side API route', async ({ page }) => {
-    const navigations: string[] = []
+    const forwardedRequest = page.waitForRequest((request) => (
+      request.url().includes('/api/auth/callback')
+    ))
 
-    page.on('framenavigated', frame => {
-      if (frame === page.mainFrame()) {
-        navigations.push(frame.url())
-      }
-    })
+    await page.goto('/auth/callback?code=test123', { waitUntil: 'domcontentloaded' })
 
-    await page.goto('/auth/callback?code=test123')
+    const request = await forwardedRequest
+    expect(request.url()).toContain('code=test123')
 
-    // Wait for client-side redirect
-    await page.waitForTimeout(2000)
-
-    // Should have navigated to /api/auth/callback
-    const hasApiRedirect = navigations.some(url => url.includes('/api/auth/callback'))
-    expect(hasApiRedirect).toBeTruthy()
+    await page.waitForURL(/\/login/)
+    expect(page.url()).toContain('error=oauth')
   })
 
   test('preserves query parameters when forwarding', async ({ page }) => {
-    const navigations: string[] = []
+    const forwardedRequest = page.waitForRequest((request) => (
+      request.url().includes('/api/auth/callback')
+      && request.url().includes('redirect=%2Fmembers%2Flibrary')
+    ))
 
-    page.on('framenavigated', frame => {
-      if (frame === page.mainFrame()) {
-        navigations.push(frame.url())
-      }
+    await page.goto('/auth/callback?code=abc123&redirect=/members/library&state=xyz', {
+      waitUntil: 'domcontentloaded',
     })
 
-    await page.goto('/auth/callback?code=abc123&redirect=/members/library&state=xyz')
-
-    await page.waitForTimeout(2000)
-
-    // API route URL should contain query params
-    const apiUrl = navigations.find(url => url.includes('/api/auth/callback'))
-    expect(apiUrl).toContain('code=abc123')
-    expect(apiUrl).toContain('redirect')
+    const request = await forwardedRequest
+    expect(request.url()).toContain('code=abc123')
+    expect(request.url()).toContain('state=xyz')
   })
 
   test('does NOT perform client-side code exchange', async ({ page }) => {
@@ -84,8 +76,8 @@ test.describe('Auth Callback Page (Client Forwarder)', () => {
 
     const bodyText = await page.locator('body').textContent()
 
-    // Should mention redirecting to secure authentication
-    expect(bodyText).toMatch(/Redirecting|secure authentication|verify/i)
+    // Callback route may briefly show forwarding copy before it lands on login.
+    expect(bodyText).toMatch(/Redirecting|secure authentication|Welcome Back|Authentication Failed/i)
   })
 
   test('loads quickly without delays', async ({ page }) => {

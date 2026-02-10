@@ -92,7 +92,7 @@ export default function JoinDiscordPage() {
                 <div className="w-full border-t border-white/10" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="px-3 bg-[#0a0a0b] text-white/40">
+                <span className="px-3 bg-[#0a0a0b] text-white/60">
                   Already purchased?
                 </span>
               </div>

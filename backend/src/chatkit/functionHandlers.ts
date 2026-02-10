@@ -1,5 +1,11 @@
 import { calculateLevels } from '../services/levels';
 import { fetchIntradayData, fetchDailyData } from '../services/levels/fetcher';
+import {
+  calculateFibonacciRetracement,
+  findClosestFibLevel,
+} from '../services/levels/calculators/fibonacciRetracement';
+import { detectConfluence } from '../services/levels/confluenceDetector';
+import { formatLevelTestSummary, type LevelTestHistory } from '../services/levels/levelTestTracker';
 import { fetchOptionsChain } from '../services/options/optionsChainFetcher';
 import { calculateGEXProfile } from '../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../services/options/zeroDTE';
@@ -21,8 +27,8 @@ import { calculateRoll } from '../services/leaps/rollCalculator';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
-import { journalPatternAnalyzer } from '../services/journal/patternAnalyzer';
 import { isValidSymbol, normalizeSymbol, POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
+import { hasRequiredTierForUser } from '../middleware/requireTier';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
@@ -52,6 +58,12 @@ async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: st
 }
 
 const FUNCTION_TIMEOUT_MS = 10000; // 10 second timeout per function call
+const PREMIUM_FUNCTIONS = new Set([
+  'get_gamma_exposure',
+  'get_zero_dte_analysis',
+  'get_iv_analysis',
+  'get_earnings_analysis',
+]);
 
 function toValidSymbol(symbol: unknown): string | null {
   if (typeof symbol !== 'string') return null;
@@ -95,6 +107,23 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
     throw new Error('Function arguments must be a JSON object');
   }
 
+  if (context?.userId && PREMIUM_FUNCTIONS.has(name)) {
+    try {
+      const hasTier = await hasRequiredTierForUser(context.userId, ['pro']);
+      if (!hasTier) {
+        return {
+          error: 'This feature requires a Pro subscription',
+          requiredTier: 'pro',
+        };
+      }
+    } catch (_error) {
+      return {
+        error: 'Subscription verification unavailable',
+        message: 'Unable to verify subscription tier. Please try again shortly.',
+      };
+    }
+  }
+
   // Cast args to `any` at the dispatch layer — each handler validates its own inputs
   const typedArgs = args as any;
 
@@ -104,6 +133,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_current_price':
       return await handleGetCurrentPrice(typedArgs);
+
+    case 'get_fibonacci_levels':
+      return await handleGetFibonacciLevels(typedArgs);
 
     case 'get_market_status':
       return await handleGetMarketStatus(typedArgs);
@@ -194,15 +226,65 @@ async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) 
       'get_key_levels'
     );
 
+    let fibonacci: ReturnType<typeof calculateFibonacciRetracement> | null = null;
+    try {
+      const fibBars = await withTimeout(
+        () => fetchDailyData(validSymbol, 40),
+        FUNCTION_TIMEOUT_MS,
+        'get_key_levels.fibonacci',
+      );
+      if (fibBars.length >= 2) {
+        fibonacci = calculateFibonacciRetracement(validSymbol, fibBars, 'daily', 20);
+      }
+    } catch (_error) {
+      fibonacci = null;
+    }
+
+    const confluenceZones = detectConfluence(levels, fibonacci, null, levels.currentPrice);
+
+    const testSummaries = [...levels.levels.resistance, ...levels.levels.support]
+      .filter((level) => (level.testsToday || 0) > 0)
+      .map((level) => {
+        const history: LevelTestHistory = {
+          level: `${level.type}_${level.price.toFixed(2)}`,
+          levelType: level.type,
+          levelPrice: level.price,
+          side: level.side || (level.price >= levels.currentPrice ? 'resistance' : 'support'),
+          testsToday: level.testsToday || 0,
+          tests: [],
+          holdRate: level.holdRate || 0,
+          lastTest: level.lastTest || null,
+          avgVolumeAtTest: null,
+        };
+        return formatLevelTestSummary(history);
+      });
+
     // Return simplified response for AI (remove some metadata)
     return withFreshness({
       symbol: levels.symbol,
       currentPrice: levels.currentPrice,
       levels: {
-        resistance: levels.levels.resistance.slice(0, 5), // Top 5 resistance levels
-        support: levels.levels.support.slice(0, 5), // Top 5 support levels
+        resistance: levels.levels.resistance.slice(0, 5).map((level) => ({
+          ...level,
+          name: level.type,
+        })), // Top 5 resistance levels
+        support: levels.levels.support.slice(0, 5).map((level) => ({
+          ...level,
+          name: level.type,
+        })), // Top 5 support levels
         pivots: levels.levels.pivots,
         indicators: levels.levels.indicators
+      },
+      fibonacci,
+      confluenceZones,
+      testSummaries,
+      aiGuidance: {
+        strongestResistance: levels.levels.resistance[0] || null,
+        strongestSupport: levels.levels.support[0] || null,
+        nearestConfluence: confluenceZones[0] || null,
+        criticalLevels: [...levels.levels.resistance, ...levels.levels.support]
+          .filter((level) => level.strength === 'critical')
+          .slice(0, 3),
       },
       marketContext: levels.marketContext,
       timestamp: levels.timestamp
@@ -292,6 +374,84 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
     return {
       error: 'Failed to fetch current price',
       message: error.message
+    };
+  }
+}
+
+/**
+ * Handler: get_fibonacci_levels
+ * Calculates Fibonacci retracement/extension levels for the requested symbol.
+ */
+async function handleGetFibonacciLevels(args: {
+  symbol: string;
+  timeframe?: 'daily' | '1h' | '15m' | '5m';
+  lookback?: number;
+}) {
+  const validSymbol = toValidSymbol(args.symbol);
+  if (!validSymbol) {
+    return invalidSymbolError();
+  }
+
+  const timeframe = args.timeframe || 'daily';
+  const normalizedLookback = typeof args.lookback === 'number' && Number.isFinite(args.lookback)
+    ? Math.max(2, Math.min(100, Math.floor(args.lookback)))
+    : 20;
+
+  try {
+    const bars = timeframe === 'daily'
+      ? await withTimeout(
+          () => fetchDailyData(validSymbol, normalizedLookback + 10),
+          FUNCTION_TIMEOUT_MS,
+          'get_fibonacci_levels.daily',
+        )
+      : await withTimeout(
+          () => fetchIntradayData(validSymbol),
+          FUNCTION_TIMEOUT_MS,
+          'get_fibonacci_levels.intraday',
+        );
+
+    if (bars.length < 2) {
+      return {
+        error: 'Insufficient data',
+        message: `Not enough price data for ${validSymbol} to calculate Fibonacci levels`,
+      };
+    }
+
+    const fibStartMs = Date.now();
+    const fib = calculateFibonacciRetracement(validSymbol, bars, timeframe, normalizedLookback);
+    const fibDurationMs = Date.now() - fibStartMs;
+    const currentPrice = bars[bars.length - 1].c;
+    const closest = findClosestFibLevel(fib, currentPrice);
+
+    const closestRatio = closest.level.replace('level_', '');
+    const interpretation = fib.direction === 'retracement'
+      ? `Price pulled back from swing high $${fib.swingHigh.toFixed(2)}. Key support sits near 61.8% ($${fib.levels.level_618.toFixed(2)}).`
+      : `Price rallied from swing low $${fib.swingLow.toFixed(2)}. Key resistance sits near 61.8% ($${fib.levels.level_618.toFixed(2)}).`;
+
+    return withFreshness({
+      ...fib,
+      currentPrice: Number(currentPrice.toFixed(2)),
+      closestLevel: {
+        name: `${closestRatio}%`,
+        price: closest.price,
+        distance: closest.distance,
+        distancePct: Number(((closest.distance / currentPrice) * 100).toFixed(2)),
+      },
+      interpretation,
+      performance: {
+        fibCalculationMs: fibDurationMs,
+        withinTarget: fibDurationMs < 100,
+      },
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'fibonacci_levels',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Calculation failed',
+      message: error.message,
     };
   }
 }
@@ -907,18 +1067,93 @@ async function handleGetJournalInsights(
   try {
     const period = args.period || '30d';
     const periodDays = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+    const periodStart = new Date(Date.now() - (periodDays * 24 * 60 * 60 * 1000)).toISOString();
 
-    const result = await journalPatternAnalyzer.getJournalInsightsForUser(userId, periodDays);
+    const { data, error } = await supabase
+      .from('journal_entries')
+      .select('trade_date,pnl,is_winner,followed_plan,discipline_score')
+      .eq('user_id', userId)
+      .gte('trade_date', periodStart);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const trades = (data ?? []).filter((row) => typeof row.trade_date === 'string');
+    const closedTrades = trades.filter((row) => toFiniteNumber(row.pnl) !== null);
+    const wins = closedTrades.filter((row) => {
+      if (row.is_winner === true) return true;
+      const pnl = toFiniteNumber(row.pnl);
+      return pnl !== null && pnl > 0;
+    });
+    const losses = closedTrades.filter((row) => {
+      if (row.is_winner === false) return true;
+      const pnl = toFiniteNumber(row.pnl);
+      return pnl !== null && pnl < 0;
+    });
+
+    const totalPnl = closedTrades.reduce((sum, row) => sum + (toFiniteNumber(row.pnl) ?? 0), 0);
+    const avgPnl = closedTrades.length > 0 ? totalPnl / closedTrades.length : 0;
+    const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
+
+    const hourly = new Map<number, { pnl: number; count: number }>();
+    for (const row of closedTrades) {
+      const date = new Date(String(row.trade_date));
+      if (Number.isNaN(date.getTime())) continue;
+      const hour = date.getHours();
+      const pnl = toFiniteNumber(row.pnl) ?? 0;
+      const bucket = hourly.get(hour) ?? { pnl: 0, count: 0 };
+      bucket.pnl += pnl;
+      bucket.count += 1;
+      hourly.set(hour, bucket);
+    }
+
+    const bestHour = [...hourly.entries()]
+      .map(([hour, bucket]) => ({
+        hour,
+        avgPnl: bucket.count > 0 ? bucket.pnl / bucket.count : 0,
+        trades: bucket.count,
+      }))
+      .sort((a, b) => b.avgPnl - a.avgPnl)[0] ?? null;
+
+    const followedPlanKnown = trades.filter((row) => typeof row.followed_plan === 'boolean');
+    const followedPlanRate = followedPlanKnown.length > 0
+      ? (followedPlanKnown.filter((row) => row.followed_plan === true).length / followedPlanKnown.length) * 100
+      : null;
+
+    const disciplineValues = trades
+      .map((row) => toFiniteNumber(row.discipline_score))
+      .filter((value): value is number => value !== null);
+    const avgDiscipline = disciplineValues.length > 0
+      ? disciplineValues.reduce((sum, value) => sum + value, 0) / disciplineValues.length
+      : null;
+
+    const summary = closedTrades.length === 0
+      ? 'No closed trades found in the selected period.'
+      : `Closed trades: ${closedTrades.length}. Win rate: ${winRate.toFixed(1)}%. Avg P&L: $${avgPnl.toFixed(2)}.`;
 
     return {
-      period: result.period,
-      cached: result.cached,
-      tradeCount: result.insights.tradeCount,
-      summary: result.insights.summary,
-      timeOfDay: result.insights.timeOfDay,
-      setupAnalysis: result.insights.setupAnalysis,
-      behavioral: result.insights.behavioral,
-      riskManagement: result.insights.riskManagement,
+      period,
+      cached: false,
+      tradeCount: closedTrades.length,
+      summary,
+      timeOfDay: {
+        bestHour: bestHour ? `${String(bestHour.hour).padStart(2, '0')}:00` : null,
+        avgPnl: bestHour ? Number(bestHour.avgPnl.toFixed(2)) : null,
+        trades: bestHour?.trades ?? 0,
+      },
+      setupAnalysis: {
+        summary: 'Setup-level pattern analysis is disabled in Journal V2.',
+      },
+      behavioral: {
+        followedPlanRate: followedPlanRate != null ? Number(followedPlanRate.toFixed(1)) : null,
+        avgDiscipline: avgDiscipline != null ? Number(avgDiscipline.toFixed(2)) : null,
+      },
+      riskManagement: {
+        summary: losses.length > 0
+          ? `Loss count: ${losses.length}. Review stop placement consistency and position sizing on losing trades.`
+          : 'No losing trades in this period. Maintain risk discipline.',
+      },
     };
   } catch (error: any) {
     return {
@@ -1244,6 +1479,34 @@ async function handleShowChart(args: { symbol: string; timeframe?: string }) {
   try {
     // Fetch levels to include as annotations
     const levels = await calculateLevels(validSymbol, 'intraday');
+    let fibonacciLevels: Array<{ name: string; price: number; isMajor?: boolean }> = [];
+
+    try {
+      const dailyBars = await fetchDailyData(validSymbol, 40);
+      if (dailyBars.length >= 2) {
+        const fib = calculateFibonacciRetracement(validSymbol, dailyBars, 'daily', 20);
+        fibonacciLevels = [
+          { name: '0%', price: fib.levels.level_0 },
+          { name: '23.6%', price: fib.levels.level_236 },
+          { name: '38.2%', price: fib.levels.level_382, isMajor: true },
+          { name: '50%', price: fib.levels.level_500 },
+          { name: '61.8%', price: fib.levels.level_618, isMajor: true },
+          { name: '78.6%', price: fib.levels.level_786 },
+          { name: '100%', price: fib.levels.level_100 },
+        ];
+      }
+    } catch (_fibError) {
+      fibonacciLevels = [];
+    }
+
+    const normalizedResistance = levels.levels.resistance.slice(0, 5).map((level) => ({
+      ...level,
+      name: level.type,
+    }));
+    const normalizedSupport = levels.levels.support.slice(0, 5).map((level) => ({
+      ...level,
+      name: level.type,
+    }));
 
     return {
       action: 'show_chart',
@@ -1251,9 +1514,10 @@ async function handleShowChart(args: { symbol: string; timeframe?: string }) {
       timeframe,
       currentPrice: levels.currentPrice,
       levels: {
-        resistance: levels.levels.resistance.slice(0, 5),
-        support: levels.levels.support.slice(0, 5),
-        indicators: levels.levels.indicators
+        resistance: normalizedResistance,
+        support: normalizedSupport,
+        fibonacci: fibonacciLevels,
+        indicators: levels.levels.indicators,
       },
       message: `Displaying ${validSymbol} chart (${timeframe}) with key levels in the center panel.`
     };

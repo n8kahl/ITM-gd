@@ -19,6 +19,13 @@ interface RawLessonQuiz {
   questions?: RawQuizQuestion[]
 }
 
+interface FlatQuizQuestion {
+  question?: string
+  options?: string[]
+  correct_index?: number
+  explanation?: string
+}
+
 /**
  * GET /api/academy/lessons/[id]
  * Returns lesson payload tailored for the academy lesson page.
@@ -46,6 +53,7 @@ export async function GET(
         title,
         course_id,
         content_markdown,
+        chunk_data,
         lesson_type,
         video_url,
         estimated_minutes,
@@ -117,16 +125,41 @@ export async function GET(
       }
     })
 
-    const quizData = (lesson.quiz_data || {}) as RawLessonQuiz
-    const quizQuestions = Array.isArray(quizData.questions)
-      ? quizData.questions.map((question) => ({
-          id: question.id,
-          question: question.text,
-          options: question.options || [],
-          correctOptionId: question.correct_answer,
+    const rawQuizData = lesson.quiz_data
+    let quizQuestions: Array<{
+      id: string
+      question: string
+      options: QuizOption[]
+      correctOptionId: string
+      explanation?: string
+    }> | null = null
+
+    if (Array.isArray(rawQuizData)) {
+      const normalized = (rawQuizData as FlatQuizQuestion[])
+        .filter((question) => typeof question.question === 'string' && Array.isArray(question.options))
+        .map((question, index) => ({
+          id: `q-${index + 1}`,
+          question: question.question || '',
+          options: (question.options || []).map((option, optionIndex) => ({
+            id: String(optionIndex),
+            text: option,
+          })),
+          correctOptionId: String(question.correct_index ?? 0),
           explanation: question.explanation,
         }))
-      : null
+      quizQuestions = normalized.length > 0 ? normalized : null
+    } else {
+      const quizData = (rawQuizData || {}) as RawLessonQuiz
+      quizQuestions = Array.isArray(quizData.questions)
+        ? quizData.questions.map((question) => ({
+            id: question.id,
+            question: question.text,
+            options: question.options || [],
+            correctOptionId: question.correct_answer,
+            explanation: question.explanation,
+          }))
+        : null
+    }
 
     const contentType =
       lesson.lesson_type === 'video'
@@ -141,6 +174,7 @@ export async function GET(
         id: lesson.id,
         title: lesson.title,
         content: lesson.content_markdown || '',
+        chunkData: Array.isArray(lesson.chunk_data) ? lesson.chunk_data : null,
         contentType,
         videoUrl: lesson.video_url,
         durationMinutes: lesson.estimated_minutes || lesson.duration_minutes || 0,

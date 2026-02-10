@@ -34,7 +34,39 @@ type TutorLesson = {
   course_id: string
   difficulty_level: string | null
   content_markdown: string | null
+  chunk_data: unknown
+  competency_keys: string[] | null
+  ai_tutor_context: string | null
   key_takeaways: string[] | null
+}
+
+type TutorChunk = {
+  id?: string
+  title?: string
+  content?: string
+}
+
+type TutorInputContext = {
+  chunkId: string | null
+  competencyKey: string | null
+  lastQuizError: string | null
+  userJournalContext: string | null
+}
+
+function sanitizeContextText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, 1200)
+}
+
+function resolveChunkContext(lesson: TutorLesson, chunkId: string | null): TutorChunk | null {
+  if (!chunkId) return null
+  if (!Array.isArray(lesson.chunk_data)) return null
+
+  const chunk = (lesson.chunk_data as TutorChunk[]).find((item) => item?.id === chunkId)
+  if (!chunk) return null
+  return chunk
 }
 
 function buildTutorSystemPrompt(args: {
@@ -43,10 +75,18 @@ function buildTutorSystemPrompt(args: {
   experienceLevel: string | null
   currentRank: string | null
   coursesCompletedCount: number | null
+  inputContext: TutorInputContext
 }): string {
   const takeaways = Array.isArray(args.lesson.key_takeaways)
     ? args.lesson.key_takeaways.filter(Boolean).slice(0, 10)
     : []
+
+  const chunk = resolveChunkContext(args.lesson, args.inputContext.chunkId)
+  const chunkTitle = chunk?.title || null
+  const chunkContent =
+    typeof chunk?.content === 'string' && chunk.content.trim().length > 0
+      ? chunk.content.trim().slice(0, 1200)
+      : null
 
   return [
     'You are a TITM Academy tutor helping a member understand this lesson.',
@@ -58,8 +98,18 @@ function buildTutorSystemPrompt(args: {
     'LESSON CONTENT SUMMARY:',
     args.lesson.content_markdown ? String(args.lesson.content_markdown).slice(0, 2000) : '(no content available)',
     '',
+    'AUTHORING CONTEXT:',
+    args.lesson.ai_tutor_context || '(none)',
+    '',
     'KEY TAKEAWAYS:',
     takeaways.length > 0 ? takeaways.map((t) => `- ${t}`).join('\n') : '(none)',
+    '',
+    'CHUNK-LEVEL CONTEXT:',
+    chunkTitle ? `- Chunk title: ${chunkTitle}` : '- Chunk title: (not provided)',
+    chunkContent ? `- Chunk content: ${chunkContent}` : '- Chunk content: (not provided)',
+    `- Competency focus: ${args.inputContext.competencyKey || 'not provided'}`,
+    `- Last quiz error: ${args.inputContext.lastQuizError || 'not provided'}`,
+    `- Journal context: ${args.inputContext.userJournalContext || 'not provided'}`,
     '',
     'MEMBER CONTEXT:',
     `- Experience: ${args.experienceLevel || 'unknown'}`,
@@ -75,6 +125,9 @@ function buildTutorSystemPrompt(args: {
     '- Use TITM terminology and trading examples',
     '- If asked about unrelated topics, redirect back to the lesson topic',
     `- Explain concepts at the member's level (${args.experienceLevel || 'unknown'})`,
+    '- If chunk context is provided, anchor the explanation to that exact chunk first',
+    '- If a quiz error is provided, explain why it was wrong and what rule to remember',
+    '- If journal context is provided, tie your explanation to that real trade behavior',
     '- Use practical examples: "When trading SPX 0DTE..."',
     '- Never make up statistics or win rates',
   ].join('\n')
@@ -99,7 +152,13 @@ export async function POST(request: NextRequest) {
     const lessonId = body?.lesson_id || body?.lessonId
     const sessionIdFromClient = body?.session_id || body?.sessionId || null
     const initialQuestion =
-      body?.initial_question || body?.message || body?.initialMessage || null
+      body?.question || body?.initial_question || body?.message || body?.initialMessage || null
+    const inputContext: TutorInputContext = {
+      chunkId: sanitizeContextText(body?.chunk_id),
+      competencyKey: sanitizeContextText(body?.competency_key),
+      lastQuizError: sanitizeContextText(body?.last_quiz_error),
+      userJournalContext: sanitizeContextText(body?.user_journal_context),
+    }
 
     if (!lessonId || typeof lessonId !== 'string') {
       return NextResponse.json(
@@ -112,7 +171,7 @@ export async function POST(request: NextRequest) {
 
     const { data: lesson, error: lessonError } = await supabaseAdmin
       .from('lessons')
-      .select('id, title, slug, course_id, difficulty_level, content_markdown, key_takeaways')
+      .select('id, title, slug, course_id, difficulty_level, content_markdown, chunk_data, competency_keys, ai_tutor_context, key_takeaways')
       .eq('id', lessonId)
       .maybeSingle()
 
@@ -205,6 +264,7 @@ export async function POST(request: NextRequest) {
         experienceLevel: profile?.experience_level || null,
         currentRank: userXp?.current_rank || null,
         coursesCompletedCount: userXp?.courses_completed_count ?? null,
+        inputContext,
       })
 
       const { data: createdSession, error: sessionCreateError } = await supabaseAdmin
@@ -221,6 +281,10 @@ export async function POST(request: NextRequest) {
             course_title: courseTitle,
             lesson_slug: lessonRow.slug,
             system_prompt_category: 'academy_tutor_lesson_context',
+            chunk_id: inputContext.chunkId,
+            competency_key: inputContext.competencyKey,
+            last_quiz_error: inputContext.lastQuizError,
+            user_journal_context: inputContext.userJournalContext,
             created_at: nowIso,
           },
         })
@@ -287,6 +351,16 @@ export async function POST(request: NextRequest) {
       }
 
       const apiBase = resolveAICoachApiBase()
+      const contextLines = [
+        inputContext.chunkId ? `chunk_id: ${inputContext.chunkId}` : null,
+        inputContext.competencyKey ? `competency_key: ${inputContext.competencyKey}` : null,
+        inputContext.lastQuizError ? `last_quiz_error: ${inputContext.lastQuizError}` : null,
+        inputContext.userJournalContext ? `user_journal_context: ${inputContext.userJournalContext}` : null,
+      ].filter((line): line is string => Boolean(line))
+      const outboundMessage = contextLines.length > 0
+        ? `[ACADEMY_CONTEXT]\n${contextLines.join('\n')}\n\n${initialQuestion.trim()}`
+        : initialQuestion.trim()
+
       const aiResponse = await fetch(`${apiBase}/api/chat/message`, {
         method: 'POST',
         headers: {
@@ -295,7 +369,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           sessionId,
-          message: initialQuestion.trim(),
+          message: outboundMessage,
         }),
       })
 
@@ -326,6 +400,8 @@ export async function POST(request: NextRequest) {
           title: `${lessonRow.title} Tutor`,
           created_at: createdAt || nowIso,
           system_prompt_category: 'academy_tutor_lesson_context',
+          chunk_id: inputContext.chunkId,
+          competency_key: inputContext.competencyKey,
           first_message: firstMessage,
           reply: firstMessage?.content || `Ask me anything about: ${lessonRow.title}`,
           xp_awarded: xpAwarded,

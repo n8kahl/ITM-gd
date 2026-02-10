@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState, useMemo, type ReactNode } fro
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { Clock, BookOpen, PlayCircle } from 'lucide-react'
+import { LessonChunkRenderer, type LessonChunk } from '@/components/academy/lesson-chunk-renderer'
 
 // Lazy-load react-markdown for code splitting
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false })
@@ -14,6 +15,7 @@ interface LessonPlayerProps {
   title: string
   content: string
   contentType: 'markdown' | 'video' | 'mixed'
+  chunkData?: LessonChunk[] | null
   videoUrl?: string | null
   durationMinutes?: number
   onProgressUpdate?: (scrollPercent: number) => void
@@ -26,6 +28,7 @@ export function LessonPlayer({
   title,
   content,
   contentType,
+  chunkData,
   videoUrl,
   durationMinutes,
   onProgressUpdate,
@@ -36,6 +39,8 @@ export function LessonPlayer({
   const [remarkPlugin, setRemarkPlugin] = useState<any[]>([])
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastProgressRef = useRef(0)
+  const [currentChunk, setCurrentChunk] = useState(0)
+  const [completedChunks, setCompletedChunks] = useState<number[]>([])
 
   // Load remark-gfm plugin
   useEffect(() => {
@@ -43,6 +48,8 @@ export function LessonPlayer({
       setRemarkPlugin([plugin])
     })
   }, [])
+
+  const hasChunks = Array.isArray(chunkData) && chunkData.length > 0
 
   // Scroll-based progress tracking
   const handleScroll = useCallback(() => {
@@ -89,6 +96,29 @@ export function LessonPlayer({
     return videoUrl
   }, [videoUrl])
 
+  const handleChunkComplete = useCallback((index: number) => {
+    setCompletedChunks((previous) =>
+      previous.includes(index) ? previous : [...previous, index]
+    )
+  }, [])
+
+  const handleChunkNavigate = useCallback((direction: 'prev' | 'next') => {
+    setCurrentChunk((previous) => {
+      const maxIndex = Math.max((chunkData?.length || 1) - 1, 0)
+      if (direction === 'prev') {
+        return Math.max(0, previous - 1)
+      }
+      return Math.min(maxIndex, previous + 1)
+    })
+  }, [chunkData])
+
+  useEffect(() => {
+    if (!hasChunks || !onProgressUpdate || !chunkData) return
+    const viewed = new Set<number>([...completedChunks, currentChunk]).size
+    const percent = Math.min(100, Math.round((viewed / chunkData.length) * 100))
+    onProgressUpdate(percent)
+  }, [chunkData, completedChunks, currentChunk, hasChunks, onProgressUpdate])
+
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
       {/* Lesson header */}
@@ -111,46 +141,58 @@ export function LessonPlayer({
       {/* Content area */}
       <div
         ref={contentRef}
-        onScroll={handleScroll}
+        onScroll={!hasChunks ? handleScroll : undefined}
         className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10"
       >
-        <div className="px-6 py-6 space-y-6 max-w-3xl">
-          {/* Video embed */}
-          {(contentType === 'video' || contentType === 'mixed') && youtubeEmbedUrl && (
-            <div className="relative aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10">
-              <iframe
-                src={youtubeEmbedUrl}
-                title={title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full"
-              />
-            </div>
-          )}
+        <div className={cn('px-6 py-6', hasChunks ? 'max-w-4xl' : 'space-y-6 max-w-3xl')}>
+          {hasChunks && chunkData ? (
+            <LessonChunkRenderer
+              chunks={chunkData}
+              currentChunkIndex={currentChunk}
+              onChunkComplete={handleChunkComplete}
+              onNavigate={handleChunkNavigate}
+              lessonId={lessonId}
+            />
+          ) : (
+            <>
+              {/* Video embed */}
+              {(contentType === 'video' || contentType === 'mixed') && youtubeEmbedUrl && (
+                <div className="relative aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10">
+                  <iframe
+                    src={youtubeEmbedUrl}
+                    title={title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 w-full h-full"
+                  />
+                </div>
+              )}
 
-          {/* Video placeholder when no URL */}
-          {(contentType === 'video' || contentType === 'mixed') && !youtubeEmbedUrl && (
-            <div className="relative aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
-              <div className="text-center">
-                <PlayCircle className="w-12 h-12 text-white/20 mx-auto mb-2" />
-                <p className="text-sm text-white/40">Video coming soon</p>
-              </div>
-            </div>
-          )}
+              {/* Video placeholder when no URL */}
+              {(contentType === 'video' || contentType === 'mixed') && !youtubeEmbedUrl && (
+                <div className="relative aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+                  <div className="text-center">
+                    <PlayCircle className="w-12 h-12 text-white/20 mx-auto mb-2" />
+                    <p className="text-sm text-white/40">Video coming soon</p>
+                  </div>
+                </div>
+              )}
 
-          {/* Markdown content */}
-          {(contentType === 'markdown' || contentType === 'mixed') && content && (
-            <article className="prose prose-invert prose-emerald max-w-none prose-headings:font-semibold prose-headings:text-white prose-p:text-white/70 prose-p:leading-relaxed prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-white prose-code:text-emerald-300 prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-[#141416] prose-pre:border prose-pre:border-white/10 prose-blockquote:border-emerald-500/50 prose-blockquote:text-white/60 prose-li:text-white/70 prose-th:text-white/80 prose-td:text-white/60 prose-hr:border-white/10">
-              <ReactMarkdown remarkPlugins={remarkPlugin}>
-                {content}
-              </ReactMarkdown>
-            </article>
-          )}
+              {/* Markdown content */}
+              {(contentType === 'markdown' || contentType === 'mixed') && content && (
+                <article className="prose prose-invert prose-emerald max-w-none prose-headings:font-semibold prose-headings:text-white prose-p:text-white/70 prose-p:leading-relaxed prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-white prose-code:text-emerald-300 prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-[#141416] prose-pre:border prose-pre:border-white/10 prose-blockquote:border-emerald-500/50 prose-blockquote:text-white/60 prose-li:text-white/70 prose-th:text-white/80 prose-td:text-white/60 prose-hr:border-white/10">
+                  <ReactMarkdown remarkPlugins={remarkPlugin}>
+                    {content}
+                  </ReactMarkdown>
+                </article>
+              )}
 
-          {footer && (
-            <div className="pt-2">
-              {footer}
-            </div>
+              {footer && (
+                <div className="pt-2">
+                  {footer}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

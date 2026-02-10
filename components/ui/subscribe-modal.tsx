@@ -10,6 +10,7 @@ import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { addSubscriber } from "@/lib/supabase";
 import { Analytics, getSessionId } from "@/lib/analytics";
+import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
 
 // Form validation schema
 const subscribeSchema = z.object({
@@ -131,6 +132,8 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
               <div className="relative bg-[rgba(10,10,11,0.98)] backdrop-blur-xl rounded-2xl p-6 md:p-8">
                 {/* Close button */}
                 <button
+                  type="button"
+                  aria-label="Close subscribe modal"
                   onClick={handleClose}
                   className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition-colors"
                 >
@@ -164,8 +167,8 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                       {/* Brand Logo */}
                       <div className="flex justify-center mb-4">
                         <Image
-                          src="/hero-logo.png"
-                          alt="TradeITM"
+                          src={BRAND_LOGO_SRC}
+                          alt={BRAND_NAME}
                           width={180}
                           height={60}
                           className="h-12 w-auto object-contain"

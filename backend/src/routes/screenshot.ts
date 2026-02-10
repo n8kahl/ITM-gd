@@ -4,6 +4,7 @@ import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { analyzeScreenshot } from '../services/screenshot/analyzer';
 import { analyzeScreenshotSchema } from '../schemas/screenshotValidation';
+import { validateImagePayload } from '../lib/sanitize-input';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { image, mimeType = 'image/png' } = req.body;
+      const imagePayload = `data:${mimeType};base64,${image}`;
 
       // Check size (base64 is ~33% larger than binary)
       const estimatedSize = (image.length * 3) / 4;
@@ -34,6 +36,13 @@ router.post(
         return res.status(400).json({
           error: 'File too large',
           message: 'Maximum file size is 10MB',
+        });
+      }
+
+      if (!validateImagePayload(imagePayload)) {
+        return res.status(400).json({
+          error: 'Invalid image payload',
+          message: 'Image must be valid base64 and use PNG, JPEG, WebP, or GIF format.',
         });
       }
 
