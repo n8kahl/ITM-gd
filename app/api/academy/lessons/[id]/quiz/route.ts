@@ -15,13 +15,26 @@ const XP_QUIZ_PERFECT = 100
 
 interface QuizAnswer {
   question_id: string
-  selected_answer: string | string[]
+  selected_option_id: string
+}
+
+interface QuizQuestion {
+  id: string
+  question: string
+  options: Array<{ id: string; text: string }>
+  correct_option_id: string
+  explanation: string
+}
+
+interface QuizData {
+  questions: QuizQuestion[]
+  passing_score: number
 }
 
 /**
  * POST /api/academy/lessons/[id]/quiz
  * Submit quiz answers, calculate score, award XP.
- * Body: { answers: [{ question_id, selected_answer }] }
+ * Body: { answers: [{ question_id, selected_option_id }] }
  */
 export async function POST(
   request: NextRequest,
@@ -50,18 +63,31 @@ export async function POST(
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Fetch quiz questions with correct answers
-    const { data: questions, error: questionsError } = await supabaseAdmin
-      .from('quiz_questions')
-      .select('id, correct_answer, points, explanation')
-      .eq('lesson_id', lessonId)
+    // Fetch lesson to get quiz_data JSONB and course_id
+    const { data: lesson, error: lessonError } = await supabaseAdmin
+      .from('lessons')
+      .select('id, course_id, quiz_data')
+      .eq('id', lessonId)
+      .single()
 
-    if (questionsError || !questions || questions.length === 0) {
+    if (lessonError || !lesson) {
+      return NextResponse.json(
+        { success: false, error: 'Lesson not found' },
+        { status: 404 }
+      )
+    }
+
+    const quizData = lesson.quiz_data as QuizData | null
+
+    if (!quizData || !quizData.questions || quizData.questions.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No quiz found for this lesson' },
         { status: 404 }
       )
     }
+
+    const questions = quizData.questions
+    const passingScore = quizData.passing_score ?? 70
 
     // Build lookup map for correct answers
     const questionMap = new Map(
@@ -69,8 +95,8 @@ export async function POST(
     )
 
     // Grade each answer
-    let totalPoints = 0
-    let earnedPoints = 0
+    const totalQuestions = questions.length
+    let correctCount = 0
     const results = answers.map((answer) => {
       const question = questionMap.get(answer.question_id)
       if (!question) {
@@ -82,20 +108,10 @@ export async function POST(
         }
       }
 
-      const points = question.points || 1
-      totalPoints += points
-
-      const isCorrect = Array.isArray(question.correct_answer)
-        ? arraysMatch(
-            Array.isArray(answer.selected_answer)
-              ? answer.selected_answer
-              : [answer.selected_answer],
-            question.correct_answer
-          )
-        : String(answer.selected_answer) === String(question.correct_answer)
+      const isCorrect = answer.selected_option_id === question.correct_option_id
 
       if (isCorrect) {
-        earnedPoints += points
+        correctCount++
       }
 
       return {
@@ -105,15 +121,8 @@ export async function POST(
       }
     })
 
-    // Account for any unanswered questions
-    for (const q of questions) {
-      if (!answers.find((a) => a.question_id === q.id)) {
-        totalPoints += q.points || 1
-      }
-    }
-
-    const scorePct = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0
-    const passed = scorePct >= 70
+    const scorePct = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
+    const passed = scorePct >= passingScore
     const perfect = scorePct === 100
 
     // Check previous attempts
@@ -126,41 +135,30 @@ export async function POST(
 
     const attemptNumber = (existingProgress?.quiz_attempts || 0) + 1
     const isFirstAttempt = attemptNumber === 1
-    const previouslyPassed = (existingProgress?.quiz_score || 0) >= 70
+    const previouslyPassed = (existingProgress?.quiz_score || 0) >= passingScore
 
-    // Update lesson progress with quiz score
+    // Update lesson progress with quiz score and responses
     if (existingProgress) {
       await supabaseAdmin
         .from('user_lesson_progress')
         .update({
           quiz_score: Math.max(scorePct, existingProgress.quiz_score || 0),
           quiz_attempts: attemptNumber,
-          updated_at: new Date().toISOString(),
+          quiz_responses: answers,
         })
         .eq('id', existingProgress.id)
     } else {
       await supabaseAdmin.from('user_lesson_progress').insert({
         user_id: user.id,
         lesson_id: lessonId,
+        course_id: lesson.course_id,
         status: 'in_progress',
-        progress_pct: 50,
         quiz_score: scorePct,
         quiz_attempts: 1,
+        quiz_responses: answers,
         started_at: new Date().toISOString(),
       })
     }
-
-    // Save quiz attempt record
-    await supabaseAdmin.from('quiz_attempts').insert({
-      user_id: user.id,
-      lesson_id: lessonId,
-      answers: answers,
-      score_pct: scorePct,
-      earned_points: earnedPoints,
-      total_points: totalPoints,
-      passed,
-      attempt_number: attemptNumber,
-    })
 
     // Award XP if passed and not previously passed
     let xpAwarded = 0
@@ -173,20 +171,9 @@ export async function POST(
         xpAwarded = XP_QUIZ_PASS_RETAKE
       }
 
-      await supabaseAdmin.from('xp_transactions').insert({
-        user_id: user.id,
-        amount: xpAwarded,
-        source: perfect ? 'quiz_perfect' : isFirstAttempt ? 'quiz_pass_first' : 'quiz_pass_retake',
-        reference_id: lessonId,
-        description: perfect
-          ? 'Perfect quiz score'
-          : isFirstAttempt
-            ? 'Passed quiz on first attempt'
-            : 'Passed quiz on retake',
-      })
       await supabaseAdmin.rpc('increment_user_xp', {
         p_user_id: user.id,
-        p_amount: xpAwarded,
+        p_xp: xpAwarded,
       })
     }
 
@@ -194,8 +181,9 @@ export async function POST(
       success: true,
       data: {
         score_pct: scorePct,
-        earned_points: earnedPoints,
-        total_points: totalPoints,
+        correct_count: correctCount,
+        total_questions: totalQuestions,
+        passing_score: passingScore,
         passed,
         perfect,
         attempt_number: attemptNumber,
@@ -209,11 +197,4 @@ export async function POST(
       { status: 500 }
     )
   }
-}
-
-function arraysMatch(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false
-  const sortedA = [...a].sort()
-  const sortedB = [...b].sort()
-  return sortedA.every((val, idx) => val === sortedB[idx])
 }

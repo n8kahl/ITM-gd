@@ -30,7 +30,7 @@ export async function GET(
         slug,
         description,
         thumbnail_url,
-        difficulty,
+        difficulty_level,
         tier_required,
         estimated_hours,
         is_published,
@@ -38,11 +38,9 @@ export async function GET(
           id,
           title,
           slug,
-          description,
           lesson_type,
           estimated_minutes,
           display_order,
-          is_published,
           is_free_preview
         )
       `)
@@ -67,7 +65,7 @@ export async function GET(
     const lessonIds = sortedLessons.map((l: { id: string }) => l.id)
     const { data: lessonProgress } = await supabase
       .from('user_lesson_progress')
-      .select('lesson_id, status, progress_pct, completed_at, quiz_score, time_spent_seconds')
+      .select('lesson_id, status, completed_at, quiz_score, time_spent_seconds')
       .eq('user_id', user.id)
       .in('lesson_id', lessonIds.length > 0 ? lessonIds : ['__none__'])
 
@@ -78,7 +76,7 @@ export async function GET(
     // Fetch overall course progress
     const { data: courseProgress } = await supabase
       .from('user_course_progress')
-      .select('progress_pct, status, completed_at')
+      .select('lessons_completed, total_lessons, status, completed_at')
       .eq('user_id', user.id)
       .eq('course_id', course.id)
       .maybeSingle()
@@ -87,7 +85,6 @@ export async function GET(
       ...lesson,
       user_progress: progressMap.get(lesson.id as string) || {
         status: 'not_started',
-        progress_pct: 0,
         completed_at: null,
         quiz_score: null,
         time_spent_seconds: 0,
@@ -104,7 +101,8 @@ export async function GET(
           (l: { user_progress: { status: string } }) => l.user_progress.status === 'completed'
         ).length,
         course_progress: courseProgress || {
-          progress_pct: 0,
+          lessons_completed: 0,
+          total_lessons: 0,
           status: 'not_started',
           completed_at: null,
         },

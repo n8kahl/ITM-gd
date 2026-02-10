@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       preferred_style,
       trading_instruments,
       weekly_hours,
+      broker_status,
     } = body
 
     if (!experience_level || !learning_goals || !preferred_style) {
@@ -81,10 +82,16 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         experience_level,
         learning_goals,
-        preferred_style,
-        trading_instruments: trading_instruments || [],
-        weekly_hours: weekly_hours || 5,
-        recommended_path_id: learningPath?.id || null,
+        preferred_lesson_type: preferred_style,
+        weekly_time_minutes: (weekly_hours || 5) * 60,
+        broker_status: broker_status || null,
+        current_learning_path_id: learningPath?.id || null,
+        onboarding_completed: true,
+        onboarding_data: {
+          trading_instruments: trading_instruments || [],
+          preferred_style,
+          weekly_hours: weekly_hours || 5,
+        },
       })
       .select()
       .single()
@@ -96,18 +103,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Award onboarding XP
-    await supabaseAdmin.from('xp_transactions').insert({
-      user_id: user.id,
-      amount: XP_ONBOARDING,
-      source: 'onboarding_complete',
-      description: 'Completed academy onboarding',
-    })
-
-    // Update user XP total
+    // Award onboarding XP via RPC
     await supabaseAdmin.rpc('increment_user_xp', {
       p_user_id: user.id,
-      p_amount: XP_ONBOARDING,
+      p_xp: XP_ONBOARDING,
     })
 
     return NextResponse.json({

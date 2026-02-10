@@ -10,10 +10,6 @@ import { AcademyHub } from '@/components/academy/academy-hub'
 // TYPES
 // ============================================
 
-interface OnboardingStatus {
-  isComplete: boolean
-}
-
 interface DashboardData {
   stats: {
     coursesCompleted: number
@@ -118,20 +114,23 @@ export default function AcademyPage() {
   const [pageState, setPageState] = useState<PageState>('loading')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
 
-  const checkOnboardingAndLoadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     try {
-      // Step 1: Check onboarding status
-      const onboardingRes = await fetch('/api/academy/onboarding-status')
-      if (!onboardingRes.ok) {
-        throw new Error('Failed to check onboarding status')
-      }
-
-      const onboardingData: OnboardingStatus = await onboardingRes.json()
-
-      if (!onboardingData.isComplete) {
-        setPageState('redirecting')
-        router.push('/members/academy/onboarding')
-        return
+      // Step 1: Check onboarding status (non-blocking — skip if it fails)
+      try {
+        const onboardingRes = await fetch('/api/academy/onboarding-status')
+        if (onboardingRes.ok) {
+          const onboardingJson = await onboardingRes.json()
+          // API returns { success, data: { completed } }
+          const isComplete = onboardingJson?.data?.completed ?? onboardingJson?.isComplete
+          if (isComplete === false) {
+            setPageState('redirecting')
+            router.push('/members/academy/onboarding')
+            return
+          }
+        }
+      } catch {
+        // Onboarding check failed — continue to dashboard anyway
       }
 
       // Step 2: Fetch dashboard data
@@ -140,7 +139,9 @@ export default function AcademyPage() {
         throw new Error('Failed to load dashboard')
       }
 
-      const data: DashboardData = await dashboardRes.json()
+      const dashboardJson = await dashboardRes.json()
+      // API returns { success, data: { stats, currentLesson, ... } }
+      const data: DashboardData = dashboardJson?.data ?? dashboardJson
       setDashboardData(data)
       setPageState('dashboard')
     } catch (error) {
@@ -166,8 +167,8 @@ export default function AcademyPage() {
   }, [router])
 
   useEffect(() => {
-    checkOnboardingAndLoadDashboard()
-  }, [checkOnboardingAndLoadDashboard])
+    loadDashboard()
+  }, [loadDashboard])
 
   if (pageState === 'loading' || pageState === 'redirecting') {
     return <AcademySkeleton />

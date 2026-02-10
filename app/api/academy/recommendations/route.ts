@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-
-const TIER_HIERARCHY: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-
-function getAccessibleTiers(userTier: string): string[] {
-  const level = TIER_HIERARCHY[userTier] || 1
-  return Object.entries(TIER_HIERARCHY)
-    .filter(([, l]) => l <= level)
-    .map(([tier]) => tier)
-}
+import { getUserTier, getAccessibleTiers } from '@/lib/academy/get-user-tier'
 
 function getCourseTierFromRelation(value: unknown): string {
   if (Array.isArray(value)) {
@@ -40,21 +32,16 @@ export async function GET(request: NextRequest) {
 
     const { user, supabase } = auth
 
-    // Fetch user profile and membership in parallel
-    const [profileResult, membershipResult] = await Promise.all([
+    // Fetch user profile and tier in parallel
+    const [profileResult, userTier] = await Promise.all([
       supabase
         .from('user_learning_profiles')
-        .select('recommended_path_id, experience_level, learning_goals, preferred_style')
+        .select('current_learning_path_id, experience_level, learning_goals, preferred_lesson_type')
         .eq('user_id', user.id)
         .maybeSingle(),
-      supabase
-        .from('user_memberships')
-        .select('tier')
-        .eq('user_id', user.id)
-        .maybeSingle(),
+      getUserTier(supabase, user.id),
     ])
 
-    const userTier = membershipResult.data?.tier || 'core'
     const accessibleTiers = getAccessibleTiers(userTier)
     const profile = profileResult.data
 
@@ -87,7 +74,7 @@ export async function GET(request: NextRequest) {
         .from('lessons')
         .select('id, title, slug, estimated_minutes, display_order, course_id, courses(id, title, slug, tier_required)')
         .in('id', Array.from(inProgressLessonIds))
-        .eq('is_published', true)
+
         .limit(2)
 
       for (const lesson of inProgressLessons || []) {
@@ -103,12 +90,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Priority 2: Next lesson in recommended path
-    if (profile?.recommended_path_id) {
+    if (profile?.current_learning_path_id) {
       const { data: pathCourses } = await supabase
         .from('learning_path_courses')
-        .select('course_id, display_order')
-        .eq('path_id', profile.recommended_path_id)
-        .order('display_order', { ascending: true })
+        .select('course_id, sequence_order')
+        .eq('learning_path_id', profile.current_learning_path_id)
+        .order('sequence_order', { ascending: true })
 
       for (const pc of pathCourses || []) {
         if (recommendations.length >= 5) break
@@ -117,7 +104,7 @@ export async function GET(request: NextRequest) {
           .from('lessons')
           .select('id, title, slug, estimated_minutes, display_order, course_id, courses(id, title, slug, tier_required)')
           .eq('course_id', pc.course_id)
-          .eq('is_published', true)
+  
           .order('display_order', { ascending: true })
 
         for (const lesson of lessons || []) {
@@ -148,7 +135,7 @@ export async function GET(request: NextRequest) {
       const { data: nextLessons } = await supabase
         .from('lessons')
         .select('id, title, slug, estimated_minutes, display_order, course_id, courses(id, title, slug, tier_required)')
-        .eq('is_published', true)
+
         .order('display_order', { ascending: true })
         .limit(20)
 
