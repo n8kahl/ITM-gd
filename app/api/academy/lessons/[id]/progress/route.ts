@@ -45,7 +45,7 @@ export async function POST(
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Verify lesson exists
+    // Verify lesson exists and get course_id
     const { data: lesson, error: lessonError } = await supabaseAdmin
       .from('lessons')
       .select('id, course_id')
@@ -76,23 +76,16 @@ export async function POST(
         await supabaseAdmin.from('user_lesson_progress').insert({
           user_id: user.id,
           lesson_id: lessonId,
+          course_id: lesson.course_id,
           status: 'in_progress',
-          progress_pct: 10,
           time_spent_seconds: time_spent_seconds || 0,
           started_at: now,
         })
 
         xpAwarded = XP_LESSON_VIEW
-        await supabaseAdmin.from('xp_transactions').insert({
-          user_id: user.id,
-          amount: XP_LESSON_VIEW,
-          source: 'lesson_view',
-          reference_id: lessonId,
-          description: 'Started a lesson',
-        })
         await supabaseAdmin.rpc('increment_user_xp', {
           p_user_id: user.id,
-          p_amount: XP_LESSON_VIEW,
+          p_xp: XP_LESSON_VIEW,
         })
       } else {
         // Update time spent
@@ -101,7 +94,6 @@ export async function POST(
           .from('user_lesson_progress')
           .update({
             time_spent_seconds: totalTime,
-            updated_at: now,
           })
           .eq('id', existing.id)
       }
@@ -115,8 +107,8 @@ export async function POST(
         await supabaseAdmin.from('user_lesson_progress').insert({
           user_id: user.id,
           lesson_id: lessonId,
+          course_id: lesson.course_id,
           status: 'completed',
-          progress_pct: 100,
           completed_at: now,
           started_at: now,
           time_spent_seconds: time_spent_seconds || 0,
@@ -127,10 +119,8 @@ export async function POST(
           .from('user_lesson_progress')
           .update({
             status: 'completed',
-            progress_pct: 100,
             completed_at: now,
             time_spent_seconds: totalTime,
-            updated_at: now,
           })
           .eq('id', existing.id)
       }
@@ -138,20 +128,13 @@ export async function POST(
       if (!alreadyCompleted) {
         // Award completion XP
         xpAwarded = XP_LESSON_COMPLETE
-        await supabaseAdmin.from('xp_transactions').insert({
-          user_id: user.id,
-          amount: XP_LESSON_COMPLETE,
-          source: 'lesson_complete',
-          reference_id: lessonId,
-          description: 'Completed a lesson',
-        })
         await supabaseAdmin.rpc('increment_user_xp', {
           p_user_id: user.id,
-          p_amount: XP_LESSON_COMPLETE,
+          p_xp: XP_LESSON_COMPLETE,
         })
 
         // Update learning streak
-        await supabaseAdmin.rpc('update_learning_streak', {
+        await supabaseAdmin.rpc('update_streak', {
           p_user_id: user.id,
         })
 
@@ -163,16 +146,9 @@ export async function POST(
         )
         if (courseComplete) {
           xpAwarded += XP_COURSE_COMPLETE
-          await supabaseAdmin.from('xp_transactions').insert({
-            user_id: user.id,
-            amount: XP_COURSE_COMPLETE,
-            source: 'course_complete',
-            reference_id: lesson.course_id,
-            description: 'Completed a course',
-          })
           await supabaseAdmin.rpc('increment_user_xp', {
             p_user_id: user.id,
-            p_amount: XP_COURSE_COMPLETE,
+            p_xp: XP_COURSE_COMPLETE,
           })
         }
       }
@@ -195,7 +171,7 @@ export async function POST(
 }
 
 /**
- * Check if all published lessons in a course are completed.
+ * Check if all lessons in a course are completed.
  * If so, mark the course as complete and return true.
  */
 async function checkCourseCompletion(
@@ -207,7 +183,6 @@ async function checkCourseCompletion(
     .from('lessons')
     .select('id')
     .eq('course_id', courseId)
-    .eq('is_published', true)
 
   if (!allLessons || allLessons.length === 0) return false
 
@@ -218,7 +193,9 @@ async function checkCourseCompletion(
     .eq('status', 'completed')
     .in('lesson_id', allLessons.map((l) => l.id))
 
-  const allComplete = (completedLessons?.length || 0) >= allLessons.length
+  const completedCount = completedLessons?.length || 0
+  const totalCount = allLessons.length
+  const allComplete = completedCount >= totalCount
 
   if (allComplete) {
     // Upsert course progress to completed
@@ -228,24 +205,23 @@ async function checkCourseCompletion(
         {
           user_id: userId,
           course_id: courseId,
-          progress_pct: 100,
+          lessons_completed: totalCount,
+          total_lessons: totalCount,
           status: 'completed',
           completed_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,course_id' }
       )
   } else {
-    // Update course progress percentage
-    const pct = Math.round(
-      ((completedLessons?.length || 0) / allLessons.length) * 100
-    )
+    // Update course progress counts
     await supabaseAdmin
       .from('user_course_progress')
       .upsert(
         {
           user_id: userId,
           course_id: courseId,
-          progress_pct: pct,
+          lessons_completed: completedCount,
+          total_lessons: totalCount,
           status: 'in_progress',
         },
         { onConflict: 'user_id,course_id' }

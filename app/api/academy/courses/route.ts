@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-
-const TIER_HIERARCHY: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-
-function getAccessibleTiers(userTier: string): string[] {
-  const level = TIER_HIERARCHY[userTier] || 1
-  return Object.entries(TIER_HIERARCHY)
-    .filter(([, l]) => l <= level)
-    .map(([tier]) => tier)
-}
+import { getUserTier, getAccessibleTiers } from '@/lib/academy/get-user-tier'
 
 /**
  * GET /api/academy/courses
@@ -31,14 +23,8 @@ export async function GET(request: NextRequest) {
     const pathId = searchParams.get('path_id')
     const difficulty = searchParams.get('difficulty')
 
-    // Get user tier
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    const userTier = membership?.tier || 'core'
+    // Get user tier from discord profile + app_settings mapping
+    const userTier = await getUserTier(supabase, user.id)
     const accessibleTiers = getAccessibleTiers(userTier)
 
     // Build course query
@@ -50,7 +36,7 @@ export async function GET(request: NextRequest) {
         slug,
         description,
         thumbnail_url,
-        difficulty,
+        difficulty_level,
         tier_required,
         estimated_hours,
         is_published,
@@ -62,7 +48,7 @@ export async function GET(request: NextRequest) {
       .order('display_order', { ascending: true })
 
     if (difficulty) {
-      query = query.eq('difficulty', difficulty)
+      query = query.eq('difficulty_level', difficulty)
     }
 
     const { data: courses, error } = await query
@@ -80,8 +66,8 @@ export async function GET(request: NextRequest) {
       const { data: pathCourses } = await supabase
         .from('learning_path_courses')
         .select('course_id')
-        .eq('path_id', pathId)
-        .order('display_order', { ascending: true })
+        .eq('learning_path_id', pathId)
+        .order('sequence_order', { ascending: true })
 
       pathCourseIds = (pathCourses || []).map((pc) => pc.course_id)
     }
@@ -89,7 +75,7 @@ export async function GET(request: NextRequest) {
     // Get user course progress
     const { data: courseProgress } = await supabase
       .from('user_course_progress')
-      .select('course_id, progress_pct, status, completed_at')
+      .select('course_id, lessons_completed, total_lessons, status, completed_at')
       .eq('user_id', user.id)
 
     const progressMap = new Map(
@@ -101,16 +87,31 @@ export async function GET(request: NextRequest) {
       filteredCourses = filteredCourses.filter((c) => pathCourseIds!.includes(c.id))
     }
 
-    const coursesWithProgress = filteredCourses.map((course) => ({
-      ...course,
-      lesson_count: course.lessons?.length || 0,
-      lessons: undefined, // Remove raw lessons array
-      user_progress: progressMap.get(course.id) || {
-        progress_pct: 0,
-        status: 'not_started',
-        completed_at: null,
-      },
-    }))
+    const coursesWithProgress = filteredCourses.map((course) => {
+      const progress = progressMap.get(course.id)
+      const totalLessons = course.lessons?.length || 0
+      const lessonsCompleted = progress?.lessons_completed || 0
+      return {
+        ...course,
+        lesson_count: totalLessons,
+        lessons: undefined,
+        user_progress: progress
+          ? {
+              lessons_completed: lessonsCompleted,
+              total_lessons: progress.total_lessons || totalLessons,
+              progress_pct: totalLessons > 0 ? Math.round((lessonsCompleted / totalLessons) * 100) : 0,
+              status: progress.status,
+              completed_at: progress.completed_at,
+            }
+          : {
+              lessons_completed: 0,
+              total_lessons: totalLessons,
+              progress_pct: 0,
+              status: 'not_started',
+              completed_at: null,
+            },
+      }
+    })
 
     return NextResponse.json({
       success: true,

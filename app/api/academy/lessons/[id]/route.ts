@@ -28,21 +28,24 @@ export async function GET(
         id,
         title,
         slug,
-        description,
-        content,
-        content_format,
         lesson_type,
         estimated_minutes,
+        duration_minutes,
         display_order,
-        is_published,
         is_free_preview,
         video_url,
-        resources,
+        content_markdown,
         course_id,
+        quiz_data,
+        activity_data,
+        ai_tutor_context,
+        ai_tutor_chips,
+        key_takeaways,
+        created_at,
+        updated_at,
         courses(id, title, slug)
       `)
       .eq('id', id)
-      .eq('is_published', true)
       .single()
 
     if (lessonError || !lesson) {
@@ -52,25 +55,24 @@ export async function GET(
       )
     }
 
-    // Fetch quiz questions for this lesson
-    const { data: quizQuestions } = await supabase
-      .from('quiz_questions')
-      .select(`
-        id,
-        question_text,
-        question_type,
-        options,
-        explanation,
-        display_order,
-        points
-      `)
-      .eq('lesson_id', id)
-      .order('display_order', { ascending: true })
+    // Parse quiz data from the lesson's JSONB field
+    const quizData = lesson.quiz_data as {
+      questions?: Array<{
+        id: string
+        question: string
+        options: Array<{ id: string; text: string }>
+        correct_option_id: string
+        explanation: string
+      }>
+      passing_score?: number
+    } | null
+
+    const quizQuestions = quizData?.questions || []
 
     // Fetch user progress for this lesson
     const { data: progress } = await supabase
       .from('user_lesson_progress')
-      .select('status, progress_pct, completed_at, quiz_score, quiz_attempts, time_spent_seconds')
+      .select('status, completed_at, quiz_score, quiz_attempts, quiz_responses, activity_completed, time_spent_seconds, notes')
       .eq('user_id', user.id)
       .eq('lesson_id', id)
       .maybeSingle()
@@ -80,7 +82,6 @@ export async function GET(
       .from('lessons')
       .select('id, title, slug, display_order')
       .eq('course_id', lesson.course_id)
-      .eq('is_published', true)
       .order('display_order', { ascending: true })
 
     const currentIndex = (siblingLessons || []).findIndex(
@@ -97,19 +98,19 @@ export async function GET(
       data: {
         ...lesson,
         quiz: {
-          questions: quizQuestions || [],
-          total_points: (quizQuestions || []).reduce(
-            (sum: number, q: { points: number }) => sum + (q.points || 1),
-            0
-          ),
+          questions: quizQuestions.map(({ correct_option_id, ...q }) => q),
+          passing_score: quizData?.passing_score ?? 70,
+          total_questions: quizQuestions.length,
         },
         user_progress: progress || {
           status: 'not_started',
-          progress_pct: 0,
           completed_at: null,
           quiz_score: null,
           quiz_attempts: 0,
+          quiz_responses: null,
+          activity_completed: false,
           time_spent_seconds: 0,
+          notes: null,
         },
         navigation: {
           previous: prevLesson,

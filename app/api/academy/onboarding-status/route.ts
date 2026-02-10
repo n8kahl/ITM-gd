@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile, error } = await supabase
       .from('user_learning_profiles')
-      .select('id, experience_level, learning_goals, preferred_style, created_at')
+      .select('id, experience_level, learning_goals, preferred_lesson_type, onboarding_completed, created_at')
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        completed: !!profile,
+        completed: !!profile?.onboarding_completed,
         profile: profile || null,
       },
     })

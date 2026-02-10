@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-
-const TIER_HIERARCHY: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-
-function getAccessibleTiers(userTier: string): string[] {
-  const level = TIER_HIERARCHY[userTier] || 1
-  return Object.entries(TIER_HIERARCHY)
-    .filter(([, l]) => l <= level)
-    .map(([tier]) => tier)
-}
+import { getUserTier, getAccessibleTiers } from '@/lib/academy/get-user-tier'
 
 /**
  * GET /api/academy/paths
@@ -26,14 +18,8 @@ export async function GET(request: NextRequest) {
 
     const { user, supabase } = auth
 
-    // Get user tier from their profile or subscription
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    const userTier = membership?.tier || 'core'
+    // Get user tier from Discord roles + app_settings mapping
+    const userTier = await getUserTier(supabase, user.id)
     const accessibleTiers = getAccessibleTiers(userTier)
 
     // Fetch paths filtered by tier
@@ -46,13 +32,14 @@ export async function GET(request: NextRequest) {
         description,
         tier_required,
         estimated_hours,
-        difficulty,
-        icon,
+        difficulty_level,
+        icon_name,
         is_published,
         display_order,
         courses:learning_path_courses(
           course_id,
-          display_order,
+          sequence_order,
+          is_required,
           courses(id, title, slug)
         )
       `)
@@ -67,20 +54,61 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user progress for each path
-    const { data: userProgress } = await supabase
-      .from('user_path_progress')
-      .select('path_id, progress_pct, status')
-      .eq('user_id', user.id)
+    // Gather all course IDs across all paths to fetch user progress in one query
+    const allCourseIds = new Set<string>()
+    for (const path of paths || []) {
+      for (const entry of path.courses || []) {
+        if (entry.course_id) {
+          allCourseIds.add(entry.course_id)
+        }
+      }
+    }
 
-    const progressMap = new Map(
-      (userProgress || []).map((p) => [p.path_id, p])
-    )
+    // Fetch user course progress for all relevant courses in a single query
+    let courseProgressMap = new Map<string, { status: string; lessons_completed: number; total_lessons: number }>()
 
-    const pathsWithProgress = (paths || []).map((path) => ({
-      ...path,
-      user_progress: progressMap.get(path.id) || { progress_pct: 0, status: 'not_started' },
-    }))
+    if (allCourseIds.size > 0) {
+      const { data: courseProgress } = await supabase
+        .from('user_course_progress')
+        .select('course_id, status, lessons_completed, total_lessons')
+        .eq('user_id', user.id)
+        .in('course_id', Array.from(allCourseIds))
+
+      courseProgressMap = new Map(
+        (courseProgress || []).map((p) => [p.course_id, p])
+      )
+    }
+
+    // Compute per-path progress from individual course progress
+    const pathsWithProgress = (paths || []).map((path) => {
+      const pathCourses = path.courses || []
+      const totalCourses = pathCourses.length
+      const completedCourses = pathCourses.filter((entry: { course_id: string }) => {
+        const progress = courseProgressMap.get(entry.course_id)
+        return progress?.status === 'completed'
+      }).length
+
+      const progressPct = totalCourses > 0
+        ? Math.round((completedCourses / totalCourses) * 100)
+        : 0
+
+      let status: 'not_started' | 'in_progress' | 'completed' = 'not_started'
+      if (completedCourses === totalCourses && totalCourses > 0) {
+        status = 'completed'
+      } else if (completedCourses > 0) {
+        status = 'in_progress'
+      }
+
+      return {
+        ...path,
+        user_progress: {
+          progress_pct: progressPct,
+          status,
+          completed_courses: completedCourses,
+          total_courses: totalCourses,
+        },
+      }
+    })
 
     return NextResponse.json({
       success: true,
