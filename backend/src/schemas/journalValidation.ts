@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+const journalPositionTypeSchema = z.enum(['call', 'put', 'stock', 'iron_condor']);
+
 export const createTradeSchema = z.object({
   symbol: z.string().min(1).max(10).transform(s => s.toUpperCase()),
-  position_type: z.enum(['call', 'put', 'stock', 'call_spread', 'put_spread', 'iron_condor']),
+  position_type: journalPositionTypeSchema,
   strategy: z.string().max(100).optional().nullable(),
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   entry_price: z.number().positive(),
@@ -16,7 +18,7 @@ export const createTradeSchema = z.object({
 
 export const updateTradeSchema = z.object({
   symbol: z.string().min(1).max(10).transform(s => s.toUpperCase()).optional(),
-  position_type: z.enum(['call', 'put', 'stock', 'call_spread', 'put_spread', 'iron_condor']).optional(),
+  position_type: journalPositionTypeSchema.optional(),
   strategy: z.string().max(100).optional().nullable(),
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   entry_price: z.number().positive().optional(),

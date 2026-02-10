@@ -149,12 +149,10 @@ describe('Validation Schemas', () => {
       });
 
       it('should accept all valid position_type values', () => {
-        const positionTypes: Array<'call' | 'put' | 'stock' | 'call_spread' | 'put_spread' | 'iron_condor'> = [
+        const positionTypes: Array<'call' | 'put' | 'stock' | 'iron_condor'> = [
           'call',
           'put',
           'stock',
-          'call_spread',
-          'put_spread',
           'iron_condor',
         ];
 
@@ -176,6 +174,19 @@ describe('Validation Schemas', () => {
         const invalidTrade = {
           symbol: 'SPY',
           position_type: 'invalid_position',
+          entry_date: '2026-01-15',
+          entry_price: 425.50,
+          quantity: 100,
+        };
+
+        const result = tradeSchema.safeParse(invalidTrade);
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject spread position types for journal trades', () => {
+        const invalidTrade = {
+          symbol: 'SPY',
+          position_type: 'call_spread',
           entry_date: '2026-01-15',
           entry_price: 425.50,
           quantity: 100,

@@ -1116,12 +1116,13 @@ export async function analyzeScreenshot(
 // ============================================
 
 export type TradeOutcome = 'win' | 'loss' | 'breakeven'
+export type JournalPositionType = Exclude<PositionType, 'call_spread' | 'put_spread'>
 
 export interface TradeEntry {
   id: string
   user_id: string
   symbol: string
-  position_type: PositionType
+  position_type: JournalPositionType
   strategy?: string
   entry_date: string
   entry_price: number
@@ -1144,7 +1145,7 @@ export interface TradeEntry {
 
 export interface TradeCreateInput {
   symbol: string
-  position_type: PositionType
+  position_type: JournalPositionType
   strategy?: string
   entry_date: string
   entry_price: number

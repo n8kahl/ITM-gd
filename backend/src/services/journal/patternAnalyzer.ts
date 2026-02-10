@@ -412,6 +412,7 @@ async function fetchTradesForPeriod(userId: string, startDate: string, endDate: 
     .from('ai_coach_trades')
     .select('id, symbol, strategy, trade_outcome, pnl, hold_time_days, created_at, entry_date, entry_price, quantity, session_context, exit_reason')
     .eq('user_id', userId)
+    .eq('draft_status', 'published')
     .gte('entry_date', startDate)
     .lte('entry_date', endDate)
     .not('trade_outcome', 'is', null)

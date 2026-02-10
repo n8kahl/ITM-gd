@@ -20,6 +20,17 @@ import {
 
 const router = Router();
 
+type JournalPositionType = 'call' | 'put' | 'stock' | 'iron_condor';
+
+function normalizeJournalPositionType(value: unknown): JournalPositionType {
+  if (typeof value !== 'string') return 'call';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'call' || normalized === 'put' || normalized === 'stock' || normalized === 'iron_condor') {
+    return normalized;
+  }
+  return 'call';
+}
+
 /**
  * GET /api/journal/trades
  *
@@ -341,6 +352,7 @@ router.get(
         .from('ai_coach_trades')
         .select('*')
         .eq('user_id', userId)
+        .eq('draft_status', 'published')
         .not('trade_outcome', 'is', null)
         .order('entry_date', { ascending: true });
 
@@ -463,7 +475,7 @@ router.post(
       const mapped = importedTrades.map((t: any) => ({
         user_id: userId,
         symbol: String(t.symbol || '').toUpperCase(),
-        position_type: t.position_type || t.type || 'call',
+        position_type: normalizeJournalPositionType(t.position_type || t.type || 'call'),
         strategy: t.strategy || null,
         entry_date: t.entry_date || t.entryDate,
         entry_price: Number(t.entry_price || t.entryPrice || 0),

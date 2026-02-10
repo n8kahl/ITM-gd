@@ -27,7 +27,7 @@ import {
   type TradeEntry,
   type TradeCreateInput,
   type TradeAnalyticsResponse,
-  type PositionType,
+  type JournalPositionType,
   type TradeOutcome,
 } from '@/lib/api/ai-coach'
 import { JournalInsights } from './journal-insights'
@@ -47,19 +47,15 @@ interface TradeJournalProps {
 // CONSTANTS
 // ============================================
 
-const POSITION_TYPES: { value: PositionType; label: string }[] = [
+const POSITION_TYPES: { value: JournalPositionType; label: string }[] = [
   { value: 'call', label: 'Call' },
   { value: 'put', label: 'Put' },
-  { value: 'call_spread', label: 'Call Spread' },
-  { value: 'put_spread', label: 'Put Spread' },
   { value: 'iron_condor', label: 'Iron Condor' },
   { value: 'stock', label: 'Stock' },
 ]
 
 const STRATEGIES = [
   '0DTE Scalp',
-  'Credit Spread',
-  'Debit Spread',
   'Iron Condor',
   'LEAPS',
   'Swing Trade',
@@ -102,6 +98,7 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
         () => getTrades(token, {
           limit: 50,
           outcome: filterOutcome || undefined,
+          draft_status: 'published',
         }),
         {
           onRetry: ({ nextAttempt, maxAttempts }) => {
@@ -444,7 +441,7 @@ function TradeForm({
   const [formError, setFormError] = useState<string | null>(null)
 
   const [symbol, setSymbol] = useState('')
-  const [positionType, setPositionType] = useState<PositionType>('call')
+  const [positionType, setPositionType] = useState<JournalPositionType>('call')
   const [strategy, setStrategy] = useState('')
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0])
   const [entryPrice, setEntryPrice] = useState('')
@@ -514,7 +511,7 @@ function TradeForm({
           <label className="text-xs text-white/40 block mb-1">Type</label>
           <select
             value={positionType}
-            onChange={e => setPositionType(e.target.value as PositionType)}
+            onChange={e => setPositionType(e.target.value as JournalPositionType)}
             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500/50 focus:outline-none transition-colors"
           >
             {POSITION_TYPES.map(pt => (
