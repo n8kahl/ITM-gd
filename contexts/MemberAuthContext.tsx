@@ -11,6 +11,7 @@ import {
   type ReactNode
 } from 'react'
 import { useRouter } from 'next/navigation'
+import * as Sentry from '@sentry/nextjs'
 import { supabase } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 import type { DiscordSyncResult, UserDiscordProfile } from '@/lib/types_db'
@@ -868,6 +869,15 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     isAuthenticatedRef.current = state.isAuthenticated
   }, [state.isAuthenticated])
+
+  useEffect(() => {
+    if (state.user?.id) {
+      Sentry.setUser({ id: state.user.id })
+      return
+    }
+
+    Sentry.setUser(null)
+  }, [state.user?.id])
 
   // Cross-tab session sync using BroadcastChannel
   useEffect(() => {

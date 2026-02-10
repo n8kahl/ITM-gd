@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Upload, FileSpreadsheet, Loader2 } from 'lucide-react'
+import * as Sentry from '@sentry/nextjs'
 import { createAppError, createAppErrorFromResponse, notifyAppError } from '@/lib/error-handler'
 
 const BROKERS = [
@@ -75,6 +76,19 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
       const inserted = result?.data?.inserted ?? 0
       const duplicates = result?.data?.duplicates ?? 0
       const errors = result?.data?.errors ?? 0
+      Sentry.addBreadcrumb({
+        category: 'journal',
+        message: 'Trades imported',
+        level: 'info',
+        data: {
+          broker,
+          fileName: fileName || 'import.csv',
+          rows: rows.length,
+          inserted,
+          duplicates,
+          errors,
+        },
+      })
       setResultMessage(`Import complete: ${inserted} inserted, ${duplicates} duplicates, ${errors} errors.`)
       if (onImported) onImported()
     } catch (error) {

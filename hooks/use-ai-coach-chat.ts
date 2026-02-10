@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   sendMessage as apiSendMessage,
@@ -198,11 +199,22 @@ export function useAICoachChat() {
     abortControllerRef.current = controller
 
     const sessionId = currentSessionIdRef.current || crypto.randomUUID()
+    const trimmedText = text.trim()
+
+    Sentry.addBreadcrumb({
+      category: 'ai-chat',
+      message: 'AI chat message sent',
+      level: 'info',
+      data: {
+        sessionId,
+        messageLength: trimmedText.length,
+      },
+    })
 
     const userMessage: ChatMessage = {
       id: `optimistic-${Date.now()}`,
       role: 'user',
-      content: text.trim(),
+      content: trimmedText,
       timestamp: new Date().toISOString(),
       isOptimistic: true,
     }
@@ -233,7 +245,7 @@ export function useAICoachChat() {
 
       try {
         // Try streaming first
-        for await (const event of apiStreamMessage(sessionId, text.trim(), token, controller.signal)) {
+        for await (const event of apiStreamMessage(sessionId, trimmedText, token, controller.signal)) {
           usedStreaming = true
 
           if (event.type === 'status') {
@@ -273,7 +285,7 @@ export function useAICoachChat() {
       } catch (streamError) {
         // If streaming fails and we haven't received any data, fall back to non-streaming
         if (!usedStreaming) {
-          const response = await apiSendMessage(sessionId, text.trim(), token, controller.signal)
+          const response = await apiSendMessage(sessionId, trimmedText, token, controller.signal)
           streamContent = response.content
           doneData = {
             messageId: response.messageId,
@@ -310,6 +322,17 @@ export function useAICoachChat() {
         ...(newChartRequest ? { chartRequest: newChartRequest } : {}),
       }))
 
+      Sentry.addBreadcrumb({
+        category: 'ai-chat',
+        message: 'AI chat response received',
+        level: 'info',
+        data: {
+          sessionId,
+          tokensUsed: doneData?.tokensUsed,
+          functionCalls: doneData?.functionCalls?.length || 0,
+        },
+      })
+
       loadSessions()
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') { return }
@@ -325,6 +348,15 @@ export function useAICoachChat() {
       }
 
       console.error('[AI Coach] sendMessage error:', error)
+      Sentry.addBreadcrumb({
+        category: 'ai-chat',
+        message: 'AI chat send failed',
+        level: 'error',
+        data: {
+          sessionId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      })
 
       if (error instanceof AICoachAPIError && error.isRateLimited) {
         setState(prev => ({

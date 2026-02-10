@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Plus, BookOpen, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
+import * as Sentry from '@sentry/nextjs'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_FILTERS } from '@/lib/types/journal'
 import { cn } from '@/lib/utils'
@@ -437,6 +438,11 @@ export default function JournalPage() {
     const method = data.id ? 'PATCH' : 'POST'
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      Sentry.addBreadcrumb({
+        category: 'journal',
+        message: method === 'POST' ? 'Trade creation queued offline' : 'Trade update queued offline',
+        level: 'info',
+      })
       const queuedMutation = enqueueOfflineJournalMutation(method, data)
       setOfflineQueueCount((prev) => prev + 1)
       setShowingCachedEntries(true)
@@ -473,6 +479,17 @@ export default function JournalPage() {
       throw createAppError('Journal save did not return entry data.')
     }
     const sanitizedSavedEntry = sanitizeJournalEntry(result.data, 'saved-entry')
+
+    Sentry.addBreadcrumb({
+      category: 'journal',
+      message: method === 'POST' ? 'Trade created' : 'Trade updated',
+      level: 'info',
+      data: {
+        entryId: sanitizedSavedEntry.id,
+        symbol: sanitizedSavedEntry.symbol,
+        direction: sanitizedSavedEntry.direction,
+      },
+    })
 
     if (!data.id) {
       fetch('/api/members/journal/enrich', {
