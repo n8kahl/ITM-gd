@@ -31,8 +31,6 @@ interface PositionFormProps {
 const POSITION_TYPES: { value: PositionType; label: string; requiresStrike: boolean; requiresExpiry: boolean }[] = [
   { value: 'call', label: 'Long Call', requiresStrike: true, requiresExpiry: true },
   { value: 'put', label: 'Long Put', requiresStrike: true, requiresExpiry: true },
-  { value: 'call_spread', label: 'Call Spread', requiresStrike: true, requiresExpiry: true },
-  { value: 'put_spread', label: 'Put Spread', requiresStrike: true, requiresExpiry: true },
   { value: 'iron_condor', label: 'Iron Condor', requiresStrike: true, requiresExpiry: true },
   { value: 'stock', label: 'Stock', requiresStrike: false, requiresExpiry: false },
 ]
@@ -69,7 +67,7 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
   const [error, setError] = useState<string | null>(null)
 
   const posType = POSITION_TYPES.find(t => t.value === form.type)!
-  const isSpread = ['call_spread', 'put_spread', 'iron_condor'].includes(form.type)
+  const isSpread = form.type === 'iron_condor'
 
   const handleChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
