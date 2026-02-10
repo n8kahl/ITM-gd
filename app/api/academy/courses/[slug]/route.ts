@@ -13,17 +13,16 @@ interface LessonRow {
   display_order: number
 }
 
-function normalizePathName(value: unknown): string {
-  if (Array.isArray(value)) {
-    const first = value[0] as { name?: string } | undefined
-    return first?.name || 'General'
-  }
-
-  if (value && typeof value === 'object') {
-    return ((value as { name?: string }).name) || 'General'
-  }
-
-  return 'General'
+interface CourseRow {
+  id: string
+  slug: string
+  title: string
+  description: string | null
+  thumbnail_url: string | null
+  difficulty_level: 'beginner' | 'intermediate' | 'advanced'
+  tier_required: 'core' | 'pro' | 'executive'
+  estimated_hours: number | null
+  learning_path_id: string | null
 }
 
 /**
@@ -57,7 +56,7 @@ export async function GET(
         difficulty_level,
         tier_required,
         estimated_hours,
-        learning_paths:learning_path_id(name)
+        learning_path_id
       `)
       .eq('slug', slug)
       .eq('is_published', true)
@@ -70,10 +69,21 @@ export async function GET(
       )
     }
 
+    const typedCourse = course as CourseRow
+    let learningPathName = 'General'
+    if (typedCourse.learning_path_id) {
+      const { data: learningPath } = await supabase
+        .from('learning_paths')
+        .select('name')
+        .eq('id', typedCourse.learning_path_id)
+        .maybeSingle()
+      learningPathName = learningPath?.name || 'General'
+    }
+
     const { data: lessons, error: lessonsError } = await supabase
       .from('lessons')
       .select('id, title, lesson_type, estimated_minutes, duration_minutes, display_order')
-      .eq('course_id', course.id)
+      .eq('course_id', typedCourse.id)
       .order('display_order', { ascending: true })
 
     if (lessonsError) {
@@ -127,14 +137,14 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: {
-        slug: course.slug,
-        title: course.title,
-        description: course.description || '',
-        longDescription: course.description || '',
-        thumbnailUrl: course.thumbnail_url,
-        difficulty: course.difficulty_level,
-        path: normalizePathName(course.learning_paths),
-        estimatedMinutes: estimatedMinutes || Math.round((course.estimated_hours || 0) * 60),
+        slug: typedCourse.slug,
+        title: typedCourse.title,
+        description: typedCourse.description || '',
+        longDescription: typedCourse.description || '',
+        thumbnailUrl: typedCourse.thumbnail_url,
+        difficulty: typedCourse.difficulty_level,
+        path: learningPathName,
+        estimatedMinutes: estimatedMinutes || Math.round((typedCourse.estimated_hours || 0) * 60),
         lessons: mappedLessons,
         totalLessons: mappedLessons.length,
         completedLessons,

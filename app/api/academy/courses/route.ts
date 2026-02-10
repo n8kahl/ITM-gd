@@ -13,15 +13,15 @@ interface CourseRow {
   difficulty_level: 'beginner' | 'intermediate' | 'advanced'
   tier_required: 'core' | 'pro' | 'executive'
   estimated_hours: number | null
-  learning_paths?: { name?: string | null } | Array<{ name?: string | null }> | null
+  learning_path_id: string | null
 }
 
-function getPathName(course: CourseRow): string {
-  if (Array.isArray(course.learning_paths)) {
-    return course.learning_paths[0]?.name || 'General'
+function getPathName(course: CourseRow, pathNamesById: Map<string, string>): string {
+  if (!course.learning_path_id) {
+    return 'General'
   }
 
-  return course.learning_paths?.name || 'General'
+  return pathNamesById.get(course.learning_path_id) || 'General'
 }
 
 /**
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         difficulty_level,
         tier_required,
         estimated_hours,
-        learning_paths:learning_path_id(name)
+        learning_path_id
       `)
       .eq('is_published', true)
       .order('display_order', { ascending: true })
@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
 
     const { data: rawCourses, error: coursesError } = await query
     if (coursesError) {
+      console.error('academy courses query failed', coursesError)
       return NextResponse.json(
         { success: false, error: 'Failed to load courses' },
         { status: 500 }
@@ -82,6 +83,21 @@ export async function GET(request: NextRequest) {
       const allowedCourseIds = new Set((pathMappings || []).map((mapping) => mapping.course_id))
       courses = courses.filter((course) => allowedCourseIds.has(course.id))
     }
+
+    const learningPathIds = Array.from(
+      new Set(courses.map((course) => course.learning_path_id).filter((value): value is string => !!value))
+    )
+
+    const { data: learningPaths } = learningPathIds.length > 0
+      ? await supabase
+          .from('learning_paths')
+          .select('id, name')
+          .in('id', learningPathIds)
+      : { data: [] as Array<{ id: string; name: string | null }> }
+
+    const pathNamesById = new Map(
+      (learningPaths || []).map((row) => [row.id, row.name || 'General'])
+    )
 
     const courseIds = courses.map((course) => course.id)
 
@@ -133,7 +149,7 @@ export async function GET(request: NextRequest) {
       description: course.description || '',
       thumbnailUrl: course.thumbnail_url,
       difficulty: course.difficulty_level,
-      path: getPathName(course),
+      path: getPathName(course, pathNamesById),
       totalLessons: lessonCountByCourse.get(course.id) || 0,
       completedLessons: completedLessonsByCourse.get(course.id) || 0,
       estimatedMinutes:
