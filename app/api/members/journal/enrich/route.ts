@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
+import { fetchWithRetry } from '@/lib/api/fetch-with-retry'
 import { MassiveAggsResponseSchema, type MassiveBar } from '@/lib/types/massive-api'
 
 type TradeDirection = 'long' | 'short' | 'neutral'
@@ -187,25 +188,51 @@ export async function POST(request: NextRequest) {
     const from = new Date(`${tradeDate}T04:00:00-05:00`).getTime()
     const to = new Date(`${tradeDate}T20:00:00-05:00`).getTime()
 
-    const [minuteRes, dailyRes] = await Promise.all([
-      fetch(`https://api.massive.com/v2/aggs/ticker/${ticker}/range/1/minute/${from}/${to}?apiKey=${apiKey}&limit=50000`),
-      fetch(`https://api.massive.com/v2/aggs/ticker/${ticker}/range/1/day/${new Date(new Date(tradeDate).getTime() - 30 * 86400000).toISOString().split('T')[0]}/${tradeDate}?apiKey=${apiKey}`),
-    ])
-
     let marketContext: MarketContext = {}
     let verification: TradeVerification | null = null
     let mfePercent: number | null = null
     let maePercent: number | null = null
     let holdDurationMin: number | null = null
+    const warnings: string[] = []
 
-    if (minuteRes.ok && dailyRes.ok) {
-      const minuteData = MassiveAggsResponseSchema.parse(await minuteRes.json())
-      const dailyData = MassiveAggsResponseSchema.parse(await dailyRes.json())
+    const [minuteRes, dailyRes] = await Promise.all([
+      fetchWithRetry(
+        `https://api.massive.com/v2/aggs/ticker/${ticker}/range/1/minute/${from}/${to}?apiKey=${apiKey}&limit=50000`,
+      ).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Unknown minute-bars error'
+        warnings.push(`Minute bars request failed: ${message}`)
+        return null
+      }),
+      fetchWithRetry(
+        `https://api.massive.com/v2/aggs/ticker/${ticker}/range/1/day/${new Date(new Date(tradeDate).getTime() - 30 * 86400000).toISOString().split('T')[0]}/${tradeDate}?apiKey=${apiKey}`,
+      ).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Unknown daily-bars error'
+        warnings.push(`Daily bars request failed: ${message}`)
+        return null
+      }),
+    ])
 
-      const minuteBars = minuteData.results
-      const dailyBars = dailyData.results
+    let minuteBars: MassiveBar[] = []
+    let dailyBars: MassiveBar[] = []
 
-      // Calculate VWAP at entry/exit times
+    if (minuteRes) {
+      if (!minuteRes.ok) {
+        warnings.push(`Minute bars request returned ${minuteRes.status}`)
+      } else {
+        minuteBars = MassiveAggsResponseSchema.parse(await minuteRes.json()).results
+      }
+    }
+
+    if (dailyRes) {
+      if (!dailyRes.ok) {
+        warnings.push(`Daily bars request returned ${dailyRes.status}`)
+      } else {
+        dailyBars = MassiveAggsResponseSchema.parse(await dailyRes.json()).results
+      }
+    }
+
+    // Calculate VWAP and intraday metrics from minute bars.
+    if (minuteBars.length > 0) {
       const entryTimestamp = resolveTradeTimestamp({
         entryId,
         userId,
@@ -221,12 +248,11 @@ export async function POST(request: NextRequest) {
         fallbackIso: `${tradeDate}T15:00:00-05:00`,
       })
 
-      // Find bars at entry/exit
       const entryBar = minuteBars.find((b: MassiveBar) => b.t >= entryTimestamp) || minuteBars[0]
       const exitBar = minuteBars.find((b: MassiveBar) => b.t >= exitTimestamp) || minuteBars[minuteBars.length - 1]
 
-      // Calculate VWAP up to entry time
-      let cTPV = 0, cVol = 0
+      let cTPV = 0
+      let cVol = 0
       for (const bar of minuteBars) {
         if (bar.t > entryTimestamp) break
         const tp = (bar.h + bar.l + bar.c) / 3
@@ -235,7 +261,6 @@ export async function POST(request: NextRequest) {
       }
       const entryVwap = cVol > 0 ? cTPV / cVol : entryBar?.c || 0
 
-      // Continue for exit VWAP
       for (const bar of minuteBars) {
         if (bar.t <= entryTimestamp) continue
         if (bar.t > exitTimestamp) break
@@ -245,59 +270,9 @@ export async function POST(request: NextRequest) {
       }
       const exitVwap = cVol > 0 ? cTPV / cVol : exitBar?.c || 0
 
-      // Calculate ATR(14) from daily bars
-      let atr14 = 0
-      if (dailyBars.length >= 15) {
-        const trs = dailyBars.slice(-15).map((d: MassiveBar, i: number, arr: MassiveBar[]) => {
-          if (i === 0) return d.h - d.l
-          const prevClose = arr[i - 1].c
-          return Math.max(d.h - d.l, Math.abs(d.h - prevClose), Math.abs(d.l - prevClose))
-        })
-        atr14 = trs.slice(1).reduce((s: number, v: number) => s + v, 0) / 14
-      }
-
-      // Previous day data
-      const prevDay = dailyBars.length >= 2 ? dailyBars[dailyBars.length - 2] : null
-      const pdh = prevDay?.h || 0
-      const pdl = prevDay?.l || 0
-      const pdc = prevDay?.c || 0
-
-      // Volume comparison (today vs 20-day avg)
-      const recentDailyBars = dailyBars.slice(-21, -1)
-      const avgVolume = recentDailyBars.length > 0
-        ? recentDailyBars.reduce((s: number, d: MassiveBar) => s + d.v, 0) / recentDailyBars.length
-        : 1
-      const todayVolume = dailyBars[dailyBars.length - 1]?.v || 0
-      const volumeVsAvg = avgVolume > 0 ? todayVolume / avgVolume : 1
-
-      // Nearest level at entry
       const ep = entry.entry_price || entryBar?.c || 0
-      const pp = (pdh + pdl + pdc) / 3
-      const r1 = 2 * pp - pdl
-      const s1 = 2 * pp - pdh
-
-      const levels = [
-        { name: 'PDH', price: pdh },
-        { name: 'PDL', price: pdl },
-        { name: 'PDC', price: pdc },
-        { name: 'VWAP', price: entryVwap },
-        { name: 'Pivot PP', price: pp },
-        { name: 'Pivot R1', price: r1 },
-        { name: 'Pivot S1', price: s1 },
-      ].filter(l => l.price > 0)
-
-      const nearestEntry = levels.reduce<{ name: string; price: number; distance: number }>((best, l) => {
-        const dist = Math.abs(ep - l.price)
-        return dist < best.distance ? { ...l, distance: dist / (atr14 || 1) } : best
-      }, { name: 'None', price: 0, distance: Infinity })
-
       const xp = entry.exit_price || exitBar?.c || 0
-      const nearestExit = levels.reduce<{ name: string; price: number; distance: number }>((best, l) => {
-        const dist = Math.abs(xp - l.price)
-        return dist < best.distance ? { ...l, distance: dist / (atr14 || 1) } : best
-      }, { name: 'None', price: 0, distance: Infinity })
 
-      // MFE / MAE over the active trade window.
       const activeBars = minuteBars.filter((bar: MassiveBar) => bar.t >= entryTimestamp && bar.t <= exitTimestamp)
       if (activeBars.length > 0 && ep > 0) {
         const highestHigh = activeBars.reduce((max: number, bar: MassiveBar) => Math.max(max, bar.h), activeBars[0].h)
@@ -311,59 +286,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (entryTimestamp && exitTimestamp && exitTimestamp >= entryTimestamp) {
+      if (exitTimestamp >= entryTimestamp) {
         holdDurationMin = Math.max(0, Math.round((exitTimestamp - entryTimestamp) / (1000 * 60)))
       }
 
-      // Determine day context
-      const dayHigh = dailyBars[dailyBars.length - 1]?.h || 0
-      const dayLow = dailyBars[dailyBars.length - 1]?.l || 0
-      const dayClose = dailyBars[dailyBars.length - 1]?.c || 0
-      const atrUsed = atr14 > 0 ? (dayHigh - dayLow) / atr14 : 0
-      const marketTrend: MarketTrend = dayClose > entryVwap && dayClose > pp
-        ? 'bullish'
-        : dayClose < entryVwap && dayClose < pp
-          ? 'bearish'
-          : 'neutral'
-      const sessionType: SessionType = atrUsed > 1.2 ? 'trending' : atrUsed < 0.6 ? 'range-bound' : 'volatile'
-
-      marketContext = {
-        entryContext: {
-          timestamp: new Date(entryTimestamp).toISOString(),
-          price: ep,
-          vwap: Math.round(entryVwap * 100) / 100,
-          atr14: Math.round(atr14 * 100) / 100,
-          volumeVsAvg: Math.round(volumeVsAvg * 100) / 100,
-          distanceFromPDH: Math.round(Math.abs(ep - pdh) * 100) / 100,
-          distanceFromPDL: Math.round(Math.abs(ep - pdl) * 100) / 100,
-          nearestLevel: { name: nearestEntry.name, price: nearestEntry.price, distance: Math.round(nearestEntry.distance * 100) / 100 },
-        },
-        exitContext: {
-          timestamp: new Date(exitTimestamp).toISOString(),
-          price: xp,
-          vwap: Math.round(exitVwap * 100) / 100,
-          atr14: Math.round(atr14 * 100) / 100,
-          volumeVsAvg: Math.round(volumeVsAvg * 100) / 100,
-          distanceFromPDH: Math.round(Math.abs(xp - pdh) * 100) / 100,
-          distanceFromPDL: Math.round(Math.abs(xp - pdl) * 100) / 100,
-          nearestLevel: { name: nearestExit.name, price: nearestExit.price, distance: Math.round(nearestExit.distance * 100) / 100 },
-        },
-        dayContext: {
-          marketTrend,
-          atrUsed: Math.round(atrUsed * 100) / 100,
-          sessionType,
-          keyLevelsActive: {
-            pdh, pdl, pdc,
-            vwap: Math.round(entryVwap * 100) / 100,
-            atr14: Math.round(atr14 * 100) / 100,
-            pivotPP: Math.round(pp * 100) / 100,
-            pivotR1: Math.round(r1 * 100) / 100,
-            pivotS1: Math.round(s1 * 100) / 100,
-          },
-        },
-      }
-
-      // Trade verification
       if (entryBar && entry.entry_price != null) {
         const entryInRange = entry.entry_price >= entryBar.l && entry.entry_price <= entryBar.h
         let exitInRange = true
@@ -379,6 +305,138 @@ export async function POST(request: NextRequest) {
           verifiedAt: new Date().toISOString(),
         }
       }
+
+      if (dailyBars.length > 0) {
+        let atr14 = 0
+        if (dailyBars.length >= 15) {
+          const trs = dailyBars.slice(-15).map((d: MassiveBar, i: number, arr: MassiveBar[]) => {
+            if (i === 0) return d.h - d.l
+            const prevClose = arr[i - 1].c
+            return Math.max(d.h - d.l, Math.abs(d.h - prevClose), Math.abs(d.l - prevClose))
+          })
+          atr14 = trs.slice(1).reduce((s: number, v: number) => s + v, 0) / 14
+        }
+
+        const prevDay = dailyBars.length >= 2 ? dailyBars[dailyBars.length - 2] : null
+        const pdh = prevDay?.h || 0
+        const pdl = prevDay?.l || 0
+        const pdc = prevDay?.c || 0
+
+        const recentDailyBars = dailyBars.slice(-21, -1)
+        const avgVolume = recentDailyBars.length > 0
+          ? recentDailyBars.reduce((s: number, d: MassiveBar) => s + d.v, 0) / recentDailyBars.length
+          : 1
+        const todayVolume = dailyBars[dailyBars.length - 1]?.v || 0
+        const volumeVsAvg = avgVolume > 0 ? todayVolume / avgVolume : 1
+
+        const pp = (pdh + pdl + pdc) / 3
+        const r1 = 2 * pp - pdl
+        const s1 = 2 * pp - pdh
+        const levels = [
+          { name: 'PDH', price: pdh },
+          { name: 'PDL', price: pdl },
+          { name: 'PDC', price: pdc },
+          { name: 'VWAP', price: entryVwap },
+          { name: 'Pivot PP', price: pp },
+          { name: 'Pivot R1', price: r1 },
+          { name: 'Pivot S1', price: s1 },
+        ].filter(level => level.price > 0)
+
+        const nearestEntry = levels.reduce<LevelDistance>((best, level) => {
+          const dist = Math.abs(ep - level.price)
+          return dist < best.distance ? { ...level, distance: dist / (atr14 || 1) } : best
+        }, { name: 'None', price: 0, distance: Infinity })
+
+        const nearestExit = levels.reduce<LevelDistance>((best, level) => {
+          const dist = Math.abs(xp - level.price)
+          return dist < best.distance ? { ...level, distance: dist / (atr14 || 1) } : best
+        }, { name: 'None', price: 0, distance: Infinity })
+
+        const dayHigh = dailyBars[dailyBars.length - 1]?.h || 0
+        const dayLow = dailyBars[dailyBars.length - 1]?.l || 0
+        const dayClose = dailyBars[dailyBars.length - 1]?.c || 0
+        const atrUsed = atr14 > 0 ? (dayHigh - dayLow) / atr14 : 0
+        const marketTrend: MarketTrend = dayClose > entryVwap && dayClose > pp
+          ? 'bullish'
+          : dayClose < entryVwap && dayClose < pp
+            ? 'bearish'
+            : 'neutral'
+        const sessionType: SessionType = atrUsed > 1.2 ? 'trending' : atrUsed < 0.6 ? 'range-bound' : 'volatile'
+
+        marketContext = {
+          entryContext: {
+            timestamp: new Date(entryTimestamp).toISOString(),
+            price: ep,
+            vwap: Math.round(entryVwap * 100) / 100,
+            atr14: Math.round(atr14 * 100) / 100,
+            volumeVsAvg: Math.round(volumeVsAvg * 100) / 100,
+            distanceFromPDH: Math.round(Math.abs(ep - pdh) * 100) / 100,
+            distanceFromPDL: Math.round(Math.abs(ep - pdl) * 100) / 100,
+            nearestLevel: {
+              name: nearestEntry.name,
+              price: nearestEntry.price,
+              distance: Math.round(nearestEntry.distance * 100) / 100,
+            },
+          },
+          exitContext: {
+            timestamp: new Date(exitTimestamp).toISOString(),
+            price: xp,
+            vwap: Math.round(exitVwap * 100) / 100,
+            atr14: Math.round(atr14 * 100) / 100,
+            volumeVsAvg: Math.round(volumeVsAvg * 100) / 100,
+            distanceFromPDH: Math.round(Math.abs(xp - pdh) * 100) / 100,
+            distanceFromPDL: Math.round(Math.abs(xp - pdl) * 100) / 100,
+            nearestLevel: {
+              name: nearestExit.name,
+              price: nearestExit.price,
+              distance: Math.round(nearestExit.distance * 100) / 100,
+            },
+          },
+          dayContext: {
+            marketTrend,
+            atrUsed: Math.round(atrUsed * 100) / 100,
+            sessionType,
+            keyLevelsActive: {
+              pdh,
+              pdl,
+              pdc,
+              vwap: Math.round(entryVwap * 100) / 100,
+              atr14: Math.round(atr14 * 100) / 100,
+              pivotPP: Math.round(pp * 100) / 100,
+              pivotR1: Math.round(r1 * 100) / 100,
+              pivotS1: Math.round(s1 * 100) / 100,
+            },
+          },
+        }
+      } else {
+        warnings.push('Daily bars unavailable; returning minute-only enrichment.')
+        marketContext = {
+          entryContext: {
+            timestamp: new Date(entryTimestamp).toISOString(),
+            price: ep,
+            vwap: Math.round(entryVwap * 100) / 100,
+            atr14: 0,
+            volumeVsAvg: 0,
+            distanceFromPDH: 0,
+            distanceFromPDL: 0,
+            nearestLevel: { name: 'None', price: 0, distance: 0 },
+          },
+          exitContext: {
+            timestamp: new Date(exitTimestamp).toISOString(),
+            price: xp,
+            vwap: Math.round(exitVwap * 100) / 100,
+            atr14: 0,
+            volumeVsAvg: 0,
+            distanceFromPDH: 0,
+            distanceFromPDL: 0,
+            nearestLevel: { name: 'None', price: 0, distance: 0 },
+          },
+        }
+      }
+    } else if (dailyBars.length > 0) {
+      warnings.push('Minute bars unavailable; skipping intraday verification metrics.')
+    } else {
+      warnings.push('Massive minute and daily bars unavailable for enrichment.')
     }
 
     // Generate smart tags from market context
@@ -441,6 +499,7 @@ export async function POST(request: NextRequest) {
         smart_tags: smartTags,
         mfe_percent: updateData.mfe_percent ?? null,
         mae_percent: updateData.mae_percent ?? null,
+        warnings,
       },
     })
   } catch (error) {

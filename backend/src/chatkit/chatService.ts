@@ -39,6 +39,21 @@ interface ChatResponse {
 }
 
 /**
+ * Run a chat completion through the OpenAI circuit breaker.
+ * Retries/timeouts are configured at the OpenAI client level.
+ */
+async function createChatCompletion(messages: ChatCompletionMessageParam[]) {
+  return openaiCircuit.execute(() => openaiClient.chat.completions.create({
+    model: CHAT_MODEL,
+    messages,
+    tools: AI_FUNCTIONS,
+    tool_choice: 'auto',
+    max_tokens: MAX_TOKENS,
+    temperature: TEMPERATURE
+  }));
+}
+
+/**
  * Send a chat message and get AI response
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
@@ -78,14 +93,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     }
 
     // Call OpenAI API with function calling via circuit breaker
-    let completion = await openaiCircuit.execute(() => openaiClient.chat.completions.create({
-      model: CHAT_MODEL,
-      messages,
-      tools: AI_FUNCTIONS,
-      tool_choice: 'auto',
-      max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE
-    }));
+    let completion = await createChatCompletion(messages);
 
     const functionCalls: any[] = [];
     let assistantMessage = completion.choices[0].message;
@@ -153,14 +161,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       }
 
       // Call OpenAI again with function results
-      completion = await openaiCircuit.execute(() => openaiClient.chat.completions.create({
-        model: CHAT_MODEL,
-        messages,
-        tools: AI_FUNCTIONS,
-        tool_choice: 'auto',
-        max_tokens: MAX_TOKENS,
-        temperature: TEMPERATURE
-      }));
+      completion = await createChatCompletion(messages);
 
       assistantMessage = completion.choices[0].message;
 
