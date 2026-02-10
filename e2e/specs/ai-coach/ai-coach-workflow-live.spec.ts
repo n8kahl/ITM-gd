@@ -25,6 +25,15 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       })
       await authenticateAsE2EBypassMember(page)
 
+      const clickAICoachNav = async (name: string | RegExp) => {
+        const tab = page.getByRole('tab', { name }).first()
+        if (await tab.count()) {
+          await tab.click()
+          return
+        }
+        await page.getByRole('button', { name }).first().click()
+      }
+
       const healthResponse = await request.get(`${e2eBackendUrl}/health/detailed`)
       if (requireAICoachLiveReadiness) {
         expect(healthResponse.ok()).toBe(true)
@@ -54,7 +63,7 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       await page.waitForLoadState('networkidle')
       await expect(page.getByText(/AI Coach Center|Command Center/i).first()).toBeVisible()
 
-      await page.getByRole('button', { name: 'Scanner' }).first().click()
+      await clickAICoachNav('Scanner')
       await expect(page.getByText('Opportunity Scanner')).toBeVisible()
 
       const scanResponsePromise = page.waitForResponse((response) => (
@@ -67,7 +76,7 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       }
       await expect(page.getByText('Failed to scan for opportunities. Please try again.')).toHaveCount(0)
 
-      await page.getByRole('button', { name: /Tracked|Watchlist/i }).first().click()
+      await clickAICoachNav(/Tracked|Watchlist/i)
       await expect(page.getByText('Tracked Setups')).toBeVisible()
       const simulateDetectionResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups/e2e/simulate-detected`, {
         headers: authHeaders,
@@ -96,10 +105,10 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       const briefResponsePromise = page.waitForResponse((response) => (
         response.url().includes('/api/brief/today') && response.request().method() === 'GET'
       ))
-      await page.getByRole('button', { name: /Brief|Daily Brief/i }).first().click()
+      await clickAICoachNav(/Brief|Daily Brief/i)
       const briefResponse = await briefResponsePromise
       expect(briefResponse.status()).toBe(200)
-      await expect(page.getByText('Morning Brief')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Morning Brief' })).toBeVisible()
       await expect(page.getByText('Watchlist').first()).toBeVisible()
     } finally {
       if (trackedSetupId) {
