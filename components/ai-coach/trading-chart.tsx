@@ -136,6 +136,7 @@ export function TradingChart({
   const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const macdHistogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const levelPriceLinesRef = useRef<any[]>([])
+  const userAdjustedViewportRef = useRef(false)
   const safeBars = bars
     .filter((bar) => (
       Number.isFinite(bar.time)
@@ -322,9 +323,27 @@ export function TradingChart({
         borderColor: CHART_COLORS.borderColor,
         timeVisible: timeframe !== '1D',
         secondsVisible: false,
+        rightOffset: 12,
+        barSpacing: timeframe === '1D' ? 8 : 6,
+        minBarSpacing: 3,
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: false,
+        shiftVisibleRangeOnNewBar: true,
       },
-      handleScroll: { vertTouchDrag: false },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
     })
+
+    const markUserViewportAdjusted = () => {
+      userAdjustedViewportRef.current = true
+    }
+    containerRef.current.addEventListener('pointerdown', markUserViewportAdjusted, { passive: true })
+    containerRef.current.addEventListener('wheel', markUserViewportAdjusted, { passive: true })
+    containerRef.current.addEventListener('touchstart', markUserViewportAdjusted, { passive: true })
 
     // Candlestick series
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
@@ -393,6 +412,9 @@ export function TradingChart({
 
     return () => {
       resizeObserver.disconnect()
+      containerRef.current?.removeEventListener('pointerdown', markUserViewportAdjusted)
+      containerRef.current?.removeEventListener('wheel', markUserViewportAdjusted)
+      containerRef.current?.removeEventListener('touchstart', markUserViewportAdjusted)
       clearLevelPriceLines(candlestickSeriesRef.current)
       resetMainChartRefs()
       try {
@@ -413,6 +435,10 @@ export function TradingChart({
     const cleanup = initChart()
     return () => cleanup?.()
   }, [initChart])
+
+  useEffect(() => {
+    userAdjustedViewportRef.current = false
+  }, [symbol, timeframe])
 
   useEffect(() => {
     if (!indicators.rsi) {
@@ -781,10 +807,13 @@ export function TradingChart({
       }
     }
 
-    // Fit content to view
-    chartRef.current?.timeScale().fitContent()
-    rsiChartRef.current?.timeScale().fitContent()
-    macdChartRef.current?.timeScale().fitContent()
+    // Auto-fit only until the user manually pans/zooms the chart.
+    if (!userAdjustedViewportRef.current) {
+      chartRef.current?.timeScale().fitContent()
+      chartRef.current?.timeScale().scrollToRealTime()
+      rsiChartRef.current?.timeScale().fitContent()
+      macdChartRef.current?.timeScale().fitContent()
+    }
   }, [safeBars, indicators, buildRSIData, buildMACDData])
 
   useEffect(() => {
