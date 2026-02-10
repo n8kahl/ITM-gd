@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useMemo, useState } from 'react'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { TrendingUp, TrendingDown, Target, DollarSign, BarChart3, Calendar } from 'lucide-react'
-import { getJournalStats } from '@/app/actions/journal'
+import type { JournalEntry } from '@/lib/types/journal'
 
 interface JournalStats {
   total_trades: number
@@ -18,30 +18,84 @@ interface JournalStats {
   last_trade_date: string
 }
 
+function computeStats(entries: JournalEntry[]): JournalStats | null {
+  const closed = entries.filter((entry) => entry.pnl != null)
+  if (closed.length === 0) return null
+
+  const winningTrades = closed.filter((entry) => (entry.pnl ?? 0) > 0).length
+  const losingTrades = closed.filter((entry) => (entry.pnl ?? 0) < 0).length
+
+  const pnlValues = closed.map((entry) => entry.pnl ?? 0)
+  const totalPnl = pnlValues.reduce((sum, value) => sum + value, 0)
+  const avgPnl = totalPnl / closed.length
+
+  const uniqueSymbols = new Set(closed.map((entry) => entry.symbol.toUpperCase())).size
+  const sortedTradeDates = closed
+    .map((entry) => entry.trade_date)
+    .sort((a, b) => (a < b ? 1 : -1))
+
+  return {
+    total_trades: closed.length,
+    winning_trades: winningTrades,
+    losing_trades: losingTrades,
+    win_rate: (winningTrades / closed.length) * 100,
+    total_pnl: Number(totalPnl.toFixed(2)),
+    avg_pnl: Number(avgPnl.toFixed(2)),
+    best_trade: Number(Math.max(...pnlValues).toFixed(2)),
+    worst_trade: Number(Math.min(...pnlValues).toFixed(2)),
+    unique_symbols: uniqueSymbols,
+    last_trade_date: sortedTradeDates[0] ?? '',
+  }
+}
+
+async function loadEntries(): Promise<JournalEntry[]> {
+  const response = await fetch('/api/members/journal?limit=500&offset=0&sortBy=trade_date&sortDir=desc', {
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    return []
+  }
+
+  const payload = await response.json().catch(() => null)
+  if (!payload?.success || !Array.isArray(payload.data)) {
+    return []
+  }
+
+  return payload.data as JournalEntry[]
+}
+
 export function StatsOverview() {
-  const [stats, setStats] = useState<JournalStats | null>(null)
+  const [entries, setEntries] = useState<JournalEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const loadStats = async () => {
-      const result = await getJournalStats()
-      if (result.success && result.data) {
-        setStats(result.data)
+    let active = true
+
+    const run = async () => {
+      const loaded = await loadEntries()
+      if (active) {
+        setEntries(loaded)
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
-    loadStats()
+    void run()
+
+    return () => {
+      active = false
+    }
   }, [])
+
+  const stats = useMemo(() => computeStats(entries), [entries])
 
   const formatCurrency = (value: number | null) => {
     if (value === null || value === undefined) return '$0.00'
-    const formatted = new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 2
+      minimumFractionDigits: 2,
     }).format(value)
-    return formatted
   }
 
   const formatDate = (dateString: string | null) => {
@@ -49,7 +103,7 @@ export function StatsOverview() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     })
   }
 
@@ -57,10 +111,10 @@ export function StatsOverview() {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="glass-card-heavy border-white/10 animate-pulse">
+          <Card key={i} className="glass-card-heavy animate-pulse border-white/10">
             <CardHeader className="pb-2">
-              <div className="h-4 bg-white/10 rounded w-20 mb-2" />
-              <div className="h-8 bg-white/10 rounded w-16" />
+              <div className="mb-2 h-4 w-20 rounded bg-white/10" />
+              <div className="h-8 w-16 rounded bg-white/10" />
             </CardHeader>
           </Card>
         ))}
@@ -112,7 +166,6 @@ export function StatsOverview() {
 
   return (
     <div className="space-y-4">
-      {/* Main Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat, index) => {
           const Icon = stat.icon
@@ -120,7 +173,7 @@ export function StatsOverview() {
             <Card key={index} className="glass-card-heavy border-white/10">
               <CardHeader className="pb-2">
                 <CardDescription className="flex items-center gap-2">
-                  <Icon className={`w-4 h-4 ${stat.color}`} />
+                  <Icon className={`h-4 w-4 ${stat.color}`} />
                   {stat.title}
                 </CardDescription>
               </CardHeader>
@@ -128,21 +181,20 @@ export function StatsOverview() {
                 <div className={`text-2xl font-bold ${stat.color}`} suppressHydrationWarning>
                   {stat.value}
                 </div>
-                {stat.subtitle && (
-                  <p className="text-xs text-white/60 mt-1">{stat.subtitle}</p>
-                )}
+                {stat.subtitle ? (
+                  <p className="mt-1 text-xs text-white/60">{stat.subtitle}</p>
+                ) : null}
               </CardContent>
             </Card>
           )
         })}
       </div>
 
-      {/* Additional Stats Row */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="glass-card-heavy border-white/10">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
               Best Trade
             </CardDescription>
           </CardHeader>
@@ -156,7 +208,7 @@ export function StatsOverview() {
         <Card className="glass-card-heavy border-white/10">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <TrendingDown className="w-4 h-4 text-red-500" />
+              <TrendingDown className="h-4 w-4 text-red-500" />
               Worst Trade
             </CardDescription>
           </CardHeader>
@@ -170,7 +222,7 @@ export function StatsOverview() {
         <Card className="glass-card-heavy border-white/10">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-blue-500" />
+              <Calendar className="h-4 w-4 text-blue-500" />
               Last Trade
             </CardDescription>
           </CardHeader>
@@ -178,7 +230,7 @@ export function StatsOverview() {
             <div className="text-xl font-bold text-white" suppressHydrationWarning>
               {formatDate(stats.last_trade_date)}
             </div>
-            <p className="text-xs text-white/60 mt-1">
+            <p className="mt-1 text-xs text-white/60">
               {stats.unique_symbols} unique symbols
             </p>
           </CardContent>

@@ -1,49 +1,97 @@
-import type {
-  AITradeAnalysis,
-  JournalEntry,
-  MarketContextSnapshot,
-  TradeVerification,
-} from '@/lib/types/journal'
+import { z } from 'zod'
+import type { AITradeAnalysis, JournalEntry, JournalMood, MarketContextSnapshot } from '@/lib/types/journal'
+import {
+  aiTradeAnalysisSchema,
+  contractTypeSchema,
+  directionSchema,
+  moodSchema,
+  sanitizeString,
+} from '@/lib/validation/journal-entry'
 
-const VALID_DIRECTIONS = new Set(['long', 'short', 'neutral'])
-const VALID_CONTRACT_TYPES = new Set(['stock', 'call', 'put'])
-const VALID_MOODS = new Set(['confident', 'neutral', 'anxious', 'frustrated', 'excited', 'fearful'])
-const VALID_DRAFT_STATUSES = new Set(['pending', 'confirmed', 'dismissed'])
-const VALID_SYNC_STATUSES = new Set(['synced', 'pending_offline'])
-const VALID_MARKET_TRENDS = new Set(['bullish', 'bearish', 'neutral'])
-const VALID_SESSION_TYPES = new Set(['trending', 'range-bound', 'volatile'])
-const VALID_VERIFICATION_CONFIDENCE = new Set(['exact', 'close', 'unverifiable'])
+const marketContextSnapshotSchema: z.ZodType<MarketContextSnapshot> = z.object({
+  entryContext: z.object({
+    timestamp: z.string(),
+    price: z.number(),
+    vwap: z.number(),
+    atr14: z.number(),
+    volumeVsAvg: z.number(),
+    distanceFromPDH: z.number(),
+    distanceFromPDL: z.number(),
+    nearestLevel: z.object({
+      name: z.string(),
+      price: z.number(),
+      distance: z.number(),
+    }),
+  }),
+  exitContext: z.object({
+    timestamp: z.string(),
+    price: z.number(),
+    vwap: z.number(),
+    atr14: z.number(),
+    volumeVsAvg: z.number(),
+    distanceFromPDH: z.number(),
+    distanceFromPDL: z.number(),
+    nearestLevel: z.object({
+      name: z.string(),
+      price: z.number(),
+      distance: z.number(),
+    }),
+  }),
+  optionsContext: z.object({
+    ivAtEntry: z.number(),
+    ivAtExit: z.number(),
+    ivRankAtEntry: z.number(),
+    deltaAtEntry: z.number(),
+    thetaAtEntry: z.number(),
+    dteAtEntry: z.number(),
+    dteAtExit: z.number(),
+  }).optional(),
+  dayContext: z.object({
+    marketTrend: z.enum(['bullish', 'bearish', 'neutral']),
+    atrUsed: z.number(),
+    sessionType: z.enum(['trending', 'range-bound', 'volatile']),
+    keyLevelsActive: z.object({
+      pdh: z.number(),
+      pdl: z.number(),
+      pdc: z.number(),
+      vwap: z.number(),
+      atr14: z.number(),
+      pivotPP: z.number(),
+      pivotR1: z.number(),
+      pivotS1: z.number(),
+    }),
+  }),
+})
 
-type UnknownRecord = Record<string, unknown>
+const textFieldMaxLengths = {
+  symbol: 16,
+  strategy: 120,
+  setup_notes: 10_000,
+  execution_notes: 10_000,
+  lessons_learned: 10_000,
+  deviation_notes: 5_000,
+  screenshot_url: 2_048,
+  screenshot_storage_path: 512,
+  import_id: 64,
+} as const
 
-function isRecord(value: unknown): value is UnknownRecord {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function normalizeString(value: unknown): string | null {
+function asString(value: unknown, maxLength: number): string | null {
   if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
+  const sanitized = sanitizeString(value, maxLength)
+  return sanitized.length > 0 ? sanitized : null
 }
 
-function normalizeUpperString(value: unknown): string | null {
-  const normalized = normalizeString(value)
-  return normalized ? normalized.toUpperCase() : null
-}
-
-function normalizeNumber(value: unknown): number | null {
+function asNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function normalizeInteger(value: unknown): number | null {
-  const parsed = normalizeNumber(value)
-  if (parsed == null) return null
-  return Number.isInteger(parsed) ? parsed : Math.round(parsed)
-}
-
-function normalizeBoolean(value: unknown): boolean | null {
+function asBoolean(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase()
@@ -53,303 +101,210 @@ function normalizeBoolean(value: unknown): boolean | null {
   return null
 }
 
-function normalizeIsoString(value: unknown, fallback: string): string {
-  const normalized = normalizeString(value)
-  if (!normalized) return fallback
-  const parsed = Date.parse(normalized)
-  if (Number.isNaN(parsed)) return fallback
-  return new Date(parsed).toISOString()
-}
-
-function normalizeOptionalIsoString(value: unknown): string | null {
-  const normalized = normalizeString(value)
-  if (!normalized) return null
-  const parsed = Date.parse(normalized)
+function asDateTime(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const parsed = Date.parse(value)
   if (Number.isNaN(parsed)) return null
   return new Date(parsed).toISOString()
 }
 
-function normalizeStringArray(value: unknown): string[] {
+function asDateOnly(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  const parsed = Date.parse(trimmed)
+  if (Number.isNaN(parsed)) return null
+  return new Date(parsed).toISOString().split('T')[0]
+}
+
+function asDirection(value: unknown): 'long' | 'short' {
+  const parsed = directionSchema.safeParse(typeof value === 'string' ? value.trim().toLowerCase() : value)
+  return parsed.success ? parsed.data : 'long'
+}
+
+function asContractType(value: unknown): 'stock' | 'call' | 'put' {
+  const parsed = contractTypeSchema.safeParse(typeof value === 'string' ? value.trim().toLowerCase() : value)
+  return parsed.success ? parsed.data : 'stock'
+}
+
+function asMood(value: unknown): JournalMood | null {
+  if (value == null) return null
+  const parsed = moodSchema.safeParse(typeof value === 'string' ? value.trim().toLowerCase() : value)
+  return parsed.success ? parsed.data : null
+}
+
+function asTags(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((entry) => normalizeString(entry))
-    .filter((entry): entry is string => Boolean(entry))
+    .map((tag) => asString(tag, 50))
+    .filter((tag): tag is string => Boolean(tag))
+    .slice(0, 20)
 }
 
-function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim().toLowerCase()
-  return VALID_DIRECTIONS.has(normalized) ? (normalized as 'long' | 'short' | 'neutral') : null
-}
-
-function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim().toLowerCase()
-  return VALID_CONTRACT_TYPES.has(normalized) ? (normalized as 'stock' | 'call' | 'put') : null
-}
-
-function normalizeMood(value: unknown): JournalEntry['mood_before'] {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim().toLowerCase()
-  if (!VALID_MOODS.has(normalized)) return null
-  return normalized as JournalEntry['mood_before']
-}
-
-function normalizeDraftStatus(value: unknown): JournalEntry['draft_status'] {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim().toLowerCase()
-  if (!VALID_DRAFT_STATUSES.has(normalized)) return null
-  return normalized as JournalEntry['draft_status']
-}
-
-function normalizeGrade(value: unknown): string | null {
-  const normalized = normalizeString(value)
-  if (!normalized) return null
-  const compact = normalized.toUpperCase()
-  if (/^[ABCDF][+-]?$/.test(compact)) return compact
-  return compact.slice(0, 6)
-}
-
-function normalizeTradeVerification(value: unknown, fallbackIso: string): TradeVerification | null {
-  if (!isRecord(value)) return null
-
-  const confidenceRaw = normalizeString(value.confidence)?.toLowerCase() || ''
-  const confidence = VALID_VERIFICATION_CONFIDENCE.has(confidenceRaw)
-    ? (confidenceRaw as TradeVerification['confidence'])
-    : 'unverifiable'
+function asAIAnalysis(value: unknown): AITradeAnalysis | null {
+  const parsed = aiTradeAnalysisSchema.safeParse(value)
+  if (!parsed.success) return null
 
   return {
-    isVerified: normalizeBoolean(value.isVerified) ?? false,
-    confidence,
-    entryPriceMatch: normalizeBoolean(value.entryPriceMatch) ?? false,
-    exitPriceMatch: normalizeBoolean(value.exitPriceMatch) ?? false,
-    priceSource: normalizeString(value.priceSource) || 'unknown',
-    verifiedAt: normalizeIsoString(value.verifiedAt, fallbackIso),
+    ...parsed.data,
+    entry_quality: sanitizeString(parsed.data.entry_quality, 500),
+    exit_quality: sanitizeString(parsed.data.exit_quality, 500),
+    risk_management: sanitizeString(parsed.data.risk_management, 500),
+    lessons: parsed.data.lessons
+      .map((lesson) => sanitizeString(lesson, 200))
+      .filter((lesson) => lesson.length > 0)
+      .slice(0, 5),
   }
 }
 
-function normalizeContextPoint(value: unknown, fallbackIso: string): MarketContextSnapshot['entryContext'] | null {
-  if (!isRecord(value)) return null
-  const nearestLevelRaw = isRecord(value.nearestLevel) ? value.nearestLevel : {}
+function asMarketContext(value: unknown): MarketContextSnapshot | null {
+  const parsed = marketContextSnapshotSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
+}
 
-  return {
-    timestamp: normalizeIsoString(value.timestamp, fallbackIso),
-    price: normalizeNumber(value.price) ?? 0,
-    vwap: normalizeNumber(value.vwap) ?? 0,
-    atr14: normalizeNumber(value.atr14) ?? 0,
-    volumeVsAvg: normalizeNumber(value.volumeVsAvg) ?? 0,
-    distanceFromPDH: normalizeNumber(value.distanceFromPDH) ?? 0,
-    distanceFromPDL: normalizeNumber(value.distanceFromPDL) ?? 0,
-    nearestLevel: {
-      name: normalizeString(nearestLevelRaw.name) || 'N/A',
-      price: normalizeNumber(nearestLevelRaw.price) ?? 0,
-      distance: normalizeNumber(nearestLevelRaw.distance) ?? 0,
-    },
+export function sanitizeJournalWriteInput(input: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {}
+
+  if (input.trade_date !== undefined) {
+    sanitized.trade_date = asDateTime(input.trade_date) ?? new Date().toISOString()
   }
-}
 
-function normalizeMarketContext(value: unknown, fallbackIso: string): MarketContextSnapshot | null {
-  if (!isRecord(value)) return null
-
-  const entryContext = normalizeContextPoint(value.entryContext, fallbackIso)
-  const exitContext = normalizeContextPoint(value.exitContext, fallbackIso)
-  const dayContextRaw = isRecord(value.dayContext) ? value.dayContext : null
-  const keyLevelsRaw = dayContextRaw && isRecord(dayContextRaw.keyLevelsActive)
-    ? dayContextRaw.keyLevelsActive
-    : {}
-
-  if (!entryContext || !exitContext || !dayContextRaw) return null
-
-  const marketTrendRaw = normalizeString(dayContextRaw.marketTrend)?.toLowerCase() || ''
-  const sessionTypeRaw = normalizeString(dayContextRaw.sessionType)?.toLowerCase() || ''
-
-  const optionsContextRaw = isRecord(value.optionsContext) ? value.optionsContext : null
-  const optionsContext = optionsContextRaw
-    ? {
-        ivAtEntry: normalizeNumber(optionsContextRaw.ivAtEntry) ?? 0,
-        ivAtExit: normalizeNumber(optionsContextRaw.ivAtExit) ?? 0,
-        ivRankAtEntry: normalizeNumber(optionsContextRaw.ivRankAtEntry) ?? 0,
-        deltaAtEntry: normalizeNumber(optionsContextRaw.deltaAtEntry) ?? 0,
-        thetaAtEntry: normalizeNumber(optionsContextRaw.thetaAtEntry) ?? 0,
-        dteAtEntry: normalizeNumber(optionsContextRaw.dteAtEntry) ?? 0,
-        dteAtExit: normalizeNumber(optionsContextRaw.dteAtExit) ?? 0,
-      }
-    : undefined
-
-  return {
-    entryContext,
-    exitContext,
-    optionsContext,
-    dayContext: {
-      marketTrend: VALID_MARKET_TRENDS.has(marketTrendRaw)
-        ? (marketTrendRaw as 'bullish' | 'bearish' | 'neutral')
-        : 'neutral',
-      atrUsed: normalizeNumber(dayContextRaw.atrUsed) ?? 0,
-      sessionType: VALID_SESSION_TYPES.has(sessionTypeRaw)
-        ? (sessionTypeRaw as 'trending' | 'range-bound' | 'volatile')
-        : 'range-bound',
-      keyLevelsActive: {
-        pdh: normalizeNumber(keyLevelsRaw.pdh) ?? 0,
-        pdl: normalizeNumber(keyLevelsRaw.pdl) ?? 0,
-        pdc: normalizeNumber(keyLevelsRaw.pdc) ?? 0,
-        vwap: normalizeNumber(keyLevelsRaw.vwap) ?? 0,
-        atr14: normalizeNumber(keyLevelsRaw.atr14) ?? 0,
-        pivotPP: normalizeNumber(keyLevelsRaw.pivotPP) ?? 0,
-        pivotR1: normalizeNumber(keyLevelsRaw.pivotR1) ?? 0,
-        pivotS1: normalizeNumber(keyLevelsRaw.pivotS1) ?? 0,
-      },
-    },
+  if (input.symbol !== undefined) {
+    const next = asString(input.symbol, textFieldMaxLengths.symbol)
+    sanitized.symbol = next ? next.toUpperCase() : null
   }
-}
 
-function normalizeAiAnalysis(value: unknown): AITradeAnalysis | null {
-  if (!isRecord(value)) return null
-
-  const summary = normalizeString(value.summary) || normalizeString(value.analysis_summary)
-  const grade = normalizeGrade(value.grade)
-
-  const trendRaw = isRecord(value.trend_analysis) ? value.trend_analysis : null
-  const trendAnalysis = trendRaw
-    ? {
-        direction: normalizeString(trendRaw.direction) || 'unknown',
-        strength: normalizeString(trendRaw.strength) || 'unknown',
-        notes: normalizeString(trendRaw.notes) || '',
-      }
-    : undefined
-
-  const entryRaw = isRecord(value.entry_analysis) ? value.entry_analysis : null
-  const entryAnalysis = entryRaw
-    ? {
-        quality: normalizeString(entryRaw.quality) || 'unknown',
-        observations: normalizeStringArray(entryRaw.observations),
-        improvements: normalizeStringArray(entryRaw.improvements),
-      }
-    : undefined
-
-  const exitRaw = isRecord(value.exit_analysis) ? value.exit_analysis : null
-  const exitAnalysis = exitRaw
-    ? {
-        quality: normalizeString(exitRaw.quality) || 'unknown',
-        observations: normalizeStringArray(exitRaw.observations),
-        improvements: normalizeStringArray(exitRaw.improvements),
-      }
-    : undefined
-
-  const riskRaw = isRecord(value.risk_management) ? value.risk_management : null
-  const riskManagement = riskRaw
-    ? {
-        score: normalizeNumber(riskRaw.score) ?? 0,
-        observations: normalizeStringArray(riskRaw.observations),
-        suggestions: normalizeStringArray(riskRaw.suggestions),
-      }
-    : undefined
-
-  const hasStructuredData = Boolean(
-    trendAnalysis
-    || entryAnalysis
-    || exitAnalysis
-    || riskManagement
-    || normalizeString(value.coaching_notes)
-    || normalizeStringArray(value.tags).length > 0,
-  )
-
-  if (!summary && !grade && !hasStructuredData) return null
-
-  return {
-    summary: summary || 'AI analysis available.',
-    grade: grade || 'B',
-    trend_analysis: trendAnalysis,
-    entry_analysis: entryAnalysis,
-    exit_analysis: exitAnalysis,
-    risk_management: riskManagement,
-    coaching_notes: normalizeString(value.coaching_notes) || undefined,
-    tags: normalizeStringArray(value.tags),
-    analyzed_at: normalizeOptionalIsoString(value.analyzed_at) || undefined,
-    model: normalizeString(value.model) || undefined,
+  if (input.direction !== undefined) {
+    sanitized.direction = asDirection(input.direction)
   }
+
+  if (input.contract_type !== undefined) {
+    sanitized.contract_type = asContractType(input.contract_type)
+  }
+
+  if (input.entry_price !== undefined) sanitized.entry_price = asNumber(input.entry_price)
+  if (input.exit_price !== undefined) sanitized.exit_price = asNumber(input.exit_price)
+  if (input.position_size !== undefined) sanitized.position_size = asNumber(input.position_size)
+  if (input.pnl !== undefined) sanitized.pnl = asNumber(input.pnl)
+  if (input.pnl_percentage !== undefined) sanitized.pnl_percentage = asNumber(input.pnl_percentage)
+  if (input.is_open !== undefined) sanitized.is_open = asBoolean(input.is_open) ?? false
+
+  if (input.entry_timestamp !== undefined) sanitized.entry_timestamp = asDateTime(input.entry_timestamp)
+  if (input.exit_timestamp !== undefined) sanitized.exit_timestamp = asDateTime(input.exit_timestamp)
+
+  if (input.stop_loss !== undefined) sanitized.stop_loss = asNumber(input.stop_loss)
+  if (input.initial_target !== undefined) sanitized.initial_target = asNumber(input.initial_target)
+  if (input.hold_duration_min !== undefined) sanitized.hold_duration_min = asNumber(input.hold_duration_min)
+  if (input.mfe_percent !== undefined) sanitized.mfe_percent = asNumber(input.mfe_percent)
+  if (input.mae_percent !== undefined) sanitized.mae_percent = asNumber(input.mae_percent)
+
+  if (input.strike_price !== undefined) sanitized.strike_price = asNumber(input.strike_price)
+  if (input.expiration_date !== undefined) sanitized.expiration_date = asDateOnly(input.expiration_date)
+  if (input.dte_at_entry !== undefined) sanitized.dte_at_entry = asNumber(input.dte_at_entry)
+  if (input.iv_at_entry !== undefined) sanitized.iv_at_entry = asNumber(input.iv_at_entry)
+  if (input.delta_at_entry !== undefined) sanitized.delta_at_entry = asNumber(input.delta_at_entry)
+  if (input.theta_at_entry !== undefined) sanitized.theta_at_entry = asNumber(input.theta_at_entry)
+  if (input.gamma_at_entry !== undefined) sanitized.gamma_at_entry = asNumber(input.gamma_at_entry)
+  if (input.vega_at_entry !== undefined) sanitized.vega_at_entry = asNumber(input.vega_at_entry)
+  if (input.underlying_at_entry !== undefined) sanitized.underlying_at_entry = asNumber(input.underlying_at_entry)
+  if (input.underlying_at_exit !== undefined) sanitized.underlying_at_exit = asNumber(input.underlying_at_exit)
+
+  if (input.mood_before !== undefined) sanitized.mood_before = asMood(input.mood_before)
+  if (input.mood_after !== undefined) sanitized.mood_after = asMood(input.mood_after)
+  if (input.discipline_score !== undefined) sanitized.discipline_score = asNumber(input.discipline_score)
+  if (input.followed_plan !== undefined) sanitized.followed_plan = asBoolean(input.followed_plan)
+
+  if (input.deviation_notes !== undefined) sanitized.deviation_notes = asString(input.deviation_notes, textFieldMaxLengths.deviation_notes)
+  if (input.strategy !== undefined) sanitized.strategy = asString(input.strategy, textFieldMaxLengths.strategy)
+  if (input.setup_notes !== undefined) sanitized.setup_notes = asString(input.setup_notes, textFieldMaxLengths.setup_notes)
+  if (input.execution_notes !== undefined) sanitized.execution_notes = asString(input.execution_notes, textFieldMaxLengths.execution_notes)
+  if (input.lessons_learned !== undefined) sanitized.lessons_learned = asString(input.lessons_learned, textFieldMaxLengths.lessons_learned)
+
+  if (input.tags !== undefined) sanitized.tags = asTags(input.tags)
+
+  if (input.rating !== undefined) sanitized.rating = asNumber(input.rating)
+
+  if (input.screenshot_url !== undefined) sanitized.screenshot_url = asString(input.screenshot_url, textFieldMaxLengths.screenshot_url)
+  if (input.screenshot_storage_path !== undefined) {
+    sanitized.screenshot_storage_path = asString(input.screenshot_storage_path, textFieldMaxLengths.screenshot_storage_path)
+  }
+
+  if (input.ai_analysis !== undefined) sanitized.ai_analysis = asAIAnalysis(input.ai_analysis)
+  if (input.market_context !== undefined) sanitized.market_context = asMarketContext(input.market_context)
+  if (input.import_id !== undefined) sanitized.import_id = asString(input.import_id, textFieldMaxLengths.import_id)
+  if (input.is_favorite !== undefined) sanitized.is_favorite = asBoolean(input.is_favorite) ?? false
+
+  return sanitized
 }
 
-function normalizeSyncStatus(value: unknown): JournalEntry['sync_status'] {
-  if (typeof value !== 'string') return undefined
-  const normalized = value.trim().toLowerCase()
-  if (!VALID_SYNC_STATUSES.has(normalized)) return undefined
-  return normalized as JournalEntry['sync_status']
-}
-
-function normalizeRating(value: unknown): number | null {
-  const parsed = normalizeNumber(value)
-  if (parsed == null || parsed <= 0) return null
-  return Math.max(1, Math.min(5, Math.round(parsed)))
-}
-
-export function sanitizeJournalEntry(raw: unknown, fallbackId: string): JournalEntry {
+export function sanitizeJournalEntry(raw: unknown, fallbackId = 'entry-0'): JournalEntry {
   const nowIso = new Date().toISOString()
   const value = isRecord(raw) ? raw : {}
 
-  const id = normalizeString(value.id) || fallbackId
-  const tradeDate = normalizeIsoString(value.trade_date, nowIso)
+  const symbol = asString(value.symbol, textFieldMaxLengths.symbol)
 
   return {
-    id,
-    user_id: normalizeString(value.user_id) || 'unknown',
-    trade_date: tradeDate,
-    symbol: normalizeUpperString(value.symbol) || 'UNKNOWN',
-    direction: normalizeDirection(value.direction),
-    entry_price: normalizeNumber(value.entry_price),
-    exit_price: normalizeNumber(value.exit_price),
-    position_size: normalizeNumber(value.position_size),
-    pnl: normalizeNumber(value.pnl),
-    pnl_percentage: normalizeNumber(value.pnl_percentage),
-    is_winner: normalizeBoolean(value.is_winner),
-    screenshot_url: normalizeString(value.screenshot_url),
-    screenshot_storage_path: normalizeString(value.screenshot_storage_path),
-    ai_analysis: normalizeAiAnalysis(value.ai_analysis),
-    setup_notes: normalizeString(value.setup_notes),
-    execution_notes: normalizeString(value.execution_notes),
-    lessons_learned: normalizeString(value.lessons_learned),
-    tags: normalizeStringArray(value.tags),
-    smart_tags: normalizeStringArray(value.smart_tags),
-    rating: normalizeRating(value.rating),
-    market_context: normalizeMarketContext(value.market_context, tradeDate),
-    verification: normalizeTradeVerification(value.verification, tradeDate),
-    entry_timestamp: normalizeOptionalIsoString(value.entry_timestamp),
-    exit_timestamp: normalizeOptionalIsoString(value.exit_timestamp),
-    stop_loss: normalizeNumber(value.stop_loss),
-    initial_target: normalizeNumber(value.initial_target),
-    strategy: normalizeString(value.strategy),
-    hold_duration_min: normalizeInteger(value.hold_duration_min),
-    mfe_percent: normalizeNumber(value.mfe_percent),
-    mae_percent: normalizeNumber(value.mae_percent),
-    contract_type: normalizeContractType(value.contract_type),
-    strike_price: normalizeNumber(value.strike_price),
-    expiration_date: normalizeString(value.expiration_date),
-    dte_at_entry: normalizeInteger(value.dte_at_entry),
-    dte_at_exit: normalizeInteger(value.dte_at_exit),
-    iv_at_entry: normalizeNumber(value.iv_at_entry),
-    iv_at_exit: normalizeNumber(value.iv_at_exit),
-    delta_at_entry: normalizeNumber(value.delta_at_entry),
-    theta_at_entry: normalizeNumber(value.theta_at_entry),
-    gamma_at_entry: normalizeNumber(value.gamma_at_entry),
-    vega_at_entry: normalizeNumber(value.vega_at_entry),
-    underlying_at_entry: normalizeNumber(value.underlying_at_entry),
-    underlying_at_exit: normalizeNumber(value.underlying_at_exit),
-    mood_before: normalizeMood(value.mood_before),
-    mood_after: normalizeMood(value.mood_after),
-    discipline_score: normalizeInteger(value.discipline_score),
-    followed_plan: normalizeBoolean(value.followed_plan),
-    deviation_notes: normalizeString(value.deviation_notes),
-    session_id: normalizeString(value.session_id),
-    draft_status: normalizeDraftStatus(value.draft_status),
-    is_draft: normalizeBoolean(value.is_draft) ?? false,
-    draft_expires_at: normalizeOptionalIsoString(value.draft_expires_at),
-    is_open: normalizeBoolean(value.is_open) ?? false,
-    enriched_at: normalizeOptionalIsoString(value.enriched_at),
-    share_count: Math.max(0, normalizeInteger(value.share_count) ?? 0),
-    is_favorite: normalizeBoolean(value.is_favorite) ?? false,
-    created_at: normalizeIsoString(value.created_at, nowIso),
-    updated_at: normalizeIsoString(value.updated_at, nowIso),
-    sync_status: normalizeSyncStatus(value.sync_status),
-    offline_queue_id: normalizeString(value.offline_queue_id),
+    id: asString(value.id, 64) ?? fallbackId,
+    user_id: asString(value.user_id, 64) ?? 'unknown',
+
+    trade_date: asDateTime(value.trade_date) ?? nowIso,
+    symbol: symbol ? symbol.toUpperCase() : 'UNKNOWN',
+    direction: asDirection(value.direction),
+    contract_type: asContractType(value.contract_type),
+    entry_price: asNumber(value.entry_price),
+    exit_price: asNumber(value.exit_price),
+    position_size: asNumber(value.position_size),
+    pnl: asNumber(value.pnl),
+    pnl_percentage: asNumber(value.pnl_percentage),
+    is_winner: asBoolean(value.is_winner),
+    is_open: asBoolean(value.is_open) ?? false,
+
+    entry_timestamp: asDateTime(value.entry_timestamp),
+    exit_timestamp: asDateTime(value.exit_timestamp),
+
+    stop_loss: asNumber(value.stop_loss),
+    initial_target: asNumber(value.initial_target),
+    hold_duration_min: asNumber(value.hold_duration_min),
+    mfe_percent: asNumber(value.mfe_percent),
+    mae_percent: asNumber(value.mae_percent),
+
+    strike_price: asNumber(value.strike_price),
+    expiration_date: asDateOnly(value.expiration_date),
+    dte_at_entry: asNumber(value.dte_at_entry),
+    iv_at_entry: asNumber(value.iv_at_entry),
+    delta_at_entry: asNumber(value.delta_at_entry),
+    theta_at_entry: asNumber(value.theta_at_entry),
+    gamma_at_entry: asNumber(value.gamma_at_entry),
+    vega_at_entry: asNumber(value.vega_at_entry),
+    underlying_at_entry: asNumber(value.underlying_at_entry),
+    underlying_at_exit: asNumber(value.underlying_at_exit),
+
+    mood_before: asMood(value.mood_before),
+    mood_after: asMood(value.mood_after),
+    discipline_score: asNumber(value.discipline_score),
+    followed_plan: asBoolean(value.followed_plan),
+    deviation_notes: asString(value.deviation_notes, textFieldMaxLengths.deviation_notes),
+
+    strategy: asString(value.strategy, textFieldMaxLengths.strategy),
+    setup_notes: asString(value.setup_notes, textFieldMaxLengths.setup_notes),
+    execution_notes: asString(value.execution_notes, textFieldMaxLengths.execution_notes),
+    lessons_learned: asString(value.lessons_learned, textFieldMaxLengths.lessons_learned),
+    tags: asTags(value.tags),
+    rating: asNumber(value.rating),
+
+    screenshot_url: asString(value.screenshot_url, textFieldMaxLengths.screenshot_url),
+    screenshot_storage_path: asString(value.screenshot_storage_path, textFieldMaxLengths.screenshot_storage_path),
+
+    ai_analysis: asAIAnalysis(value.ai_analysis),
+
+    market_context: asMarketContext(value.market_context),
+
+    import_id: asString(value.import_id, textFieldMaxLengths.import_id),
+
+    is_favorite: asBoolean(value.is_favorite) ?? false,
+
+    created_at: asDateTime(value.created_at) ?? nowIso,
+    updated_at: asDateTime(value.updated_at) ?? nowIso,
   }
 }
 

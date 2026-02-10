@@ -4,9 +4,13 @@ import type { ZodTypeAny } from 'zod'
 let createSchema: ZodTypeAny
 
 beforeAll(async () => {
-  const module = await import('@/lib/validation/journal-entry')
-  createSchema = (module as { journalEntryCreateSchema?: ZodTypeAny; journalEntrySchema?: ZodTypeAny }).journalEntryCreateSchema
-    ?? (module as { journalEntrySchema: ZodTypeAny }).journalEntrySchema
+  const loadedModule = await import('@/lib/validation/journal-entry')
+  const loaded = loadedModule as unknown as { journalEntryCreateSchema?: ZodTypeAny; journalEntrySchema?: ZodTypeAny }
+  const schema = loaded.journalEntryCreateSchema ?? loaded.journalEntrySchema
+  if (!schema) {
+    throw new Error('Journal entry schema export is missing')
+  }
+  createSchema = schema
 })
 
 describe('journalEntryCreateSchema', () => {

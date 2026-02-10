@@ -40,20 +40,6 @@ export const getTradesQuerySchema = z.object({
   symbol: z.string().min(1).max(10).optional(),
   strategy: z.string().max(100).optional(),
   outcome: z.enum(['win', 'loss', 'breakeven']).optional(),
-  draft_status: z.enum(['draft', 'reviewed', 'published']).optional(),
-});
-
-export const getDraftTradesQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(200).optional().default(100),
-  status: z.enum(['draft', 'reviewed', 'published', 'all']).optional().default('draft'),
-});
-
-export const generateDraftsSchema = z.object({
-  marketDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-});
-
-export const updateDraftStatusSchema = z.object({
-  draft_status: z.enum(['draft', 'reviewed', 'published']),
 });
 
 export const getJournalInsightsQuerySchema = z.object({
