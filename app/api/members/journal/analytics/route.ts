@@ -26,6 +26,13 @@ function toNumber(value: number | string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function toIsoForSort(value: unknown): string {
+  if (typeof value !== 'string' || value.trim().length === 0) return ''
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return ''
+  return new Date(parsed).toISOString()
+}
+
 function getPeriodStart(period: Period): Date {
   const now = new Date()
   switch (period) {
@@ -117,9 +124,9 @@ function buildFallbackAnalytics(entries: RawEntry[], period: Period) {
   let maxDrawdownDuration = 0
 
   const sortedForEquity = [...closedEntries].sort((a, b) => {
-    const tradeCompare = a.trade_date.localeCompare(b.trade_date)
+    const tradeCompare = toIsoForSort(a.trade_date).localeCompare(toIsoForSort(b.trade_date))
     if (tradeCompare !== 0) return tradeCompare
-    return a.created_at.localeCompare(b.created_at)
+    return toIsoForSort(a.created_at).localeCompare(toIsoForSort(b.created_at))
   })
 
   const equityCurve = sortedForEquity.map((entry) => {
@@ -153,7 +160,8 @@ function buildFallbackAnalytics(entries: RawEntry[], period: Period) {
 
   for (const entry of closedEntries) {
     const pnl = toNumber(entry.pnl) || 0
-    const tradeDate = new Date(entry.trade_date)
+    const tradeDate = new Date(toIsoForSort(entry.trade_date))
+    if (Number.isNaN(tradeDate.getTime())) continue
     const etDate = new Date(tradeDate.toLocaleString('en-US', { timeZone: 'America/New_York' }))
     const hour = etDate.getHours()
     const weekday = etDate.getDay()
@@ -311,6 +319,7 @@ export async function GET(request: NextRequest) {
       .from('journal_entries')
       .select('id,trade_date,created_at,symbol,direction,pnl,stop_loss,entry_price,exit_price,hold_duration_min,mfe_percent,mae_percent,dte_at_entry')
       .eq('user_id', userId)
+      .or('is_draft.is.null,is_draft.eq.false')
       .gte('trade_date', periodStart)
       .order('trade_date', { ascending: true })
 

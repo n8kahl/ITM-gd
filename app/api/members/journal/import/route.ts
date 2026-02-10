@@ -148,8 +148,8 @@ export async function POST(request: NextRequest) {
     for (const row of normalizedRows) {
       const rowDate = row.tradeDate.split('T')[0]
       const duplicate = existing.some((entry) => {
-        const sameSymbol = entry.symbol === row.symbol
-        const sameDay = entry.trade_date.split('T')[0] === rowDate
+        const sameSymbol = typeof entry.symbol === 'string' && entry.symbol === row.symbol
+        const sameDay = typeof entry.trade_date === 'string' && entry.trade_date.split('T')[0] === rowDate
         const samePrice = priceWithinTolerance(toNumber(entry.entry_price), row.entryPrice, 0.01)
         return sameSymbol && sameDay && samePrice
       })

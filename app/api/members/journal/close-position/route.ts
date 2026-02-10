@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
 import { closePositionSchema } from '@/lib/validation/journal-api'
+import { sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
 
 function toNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null
@@ -54,7 +55,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Entry price missing for open position' }, { status: 400 })
     }
 
-    const marketExit = await fetchLastPrice(entry.symbol, process.env.MASSIVE_API_KEY)
+    const symbol = typeof entry.symbol === 'string' && entry.symbol.trim().length > 0
+      ? entry.symbol.trim().toUpperCase()
+      : null
+    if (!symbol) {
+      return NextResponse.json({ success: false, error: 'Entry symbol missing for open position' }, { status: 400 })
+    }
+
+    const marketExit = await fetchLastPrice(symbol, process.env.MASSIVE_API_KEY)
     const exitPrice = payload.exit_price ?? marketExit
     if (exitPrice == null) {
       return NextResponse.json({ success: false, error: 'Unable to determine exit price' }, { status: 400 })
@@ -93,7 +101,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: updateError?.message || 'Failed to close position' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data: updated })
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(updated, payload.entryId) })
   } catch (error) {
     if (error instanceof Error && error.name === 'ZodError') {
       return NextResponse.json({ success: false, error: 'Invalid close position payload' }, { status: 400 })

@@ -283,6 +283,19 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
   const isWinner = (entry.pnl ?? 0) > 0
   const isLoss = (entry.pnl ?? 0) < 0
   const grade = entry.ai_analysis?.grade
+  const tradeDate = new Date(entry.trade_date)
+  const tradeDateLabel = Number.isNaN(tradeDate.getTime())
+    ? 'Unknown date'
+    : tradeDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  const manualTags = Array.isArray(entry.tags) ? entry.tags : []
+  const smartTags = Array.isArray(entry.smart_tags) ? entry.smart_tags : []
+  const aiAnalysis = entry.ai_analysis
+  const entryObservations = Array.isArray(aiAnalysis?.entry_analysis?.observations)
+    ? aiAnalysis.entry_analysis.observations
+    : []
+  const entryImprovements = Array.isArray(aiAnalysis?.entry_analysis?.improvements)
+    ? aiAnalysis.entry_analysis.improvements
+    : []
 
   return createPortal(
     <AnimatePresence>
@@ -334,7 +347,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
                 )}
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {new Date(entry.trade_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                {tradeDateLabel}
               </p>
             </div>
             <button
@@ -414,7 +427,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
             {entry.market_context && <MarketContextDisplay context={entry.market_context} />}
 
             {/* AI Analysis */}
-            {entry.ai_analysis && (
+            {aiAnalysis && (
               <div className="glass-card rounded-xl p-4 border-champagne/[0.08]">
                 <div className="flex items-center gap-2 mb-3">
                   <Bot className="w-4 h-4 text-champagne" />
@@ -425,31 +438,31 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-ivory/80 leading-relaxed">{entry.ai_analysis.summary}</p>
+                <p className="text-xs text-ivory/80 leading-relaxed">{aiAnalysis.summary}</p>
 
-                {entry.ai_analysis.trend_analysis && (
+                {aiAnalysis.trend_analysis && (
                   <div className="mt-3 p-2 rounded-lg bg-white/[0.02]">
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-muted-foreground">Trend:</span>
-                      <span className="text-ivory capitalize">{entry.ai_analysis.trend_analysis.direction}</span>
+                      <span className="text-ivory capitalize">{aiAnalysis.trend_analysis.direction}</span>
                       <span className="text-muted-foreground">|</span>
-                      <span className="text-ivory capitalize">{entry.ai_analysis.trend_analysis.strength}</span>
+                      <span className="text-ivory capitalize">{aiAnalysis.trend_analysis.strength}</span>
                     </div>
-                    {entry.ai_analysis.trend_analysis.notes && (
-                      <p className="text-[11px] text-muted-foreground mt-1">{entry.ai_analysis.trend_analysis.notes}</p>
+                    {aiAnalysis.trend_analysis.notes && (
+                      <p className="text-[11px] text-muted-foreground mt-1">{aiAnalysis.trend_analysis.notes}</p>
                     )}
                   </div>
                 )}
 
-                {entry.ai_analysis.entry_analysis && (
+                {aiAnalysis.entry_analysis && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Entry: {entry.ai_analysis.entry_analysis.quality}</p>
-                    {entry.ai_analysis.entry_analysis.observations.map((obs, i) => (
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Entry: {aiAnalysis.entry_analysis.quality}</p>
+                    {entryObservations.map((obs, i) => (
                       <p key={i} className="text-[11px] text-ivory/70 flex items-start gap-1.5">
                         <CheckCircle className="w-3 h-3 text-emerald-400 flex-shrink-0 mt-0.5" /> {obs}
                       </p>
                     ))}
-                    {entry.ai_analysis.entry_analysis.improvements.map((imp, i) => (
+                    {entryImprovements.map((imp, i) => (
                       <p key={i} className="text-[11px] text-ivory/70 flex items-start gap-1.5">
                         <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" /> {imp}
                       </p>
@@ -457,16 +470,16 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
                   </div>
                 )}
 
-                {entry.ai_analysis.risk_management && (
+                {aiAnalysis.risk_management && (
                   <div className="mt-3 p-2 rounded-lg bg-white/[0.02]">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-                      Risk Management: {entry.ai_analysis.risk_management.score}/10
+                      Risk Management: {aiAnalysis.risk_management.score}/10
                     </p>
                   </div>
                 )}
 
-                {entry.ai_analysis.coaching_notes && (
-                  <p className="mt-3 text-[11px] text-muted-foreground italic">{entry.ai_analysis.coaching_notes}</p>
+                {aiAnalysis.coaching_notes && (
+                  <p className="mt-3 text-[11px] text-muted-foreground italic">{aiAnalysis.coaching_notes}</p>
                 )}
 
                 <Link
@@ -545,14 +558,14 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
             </div>
 
             {/* Tags */}
-            {(entry.tags.length > 0 || entry.smart_tags.length > 0) && (
+            {(manualTags.length > 0 || smartTags.length > 0) && (
               <div className="flex flex-wrap gap-1.5">
-                {entry.tags.map(tag => (
+                {manualTags.map(tag => (
                   <span key={tag} className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-white/[0.05] text-muted-foreground border border-white/[0.06]">
                     {tag}
                   </span>
                 ))}
-                {entry.smart_tags.map(tag => (
+                {smartTags.map(tag => (
                   <span key={tag} className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-champagne/10 text-champagne border border-champagne/20">
                     {tag}
                   </span>

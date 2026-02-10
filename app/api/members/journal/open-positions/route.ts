@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
+import { sanitizeJournalEntries } from '@/lib/journal/sanitize-entry'
 
 function toNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null
@@ -42,14 +43,15 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('user_id', userId)
       .eq('is_open', true)
+      .or('is_draft.is.null,is_draft.eq.false')
       .order('trade_date', { ascending: false })
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    const openEntries = entries || []
-    const symbols = Array.from(new Set(openEntries.map((entry) => entry.symbol).filter(Boolean)))
+    const openEntries = sanitizeJournalEntries(entries || [])
+    const symbols = Array.from(new Set(openEntries.map((entry) => entry.symbol).filter((symbol) => symbol !== 'UNKNOWN')))
     const apiKey = process.env.MASSIVE_API_KEY
 
     const prices = new Map<string, number | null>()

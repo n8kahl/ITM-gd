@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
+import { sanitizeJournalEntries } from '@/lib/journal/sanitize-entry'
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +24,7 @@ export async function GET(
       .select('*')
       .eq('user_id', userId)
       .eq('symbol', normalizedSymbol)
+      .or('is_draft.is.null,is_draft.eq.false')
       .order('trade_date', { ascending: false })
       .limit(100)
 
@@ -30,7 +32,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data: data || [] })
+    return NextResponse.json({ success: true, data: sanitizeJournalEntries(data || []) })
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },

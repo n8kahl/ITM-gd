@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
+import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -39,15 +40,6 @@ function parseMaybeInteger(value: unknown): number | null {
   return Number.isInteger(parsed) ? parsed : Math.round(parsed)
 }
 
-function parseMaybeDateString(value: unknown): string | null {
-  if (value === null || value === undefined || value === '') return null
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (!trimmed) return null
-  const parsed = Date.parse(trimmed)
-  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
-}
-
 function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null {
   if (typeof value !== 'string') return null
   const normalized = value.toLowerCase().trim()
@@ -72,15 +64,6 @@ function normalizeMood(value: unknown): 'confident' | 'neutral' | 'anxious' | 'f
   const normalized = value.toLowerCase().trim()
   if (['confident', 'neutral', 'anxious', 'frustrated', 'excited', 'fearful'].includes(normalized)) {
     return normalized as 'confident' | 'neutral' | 'anxious' | 'frustrated' | 'excited' | 'fearful'
-  }
-  return null
-}
-
-function normalizeDraftStatus(value: unknown): 'pending' | 'confirmed' | 'dismissed' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.toLowerCase().trim()
-  if (normalized === 'pending' || normalized === 'confirmed' || normalized === 'dismissed') {
-    return normalized
   }
   return null
 }
@@ -250,23 +233,11 @@ function normalizeJournalWritePayload(
       : null
   }
 
-  if (input.draft_status !== undefined) {
-    payload.draft_status = normalizeDraftStatus(input.draft_status)
-  }
-
-  if (input.is_draft !== undefined) {
-    payload.is_draft = parseMaybeBoolean(input.is_draft)
-  }
-
   if (input.is_favorite !== undefined) {
     const maybeFavorite = parseMaybeBoolean(input.is_favorite)
     if (maybeFavorite !== null) {
       payload.is_favorite = maybeFavorite
     }
-  }
-
-  if (input.draft_expires_at !== undefined) {
-    payload.draft_expires_at = parseMaybeDateString(input.draft_expires_at)
   }
 
   if (input.screenshot_url !== undefined) {
@@ -283,9 +254,15 @@ function normalizeJournalWritePayload(
         : null
   }
 
-  if (input.setup_notes !== undefined) payload.setup_notes = input.setup_notes
-  if (input.execution_notes !== undefined) payload.execution_notes = input.execution_notes
-  if (input.lessons_learned !== undefined) payload.lessons_learned = input.lessons_learned
+  if (input.setup_notes !== undefined) {
+    payload.setup_notes = typeof input.setup_notes === 'string' ? input.setup_notes : null
+  }
+  if (input.execution_notes !== undefined) {
+    payload.execution_notes = typeof input.execution_notes === 'string' ? input.execution_notes : null
+  }
+  if (input.lessons_learned !== undefined) {
+    payload.lessons_learned = typeof input.lessons_learned === 'string' ? input.lessons_learned : null
+  }
 
   if (input.tags !== undefined) {
     payload.tags = normalizeTags(input.tags)
@@ -306,6 +283,12 @@ function normalizeJournalWritePayload(
   } else if (mode === 'create' && typeof payload.pnl === 'number') {
     payload.is_winner = payload.pnl > 0 ? true : payload.pnl < 0 ? false : null
   }
+
+  // Draft entries are deprecated from the member journal flow.
+  // Always persist standard entries only.
+  payload.is_draft = false
+  payload.draft_status = null
+  payload.draft_expires_at = null
 
   return payload
 }
@@ -331,7 +314,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const parsedLimit = Number.parseInt(searchParams.get('limit') || '50', 10)
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(500, Math.max(parsedLimit, 1))
+      : 50
 
     const supabase = getSupabaseAdmin()
 
@@ -339,6 +325,7 @@ export async function GET(request: NextRequest) {
       .from('journal_entries')
       .select('*')
       .eq('user_id', userId)
+      .or('is_draft.is.null,is_draft.eq.false')
       .order('trade_date', { ascending: false })
       .limit(limit)
 
@@ -364,7 +351,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: entries || [],
+      data: sanitizeJournalEntries(entries || []),
       streaks: streaks || {
         current_streak: 0,
         longest_streak: 0,
@@ -392,7 +379,10 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    }
     const payload = normalizeJournalWritePayload(body, 'create')
     const symbol = typeof payload.symbol === 'string' ? payload.symbol : ''
     if (!symbol || !symbol.trim()) {
@@ -422,7 +412,7 @@ export async function POST(request: NextRequest) {
       typeof payload.trade_date === 'string' ? payload.trade_date : undefined,
     )
 
-    return NextResponse.json({ success: true, data: entry })
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(entry, 'new-entry') })
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -443,7 +433,10 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    }
     const { id, ...rawUpdates } = body
 
     if (!id) {
@@ -484,7 +477,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, data: data[0] })
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(data[0], 'updated-entry') })
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -604,6 +597,7 @@ async function recalculateStreaks(
     .from('journal_entries')
     .select('trade_date, is_winner')
     .eq('user_id', userId)
+    .or('is_draft.is.null,is_draft.eq.false')
     .order('trade_date', { ascending: true })
 
   if (!entries || entries.length === 0) {

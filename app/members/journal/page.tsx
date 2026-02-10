@@ -16,7 +16,6 @@ import { JournalTableView } from '@/components/journal/journal-table-view'
 import { JournalCardView } from '@/components/journal/journal-card-view'
 import { OpenPositionsWidget } from '@/components/journal/open-positions-widget'
 import { ImportWizard } from '@/components/journal/import-wizard'
-import { DraftEntriesPanel } from '@/components/journal/draft-entries-panel'
 import { JournalPwaPrompt } from '@/components/journal/journal-pwa-prompt'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
@@ -41,15 +40,31 @@ import {
   writeCachedJournalEntries,
   writeOfflineJournalMutations,
 } from '@/lib/journal/offline-storage'
+import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
+
+function normalizeDateKey(value: string | null | undefined): string | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return null
+  return new Date(parsed).toISOString().split('T')[0]
+}
 
 function applyFilters(entries: JournalEntry[], filters: JournalFilters): JournalEntry[] {
   let filtered = [...entries]
+  const filterFrom = normalizeDateKey(filters.dateRange.from)
+  const filterTo = normalizeDateKey(filters.dateRange.to)
 
-  if (filters.dateRange.from) {
-    filtered = filtered.filter((entry) => entry.trade_date >= filters.dateRange.from!)
+  if (filterFrom) {
+    filtered = filtered.filter((entry) => {
+      const entryDate = normalizeDateKey(entry.trade_date)
+      return entryDate ? entryDate >= filterFrom : false
+    })
   }
-  if (filters.dateRange.to) {
-    filtered = filtered.filter((entry) => entry.trade_date.split('T')[0] <= filters.dateRange.to!)
+  if (filterTo) {
+    filtered = filtered.filter((entry) => {
+      const entryDate = normalizeDateKey(entry.trade_date)
+      return entryDate ? entryDate <= filterTo : false
+    })
   }
 
   if (filters.symbol) {
@@ -73,7 +88,9 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
 
   if (filters.tags.length > 0) {
     filtered = filtered.filter((entry) => (
-      filters.tags.some((tag) => entry.tags.includes(tag) || entry.smart_tags.includes(tag))
+      filters.tags.some((tag) => (
+        entry.tags?.includes(tag) || entry.smart_tags?.includes(tag)
+      ))
     ))
   }
 
@@ -278,9 +295,10 @@ export default function JournalPage() {
         throw createAppError('Journal response format was invalid.')
       }
 
-      const mergedEntries = mergeServerEntriesWithPendingOffline(result.data)
+      const sanitizedEntries = sanitizeJournalEntries(result.data)
+      const mergedEntries = mergeServerEntriesWithPendingOffline(sanitizedEntries)
       setEntries(mergedEntries)
-      writeCachedJournalEntries(result.data)
+      writeCachedJournalEntries(sanitizedEntries)
       setShowingCachedEntries(false)
       setOfflineQueueCount(getOfflineMutationCount())
       succeeded = true
@@ -454,17 +472,18 @@ export default function JournalPage() {
     if (!result.success || !result.data) {
       throw createAppError('Journal save did not return entry data.')
     }
+    const sanitizedSavedEntry = sanitizeJournalEntry(result.data, 'saved-entry')
 
     if (!data.id) {
       fetch('/api/members/journal/enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entryId: result.data.id }),
+        body: JSON.stringify({ entryId: sanitizedSavedEntry.id }),
       })
         .then(() => fetch('/api/members/journal/grade', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entryId: result.data.id }),
+          body: JSON.stringify({ entryId: sanitizedSavedEntry.id }),
         }))
         .catch((error) => {
           console.error('[Journal] Enrichment/grading failed:', error)
@@ -472,7 +491,7 @@ export default function JournalPage() {
     }
 
     await loadEntries()
-    return result.data as JournalEntry
+    return sanitizedSavedEntry
   }, [entries, loadEntries])
 
   const handleDelete = useCallback(async (entryId: string) => {
@@ -721,7 +740,6 @@ export default function JournalPage() {
       <JournalSummaryStats entries={filteredEntries} />
 
       <OpenPositionsWidget onUpdated={() => { void loadEntries() }} />
-      <DraftEntriesPanel onUpdated={() => { void loadEntries() }} />
       <JournalPwaPrompt />
       <ImportWizard onImported={() => { void loadEntries() }} />
 

@@ -1,4 +1,5 @@
 import type { JournalEntry } from '@/lib/types/journal'
+import { sanitizeJournalEntries } from '@/lib/journal/sanitize-entry'
 
 const JOURNAL_CACHE_KEY = 'journal-cache-v1'
 const JOURNAL_MUTATION_QUEUE_KEY = 'journal-offline-mutations-v1'
@@ -94,14 +95,15 @@ export function readCachedJournalEntries(): JournalEntry[] {
   )
 
   if (!parsed || !Array.isArray(parsed.entries)) return []
-  return parsed.entries
+  return sanitizeJournalEntries(parsed.entries)
 }
 
 export function writeCachedJournalEntries(entries: JournalEntry[]): void {
   if (!isBrowser()) return
+  const sanitized = sanitizeJournalEntries(entries)
   const payload: CachedJournalEntries = {
     saved_at: new Date().toISOString(),
-    entries: entries.slice(0, MAX_CACHE_ENTRIES),
+    entries: sanitized.slice(0, MAX_CACHE_ENTRIES),
   }
   window.localStorage.setItem(JOURNAL_CACHE_KEY, JSON.stringify(payload))
 }
@@ -230,14 +232,15 @@ export function buildOptimisticEntryFromMutation(mutation: OfflineJournalMutatio
 }
 
 export function mergeServerEntriesWithPendingOffline(serverEntries: JournalEntry[]): JournalEntry[] {
+  const sanitizedServerEntries = sanitizeJournalEntries(serverEntries)
   const pendingEntries = getPendingOfflineJournalEntries()
-  if (pendingEntries.length === 0) return serverEntries
+  if (pendingEntries.length === 0) return sanitizedServerEntries
 
   const dedupe = new Map<string, JournalEntry>()
   for (const pendingEntry of pendingEntries) {
     dedupe.set(pendingEntry.id, pendingEntry)
   }
-  for (const entry of serverEntries) {
+  for (const entry of sanitizedServerEntries) {
     dedupe.set(entry.id, entry)
   }
 

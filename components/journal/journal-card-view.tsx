@@ -14,7 +14,9 @@ const RIGHT_SWIPE_FAVORITE_THRESHOLD = 72
 const MAX_RIGHT_SWIPE_DISTANCE = 88
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const parsed = new Date(dateStr)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function formatCurrency(val: number | null): string {
@@ -189,6 +191,7 @@ export function JournalCardView({
         const isWinner = (entry.pnl ?? 0) > 0
         const isLoss = (entry.pnl ?? 0) < 0
         const grade = entry.ai_analysis?.grade
+        const tags = Array.isArray(entry.tags) ? entry.tags : []
         const hasScreenshot = !!(entry.screenshot_url || entry.screenshot_storage_path)
         const isVerified = entry.verification?.isVerified
         const isFavorite = Boolean(entry.is_favorite)
@@ -339,7 +342,7 @@ export function JournalCardView({
                   </div>
                 )}
                 <div className="ml-auto flex flex-wrap justify-end gap-1">
-                  {entry.tags.slice(0, 2).map((tag) => (
+                  {tags.slice(0, 2).map((tag) => (
                     <span key={tag} className="rounded-full bg-white/[0.05] px-1.5 py-0.5 text-[9px] text-muted-foreground">{tag}</span>
                   ))}
                 </div>

@@ -5,7 +5,9 @@ import { cn } from '@/lib/utils'
 import type { JournalEntry } from '@/lib/types/journal'
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const parsed = new Date(dateStr)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function formatCurrency(val: number | null): string {
@@ -61,6 +63,7 @@ export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDelete
               const isWinner = (entry.pnl ?? 0) > 0
               const isLoss = (entry.pnl ?? 0) < 0
               const grade = entry.ai_analysis?.grade
+              const tags = Array.isArray(entry.tags) ? entry.tags : []
 
               return (
                 <tr
@@ -138,10 +141,10 @@ export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDelete
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1 max-w-[150px]">
-                      {entry.tags.slice(0, 2).map(tag => (
+                      {tags.slice(0, 2).map(tag => (
                         <span key={tag} className="px-1.5 py-0.5 text-[9px] rounded-full bg-white/[0.05] text-muted-foreground">{tag}</span>
                       ))}
-                      {entry.tags.length > 2 && <span className="text-[9px] text-muted-foreground">+{entry.tags.length - 2}</span>}
+                      {tags.length > 2 && <span className="text-[9px] text-muted-foreground">+{tags.length - 2}</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">

@@ -19,6 +19,30 @@ interface OpenPositionsWidgetProps {
   onUpdated?: () => void
 }
 
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function sanitizeOpenPositions(raw: unknown): OpenPosition[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((entry, index) => {
+    const record = typeof entry === 'object' && entry !== null ? entry as Record<string, unknown> : {}
+    const direction = record.direction === 'short' || record.direction === 'neutral' ? record.direction : 'long'
+    return {
+      id: typeof record.id === 'string' && record.id.trim().length > 0 ? record.id : `open-${index + 1}`,
+      symbol: typeof record.symbol === 'string' && record.symbol.trim().length > 0 ? record.symbol.toUpperCase() : 'UNKNOWN',
+      direction,
+      entry_price: toNumber(record.entry_price),
+      position_size: toNumber(record.position_size),
+      current_price: toNumber(record.current_price),
+      live_pnl: toNumber(record.live_pnl),
+      live_pnl_percentage: toNumber(record.live_pnl_percentage),
+    }
+  })
+}
+
 function formatCurrency(value: number | null): string {
   if (value == null) return '—'
   const prefix = value >= 0 ? '+$' : '-$'
@@ -42,7 +66,7 @@ export function OpenPositionsWidget({ onUpdated }: OpenPositionsWidgetProps) {
         throw await createAppErrorFromResponse(response)
       }
       const result = await response.json()
-      setPositions(Array.isArray(result.data) ? result.data : [])
+      setPositions(sanitizeOpenPositions(result.data))
     } catch (error) {
       notifyAppError(createAppError(error), { retryLabel: 'Refresh' })
     } finally {

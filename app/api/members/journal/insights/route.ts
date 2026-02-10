@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       .from('journal_entries')
       .select('symbol,direction,pnl,trade_date,strategy,mfe_percent,mae_percent')
       .eq('user_id', userId)
+      .or('is_draft.is.null,is_draft.eq.false')
       .order('trade_date', { ascending: false })
       .limit(500)
 

@@ -5,6 +5,7 @@ import { FileClock, Check, X, Loader2 } from 'lucide-react'
 import type { JournalEntry } from '@/lib/types/journal'
 import { toast } from 'sonner'
 import { createAppError, createAppErrorFromResponse, notifyAppError } from '@/lib/error-handler'
+import { sanitizeJournalEntries } from '@/lib/journal/sanitize-entry'
 
 interface DraftEntriesPanelProps {
   onUpdated?: () => void
@@ -66,7 +67,7 @@ export function DraftEntriesPanel({ onUpdated }: DraftEntriesPanelProps) {
       const response = await fetch('/api/members/journal/drafts?status=pending&limit=20', { cache: 'no-store' })
       if (!response.ok) throw await createAppErrorFromResponse(response)
       const result = await response.json()
-      setDrafts(Array.isArray(result.data) ? result.data : [])
+      setDrafts(sanitizeJournalEntries(result.data))
 
       const nextNotice = result?.notification
       if (nextNotice && typeof nextNotice.id === 'string' && typeof nextNotice.message === 'string') {

@@ -329,10 +329,9 @@ test.describe('Trade Journal Feature Flows', () => {
 
     await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Open Positions' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Pending Draft Entries' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'CSV Import Wizard' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Log Trade' }).click()
+    await page.getByRole('button', { name: /Log/i }).first().click()
     await expect(page.getByRole('heading', { name: 'Log Trade' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save & Add Details' })).toBeVisible()
 
@@ -355,8 +354,8 @@ test.describe('Trade Journal Feature Flows', () => {
     await page.goto('/members/journal/analytics', { timeout: 30000 })
 
     await expect(page.getByRole('heading', { name: 'Journal Analytics', level: 1 })).toBeVisible()
-    await expect(page.getByText('Win Rate')).toBeVisible()
-    await expect(page.getByText('Expectancy')).toBeVisible()
+    await expect(page.getByText('Win Rate', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Expectancy', { exact: true }).first()).toBeVisible()
     await page.getByRole('button', { name: 'Risk' }).click()
     await expect(page.getByText('R-Multiple Distribution')).toBeVisible()
     await expect(page.getByText('ORB Breakout')).toBeVisible()
