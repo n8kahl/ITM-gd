@@ -4,6 +4,7 @@ const nextConfig = {
     // SECURITY: Never ignore build errors in production
     // ignoreBuildErrors: false, // default
   },
+  serverExternalPackages: ['@resvg/resvg-js'],
   images: {
     // Enable Next.js image optimization for better mobile performance
     remotePatterns: [

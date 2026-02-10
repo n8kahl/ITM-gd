@@ -9,6 +9,23 @@ function getSupabaseAdmin() {
   )
 }
 
+function normalizeCourseRelation(
+  value: unknown
+): { title?: string; slug?: string } | null {
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return first && typeof first === 'object'
+      ? (first as { title?: string; slug?: string })
+      : null
+  }
+
+  if (value && typeof value === 'object') {
+    return value as { title?: string; slug?: string }
+  }
+
+  return null
+}
+
 /**
  * GET /api/admin/academy/analytics
  * Admin only. Learning analytics: completion rates, quiz scores,
@@ -121,7 +138,7 @@ export async function GET(request: NextRequest) {
     for (const entry of topCoursesResult.data || []) {
       const id = entry.course_id
       const existing = courseCounts.get(id)
-      const courseInfo = entry.courses as { title: string; slug: string } | null
+      const courseInfo = normalizeCourseRelation(entry.courses)
       if (existing) {
         existing.count++
       } else {

@@ -54,6 +54,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const lessonCourse = (lesson as {
+      courses?: { title?: string } | Array<{ title?: string }> | null
+    }).courses
+    const courseTitle = Array.isArray(lessonCourse)
+      ? lessonCourse[0]?.title || null
+      : lessonCourse?.title || null
+
     // Check rate limiting: max 10 sessions per day per user
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
@@ -83,7 +90,7 @@ export async function POST(request: NextRequest) {
           lesson_id: lesson.id,
           lesson_title: lesson.title,
           course_id: lesson.course_id,
-          course_title: (lesson.courses as { title: string })?.title || null,
+          course_title: courseTitle,
           initial_question: initial_question || null,
         },
         context: {

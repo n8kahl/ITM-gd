@@ -10,6 +10,19 @@ function getAccessibleTiers(userTier: string): string[] {
     .map(([tier]) => tier)
 }
 
+function getCourseTierFromRelation(value: unknown): string {
+  if (Array.isArray(value)) {
+    const first = value[0] as { tier_required?: string } | undefined
+    return first?.tier_required || 'core'
+  }
+
+  if (value && typeof value === 'object') {
+    return ((value as { tier_required?: string }).tier_required) || 'core'
+  }
+
+  return 'core'
+}
+
 /**
  * GET /api/academy/recommendations
  * Get next-lesson recommendations based on user progress and learning path.
@@ -78,7 +91,7 @@ export async function GET(request: NextRequest) {
         .limit(2)
 
       for (const lesson of inProgressLessons || []) {
-        const courseTier = (lesson.courses as { tier_required?: string })?.tier_required || 'core'
+        const courseTier = getCourseTierFromRelation(lesson.courses)
         if (accessibleTiers.includes(courseTier)) {
           recommendations.push({
             lesson,
@@ -111,7 +124,7 @@ export async function GET(request: NextRequest) {
           if (recommendations.length >= 5) break
           if (completedLessonIds.has(lesson.id) || inProgressLessonIds.has(lesson.id)) continue
 
-          const courseTier = (lesson.courses as { tier_required?: string })?.tier_required || 'core'
+          const courseTier = getCourseTierFromRelation(lesson.courses)
           if (accessibleTiers.includes(courseTier)) {
             recommendations.push({
               lesson,
@@ -143,7 +156,7 @@ export async function GET(request: NextRequest) {
         if (recommendations.length >= 5) break
         if (excludeIds.includes(lesson.id)) continue
 
-        const courseTier = (lesson.courses as { tier_required?: string })?.tier_required || 'core'
+        const courseTier = getCourseTierFromRelation(lesson.courses)
         if (accessibleTiers.includes(courseTier)) {
           recommendations.push({
             lesson,

@@ -126,8 +126,18 @@ export async function POST(request: NextRequest) {
         : 0
 
     const coursesCompletedList = (completedCourses || [])
-      .map((cp: { courses: { title: string } | null }) => cp.courses?.title)
-      .filter(Boolean) as string[]
+      .map((cp) => {
+        const courses = (cp as {
+          courses?: { title?: string } | Array<{ title?: string }> | null
+        }).courses
+
+        if (Array.isArray(courses)) {
+          return courses[0]?.title
+        }
+
+        return courses?.title
+      })
+      .filter((title): title is string => typeof title === 'string' && title.length > 0)
 
     const memberName =
       profile?.display_name ||
