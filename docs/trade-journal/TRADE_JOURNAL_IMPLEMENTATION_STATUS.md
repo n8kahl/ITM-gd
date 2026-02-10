@@ -121,7 +121,7 @@ Branch: `codex/trade-journal-implementation`
   - `components/journal/trade-replay-chart.tsx`
   - `lib/types/journal.ts`
 
-### Phase 7 - Mobile & Accessibility (Partial)
+### Phase 7 - Mobile & Accessibility
 - [x] Mobile quick-entry FAB + bottom-sheet modal pattern for journal sheets
   - `app/members/journal/page.tsx`
   - `components/journal/trade-entry-sheet.tsx`
@@ -131,6 +131,26 @@ Branch: `codex/trade-journal-implementation`
   - `hooks/use-focus-trap.ts`
   - `components/journal/trade-entry-sheet.tsx`
   - `components/journal/entry-detail-sheet.tsx`
+- [x] Swipe gestures, favorites, and pull-to-refresh on mobile journal cards
+  - `components/journal/journal-card-view.tsx`
+  - `app/members/journal/page.tsx`
+  - `supabase/migrations/20260310000000_journal_phase7_mobile_favorites.sql`
+- [x] Offline journal cache + queued trade sync on reconnect
+  - `lib/journal/offline-storage.ts`
+  - `app/members/journal/page.tsx`
+- [x] Broader keyboard/ARIA/focus-visible/reduced-motion hardening
+  - `app/members/layout.tsx`
+  - `components/journal/journal-filter-bar.tsx`
+  - `components/journal/journal-table-view.tsx`
+  - `components/journal/trade-replay-chart.tsx`
+  - `components/journal/quick-entry-form.tsx`
+  - `components/journal/full-entry-form.tsx`
+- [x] PWA enhancements (service-worker journal caching + install prompt + push subscription UX)
+  - `public/sw.js`
+  - `components/journal/journal-pwa-prompt.tsx`
+  - `lib/notifications.ts`
+  - `app/api/members/journal/push-subscriptions/route.ts`
+  - `supabase/migrations/20260310010000_push_subscriptions.sql`
 
 ## Implemented
 - Advanced analytics service with fallback calculations and chart-ready payloads.
@@ -148,29 +168,33 @@ Branch: `codex/trade-journal-implementation`
 - Trade replay upgrades: skip-to-entry/exit controls, live P&L ticker, stop/target overlays, and MFE/MAE markers.
 - End-of-day auto-journal endpoint plus in-app post-close draft detection and pending-draft expiry auto-dismiss.
 - Server-side 4:05 PM ET auto-journal worker now writes canonical `journal_entries` drafts and emits in-app review notices.
-- Accessibility hardening in journal modals: focus-trap behavior, Escape close, and dialog semantics.
-- Mobile-first journal improvements: floating quick-entry FAB and bottom-sheet behavior on small screens.
+- Server-side auto-journal now also supports optional web-push delivery (when VAPID keys + user subscriptions are configured).
+- Accessibility hardening expanded across journal surfaces: keyboard row/card activation, focus-visible styling, ARIA labels, aria-live announcements, and reduced-motion fallbacks.
+- Mobile-first journal improvements now include swipe actions (Edit/Delete/Share), swipe-right favorite marking, pull-to-refresh, and persistent favorites.
+- Offline/PWA behavior now includes local journal cache fallback, queued offline trade saves with reconnect sync, service-worker caching for journal API traffic, and a custom install prompt after the third visit.
 
 ## Remaining
-- Optional web-push transport for auto-journal notices is not wired yet (in-app notification delivery is implemented).
-- Phase 7 still needs swipe gestures, offline/PWA sync flow, and broader WCAG hardening beyond journal sheets.
+- No outstanding implementation items remain for the Trade Journal spec scope in `docs/TITM_TRADE_JOURNAL_SPEC_V1.md`.
 
 ## Risks
 - `journal_analytics_cache` is refreshed by trigger on every write; this is simple but can become expensive at higher write throughput.
 - CSV parsing in UI is intentionally lightweight and does not fully support complex quoted CSV edge cases.
 - Options-chain enrichment currently performs lightweight contract parsing; full Greeks/IV chain hydration depends on expanding enrichment providers and rate-limit strategy.
+- Web-push delivery is gated by environment setup (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and `NEXT_PUBLIC_VAPID_PUBLIC_KEY`); without these keys the system degrades to in-app notifications only.
 
 ## Next Steps
 1. Add async/background jobs for grading, import enrichment queues, and weekly behavioral insight generation.
 2. Replace synchronous materialized view refresh trigger with queued refresh/job scheduling.
 3. Complete remaining Phase 6 polish on replay side-panel context/notes coupling.
-4. Complete Phase 7 accessibility/mobile/PWA hardening.
-5. Optionally add web-push transport for journal notifications (current in-app alert path is production-ready).
+4. Add ops monitoring for offline queue sync failures and web-push delivery failure rates.
 
 ## Migration Notes
 - Apply migration:
   - `supabase/migrations/20260307000000_trade_journal_spec_phase2_7.sql`
   - `supabase/migrations/20260308000000_journal_notifications.sql`
+  - `supabase/migrations/20260310000000_journal_phase7_mobile_favorites.sql`
+  - `supabase/migrations/20260310010000_push_subscriptions.sql`
 - This migration adds journal columns, new tables (`playbooks`, `ai_behavioral_insights`, `import_history`), materialized view `journal_analytics_cache`, trigger-based refresh, RPC `get_advanced_analytics`, and `dashboard_layout` on `ai_coach_user_preferences`.
 - The journal notification migration adds `journal_notifications` for server-generated in-app notices (auto-journal ready prompts) with RLS and unread indexing.
+- The mobile/PWA migrations add persistent `journal_entries.is_favorite` plus the `push_subscriptions` table and policies for browser push delivery.
 - Post-deploy recommendation: validate trigger overhead in staging under write load and monitor refresh latency.
