@@ -1,4 +1,7 @@
+import { validateEnv } from '@/lib/env-validation'
+
 export async function register() {
+  validateEnv()
   // Sentry is intentionally disabled in this environment.
 }
 
