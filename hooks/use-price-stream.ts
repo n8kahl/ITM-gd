@@ -38,8 +38,9 @@ interface PriceStreamState {
  *
  * @param symbols - Array of symbols to subscribe to (e.g. ['SPX', 'NDX'])
  * @param enabled - Whether the connection should be active
+ * @param token - Supabase JWT used to authenticate websocket connection
  */
-export function usePriceStream(symbols: string[], enabled: boolean = true) {
+export function usePriceStream(symbols: string[], enabled: boolean = true, token?: string | null) {
   const [state, setState] = useState<PriceStreamState>({
     prices: new Map(),
     marketStatus: null,
@@ -50,23 +51,31 @@ export function usePriceStream(symbols: string[], enabled: boolean = true) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const connectRef = useRef<() => void>(() => {})
   const symbolsRef = useRef(symbols)
-  symbolsRef.current = symbols
+
+  useEffect(() => {
+    symbolsRef.current = symbols
+  }, [symbols])
 
   const connect = useCallback(() => {
-    if (!enabled) return
+    if (!enabled || !token) return
 
     // Build WebSocket URL from current location
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || ''
+    const backendUrl = process.env.NEXT_PUBLIC_AI_COACH_API_URL || process.env.NEXT_PUBLIC_API_URL || ''
     let wsUrl: string
 
     if (backendUrl) {
       // Use configured backend URL
       const url = new URL(backendUrl)
-      wsUrl = `${protocol}//${url.host}/ws/prices`
+      const parsedWsUrl = new URL(`${protocol}//${url.host}/ws/prices`)
+      parsedWsUrl.searchParams.set('token', token)
+      wsUrl = parsedWsUrl.toString()
     } else {
-      wsUrl = `${protocol}//${window.location.host}/ws/prices`
+      const parsedWsUrl = new URL(`${protocol}//${window.location.host}/ws/prices`)
+      parsedWsUrl.searchParams.set('token', token)
+      wsUrl = parsedWsUrl.toString()
     }
 
     try {
@@ -124,7 +133,7 @@ export function usePriceStream(symbols: string[], enabled: boolean = true) {
         if (enabled) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000)
           reconnectAttemptRef.current++
-          reconnectTimerRef.current = setTimeout(connect, delay)
+          reconnectTimerRef.current = setTimeout(() => connectRef.current(), delay)
         }
       }
 
@@ -134,15 +143,30 @@ export function usePriceStream(symbols: string[], enabled: boolean = true) {
     } catch {
       setState(prev => ({ ...prev, error: 'Failed to create WebSocket connection' }))
     }
-  }, [enabled])
+  }, [enabled, token])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   // Connect/disconnect based on enabled flag
   useEffect(() => {
-    if (enabled) {
-      connect()
+    let deferredAction: ReturnType<typeof setTimeout> | null = null
+
+    if (enabled && token) {
+      deferredAction = setTimeout(() => {
+        connect()
+      }, 0)
+    } else if (enabled && !token) {
+      deferredAction = setTimeout(() => {
+        setState(prev => ({ ...prev, isConnected: false, error: 'Authentication required for live stream' }))
+      }, 0)
     }
 
     return () => {
+      if (deferredAction) {
+        clearTimeout(deferredAction)
+      }
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)
       }
@@ -151,7 +175,7 @@ export function usePriceStream(symbols: string[], enabled: boolean = true) {
         wsRef.current = null
       }
     }
-  }, [enabled, connect])
+  }, [enabled, token, connect])
 
   // Update subscriptions when symbols change
   useEffect(() => {

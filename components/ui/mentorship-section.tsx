@@ -168,7 +168,7 @@ export function MentorshipSection() {
               <div className="h-full p-6 rounded-xl bg-[rgba(10,10,11,0.5)] border border-champagne/20">
                 <div className="flex items-center gap-2 mb-5">
                   <span className="text-xl">📦</span>
-                  <h3 className="text-lg font-semibold text-ivory">What's Included</h3>
+                  <h3 className="text-lg font-semibold text-ivory">What&apos;s Included</h3>
                 </div>
 
                 <div className="space-y-4">

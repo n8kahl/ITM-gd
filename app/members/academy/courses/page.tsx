@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
-import { GraduationCap } from 'lucide-react'
+import { GraduationCap, Sparkles } from 'lucide-react'
 import { CourseCatalog } from '@/components/academy/course-catalog'
 import type { CourseCardData } from '@/components/academy/course-card'
 
@@ -80,13 +80,20 @@ export default function CoursesPage() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
+      <div className="rounded-2xl border border-white/10 bg-[#0A0A0B]/60 backdrop-blur-xl p-5">
+        <div className="flex items-center gap-2 mb-2">
           <GraduationCap className="w-5 h-5 text-emerald-400" />
-          <h1 className="text-xl font-semibold text-white">Course Catalog</h1>
+          <h1 className="text-xl font-semibold text-white">Training Library</h1>
+          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+            <Sparkles className="w-3 h-3" />
+            Competency Based
+          </span>
         </div>
-        <p className="text-sm text-white/50">
-          Browse our complete library of trading courses. Filter by learning path or difficulty.
+        <p className="text-sm text-white/60">
+          Browse all courses, launch micro-learning modules, and resume in-progress training from one place.
+        </p>
+        <p className="text-xs text-white/40 mt-2">
+          {courses.length} total courses loaded
         </p>
       </div>
 

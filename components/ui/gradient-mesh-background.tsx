@@ -20,14 +20,7 @@ function useIsMobile() {
 }
 
 export function GradientMeshBackground() {
-  const [mounted, setMounted] = useState(false);
   const isMobile = useIsMobile();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
 
   // Reduced blur values for mobile performance
   const blurOrb1 = isMobile ? "blur(25px)" : "blur(60px)";

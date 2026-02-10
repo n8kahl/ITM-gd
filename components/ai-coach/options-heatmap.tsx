@@ -143,19 +143,16 @@ export function OptionsHeatmap({
     return matrix.cells.reduce((max, cell) => Math.max(max, getMetric(cell, mode)), 0)
   }, [matrix, mode])
 
-  useEffect(() => {
+  const defaultCenterRow = useMemo(() => {
     if (!matrix || sortedStrikesDesc.length === 0) {
-      setCenterRow(null)
-      return
+      return null
     }
 
-    const closestRow = sortedStrikesDesc.reduce((bestIdx, strike, idx) => {
+    return sortedStrikesDesc.reduce((bestIdx, strike, idx) => {
       const prevDiff = Math.abs(sortedStrikesDesc[bestIdx] - matrix.currentPrice)
       const currDiff = Math.abs(strike - matrix.currentPrice)
       return currDiff < prevDiff ? idx : bestIdx
     }, 0)
-
-    setCenterRow((prev) => prev ?? closestRow)
   }, [matrix, sortedStrikesDesc])
 
   useEffect(() => {
@@ -195,7 +192,7 @@ export function OptionsHeatmap({
 
       const rowsTotal = sortedStrikesDesc.length
       const visibleRows = Math.max(12, Math.min(rowsTotal, Math.floor(rowsTotal / zoom)))
-      const effectiveCenter = centerRow == null ? Math.floor(rowsTotal / 2) : centerRow
+      const effectiveCenter = centerRow ?? defaultCenterRow ?? Math.floor(rowsTotal / 2)
       const half = Math.floor(visibleRows / 2)
       const startRow = Math.max(0, Math.min(rowsTotal - visibleRows, effectiveCenter - half))
       const visibleStrikes = sortedStrikesDesc.slice(startRow, startRow + visibleRows)
@@ -275,7 +272,7 @@ export function OptionsHeatmap({
     const resizeObserver = new ResizeObserver(draw)
     resizeObserver.observe(container)
     return () => resizeObserver.disconnect()
-  }, [matrix, cellMap, mode, maxMetricAbs, zoom, centerRow, sortedStrikesDesc])
+  }, [matrix, cellMap, mode, maxMetricAbs, zoom, centerRow, defaultCenterRow, sortedStrikesDesc])
 
   const resolveCellFromPoint = (x: number, y: number): { cell: OptionsMatrixCell | null; rowGlobal: number | null } => {
     const renderState = renderStateRef.current

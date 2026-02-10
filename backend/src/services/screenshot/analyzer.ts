@@ -7,7 +7,7 @@ import { openaiClient } from '../../config/openai';
 
 export interface ExtractedPosition {
   symbol: string;
-  type: 'call' | 'put' | 'call_spread' | 'put_spread' | 'stock';
+  type: 'call' | 'put' | 'stock';
   strike?: number;
   expiry?: string;
   quantity: number;
@@ -29,7 +29,7 @@ const EXTRACTION_PROMPT = `You are an expert at reading trading platform screens
 
 For each position found, provide:
 - symbol: The underlying symbol (e.g., SPX, NDX, AAPL)
-- type: "call", "put", "call_spread", "put_spread", or "stock"
+- type: "call", "put", or "stock"
 - strike: Strike price (if options)
 - expiry: Expiration date in YYYY-MM-DD format (if options)
 - quantity: Number of contracts (positive = long, negative = short)
@@ -95,11 +95,11 @@ export async function analyzeScreenshot(
     const parsed = JSON.parse(jsonStr);
 
     // Validate and sanitize
-    const positions: ExtractedPosition[] = (parsed.positions || []).map((p: any) => ({
-      symbol: String(p.symbol || '').toUpperCase(),
-      type: ['call', 'put', 'call_spread', 'put_spread', 'stock'].includes(p.type)
-        ? p.type
-        : 'call',
+      const positions: ExtractedPosition[] = (parsed.positions || []).map((p: any) => ({
+        symbol: String(p.symbol || '').toUpperCase(),
+        type: ['call', 'put', 'stock'].includes(p.type)
+          ? p.type
+          : 'call',
       strike: p.strike ? Number(p.strike) : undefined,
       expiry: p.expiry || undefined,
       quantity: Number(p.quantity) || 1,

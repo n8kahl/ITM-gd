@@ -5,7 +5,7 @@ import { fetchOptionsChain } from '../options/optionsChainFetcher';
  */
 
 export interface OptionsSetup {
-  type: 'high_iv' | 'unusual_activity' | 'iv_crush' | 'high_prob_spread';
+  type: 'high_iv' | 'unusual_activity' | 'iv_crush';
   symbol: string;
   direction: 'bullish' | 'bearish' | 'neutral';
   confidence: number; // 0-1
@@ -25,7 +25,7 @@ export interface OptionsSetup {
 }
 
 /**
- * Scan for high implied volatility (good for selling premium)
+ * Scan for high implied volatility (use with caution for long premium)
  */
 export async function scanHighIV(symbol: string): Promise<OptionsSetup | null> {
   try {
@@ -47,9 +47,9 @@ export async function scanHighIV(symbol: string): Promise<OptionsSetup | null> {
     const ivPct = (avgIV * 100).toFixed(1);
     const confidence = Math.min(0.85, 0.4 + (avgIV - 0.25) * 2);
 
-    // Suggest iron condor for high IV
-    const callStrike = Math.ceil(chain.currentPrice * 1.02 / 5) * 5;
-    const putStrike = Math.floor(chain.currentPrice * 0.98 / 5) * 5;
+    // TITM only trades single-leg options and stock.
+    // When IV is elevated we still surface the signal, but avoid spread/condor suggestions.
+    const nearestStrike = Math.round(chain.currentPrice / 5) * 5;
 
     return {
       type: 'high_iv',
@@ -57,14 +57,13 @@ export async function scanHighIV(symbol: string): Promise<OptionsSetup | null> {
       direction: 'neutral',
       confidence,
       currentPrice: chain.currentPrice,
-      description: `${symbol} ATM IV elevated at ${ivPct}% - favorable for premium selling`,
+      description: `${symbol} ATM IV elevated at ${ivPct}% - favor high-conviction directional setups with tighter risk`,
       suggestedTrade: {
-        strategy: 'Iron Condor',
-        strikes: [putStrike - 10, putStrike, callStrike, callStrike + 10],
+        strategy: 'Single-Leg Momentum Option',
+        strikes: [nearestStrike],
         expiry: chain.expiry,
-        maxProfit: 'Net credit received',
-        maxLoss: 'Width of spread minus credit',
-        probability: '>60%',
+        maxProfit: 'Manage with scaling/trailing stops',
+        maxLoss: 'Premium paid',
       },
       metadata: {
         avgIV: ivPct + '%',
@@ -126,70 +125,12 @@ export async function scanUnusualActivity(symbol: string): Promise<OptionsSetup 
 }
 
 /**
- * Scan for high-probability credit spread opportunities
- */
-export async function scanHighProbSpreads(symbol: string): Promise<OptionsSetup | null> {
-  try {
-    const chain = await fetchOptionsChain(symbol, undefined, 15);
-    if (!chain.options.puts.length || !chain.options.calls.length) return null;
-
-    // Look for OTM put spreads with delta < 0.20 (>80% probability)
-    const otmPuts = chain.options.puts
-      .filter(p => p.delta && Math.abs(p.delta) < 0.20 && Math.abs(p.delta) > 0.05)
-      .sort((a, b) => (b.strike) - (a.strike)); // highest strike first (closest to ATM)
-
-    if (otmPuts.length < 2) return null;
-
-    const shortPut = otmPuts[0]; // sell this
-    const longPut = chain.options.puts
-      .find(p => p.strike === shortPut.strike - 5 || p.strike === shortPut.strike - 10);
-
-    if (!longPut) return null;
-
-    const credit = (shortPut.bid - longPut.ask);
-    if (credit <= 0) return null;
-
-    const width = shortPut.strike - longPut.strike;
-    const maxLoss = width - credit;
-    const probability = shortPut.delta ? ((1 - Math.abs(shortPut.delta)) * 100).toFixed(0) : '80';
-
-    return {
-      type: 'high_prob_spread',
-      symbol,
-      direction: 'bullish',
-      confidence: 0.65,
-      currentPrice: chain.currentPrice,
-      description: `${symbol} bull put spread: sell $${shortPut.strike}/$${longPut.strike} for $${credit.toFixed(2)} credit (~${probability}% prob)`,
-      suggestedTrade: {
-        strategy: 'Bull Put Spread',
-        strikes: [longPut.strike, shortPut.strike],
-        expiry: chain.expiry,
-        estimatedCredit: credit,
-        maxProfit: `$${(credit * 100).toFixed(0)}`,
-        maxLoss: `$${(maxLoss * 100).toFixed(0)}`,
-        probability: probability + '%',
-      },
-      metadata: {
-        shortDelta: shortPut.delta?.toFixed(3),
-        shortIV: (shortPut.impliedVolatility * 100).toFixed(1) + '%',
-        daysToExpiry: chain.daysToExpiry,
-        creditReceived: credit.toFixed(2),
-        riskReward: (maxLoss / credit).toFixed(1),
-      },
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Run all options scanners for a symbol
  */
 export async function runOptionsScan(symbol: string): Promise<OptionsSetup[]> {
   const results = await Promise.allSettled([
     scanHighIV(symbol),
     scanUnusualActivity(symbol),
-    scanHighProbSpreads(symbol),
   ]);
 
   return results

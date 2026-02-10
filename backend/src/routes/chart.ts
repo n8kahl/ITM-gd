@@ -179,7 +179,8 @@ router.get(
   validateQuery(chartQuerySchema),
   async (req: Request, res: Response) => {
     try {
-      const symbol = req.params.symbol.toUpperCase();
+      const validatedParams = ((req as any).validatedParams || {}) as { symbol?: string };
+      const symbol = (validatedParams.symbol || req.params.symbol || '').toUpperCase();
       const validatedQuery = ((req as any).validatedQuery || {}) as {
         timeframe?: ChartTimeframe;
         bars?: number;
@@ -187,14 +188,6 @@ router.get(
       };
       const timeframe = validatedQuery.timeframe || '1D';
       const includeIndicators = validatedQuery.includeIndicators === true;
-
-      // Validate symbol format (1-10 uppercase letters)
-      if (!/^[A-Z]{1,10}$/.test(symbol)) {
-        return res.status(400).json({
-          error: 'Invalid symbol',
-          message: 'Symbol must be 1-10 uppercase letters'
-        });
-      }
 
       // Handle weekly/monthly via chart data service
       if (timeframe === '1W' || timeframe === '1M') {

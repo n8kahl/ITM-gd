@@ -1,113 +1,180 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-import {
-  toSafeErrorMessage,
-} from '@/lib/academy/api-utils'
+import { toSafeErrorMessage } from '@/lib/academy/api-utils'
 
-interface CourseRow {
+interface BaseCourseRow {
   id: string
   slug: string
   title: string
   description: string | null
   thumbnail_url: string | null
-  difficulty_level: 'beginner' | 'intermediate' | 'advanced'
-  tier_required: 'core' | 'pro' | 'executive'
-  estimated_hours: number | null
-  learning_path_id: string | null
+  updated_at?: string | null
 }
 
-function getPathName(course: CourseRow, pathNamesById: Map<string, string>): string {
-  if (!course.learning_path_id) {
-    return 'General'
+interface ExtendedCourseRow extends BaseCourseRow {
+  difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | null
+  estimated_hours?: number | null
+  learning_path_id?: string | null
+}
+
+interface LessonRow {
+  id: string
+  course_id: string
+  estimated_minutes?: number | null
+  duration_minutes?: number | null
+}
+
+const DIFFICULTY_VALUES = new Set(['beginner', 'intermediate', 'advanced'])
+
+function normalizeDifficulty(value: string | null | undefined): 'beginner' | 'intermediate' | 'advanced' {
+  if (value && DIFFICULTY_VALUES.has(value)) {
+    return value as 'beginner' | 'intermediate' | 'advanced'
   }
 
-  return pathNamesById.get(course.learning_path_id) || 'General'
+  return 'beginner'
+}
+
+function inferSkills(title: string, description: string): string[] {
+  const searchText = `${title} ${description}`.toLowerCase()
+  const skillMap: Array<{ key: string; label: string }> = [
+    { key: 'entry', label: 'Entry Validation' },
+    { key: 'risk', label: 'Risk Sizing' },
+    { key: 'manage', label: 'Trade Management' },
+    { key: 'exit', label: 'Exit Discipline' },
+    { key: 'journal', label: 'Review and Reflection' },
+    { key: 'greek', label: 'Options Greeks' },
+    { key: 'context', label: 'Market Context' },
+  ]
+
+  const matched = skillMap
+    .filter((item) => searchText.includes(item.key))
+    .map((item) => item.label)
+
+  return matched.length > 0 ? matched.slice(0, 3) : ['Execution Framework']
+}
+
+async function fetchLessonsWithFallback(
+  supabase: SupabaseClient,
+  courseIds: string[]
+) {
+  if (courseIds.length === 0) {
+    return { data: [] as LessonRow[], error: null }
+  }
+
+  const primary = await supabase
+    .from('lessons')
+    .select('id, course_id, estimated_minutes, duration_minutes')
+    .in('course_id', courseIds)
+
+  if (!primary.error) {
+    return { data: (primary.data || []) as LessonRow[], error: null }
+  }
+
+  const fallback = await supabase
+    .from('lessons')
+    .select('id, course_id, duration_minutes')
+    .in('course_id', courseIds)
+
+  return {
+    data: (fallback.data || []) as LessonRow[],
+    error: fallback.error,
+  }
 }
 
 /**
  * GET /api/academy/courses
- * Lists courses available to the member, including progress metadata.
+ * Lists courses for the member academy UI.
  */
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthenticatedUserFromRequest(request)
     if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     const { user, supabase } = auth
     const { searchParams } = new URL(request.url)
     const pathId = searchParams.get('path_id')
-    const difficulty = searchParams.get('difficulty')
+    const difficultyFilter = searchParams.get('difficulty')
 
-    let query = supabase
+    const extendedSelect = `
+      id,
+      slug,
+      title,
+      description,
+      thumbnail_url,
+      difficulty_level,
+      estimated_hours,
+      learning_path_id,
+      updated_at,
+      display_order
+    `
+
+    let rawCourses: ExtendedCourseRow[] = []
+    let extendedSchemaAvailable = true
+
+    let extendedQuery = supabase
       .from('courses')
-      .select(`
-        id,
-        slug,
-        title,
-        description,
-        thumbnail_url,
-        difficulty_level,
-        tier_required,
-        estimated_hours,
-        learning_path_id
-      `)
+      .select(extendedSelect)
       .eq('is_published', true)
       .order('display_order', { ascending: true })
 
-    if (difficulty && ['beginner', 'intermediate', 'advanced'].includes(difficulty)) {
-      query = query.eq('difficulty_level', difficulty)
+    if (difficultyFilter && DIFFICULTY_VALUES.has(difficultyFilter)) {
+      extendedQuery = extendedQuery.eq('difficulty_level', difficultyFilter)
     }
 
-    const { data: rawCourses, error: coursesError } = await query
-    if (coursesError) {
-      console.error('academy courses query failed', coursesError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to load courses' },
-        { status: 500 }
-      )
+    const extendedResult = await extendedQuery
+    if (!extendedResult.error) {
+      rawCourses = (extendedResult.data || []) as ExtendedCourseRow[]
+    } else {
+      extendedSchemaAvailable = false
+      const fallbackResult = await supabase
+        .from('courses')
+        .select('id, slug, title, description, thumbnail_url, updated_at, display_order')
+        .eq('is_published', true)
+        .order('display_order', { ascending: true })
+
+      if (fallbackResult.error) {
+        console.error('academy courses query failed', fallbackResult.error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to load courses' },
+          { status: 500 }
+        )
+      }
+
+      rawCourses = (fallbackResult.data || []) as ExtendedCourseRow[]
     }
 
-    let courses = (rawCourses || []) as CourseRow[]
-
-    if (pathId) {
-      const { data: pathMappings } = await supabase
-        .from('learning_path_courses')
-        .select('course_id')
-        .eq('learning_path_id', pathId)
-
-      const allowedCourseIds = new Set((pathMappings || []).map((mapping) => mapping.course_id))
-      courses = courses.filter((course) => allowedCourseIds.has(course.id))
+    let courses = rawCourses
+    if (pathId && extendedSchemaAvailable) {
+      courses = courses.filter((course) => course.learning_path_id === pathId)
+    }
+    if (difficultyFilter && DIFFICULTY_VALUES.has(difficultyFilter) && !extendedSchemaAvailable) {
+      courses = courses.filter((course) => normalizeDifficulty(course.difficulty_level) === difficultyFilter)
     }
 
     const learningPathIds = Array.from(
-      new Set(courses.map((course) => course.learning_path_id).filter((value): value is string => !!value))
+      new Set(courses.map((course) => course.learning_path_id).filter((value): value is string => Boolean(value)))
     )
 
-    const { data: learningPaths } = learningPathIds.length > 0
-      ? await supabase
-          .from('learning_paths')
-          .select('id, name')
-          .in('id', learningPathIds)
-      : { data: [] as Array<{ id: string; name: string | null }> }
+    let pathNamesById = new Map<string, string>()
+    if (learningPathIds.length > 0) {
+      const learningPathResult = await supabase
+        .from('learning_paths')
+        .select('id, name')
+        .in('id', learningPathIds)
 
-    const pathNamesById = new Map(
-      (learningPaths || []).map((row) => [row.id, row.name || 'General'])
-    )
+      if (!learningPathResult.error) {
+        pathNamesById = new Map(
+          (learningPathResult.data || []).map((row) => [row.id, row.name || 'General'])
+        )
+      }
+    }
 
     const courseIds = courses.map((course) => course.id)
-
     const [lessonsResult, progressResult] = await Promise.all([
-      courseIds.length > 0
-        ? supabase
-            .from('lessons')
-            .select('id, course_id, estimated_minutes')
-            .in('course_id', courseIds)
-        : Promise.resolve({ data: [], error: null }),
+      fetchLessonsWithFallback(supabase, courseIds),
       courseIds.length > 0
         ? supabase
             .from('user_lesson_progress')
@@ -117,25 +184,34 @@ export async function GET(request: NextRequest) {
         : Promise.resolve({ data: [], error: null }),
     ])
 
-    if (lessonsResult.error || progressResult.error) {
+    if (lessonsResult.error) {
+      console.error('academy lessons query failed', lessonsResult.error)
       return NextResponse.json(
-        { success: false, error: 'Failed to load course progress' },
+        { success: false, error: 'Failed to load lessons' },
         { status: 500 }
       )
     }
 
+    const safeProgressRows = progressResult.error ? [] : progressResult.data || []
+
     const lessonCountByCourse = new Map<string, number>()
     const estimatedMinutesByCourse = new Map<string, number>()
+    const hasMicroLessonByCourse = new Map<string, boolean>()
+
     for (const lesson of lessonsResult.data || []) {
       lessonCountByCourse.set(lesson.course_id, (lessonCountByCourse.get(lesson.course_id) || 0) + 1)
+      const duration = lesson.estimated_minutes || lesson.duration_minutes || 0
       estimatedMinutesByCourse.set(
         lesson.course_id,
-        (estimatedMinutesByCourse.get(lesson.course_id) || 0) + (lesson.estimated_minutes || 0)
+        (estimatedMinutesByCourse.get(lesson.course_id) || 0) + duration
       )
+      if (duration > 0 && duration <= 10) {
+        hasMicroLessonByCourse.set(lesson.course_id, true)
+      }
     }
 
     const completedLessonsByCourse = new Map<string, number>()
-    for (const progress of progressResult.data || []) {
+    for (const progress of safeProgressRows) {
       if (progress.status !== 'completed') continue
       completedLessonsByCourse.set(
         progress.course_id,
@@ -143,18 +219,30 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const mappedCourses = courses.map((course) => ({
-      slug: course.slug,
-      title: course.title,
-      description: course.description || '',
-      thumbnailUrl: course.thumbnail_url,
-      difficulty: course.difficulty_level,
-      path: getPathName(course, pathNamesById),
-      totalLessons: lessonCountByCourse.get(course.id) || 0,
-      completedLessons: completedLessonsByCourse.get(course.id) || 0,
-      estimatedMinutes:
-        estimatedMinutesByCourse.get(course.id) || Math.round((course.estimated_hours || 0) * 60),
-    }))
+    const mappedCourses = courses.map((course) => {
+      const description = course.description || ''
+      const path = course.learning_path_id
+        ? pathNamesById.get(course.learning_path_id) || 'General'
+        : 'General'
+      const estimatedFromLessons = estimatedMinutesByCourse.get(course.id) || 0
+
+      return {
+        slug: course.slug,
+        title: course.title,
+        description,
+        thumbnailUrl: course.thumbnail_url,
+        difficulty: normalizeDifficulty(course.difficulty_level),
+        path,
+        totalLessons: lessonCountByCourse.get(course.id) || 0,
+        completedLessons: completedLessonsByCourse.get(course.id) || 0,
+        estimatedMinutes:
+          estimatedFromLessons || Math.round(((course.estimated_hours || 0) * 60)),
+        skills: inferSkills(course.title, description),
+        microLearningAvailable:
+          hasMicroLessonByCourse.get(course.id) || (lessonCountByCourse.get(course.id) || 0) > 0,
+        lastUpdatedAt: course.updated_at || null,
+      }
+    })
 
     const paths = Array.from(new Set(mappedCourses.map((course) => course.path))).sort()
 

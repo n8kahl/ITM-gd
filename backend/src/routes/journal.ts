@@ -20,12 +20,12 @@ import {
 
 const router = Router();
 
-type JournalPositionType = 'call' | 'put' | 'stock' | 'iron_condor';
+type JournalPositionType = 'call' | 'put' | 'stock';
 
 function normalizeJournalPositionType(value: unknown): JournalPositionType {
   if (typeof value !== 'string') return 'call';
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'call' || normalized === 'put' || normalized === 'stock' || normalized === 'iron_condor') {
+  if (normalized === 'call' || normalized === 'put' || normalized === 'stock') {
     return normalized;
   }
   return 'call';

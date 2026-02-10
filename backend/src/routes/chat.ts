@@ -9,6 +9,12 @@ import { sendMessageSchema, getSessionMessagesSchema, deleteSessionSchema, getSe
 
 const router = Router();
 
+function isMobileRequest(req: Request): boolean {
+  const userAgent = req.headers['user-agent'];
+  if (!userAgent) return false;
+  return /(iphone|ipad|ipod|android|mobile|blackberry|iemobile|opera mini)/i.test(userAgent);
+}
+
 /**
  * POST /api/chat/message
  *
@@ -29,7 +35,10 @@ router.post(
       const response = await sendChatMessage({
         sessionId: finalSessionId,
         message: message.trim(),
-        userId
+        userId,
+        context: {
+          isMobile: isMobileRequest(req),
+        },
       });
 
       return res.json({
@@ -96,7 +105,14 @@ router.post(
       // Send session ID as first event
       res.write(`event: session\ndata: ${JSON.stringify({ sessionId: finalSessionId })}\n\n`);
 
-      await streamChatMessage({ sessionId: finalSessionId, message: message.trim(), userId }, res);
+      await streamChatMessage({
+        sessionId: finalSessionId,
+        message: message.trim(),
+        userId,
+        context: {
+          isMobile: isMobileRequest(req),
+        },
+      }, res);
 
       res.end();
     } catch (error: any) {

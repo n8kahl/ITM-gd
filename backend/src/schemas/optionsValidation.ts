@@ -51,7 +51,7 @@ export const positionAdviceQuerySchema = z.object({
 export const analyzePositionSchema = z.object({
   position: z.object({
     symbol: z.string().min(1).max(10),
-    type: z.enum(['call', 'put', 'call_spread', 'put_spread', 'iron_condor', 'stock']),
+    type: z.enum(['call', 'put', 'stock']),
     strike: z.number().positive().optional(),
     expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     quantity: z.number().int().refine(n => n !== 0),
@@ -60,7 +60,7 @@ export const analyzePositionSchema = z.object({
   }).optional(),
   positions: z.array(z.object({
     symbol: z.string().min(1).max(10),
-    type: z.enum(['call', 'put', 'call_spread', 'put_spread', 'iron_condor', 'stock']),
+    type: z.enum(['call', 'put', 'stock']),
     strike: z.number().positive().optional(),
     expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     quantity: z.number().int().refine(n => n !== 0),

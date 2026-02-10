@@ -12,7 +12,7 @@ export interface TradeEntryFormData {
   trade_date: string
   symbol: string
   direction: 'long' | 'short'
-  contract_type: 'stock' | 'call' | 'put' | 'spread'
+  contract_type: 'stock' | 'call' | 'put'
   strike_price: string
   expiration_date: string
   dte_at_entry: string

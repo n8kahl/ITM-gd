@@ -150,7 +150,7 @@ describe('Opportunity Scanner', () => {
       expect(highIV).toBeDefined();
       if (highIV) {
         expect(highIV.direction).toBe('neutral');
-        expect(highIV.suggestedTrade?.strategy).toBe('Iron Condor');
+        expect(highIV.suggestedTrade?.strategy).toBe('Single-Leg Momentum Option');
       }
     });
 

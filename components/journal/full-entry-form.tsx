@@ -223,7 +223,6 @@ export function FullEntryForm({
               <option value="stock">Stock</option>
               <option value="call">Call</option>
               <option value="put">Put</option>
-              <option value="spread">Spread</option>
             </select>
           </div>
           <div>

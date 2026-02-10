@@ -6,11 +6,11 @@ import { z } from 'zod';
  */
 
 export const sendMessageSchema = z.object({
-  sessionId: z.string().uuid('sessionId must be a valid UUID'),
+  sessionId: z.string().uuid('sessionId must be a valid UUID').optional(),
   message: z.string()
+    .trim()
     .min(1, 'Message cannot be empty')
-    .max(5000, 'Message cannot exceed 5000 characters')
-    .trim(),
+    .max(5000, 'Message cannot exceed 5000 characters'),
 });
 
 export const getSessionMessagesSchema = z.object({

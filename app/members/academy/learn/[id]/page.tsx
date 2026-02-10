@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Menu, X } from 'lucide-react'
@@ -181,12 +182,27 @@ export default function LessonPage() {
   }
 
   return (
-    <div className="relative -mx-4 -my-4 lg:-mx-8 lg:-my-6">
+    <div className="relative space-y-3">
+      <div className="flex items-center gap-2 text-xs text-white/45">
+        <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
+          Training Library
+        </Link>
+        <span>/</span>
+        <Link
+          href={`/members/academy/courses/${lesson.course.slug}`}
+          className="hover:text-white/70 transition-colors"
+        >
+          {lesson.course.title}
+        </Link>
+        <span>/</span>
+        <span className="text-white/70 truncate">{lesson.title}</span>
+      </div>
+
       {/* Mobile sidebar toggle */}
       <button
         onClick={() => setShowSidebar(!showSidebar)}
         className={cn(
-          'lg:hidden fixed top-20 left-4 z-30',
+          'lg:hidden fixed top-[4.4rem] left-4 z-30',
           'w-10 h-10 rounded-lg flex items-center justify-center',
           'bg-[#0A0A0B]/90 border border-white/10',
           'text-white/60 hover:text-white/80',
@@ -197,14 +213,14 @@ export default function LessonPage() {
         {showSidebar ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      <div className="flex min-h-screen">
+      <div className="flex min-h-[calc(100vh-7rem)] rounded-2xl border border-white/10 bg-[#0A0A0B]/55 backdrop-blur-xl overflow-hidden">
         {/* Sidebar - Desktop always visible, Mobile toggleable */}
         <div
           className={cn(
             'shrink-0 transition-all duration-300',
             // Mobile: overlay
             'fixed lg:relative z-20',
-            'top-0 left-0 bottom-0',
+            'top-14 left-0 bottom-0',
             'w-[280px]',
             showSidebar
               ? 'translate-x-0'
@@ -218,7 +234,7 @@ export default function LessonPage() {
             currentLessonId={lesson.id}
             onMarkComplete={handleMarkComplete}
             isMarkingComplete={isMarkingComplete}
-            className="h-full rounded-none lg:rounded-r-xl"
+            className="h-full rounded-none lg:border-r lg:border-white/10"
           />
         </div>
 
@@ -231,7 +247,7 @@ export default function LessonPage() {
         )}
 
         {/* Main content area */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 bg-transparent">
           <LessonPlayer
             lessonId={lesson.id}
             title={lesson.title}

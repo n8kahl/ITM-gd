@@ -50,13 +50,11 @@ interface TradeJournalProps {
 const POSITION_TYPES: { value: JournalPositionType; label: string }[] = [
   { value: 'call', label: 'Call' },
   { value: 'put', label: 'Put' },
-  { value: 'iron_condor', label: 'Iron Condor' },
   { value: 'stock', label: 'Stock' },
 ]
 
 const STRATEGIES = [
   '0DTE Scalp',
-  'Iron Condor',
   'LEAPS',
   'Swing Trade',
   'Day Trade',

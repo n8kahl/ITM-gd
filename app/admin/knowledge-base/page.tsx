@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,6 @@ const CATEGORIES = ['pricing', 'features', 'proof', 'faq', 'technical', 'escalat
 
 export default function KnowledgeBasePage() {
   const [entries, setEntries] = useState<KBEntry[]>([])
-  const [filteredEntries, setFilteredEntries] = useState<KBEntry[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | 'all'>('all')
   const [editingEntry, setEditingEntry] = useState<KBEntry | null>(null)
@@ -56,29 +55,7 @@ export default function KnowledgeBasePage() {
     byCategory: {} as Record<string, number>
   })
 
-  useEffect(() => {
-    loadEntries()
-  }, [])
-
-  useEffect(() => {
-    let filtered = entries
-
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(e => e.category === selectedCategory)
-    }
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(e =>
-        e.question.toLowerCase().includes(query) ||
-        e.answer.toLowerCase().includes(query)
-      )
-    }
-
-    setFilteredEntries(filtered)
-  }, [entries, selectedCategory, searchQuery])
-
-  async function loadEntries() {
+  const loadEntries = useCallback(async () => {
     const { data } = await supabase
       .from('knowledge_base')
       .select('*')
@@ -100,7 +77,33 @@ export default function KnowledgeBasePage() {
         byCategory
       })
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadEntries()
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [loadEntries])
+
+  const filteredEntries = useMemo(() => {
+    let filtered = entries
+
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(e => e.category === selectedCategory)
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(e =>
+        e.question.toLowerCase().includes(query) ||
+        e.answer.toLowerCase().includes(query)
+      )
+    }
+
+    return filtered
+  }, [entries, selectedCategory, searchQuery])
 
   async function saveEntry() {
     const payload = {

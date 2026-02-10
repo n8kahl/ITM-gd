@@ -667,7 +667,7 @@ export default function TeamMembersPage() {
             <CardContent className="p-8 text-center">
               <Users className="w-16 h-16 text-platinum/20 mx-auto mb-4" />
               <p className="text-platinum/60 mb-4">
-                No team members yet. Click "Add Team Member" to invite your first member.
+                No team members yet. Click &quot;Add Team Member&quot; to invite your first member.
               </p>
             </CardContent>
           </Card>

@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { timingSafeEqual } from 'crypto';
 import { logger } from '../lib/logger';
 import { supabase } from '../config/database';
-import { getEnv } from '../config/env';
+import { extractBearerToken, AuthTokenError, verifyAuthToken } from '../lib/tokenAuth';
 
 // Extend Express Request type to include user
 declare global {
@@ -16,47 +15,6 @@ declare global {
   }
 }
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ensuredE2EUsers = new Set<string>();
-
-function isValidSharedSecret(expected: string, provided: string): boolean {
-  const expectedBuf = Buffer.from(expected);
-  const providedBuf = Buffer.from(provided);
-  if (expectedBuf.length !== providedBuf.length) return false;
-  return timingSafeEqual(expectedBuf, providedBuf);
-}
-
-async function ensureE2EUserExists(userId: string): Promise<void> {
-  if (ensuredE2EUsers.has(userId)) return;
-
-  const { data, error } = await supabase.auth.admin.getUserById(userId);
-  if (data?.user) {
-    ensuredE2EUsers.add(userId);
-    return;
-  }
-
-  if (error && !/user.*not.*found/i.test(error.message)) {
-    throw new Error(`Failed to verify E2E user: ${error.message}`);
-  }
-
-  const email = `e2e+${userId}@tradeitm.local`;
-  const { data: created, error: createError } = await supabase.auth.admin.createUser({
-    id: userId,
-    email,
-    email_confirm: true,
-    user_metadata: { full_name: 'E2E Member' },
-    app_metadata: { provider: 'e2e', providers: ['e2e'] },
-  });
-
-  if (createError && !/already|exists|registered/i.test(createError.message)) {
-    throw new Error(`Failed to create E2E user: ${createError.message}`);
-  }
-
-  if (created?.user || !createError) {
-    ensuredE2EUsers.add(userId);
-  }
-}
-
 // Middleware to verify JWT token from Supabase
 export async function authenticateToken(
   req: Request,
@@ -64,9 +22,8 @@ export async function authenticateToken(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractBearerToken(req.headers.authorization);
+    if (!token) {
       res.status(401).json({
         error: 'Unauthorized',
         message: 'Missing or invalid authorization header'
@@ -74,86 +31,25 @@ export async function authenticateToken(
       return;
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    const env = getEnv();
-
-    const bypassEnabled = env.E2E_BYPASS_AUTH
-      && (env.NODE_ENV !== 'production' || env.E2E_BYPASS_ALLOW_IN_PRODUCTION);
-    const bypassPrefix = env.E2E_BYPASS_TOKEN_PREFIX;
-    if (bypassEnabled && token.startsWith(bypassPrefix)) {
-      const bypassPayload = token.slice(bypassPrefix.length).trim();
-      let userId = bypassPayload;
-
-      if (env.E2E_BYPASS_SHARED_SECRET) {
-        const separatorIndex = bypassPayload.indexOf(':');
-        if (separatorIndex <= 0 || separatorIndex >= bypassPayload.length - 1) {
-          res.status(401).json({
-            error: 'Unauthorized',
-            message: 'Invalid E2E bypass token format'
-          });
-          return;
-        }
-
-        const providedSecret = bypassPayload.slice(0, separatorIndex);
-        userId = bypassPayload.slice(separatorIndex + 1);
-        if (!isValidSharedSecret(env.E2E_BYPASS_SHARED_SECRET, providedSecret)) {
-          res.status(401).json({
-            error: 'Unauthorized',
-            message: 'Invalid E2E bypass token format'
-          });
-          return;
-        }
-      }
-
-      if (!UUID_REGEX.test(userId)) {
-        res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Invalid E2E bypass token format'
-        });
-        return;
-      }
-
-      try {
-        await ensureE2EUserExists(userId);
-      } catch (e) {
-        logger.error('E2E user provisioning failed', {
-          userId,
-          error: e instanceof Error ? e.message : String(e),
-        });
-        res.status(500).json({
-          error: 'Internal server error',
-          message: 'E2E auth bootstrap failed'
-        });
-        return;
-      }
-
-      req.user = {
-        id: userId,
-        email: `e2e+${userId}@tradeitm.local`
-      };
-      next();
-      return;
-    }
-
-    // Verify token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Invalid or expired token'
-      });
-      return;
-    }
+    const user = await verifyAuthToken(token);
 
     // Attach user to request object
     req.user = {
       id: user.id,
-      email: user.email
+      email: user.email,
     };
 
     next();
   } catch (error) {
+    if (error instanceof AuthTokenError) {
+      const errorLabel = error.statusCode === 401 ? 'Unauthorized' : 'Internal server error';
+      res.status(error.statusCode).json({
+        error: errorLabel,
+        message: error.clientMessage,
+      });
+      return;
+    }
+
     logger.error('Authentication error', { error: error instanceof Error ? error.message : String(error) });
     res.status(500).json({
       error: 'Internal server error',

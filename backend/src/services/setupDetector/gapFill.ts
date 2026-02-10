@@ -58,7 +58,7 @@ export function detectGapFill(snapshot: DetectorSnapshot): SetupSignal | null {
   const confidence = clampConfidence(confidenceBase + Math.min(12, Math.abs(gapPct) * 2));
 
   const target = stage === 'half'
-    ? todayOpen - gapSize * 0.25
+    ? todayOpen - gapSize * 0.75
     : previousClose;
 
   const stopLoss = direction === 'long'

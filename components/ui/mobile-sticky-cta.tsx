@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, MessageCircle } from "lucide-react";
 
 export function MobileStickyCtA() {
-  const [isVisible, setIsVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
     // Check if mobile
@@ -22,25 +22,24 @@ export function MobileStickyCtA() {
   }, []);
 
   useEffect(() => {
-    if (!isMobile) {
-      setIsVisible(false);
-      return;
-    }
+    if (!isMobile) return;
 
     const handleScroll = () => {
-      // Show CTA after scrolling past hero section (approximately 600px)
-      const scrollThreshold = 600;
-      const scrollY = window.scrollY;
-
-      setIsVisible(scrollY > scrollThreshold);
+      setScrollY(window.scrollY);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    // Initial check
-    handleScroll();
+    const initialFrame = requestAnimationFrame(() => {
+      setScrollY(window.scrollY);
+    });
 
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      cancelAnimationFrame(initialFrame);
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, [isMobile]);
+
+  const isVisible = isMobile && scrollY > 600;
 
   // Don't render on desktop
   if (!isMobile) return null;

@@ -1,0 +1,13 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#070809"/>
+  <rect x="50" y="50" width="1180" height="620" rx="24" fill="#09100F" stroke="#20342F"/>
+  <text x="110" y="155" fill="#ECF3F0" font-size="52" font-family="Playfair Display, Georgia, serif" font-weight="700">Entry Validation</text>
+  <text x="110" y="198" fill="#A2B7AF" font-size="24" font-family="Inter, Arial, sans-serif">Confirm setup quality before pressing execute.</text>
+  <rect x="120" y="250" width="1040" height="330" rx="18" fill="#0B1614" stroke="#1F3B35"/>
+  <path d="M170 530L280 420L360 460L520 340L620 385L760 295L900 315L1070 205" stroke="#14C88B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="620" cy="385" r="13" fill="#0A0A0B" stroke="#F3E5AB" stroke-width="5"/>
+  <path d="M611 385L618 392L632 378" stroke="#F3E5AB" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="870" y="115" width="280" height="108" rx="12" fill="#0C1815" stroke="#275147"/>
+  <text x="895" y="160" fill="#DFF5EC" font-size="26" font-family="Inter, Arial, sans-serif" font-weight="600">Checklist: 4 / 4</text>
+  <text x="895" y="193" fill="#9ED8C2" font-size="20" font-family="Inter, Arial, sans-serif">Trend, level, trigger, risk</text>
+</svg>

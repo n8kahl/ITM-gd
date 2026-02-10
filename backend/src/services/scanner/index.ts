@@ -80,7 +80,6 @@ function scoreOptionsSetup(setup: OptionsSetup): number {
   const typeBonus: Record<string, number> = {
     high_iv: 8,
     unusual_activity: 12,
-    high_prob_spread: 10,
     iv_crush: 6,
   };
   score += typeBonus[setup.type] || 0;

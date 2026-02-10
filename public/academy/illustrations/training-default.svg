@@ -1,0 +1,30 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#070809"/>
+  <rect x="40" y="40" width="1200" height="640" rx="24" fill="url(#bg)" fill-opacity="0.58" stroke="#1B1F24"/>
+  <g opacity="0.34" stroke="#1C2E2B" stroke-width="1">
+    <path d="M120 140H1160"/>
+    <path d="M120 220H1160"/>
+    <path d="M120 300H1160"/>
+    <path d="M120 380H1160"/>
+    <path d="M120 460H1160"/>
+    <path d="M120 540H1160"/>
+    <path d="M220 110V580"/>
+    <path d="M360 110V580"/>
+    <path d="M500 110V580"/>
+    <path d="M640 110V580"/>
+    <path d="M780 110V580"/>
+    <path d="M920 110V580"/>
+    <path d="M1060 110V580"/>
+  </g>
+  <path d="M180 490L330 420L440 450L590 340L710 368L860 280L1010 300L1120 210" stroke="#18C58C" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="1120" cy="210" r="14" fill="#18C58C"/>
+  <rect x="150" y="132" width="300" height="66" rx="12" fill="#0B1311" stroke="#1E4137"/>
+  <text x="176" y="172" fill="#E7ECEB" font-size="30" font-family="Inter, Arial, sans-serif" font-weight="600">TradeITM Academy</text>
+  <text x="150" y="615" fill="#A5B4B0" font-size="24" font-family="Inter, Arial, sans-serif">Competency-based learning. Built for execution.</text>
+  <defs>
+    <linearGradient id="bg" x1="40" y1="40" x2="1240" y2="680" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1110"/>
+      <stop offset="1" stop-color="#0A0C0D"/>
+    </linearGradient>
+  </defs>
+</svg>

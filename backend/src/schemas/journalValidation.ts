@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const journalPositionTypeSchema = z.enum(['call', 'put', 'stock', 'iron_condor']);
+const journalPositionTypeSchema = z.enum(['call', 'put', 'stock']);
 
 export const createTradeSchema = z.object({
   symbol: z.string().min(1).max(10).transform(s => s.toUpperCase()),

@@ -3,7 +3,7 @@ import { ExitAdvisor } from '../exitAdvisor';
 describe('ExitAdvisor', () => {
   const advisor = new ExitAdvisor();
 
-  it('returns profit-taking and spread-conversion advice for winning long calls', () => {
+  it('returns profit-taking and protective-stop advice for winning long calls', () => {
     const advice = advisor.generateAdviceFromInputs([
       {
         positionId: 'pos-1',
@@ -28,7 +28,7 @@ describe('ExitAdvisor', () => {
     ]);
 
     expect(advice.some((item) => item.type === 'take_profit')).toBe(true);
-    expect(advice.some((item) => item.type === 'spread_conversion')).toBe(true);
+    expect(advice.some((item) => item.type === 'stop_loss')).toBe(true);
   });
 
   it('returns stop-loss advice for large drawdowns', () => {
@@ -52,7 +52,7 @@ describe('ExitAdvisor', () => {
     expect(advice.some((item) => item.type === 'stop_loss')).toBe(true);
   });
 
-  it('returns time-decay and roll suggestions near expiry', () => {
+  it('returns time-decay suggestions near expiry', () => {
     const advice = advisor.generateAdviceFromInputs([
       {
         positionId: 'pos-3',
@@ -77,6 +77,6 @@ describe('ExitAdvisor', () => {
     ]);
 
     expect(advice.some((item) => item.type === 'time_decay')).toBe(true);
-    expect(advice.some((item) => item.type === 'roll')).toBe(true);
+    expect(advice.some((item) => item.type === 'take_profit')).toBe(true);
   });
 });

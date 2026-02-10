@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { UserPlus, TrendingUp, Award } from "lucide-react";
 
 interface Activity {
@@ -31,12 +31,8 @@ const icons = {
 
 export function LiveActivityFeed() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [displayedActivities, setDisplayedActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
-    // Initialize with first 3 activities
-    setDisplayedActivities(activities.slice(0, 3));
-
     // Rotate activities every 3 seconds
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % activities.length);
@@ -45,13 +41,8 @@ export function LiveActivityFeed() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    // Update displayed activities when index changes
-    const newActivities = [];
-    for (let i = 0; i < 3; i++) {
-      newActivities.push(activities[(currentIndex + i) % activities.length]);
-    }
-    setDisplayedActivities(newActivities);
+  const displayedActivities = useMemo(() => {
+    return Array.from({ length: 3 }, (_, offset) => activities[(currentIndex + offset) % activities.length]);
   }, [currentIndex]);
 
   return (

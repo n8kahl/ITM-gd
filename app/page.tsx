@@ -708,7 +708,7 @@ export default function Home() {
                 <span className="text-gradient-champagne">Winning Trades</span>
               </h2>
               <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
-                Every day you wait is another 100%+ trade you're missing. Get the exact entries elite traders use.
+                Every day you wait is another 100%+ trade you&apos;re missing. Get the exact entries elite traders use.
               </p>
 
               {/* Urgency Element */}

@@ -1,7 +1,6 @@
-import { calculateRoll } from '../leaps/rollCalculator';
 import { PositionAnalysis } from '../options/types';
 
-export type PositionAdviceType = 'take_profit' | 'stop_loss' | 'time_decay' | 'spread_conversion' | 'roll';
+export type PositionAdviceType = 'take_profit' | 'stop_loss' | 'time_decay';
 export type PositionAdviceUrgency = 'low' | 'medium' | 'high';
 
 export interface PositionAdvice {
@@ -68,32 +67,6 @@ function buildAdvice(
   };
 }
 
-function roundToNearest(value: number, step: number): number {
-  return Math.round(value / step) * step;
-}
-
-function strikeStepForSymbol(symbol: string): number {
-  if (symbol === 'SPX') return 25;
-  if (symbol === 'NDX') return 25;
-  return 5;
-}
-
-function inferIv(greeks: PositionAdviceInput['greeks']): number {
-  const vega = Math.abs(greeks?.vega || 0);
-  if (vega > 80) return 0.4;
-  if (vega > 40) return 0.3;
-  if (vega > 10) return 0.25;
-  return 0.2;
-}
-
-function getNextMonthIsoDate(expiry?: string): string | null {
-  if (!expiry) return null;
-  const date = new Date(expiry);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setUTCDate(date.getUTCDate() + 30);
-  return date.toISOString().slice(0, 10);
-}
-
 export class ExitAdvisor {
   generateAdvice(analyses: PositionAnalysis[]): PositionAdvice[] {
     return this.generateAdviceFromInputs(analyses.map(toAdviceInput));
@@ -117,10 +90,10 @@ export class ExitAdvisor {
         input.positionId,
         'take_profit',
         'high',
-        `Strong gain (${input.pnlPct.toFixed(1)}%). Consider closing or converting to a spread to lock profits.`,
+        `Strong gain (${input.pnlPct.toFixed(1)}%). Consider closing or trimming size to lock profits.`,
         {
-          action: 'close_or_convert',
-          closePct: 100,
+          action: 'take_profit',
+          closePct: 75,
         },
       ));
     } else if (input.pnlPct >= 50) {
@@ -151,14 +124,14 @@ export class ExitAdvisor {
 
     if (typeof input.maxLoss === 'number' && input.maxLoss > 0 && input.pnl < 0) {
       const lossPctOfMax = Math.abs(input.pnl) / input.maxLoss;
-      if (lossPctOfMax >= 0.8 && (input.type === 'call_spread' || input.type === 'put_spread' || input.type === 'iron_condor')) {
+      if (lossPctOfMax >= 0.8) {
         advice.push(buildAdvice(
           input.positionId,
           'stop_loss',
           'high',
-          'Spread is near max loss. Consider closing to preserve remaining value.',
+          'Position is near max planned loss. Consider closing to preserve capital.',
           {
-            action: 'close_spread',
+            action: 'close_position',
             lossPctOfMax: Number((lossPctOfMax * 100).toFixed(1)),
           },
         ));
@@ -171,9 +144,9 @@ export class ExitAdvisor {
         input.positionId,
         'time_decay',
         'high',
-        'Aggressive theta decay detected. Consider closing or rolling now.',
+        'Aggressive theta decay detected. Consider closing now or reducing exposure.',
         {
-          action: 'close_or_roll',
+          action: 'close_or_reduce',
           thetaPerDay: Number(thetaBurn.toFixed(2)),
           thetaBurnPctOfValue: Number(((thetaBurn / input.currentValue) * 100).toFixed(1)),
         },
@@ -193,60 +166,19 @@ export class ExitAdvisor {
       ));
     }
 
-    if (input.type === 'call' && input.quantity > 0 && input.pnlPct >= 30 && input.strike) {
-      const strikeStep = strikeStepForSymbol(input.symbol);
-      const targetShortStrike = roundToNearest(input.strike + (strikeStep * 2), strikeStep);
-      const estimatedCredit = Math.max(0.05, input.currentPrice * 0.35) * Math.abs(input.quantity) * 100;
+    if (input.pnlPct >= 30 && input.type !== 'stock') {
+      const protectiveStop = input.breakeven ?? input.currentPrice * (input.quantity > 0 ? 0.92 : 1.08);
 
       advice.push(buildAdvice(
         input.positionId,
-        'spread_conversion',
+        'stop_loss',
         'medium',
-        `Consider selling the ${targetShortStrike}C to convert to a call spread and lock gains.`,
+        `Position is up ${input.pnlPct.toFixed(1)}%. Raise your stop to protect gains.`,
         {
-          action: 'sell_call_against_long',
-          shortStrike: targetShortStrike,
-          estimatedCredit: Number(estimatedCredit.toFixed(2)),
+          action: 'tighten_stop',
+          suggestedStop: Number(protectiveStop.toFixed(2)),
         },
       ));
-    }
-
-    if ((input.daysToExpiry ?? 999) < 14 && input.pnl > 0 && input.type !== 'stock' && input.strike && input.expiry) {
-      const newExpiry = getNextMonthIsoDate(input.expiry);
-      if (newExpiry) {
-        const strikeStep = strikeStepForSymbol(input.symbol);
-        const newStrike = input.type === 'put'
-          ? roundToNearest(Math.max(strikeStep, input.strike - strikeStep), strikeStep)
-          : roundToNearest(input.strike + strikeStep, strikeStep);
-
-        const optionType = input.type === 'put' ? 'put' : 'call';
-        const proxyUnderlying = input.breakeven ?? input.strike;
-
-        const roll = calculateRoll({
-          currentStrike: input.strike,
-          currentExpiry: input.expiry,
-          newStrike,
-          newExpiry,
-          optionType,
-          currentPrice: proxyUnderlying,
-          impliedVolatility: inferIv(input.greeks),
-          quantity: Math.abs(input.quantity),
-        });
-
-        advice.push(buildAdvice(
-          input.positionId,
-          'roll',
-          'medium',
-          'Position is nearing expiry with a gain. Consider rolling to maintain exposure.',
-          {
-            action: 'roll_position',
-            newStrike,
-            newExpiry,
-            netCreditDebit: roll.rollAnalysis.netCreditDebit,
-            recommendation: roll.rollAnalysis.recommendation,
-          },
-        ));
-      }
     }
 
     return advice;

@@ -824,12 +824,12 @@ describe('Function Handlers', () => {
       mockExitAdvisorGenerateAdvice.mockReturnValue([
         {
           positionId: 'pos-1',
-          type: 'spread_conversion',
+          type: 'stop_loss',
           urgency: 'medium',
-          message: 'Consider selling a higher strike call to convert to a spread.',
+          message: 'Position is up 40.0%. Raise your stop to protect gains.',
           suggestedAction: {
-            action: 'sell_call_against_long',
-            shortStrike: 6050,
+            action: 'tighten_stop',
+            suggestedStop: 6000,
           },
         },
       ]);
@@ -845,7 +845,7 @@ describe('Function Handlers', () => {
       expect(mockGetUserPositions).toHaveBeenCalledWith('user-1');
       expect(mockAnalyzePosition).toHaveBeenCalledTimes(1);
       expect(result).toHaveProperty('adviceCount', 1);
-      expect(result.advice[0]).toHaveProperty('type', 'spread_conversion');
+      expect(result.advice[0]).toHaveProperty('type', 'stop_loss');
     });
 
     it('should return no advice when no open position matches', async () => {

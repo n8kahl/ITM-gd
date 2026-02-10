@@ -38,9 +38,8 @@ export interface Greeks {
 export interface Position {
   id?: string;
   symbol: string;
-  type: 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock';
+  type: 'call' | 'put' | 'stock';
   strike?: number;          // For options
-  strike2?: number;         // For spreads
   expiry?: string;          // For options
   quantity: number;         // Positive = long, negative = short
   entryPrice: number;       // Entry price per contract

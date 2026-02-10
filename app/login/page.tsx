@@ -202,7 +202,7 @@ function LoginContent() {
                   <div>
                     <p className="text-sm text-blue-400 font-medium">Opening in Safari</p>
                     <p className="text-sm text-blue-400/70 mt-1">
-                      After authorizing Discord, you'll see a notification to return to TradeITM.
+                      After authorizing Discord, you&apos;ll see a notification to return to TradeITM.
                       Tap it, or manually switch back to the app.
                     </p>
                   </div>

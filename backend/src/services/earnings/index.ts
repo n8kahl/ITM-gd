@@ -573,111 +573,80 @@ function buildSuggestedStrategies(input: {
 
   if (moveOverpricing > 20) {
     strategies.push({
-      name: 'Iron Condor (Premium Sell)',
-      description: `Implied move is ${round(moveOverpricing)}% above historical realized moves. Favor selling volatility with defined risk wings.`,
+      name: 'Wait For IV Reset',
+      description: `Implied move is ${round(moveOverpricing)}% above historical realized moves. Premium is expensive for pre-earnings long options.`,
       setup: {
-        type: 'iron_condor',
-        shortPutAround: round(currentPrice * (1 - expectedMovePct / 100)),
-        shortCallAround: round(currentPrice * (1 + expectedMovePct / 100)),
+        type: 'wait_for_iv_reset',
+        trigger: 'post_earnings_or_confirmed_breakout',
       },
-      riskReward: 'Risk 1 to make 0.4-0.7',
+      riskReward: 'Capital preservation focus',
       bestWhen: 'Expected move is overpriced and directional conviction is low',
-      expectedMaxLoss: 'Wing width minus credit',
-      expectedMaxGain: 'Net credit received',
-      probability: clamp(Math.round(58 + Math.min(moveOverpricing, 35) * 0.4), 55, 75),
-    });
-
-    strategies.push({
-      name: 'Short Strangle (Experienced Only)',
-      description: 'Neutral premium sell setup with wider break-evens; use strict risk limits or convert to iron condor for defined risk.',
-      setup: {
-        type: 'short_strangle',
-        shortPutAround: round(currentPrice * (1 - expectedMovePct / 100)),
-        shortCallAround: round(currentPrice * (1 + expectedMovePct / 100)),
-      },
-      riskReward: 'High probability, undefined tail risk',
-      bestWhen: 'High IV and expected move priced too wide',
-      expectedMaxLoss: 'Undefined without hedges',
-      expectedMaxGain: 'Net credit received',
-      probability: clamp(Math.round(56 + Math.min(moveOverpricing, 30) * 0.3), 52, 70),
+      expectedMaxLoss: 'No position until confirmation',
+      expectedMaxGain: 'Depends on confirmed setup',
+      probability: clamp(Math.round(60 + Math.min(moveOverpricing, 30) * 0.2), 58, 72),
     });
   } else if (moveOverpricing < -10) {
     strategies.push({
-      name: 'Long Straddle',
-      description: `Implied move is discounted versus history by ${round(Math.abs(moveOverpricing))}%. Favor long volatility around the event.`,
+      name: 'Long Option (Single-Leg)',
+      description: `Implied move is discounted versus history by ${round(Math.abs(moveOverpricing))}%. A single-leg option can capture outsized movement.`,
       setup: {
-        type: 'long_straddle',
-        strike: round(currentPrice),
+        type: directionalBias === 'bearish' ? 'long_put' : 'long_call',
+        strikeAround: round(currentPrice),
       },
-      riskReward: 'Risk 1 to make 1.2-2.0+',
-      bestWhen: 'Expected move is underpriced and move potential is high',
-      expectedMaxLoss: 'Net debit paid',
-      expectedMaxGain: 'Theoretically large on outsized move',
+      riskReward: 'Risk defined to premium paid',
+      bestWhen: 'Expected move is underpriced and directional follow-through appears likely',
+      expectedMaxLoss: 'Option premium paid',
+      expectedMaxGain: 'Large if trend extends',
       probability: clamp(Math.round(48 + Math.min(Math.abs(moveOverpricing), 30) * 0.5), 45, 62),
-    });
-
-    strategies.push({
-      name: 'Long Strangle',
-      description: 'Lower debit alternative to straddle with wider break-even requirements.',
-      setup: {
-        type: 'long_strangle',
-        longPutAround: round(currentPrice * (1 - expectedMovePct / 100)),
-        longCallAround: round(currentPrice * (1 + expectedMovePct / 100)),
-      },
-      riskReward: 'Lower cost, lower probability than straddle',
-      bestWhen: 'You expect a large move but want lower upfront debit',
-      expectedMaxLoss: 'Net debit paid',
-      expectedMaxGain: 'Large on extended move',
-      probability: clamp(Math.round(44 + Math.min(Math.abs(moveOverpricing), 30) * 0.35), 40, 58),
     });
   }
 
-  if ((ivRank ?? 0) > 80 && !strategies.some((strategy) => strategy.name.includes('Iron Condor'))) {
+  if ((ivRank ?? 0) > 80) {
     strategies.push({
-      name: 'High-IV Iron Condor',
-      description: 'IV rank is elevated. Defined-risk premium selling can benefit from post-earnings IV crush.',
+      name: 'High-IV Caution',
+      description: 'IV rank is elevated. Prefer waiting for post-event volatility compression before initiating long options.',
       setup: {
-        type: 'iron_condor',
-        center: round(currentPrice),
+        type: 'high_iv_caution',
+        ivRank,
       },
-      riskReward: 'Risk 1 to make 0.4-0.6',
-      bestWhen: 'IV rank > 80 and no strong directional edge',
-      expectedMaxLoss: 'Wing width minus credit',
-      expectedMaxGain: 'Net credit received',
-      probability: 60,
+      riskReward: 'Avoid adverse IV crush',
+      bestWhen: 'IV rank > 80',
+      expectedMaxLoss: 'No position until IV cools',
+      expectedMaxGain: 'Cleaner entries after event',
+      probability: 64,
     });
   }
 
   if (directionalBias === 'bullish') {
     strategies.push({
-      name: 'Bull Call Spread',
-      description: 'Directional bullish setup with defined risk and controlled theta/vega exposure.',
+      name: 'Directional Long Call',
+      description: 'Directional bullish setup using a single-leg call with defined premium risk.',
       setup: {
-        type: 'bull_call_spread',
-        buyStrike: round(currentPrice),
-        sellStrike: round(currentPrice * (1 + expectedMovePct / 100)),
+        type: 'long_call',
+        strikeAround: round(currentPrice),
+        firstTargetAround: round(currentPrice * (1 + expectedMovePct / 100)),
       },
-      riskReward: 'Risk 1 to make 1.0-2.0',
+      riskReward: 'Risk 1 to make 1.0-2.5+',
       bestWhen: 'Historical post-earnings drift is upward',
-      expectedMaxLoss: 'Net debit paid',
-      expectedMaxGain: 'Spread width minus debit',
+      expectedMaxLoss: 'Option premium paid',
+      expectedMaxGain: 'Large if trend extends',
       probability: 52,
     });
   }
 
   if (directionalBias === 'bearish') {
     strategies.push({
-      name: 'Bear Put Spread',
-      description: 'Directional bearish setup with defined downside risk and upside on post-earnings weakness.',
+      name: 'Directional Long Put',
+      description: 'Directional bearish setup using a single-leg put with defined premium risk.',
       setup: {
-        type: 'bear_put_spread',
-        buyStrike: round(currentPrice),
-        sellStrike: round(currentPrice * (1 - expectedMovePct / 100)),
+        type: 'long_put',
+        strikeAround: round(currentPrice),
+        firstTargetAround: round(currentPrice * (1 - expectedMovePct / 100)),
       },
-      riskReward: 'Risk 1 to make 1.0-2.0',
+      riskReward: 'Risk 1 to make 1.0-2.5+',
       bestWhen: 'Historical post-earnings drift is downward',
-      expectedMaxLoss: 'Net debit paid',
-      expectedMaxGain: 'Spread width minus debit',
+      expectedMaxLoss: 'Option premium paid',
+      expectedMaxGain: 'Large if trend extends',
       probability: 51,
     });
   }

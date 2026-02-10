@@ -1,11 +1,11 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useState, useRef, memo } from "react";
+import { useEffect, useState, useRef, memo, useMemo } from "react";
 import { TrendingUp, DollarSign } from "lucide-react";
 
 interface WinEvent {
-  id: number;
+  id: string;
   trader: string;
   ticker: string;
   gain: string;
@@ -25,11 +25,6 @@ const SAMPLE_WINS: Omit<WinEvent, "id" | "time">[] = [
   { trader: "Elite Member", ticker: "QQQ", gain: "+245%" },
 ];
 
-function generateTime(): string {
-  const minutes = Math.floor(Math.random() * 59) + 1;
-  return `${minutes}m ago`;
-}
-
 // Mobile detection hook
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -45,7 +40,6 @@ function useIsMobile() {
 }
 
 export const LiveWinsTicker = memo(function LiveWinsTicker() {
-  const [wins, setWins] = useState<WinEvent[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const isMobile = useIsMobile();
   const isVisible = useRef(true);
@@ -67,44 +61,30 @@ export const LiveWinsTicker = memo(function LiveWinsTicker() {
   }, []);
 
   useEffect(() => {
-    // Initialize with fewer wins on mobile
-    const initialCount = isMobile ? 3 : 5;
-    const initialWins = SAMPLE_WINS.slice(0, initialCount).map((w, i) => ({
-      ...w,
-      id: i,
-      time: generateTime(),
-    }));
-    setWins(initialWins);
-  }, [isMobile]);
-
-  useEffect(() => {
     // Slower interval on mobile (6s vs 4s)
     const intervalDuration = isMobile ? 6000 : 4000;
-    const maxWins = isMobile ? 3 : 5;
 
     const interval = setInterval(() => {
       // Skip update if not visible
       if (!isVisible.current) return;
 
-      setCurrentIndex((prev) => {
-        const nextIndex = (prev + 1) % SAMPLE_WINS.length;
-        setWins((prevWins) => {
-          const newWin = {
-            ...SAMPLE_WINS[nextIndex],
-            id: Date.now(),
-            time: "Just now",
-          };
-          return [newWin, ...prevWins.slice(0, maxWins - 1)];
-        });
-        return nextIndex;
-      });
+      setCurrentIndex((prev) => (prev + 1) % SAMPLE_WINS.length);
     }, intervalDuration);
 
     return () => clearInterval(interval);
   }, [isMobile]);
 
-  // Reduced visible items on mobile
-  const visibleWins = isMobile ? wins.slice(0, 3) : wins;
+  const visibleWins = useMemo<WinEvent[]>(() => {
+    const maxWins = isMobile ? 3 : 5;
+    return Array.from({ length: maxWins }, (_, offset) => {
+      const sampleIndex = (currentIndex + offset) % SAMPLE_WINS.length;
+      return {
+        ...SAMPLE_WINS[sampleIndex],
+        id: `${currentIndex}-${sampleIndex}-${offset}`,
+        time: offset === 0 ? "Just now" : `${(((currentIndex + offset) * 7) % 55) + 1}m ago`,
+      };
+    });
+  }, [currentIndex, isMobile]);
 
   return (
     <div ref={containerRef} className="w-full overflow-hidden">

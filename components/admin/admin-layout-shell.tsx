@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Bell, Menu, X, Search, Command, LogOut } from 'lucide-react'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
@@ -14,9 +14,6 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-  // Close mobile menu on route change
-  useEffect(() => setMobileMenuOpen(false), [pathname])
 
   const handleLogout = async () => {
     try {

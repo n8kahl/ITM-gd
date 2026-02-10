@@ -38,28 +38,29 @@ function formatDollar(value: number): string {
   })}`
 }
 
-function buildPositionPrompt(action: 'close' | 'roll' | 'spread' | 'stop', position: PositionLiveSnapshot): string {
+function buildPositionPrompt(action: 'close' | 'take_profit' | 'stop', position: PositionLiveSnapshot): string {
   if (action === 'close') {
     return `Help me close ${position.symbol} ${position.type} position ${position.id}. Give me a step-by-step exit checklist and risk notes.`
   }
-  if (action === 'roll') {
-    return `Evaluate rolling my ${position.symbol} ${position.type} position ${position.id}. Suggest the best strike/expiry with net credit/debit.`
-  }
-  if (action === 'spread') {
-    return `Analyze converting my ${position.symbol} ${position.type} position ${position.id} into a spread. Show strikes, max gain/loss, and tradeoff.`
+  if (action === 'take_profit') {
+    return `Build a take-profit plan for my ${position.symbol} ${position.type} position ${position.id}. Include scale-out levels and stop-adjustment rules.`
   }
   return `Set a stop plan for my ${position.symbol} ${position.type} position ${position.id}. Recommend a stop level and management rules.`
 }
 
-function toWsUrl(baseHttpUrl: string): string {
+function toAuthenticatedWsUrl(baseHttpUrl: string, token: string): string {
   try {
     const parsed = new URL(baseHttpUrl)
     const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${parsed.host}/ws/prices`
+    const wsUrl = new URL(`${protocol}//${parsed.host}/ws/prices`)
+    wsUrl.searchParams.set('token', token)
+    return wsUrl.toString()
   } catch {
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3001'
-    return `${protocol}//${host}/ws/prices`
+    const wsUrl = new URL(`${protocol}//${host}/ws/prices`)
+    wsUrl.searchParams.set('token', token)
+    return wsUrl.toString()
   }
 }
 
@@ -176,10 +177,10 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
   }, [fetchAll, token])
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !token) return
 
     const channel = `positions:${userId}`
-    const ws = new WebSocket(toWsUrl(API_BASE))
+    const ws = new WebSocket(toAuthenticatedWsUrl(API_BASE, token))
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -214,7 +215,7 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
       wsRef.current?.close()
       wsRef.current = null
     }
-  }, [upsertPosition, updateAdvice, userId])
+  }, [token, upsertPosition, updateAdvice, userId])
 
   const positionsSorted = useMemo(
     () => [...positions].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)),
@@ -341,8 +342,7 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
 
               <div className="flex flex-wrap gap-2">
                 <ActionButton label="Close" onClick={() => onSendPrompt?.(buildPositionPrompt('close', position))} />
-                <ActionButton label="Roll" onClick={() => onSendPrompt?.(buildPositionPrompt('roll', position))} />
-                <ActionButton label="Convert to Spread" onClick={() => onSendPrompt?.(buildPositionPrompt('spread', position))} />
+                <ActionButton label="Take Profit Plan" onClick={() => onSendPrompt?.(buildPositionPrompt('take_profit', position))} />
                 <ActionButton label="Set Stop" onClick={() => onSendPrompt?.(buildPositionPrompt('stop', position))} />
               </div>
             </div>

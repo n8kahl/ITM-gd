@@ -26,9 +26,8 @@ export function TextScramble({
   onComplete,
 }: TextScrambleProps) {
   const [displayText, setDisplayText] = useState("");
-  const [isComplete, setIsComplete] = useState(false);
   const revealedIndexRef = useRef(0);
-  const frameRef = useRef<number>(0);
+  const isComplete = displayText === text && text.length > 0;
 
   const scramble = useCallback(() => {
     const chars = characterSet.split("");
@@ -56,6 +55,10 @@ export function TextScramble({
     let scrambleInterval: NodeJS.Timeout;
     let revealTimeout: NodeJS.Timeout;
     let initialTimeout: NodeJS.Timeout;
+    const resetFrame = requestAnimationFrame(() => {
+      revealedIndexRef.current = 0;
+      setDisplayText("");
+    });
 
     const startAnimation = () => {
       // Continuous scramble animation
@@ -78,7 +81,6 @@ export function TextScramble({
           // Animation complete
           clearInterval(scrambleInterval);
           setDisplayText(text);
-          setIsComplete(true);
           onComplete?.();
         }
       };
@@ -90,21 +92,12 @@ export function TextScramble({
     initialTimeout = setTimeout(startAnimation, delay);
 
     return () => {
+      cancelAnimationFrame(resetFrame);
       clearTimeout(initialTimeout);
       clearTimeout(revealTimeout);
       clearInterval(scrambleInterval);
-      if (frameRef.current) {
-        cancelAnimationFrame(frameRef.current);
-      }
     };
   }, [text, speed, scrambleSpeed, delay, scramble, onComplete]);
-
-  // Reset on text change
-  useEffect(() => {
-    revealedIndexRef.current = 0;
-    setIsComplete(false);
-    setDisplayText("");
-  }, [text]);
 
   return (
     <span

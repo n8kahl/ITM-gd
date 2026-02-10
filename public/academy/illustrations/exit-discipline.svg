@@ -1,0 +1,12 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#070809"/>
+  <rect x="50" y="50" width="1180" height="620" rx="24" fill="#09100F" stroke="#20342F"/>
+  <text x="110" y="155" fill="#ECF3F0" font-size="52" font-family="Playfair Display, Georgia, serif" font-weight="700">Exit Discipline</text>
+  <text x="110" y="198" fill="#A2B7AF" font-size="24" font-family="Inter, Arial, sans-serif">Lock gains and cut risk with predefined exit logic.</text>
+  <rect x="120" y="250" width="1040" height="330" rx="18" fill="#0B1614" stroke="#1F3B35"/>
+  <path d="M170 330L300 360L430 340L570 390L710 370L860 440L1020 410" stroke="#F3E5AB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M170 530L300 470L430 450L570 490L710 440L860 500L1020 470" stroke="#EA5967" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  <rect x="820" y="285" width="250" height="120" rx="12" fill="#0E1B18" stroke="#2B5046"/>
+  <text x="848" y="332" fill="#DDF4EC" font-size="24" font-family="Inter, Arial, sans-serif" font-weight="600">Take Profit</text>
+  <text x="848" y="368" fill="#8FBBAC" font-size="22" font-family="Inter, Arial, sans-serif">2R target filled</text>
+</svg>

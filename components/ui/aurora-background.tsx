@@ -20,14 +20,7 @@ function useIsMobile() {
 }
 
 export function AuroraBackground() {
-  const [mounted, setMounted] = useState(false);
   const isMobile = useIsMobile();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
 
   // Reduced blur values for mobile performance
   const blurPrimary = isMobile ? "blur(30px)" : "blur(80px)";

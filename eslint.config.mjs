@@ -12,6 +12,9 @@ const eslintConfig = [
       'supabase/functions/',
       'playwright-report/',
       'test-results/',
+      'docs/specs/mockups/**',
+      'member-dashboard-mockup.jsx',
+      'member-journal-mockup.jsx',
     ],
   },
 ]

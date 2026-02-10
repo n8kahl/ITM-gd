@@ -33,7 +33,7 @@ describe('earnings service helpers', () => {
     expect(__testables.classifyEarningsTiming({} as any)).toBe('DURING');
   });
 
-  it('builds premium-selling strategies when move is overpriced', () => {
+  it('builds caution strategies when move is overpriced', () => {
     const strategies = __testables.buildSuggestedStrategies({
       symbol: 'SPX',
       moveOverpricing: 28,
@@ -44,10 +44,10 @@ describe('earnings service helpers', () => {
     });
 
     expect(strategies.length).toBeGreaterThan(0);
-    expect(strategies.some((strategy) => strategy.name.toLowerCase().includes('iron condor'))).toBe(true);
+    expect(strategies.some((strategy) => strategy.name === 'Wait For IV Reset')).toBe(true);
   });
 
-  it('builds directional spread when bearish bias exists', () => {
+  it('builds directional single-leg setup when bearish bias exists', () => {
     const strategies = __testables.buildSuggestedStrategies({
       symbol: 'AAPL',
       moveOverpricing: -5,
@@ -57,7 +57,7 @@ describe('earnings service helpers', () => {
       currentPrice: 220,
     });
 
-    expect(strategies.some((strategy) => strategy.name === 'Bear Put Spread')).toBe(true);
+    expect(strategies.some((strategy) => strategy.name === 'Directional Long Put')).toBe(true);
   });
 
   it('maps days to Alpha Vantage horizon buckets', () => {

@@ -1,7 +1,13 @@
 import { z } from 'zod';
+import { SYMBOL_REGEX } from '../lib/symbols';
 
 export const chartParamSchema = z.object({
-  symbol: z.string().min(1).max(10).transform(s => s.toUpperCase()),
+  symbol: z.string()
+    .trim()
+    .transform((s) => s.toUpperCase())
+    .refine((s) => SYMBOL_REGEX.test(s), {
+      message: 'Symbol must be 1-10 chars and may include letters, numbers, dot, underscore, colon, or hyphen',
+    }),
 });
 
 const queryBooleanSchema = z.preprocess((value) => {

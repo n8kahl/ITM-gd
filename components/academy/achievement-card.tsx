@@ -27,6 +27,13 @@ export function AchievementCard({
   const [copied, setCopied] = useState(false)
   const isEarned = !!earnedAt
 
+  const earnedDateLabel = (() => {
+    if (!earnedAt) return null
+    const parsed = new Date(earnedAt)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed.toLocaleDateString()
+  })()
+
   const handleShare = async () => {
     const shareUrl = `${window.location.origin}/achievements/${id}`
     try {
@@ -97,9 +104,9 @@ export function AchievementCard({
               {category}
             </span>
           )}
-          {earnedAt && (
+          {earnedDateLabel && (
             <p className="text-[10px] text-white/30 mt-1">
-              Earned {new Date(earnedAt).toLocaleDateString()}
+              Earned {earnedDateLabel}
             </p>
           )}
         </div>

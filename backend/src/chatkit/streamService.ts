@@ -1,11 +1,23 @@
 import { Response } from 'express';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { logger } from '../lib/logger';
-import { openaiClient, CHAT_MODEL, MAX_TOKENS, TEMPERATURE } from '../config/openai';
-import { getSystemPrompt } from './systemPrompt';
+import {
+  openaiClient,
+  CHAT_MODEL,
+  MAX_TOKENS,
+  MAX_TOTAL_TOKENS_PER_REQUEST,
+  TEMPERATURE,
+} from '../config/openai';
 import { AI_FUNCTIONS } from './functions';
 import { executeFunctionCall } from './functionHandlers';
-import { supabase } from '../config/database';
-import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { openaiCircuit } from '../lib/circuitBreaker';
+import { buildSystemPromptForUser } from './promptContext';
+import {
+  getConversationHistory,
+  getOrCreateSession,
+  saveMessage,
+  updateSessionTitle,
+} from './chatService';
 
 /**
  * Streaming Chat Service
@@ -13,7 +25,7 @@ import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
  *
  * Event types:
  *   status   — phase updates (thinking, calling functions, generating)
- *   token    — individual text tokens as they arrive
+ *   token    — text deltas as they arrive from OpenAI
  *   done     — final message with metadata (messageId, functionCalls, tokensUsed)
  *   error    — error occurred
  */
@@ -22,10 +34,107 @@ interface StreamRequest {
   sessionId: string;
   message: string;
   userId: string;
+  context?: {
+    isMobile?: boolean;
+  };
+}
+
+interface StreamToolCallAccumulator {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+interface StreamToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface StreamIterationResult {
+  content: string;
+  toolCalls: StreamToolCall[];
+  tokensUsed: number;
 }
 
 function sendSSE(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+async function runStreamingIteration(
+  messages: ChatCompletionMessageParam[],
+  res: Response,
+): Promise<StreamIterationResult> {
+  const stream = await openaiCircuit.execute(() => openaiClient.chat.completions.create({
+    model: CHAT_MODEL,
+    messages,
+    tools: AI_FUNCTIONS,
+    tool_choice: 'auto',
+    max_tokens: MAX_TOKENS,
+    temperature: TEMPERATURE,
+    stream: true,
+    stream_options: {
+      include_usage: true,
+    },
+  }));
+
+  let content = '';
+  let tokensUsed = 0;
+  const toolCallsByIndex = new Map<number, StreamToolCallAccumulator>();
+
+  for await (const chunk of stream) {
+    if (typeof chunk.usage?.total_tokens === 'number') {
+      tokensUsed = chunk.usage.total_tokens;
+    }
+
+    const choice = chunk.choices[0];
+    if (!choice) continue;
+
+    const delta = choice.delta;
+    if (delta.content) {
+      content += delta.content;
+      sendSSE(res, 'token', { content: delta.content });
+    }
+
+    if (delta.tool_calls && delta.tool_calls.length > 0) {
+      for (const toolCallDelta of delta.tool_calls) {
+        const index = typeof toolCallDelta.index === 'number' ? toolCallDelta.index : 0;
+        const existing = toolCallsByIndex.get(index) || { id: '', name: '', arguments: '' };
+
+        if (typeof toolCallDelta.id === 'string') {
+          existing.id = toolCallDelta.id;
+        }
+        if (typeof toolCallDelta.function?.name === 'string') {
+          existing.name = toolCallDelta.function.name;
+        }
+        if (typeof toolCallDelta.function?.arguments === 'string') {
+          existing.arguments += toolCallDelta.function.arguments;
+        }
+
+        toolCallsByIndex.set(index, existing);
+      }
+    }
+  }
+
+  const toolCalls: StreamToolCall[] = Array.from(toolCallsByIndex.values())
+    .filter((toolCall) => toolCall.id && toolCall.name)
+    .map((toolCall) => ({
+      id: toolCall.id,
+      type: 'function',
+      function: {
+        name: toolCall.name,
+        arguments: toolCall.arguments || '{}',
+      },
+    }));
+
+  return {
+    content,
+    toolCalls,
+    tokensUsed,
+  };
 }
 
 /**
@@ -33,7 +142,11 @@ function sendSSE(res: Response, event: string, data: unknown): void {
  */
 export async function streamChatMessage(request: StreamRequest, res: Response): Promise<void> {
   const startTime = Date.now();
-  const { sessionId, message, userId } = request;
+  const { sessionId, message, userId, context } = request;
+
+  const MAX_FUNCTION_CALL_ITERATIONS = 5;
+  const functionCalls: Array<{ function: string; arguments: Record<string, unknown>; result: unknown }> = [];
+  let cumulativeTokens = 0;
 
   try {
     // Get or create session
@@ -42,10 +155,14 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
     // Get conversation history
     const history = await getConversationHistory(sessionId);
 
+    const systemPrompt = await buildSystemPromptForUser(userId, {
+      isMobile: context?.isMobile,
+    });
+
     // Build messages array
     const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: getSystemPrompt() },
-      ...history.map(msg => ({
+      { role: 'system', content: systemPrompt },
+      ...history.map((msg) => ({
         role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.content,
       })),
@@ -62,44 +179,47 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
 
     sendSSE(res, 'status', { phase: 'thinking' });
 
-    // First call — may include function calls
-    let completion = await openaiClient.chat.completions.create({
-      model: CHAT_MODEL,
-      messages,
-      tools: AI_FUNCTIONS,
-      tool_choice: 'auto',
-      max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE,
-    });
+    let iteration = 0;
+    let finalContent: string | null = null;
 
-    let assistantMessage = completion.choices[0].message;
-    const functionCalls: Array<{ function: string; arguments: Record<string, unknown>; result: unknown }> = [];
-    let cumulativeTokens = completion.usage?.total_tokens || 0;
+    while (iteration <= MAX_FUNCTION_CALL_ITERATIONS) {
+      sendSSE(res, 'status', { phase: 'generating' });
 
-    // Handle function calling loop (max 5 iterations)
-    let iterations = 0;
-    while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-      iterations++;
-      if (iterations > 5) break;
+      const streamed = await runStreamingIteration(messages, res);
+      cumulativeTokens += streamed.tokensUsed;
+
+      if (!streamed.toolCalls.length) {
+        finalContent = streamed.content || 'I apologize, but I was unable to generate a response.';
+        break;
+      }
+
+      if (streamed.content.trim().length > 0) {
+        sendSSE(res, 'status', { phase: 'thinking', resetContent: true });
+      }
 
       messages.push({
         role: 'assistant',
-        content: assistantMessage.content || '',
-        tool_calls: assistantMessage.tool_calls,
+        content: streamed.content || '',
+        tool_calls: streamed.toolCalls as any,
       });
 
-      for (const toolCall of assistantMessage.tool_calls) {
+      for (const toolCall of streamed.toolCalls) {
         const functionName = toolCall.function.name;
         sendSSE(res, 'status', { phase: 'calling', function: functionName });
 
         try {
-          const args = JSON.parse(toolCall.function.arguments);
+          const parsedArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
           const result = await executeFunctionCall(
             { name: functionName, arguments: toolCall.function.arguments },
             { userId },
           );
 
-          functionCalls.push({ function: functionName, arguments: args, result });
+          functionCalls.push({
+            function: functionName,
+            arguments: parsedArgs,
+            result,
+          });
+
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -108,47 +228,40 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
         } catch (error: unknown) {
           const errMsg = error instanceof Error ? error.message : String(error);
           logger.error(`Function ${functionName} failed`, { error: errMsg });
+
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
-            content: JSON.stringify({ error: 'Function execution failed', message: errMsg }),
+            content: JSON.stringify({
+              error: 'Function execution failed',
+              message: errMsg,
+            }),
           });
         }
       }
 
-      // Continue the conversation with function results
-      completion = await openaiClient.chat.completions.create({
-        model: CHAT_MODEL,
-        messages,
-        tools: AI_FUNCTIONS,
-        tool_choice: 'auto',
-        max_tokens: MAX_TOKENS,
-        temperature: TEMPERATURE,
-      });
+      if (cumulativeTokens > MAX_TOTAL_TOKENS_PER_REQUEST) {
+        finalContent = 'I hit the response budget while gathering data. Please retry with a narrower request.';
+        break;
+      }
 
-      assistantMessage = completion.choices[0].message;
-      cumulativeTokens += completion.usage?.total_tokens || 0;
-      if (cumulativeTokens > 4000) break;
+      iteration += 1;
+      if (iteration > MAX_FUNCTION_CALL_ITERATIONS) {
+        finalContent = 'I reached the function-call limit for this request. Please retry with a more specific question.';
+        break;
+      }
+
+      sendSSE(res, 'status', { phase: 'thinking' });
     }
 
-    // Now stream the final response
-    sendSSE(res, 'status', { phase: 'generating' });
-
-    // If we already have the final content (from non-streaming call), stream it in chunks
-    const finalContent = assistantMessage.content || 'I apologize, but I was unable to generate a response.';
-
-    // Stream content in word-sized chunks for smooth rendering
-    const words = finalContent.split(/(\s+)/);
-    for (const word of words) {
-      sendSSE(res, 'token', { content: word });
-    }
+    const safeFinalContent = finalContent || 'I apologize, but I was unable to generate a response.';
 
     // Save assistant message to database
     const savedMessage = await saveMessage(
       sessionId,
       userId,
       'assistant',
-      finalContent,
+      safeFinalContent,
       functionCalls.length > 0 ? JSON.stringify(functionCalls) : null,
       cumulativeTokens,
     );
@@ -166,66 +279,4 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
     logger.error('Stream chat error', { error: errMsg });
     sendSSE(res, 'error', { message: 'Failed to process message. Please try again.' });
   }
-}
-
-// ---- DB helpers (duplicated from chatService to keep streaming self-contained) ----
-
-async function getOrCreateSession(sessionId: string, userId: string) {
-  await supabase
-    .from('ai_coach_sessions')
-    .upsert(
-      { id: sessionId, user_id: userId, title: 'New Conversation', message_count: 0 },
-      { onConflict: 'id', ignoreDuplicates: true },
-    );
-
-  const { data: session, error } = await supabase
-    .from('ai_coach_sessions')
-    .select('*')
-    .eq('id', sessionId)
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error || !session) throw new Error('Session not found or access denied');
-  return session;
-}
-
-async function getConversationHistory(sessionId: string, limit: number = 20) {
-  const { data: messages } = await supabase
-    .from('ai_coach_messages')
-    .select('role, content')
-    .eq('session_id', sessionId)
-    .order('created_at', { ascending: true })
-    .limit(limit);
-
-  return messages || [];
-}
-
-async function saveMessage(
-  sessionId: string,
-  userId: string,
-  role: 'user' | 'assistant' | 'system',
-  content: string,
-  functionCall?: string | null,
-  tokensUsed?: number,
-) {
-  const { data, error } = await supabase
-    .from('ai_coach_messages')
-    .insert({
-      session_id: sessionId,
-      user_id: userId,
-      role,
-      content,
-      function_call: functionCall ? JSON.parse(functionCall) : null,
-      tokens_used: tokensUsed || null,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(`Failed to save message: ${error.message}`);
-  return data;
-}
-
-async function updateSessionTitle(sessionId: string, firstMessage: string) {
-  const title = firstMessage.length > 60 ? firstMessage.substring(0, 57) + '...' : firstMessage;
-  await supabase.from('ai_coach_sessions').update({ title }).eq('id', sessionId);
 }

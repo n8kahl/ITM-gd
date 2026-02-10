@@ -378,7 +378,7 @@ function validatePosition(position: any): boolean {
   if (!position || typeof position !== 'object') return false;
   const required = ['symbol', 'type', 'quantity', 'entryPrice', 'entryDate'];
   for (const field of required) { if (!(field in position)) return false; }
-  const validTypes = ['call', 'put', 'call_spread', 'put_spread', 'iron_condor', 'stock'];
+  const validTypes = ['call', 'put', 'stock'];
   if (!validTypes.includes(position.type)) return false;
   if (position.type !== 'stock' && (!position.strike || !position.expiry)) return false;
   if (typeof position.quantity !== 'number' || position.quantity === 0) return false;

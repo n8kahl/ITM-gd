@@ -289,9 +289,11 @@ function PositionCard({
   onAskAI?: (prompt: string) => void
 }) {
   const daysToExpiry = Math.max(0, Math.ceil(
+    // eslint-disable-next-line react-hooks/purity
     (new Date(position.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   ))
   const daysHeld = Math.ceil(
+    // eslint-disable-next-line react-hooks/purity
     (Date.now() - new Date(position.entry_date).getTime()) / (1000 * 60 * 60 * 24)
   )
 

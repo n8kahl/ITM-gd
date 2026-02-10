@@ -237,7 +237,10 @@ export function useAICoachChat() {
           usedStreaming = true
 
           if (event.type === 'status') {
-            const status = event.data as { phase: string; function?: string }
+            const status = event.data as { phase: string; function?: string; resetContent?: boolean }
+            if (status.resetContent) {
+              streamContent = ''
+            }
             let statusText = 'Thinking...'
             if (status.phase === 'calling') statusText = `Using ${status.function}...`
             else if (status.phase === 'generating') statusText = 'Writing...'

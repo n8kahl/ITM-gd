@@ -6,6 +6,9 @@
  *
  * Protocol (JSON messages):
  *
+ *   Authentication:
+ *     - Clients must pass Supabase JWT as query param: /ws/prices?token=<jwt>
+ *
  *   Client → Server:
  *     { "type": "subscribe",   "symbols": ["SPX", "NDX"] }
  *     { "type": "subscribe",   "channels": ["setups:user-123"] }
@@ -31,12 +34,13 @@
  *   Market closed: every 5 minutes
  */
 
-import { Server as HTTPServer } from 'http';
+import { Server as HTTPServer, IncomingMessage } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { logger } from '../lib/logger';
 import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { formatMassiveTicker, isValidSymbol, normalizeSymbol } from '../lib/symbols';
 import { getMarketStatus } from './marketHours';
+import { AuthTokenError, extractBearerToken, verifyAuthToken } from '../lib/tokenAuth';
 import {
   subscribeSetupPushEvents,
   type SetupDetectedUpdate,
@@ -53,6 +57,7 @@ import {
 // ============================================
 
 interface ClientState {
+  userId: string;
   subscriptions: Set<string>;
   lastActivity: number;
 }
@@ -84,6 +89,8 @@ const SETUP_CHANNEL_PREFIX = 'setups:';
 const SETUP_CHANNEL_PATTERN = /^setups:[a-zA-Z0-9_-]{3,64}$/;
 const POSITION_CHANNEL_PREFIX = 'positions:';
 const POSITION_CHANNEL_PATTERN = /^positions:[a-zA-Z0-9_-]{3,64}$/;
+const WS_CLOSE_UNAUTHORIZED = 4401;
+const WS_CLOSE_FORBIDDEN = 4403;
 
 function formatTicker(symbol: string): string {
   return formatMassiveTicker(symbol);
@@ -155,6 +162,47 @@ function normalizeRealtimeChannel(value: string): string | null {
   return normalizeSetupChannel(value) || normalizePositionChannel(value);
 }
 
+function getChannelOwnerId(channel: string): string | null {
+  if (channel.startsWith(SETUP_CHANNEL_PREFIX)) {
+    return channel.slice(SETUP_CHANNEL_PREFIX.length);
+  }
+  if (channel.startsWith(POSITION_CHANNEL_PREFIX)) {
+    return channel.slice(POSITION_CHANNEL_PREFIX.length);
+  }
+  return null;
+}
+
+function isRealtimeChannelAuthorized(channel: string, userId: string): boolean {
+  const ownerId = getChannelOwnerId(channel);
+  if (!ownerId) return true;
+  return ownerId === userId.toLowerCase();
+}
+
+function toSetupChannel(userId: string): string {
+  return `${SETUP_CHANNEL_PREFIX}${userId.toLowerCase()}`;
+}
+
+function toPositionChannel(userId: string): string {
+  return `${POSITION_CHANNEL_PREFIX}${userId.toLowerCase()}`;
+}
+
+function extractWsToken(req: IncomingMessage): string | null {
+  const host = req.headers.host || 'localhost';
+  const requestUrl = req.url || '/ws/prices';
+
+  try {
+    const parsedUrl = new URL(requestUrl, `http://${host}`);
+    const tokenFromQuery = parsedUrl.searchParams.get('token');
+    if (tokenFromQuery && tokenFromQuery.trim().length > 0) {
+      return tokenFromQuery.trim();
+    }
+  } catch {
+    // Ignore URL parsing errors and fall back to Authorization header parsing.
+  }
+
+  return extractBearerToken(req.headers.authorization);
+}
+
 function getActiveSymbols(): Set<string> {
   const symbols = new Set<string>();
   for (const state of clients.values()) {
@@ -177,7 +225,7 @@ function broadcastPrice(update: PriceUpdate): void {
 }
 
 function broadcastSetupUpdate(update: SetupStatusUpdate): void {
-  const channel = `${SETUP_CHANNEL_PREFIX}${update.userId}`;
+  const channel = toSetupChannel(update.userId);
   const message = JSON.stringify({
     type: 'setup_update',
     channel,
@@ -192,7 +240,7 @@ function broadcastSetupUpdate(update: SetupStatusUpdate): void {
 }
 
 function broadcastSetupDetected(update: SetupDetectedUpdate): void {
-  const channel = `${SETUP_CHANNEL_PREFIX}${update.userId}`;
+  const channel = toSetupChannel(update.userId);
   const message = JSON.stringify({
     type: 'setup_detected',
     channel,
@@ -207,7 +255,7 @@ function broadcastSetupDetected(update: SetupDetectedUpdate): void {
 }
 
 function broadcastPositionUpdate(update: PositionLiveUpdate): void {
-  const channel = `${POSITION_CHANNEL_PREFIX}${update.userId}`;
+  const channel = toPositionChannel(update.userId);
   const message = JSON.stringify({
     type: 'position_update',
     channel,
@@ -222,7 +270,7 @@ function broadcastPositionUpdate(update: PositionLiveUpdate): void {
 }
 
 function broadcastPositionAdvice(update: PositionAdviceUpdate): void {
-  const channel = `${POSITION_CHANNEL_PREFIX}${update.userId}`;
+  const channel = toPositionChannel(update.userId);
   const message = JSON.stringify({
     type: 'position_advice',
     channel,
@@ -292,6 +340,11 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
           const channel = normalizeRealtimeChannel(channelCandidate);
           if (!channel) {
             sendToClient(ws, { type: 'error', message: `Invalid channel: ${String(channelCandidate)}` });
+            continue;
+          }
+
+          if (!isRealtimeChannelAuthorized(channel, state.userId)) {
+            sendToClient(ws, { type: 'error', message: `Forbidden channel: ${channel}` });
             continue;
           }
 
@@ -413,8 +466,43 @@ function startHeartbeat(): void {
 export function initWebSocket(server: HTTPServer): void {
   wss = new WebSocketServer({ server, path: '/ws/prices' });
 
-  wss.on('connection', (ws: WebSocket) => {
-    clients.set(ws, { subscriptions: new Set(), lastActivity: Date.now() });
+  wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
+    const token = extractWsToken(req);
+    if (!token) {
+      sendToClient(ws, { type: 'error', message: 'Missing authentication token' });
+      ws.close(WS_CLOSE_UNAUTHORIZED, 'Unauthorized');
+      return;
+    }
+
+    let authenticatedUserId = '';
+    try {
+      const user = await verifyAuthToken(token);
+      authenticatedUserId = user.id.toLowerCase();
+    } catch (error) {
+      if (error instanceof AuthTokenError) {
+        const closeCode = error.statusCode === 401
+          ? WS_CLOSE_UNAUTHORIZED
+          : error.statusCode === 403
+            ? WS_CLOSE_FORBIDDEN
+            : 1011;
+        sendToClient(ws, { type: 'error', message: error.clientMessage });
+        ws.close(closeCode, error.clientMessage);
+        return;
+      }
+
+      logger.error('WebSocket authentication error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      sendToClient(ws, { type: 'error', message: 'Authentication failed' });
+      ws.close(1011, 'Authentication failed');
+      return;
+    }
+
+    clients.set(ws, {
+      userId: authenticatedUserId,
+      subscriptions: new Set(),
+      lastActivity: Date.now(),
+    });
 
     logger.info(`WebSocket client connected (${clients.size} total)`);
 

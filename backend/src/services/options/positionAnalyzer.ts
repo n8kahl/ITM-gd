@@ -79,7 +79,7 @@ function calculateMaxGainLoss(position: Position): {
   maxGain: number | string;
   maxLoss: number | string;
 } {
-  const { type, strike, strike2, quantity, entryPrice } = position;
+  const { type, strike, quantity, entryPrice } = position;
   const absQuantity = Math.abs(quantity);
   const premium = entryPrice * CONTRACT_MULTIPLIER * absQuantity;
 
@@ -115,59 +115,26 @@ function calculateMaxGainLoss(position: Position): {
     };
   }
 
-  // Call spread (bull call spread: long lower strike, short higher strike)
-  if (type === 'call_spread' && strike && strike2) {
-    const spreadWidth = Math.abs(strike2 - strike) * CONTRACT_MULTIPLIER * absQuantity;
-
-    if (quantity > 0) {
-      // Bull call spread (debit)
-      return {
-        maxGain: spreadWidth - premium,
-        maxLoss: premium
-      };
-    } else {
-      // Bear call spread (credit)
-      return {
-        maxGain: premium,
-        maxLoss: spreadWidth - premium
-      };
-    }
-  }
-
-  // Put spread (bear put spread: long higher strike, short lower strike)
-  if (type === 'put_spread' && strike && strike2) {
-    const spreadWidth = Math.abs(strike2 - strike) * CONTRACT_MULTIPLIER * absQuantity;
-
-    if (quantity > 0) {
-      // Bear put spread (debit)
-      return {
-        maxGain: spreadWidth - premium,
-        maxLoss: premium
-      };
-    } else {
-      // Bull put spread (credit)
-      return {
-        maxGain: premium,
-        maxLoss: spreadWidth - premium
-      };
-    }
-  }
-
-  // Iron condor (4-leg spread)
-  if (type === 'iron_condor' && strike && strike2) {
-    // Simplified calculation assuming balanced iron condor
-    // Premium received should exceed max loss on either side
-    return {
-      maxGain: premium,
-      maxLoss: 'varies by strikes'
-    };
-  }
-
   // Stock
   if (type === 'stock') {
+    const costBasis = entryPrice * absQuantity;
+    if (quantity > 0) {
+      return {
+        maxGain: 'unlimited',
+        maxLoss: costBasis
+      };
+    }
+
+    if (quantity < 0) {
+      return {
+        maxGain: costBasis,
+        maxLoss: 'unlimited'
+      };
+    }
+
     return {
       maxGain: 'unlimited',
-      maxLoss: strike ? strike * absQuantity : 'unlimited'
+      maxLoss: 'unknown'
     };
   }
 
@@ -185,7 +152,7 @@ async function fetchCurrentOptionData(
 ): Promise<{ currentPrice: number; greeks: Greeks } | null> {
   if (!position.strike || !position.expiry) return null;
 
-  const optionType = position.type === 'call' || position.type === 'call_spread' ? 'call' : 'put';
+  const optionType = position.type === 'call' ? 'call' : 'put';
 
   try {
     const contract = await fetchOptionContract(
@@ -470,9 +437,6 @@ interface PositionRow {
 const VALID_POSITION_TYPES = new Set<Position['type']>([
   'call',
   'put',
-  'call_spread',
-  'put_spread',
-  'iron_condor',
   'stock',
 ]);
 
@@ -504,17 +468,27 @@ function parseGreeks(value: Record<string, unknown> | null): Greeks | undefined 
   return { delta, gamma, theta, vega, rho };
 }
 
-function mapPositionType(positionType: string): Position['type'] {
+function mapPositionType(positionType: string): Position['type'] | null {
   const normalized = positionType.toLowerCase() as Position['type'];
   if (VALID_POSITION_TYPES.has(normalized)) return normalized;
-  return 'stock';
+  return null;
 }
 
-function mapRowToPosition(row: PositionRow): Position {
+function mapRowToPosition(row: PositionRow): Position | null {
+  const type = mapPositionType(row.position_type);
+  if (!type) {
+    logger.warn('Skipping unsupported position type for TITM single-leg model', {
+      positionId: row.id,
+      symbol: row.symbol,
+      positionType: row.position_type,
+    });
+    return null;
+  }
+
   return {
     id: row.id,
     symbol: row.symbol.toUpperCase(),
-    type: mapPositionType(row.position_type),
+    type,
     strike: parseNumber(row.strike),
     expiry: parseDateOnly(row.expiry),
     quantity: parseNumber(row.quantity) ?? 0,
@@ -579,5 +553,6 @@ export async function getUserPositions(userId: string): Promise<Position[]> {
 
   return (data || [])
     .map((row) => mapRowToPosition(row as PositionRow))
+    .filter((position): position is Position => Boolean(position))
     .filter((position) => position.quantity !== 0 && position.entryPrice > 0);
 }

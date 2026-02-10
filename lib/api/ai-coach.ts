@@ -360,13 +360,12 @@ export interface EarningsAnalysisResponse {
   asOf: string
 }
 
-export type PositionType = 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock'
+export type PositionType = 'call' | 'put' | 'stock'
 
 export interface PositionInput {
   symbol: string
   type: PositionType
   strike?: number
-  strike2?: number
   expiry?: string
   quantity: number
   entryPrice: number
@@ -394,7 +393,7 @@ export interface PositionAnalysis {
   }
 }
 
-export type PositionAdviceType = 'take_profit' | 'stop_loss' | 'time_decay' | 'spread_conversion' | 'roll'
+export type PositionAdviceType = 'take_profit' | 'stop_loss' | 'time_decay'
 export type PositionAdviceUrgency = 'low' | 'medium' | 'high'
 
 export interface PositionAdvice {
@@ -522,17 +521,22 @@ async function fetchWithAuth(
  * Send a chat message and receive AI response
  */
 export async function sendMessage(
-  sessionId: string,
+  sessionId: string | undefined,
   message: string,
   token: string,
   signal?: AbortSignal
 ): Promise<ChatMessageResponse> {
+  const payload: { message: string; sessionId?: string } = { message }
+  if (sessionId && sessionId.trim().length > 0) {
+    payload.sessionId = sessionId
+  }
+
   const response = await fetchWithAuth(
     `${API_BASE}/api/chat/message`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, message }),
+      body: JSON.stringify(payload),
     },
     token,
     signal
@@ -556,7 +560,7 @@ export async function sendChatMessage(
   message: string,
   token: string
 ): Promise<ChatMessageResponse> {
-  return sendMessage('', message, token)
+  return sendMessage(undefined, message, token)
 }
 
 /**
@@ -1065,7 +1069,7 @@ export async function getPositionAdvice(
 
 export interface ExtractedPosition {
   symbol: string
-  type: 'call' | 'put' | 'call_spread' | 'put_spread' | 'stock'
+  type: 'call' | 'put' | 'stock'
   strike?: number
   expiry?: string
   quantity: number
@@ -1116,7 +1120,7 @@ export async function analyzeScreenshot(
 // ============================================
 
 export type TradeOutcome = 'win' | 'loss' | 'breakeven'
-export type JournalPositionType = Exclude<PositionType, 'call_spread' | 'put_spread'>
+export type JournalPositionType = PositionType
 
 export interface TradeEntry {
   id: string

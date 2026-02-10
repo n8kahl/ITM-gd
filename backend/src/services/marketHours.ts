@@ -33,8 +33,7 @@ const MARKET_HOLIDAYS: Record<string, 'closed' | 'early'> = {
   '2026-04-03': 'closed', // Good Friday
   '2026-05-25': 'closed', // Memorial Day
   '2026-06-19': 'closed', // Juneteenth
-  '2026-07-03': 'early',  // Independence Day (observed) Eve
-  '2026-07-04': 'closed', // Independence Day (Sat - observed Fri Jul 3)
+  '2026-07-03': 'closed', // Independence Day observed
   '2026-09-07': 'closed', // Labor Day
   '2026-11-26': 'closed', // Thanksgiving
   '2026-11-27': 'early',  // Black Friday
@@ -47,15 +46,13 @@ const MARKET_HOLIDAYS: Record<string, 'closed' | 'early'> = {
   '2027-03-26': 'closed', // Good Friday
   '2027-05-31': 'closed', // Memorial Day
   '2027-06-18': 'closed', // Juneteenth (observed)
-  '2027-07-04': 'closed', // Independence Day
-  '2027-07-05': 'early',  // Independence Day (Mon - observed)
+  '2027-07-05': 'closed', // Independence Day observed
   '2027-09-06': 'closed', // Labor Day
   '2027-11-25': 'closed', // Thanksgiving
   '2027-11-26': 'early',  // Black Friday
-  '2027-12-24': 'early',  // Christmas Eve
-  '2027-12-25': 'closed', // Christmas (Sat - observed Fri Dec 24)
+  '2027-12-24': 'closed', // Christmas observed
   // 2028
-  '2028-01-01': 'closed', // New Year's Day (Sat - observed Mon)
+  '2028-01-03': 'closed', // New Year's Day observed
   '2028-01-17': 'closed', // MLK Day
   '2028-02-21': 'closed', // Presidents' Day
   '2028-04-14': 'closed', // Good Friday
@@ -78,6 +75,14 @@ export interface MarketStatus {
   timeSinceOpen?: string;
   closingTime?: string;
   holidayName?: string;
+}
+
+function formatETTime(minutesFromMidnight: number): string {
+  const hour24 = Math.floor(minutesFromMidnight / 60);
+  const minute = minutesFromMidnight % 60;
+  const period = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${period} ET`;
 }
 
 /**
@@ -175,18 +180,15 @@ export function getMarketStatus(now?: Date): MarketStatus {
     const hours = Math.floor(minutesSinceOpen / 60);
     const mins = minutesSinceOpen % 60;
 
-    const closeHour = Math.floor(regularClose / 60);
-    const closeMin = regularClose % 60;
-
-    return {
-      status: 'open',
-      session: 'regular',
-      message: holiday === 'early'
-        ? 'Market is open (early close today at 1:00 PM ET)'
-        : 'Market is open for regular trading',
-      timeSinceOpen: `${hours}h ${mins}m`,
-      closingTime: `${closeHour}:${String(closeMin).padStart(2, '0')} PM ET`,
-    };
+      return {
+        status: 'open',
+        session: 'regular',
+        message: holiday === 'early'
+          ? 'Market is open (early close today at 1:00 PM ET)'
+          : 'Market is open for regular trading',
+        timeSinceOpen: `${hours}h ${mins}m`,
+        closingTime: formatETTime(regularClose),
+      };
   }
 
   // After-hours: close - 8:00 PM ET (1200 minutes)
@@ -211,7 +213,7 @@ function getHolidayName(dateStr: string): string {
   const month = parseInt(dateStr.slice(5, 7));
   const day = parseInt(dateStr.slice(8, 10));
 
-  if (month === 1 && day === 1) return "New Year's Day";
+  if (month === 1 && day >= 1 && day <= 3) return "New Year's Day";
   if (month === 1 && day >= 15 && day <= 21) return 'Martin Luther King Jr. Day';
   if (month === 2 && day >= 15 && day <= 21) return "Presidents' Day";
   if (month === 3 || month === 4) return 'Good Friday';

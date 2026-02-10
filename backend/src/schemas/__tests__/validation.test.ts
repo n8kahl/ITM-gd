@@ -149,11 +149,10 @@ describe('Validation Schemas', () => {
       });
 
       it('should accept all valid position_type values', () => {
-        const positionTypes: Array<'call' | 'put' | 'stock' | 'iron_condor'> = [
+        const positionTypes: Array<'call' | 'put' | 'stock'> = [
           'call',
           'put',
           'stock',
-          'iron_condor',
         ];
 
         for (const posType of positionTypes) {
@@ -173,7 +172,7 @@ describe('Validation Schemas', () => {
       it('should reject invalid position_type', () => {
         const invalidTrade = {
           symbol: 'SPY',
-          position_type: 'invalid_position',
+          position_type: 'iron_condor',
           entry_date: '2026-01-15',
           entry_price: 425.50,
           quantity: 100,
@@ -499,20 +498,14 @@ describe('Validation Schemas', () => {
         }
       });
 
-      it('should accept message with only whitespace (trims to empty then fails)', () => {
-        // Note: The schema validates min(1) BEFORE trim(), so whitespace-only strings pass min(1)
-        // Then trim() reduces them. This is the actual behavior.
+      it('should reject message with only whitespace', () => {
         const message = {
           sessionId: '550e8400-e29b-41d4-a716-446655440000',
           message: '   ',
         };
 
         const result = messageSchema.safeParse(message);
-        // This passes validation because trim happens after min(1) check
-        // But the trimmed result is empty string
-        if (result.success) {
-          expect(result.data.message).toBe('');
-        }
+        expect(result.success).toBe(false);
       });
 
       it('should accept multiline message', () => {
@@ -535,13 +528,13 @@ describe('Validation Schemas', () => {
         expect(result.success).toBe(true);
       });
 
-      it('should reject missing sessionId', () => {
+      it('should accept missing sessionId', () => {
         const incompleteMessage = {
           message: 'Hello',
         };
 
         const result = messageSchema.safeParse(incompleteMessage);
-        expect(result.success).toBe(false);
+        expect(result.success).toBe(true);
       });
 
       it('should reject missing message', () => {

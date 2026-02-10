@@ -47,9 +47,6 @@ function normalizePositionType(value: string | undefined): PositionType {
   if (
     normalized === 'call'
     || normalized === 'put'
-    || normalized === 'call_spread'
-    || normalized === 'put_spread'
-    || normalized === 'iron_condor'
     || normalized === 'stock'
   ) {
     return normalized

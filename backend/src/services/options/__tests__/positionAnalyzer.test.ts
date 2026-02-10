@@ -201,54 +201,6 @@ describe('Position Analyzer', () => {
     });
   });
 
-  describe('analyzePosition - Spreads', () => {
-    it('should analyze a call spread', async () => {
-      const position: Position = {
-        symbol: 'SPX',
-        type: 'call_spread',
-        strike: 5900, // Long strike
-        strike2: 6000, // Short strike
-        expiry: '2026-03-31',
-        quantity: 5,
-        entryPrice: 30, // Debit paid
-        entryDate: '2026-02-01'
-      };
-
-      const analysis = await analyzePosition(position);
-
-      // Spread width: $100
-      const spreadWidth = 100 * 100 * 5; // $50,000
-
-      // Max gain: spread width - premium paid
-      const premium = 30 * 100 * 5; // $15,000
-      expect(analysis.maxGain).toBe(spreadWidth - premium); // $35,000
-
-      // Max loss: premium paid
-      expect(analysis.maxLoss).toBe(premium); // $15,000
-    });
-
-    it('should calculate risk/reward ratio', async () => {
-      const position: Position = {
-        symbol: 'SPX',
-        type: 'call_spread',
-        strike: 5900,
-        strike2: 6000,
-        expiry: '2026-03-31',
-        quantity: 1,
-        entryPrice: 25,
-        entryDate: '2026-02-01'
-      };
-
-      const analysis = await analyzePosition(position);
-
-      // Max gain: (100 * 100) - (25 * 100) = $7,500
-      // Max loss: 25 * 100 = $2,500
-      // Risk/reward: 7500 / 2500 = 3.0
-
-      expect(analysis.riskRewardRatio).toBeCloseTo(3.0, 1);
-    });
-  });
-
   describe('analyzePosition - Stock', () => {
     it('should analyze a stock position', async () => {
       const position: Position = {
@@ -274,8 +226,33 @@ describe('Position Analyzer', () => {
       // Max gain: unlimited
       expect(analysis.maxGain).toBe('unlimited');
 
+      // Max loss: full cost basis for long stock
+      expect(analysis.maxLoss).toBe(580000);
+
       // No expiry for stock
       expect(analysis.daysToExpiry).toBeUndefined();
+    });
+
+    it('should model short stock as unlimited risk with limited upside', async () => {
+      const position: Position = {
+        symbol: 'SPX',
+        type: 'stock',
+        quantity: -25,
+        entryPrice: 5800,
+        currentPrice: 5700,
+        entryDate: '2026-01-15'
+      };
+
+      const analysis = await analyzePosition(position);
+
+      // Short stock gains when price drops
+      expect(analysis.pnl).toBe(2500);
+
+      // Max gain capped if underlying goes to zero
+      expect(analysis.maxGain).toBe(145000);
+
+      // Short stock downside is theoretically unlimited
+      expect(analysis.maxLoss).toBe('unlimited');
     });
   });
 

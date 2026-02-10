@@ -32,6 +32,7 @@ import {
   type WidgetAction,
 } from './widget-actions'
 import {
+  API_BASE,
   getTrackedSetups,
   updateTrackedSetup,
   deleteTrackedSetup,
@@ -71,6 +72,22 @@ const DIRECTION_STYLES: Record<'bullish' | 'bearish' | 'neutral', string> = {
 const PRESSABLE_PROPS = {
   whileHover: { y: -1 },
   whileTap: { scale: 0.98 },
+}
+
+function toAuthenticatedWsUrl(baseHttpUrl: string, token: string): string {
+  try {
+    const parsed = new URL(baseHttpUrl)
+    const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = new URL(`${protocol}//${parsed.host}/ws/prices`)
+    wsUrl.searchParams.set('token', token)
+    return wsUrl.toString()
+  } catch {
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3001'
+    const wsUrl = new URL(`${protocol}//${host}/ws/prices`)
+    wsUrl.searchParams.set('token', token)
+    return wsUrl.toString()
+  }
 }
 
 interface SetupTradePlan {
@@ -234,21 +251,10 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
   }, [fetchSetups])
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !token) return
 
     const setupChannel = `setups:${userId}`
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || ''
-    let wsUrl = `${protocol}//${window.location.host}/ws/prices`
-    if (backendUrl) {
-      try {
-        wsUrl = `${protocol}//${new URL(backendUrl).host}/ws/prices`
-      } catch {
-        wsUrl = `${protocol}//${window.location.host}/ws/prices`
-      }
-    }
-
-    const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(toAuthenticatedWsUrl(API_BASE, token))
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -276,7 +282,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
       wsRef.current?.close()
       wsRef.current = null
     }
-  }, [fetchSetups, userId])
+  }, [fetchSetups, token, userId])
 
   const setMutating = useCallback((id: string, value: boolean) => {
     setMutatingIds((prev) => ({ ...prev, [id]: value }))

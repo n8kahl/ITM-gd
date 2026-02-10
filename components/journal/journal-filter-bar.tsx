@@ -259,7 +259,7 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
 
         {/* Contract Type Filter */}
         <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">
-          {(['all', 'stock', 'call', 'put', 'spread'] as const).map((contractType) => (
+          {(['all', 'stock', 'call', 'put'] as const).map((contractType) => (
             <button
               type="button"
               key={contractType}

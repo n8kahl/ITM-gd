@@ -22,7 +22,7 @@ import { getMacroContext, assessMacroImpact } from '../services/macro/macroConte
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
 import { journalPatternAnalyzer } from '../services/journal/patternAnalyzer';
-import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
+import { isValidSymbol, normalizeSymbol, POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
@@ -52,6 +52,19 @@ async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: st
 }
 
 const FUNCTION_TIMEOUT_MS = 10000; // 10 second timeout per function call
+
+function toValidSymbol(symbol: unknown): string | null {
+  if (typeof symbol !== 'string') return null;
+  const normalized = normalizeSymbol(symbol);
+  return isValidSymbol(normalized) ? normalized : null;
+}
+
+function invalidSymbolError(): { error: string; message: string } {
+  return {
+    error: 'Invalid symbol',
+    message: 'Symbol must be 1-10 chars and may include letters, numbers, dot, underscore, colon, or hyphen',
+  };
+}
 
 export async function executeFunctionCall(functionCall: FunctionCall, context?: FunctionCallContext): Promise<any> {
   const { name, arguments: argsString } = functionCall;
@@ -152,15 +165,16 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
  */
 async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) {
   const { symbol, timeframe = 'intraday' } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     // Call the levels service
     const levels = await withTimeout(
-      () => calculateLevels(symbol, timeframe),
+      () => calculateLevels(validSymbol, timeframe),
       FUNCTION_TIMEOUT_MS,
       'get_key_levels'
     );
@@ -192,15 +206,16 @@ async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) 
  */
 async function handleGetCurrentPrice(args: { symbol: string }) {
   const { symbol } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     // Fetch intraday data
     const intradayData = await withTimeout(
-      () => fetchIntradayData(symbol),
+      () => fetchIntradayData(validSymbol),
       FUNCTION_TIMEOUT_MS,
       'get_current_price'
     );
@@ -209,7 +224,7 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
       // Market is open or has today's data
       const latestCandle = intradayData[intradayData.length - 1];
       return {
-        symbol,
+        symbol: validSymbol,
         price: latestCandle.c,
         timestamp: new Date(latestCandle.t).toISOString(),
         high: latestCandle.h,
@@ -220,12 +235,12 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
     }
 
     // Fallback to daily data (covers weekends + holidays with 7-day lookback)
-    const dailyData = await fetchDailyData(symbol, 7);
+    const dailyData = await fetchDailyData(validSymbol, 7);
     if (dailyData.length > 0) {
       const latestBar = dailyData[dailyData.length - 1];
       const marketStatus = getMarketStatusService();
       return {
-        symbol,
+        symbol: validSymbol,
         price: latestBar.c,
         timestamp: new Date(latestBar.t).toISOString(),
         high: latestBar.h,
@@ -268,14 +283,15 @@ async function handleGetOptionsChain(args: {
   strikeRange?: number;
 }) {
   const { symbol, expiry, strikeRange = 10 } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     const chain = await withTimeout(
-      () => fetchOptionsChain(symbol, expiry, strikeRange),
+      () => fetchOptionsChain(validSymbol, expiry, strikeRange),
       FUNCTION_TIMEOUT_MS,
       'get_options_chain'
     );
@@ -342,14 +358,15 @@ async function handleGetGammaExposure(args: {
     maxExpirations,
     forceRefresh = false,
   } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     const profile = await withTimeout(
-      () => calculateGEXProfile(symbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
+      () => calculateGEXProfile(validSymbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
       FUNCTION_TIMEOUT_MS,
       'get_gamma_exposure',
     );
@@ -384,14 +401,15 @@ async function handleGetZeroDTEAnalysis(args: {
   type?: 'call' | 'put';
 }) {
   const { symbol, strike, type } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     const analysis = await withTimeout(
-      () => analyzeZeroDTE(symbol, { strike, type }),
+      () => analyzeZeroDTE(validSymbol, { strike, type }),
       FUNCTION_TIMEOUT_MS,
       'get_zero_dte_analysis',
     );
@@ -423,14 +441,15 @@ async function handleGetIVAnalysis(args: {
     maxExpirations,
     forceRefresh = false,
   } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     const profile = await withTimeout(
-      () => analyzeIVProfile(symbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
+      () => analyzeIVProfile(validSymbol, { expiry, strikeRange, maxExpirations, forceRefresh }),
       FUNCTION_TIMEOUT_MS,
       'get_iv_analysis',
     );
@@ -636,14 +655,15 @@ async function handleGetEarningsCalendar(args: {
  */
 async function handleGetEarningsAnalysis(args: { symbol: string }) {
   const { symbol } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z0-9._:-]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters/numbers' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     const analysis = await withTimeout(
-      () => getEarningsAnalysis(symbol.toUpperCase()),
+      () => getEarningsAnalysis(validSymbol),
       FUNCTION_TIMEOUT_MS,
       'get_earnings_analysis',
     );
@@ -1146,18 +1166,19 @@ async function handleScanOpportunities(args: {
  */
 async function handleShowChart(args: { symbol: string; timeframe?: string }) {
   const { symbol, timeframe = '1D' } = args;
+  const validSymbol = toValidSymbol(symbol);
 
-  if (!symbol || typeof symbol !== 'string' || !/^[A-Z]{1,10}$/.test(symbol.toUpperCase())) {
-    return { error: 'Invalid symbol', message: 'Symbol must be 1-10 uppercase letters' };
+  if (!validSymbol) {
+    return invalidSymbolError();
   }
 
   try {
     // Fetch levels to include as annotations
-    const levels = await calculateLevels(symbol, 'intraday');
+    const levels = await calculateLevels(validSymbol, 'intraday');
 
     return {
       action: 'show_chart',
-      symbol,
+      symbol: validSymbol,
       timeframe,
       currentPrice: levels.currentPrice,
       levels: {
@@ -1165,15 +1186,15 @@ async function handleShowChart(args: { symbol: string; timeframe?: string }) {
         support: levels.levels.support.slice(0, 5),
         indicators: levels.levels.indicators
       },
-      message: `Displaying ${symbol} chart (${timeframe}) with key levels in the center panel.`
+      message: `Displaying ${validSymbol} chart (${timeframe}) with key levels in the center panel.`
     };
   } catch (error: any) {
     return {
       action: 'show_chart',
-      symbol,
+      symbol: validSymbol,
       timeframe,
       error: 'Could not fetch levels for chart annotations',
-      message: `Displaying ${symbol} chart (${timeframe}) in the center panel.`
+      message: `Displaying ${validSymbol} chart (${timeframe}) in the center panel.`
     };
   }
 }

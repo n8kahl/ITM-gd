@@ -1,0 +1,13 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#070809"/>
+  <rect x="50" y="50" width="1180" height="620" rx="24" fill="#09100F" stroke="#20342F"/>
+  <text x="110" y="155" fill="#ECF3F0" font-size="52" font-family="Playfair Display, Georgia, serif" font-weight="700">Trade Management</text>
+  <text x="110" y="198" fill="#A2B7AF" font-size="24" font-family="Inter, Arial, sans-serif">Manage in-flight trades with planned adjustments.</text>
+  <rect x="120" y="250" width="1040" height="330" rx="18" fill="#0B1614" stroke="#1F3B35"/>
+  <path d="M170 510L300 470L420 420L560 430L690 360L830 378L980 290L1070 315" stroke="#18C58C" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="690" y1="250" x2="690" y2="580" stroke="#F3E5AB" stroke-width="3" stroke-dasharray="10 10"/>
+  <rect x="718" y="338" width="220" height="72" rx="10" fill="#0E1F1B" stroke="#2E5E51"/>
+  <text x="740" y="376" fill="#DDF4EC" font-size="24" font-family="Inter, Arial, sans-serif" font-weight="600">Scale Out + Trail</text>
+  <rect x="170" y="290" width="180" height="56" rx="10" fill="#0E1F1B" stroke="#2E5E51"/>
+  <text x="190" y="326" fill="#DDF4EC" font-size="22" font-family="Inter, Arial, sans-serif">Entry Zone</text>
+</svg>

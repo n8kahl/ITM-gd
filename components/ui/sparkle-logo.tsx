@@ -42,6 +42,11 @@ interface SparkleLogoProps {
   priority?: boolean
 }
 
+function seededUnit(seed: number): number {
+  const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453
+  return value - Math.floor(value)
+}
+
 const Sparkle: React.FC<SparkleProps> = ({ x, y, size, delay, duration, color }) => {
   return (
     <motion.div
@@ -101,12 +106,12 @@ const SparkleLog: React.FC<SparkleLogoProps> = ({
 
     return Array.from({ length: effectiveSparkleCount }, (_, i) => ({
       id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      size: Math.random() * 6 + 3, // 3-9px
-      delay: Math.random() * 3,
-      duration: Math.random() * 2 + 2, // 2-4s
-      color: colors[Math.floor(Math.random() * colors.length)],
+      x: seededUnit(i + 1) * 100,
+      y: seededUnit((i + 1) * 2.13) * 100,
+      size: seededUnit((i + 1) * 3.17) * 6 + 3, // 3-9px
+      delay: seededUnit((i + 1) * 4.29) * 3,
+      duration: seededUnit((i + 1) * 5.43) * 2 + 2, // 2-4s
+      color: colors[Math.floor(seededUnit((i + 1) * 6.71) * colors.length)],
     }))
   }, [effectiveSparkleCount])
 

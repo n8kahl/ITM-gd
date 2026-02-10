@@ -258,16 +258,12 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
               },
               type: {
                 type: 'string',
-                enum: ['call', 'put', 'call_spread', 'put_spread', 'iron_condor', 'stock'],
+                enum: ['call', 'put', 'stock'],
                 description: 'Position type'
               },
               strike: {
                 type: 'number',
                 description: 'Strike price (for options)'
-              },
-              strike2: {
-                type: 'number',
-                description: 'Second strike for spreads'
               },
               expiry: {
                 type: 'string',
@@ -297,7 +293,6 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
                 symbol: { type: 'string' },
                 type: { type: 'string' },
                 strike: { type: 'number' },
-                strike2: { type: 'number' },
                 expiry: { type: 'string' },
                 quantity: { type: 'number' },
                 entryPrice: { type: 'number' },
@@ -313,7 +308,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_position_advice',
-      description: 'Get proactive management advice for open positions, including profit-taking, stop-loss, theta decay, spread conversion, and roll suggestions.',
+      description: 'Get proactive management advice for open positions, including profit-taking, stop-loss, and theta decay risk.',
       parameters: {
         type: 'object',
         properties: {
@@ -546,7 +541,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
           },
           position_type: {
             type: 'string',
-            enum: ['call', 'put', 'call_spread', 'put_spread', 'stock'],
+            enum: ['call', 'put', 'stock'],
             description: 'Type of position'
           },
           entry_price: {

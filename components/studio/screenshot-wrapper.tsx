@@ -181,7 +181,7 @@ export function ScreenshotWrapper() {
           {/* Instructions */}
           <div className="glass-card-heavy p-4 rounded-xl border border-white/10">
             <p className="text-sm text-white/60">
-              <span className="text-emerald-500 font-medium">Tip:</span> Click "Add Privacy Blur" to hide sensitive information like account numbers. Drag to position, resize from corners, and delete with the X button.
+              <span className="text-emerald-500 font-medium">Tip:</span> Click &quot;Add Privacy Blur&quot; to hide sensitive information like account numbers. Drag to position, resize from corners, and delete with the X button.
             </p>
           </div>
         </div>

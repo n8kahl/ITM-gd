@@ -91,6 +91,30 @@ function determineLevelStrength(distanceATR: number): 'strong' | 'moderate' | 'w
   return 'weak';
 }
 
+function calculateDistanceMetrics(currentPrice: number, levelPrice: number, atr14: number | null): {
+  distance: number;
+  distancePct: number;
+  distanceATR: number;
+} {
+  const distance = levelPrice - currentPrice;
+  const distancePct = currentPrice > 0 ? (distance / currentPrice) * 100 : 0;
+  const distanceATR = atr14 && atr14 > 0 ? distance / atr14 : 0;
+
+  return {
+    distance: Number(distance.toFixed(2)),
+    distancePct: Number(distancePct.toFixed(2)),
+    distanceATR: Number(distanceATR.toFixed(2)),
+  };
+}
+
+function splitBySide(level: LevelItem, resistance: LevelItem[], support: LevelItem[]): void {
+  if (level.distance >= 0) {
+    resistance.push(level);
+    return;
+  }
+  support.push(level);
+}
+
 /**
  * Get market context using the centralized DST-aware market hours service
  */
@@ -151,103 +175,77 @@ export async function calculateLevels(
     // Calculate distances from current price
     const distances = calculateDistances(currentPrice, prevDayLevels, atr14 || 50);
 
-    // Build resistance array
+    // Build side-aware arrays so levels are always emitted even when price is above/below them.
     const resistance: LevelItem[] = [];
-
-    // Add PWH if available
-    if (distances.PWH) {
-      resistance.push({
-        type: 'PWH',
-        price: distances.PWH.price,
-        distance: distances.PWH.distance,
-        distancePct: distances.PWH.distancePct,
-        distanceATR: distances.PWH.distanceATR,
-        strength: determineLevelStrength(distances.PWH.distanceATR),
-        description: 'Previous Week High',
-        testsToday: 0,
-        lastTest: null
-      });
-    }
-
-    // Add PDH
-    resistance.push({
-      type: 'PDH',
-      price: distances.PDH.price,
-      distance: distances.PDH.distance,
-      distancePct: distances.PDH.distancePct,
-      distanceATR: distances.PDH.distanceATR,
-      strength: determineLevelStrength(distances.PDH.distanceATR),
-      description: 'Previous Day High',
-      testsToday: 0, // TODO: Track actual tests
-      lastTest: null
-    });
-
-    // Build support array
     const support: LevelItem[] = [];
 
-    // Add VWAP if available
-    if (vwap && vwap < currentPrice) {
-      const vwapDistance = vwap - currentPrice;
-      const vwapDistancePct = (vwapDistance / currentPrice) * 100;
-      const vwapDistanceATR = atr14 ? vwapDistance / atr14 : 0;
+    const historicalLevels: Array<{
+      type: string;
+      description: string;
+      distanceData: { price: number; distance: number; distancePct: number; distanceATR: number };
+    }> = [
+      { type: 'PDH', description: 'Previous Day High', distanceData: distances.PDH },
+      { type: 'PDC', description: 'Previous Day Close', distanceData: distances.PDC },
+      { type: 'PDL', description: 'Previous Day Low', distanceData: distances.PDL },
+    ];
 
-      support.push({
+    if (distances.PWH) {
+      historicalLevels.push({ type: 'PWH', description: 'Previous Week High', distanceData: distances.PWH });
+    }
+    if (distances.PWL) {
+      historicalLevels.push({ type: 'PWL', description: 'Previous Week Low', distanceData: distances.PWL });
+    }
+
+    for (const level of historicalLevels) {
+      splitBySide({
+        type: level.type,
+        price: level.distanceData.price,
+        distance: level.distanceData.distance,
+        distancePct: level.distanceData.distancePct,
+        distanceATR: level.distanceData.distanceATR,
+        strength: determineLevelStrength(level.distanceData.distanceATR),
+        description: level.description,
+        testsToday: 0,
+        lastTest: null,
+      }, resistance, support);
+    }
+
+    if (vwap) {
+      const vwapMetrics = calculateDistanceMetrics(currentPrice, vwap, atr14);
+      splitBySide({
         type: 'VWAP',
         price: vwap,
-        distance: Number(vwapDistance.toFixed(2)),
-        distancePct: Number(vwapDistancePct.toFixed(2)),
-        distanceATR: Number(vwapDistanceATR.toFixed(2)),
+        ...vwapMetrics,
         strength: 'dynamic',
         description: 'Volume Weighted Average Price',
         testsToday: 0,
-        lastTest: null
-      });
+        lastTest: null,
+      }, resistance, support);
     }
 
-    // Add PMH if available and below current price
-    if (preMarketLevels && preMarketLevels.PMH < currentPrice) {
-      const pmhDistance = preMarketLevels.PMH - currentPrice;
-      const pmhDistancePct = (pmhDistance / currentPrice) * 100;
-      const pmhDistanceATR = atr14 ? pmhDistance / atr14 : 0;
-
-      support.push({
+    if (preMarketLevels) {
+      const pmhMetrics = calculateDistanceMetrics(currentPrice, preMarketLevels.PMH, atr14);
+      splitBySide({
         type: 'PMH',
         price: preMarketLevels.PMH,
-        distance: Number(pmhDistance.toFixed(2)),
-        distancePct: Number(pmhDistancePct.toFixed(2)),
-        distanceATR: Number(pmhDistanceATR.toFixed(2)),
-        strength: 'strong',
+        ...pmhMetrics,
+        strength: determineLevelStrength(pmhMetrics.distanceATR),
         description: 'Pre-Market High',
         testsToday: 0,
-        lastTest: null
-      });
+        lastTest: null,
+      }, resistance, support);
+
+      const pmlMetrics = calculateDistanceMetrics(currentPrice, preMarketLevels.PML, atr14);
+      splitBySide({
+        type: 'PML',
+        price: preMarketLevels.PML,
+        ...pmlMetrics,
+        strength: determineLevelStrength(pmlMetrics.distanceATR),
+        description: 'Pre-Market Low',
+        testsToday: 0,
+        lastTest: null,
+      }, resistance, support);
     }
-
-    // Add PDC
-    support.push({
-      type: 'PDC',
-      price: distances.PDC.price,
-      distance: distances.PDC.distance,
-      distancePct: distances.PDC.distancePct,
-      distanceATR: distances.PDC.distanceATR,
-      strength: determineLevelStrength(distances.PDC.distanceATR),
-      description: 'Previous Day Close',
-      testsToday: 0,
-      lastTest: null
-    });
-
-    // Add PDL
-    support.push({
-      type: 'PDL',
-      price: distances.PDL.price,
-      distance: distances.PDL.distance,
-      distancePct: distances.PDL.distancePct,
-      distanceATR: distances.PDL.distanceATR,
-      strength: determineLevelStrength(distances.PDL.distanceATR),
-      description: 'Previous Day Low',
-      testsToday: 0,
-      lastTest: null
-    });
 
     // Sort resistance by distance (closest first)
     resistance.sort((a, b) => a.distance - b.distance);

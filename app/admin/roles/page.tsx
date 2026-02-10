@@ -288,7 +288,7 @@ export default function RolesPage() {
           <ol className="text-sm text-white/70 space-y-1 list-decimal list-inside">
             <li>Open Discord and go to Server Settings → Roles</li>
             <li>Enable Developer Mode in User Settings → Advanced</li>
-            <li>Right-click any role and select "Copy Role ID"</li>
+            <li>Right-click any role and select &quot;Copy Role ID&quot;</li>
             <li>Paste the ID below and assign permissions</li>
           </ol>
           <a

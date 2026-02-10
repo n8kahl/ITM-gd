@@ -31,7 +31,6 @@ interface PositionFormProps {
 const POSITION_TYPES: { value: PositionType; label: string; requiresStrike: boolean; requiresExpiry: boolean }[] = [
   { value: 'call', label: 'Long Call', requiresStrike: true, requiresExpiry: true },
   { value: 'put', label: 'Long Put', requiresStrike: true, requiresExpiry: true },
-  { value: 'iron_condor', label: 'Iron Condor', requiresStrike: true, requiresExpiry: true },
   { value: 'stock', label: 'Stock', requiresStrike: false, requiresExpiry: false },
 ]
 
@@ -46,7 +45,6 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
     symbol: string
     type: PositionType
     strike: string
-    strike2: string
     expiry: string
     quantity: string
     entryPrice: string
@@ -55,7 +53,6 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
     symbol: 'SPY',
     type: 'call',
     strike: '',
-    strike2: '',
     expiry: '',
     quantity: '1',
     entryPrice: '',
@@ -67,7 +64,6 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
   const [error, setError] = useState<string | null>(null)
 
   const posType = POSITION_TYPES.find(t => t.value === form.type)!
-  const isSpread = form.type === 'iron_condor'
 
   const handleChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -107,7 +103,6 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
       entryPrice: parseFloat(form.entryPrice),
       entryDate: form.entryDate,
       ...(posType.requiresStrike ? { strike: parseFloat(form.strike) } : {}),
-      ...(isSpread ? { strike2: parseFloat(form.strike2) } : {}),
       ...(posType.requiresExpiry ? { expiry: form.expiry } : {}),
     }
 
@@ -121,7 +116,7 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
     } finally {
       setIsAnalyzing(false)
     }
-  }, [session?.access_token, form, posType, isSpread, onAnalysisComplete])
+  }, [session?.access_token, form, posType, onAnalysisComplete])
 
   return (
     <div className="h-full flex flex-col">
@@ -163,7 +158,7 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
 
         {/* Strike(s) & Expiry */}
         {posType.requiresStrike && (
-          <div className={cn('grid gap-3', isSpread ? 'grid-cols-3' : 'grid-cols-2')}>
+          <div className={cn('grid gap-3 grid-cols-2')}>
             <div>
               <label className="block text-xs text-white/50 mb-1.5">Strike</label>
               <input
@@ -174,18 +169,6 @@ export function PositionForm({ onClose, onAnalysisComplete }: PositionFormProps)
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-500/50"
               />
             </div>
-            {isSpread && (
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">Strike 2</label>
-                <input
-                  type="number"
-                  value={form.strike2}
-                  onChange={(e) => handleChange('strike2', e.target.value)}
-                  placeholder="5950"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-500/50"
-                />
-              </div>
-            )}
             {posType.requiresExpiry && (
               <div>
                 <label className="block text-xs text-white/50 mb-1.5">Expiry</label>

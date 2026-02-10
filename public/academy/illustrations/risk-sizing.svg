@@ -1,0 +1,18 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#070809"/>
+  <rect x="50" y="50" width="1180" height="620" rx="24" fill="#09100F" stroke="#20342F"/>
+  <text x="110" y="155" fill="#ECF3F0" font-size="52" font-family="Playfair Display, Georgia, serif" font-weight="700">Position Sizing and Risk</text>
+  <text x="110" y="198" fill="#A2B7AF" font-size="24" font-family="Inter, Arial, sans-serif">Protect downside and keep position risk consistent.</text>
+  <rect x="120" y="248" width="500" height="330" rx="16" fill="#0B1614" stroke="#1F3B35"/>
+  <rect x="670" y="248" width="490" height="330" rx="16" fill="#0B1614" stroke="#1F3B35"/>
+  <text x="160" y="320" fill="#A7C2B9" font-size="24" font-family="Inter, Arial, sans-serif">Account Risk</text>
+  <text x="160" y="385" fill="#EAF3F0" font-size="56" font-family="Inter, Arial, sans-serif" font-weight="700">1.0%</text>
+  <text x="160" y="455" fill="#8AA69D" font-size="22" font-family="Inter, Arial, sans-serif">Max loss per trade: $250</text>
+  <rect x="160" y="500" width="300" height="20" rx="10" fill="#203530"/>
+  <rect x="160" y="500" width="160" height="20" rx="10" fill="#1ED29A"/>
+  <text x="710" y="320" fill="#A7C2B9" font-size="24" font-family="Inter, Arial, sans-serif">Position Calculator</text>
+  <text x="710" y="385" fill="#EAF3F0" font-size="48" font-family="Inter, Arial, sans-serif" font-weight="700">3 Contracts</text>
+  <text x="710" y="455" fill="#8AA69D" font-size="22" font-family="Inter, Arial, sans-serif">Defined risk stays inside rule</text>
+  <circle cx="1030" cy="515" r="54" fill="#0B1311" stroke="#F3E5AB" stroke-width="5"/>
+  <path d="M1000 515H1060" stroke="#F3E5AB" stroke-width="6" stroke-linecap="round"/>
+</svg>

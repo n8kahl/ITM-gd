@@ -33,7 +33,7 @@ export interface JournalEntry {
   hold_duration_min: number | null
   mfe_percent: number | null
   mae_percent: number | null
-  contract_type: 'stock' | 'call' | 'put' | 'spread' | null
+  contract_type: 'stock' | 'call' | 'put' | null
   strike_price: number | null
   expiration_date: string | null
   dte_at_entry: number | null
@@ -73,7 +73,7 @@ export interface JournalFilters {
   }
   symbol: string | null
   direction: 'long' | 'short' | 'all'
-  contractType: 'all' | 'stock' | 'call' | 'put' | 'spread'
+  contractType: 'all' | 'stock' | 'call' | 'put'
   pnlFilter: 'winners' | 'losers' | 'all'
   tags: string[]
   aiGrade: string[] | null

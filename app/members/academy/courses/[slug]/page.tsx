@@ -15,7 +15,7 @@ import {
   Lock,
   BarChart3,
 } from 'lucide-react'
-import { ProgressRing } from '@/components/academy/progress-ring'
+import { resolveCourseImage } from '@/lib/academy/course-images'
 
 // ============================================
 // TYPES
@@ -141,16 +141,31 @@ export default function CourseDetailPage() {
   // Find the next uncompleted lesson
   const nextLesson = course.lessons.find((l) => !l.isCompleted && !l.isLocked)
 
+  const heroImageSrc = resolveCourseImage({
+    slug: course.slug,
+    title: course.title,
+    path: course.path,
+    thumbnailUrl: course.thumbnailUrl,
+  })
+  const microLessons = course.lessons
+    .filter((lesson) => lesson.durationMinutes > 0)
+    .slice(0, 6)
+    .map((lesson) => ({
+      id: lesson.id,
+      title: lesson.title,
+      durationMinutes: Math.max(5, Math.min(10, Math.round(lesson.durationMinutes / 3))),
+    }))
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-[1200px]">
       {/* Breadcrumb */}
-      <Link
-        href="/members/academy/courses"
-        className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/60 transition-colors"
-      >
-        <ChevronLeft className="w-3.5 h-3.5" />
-        All Courses
-      </Link>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
+        <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
+          Training Library
+        </Link>
+        <span>/</span>
+        <span className="text-white/70">{course.title}</span>
+      </div>
 
       {/* Course header */}
       <motion.div
@@ -163,18 +178,12 @@ export default function CourseDetailPage() {
       >
         {/* Thumbnail */}
         <div className="relative aspect-[3/1] bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 overflow-hidden">
-          {course.thumbnailUrl ? (
-            <Image
-              src={course.thumbnailUrl}
-              alt={course.title}
-              fill
-              className="object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <BookOpen className="w-16 h-16 text-emerald-500/20" />
-            </div>
-          )}
+          <Image
+            src={heroImageSrc}
+            alt={course.title}
+            fill
+            className="object-cover"
+          />
 
           {/* Overlay gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-[#0A0A0B]/40 to-transparent" />
@@ -295,6 +304,32 @@ export default function CourseDetailPage() {
           </div>
         )}
       </div>
+
+      {microLessons.length > 0 && (
+        <div
+          className={cn(
+            'rounded-xl overflow-hidden',
+            'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5'
+          )}
+        >
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">Micro-Learning Quick Wins</h3>
+            <span className="text-xs text-emerald-300">5-10 minute units</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-4">
+            {microLessons.slice(0, 4).map((lesson) => (
+              <Link
+                key={lesson.id}
+                href={`/members/academy/learn/${lesson.id}`}
+                className="rounded-lg border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] p-3 transition-colors"
+              >
+                <div className="text-xs text-emerald-300 mb-1">{lesson.durationMinutes} min</div>
+                <div className="text-sm text-white">{lesson.title}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Lesson list */}
       <div

@@ -1,11 +1,11 @@
 import { logger } from '../lib/logger';
-import { openaiClient, CHAT_MODEL, MAX_TOKENS, TEMPERATURE } from '../config/openai';
-import { getSystemPrompt } from './systemPrompt';
+import { openaiClient, CHAT_MODEL, MAX_TOKENS, MAX_TOTAL_TOKENS_PER_REQUEST, TEMPERATURE } from '../config/openai';
 import { AI_FUNCTIONS } from './functions';
 import { executeFunctionCall } from './functionHandlers';
 import { supabase } from '../config/database';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { openaiCircuit } from '../lib/circuitBreaker';
+import { buildSystemPromptForUser } from './promptContext';
 
 /**
  * Chat Service
@@ -21,6 +21,9 @@ interface ChatRequest {
   sessionId: string;
   message: string;
   userId: string;
+  context?: {
+    isMobile?: boolean;
+  };
 }
 
 interface ChatResponse {
@@ -37,7 +40,7 @@ interface ChatResponse {
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
   const startTime = Date.now();
-  const { sessionId, message, userId } = request;
+  const { sessionId, message, userId, context } = request;
 
   try {
     // Get or create session
@@ -49,8 +52,11 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     logger.info('History loaded', { messageCount: history.length });
 
     // Build messages array
+    const systemPrompt = await buildSystemPromptForUser(userId, {
+      isMobile: context?.isMobile,
+    });
     const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: getSystemPrompt() },
+      { role: 'system', content: systemPrompt },
       ...history.map(msg => ({
         role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.content
@@ -81,7 +87,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
     // Track cumulative token usage to enforce budget
     let cumulativeTokens = completion.usage?.total_tokens || 0;
-    const MAX_TOTAL_TOKENS = 4000; // Hard budget per request
+    const MAX_TOTAL_TOKENS = MAX_TOTAL_TOKENS_PER_REQUEST; // Hard budget per request
 
     // Handle function calling loop (max 5 iterations to prevent runaway costs)
     const MAX_FUNCTION_CALL_ITERATIONS = 5;
@@ -171,7 +177,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       'assistant',
       finalContent,
       functionCalls.length > 0 ? JSON.stringify(functionCalls) : null,
-      completion.usage?.total_tokens || 0
+      cumulativeTokens
     );
 
     const responseTime = Date.now() - startTime;
@@ -181,7 +187,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       role: 'assistant',
       content: finalContent,
       functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
-      tokensUsed: completion.usage?.total_tokens || 0,
+      tokensUsed: cumulativeTokens,
       responseTime: responseTime / 1000 // Convert to seconds
     };
   } catch (error: any) {
@@ -199,7 +205,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 /**
  * Get or create a chat session using upsert to prevent race conditions
  */
-async function getOrCreateSession(sessionId: string, userId: string) {
+export async function getOrCreateSession(sessionId: string, userId: string) {
   // Use upsert: INSERT ... ON CONFLICT DO NOTHING then SELECT
   const { error: upsertError } = await supabase
     .from('ai_coach_sessions')
@@ -240,7 +246,7 @@ async function getOrCreateSession(sessionId: string, userId: string) {
 /**
  * Get conversation history for a session
  */
-async function getConversationHistory(sessionId: string, limit: number = 20): Promise<ChatMessage[]> {
+export async function getConversationHistory(sessionId: string, limit: number = 20): Promise<ChatMessage[]> {
   const { data: messages, error } = await supabase
     .from('ai_coach_messages')
     .select('role, content')
@@ -259,7 +265,7 @@ async function getConversationHistory(sessionId: string, limit: number = 20): Pr
 /**
  * Save a message to the database
  */
-async function saveMessage(
+export async function saveMessage(
   sessionId: string,
   userId: string,
   role: 'user' | 'assistant' | 'system',

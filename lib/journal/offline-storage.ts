@@ -78,10 +78,10 @@ function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null
   return null
 }
 
-function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | 'spread' | null {
+function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | null {
   if (typeof value !== 'string') return null
   const normalized = value.toLowerCase().trim()
-  if (normalized === 'stock' || normalized === 'call' || normalized === 'put' || normalized === 'spread') {
+  if (normalized === 'stock' || normalized === 'call' || normalized === 'put') {
     return normalized
   }
   return null

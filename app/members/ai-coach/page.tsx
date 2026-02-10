@@ -106,7 +106,7 @@ export default function AICoachPage() {
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
     setMobileView('chat')
-  }, [chat.sendMessage])
+  }, [chat])
 
   const requestFocusInput = useCallback(() => {
     window.dispatchEvent(new CustomEvent('ai-coach-focus-input'))

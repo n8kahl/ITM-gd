@@ -108,8 +108,8 @@ export function AcademyHub({
         </p>
       </motion.div>
 
-      {/* Desktop: 2-column layout (70/30) / Mobile: stack */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
+      {/* Desktop: 2-column layout / Mobile: stack */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5">
         {/* ======== LEFT COLUMN (70%) ======== */}
         <div className="space-y-5">
           {/* Continue learning */}
@@ -173,7 +173,7 @@ export function AcademyHub({
               </Link>
             </div>
             {recommendedCourses.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
                 {recommendedCourses.slice(0, 4).map((course) => (
                   <CourseCard key={course.slug} course={course} />
                 ))}

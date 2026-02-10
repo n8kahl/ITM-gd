@@ -1,0 +1,15 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#070809"/>
+  <rect x="50" y="50" width="1180" height="620" rx="24" fill="#09100F" stroke="#20342F"/>
+  <text x="110" y="155" fill="#ECF3F0" font-size="52" font-family="Playfair Display, Georgia, serif" font-weight="700">Options Fundamentals</text>
+  <text x="110" y="198" fill="#A2B7AF" font-size="24" font-family="Inter, Arial, sans-serif">Understand premium, Greeks, and contract behavior.</text>
+  <rect x="120" y="250" width="1040" height="330" rx="18" fill="#0B1614" stroke="#1F3B35"/>
+  <rect x="170" y="300" width="280" height="230" rx="12" fill="#0D1C19" stroke="#2A5348"/>
+  <text x="200" y="350" fill="#DDF4EC" font-size="24" font-family="Inter, Arial, sans-serif">Delta</text>
+  <text x="200" y="395" fill="#95BDB1" font-size="38" font-family="Inter, Arial, sans-serif" font-weight="700">0.42</text>
+  <text x="200" y="438" fill="#DDF4EC" font-size="24" font-family="Inter, Arial, sans-serif">Theta</text>
+  <text x="200" y="483" fill="#95BDB1" font-size="38" font-family="Inter, Arial, sans-serif" font-weight="700">-0.16</text>
+  <path d="M520 520L620 430L700 450L810 360L930 380L1050 300" stroke="#1ED29A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="810" cy="360" r="12" fill="#F3E5AB"/>
+  <circle cx="1050" cy="300" r="12" fill="#F3E5AB"/>
+</svg>

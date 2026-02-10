@@ -6,7 +6,7 @@ import type {
 } from '@/lib/types/journal'
 
 const VALID_DIRECTIONS = new Set(['long', 'short', 'neutral'])
-const VALID_CONTRACT_TYPES = new Set(['stock', 'call', 'put', 'spread'])
+const VALID_CONTRACT_TYPES = new Set(['stock', 'call', 'put'])
 const VALID_MOODS = new Set(['confident', 'neutral', 'anxious', 'frustrated', 'excited', 'fearful'])
 const VALID_DRAFT_STATUSES = new Set(['pending', 'confirmed', 'dismissed'])
 const VALID_SYNC_STATUSES = new Set(['synced', 'pending_offline'])
@@ -82,10 +82,10 @@ function normalizeDirection(value: unknown): 'long' | 'short' | 'neutral' | null
   return VALID_DIRECTIONS.has(normalized) ? (normalized as 'long' | 'short' | 'neutral') : null
 }
 
-function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | 'spread' | null {
+function normalizeContractType(value: unknown): 'stock' | 'call' | 'put' | null {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toLowerCase()
-  return VALID_CONTRACT_TYPES.has(normalized) ? (normalized as 'stock' | 'call' | 'put' | 'spread') : null
+  return VALID_CONTRACT_TYPES.has(normalized) ? (normalized as 'stock' | 'call' | 'put') : null
 }
 
 function normalizeMood(value: unknown): JournalEntry['mood_before'] {
@@ -357,4 +357,3 @@ export function sanitizeJournalEntries(raw: unknown): JournalEntry[] {
   if (!Array.isArray(raw)) return []
   return raw.map((entry, index) => sanitizeJournalEntry(entry, `entry-${index + 1}`))
 }
-
