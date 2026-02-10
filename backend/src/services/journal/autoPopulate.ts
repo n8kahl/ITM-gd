@@ -1,6 +1,7 @@
 import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { isUSEasternDST } from '../marketHours';
+import { sendAutoJournalPushNotifications } from './pushNotifications';
 
 interface MessageRow {
   session_id: string | null;
@@ -60,6 +61,7 @@ export interface AutoPopulateRunStats {
     detectedTrades: number;
   };
   notified: number;
+  pushNotified: number;
 }
 
 export interface AutoPopulateBatchStats {
@@ -69,6 +71,7 @@ export interface AutoPopulateBatchStats {
   skippedExisting: number;
   failed: number;
   notified: number;
+  pushNotified: number;
 }
 
 const MAX_CANDIDATES_PER_SESSION = 10;
@@ -433,6 +436,7 @@ export class JournalAutoPopulateService {
           detectedTrades: 0,
         },
         notified: 0,
+        pushNotified: 0,
       };
     }
 
@@ -480,6 +484,11 @@ export class JournalAutoPopulateService {
       createdCount: candidateRows.length,
       sessionsScanned: messagesBySession.size,
     });
+    const pushNotified = await sendAutoJournalPushNotifications({
+      userId,
+      marketDate,
+      createdCount: candidateRows.length,
+    });
 
     return {
       userId,
@@ -492,6 +501,7 @@ export class JournalAutoPopulateService {
         detectedTrades: dedupedByKey.size,
       },
       notified: notified ? 1 : 0,
+      pushNotified,
     };
   }
 
@@ -504,6 +514,7 @@ export class JournalAutoPopulateService {
     let skippedExisting = 0;
     let failed = 0;
     let notified = 0;
+    let pushNotified = 0;
 
     for (const userId of candidates) {
       try {
@@ -511,6 +522,7 @@ export class JournalAutoPopulateService {
         generated += stats.generated;
         skippedExisting += stats.skippedExisting;
         notified += stats.notified;
+        pushNotified += stats.pushNotified;
       } catch (error) {
         failed += 1;
         logger.warn('Auto-populate: failed for user', {
@@ -528,6 +540,7 @@ export class JournalAutoPopulateService {
       skippedExisting,
       failed,
       notified,
+      pushNotified,
     };
   }
 }

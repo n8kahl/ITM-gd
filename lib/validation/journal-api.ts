@@ -80,3 +80,18 @@ export const confirmDraftSchema = z.object({
 export const dashboardLayoutSchema = z.object({
   layout: z.record(z.unknown()),
 })
+
+export const pushSubscriptionSchema = z.object({
+  subscription: z.object({
+    endpoint: z.string().url(),
+    expirationTime: z.number().nullable().optional(),
+    keys: z.object({
+      p256dh: z.string().min(1),
+      auth: z.string().min(1),
+    }).partial().optional(),
+  }).passthrough(),
+})
+
+export const deletePushSubscriptionSchema = z.object({
+  endpoint: z.string().url().optional(),
+})

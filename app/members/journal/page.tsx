@@ -17,6 +17,7 @@ import { JournalCardView } from '@/components/journal/journal-card-view'
 import { OpenPositionsWidget } from '@/components/journal/open-positions-widget'
 import { ImportWizard } from '@/components/journal/import-wizard'
 import { DraftEntriesPanel } from '@/components/journal/draft-entries-panel'
+import { JournalPwaPrompt } from '@/components/journal/journal-pwa-prompt'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
 import {
@@ -721,6 +722,7 @@ export default function JournalPage() {
 
       <OpenPositionsWidget onUpdated={() => { void loadEntries() }} />
       <DraftEntriesPanel onUpdated={() => { void loadEntries() }} />
+      <JournalPwaPrompt />
       <ImportWizard onImported={() => { void loadEntries() }} />
 
       {filteredEntries.length === 0 ? (
