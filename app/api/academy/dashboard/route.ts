@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import {
-  getAccessibleTierIds,
-  resolveUserMembershipTier,
   toSafeErrorMessage,
 } from '@/lib/academy/api-utils'
 
@@ -41,9 +39,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { user, supabase } = auth
-
-    const userTier = await resolveUserMembershipTier(user, supabase)
-    const accessibleTiers = getAccessibleTierIds(userTier)
 
     const [xpResult, currentLessonResult, recentAchievementsResult, courseProgressResult, lessonProgressResult, coursesResult, activityResult] = await Promise.all([
       supabase
@@ -92,7 +87,6 @@ export async function GET(request: NextRequest) {
           learning_paths:learning_path_id(name)
         `)
         .eq('is_published', true)
-        .in('tier_required', accessibleTiers)
         .order('display_order', { ascending: true })
         .limit(12),
       supabase

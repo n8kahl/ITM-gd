@@ -7,7 +7,7 @@ export default function LibraryPage() {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace('/members/academy')
+    router.replace('/members/academy/courses')
   }, [router])
 
   return (

@@ -90,8 +90,31 @@ export default function CoursesPage() {
         </p>
       </div>
 
-      {/* Catalog with filters */}
-      <CourseCatalog courses={courses} paths={paths} />
+      {courses.length === 0 ? (
+        <div
+          className={cn(
+            'rounded-xl p-6',
+            'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5'
+          )}
+        >
+          <p className="text-sm text-white/70">No courses found.</p>
+          <p className="text-xs text-white/40 mt-1">
+            This usually means the Academy schema or curriculum seed has not been applied to the database.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Catalog with filters */}
+          <CourseCatalog courses={courses} paths={paths} />
+        </>
+      )}
     </div>
   )
 }

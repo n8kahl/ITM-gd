@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import {
-  getAccessibleTierIds,
-  resolveUserMembershipTier,
   toSafeErrorMessage,
 } from '@/lib/academy/api-utils'
 
@@ -21,7 +19,7 @@ interface LearningPathRow {
 
 /**
  * GET /api/academy/paths
- * Returns learning paths filtered by member tier with derived progress.
+ * Returns published learning paths with derived progress.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -34,8 +32,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { user, supabase } = auth
-    const userTier = await resolveUserMembershipTier(user, supabase)
-    const accessibleTiers = getAccessibleTierIds(userTier)
 
     const { data: paths, error: pathsError } = await supabase
       .from('learning_paths')
@@ -52,7 +48,6 @@ export async function GET(request: NextRequest) {
         display_order
       `)
       .eq('is_published', true)
-      .in('tier_required', accessibleTiers)
       .order('display_order', { ascending: true })
 
     if (pathsError) {
@@ -125,7 +120,6 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         paths: mappedPaths,
-        user_tier: userTier,
       },
     })
   } catch (error) {
