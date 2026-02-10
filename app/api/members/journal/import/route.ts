@@ -1,11 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
+import { NextRequest } from 'next/server'
 import { ZodError } from 'zod'
-import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
-import { enqueueJournalAnalyticsRefresh } from '@/lib/journal/analytics-refresh-queue'
-import { importTradesSchema } from '@/lib/validation/journal-api'
-import { importBrokerNameSchema } from '@/lib/validation/journal-entry'
-
-type ContractType = 'stock' | 'call' | 'put' | 'spread'
+import { errorResponse, successResponse } from '@/lib/api/response'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { importRequestSchema, sanitizeString } from '@/lib/validation/journal-entry'
+import { sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
@@ -13,236 +12,275 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function normalizeDirection(value?: string): 'long' | 'short' {
-  const normalized = value?.toLowerCase().trim() || ''
-  if (['sell', 'short', 's', 'put'].includes(normalized)) return 'short'
+function toDateString(value: string | undefined): string {
+  if (!value) return new Date().toISOString()
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return new Date().toISOString()
+  return new Date(parsed).toISOString()
+}
+
+function normalizeDirection(value: string | undefined): 'long' | 'short' {
+  const normalized = (value ?? '').trim().toLowerCase()
+  if (['sell', 's', 'short', 'put'].includes(normalized)) return 'short'
   return 'long'
 }
 
-function normalizeContractType(value?: string): ContractType {
-  const normalized = value?.toLowerCase().trim() || ''
-  if (normalized.includes('spread')) return 'spread'
+function normalizeContractType(value: string | undefined): 'stock' | 'call' | 'put' {
+  const normalized = (value ?? '').trim().toLowerCase()
   if (normalized.includes('put')) return 'put'
   if (normalized.includes('call')) return 'call'
   return 'stock'
 }
 
-function normalizeDate(value?: string): string {
-  if (!value) return new Date().toISOString()
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return new Date().toISOString()
-  return parsed.toISOString()
-}
-
-function priceWithinTolerance(a: number | null, b: number | null, tolerancePct = 0.01): boolean {
-  if (a == null || b == null) return false
-  if (a === 0) return Math.abs(b) < 0.0001
-  return Math.abs(a - b) / Math.abs(a) <= tolerancePct
-}
-
-function brokerRowValue(row: Record<string, unknown>, keys: string[]): string | undefined {
+function getTextValue(row: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = row[key]
-    if (value != null && String(value).trim()) return String(value)
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim()
+    }
   }
   return undefined
 }
 
+function buildDeterministicUuid(key: string): string {
+  const hex = createHash('sha256').update(key).digest('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+}
+
+function toDateKey(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().split('T')[0]
+  return parsed.toISOString().split('T')[0]
+}
+
 function normalizeImportedRow(row: Record<string, unknown>, broker: string) {
-  const normalizedBroker = broker.toLowerCase()
+  const symbolRaw = getTextValue(row, ['symbol', 'Symbol', 'Ticker', 'underlying']) ?? ''
+  const symbol = sanitizeString(symbolRaw.toUpperCase(), 16)
 
-  const symbol = (brokerRowValue(row, ['symbol', 'Symbol', 'Ticker']) || '').toUpperCase().trim()
-  const tradeDate = normalizeDate(
-    brokerRowValue(row, ['trade_date', 'entry_date', 'Date', 'Trade Date', 'Transaction Date', 'entryDate']),
+  const tradeDate = toDateString(
+    getTextValue(row, ['trade_date', 'entry_date', 'Date', 'Trade Date', 'Transaction Date', 'date']),
   )
+
   const direction = normalizeDirection(
-    brokerRowValue(row, ['direction', 'Action', 'Side', 'type', 'position_type']),
+    getTextValue(row, ['direction', 'Direction', 'side', 'Side', 'action', 'Action', 'type', 'Type']),
   )
-  const entryPrice = toNumber(row.entry_price ?? row.entryPrice ?? row['Avg Price'] ?? row['Price'])
-  const exitPrice = toNumber(row.exit_price ?? row.exitPrice ?? row['Sell Price'])
-  const size = toNumber(row.position_size ?? row.quantity ?? row.Qty ?? row.Quantity) ?? 1
-  const pnl = toNumber(row.pnl ?? row['P/L'] ?? row['Realized P/L'])
-  const pnlPct = toNumber(row.pnl_percentage ?? row.pnl_pct)
-  const strategy = brokerRowValue(row, ['strategy', 'Strategy', 'Tag'])
 
-  let contractType: ContractType = normalizeContractType(
-    brokerRowValue(row, ['contract_type', 'position_type', 'Type']),
+  const contractType = normalizeContractType(
+    getTextValue(row, ['contract_type', 'Contract Type', 'position_type', 'instrument_type', 'Type']),
   )
+
+  const entryPrice = toNumber(
+    row.entry_price
+    ?? row.entryPrice
+    ?? row['Entry Price']
+    ?? row['Avg Price']
+    ?? row.price
+    ?? row.Price,
+  )
+
+  const exitPrice = toNumber(
+    row.exit_price
+    ?? row.exitPrice
+    ?? row['Exit Price']
+    ?? row['Sell Price']
+    ?? row['Close Price']
+    ?? row.close,
+  )
+
+  const positionSize = toNumber(
+    row.position_size
+    ?? row.positionSize
+    ?? row.quantity
+    ?? row.Quantity
+    ?? row.Qty,
+  ) ?? 1
+
+  const pnl = toNumber(row.pnl ?? row['P/L'] ?? row['Realized P/L'])
+  const pnlPercentage = toNumber(row.pnl_percentage ?? row['P/L %'] ?? row.pnlPct)
 
   const strikePrice = toNumber(row.strike_price ?? row.Strike)
-  const expirationDate = brokerRowValue(row, ['expiration_date', 'Expiry', 'Expiration'])
+  const expirationDateRaw = getTextValue(row, ['expiration_date', 'Expiration', 'Expiry'])
+  const expirationDate = expirationDateRaw
+    ? toDateKey(toDateString(expirationDateRaw))
+    : null
 
-  if (normalizedBroker.includes('interactive') || normalizedBroker.includes('ib')) {
-    contractType = normalizeContractType(String(row['Asset Class'] ?? row['Type'] ?? 'stock'))
-  }
-  if (normalizedBroker.includes('robinhood') || normalizedBroker.includes('webull')) {
-    contractType = normalizeContractType(String(row['instrument_type'] ?? row['Type'] ?? contractType))
-  }
-  if (normalizedBroker.includes('schwab') || normalizedBroker.includes('ameritrade')) {
-    contractType = normalizeContractType(String(row['Security Type'] ?? row['Type'] ?? contractType))
-  }
+  const strategyRaw = getTextValue(row, ['strategy', 'Strategy', 'Tag'])
+  const strategy = strategyRaw ? sanitizeString(strategyRaw, 120) : null
+
+  const brokerLower = broker.toLowerCase()
+  const contractTypeFromBroker = brokerLower === 'interactive_brokers'
+    ? normalizeContractType(getTextValue(row, ['Asset Class', 'Type']))
+    : contractType
 
   return {
     symbol,
     tradeDate,
     direction,
+    contractType: contractTypeFromBroker,
     entryPrice,
     exitPrice,
-    size,
+    positionSize,
     pnl,
-    pnlPct,
-    strategy,
-    contractType,
+    pnlPercentage,
     strikePrice,
-    expirationDate: expirationDate || null,
+    expirationDate,
+    strategy,
   }
 }
 
+function calculatePnl(
+  direction: 'long' | 'short',
+  entryPrice: number | null,
+  exitPrice: number | null,
+  positionSize: number,
+): number | null {
+  if (entryPrice == null || exitPrice == null) return null
+  const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+  return Math.round(perUnit * positionSize * 100) / 100
+}
+
+function calculatePnlPercentage(
+  direction: 'long' | 'short',
+  entryPrice: number | null,
+  exitPrice: number | null,
+): number | null {
+  if (entryPrice == null || exitPrice == null || entryPrice === 0) return null
+  const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+  return Math.round(((perUnit / entryPrice) * 100) * 10_000) / 10_000
+}
+
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return errorResponse('Unauthorized', 401)
+
   try {
-    const userId = await getRequestUserId(request)
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const validated = importRequestSchema.parse(await request.json())
+
+    if (validated.rows.length > 500) {
+      return errorResponse('Import limit exceeded (max 500 rows)', 400)
     }
 
-    const parsed = importTradesSchema.parse(await request.json())
-    const broker = importBrokerNameSchema.parse(parsed.broker)
-    const supabase = getSupabaseAdminClient()
-
-    const { data: importRecord, error: importCreateError } = await supabase
+    const { data: importRecord, error: importError } = await supabase
       .from('import_history')
       .insert({
-        user_id: userId,
-        broker_name: broker,
-        file_name: parsed.fileName,
-        record_count: parsed.rows.length,
-        status: 'processing',
+        user_id: user.id,
+        broker: validated.broker,
+        file_name: sanitizeString(validated.fileName, 255),
+        row_count: validated.rows.length,
+        inserted: 0,
+        duplicates: 0,
+        errors: 0,
       })
       .select('id')
       .single()
 
-    if (importCreateError || !importRecord) {
-      return NextResponse.json({ success: false, error: importCreateError?.message || 'Failed to initialize import' }, { status: 500 })
+    if (importError || !importRecord) {
+      console.error('Failed to create import history:', importError)
+      return errorResponse('Failed to initialize import history', 500)
     }
 
-    const normalizedRows = parsed.rows.map((row) => normalizeImportedRow(row as Record<string, unknown>, broker))
-      .filter((row) => row.symbol.length > 0)
+    let parseErrors = 0
+    const rowsToUpsert: Array<Record<string, unknown>> = []
 
-    const symbols = Array.from(new Set(normalizedRows.map((row) => row.symbol)))
-    const tradeDates = normalizedRows.map((row) => row.tradeDate)
-    const earliest = tradeDates.reduce((min, value) => value < min ? value : min, tradeDates[0] || new Date().toISOString())
-    const latest = tradeDates.reduce((max, value) => value > max ? value : max, tradeDates[0] || new Date().toISOString())
+    for (const rawRow of validated.rows) {
+      const normalized = normalizeImportedRow(rawRow, validated.broker)
 
-    const { data: existingRows, error: existingError } = await supabase
-      .from('journal_entries')
-      .select('id,symbol,trade_date,entry_price')
-      .eq('user_id', userId)
-      .in('symbol', symbols)
-      .gte('trade_date', earliest)
-      .lte('trade_date', latest)
-
-    if (existingError) {
-      return NextResponse.json({ success: false, error: existingError.message }, { status: 500 })
-    }
-
-    const existing = existingRows || []
-    const insertPayload: Array<Record<string, unknown>> = []
-    let duplicateCount = 0
-
-    for (const row of normalizedRows) {
-      const rowDate = row.tradeDate.split('T')[0]
-      const duplicate = existing.some((entry) => {
-        const sameSymbol = typeof entry.symbol === 'string' && entry.symbol === row.symbol
-        const sameDay = typeof entry.trade_date === 'string' && entry.trade_date.split('T')[0] === rowDate
-        const samePrice = priceWithinTolerance(toNumber(entry.entry_price), row.entryPrice, 0.01)
-        return sameSymbol && sameDay && samePrice
-      })
-
-      if (duplicate) {
-        duplicateCount += 1
+      if (!normalized.symbol || normalized.symbol.length < 1) {
+        parseErrors += 1
         continue
       }
 
-      const computedPnl = row.pnl ?? (
-        row.entryPrice != null && row.exitPrice != null
-          ? (row.direction === 'short' ? row.entryPrice - row.exitPrice : row.exitPrice - row.entryPrice) * row.size
-          : null
-      )
-      const computedPnlPct = row.pnlPct ?? (
-        row.entryPrice != null && row.entryPrice !== 0 && row.exitPrice != null
-          ? ((row.direction === 'short' ? row.entryPrice - row.exitPrice : row.exitPrice - row.entryPrice) / row.entryPrice) * 100
-          : null
+      const priceBucket = normalized.entryPrice == null
+        ? 'na'
+        : String(Math.round(normalized.entryPrice / Math.max(Math.abs(normalized.entryPrice) * 0.01, 0.01)))
+
+      const dedupeKey = `${user.id}:${normalized.symbol}:${toDateKey(normalized.tradeDate)}:${priceBucket}`
+      const id = buildDeterministicUuid(dedupeKey)
+
+      const computedPnl = normalized.pnl ?? calculatePnl(
+        normalized.direction,
+        normalized.entryPrice,
+        normalized.exitPrice,
+        normalized.positionSize,
       )
 
-      insertPayload.push({
-        user_id: userId,
-        trade_date: row.tradeDate,
-        symbol: row.symbol,
-        direction: row.direction,
-        entry_price: row.entryPrice,
-        exit_price: row.exitPrice,
-        position_size: row.size,
+      const computedPnlPercentage = normalized.pnlPercentage ?? calculatePnlPercentage(
+        normalized.direction,
+        normalized.entryPrice,
+        normalized.exitPrice,
+      )
+
+      const base = sanitizeJournalWriteInput({
+        id,
+        user_id: user.id,
+        trade_date: normalized.tradeDate,
+        symbol: normalized.symbol,
+        direction: normalized.direction,
+        contract_type: normalized.contractType,
+        entry_price: normalized.entryPrice,
+        exit_price: normalized.exitPrice,
+        position_size: normalized.positionSize,
         pnl: computedPnl,
-        pnl_percentage: computedPnlPct,
-        is_winner: computedPnl == null ? null : computedPnl > 0 ? true : computedPnl < 0 ? false : null,
-        strategy: row.strategy || null,
-        contract_type: row.contractType,
-        strike_price: row.strikePrice,
-        expiration_date: row.expirationDate,
+        pnl_percentage: computedPnlPercentage,
+        strategy: normalized.strategy,
+        strike_price: normalized.strikePrice,
+        expiration_date: normalized.expirationDate,
+        is_open: normalized.exitPrice == null,
         tags: [],
-        is_open: row.exitPrice == null,
+        import_id: importRecord.id,
+      })
+
+      rowsToUpsert.push({
+        ...base,
+        id,
+        user_id: user.id,
+        import_id: importRecord.id,
       })
     }
 
-    let insertedCount = 0
-    let errorCount = 0
+    let inserted = 0
+    let duplicates = 0
 
-    if (insertPayload.length > 0) {
-      const { data: inserted, error: insertError } = await supabase
+    if (rowsToUpsert.length > 0) {
+      const { data: upserted, error: upsertError } = await supabase
         .from('journal_entries')
-        .insert(insertPayload)
+        .upsert(rowsToUpsert, {
+          onConflict: 'id',
+          ignoreDuplicates: true,
+        })
         .select('id')
 
-      if (insertError) {
-        errorCount = insertPayload.length
+      if (upsertError) {
+        console.error('Failed to import journal rows:', upsertError)
+        parseErrors += rowsToUpsert.length
       } else {
-        insertedCount = inserted?.length || 0
-        if (insertedCount > 0) {
-          enqueueJournalAnalyticsRefresh(userId)
-        }
+        inserted = upserted?.length ?? 0
+        duplicates = Math.max(0, rowsToUpsert.length - inserted)
       }
     }
 
     await supabase
       .from('import_history')
       .update({
-        success_count: insertedCount,
-        duplicate_count: duplicateCount,
-        error_count: errorCount,
-        status: errorCount > 0 ? 'failed' : 'completed',
+        inserted,
+        duplicates,
+        errors: parseErrors,
       })
       .eq('id', importRecord.id)
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        importId: importRecord.id,
-        inserted: insertedCount,
-        duplicates: duplicateCount,
-        errors: errorCount,
-      },
+    return successResponse({
+      importId: importRecord.id,
+      inserted,
+      duplicates,
+      errors: parseErrors,
     })
   } catch (error) {
     if (error instanceof ZodError) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid import payload',
-        details: error.flatten(),
-      }, { status: 400 })
+      return errorResponse('Invalid request', 400, error.flatten())
     }
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 },
-    )
+
+    console.error('Journal import failed:', error)
+    return errorResponse('Internal server error', 500)
   }
 }

@@ -127,13 +127,21 @@ async function getSignedUrl(storagePath: string): Promise<string> {
     body: JSON.stringify({ storagePath }),
   })
 
+  const payload = await res.json().catch(() => null)
+
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || `Failed to get signed URL (${res.status})`)
+    throw new Error(payload?.error || `Failed to get signed URL (${res.status})`)
   }
 
-  const data = await res.json()
-  return data.signedUrl
+  const uploadUrl = payload?.data?.uploadUrl
+    ?? payload?.signedUrl
+    ?? payload?.uploadUrl
+
+  if (typeof uploadUrl !== 'string' || uploadUrl.length === 0) {
+    throw new Error('Signed URL response was missing upload URL')
+  }
+
+  return uploadUrl
 }
 
 /**
