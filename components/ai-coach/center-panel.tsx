@@ -170,7 +170,7 @@ const TABS: Array<{
   { view: 'position', icon: Calculator, label: 'Positions', group: 'analyze' },
   { view: 'scanner', icon: Search, label: 'Scanner', group: 'analyze' },
   { view: 'journal', icon: BookOpen, label: 'Journal', group: 'portfolio' },
-  { view: 'tracked', icon: ListChecks, label: 'Watchlist', group: 'portfolio' },
+  { view: 'tracked', icon: ListChecks, label: 'Tracked', group: 'portfolio' },
   { view: 'alerts', icon: Bell, label: 'Alerts', group: 'monitor' },
   { view: 'brief', icon: Sunrise, label: 'Daily Brief', group: 'monitor' },
   { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
@@ -1369,7 +1369,7 @@ function WelcomeView({
     onClick: () => void
   }> = [
     { label: 'Alerts', onClick: onShowAlerts },
-    { label: 'Watchlist', onClick: onShowTracked },
+    { label: 'Tracked Setups', onClick: onShowTracked },
     { label: 'Earnings', onClick: onShowEarnings },
     { label: 'Settings', onClick: onShowPreferences },
   ]

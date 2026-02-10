@@ -34,6 +34,15 @@ function parseWatchlistInput(value: string): string[] {
     .slice(0, 25)
 }
 
+function asNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
 export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardProps) {
   const { session } = useMemberAuth()
   const token = session?.access_token
@@ -54,6 +63,10 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
   const [ivCrushSlider, setIvCrushSlider] = useState(25)
 
   const watchlist = useMemo(() => parseWatchlistInput(watchlistInput), [watchlistInput])
+  const analysisSymbols = useMemo(
+    () => (watchlist.length > 0 ? watchlist : DEFAULT_WATCHLIST),
+    [watchlist],
+  )
 
   const loadCalendar = useCallback(async () => {
     if (!token) return
@@ -73,9 +86,14 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
       )
       setEvents(data.events)
       if (data.events.length > 0) {
-        setSelectedSymbol((prev) => prev ?? data.events[0].symbol)
+        setSelectedSymbol((prev) => {
+          if (prev && data.events.some((event) => event.symbol === prev)) {
+            return prev
+          }
+          return data.events[0]?.symbol ?? analysisSymbols[0] ?? null
+        })
       } else {
-        setSelectedSymbol(null)
+        setSelectedSymbol((prev) => prev ?? analysisSymbols[0] ?? null)
       }
     } catch (error) {
       const message = error instanceof AICoachAPIError
@@ -87,7 +105,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
       setCalendarRetryNotice(null)
       setIsLoadingCalendar(false)
     }
-  }, [daysAhead, token, watchlist])
+  }, [analysisSymbols, daysAhead, token, watchlist])
 
   const loadAnalysis = useCallback(async (symbol: string) => {
     if (!token) return
@@ -130,20 +148,38 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
     loadAnalysis(selectedSymbol)
   }, [selectedSymbol, loadAnalysis])
 
+  const historicalMoves = useMemo(
+    () => (Array.isArray(analysis?.historicalMoves) ? analysis.historicalMoves : []),
+    [analysis],
+  )
+
+  const suggestedStrategies = useMemo(
+    () => (Array.isArray(analysis?.suggestedStrategies) ? analysis.suggestedStrategies : []),
+    [analysis],
+  )
+
+  const expectedMovePct = asNumber(analysis?.expectedMove?.pct)
+  const expectedMovePoints = asNumber(analysis?.expectedMove?.points)
+  const avgHistoricalMove = asNumber(analysis?.avgHistoricalMove)
+  const moveOverpricing = asNumber(analysis?.moveOverpricing)
+  const currentIV = asNumber(analysis?.currentIV)
+  const preEarningsIVRank = asNumber(analysis?.preEarningsIVRank)
+  const atmStraddle = asNumber(analysis?.straddlePricing?.atmStraddle)
+
   const maxHistoricalMove = useMemo(() => {
-    if (!analysis || analysis.historicalMoves.length === 0) return 1
+    if (historicalMoves.length === 0) return 1
     return Math.max(
-      ...analysis.historicalMoves.map((move) => Math.max(move.expectedMove, move.actualMove)),
-      analysis.expectedMove.pct,
+      ...historicalMoves.map((move) => Math.max(asNumber(move.expectedMove) ?? 0, asNumber(move.actualMove) ?? 0)),
+      expectedMovePct ?? 0,
       1,
     )
-  }, [analysis])
+  }, [expectedMovePct, historicalMoves])
 
   const projectedStraddleValue = useMemo(() => {
-    if (!analysis || !analysis.currentIV || analysis.currentIV <= 0) return null
+    if (!analysis || !currentIV || currentIV <= 0 || atmStraddle == null) return null
     const crushRatio = Math.max(0, 1 - (ivCrushSlider / 100))
-    return analysis.straddlePricing.atmStraddle * crushRatio
-  }, [analysis, ivCrushSlider])
+    return atmStraddle * crushRatio
+  }, [analysis, atmStraddle, currentIV, ivCrushSlider])
 
   return (
     <div className="h-full flex flex-col">
@@ -220,7 +256,31 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
           ) : calendarError ? (
             <div className="p-4 text-xs text-red-300">{calendarError}</div>
           ) : events.length === 0 ? (
-            <div className="p-4 text-xs text-white/40">No earnings events found for this window.</div>
+            <div className="p-4">
+              <p className="text-xs text-white/40">
+                No earnings events found for this window.
+              </p>
+              <p className="mt-2 text-[11px] text-white/35">
+                You can still run earnings analysis for your watchlist symbols:
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {analysisSymbols.map((symbol) => (
+                  <button
+                    key={`earnings-fallback-${symbol}`}
+                    type="button"
+                    onClick={() => setSelectedSymbol(symbol)}
+                    className={cn(
+                      'px-2.5 py-1.5 rounded-lg border text-[11px] transition-colors',
+                      selectedSymbol === symbol
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                        : 'border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.08]'
+                    )}
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="p-2 space-y-2">
               {events.map((event) => (
@@ -273,27 +333,37 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
           {analysis && (
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
-                <MetricCard label="Expected Move" value={`${analysis.expectedMove.pct.toFixed(2)}%`} sub={`${analysis.expectedMove.points.toFixed(2)} pts`} tone="amber" />
-                <MetricCard label="Avg Historical Move" value={`${analysis.avgHistoricalMove.toFixed(2)}%`} sub={`${analysis.historicalMoves.length} reports`} tone="blue" />
+                <MetricCard
+                  label="Expected Move"
+                  value={expectedMovePct != null ? `${expectedMovePct.toFixed(2)}%` : 'n/a'}
+                  sub={expectedMovePoints != null ? `${expectedMovePoints.toFixed(2)} pts` : undefined}
+                  tone="amber"
+                />
+                <MetricCard
+                  label="Avg Historical Move"
+                  value={avgHistoricalMove != null ? `${avgHistoricalMove.toFixed(2)}%` : 'n/a'}
+                  sub={`${historicalMoves.length} reports`}
+                  tone="blue"
+                />
                 <MetricCard
                   label="Straddle Pricing"
-                  value={analysis.straddlePricing.assessment.toUpperCase()}
-                  sub={`${analysis.moveOverpricing.toFixed(1)}% vs history`}
-                  tone={analysis.straddlePricing.assessment === 'overpriced' ? 'red' : analysis.straddlePricing.assessment === 'underpriced' ? 'emerald' : 'blue'}
+                  value={String(analysis.straddlePricing?.assessment || 'fair').toUpperCase()}
+                  sub={moveOverpricing != null ? `${moveOverpricing.toFixed(1)}% vs history` : 'n/a'}
+                  tone={analysis.straddlePricing?.assessment === 'overpriced' ? 'red' : analysis.straddlePricing?.assessment === 'underpriced' ? 'emerald' : 'blue'}
                 />
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-medium text-white">Historical Expected vs Actual Moves</h3>
-                  <span className="text-[10px] text-white/45">Last {analysis.historicalMoves.length || 0} events</span>
+                  <span className="text-[10px] text-white/45">Last {historicalMoves.length || 0} events</span>
                 </div>
 
-                {analysis.historicalMoves.length === 0 ? (
+                {historicalMoves.length === 0 ? (
                   <p className="mt-2 text-xs text-white/45">Not enough historical earnings records yet.</p>
                 ) : (
                   <div className="mt-3 space-y-2">
-                    {analysis.historicalMoves.map((move) => (
+                    {historicalMoves.map((move) => (
                       <div key={move.date} className="space-y-1">
                         <div className="flex items-center justify-between text-[10px] text-white/45">
                           <span>{move.date}</span>
@@ -302,13 +372,13 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
                         <div className="grid grid-cols-[52px_1fr] items-center gap-2">
                           <span className="text-[10px] text-white/40">Expected</span>
                           <div className="h-1.5 rounded bg-white/5">
-                            <div className="h-1.5 rounded bg-sky-400/70" style={{ width: `${(move.expectedMove / maxHistoricalMove) * 100}%` }} />
+                            <div className="h-1.5 rounded bg-sky-400/70" style={{ width: `${((asNumber(move.expectedMove) ?? 0) / maxHistoricalMove) * 100}%` }} />
                           </div>
                         </div>
                         <div className="grid grid-cols-[52px_1fr] items-center gap-2">
                           <span className="text-[10px] text-white/40">Actual</span>
                           <div className="h-1.5 rounded bg-white/5">
-                            <div className={cn('h-1.5 rounded', move.direction === 'up' ? 'bg-emerald-400/80' : 'bg-red-400/80')} style={{ width: `${(move.actualMove / maxHistoricalMove) * 100}%` }} />
+                            <div className={cn('h-1.5 rounded', move.direction === 'up' ? 'bg-emerald-400/80' : 'bg-red-400/80')} style={{ width: `${((asNumber(move.actualMove) ?? 0) / maxHistoricalMove) * 100}%` }} />
                           </div>
                         </div>
                       </div>
@@ -320,7 +390,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-xs font-medium text-white">IV Crush Simulator</h3>
-                  <span className="text-[10px] text-white/45">Current IV: {analysis.currentIV?.toFixed(1) ?? 'n/a'}%</span>
+                  <span className="text-[10px] text-white/45">Current IV: {currentIV != null ? `${currentIV.toFixed(1)}%` : 'n/a'}</span>
                 </div>
 
                 <input
@@ -346,7 +416,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
                   {onSendPrompt && (
                     <button
                       type="button"
-                      onClick={() => onSendPrompt(`Build a detailed earnings game plan for ${analysis.symbol} using expected move ${analysis.expectedMove.pct.toFixed(2)}% and current IV rank ${analysis.preEarningsIVRank ?? 'n/a'}.`)}
+                      onClick={() => onSendPrompt(`Build a detailed earnings game plan for ${analysis.symbol} using expected move ${(expectedMovePct ?? 0).toFixed(2)}% and current IV rank ${preEarningsIVRank ?? 'n/a'}.`)}
                       className="text-[10px] text-amber-300 hover:text-amber-200"
                     >
                       Ask AI for playbook
@@ -355,7 +425,7 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
                 </div>
 
                 <div className="mt-3 grid gap-2">
-                  {analysis.suggestedStrategies.map((strategy) => (
+                  {suggestedStrategies.map((strategy) => (
                     <div key={strategy.name} className="rounded-lg border border-white/10 bg-black/20 p-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-medium text-white">{strategy.name}</p>
