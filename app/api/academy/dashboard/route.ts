@@ -132,7 +132,8 @@ export async function GET(request: NextRequest) {
     let currentLesson = null
     if (currentLessonResult.data) {
       const lp = currentLessonResult.data
-      const lesson = lp.lessons as { id: string; title: string; slug: string; estimated_minutes: number; course_id: string; courses: { id: string; title: string; slug: string } } | null
+      const lessonRaw = lp.lessons as unknown
+      const lesson = (Array.isArray(lessonRaw) ? lessonRaw[0] : lessonRaw) as { id: string; title: string; slug: string; estimated_minutes: number; course_id: string; courses: unknown } | null
       if (lesson) {
         const courseLessonsCount = allCourses.find(
           (c) => c.id === lesson.course_id
@@ -143,8 +144,8 @@ export async function GET(request: NextRequest) {
         currentLesson = {
           lessonId: lesson.id,
           lessonTitle: lesson.title,
-          courseTitle: lesson.courses?.title || '',
-          courseSlug: lesson.courses?.slug || '',
+          courseTitle: (Array.isArray(lesson.courses) ? lesson.courses[0]?.title : (lesson.courses as { title?: string })?.title) || '',
+          courseSlug: (Array.isArray(lesson.courses) ? lesson.courses[0]?.slug : (lesson.courses as { slug?: string })?.slug) || '',
           progress: courseLessonsCount > 0
             ? Math.round((completedInCourse / courseLessonsCount) * 100)
             : 0,
