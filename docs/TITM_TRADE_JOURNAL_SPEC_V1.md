@@ -451,7 +451,7 @@ Priority: **HIGH**. These features close the most critical competitive gaps agai
 
 **Requirements:**
 
-1. Add to `journal_entries` table: `contract_type` TEXT (call/put/spread), `strike_price` NUMERIC, `expiration_date` DATE, `dte_at_entry` INTEGER, `dte_at_exit` INTEGER, `iv_at_entry` NUMERIC, `iv_at_exit` NUMERIC, `delta_at_entry` NUMERIC, `theta_at_entry` NUMERIC, `gamma_at_entry` NUMERIC, `vega_at_entry` NUMERIC, `underlying_price_at_entry` NUMERIC, `underlying_price_at_exit` NUMERIC.
+1. Add to `journal_entries` table: `contract_type` TEXT (call/put/stock), `strike_price` NUMERIC, `expiration_date` DATE, `dte_at_entry` INTEGER, `dte_at_exit` INTEGER, `iv_at_entry` NUMERIC, `iv_at_exit` NUMERIC, `delta_at_entry` NUMERIC, `theta_at_entry` NUMERIC, `gamma_at_entry` NUMERIC, `vega_at_entry` NUMERIC, `underlying_price_at_entry` NUMERIC, `underlying_price_at_exit` NUMERIC.
 2. During enrichment: If the trade symbol matches an options pattern (e.g., contains strike/expiry), fetch options chain data from Massive.com and populate Greeks fields.
 3. In trade entry form: Add an "Options Details" expandable section (under Full Entry mode) with fields for contract type, strike, expiration. Auto-calculate DTE.
 4. In analytics: Add options-specific metrics: Win rate by DTE bucket (0–7, 8–30, 30+), P&L by IV percentile at entry, Average theta decay captured, Delta exposure analysis.
@@ -686,7 +686,7 @@ All database changes should be implemented as Supabase migrations with proper RL
 | strategy | TEXT | NULL | 2 | Playbook/strategy name |
 | mfe_percent | NUMERIC | NULL | 3 | Max favorable excursion % |
 | mae_percent | NUMERIC | NULL | 3 | Max adverse excursion % |
-| contract_type | TEXT | NULL | 2 | call/put/spread/stock |
+| contract_type | TEXT | NULL | 2 | call/put/stock |
 | strike_price | NUMERIC | NULL | 2 | Options strike price |
 | expiration_date | DATE | NULL | 2 | Options expiration |
 | dte_at_entry | INTEGER | NULL | 2 | Days to expiration at entry |

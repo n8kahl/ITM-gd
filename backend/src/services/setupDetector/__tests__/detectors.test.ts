@@ -134,6 +134,7 @@ describe('setupDetector modules', () => {
     expect(signal?.type).toBe('gap_fill');
     expect(signal?.direction).toBe('short');
     expect((signal?.signalData.fillPct as number)).toBeGreaterThanOrEqual(50);
+    expect(signal?.tradeSuggestion?.target).toBeCloseTo(100.75, 2);
   });
 
   it('aggregates and sorts detections by confidence', () => {

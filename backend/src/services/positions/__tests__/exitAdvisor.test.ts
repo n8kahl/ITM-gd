@@ -77,6 +77,6 @@ describe('ExitAdvisor', () => {
     ]);
 
     expect(advice.some((item) => item.type === 'time_decay')).toBe(true);
-    expect(advice.some((item) => item.type === 'take_profit')).toBe(true);
+    expect(advice.some((item) => item.type === 'stop_loss')).toBe(true);
   });
 });

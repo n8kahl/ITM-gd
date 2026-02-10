@@ -90,6 +90,7 @@ describe('Market Hours Service', () => {
       const status = getMarketStatus(blackFriday);
       expect(status.status).toBe('open');
       expect(status.message).toContain('early close');
+      expect(status.closingTime).toBe('1:00 PM ET');
     });
 
     it('should show closed after early close time', () => {
@@ -114,6 +115,39 @@ describe('Market Hours Service', () => {
       const status = getMarketStatus(opening);
       expect(status.status).toBe('open');
       expect(status.timeSinceOpen).toBe('0h 0m');
+      expect(status.closingTime).toBe('4:00 PM ET');
+    });
+
+    it('should treat Independence Day observed closure as closed (2026-07-03)', () => {
+      const observedHoliday = new Date('2026-07-03T16:00:00Z');
+      const status = getMarketStatus(observedHoliday);
+      expect(status.status).toBe('closed');
+      expect(status.session).toBe('holiday');
+      expect(status.holidayName).toContain('Independence Day');
+    });
+
+    it('should treat Independence Day observed closure as closed (2027-07-05)', () => {
+      const observedHoliday = new Date('2027-07-05T16:00:00Z');
+      const status = getMarketStatus(observedHoliday);
+      expect(status.status).toBe('closed');
+      expect(status.session).toBe('holiday');
+      expect(status.holidayName).toContain('Independence Day');
+    });
+
+    it('should treat Christmas observed closure as closed (2027-12-24)', () => {
+      const observedHoliday = new Date('2027-12-24T16:00:00Z');
+      const status = getMarketStatus(observedHoliday);
+      expect(status.status).toBe('closed');
+      expect(status.session).toBe('holiday');
+      expect(status.holidayName).toContain('Christmas');
+    });
+
+    it('should treat New Year observed closure as closed (2028-01-03)', () => {
+      const observedHoliday = new Date('2028-01-03T16:00:00Z');
+      const status = getMarketStatus(observedHoliday);
+      expect(status.status).toBe('closed');
+      expect(status.session).toBe('holiday');
+      expect(status.holidayName).toContain("New Year's Day");
     });
   });
 
