@@ -77,7 +77,12 @@ export function TestimonialMarquee({
   const duplicatedTestimonials = [...testimonials, ...testimonials];
 
   return (
-    <div className={cn("relative overflow-hidden", className)}>
+    <div
+      className={cn("relative overflow-hidden", className)}
+      role="marquee"
+      aria-live="polite"
+      aria-label="Member testimonials"
+    >
       {/* Gradient masks for fade effect */}
       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-void to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-void to-transparent z-10 pointer-events-none" />

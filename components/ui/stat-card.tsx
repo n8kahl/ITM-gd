@@ -13,6 +13,7 @@ interface StatCardProps {
   icon?: LucideIcon
   accent?: 'emerald' | 'champagne' | 'red' | 'neutral'
   className?: string
+  ariaLabel?: string
 }
 
 /**
@@ -27,6 +28,7 @@ export function StatCard({
   icon: Icon,
   accent = 'neutral',
   className,
+  ariaLabel,
 }: StatCardProps) {
   const accentColors = {
     emerald: 'text-emerald-400',
@@ -43,6 +45,8 @@ export function StatCard({
 
   return (
     <div
+      role="group"
+      aria-label={ariaLabel || `${label}: ${value}`}
       className={cn(
         // Glass Card base
         'relative rounded-xl p-4',

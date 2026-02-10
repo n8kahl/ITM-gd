@@ -15,6 +15,7 @@ interface BentoCardProps {
   image?: string; // Deprecated - prefer icons
   graphic?: ReactNode; // Custom graphic (charts, etc.)
   graphicClassName?: string;
+  ariaLabel?: string;
 }
 
 export function BentoCard({
@@ -27,6 +28,7 @@ export function BentoCard({
   image,
   graphic,
   graphicClassName,
+  ariaLabel,
 }: BentoCardProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
@@ -55,6 +57,8 @@ export function BentoCard({
   return (
     <motion.div
       ref={cardRef}
+      role="group"
+      aria-label={ariaLabel || title}
       className={cn(
         "relative group rounded-xl overflow-hidden",
         "bg-[rgba(10,10,11,0.7)] backdrop-blur-xl",

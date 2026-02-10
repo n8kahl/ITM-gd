@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { StructuredData } from '@/components/seo/structured-data'
 import Link from 'next/link'
 import { User } from 'lucide-react'
+import { AppToaster } from '@/components/ui/app-toaster'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -72,6 +73,7 @@ export default async function RootLayout({
           <User className="w-5 h-5 text-ivory/80" />
         </Link>
         {children}
+        <AppToaster />
       </body>
     </html>
   )
