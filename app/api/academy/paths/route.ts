@@ -1,10 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-import { getUserTier, getAccessibleTiers } from '@/lib/academy/get-user-tier'
+import {
+  getAccessibleTierIds,
+  resolveUserMembershipTier,
+  toSafeErrorMessage,
+} from '@/lib/academy/api-utils'
+
+interface LearningPathRow {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  tier_required: 'core' | 'pro' | 'executive'
+  estimated_hours: number | null
+  difficulty_level: 'beginner' | 'intermediate' | 'advanced'
+  icon_name: string | null
+  is_published: boolean
+  display_order: number
+}
 
 /**
  * GET /api/academy/paths
- * List learning paths filtered by the user's subscription tier.
+ * Returns learning paths filtered by member tier with derived progress.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -17,13 +34,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { user, supabase } = auth
+    const userTier = await resolveUserMembershipTier(user, supabase)
+    const accessibleTiers = getAccessibleTierIds(userTier)
 
-    // Get user tier from Discord roles + app_settings mapping
-    const userTier = await getUserTier(supabase, user.id)
-    const accessibleTiers = getAccessibleTiers(userTier)
-
-    // Fetch paths filtered by tier
-    const { data: paths, error } = await supabase
+    const { data: paths, error: pathsError } = await supabase
       .from('learning_paths')
       .select(`
         id,
@@ -35,77 +49,74 @@ export async function GET(request: NextRequest) {
         difficulty_level,
         icon_name,
         is_published,
-        display_order,
-        courses:learning_path_courses(
-          course_id,
-          sequence_order,
-          is_required,
-          courses(id, title, slug)
-        )
+        display_order
       `)
       .eq('is_published', true)
       .in('tier_required', accessibleTiers)
       .order('display_order', { ascending: true })
 
-    if (error) {
+    if (pathsError) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to load learning paths' },
         { status: 500 }
       )
     }
 
-    // Gather all course IDs across all paths to fetch user progress in one query
-    const allCourseIds = new Set<string>()
-    for (const path of paths || []) {
-      for (const entry of path.courses || []) {
-        if (entry.course_id) {
-          allCourseIds.add(entry.course_id)
-        }
-      }
+    const learningPaths = (paths || []) as LearningPathRow[]
+    const pathIds = learningPaths.map((path) => path.id)
+
+    const { data: pathCourses } = pathIds.length > 0
+      ? await supabase
+          .from('learning_path_courses')
+          .select('learning_path_id, course_id, sequence_order')
+          .in('learning_path_id', pathIds)
+          .order('sequence_order', { ascending: true })
+      : { data: [] as Array<{ learning_path_id: string; course_id: string; sequence_order: number }> }
+
+    const courseIds = Array.from(new Set((pathCourses || []).map((row) => row.course_id)))
+
+    const { data: courseProgress } = courseIds.length > 0
+      ? await supabase
+          .from('user_course_progress')
+          .select('course_id, status')
+          .eq('user_id', user.id)
+          .in('course_id', courseIds)
+      : { data: [] as Array<{ course_id: string; status: string }> }
+
+    const progressByCourse = new Map(
+      (courseProgress || []).map((row) => [row.course_id, row.status])
+    )
+
+    const coursesByPath = new Map<string, Array<{ course_id: string; sequence_order: number }>>()
+    for (const row of pathCourses || []) {
+      const existing = coursesByPath.get(row.learning_path_id) || []
+      existing.push({
+        course_id: row.course_id,
+        sequence_order: row.sequence_order,
+      })
+      coursesByPath.set(row.learning_path_id, existing)
     }
 
-    // Fetch user course progress for all relevant courses in a single query
-    let courseProgressMap = new Map<string, { status: string; lessons_completed: number; total_lessons: number }>()
+    const mappedPaths = learningPaths.map((path) => {
+      const coursesForPath = coursesByPath.get(path.id) || []
+      const completedCount = coursesForPath.filter(
+        (course) => progressByCourse.get(course.course_id) === 'completed'
+      ).length
 
-    if (allCourseIds.size > 0) {
-      const { data: courseProgress } = await supabase
-        .from('user_course_progress')
-        .select('course_id, status, lessons_completed, total_lessons')
-        .eq('user_id', user.id)
-        .in('course_id', Array.from(allCourseIds))
-
-      courseProgressMap = new Map(
-        (courseProgress || []).map((p) => [p.course_id, p])
-      )
-    }
-
-    // Compute per-path progress from individual course progress
-    const pathsWithProgress = (paths || []).map((path) => {
-      const pathCourses = path.courses || []
-      const totalCourses = pathCourses.length
-      const completedCourses = pathCourses.filter((entry: { course_id: string }) => {
-        const progress = courseProgressMap.get(entry.course_id)
-        return progress?.status === 'completed'
-      }).length
-
-      const progressPct = totalCourses > 0
-        ? Math.round((completedCourses / totalCourses) * 100)
+      const progressPct = coursesForPath.length > 0
+        ? Math.round((completedCount / coursesForPath.length) * 100)
         : 0
-
-      let status: 'not_started' | 'in_progress' | 'completed' = 'not_started'
-      if (completedCourses === totalCourses && totalCourses > 0) {
-        status = 'completed'
-      } else if (completedCourses > 0) {
-        status = 'in_progress'
-      }
 
       return {
         ...path,
         user_progress: {
           progress_pct: progressPct,
-          status,
-          completed_courses: completedCourses,
-          total_courses: totalCourses,
+          status:
+            completedCount === 0
+              ? 'not_started'
+              : completedCount >= coursesForPath.length
+                ? 'completed'
+                : 'in_progress',
         },
       }
     })
@@ -113,13 +124,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        paths: pathsWithProgress,
+        paths: mappedPaths,
         user_tier: userTier,
       },
     })
   } catch (error) {
+    console.error('academy paths failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

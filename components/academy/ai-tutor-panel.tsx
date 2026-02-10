@@ -23,20 +23,19 @@ interface Message {
 interface AiTutorPanelProps {
   lessonId: string
   lessonTitle: string
-  courseTitle: string
   className?: string
 }
 
 export function AiTutorPanel({
   lessonId,
   lessonTitle,
-  courseTitle,
   className,
 }: AiTutorPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -68,18 +67,13 @@ export function AiTutorPanel({
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/academy/ai-tutor', {
+      const response = await fetch('/api/academy/tutor/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lessonId,
-          lessonTitle,
-          courseTitle,
-          message: trimmed,
-          history: messages.slice(-10).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          lesson_id: lessonId,
+          initial_question: trimmed,
+          session_id: sessionId,
         }),
       })
 
@@ -87,12 +81,16 @@ export function AiTutorPanel({
         throw new Error('Failed to get response')
       }
 
-      const data = await response.json()
+      const payload = await response.json()
+      const data = payload?.data || null
+      if (data?.session_id && typeof data.session_id === 'string') {
+        setSessionId(data.session_id)
+      }
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: data.reply || 'I could not generate a response. Please try again.',
+        content: data?.reply || 'I could not generate a response. Please try again.',
         timestamp: new Date(),
       }
 
@@ -109,7 +107,7 @@ export function AiTutorPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, lessonId, lessonTitle, courseTitle, messages])
+  }, [input, isLoading, lessonId, sessionId])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

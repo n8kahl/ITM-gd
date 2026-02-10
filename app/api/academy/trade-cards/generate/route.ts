@@ -7,25 +7,15 @@ import {
 import { uploadTradeCardToStorage } from '@/lib/uploads/trade-card-storage'
 import type { TradeCardMetadata, TradeCardFormat } from '@/lib/types/academy'
 import { getRankForXP } from '@/lib/academy/xp-utils'
+import { generateVerificationCode } from '@/lib/validation/crypto-utils'
+import { resolveUserMembershipTier, toSafeErrorMessage } from '@/lib/academy/api-utils'
 
 /**
  * POST /api/academy/trade-cards/generate
- *
- * Generates trade card images (landscape, story, square) for an achievement.
- * Expects JSON body: { achievementId: string }
- *
- * Flow:
- * 1. Authenticate user
- * 2. Fetch achievement + user profile data
- * 3. Build TradeCardMetadata
- * 4. Generate all 3 card formats via Satori/Resvg
- * 5. Upload PNGs to Supabase Storage
- * 6. Update achievement record with image URLs
- * 7. Return URLs
+ * Generates all trade-card formats and stores URLs in achievement metadata.
  */
 export async function POST(request: NextRequest) {
   try {
-    // --- Auth ---
     const auth = await getAuthenticatedUserFromRequest(request)
     if (!auth) {
       return NextResponse.json(
@@ -35,25 +25,22 @@ export async function POST(request: NextRequest) {
     }
 
     const { user, supabase } = auth
-
-    // --- Parse body ---
     const body = await request.json()
-    const { achievementId } = body as { achievementId?: string }
+    const achievementId = body?.achievementId
 
-    if (!achievementId) {
+    if (!achievementId || typeof achievementId !== 'string') {
       return NextResponse.json(
         { success: false, error: 'achievementId is required' },
         { status: 400 }
       )
     }
 
-    // --- Fetch achievement ---
     const { data: achievement, error: achievementError } = await supabase
       .from('user_achievements')
       .select('*')
       .eq('id', achievementId)
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (achievementError || !achievement) {
       return NextResponse.json(
@@ -62,132 +49,121 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // --- Fetch user profile ---
-    const { data: profile } = await supabase
-      .from('user_learning_profiles')
-      .select('display_name, tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    const verificationCode = achievement.verification_code || generateVerificationCode()
 
-    // --- Fetch XP data ---
-    const { data: xpData } = await supabase
-      .from('user_xp_summary')
-      .select('total_xp')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    const [tier, xpResult, completedCoursesResult, courseStatsResult, totalCoursesResult, totalLessonsCompletedResult, discordProfileResult] = await Promise.all([
+      resolveUserMembershipTier(user, supabase),
+      supabase
+        .from('user_xp')
+        .select('total_xp, current_streak')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('user_course_progress')
+        .select('courses(title)')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .limit(7),
+      supabase
+        .from('user_course_progress')
+        .select('status, overall_quiz_average')
+        .eq('user_id', user.id),
+      supabase
+        .from('courses')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_published', true),
+      supabase
+        .from('user_lesson_progress')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'completed'),
+      supabase
+        .from('user_discord_profiles')
+        .select('discord_username')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ])
 
-    // --- Fetch completed courses ---
-    const { data: completedCourses } = await supabase
-      .from('user_course_progress')
-      .select('courses(title)')
-      .eq('user_id', user.id)
-      .eq('status', 'completed')
-      .limit(7)
-
-    // --- Fetch aggregate stats ---
-    const { data: courseStats } = await supabase
-      .from('user_course_progress')
-      .select('status, overall_quiz_average')
-      .eq('user_id', user.id)
-
-    const { count: totalCourses } = await supabase
-      .from('courses')
-      .select('id', { count: 'exact', head: true })
-
-    const { count: totalLessonsCompleted } = await supabase
-      .from('user_lesson_progress')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('status', 'completed')
-
-    // --- Fetch streak ---
-    const { data: streakData } = await supabase
-      .from('learning_streaks')
-      .select('current_streak')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    // --- Compute derived values ---
-    const tier = profile?.tier || 'core'
     const tierColors = TIER_COLOR_MAP[tier] || TIER_COLOR_MAP.core
-    const totalXP = xpData?.total_xp || 0
+    const totalXP = xpResult.data?.total_xp || 0
     const currentRank = getRankForXP(totalXP)
 
-    const coursesCompletedCount = courseStats?.filter(
-      (c: { status: string }) => c.status === 'completed'
-    ).length || 0
+    const coursesCompletedCount = (courseStatsResult.data || []).filter((row) => row.status === 'completed').length
+    const quizScores = (courseStatsResult.data || [])
+      .map((row) => row.overall_quiz_average)
+      .filter((value): value is number => typeof value === 'number')
+    const quizAverage = quizScores.length > 0
+      ? Math.round(quizScores.reduce((sum, value) => sum + value, 0) / quizScores.length)
+      : 0
 
-    const quizScores = courseStats
-      ?.map((c: { overall_quiz_average: number | null }) => c.overall_quiz_average)
-      .filter((s: number | null): s is number => s !== null) || []
-    const quizAverage =
-      quizScores.length > 0
-        ? Math.round(quizScores.reduce((a: number, b: number) => a + b, 0) / quizScores.length)
-        : 0
-
-    const coursesCompletedList = (completedCourses || [])
-      .map((cp) => {
-        const courses = (cp as {
-          courses?: { title?: string } | Array<{ title?: string }> | null
-        }).courses
-
-        if (Array.isArray(courses)) {
-          return courses[0]?.title
+    const coursesCompletedList = (completedCoursesResult.data || [])
+      .map((row) => {
+        const relation = row.courses as { title?: string } | Array<{ title?: string }> | null
+        if (Array.isArray(relation)) {
+          return relation[0]?.title || null
         }
 
-        return courses?.title
+        return relation?.title || null
       })
       .filter((title): title is string => typeof title === 'string' && title.length > 0)
 
     const memberName =
-      profile?.display_name ||
+      discordProfileResult.data?.discord_username ||
       user.user_metadata?.full_name ||
       user.email?.split('@')[0] ||
       'TITM Member'
 
-    const achievementData = achievement.achievement_data || {}
+    const achievementData = (achievement.achievement_data || {}) as Record<string, unknown>
     const earnedDate = new Date(achievement.earned_at).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     })
 
-    // --- Build metadata ---
     const metadata: TradeCardMetadata = {
-      achievementTitle: achievementData.title || achievement.achievement_key || 'Achievement Unlocked',
+      achievementTitle:
+        typeof achievementData.title === 'string'
+          ? achievementData.title
+          : achievement.achievement_key || 'Achievement Unlocked',
       memberName,
       earnedDate,
-      verificationCode: achievement.verification_code,
-      achievementIcon: achievementData.icon || 'trophy',
+      verificationCode,
+      achievementIcon:
+        typeof achievementData.icon === 'string'
+          ? achievementData.icon
+          : 'trophy',
       tier,
       stats: {
         coursesCompleted: coursesCompletedCount,
-        totalCourses: totalCourses || 0,
+        totalCourses: totalCoursesResult.count || 0,
         quizAverage,
-        totalLessons: totalLessonsCompleted || 0,
-        dayStreak: streakData?.current_streak || 0,
+        totalLessons: totalLessonsCompletedResult.count || 0,
+        dayStreak: xpResult.data?.current_streak || 0,
         currentRank,
       },
       coursesCompletedList,
     }
 
-    // --- Generate all 3 card formats ---
     const cards = await generateAllTradeCards(metadata, tierColors)
 
-    // --- Upload to storage ---
-    const uploadResults: Record<string, string> = {}
-
+    const uploadResults: Partial<Record<TradeCardFormat, string>> = {}
     for (const card of cards) {
-      const uploadPath = `${user.id}/${achievementId}/${card.format}.png`
+      const uploadPath = `${user.id}/${achievementId}-${card.format}.png`
       const publicUrl = await uploadTradeCardToStorage(card.buffer, uploadPath)
       uploadResults[card.format] = publicUrl
     }
 
-    // --- Update achievement record with the landscape image URL ---
+    const nextAchievementData: Record<string, unknown> = {
+      ...achievementData,
+      trade_cards: uploadResults,
+    }
+
     await supabase
       .from('user_achievements')
       .update({
-        trade_card_image_url: uploadResults.landscape,
+        verification_code: verificationCode,
+        trade_card_image_url: uploadResults.landscape || achievement.trade_card_image_url,
+        achievement_data: nextAchievementData,
       })
       .eq('id', achievementId)
       .eq('user_id', user.id)
@@ -196,17 +172,14 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         achievementId,
-        verificationCode: achievement.verification_code,
+        verificationCode,
         cards: uploadResults,
       },
     })
   } catch (error) {
-    console.error('Trade card generation failed:', error)
+    console.error('academy trade card generation failed', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

@@ -1,9 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
+import {
+  getAccessibleTierIds,
+  resolveUserMembershipTier,
+  toSafeErrorMessage,
+} from '@/lib/academy/api-utils'
+
+interface LessonRow {
+  id: string
+  title: string
+  lesson_type: 'video' | 'text' | 'interactive' | 'scenario' | 'practice' | 'guided' | null
+  estimated_minutes: number | null
+  duration_minutes: number | null
+  display_order: number
+}
+
+function normalizePathName(value: unknown): string {
+  if (Array.isArray(value)) {
+    const first = value[0] as { name?: string } | undefined
+    return first?.name || 'General'
+  }
+
+  if (value && typeof value === 'object') {
+    return ((value as { name?: string }).name) || 'General'
+  }
+
+  return 'General'
+}
 
 /**
  * GET /api/academy/courses/[slug]
- * Course detail with full lesson list and per-lesson user progress.
+ * Course detail endpoint for the member academy UI.
  */
 export async function GET(
   request: NextRequest,
@@ -21,32 +48,26 @@ export async function GET(
     const { user, supabase } = auth
     const { slug } = await params
 
-    // Fetch course with its lessons
+    const userTier = await resolveUserMembershipTier(user, supabase)
+    const accessibleTiers = getAccessibleTierIds(userTier)
+
     const { data: course, error: courseError } = await supabase
       .from('courses')
       .select(`
         id,
-        title,
         slug,
+        title,
         description,
         thumbnail_url,
         difficulty_level,
         tier_required,
         estimated_hours,
-        is_published,
-        lessons(
-          id,
-          title,
-          slug,
-          lesson_type,
-          estimated_minutes,
-          display_order,
-          is_free_preview
-        )
+        learning_paths:learning_path_id(name)
       `)
       .eq('slug', slug)
       .eq('is_published', true)
-      .single()
+      .in('tier_required', accessibleTiers)
+      .maybeSingle()
 
     if (courseError || !course) {
       return NextResponse.json(
@@ -55,62 +76,82 @@ export async function GET(
       )
     }
 
-    // Sort lessons by display_order
-    const sortedLessons = (course.lessons || []).sort(
-      (a: { display_order: number }, b: { display_order: number }) =>
-        a.display_order - b.display_order
-    )
-
-    // Fetch user progress for all lessons in this course
-    const lessonIds = sortedLessons.map((l: { id: string }) => l.id)
-    const { data: lessonProgress } = await supabase
-      .from('user_lesson_progress')
-      .select('lesson_id, status, completed_at, quiz_score, time_spent_seconds')
-      .eq('user_id', user.id)
-      .in('lesson_id', lessonIds.length > 0 ? lessonIds : ['__none__'])
-
-    const progressMap = new Map(
-      (lessonProgress || []).map((p) => [p.lesson_id, p])
-    )
-
-    // Fetch overall course progress
-    const { data: courseProgress } = await supabase
-      .from('user_course_progress')
-      .select('lessons_completed, total_lessons, status, completed_at')
-      .eq('user_id', user.id)
+    const { data: lessons, error: lessonsError } = await supabase
+      .from('lessons')
+      .select('id, title, lesson_type, estimated_minutes, duration_minutes, display_order')
       .eq('course_id', course.id)
-      .maybeSingle()
+      .order('display_order', { ascending: true })
 
-    const lessonsWithProgress = sortedLessons.map((lesson: Record<string, unknown>) => ({
-      ...lesson,
-      user_progress: progressMap.get(lesson.id as string) || {
-        status: 'not_started',
-        completed_at: null,
-        quiz_score: null,
-        time_spent_seconds: 0,
-      },
-    }))
+    if (lessonsError) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to load lessons' },
+        { status: 500 }
+      )
+    }
+
+    const lessonRows = (lessons || []) as LessonRow[]
+    const lessonIds = lessonRows.map((lesson) => lesson.id)
+
+    const { data: progressRows } = lessonIds.length > 0
+      ? await supabase
+          .from('user_lesson_progress')
+          .select('lesson_id, status')
+          .eq('user_id', user.id)
+          .in('lesson_id', lessonIds)
+      : { data: [] as Array<{ lesson_id: string; status: string }> }
+
+    const progressByLesson = new Map(
+      (progressRows || []).map((row) => [row.lesson_id, row.status])
+    )
+
+    const mappedLessons = lessonRows.map((lesson, index) => {
+      const status = progressByLesson.get(lesson.id) || 'not_started'
+      const isCompleted = status === 'completed'
+      const previousLesson = index > 0 ? lessonRows[index - 1] : null
+      const previousCompleted = previousLesson
+        ? progressByLesson.get(previousLesson.id) === 'completed'
+        : true
+
+      return {
+        id: lesson.id,
+        title: lesson.title,
+        order: lesson.display_order || index + 1,
+        durationMinutes: lesson.estimated_minutes || lesson.duration_minutes || 0,
+        contentType: lesson.lesson_type === 'video'
+          ? 'video'
+          : lesson.lesson_type === 'text'
+            ? 'markdown'
+            : 'mixed',
+        isCompleted,
+        isLocked: !isCompleted && !previousCompleted,
+      }
+    })
+
+    const completedLessons = mappedLessons.filter((lesson) => lesson.isCompleted).length
+    const estimatedMinutes = mappedLessons.reduce((sum, lesson) => sum + lesson.durationMinutes, 0)
 
     return NextResponse.json({
       success: true,
       data: {
-        ...course,
-        lessons: lessonsWithProgress,
-        lesson_count: lessonsWithProgress.length,
-        completed_count: lessonsWithProgress.filter(
-          (l: { user_progress: { status: string } }) => l.user_progress.status === 'completed'
-        ).length,
-        course_progress: courseProgress || {
-          lessons_completed: 0,
-          total_lessons: 0,
-          status: 'not_started',
-          completed_at: null,
-        },
+        slug: course.slug,
+        title: course.title,
+        description: course.description || '',
+        longDescription: course.description || '',
+        thumbnailUrl: course.thumbnail_url,
+        difficulty: course.difficulty_level,
+        path: normalizePathName(course.learning_paths),
+        estimatedMinutes: estimatedMinutes || Math.round((course.estimated_hours || 0) * 60),
+        lessons: mappedLessons,
+        totalLessons: mappedLessons.length,
+        completedLessons,
+        objectives: [],
+        prerequisites: [],
       },
     })
   } catch (error) {
+    console.error('academy course detail failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

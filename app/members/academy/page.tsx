@@ -10,6 +10,13 @@ import { AcademyHub } from '@/components/academy/academy-hub'
 // TYPES
 // ============================================
 
+interface OnboardingStatus {
+  success: boolean
+  data?: {
+    completed: boolean
+  }
+}
+
 interface DashboardData {
   stats: {
     coursesCompleted: number
@@ -49,6 +56,11 @@ interface DashboardData {
     earnedAt: string | null
     category?: string
   }>
+}
+
+interface DashboardResponse {
+  success: boolean
+  data?: DashboardData
 }
 
 type PageState = 'loading' | 'dashboard' | 'redirecting'
@@ -114,23 +126,21 @@ export default function AcademyPage() {
   const [pageState, setPageState] = useState<PageState>('loading')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
 
-  const loadDashboard = useCallback(async () => {
+  const checkOnboardingAndLoadDashboard = useCallback(async () => {
     try {
-      // Step 1: Check onboarding status (non-blocking — skip if it fails)
-      try {
-        const onboardingRes = await fetch('/api/academy/onboarding-status')
-        if (onboardingRes.ok) {
-          const onboardingJson = await onboardingRes.json()
-          // API returns { success, data: { completed } }
-          const isComplete = onboardingJson?.data?.completed ?? onboardingJson?.isComplete
-          if (isComplete === false) {
-            setPageState('redirecting')
-            router.push('/members/academy/onboarding')
-            return
-          }
-        }
-      } catch {
-        // Onboarding check failed — continue to dashboard anyway
+      // Step 1: Check onboarding status
+      const onboardingRes = await fetch('/api/academy/onboarding-status')
+      if (!onboardingRes.ok) {
+        throw new Error('Failed to check onboarding status')
+      }
+
+      const onboardingData: OnboardingStatus = await onboardingRes.json()
+      const isComplete = !!onboardingData.data?.completed
+
+      if (!isComplete) {
+        setPageState('redirecting')
+        router.push('/members/academy/onboarding')
+        return
       }
 
       // Step 2: Fetch dashboard data
@@ -139,10 +149,12 @@ export default function AcademyPage() {
         throw new Error('Failed to load dashboard')
       }
 
-      const dashboardJson = await dashboardRes.json()
-      // API returns { success, data: { stats, currentLesson, ... } }
-      const data: DashboardData = dashboardJson?.data ?? dashboardJson
-      setDashboardData(data)
+      const dashboardPayload: DashboardResponse = await dashboardRes.json()
+      if (!dashboardPayload.success || !dashboardPayload.data) {
+        throw new Error('Dashboard payload invalid')
+      }
+
+      setDashboardData(dashboardPayload.data)
       setPageState('dashboard')
     } catch (error) {
       console.error('Academy page error:', error)
@@ -167,8 +179,8 @@ export default function AcademyPage() {
   }, [router])
 
   useEffect(() => {
-    loadDashboard()
-  }, [loadDashboard])
+    checkOnboardingAndLoadDashboard()
+  }, [checkOnboardingAndLoadDashboard])
 
   if (pageState === 'loading' || pageState === 'redirecting') {
     return <AcademySkeleton />

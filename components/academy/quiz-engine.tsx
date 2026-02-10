@@ -10,11 +10,20 @@ interface QuizEngineProps {
   questions: QuizQuestionData[]
   title?: string
   passingScore?: number
-  onComplete?: (score: number, total: number, passed: boolean) => void
+  onComplete?: (
+    score: number,
+    total: number,
+    passed: boolean,
+    answers: Array<{ question_id: string; selected_answer: string }>
+  ) => void
   className?: string
 }
 
 type QuizState = 'in-progress' | 'completed'
+type QuizAnswerState = {
+  selectedOptionId: string
+  isCorrect: boolean
+}
 
 export function QuizEngine({
   questions,
@@ -24,14 +33,14 @@ export function QuizEngine({
   className,
 }: QuizEngineProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<Record<string, boolean>>({})
+  const [answers, setAnswers] = useState<Record<string, QuizAnswerState>>({})
   const [quizState, setQuizState] = useState<QuizState>('in-progress')
 
   const totalQuestions = questions.length
   const currentQuestion = questions[currentIndex]
 
   const score = useMemo(() => {
-    const correct = Object.values(answers).filter(Boolean).length
+    const correct = Object.values(answers).filter((answer) => answer.isCorrect).length
     return {
       correct,
       total: totalQuestions,
@@ -43,7 +52,10 @@ export function QuizEngine({
     (optionId: string, isCorrect: boolean) => {
       setAnswers((prev) => ({
         ...prev,
-        [currentQuestion.id]: isCorrect,
+        [currentQuestion.id]: {
+          selectedOptionId: optionId,
+          isCorrect,
+        },
       }))
     },
     [currentQuestion]
@@ -56,9 +68,13 @@ export function QuizEngine({
       setQuizState('completed')
       const correct = Object.values({
         ...answers,
-      }).filter(Boolean).length
+      }).filter((answer) => answer.isCorrect).length
       const pct = Math.round((correct / totalQuestions) * 100)
-      onComplete?.(correct, totalQuestions, pct >= passingScore)
+      const answerPayload = Object.entries(answers).map(([question_id, answer]) => ({
+        question_id,
+        selected_answer: answer.selectedOptionId,
+      }))
+      onComplete?.(correct, totalQuestions, pct >= passingScore, answerPayload)
     }
   }, [currentIndex, totalQuestions, answers, onComplete, passingScore])
 

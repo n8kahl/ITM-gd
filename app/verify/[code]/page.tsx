@@ -33,8 +33,8 @@ interface AchievementRecord {
 }
 
 interface UserProfile {
-  display_name: string | null
-  tier: string | null
+  discord_username: string | null
+  discord_avatar: string | null
 }
 
 async function getVerifiedAchievement(code: string) {
@@ -56,10 +56,10 @@ async function getVerifiedAchievement(code: string) {
 
   const typedAchievement = achievement as AchievementRecord
 
-  // Fetch user profile for display name
+  // Fetch Discord profile for display name
   const { data: profile } = await supabase
-    .from('user_learning_profiles')
-    .select('display_name, tier')
+    .from('user_discord_profiles')
+    .select('discord_username, discord_avatar')
     .eq('user_id', typedAchievement.user_id)
     .maybeSingle()
 
@@ -69,16 +69,27 @@ async function getVerifiedAchievement(code: string) {
   )
 
   const userProfile = profile as UserProfile | null
+  const achievementData = typedAchievement.achievement_data || {}
   const memberName =
-    userProfile?.display_name ||
+    userProfile?.discord_username ||
     userData?.user?.user_metadata?.full_name ||
     userData?.user?.email?.split('@')[0] ||
     'TITM Member'
 
+  const metadataTier =
+    typeof achievementData.tier === 'string'
+      ? achievementData.tier.toLowerCase()
+      : null
+
+  const tier =
+    metadataTier === 'core' || metadataTier === 'pro' || metadataTier === 'executive'
+      ? metadataTier
+      : 'core'
+
   return {
     achievement: typedAchievement,
     memberName,
-    tier: userProfile?.tier || 'core',
+    tier,
   }
 }
 

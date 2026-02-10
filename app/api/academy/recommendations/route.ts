@@ -1,24 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-import { getUserTier, getAccessibleTiers } from '@/lib/academy/get-user-tier'
+import {
+  getAccessibleTierIds,
+  resolveUserMembershipTier,
+  toSafeErrorMessage,
+} from '@/lib/academy/api-utils'
 
-function getCourseTierFromRelation(value: unknown): string {
+interface LessonWithCourse {
+  id: string
+  title: string
+  slug: string
+  estimated_minutes: number | null
+  duration_minutes: number | null
+  display_order: number
+  course_id: string
+  courses?: {
+    id: string
+    title: string
+    slug: string
+    tier_required: 'core' | 'pro' | 'executive'
+  } | Array<{
+    id: string
+    title: string
+    slug: string
+    tier_required: 'core' | 'pro' | 'executive'
+  }> | null
+}
+
+function normalizeCourseRelation(value: LessonWithCourse['courses']) {
   if (Array.isArray(value)) {
-    const first = value[0] as { tier_required?: string } | undefined
-    return first?.tier_required || 'core'
+    return value[0] || null
   }
 
-  if (value && typeof value === 'object') {
-    return ((value as { tier_required?: string }).tier_required) || 'core'
-  }
-
-  return 'core'
+  return value || null
 }
 
 /**
  * GET /api/academy/recommendations
- * Get next-lesson recommendations based on user progress and learning path.
- * Returns up to 5 recommended lessons.
+ * Returns up to 5 lesson recommendations without N+1 queries.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -31,130 +50,169 @@ export async function GET(request: NextRequest) {
     }
 
     const { user, supabase } = auth
+    const userTier = await resolveUserMembershipTier(user, supabase)
+    const accessibleTiers = getAccessibleTierIds(userTier)
 
-    // Fetch user profile and tier in parallel
-    const [profileResult, userTier] = await Promise.all([
+    const [profileResult, progressResult] = await Promise.all([
       supabase
         .from('user_learning_profiles')
-        .select('current_learning_path_id, experience_level, learning_goals, preferred_lesson_type')
+        .select('current_learning_path_id')
         .eq('user_id', user.id)
         .maybeSingle(),
-      getUserTier(supabase, user.id),
+      supabase
+        .from('user_lesson_progress')
+        .select('lesson_id, status')
+        .eq('user_id', user.id),
     ])
 
-    const accessibleTiers = getAccessibleTiers(userTier)
-    const profile = profileResult.data
-
-    // Get all completed and in-progress lessons
-    const { data: userProgress } = await supabase
-      .from('user_lesson_progress')
-      .select('lesson_id, status')
-      .eq('user_id', user.id)
-
     const completedLessonIds = new Set(
-      (userProgress || [])
-        .filter((p) => p.status === 'completed')
-        .map((p) => p.lesson_id)
+      (progressResult.data || [])
+        .filter((row) => row.status === 'completed')
+        .map((row) => row.lesson_id)
     )
     const inProgressLessonIds = new Set(
-      (userProgress || [])
-        .filter((p) => p.status === 'in_progress')
-        .map((p) => p.lesson_id)
+      (progressResult.data || [])
+        .filter((row) => row.status === 'in_progress')
+        .map((row) => row.lesson_id)
     )
 
     const recommendations: Array<{
-      lesson: Record<string, unknown>
+      lesson: LessonWithCourse
       reason: string
       priority: number
     }> = []
 
-    // Priority 1: Continue in-progress lessons
+    const seenLessonIds = new Set<string>()
+
+    // Priority 1: continue in-progress lessons
     if (inProgressLessonIds.size > 0) {
       const { data: inProgressLessons } = await supabase
         .from('lessons')
-        .select('id, title, slug, estimated_minutes, display_order, course_id, courses(id, title, slug, tier_required)')
+        .select(`
+          id,
+          title,
+          slug,
+          estimated_minutes,
+          duration_minutes,
+          display_order,
+          course_id,
+          courses(id, title, slug, tier_required)
+        `)
         .in('id', Array.from(inProgressLessonIds))
-
+        .order('display_order', { ascending: true })
         .limit(2)
 
-      for (const lesson of inProgressLessons || []) {
-        const courseTier = getCourseTierFromRelation(lesson.courses)
-        if (accessibleTiers.includes(courseTier)) {
-          recommendations.push({
-            lesson,
-            reason: 'Continue where you left off',
-            priority: 1,
-          })
+      for (const rawLesson of (inProgressLessons || []) as LessonWithCourse[]) {
+        const course = normalizeCourseRelation(rawLesson.courses)
+        if (!course || !accessibleTiers.includes(course.tier_required)) {
+          continue
         }
+
+        recommendations.push({
+          lesson: rawLesson,
+          reason: 'Continue where you left off',
+          priority: 1,
+        })
+        seenLessonIds.add(rawLesson.id)
       }
     }
 
-    // Priority 2: Next lesson in recommended path
-    if (profile?.current_learning_path_id) {
+    // Priority 2: next lesson in recommended path (batched query)
+    const recommendedPathId = profileResult.data?.current_learning_path_id
+    if (recommendedPathId && recommendations.length < 5) {
       const { data: pathCourses } = await supabase
         .from('learning_path_courses')
         .select('course_id, sequence_order')
-        .eq('learning_path_id', profile.current_learning_path_id)
+        .eq('learning_path_id', recommendedPathId)
         .order('sequence_order', { ascending: true })
 
-      for (const pc of pathCourses || []) {
-        if (recommendations.length >= 5) break
-
-        const { data: lessons } = await supabase
+      const orderedCourseIds = (pathCourses || []).map((row) => row.course_id)
+      if (orderedCourseIds.length > 0) {
+        const { data: pathLessons } = await supabase
           .from('lessons')
-          .select('id, title, slug, estimated_minutes, display_order, course_id, courses(id, title, slug, tier_required)')
-          .eq('course_id', pc.course_id)
-  
+          .select(`
+            id,
+            title,
+            slug,
+            estimated_minutes,
+            duration_minutes,
+            display_order,
+            course_id,
+            courses(id, title, slug, tier_required)
+          `)
+          .in('course_id', orderedCourseIds)
+          .order('course_id', { ascending: true })
           .order('display_order', { ascending: true })
 
-        for (const lesson of lessons || []) {
-          if (recommendations.length >= 5) break
-          if (completedLessonIds.has(lesson.id) || inProgressLessonIds.has(lesson.id)) continue
+        const firstUncompletedByCourse = new Map<string, LessonWithCourse>()
+        for (const rawLesson of (pathLessons || []) as LessonWithCourse[]) {
+          if (seenLessonIds.has(rawLesson.id)) continue
+          if (completedLessonIds.has(rawLesson.id)) continue
+          if (inProgressLessonIds.has(rawLesson.id)) continue
 
-          const courseTier = getCourseTierFromRelation(lesson.courses)
-          if (accessibleTiers.includes(courseTier)) {
-            recommendations.push({
-              lesson,
-              reason: 'Next in your learning path',
-              priority: 2,
-            })
-            break // Only one per course
+          const course = normalizeCourseRelation(rawLesson.courses)
+          if (!course || !accessibleTiers.includes(course.tier_required)) {
+            continue
+          }
+
+          if (!firstUncompletedByCourse.has(rawLesson.course_id)) {
+            firstUncompletedByCourse.set(rawLesson.course_id, rawLesson)
           }
         }
-      }
-    }
 
-    // Priority 3: Fill remaining slots with accessible unstarted lessons
-    if (recommendations.length < 5) {
-      const excludeIds = [
-        ...Array.from(completedLessonIds),
-        ...Array.from(inProgressLessonIds),
-        ...recommendations.map((r) => (r.lesson as { id: string }).id),
-      ]
+        for (const courseId of orderedCourseIds) {
+          if (recommendations.length >= 5) break
 
-      const { data: nextLessons } = await supabase
-        .from('lessons')
-        .select('id, title, slug, estimated_minutes, display_order, course_id, courses(id, title, slug, tier_required)')
+          const lesson = firstUncompletedByCourse.get(courseId)
+          if (!lesson) continue
 
-        .order('display_order', { ascending: true })
-        .limit(20)
-
-      for (const lesson of nextLessons || []) {
-        if (recommendations.length >= 5) break
-        if (excludeIds.includes(lesson.id)) continue
-
-        const courseTier = getCourseTierFromRelation(lesson.courses)
-        if (accessibleTiers.includes(courseTier)) {
           recommendations.push({
             lesson,
-            reason: 'Recommended for you',
-            priority: 3,
+            reason: 'Next in your learning path',
+            priority: 2,
           })
+          seenLessonIds.add(lesson.id)
         }
       }
     }
 
-    // Sort by priority
+    // Priority 3: fill with remaining accessible lessons
+    if (recommendations.length < 5) {
+      const { data: fallbackLessons } = await supabase
+        .from('lessons')
+        .select(`
+          id,
+          title,
+          slug,
+          estimated_minutes,
+          duration_minutes,
+          display_order,
+          course_id,
+          courses(id, title, slug, tier_required)
+        `)
+        .order('display_order', { ascending: true })
+        .limit(50)
+
+      for (const rawLesson of (fallbackLessons || []) as LessonWithCourse[]) {
+        if (recommendations.length >= 5) break
+        if (seenLessonIds.has(rawLesson.id)) continue
+        if (completedLessonIds.has(rawLesson.id)) continue
+        if (inProgressLessonIds.has(rawLesson.id)) continue
+
+        const course = normalizeCourseRelation(rawLesson.courses)
+        if (!course || !accessibleTiers.includes(course.tier_required)) {
+          continue
+        }
+
+        recommendations.push({
+          lesson: rawLesson,
+          reason: 'Recommended for you',
+          priority: 3,
+        })
+        seenLessonIds.add(rawLesson.id)
+      }
+    }
+
     recommendations.sort((a, b) => a.priority - b.priority)
 
     return NextResponse.json({
@@ -166,8 +224,9 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
+    console.error('academy recommendations failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

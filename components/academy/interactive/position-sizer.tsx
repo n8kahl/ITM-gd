@@ -51,8 +51,8 @@ function calculatePosition(
   if (riskPerContract <= 0) return null
 
   const maxContracts = Math.floor(dollarRisk / riskPerContract)
-  const totalCost = entryPrice * 100 * Math.max(maxContracts, 1)
-  const maxLoss = riskPerContract * Math.max(maxContracts, 1)
+  const totalCost = entryPrice * 100 * maxContracts
+  const maxLoss = riskPerContract * maxContracts
   const accountRiskPercent = (maxLoss / accountSize) * 100
 
   return {
