@@ -40,7 +40,7 @@ export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDelete
   return (
     <div className="glass-card-heavy rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px]">
+        <table className="w-full min-w-[900px]" aria-label="Journal trades table">
           <thead>
             <tr className="bg-white/[0.04]">
               <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Date</th>
@@ -66,6 +66,15 @@ export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDelete
                 <tr
                   key={entry.id}
                   onClick={() => onSelectEntry(entry)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onSelectEntry(entry)
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open ${entry.symbol} trade details`}
                   className={cn(
                     'border-b border-white/[0.04] hover:bg-white/[0.02] cursor-pointer transition-colors group',
                     'odd:bg-white/[0.005]'
@@ -138,14 +147,18 @@ export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDelete
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        type="button"
+                        aria-label="Edit trade"
                         onClick={(e) => { e.stopPropagation(); onEditEntry(entry) }}
-                        className="p-1.5 rounded-md hover:bg-white/[0.06] text-muted-foreground hover:text-ivory transition-colors"
+                        className="focus-champagne p-1.5 rounded-md hover:bg-white/[0.06] text-muted-foreground hover:text-ivory transition-colors"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
+                        type="button"
+                        aria-label="Delete trade"
                         onClick={(e) => { e.stopPropagation(); onDeleteEntry(entry.id) }}
-                        className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                        className="focus-champagne p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

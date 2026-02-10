@@ -112,12 +112,15 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
             placeholder="Search symbol..."
             value={filters.symbol || ''}
             onChange={(e) => updateFilter('symbol', e.target.value.toUpperCase() || null)}
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/20 transition-colors min-h-[44px]"
+            className="focus-champagne w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/20 transition-colors min-h-[44px]"
+            aria-label="Search trades by symbol"
           />
           {filters.symbol && (
             <button
+              type="button"
+              aria-label="Clear symbol filter"
               onClick={() => updateFilter('symbol', null)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-ivory"
+              className="focus-champagne absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-ivory"
             >
               <X className="w-3 h-3" />
             </button>
@@ -129,7 +132,8 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           <select
             value={filters.sortBy}
             onChange={(e) => updateFilter('sortBy', e.target.value as JournalFilters['sortBy'])}
-            className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-h-[44px]"
+            className="focus-champagne flex-1 sm:flex-none px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-ivory appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-h-[44px]"
+            aria-label="Sort journal entries"
           >
             <option value="date-desc">Newest</option>
             <option value="date-asc">Oldest</option>
@@ -141,26 +145,32 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           {/* View Toggle */}
           <div className="flex items-center bg-white/[0.03] rounded-lg p-0.5 sm:ml-auto">
             <button
+              type="button"
               onClick={() => updateFilter('view', 'table')}
               className={cn(
-                'p-2 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
+                'focus-champagne p-2 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
                 filters.view === 'table'
                   ? 'bg-emerald-900/30 text-emerald-400'
                   : 'text-muted-foreground hover:text-ivory'
               )}
               title="Table view"
+              aria-label="Switch to table view"
+              aria-pressed={filters.view === 'table'}
             >
               <TableIcon className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => updateFilter('view', 'cards')}
               className={cn(
-                'p-2 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
+                'focus-champagne p-2 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
                 filters.view === 'cards'
                   ? 'bg-emerald-900/30 text-emerald-400'
                   : 'text-muted-foreground hover:text-ivory'
               )}
               title="Card view"
+              aria-label="Switch to card view"
+              aria-pressed={filters.view === 'cards'}
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
@@ -175,17 +185,20 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5 min-w-max">
             {DATE_PRESETS.map(preset => (
               <button
+                type="button"
                 key={preset.value}
                 onClick={() => {
                   const range = getDateRangeForPreset(preset.value)
                   updateFilter('dateRange', { ...range, preset: preset.value })
                 }}
                 className={cn(
-                  'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px]',
+                  'focus-champagne px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px]',
                   filters.dateRange.preset === preset.value
                     ? 'bg-emerald-900/30 text-emerald-400'
                     : 'text-muted-foreground hover:text-ivory'
                 )}
+                aria-pressed={filters.dateRange.preset === preset.value}
+                aria-label={`Filter to ${preset.label}`}
               >
                 {preset.label}
               </button>
@@ -200,10 +213,11 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
         <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">
           {(['all', 'long', 'short'] as const).map(dir => (
             <button
+              type="button"
               key={dir}
               onClick={() => updateFilter('direction', dir)}
               className={cn(
-                'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
+                'focus-champagne px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
                 filters.direction === dir
                   ? dir === 'long'
                     ? 'bg-emerald-900/30 text-emerald-400'
@@ -212,6 +226,7 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
                     : 'bg-white/[0.06] text-ivory'
                   : 'text-muted-foreground hover:text-ivory'
               )}
+              aria-pressed={filters.direction === dir}
             >
               {dir === 'all' ? 'All' : dir}
             </button>
@@ -222,10 +237,11 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
         <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">
           {(['all', 'winners', 'losers'] as const).map(pnl => (
             <button
+              type="button"
               key={pnl}
               onClick={() => updateFilter('pnlFilter', pnl)}
               className={cn(
-                'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
+                'focus-champagne px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
                 filters.pnlFilter === pnl
                   ? pnl === 'winners'
                     ? 'bg-emerald-900/30 text-emerald-400'
@@ -234,6 +250,7 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
                     : 'bg-white/[0.06] text-ivory'
                   : 'text-muted-foreground hover:text-ivory'
               )}
+              aria-pressed={filters.pnlFilter === pnl}
             >
               {pnl === 'all' ? 'All P&L' : pnl}
             </button>
@@ -244,14 +261,16 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
         <div className="flex items-center gap-1 bg-white/[0.02] rounded-lg p-0.5">
           {(['all', 'stock', 'call', 'put', 'spread'] as const).map((contractType) => (
             <button
+              type="button"
               key={contractType}
               onClick={() => updateFilter('contractType', contractType)}
               className={cn(
-                'px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
+                'focus-champagne px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
                 filters.contractType === contractType
                   ? 'bg-white/[0.06] text-ivory'
                   : 'text-muted-foreground hover:text-ivory'
               )}
+              aria-pressed={filters.contractType === contractType}
             >
               {contractType}
             </button>
@@ -262,8 +281,9 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
         <div className="flex items-center gap-1 flex-wrap">
           {filters.symbol && (
             <button
+              type="button"
               onClick={() => updateFilter('symbol', null)}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+              className="focus-champagne inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
             >
               Symbol: {filters.symbol}
               <X className="w-2.5 h-2.5" />
@@ -271,8 +291,9 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           )}
           {filters.direction !== 'all' && (
             <button
+              type="button"
               onClick={() => updateFilter('direction', 'all')}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
+              className="focus-champagne inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
             >
               Direction: {filters.direction}
               <X className="w-2.5 h-2.5" />
@@ -280,8 +301,9 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           )}
           {filters.contractType !== 'all' && (
             <button
+              type="button"
               onClick={() => updateFilter('contractType', 'all')}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
+              className="focus-champagne inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
             >
               Type: {filters.contractType}
               <X className="w-2.5 h-2.5" />
@@ -289,8 +311,9 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
           )}
           {filters.pnlFilter !== 'all' && (
             <button
+              type="button"
               onClick={() => updateFilter('pnlFilter', 'all')}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
+              className="focus-champagne inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-white/[0.06] text-ivory border border-white/[0.12]"
             >
               P&L: {filters.pnlFilter}
               <X className="w-2.5 h-2.5" />
@@ -307,7 +330,12 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-champagne/10 text-champagne border border-champagne/20"
               >
                 {tag}
-                <button onClick={() => updateFilter('tags', filters.tags.filter(t => t !== tag))}>
+                <button
+                  type="button"
+                  aria-label={`Remove ${tag} tag filter`}
+                  onClick={() => updateFilter('tags', filters.tags.filter(t => t !== tag))}
+                  className="focus-champagne rounded-full p-0.5"
+                >
                   <X className="w-2.5 h-2.5" />
                 </button>
               </span>
@@ -318,8 +346,9 @@ export function JournalFilterBar({ filters, onChange, availableTags, totalFilter
         {/* Active filter count + Reset */}
         {activeFilterCount > 0 && (
           <button
+            type="button"
             onClick={resetFilters}
-            className="text-xs text-muted-foreground hover:text-ivory transition-colors ml-auto"
+            className="focus-champagne text-xs text-muted-foreground hover:text-ivory transition-colors ml-auto"
           >
             Clear All ({activeFilterCount})
           </button>

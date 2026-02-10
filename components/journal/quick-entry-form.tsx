@@ -41,14 +41,16 @@ function FieldStatusActions({
       <button
         type="button"
         onClick={() => onAccept(field)}
-        className="px-1.5 py-0.5 rounded-md text-[9px] text-emerald-300 hover:text-emerald-200 bg-emerald-900/20 border border-emerald-800/40"
+        className="focus-champagne px-1.5 py-0.5 rounded-md text-[9px] text-emerald-300 hover:text-emerald-200 bg-emerald-900/20 border border-emerald-800/40"
+        aria-label={`Accept AI suggestion for ${field.replace('_', ' ')}`}
       >
         Accept
       </button>
       <button
         type="button"
         onClick={() => onReject(field)}
-        className="px-1.5 py-0.5 rounded-md text-[9px] text-red-300 hover:text-red-200 bg-red-900/20 border border-red-800/40"
+        className="focus-champagne px-1.5 py-0.5 rounded-md text-[9px] text-red-300 hover:text-red-200 bg-red-900/20 border border-red-800/40"
+        aria-label={`Reject AI suggestion for ${field.replace('_', ' ')}`}
       >
         Reject
       </button>
@@ -88,7 +90,8 @@ export function QuickEntryForm({
             type="date"
             value={form.trade_date}
             onChange={(e) => onFieldChange('trade_date', e.target.value)}
-            className="w-full h-11 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            className="focus-champagne w-full h-11 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            aria-label="Trade date"
           />
         </div>
 
@@ -132,13 +135,14 @@ export function QuickEntryForm({
                 type="button"
                 onClick={() => onFieldChange('direction', direction)}
                 className={cn(
-                  'text-sm font-medium capitalize transition-colors',
+                  'focus-champagne text-sm font-medium capitalize transition-colors',
                   form.direction === direction
                     ? direction === 'long'
                       ? 'bg-emerald-600 text-white'
                       : 'bg-red-600 text-white'
                     : 'text-muted-foreground hover:text-ivory',
                 )}
+                aria-pressed={form.direction === direction}
               >
                 {direction}
               </button>
@@ -164,9 +168,10 @@ export function QuickEntryForm({
             onChange={(e) => onFieldChange('entry_price', e.target.value)}
             placeholder="0.00"
             className={cn(
-              'w-full h-11 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30',
+              'focus-champagne w-full h-11 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30',
               aiFieldStatus.entry_price === 'pending' && 'border-champagne/30 bg-champagne/5',
             )}
+            aria-label="Entry price"
           />
         </div>
 
@@ -188,9 +193,10 @@ export function QuickEntryForm({
             onChange={(e) => onFieldChange('exit_price', e.target.value)}
             placeholder="0.00"
             className={cn(
-              'w-full h-11 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30',
+              'focus-champagne w-full h-11 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm font-mono text-ivory focus:outline-none focus:ring-1 focus:ring-emerald-500/30',
               aiFieldStatus.exit_price === 'pending' && 'border-champagne/30 bg-champagne/5',
             )}
+            aria-label="Exit price"
           />
         </div>
       </div>
@@ -219,7 +225,7 @@ export function QuickEntryForm({
           <button
             type="button"
             onClick={onSaveAndAddDetails}
-            className="h-10 px-4 rounded-lg border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05] transition-colors"
+            className="focus-champagne h-10 px-4 rounded-lg border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05] transition-colors"
           >
             Save & Add Details
           </button>
@@ -227,7 +233,7 @@ export function QuickEntryForm({
             type="button"
             onClick={onSaveAndClose}
             disabled={!canSaveQuick || saving}
-            className="h-10 px-4 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+            className="focus-champagne h-10 px-4 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
           >
             {saving ? 'Saving…' : 'Save & Close'}
           </button>

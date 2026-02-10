@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { X, Loader2, Bot, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { createPortal } from 'react-dom'
@@ -175,6 +175,7 @@ export function TradeEntrySheet({
 }: TradeEntrySheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
+  const prefersReducedMotion = useReducedMotion()
   const [form, setForm] = useState<TradeEntryFormData>(EMPTY_FORM)
   const [sourceSessionId, setSourceSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<'quick' | 'full'>('quick')
@@ -571,7 +572,7 @@ export function TradeEntrySheet({
           initial={isMobile ? { y: '100%' } : { x: '100%' }}
           animate={isMobile ? { y: 0 } : { x: 0 }}
           exit={isMobile ? { y: '100%' } : { x: '100%' }}
-          transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 350, damping: 35 }}
           role="dialog"
           aria-modal="true"
           aria-label={editEntry ? 'Edit trade entry' : 'Log trade entry'}
@@ -598,9 +599,11 @@ export function TradeEntrySheet({
                   type="button"
                   onClick={() => setMode('quick')}
                   className={cn(
-                    'px-2.5 py-1 rounded-md text-xs transition-colors',
+                    'focus-champagne px-2.5 py-1 rounded-md text-xs transition-colors',
                     mode === 'quick' ? 'bg-emerald-900/30 text-emerald-300' : 'text-muted-foreground',
                   )}
+                  aria-pressed={mode === 'quick'}
+                  aria-label="Switch to quick entry mode"
                 >
                   Quick Entry
                 </button>
@@ -608,9 +611,11 @@ export function TradeEntrySheet({
                   type="button"
                   onClick={() => setMode('full')}
                   className={cn(
-                    'px-2.5 py-1 rounded-md text-xs transition-colors',
+                    'focus-champagne px-2.5 py-1 rounded-md text-xs transition-colors',
                     mode === 'full' ? 'bg-emerald-900/30 text-emerald-300' : 'text-muted-foreground',
                   )}
+                  aria-pressed={mode === 'full'}
+                  aria-label="Switch to full entry mode"
                 >
                   Full Entry
                 </button>
@@ -619,7 +624,7 @@ export function TradeEntrySheet({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors"
+              className="focus-champagne p-1.5 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors"
               aria-label="Close trade entry"
             >
               <X className="w-5 h-5" />
@@ -647,7 +652,7 @@ export function TradeEntrySheet({
                   initial={{ opacity: 0, height: 0, y: 8 }}
                   animate={{ opacity: 1, height: 'auto', y: 0 }}
                   exit={{ opacity: 0, height: 0, y: 8 }}
-                  transition={{ duration: 0.2 }}
+                  transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.2 }}
                   className="overflow-hidden"
                 >
                   <FullEntryForm
@@ -726,19 +731,19 @@ export function TradeEntrySheet({
 
           {mode === 'full' && (
             <div className="px-6 py-4 border-t border-white/[0.06] flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMode('quick')}
-                className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
-              >
-                Back To Quick
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('quick')}
+                  className="focus-champagne px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
+                >
+                  Back To Quick
+                </button>
 
               <div className="ml-auto flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
+                  className="focus-champagne px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
                 >
                   Cancel
                 </button>
@@ -746,7 +751,7 @@ export function TradeEntrySheet({
                   type="button"
                   onClick={() => submit('full')}
                   disabled={saving || !form.symbol.trim()}
-                  className="px-5 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors min-w-[112px] flex items-center justify-center"
+                  className="focus-champagne px-5 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors min-w-[112px] flex items-center justify-center"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editEntry ? 'Save Changes' : 'Save Trade'}
                 </button>

@@ -55,14 +55,16 @@ function FieldStatusActions({
       <button
         type="button"
         onClick={() => onAccept(field)}
-        className="px-1.5 py-0.5 rounded-md text-[9px] text-emerald-300 hover:text-emerald-200 bg-emerald-900/20 border border-emerald-800/40"
+        className="focus-champagne px-1.5 py-0.5 rounded-md text-[9px] text-emerald-300 hover:text-emerald-200 bg-emerald-900/20 border border-emerald-800/40"
+        aria-label={`Accept AI suggestion for ${field.replace('_', ' ')}`}
       >
         Accept
       </button>
       <button
         type="button"
         onClick={() => onReject(field)}
-        className="px-1.5 py-0.5 rounded-md text-[9px] text-red-300 hover:text-red-200 bg-red-900/20 border border-red-800/40"
+        className="focus-champagne px-1.5 py-0.5 rounded-md text-[9px] text-red-300 hover:text-red-200 bg-red-900/20 border border-red-800/40"
+        aria-label={`Reject AI suggestion for ${field.replace('_', ' ')}`}
       >
         Reject
       </button>
@@ -344,7 +346,7 @@ export function FullEntryForm({
             <button
               type="button"
               onClick={onRemoveScreenshot}
-              className="absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white hover:bg-black/80"
+              className="focus-champagne absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white hover:bg-black/80"
               aria-label="Remove screenshot"
             >
               <X className="w-4 h-4" />
@@ -403,7 +405,8 @@ export function FullEntryForm({
             type="button"
             onClick={onAnalyze}
             disabled={analyzing || (uploadStatus != null && uploadStatus.status !== 'complete' && uploadStatus.status !== 'error')}
-            className="mt-2 w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            className="focus-champagne mt-2 w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            aria-live="polite"
           >
             {analyzing ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing your trade...</>

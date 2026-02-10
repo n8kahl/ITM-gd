@@ -381,7 +381,7 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
             <p className={cn(
               'font-mono text-[11px] tabular-nums',
               pnlPreview.raw > 0 ? 'text-emerald-400' : pnlPreview.raw < 0 ? 'text-red-400' : 'text-muted-foreground',
-            )}>
+            )} aria-live="polite" aria-atomic="true">
               {pnlPreview.raw >= 0 ? '+' : '-'}${Math.abs(pnlPreview.raw).toFixed(2)} ({pnlPreview.pct >= 0 ? '+' : ''}{pnlPreview.pct.toFixed(2)}%)
             </p>
           )}
@@ -390,7 +390,7 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
 
       <div className="px-2">
         {loading ? (
-          <div className="flex h-[300px] items-center justify-center">
+          <div className="flex h-[300px] items-center justify-center" role="status" aria-live="polite">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             <span className="ml-2 text-xs text-muted-foreground">Loading market data...</span>
           </div>
@@ -408,14 +408,14 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setPlaying((prev) => !prev)}
-              className="rounded-lg bg-emerald-600 p-2 text-white transition-colors hover:bg-emerald-500"
+              className="focus-champagne rounded-lg bg-emerald-600 p-2 text-white transition-colors hover:bg-emerald-500"
               aria-label={playing ? 'Pause replay' : 'Play replay'}
             >
               {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </button>
             <button
               onClick={handleReset}
-              className="rounded-lg bg-white/[0.04] p-2 text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-ivory"
+              className="focus-champagne rounded-lg bg-white/[0.04] p-2 text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-ivory"
               aria-label="Reset replay"
             >
               <RotateCcw className="h-4 w-4" />
@@ -423,7 +423,7 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
             <button
               onClick={handleSkipToEntry}
               disabled={entryIndex < 0}
-              className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-ivory disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-champagne inline-flex items-center gap-1 rounded-lg border border-white/[0.08] px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-ivory disabled:cursor-not-allowed disabled:opacity-50"
             >
               <SkipBack className="h-3.5 w-3.5" />
               Entry
@@ -431,7 +431,7 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
             <button
               onClick={handleSkipToExit}
               disabled={exitIndexRaw < 0}
-              className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-ivory disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-champagne inline-flex items-center gap-1 rounded-lg border border-white/[0.08] px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-ivory disabled:cursor-not-allowed disabled:opacity-50"
             >
               <SkipForward className="h-3.5 w-3.5" />
               Exit
@@ -443,7 +443,7 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
                   key={s}
                   onClick={() => setSpeed(s)}
                   className={cn(
-                    'rounded-md px-2 py-1 text-[10px] font-medium transition-colors',
+                    'focus-champagne rounded-md px-2 py-1 text-[10px] font-medium transition-colors',
                     speed === s ? 'bg-emerald-900/30 text-emerald-400' : 'text-muted-foreground hover:text-ivory',
                   )}
                 >
@@ -463,11 +463,11 @@ export function TradeReplayChart({ entryId, symbol, tradeDate }: TradeReplayChar
             max={replayEndIndex}
             value={Math.min(currentBarIndex, replayEndIndex)}
             onChange={handleScrub}
-            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/[0.06] accent-emerald-500"
+            className="focus-champagne h-1 w-full cursor-pointer appearance-none rounded-full bg-white/[0.06] accent-emerald-500"
+            aria-label="Replay progress"
           />
         </div>
       )}
     </div>
   )
 }
-

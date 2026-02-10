@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -51,6 +51,7 @@ export default function MembersLayout({
 function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const prefersReducedMotion = useReducedMotion()
 
   const {
     isLoading,
@@ -112,6 +113,18 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     )
   }
 
+  const reducedMotionVariants = prefersReducedMotion
+    ? {
+        initial: { opacity: 1, y: 0, filter: 'none' },
+        animate: { opacity: 1, y: 0, filter: 'none' },
+        exit: { opacity: 1, y: 0, filter: 'none' },
+      }
+    : pageVariants
+
+  const reducedMotionTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : pageTransition
+
   return (
     <div className="min-h-screen bg-[#0A0A0B]">
       {/* Desktop Sidebar */}
@@ -129,11 +142,11 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}
-              variants={pageVariants}
+              variants={reducedMotionVariants}
               initial="initial"
               animate="animate"
               exit="exit"
-              transition={pageTransition}
+              transition={reducedMotionTransition}
             >
               {children}
             </motion.div>

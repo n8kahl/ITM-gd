@@ -1,7 +1,8 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   X,
   Star,
@@ -171,8 +172,11 @@ function NotesAccordion({ title, content }: { title: string; content: string | n
   return (
     <div className="border-b border-white/[0.04]">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-3 text-sm text-muted-foreground hover:text-ivory transition-colors"
+        className="focus-champagne flex items-center justify-between w-full py-3 text-sm text-muted-foreground hover:text-ivory transition-colors"
+        aria-expanded={open}
+        aria-label={`${open ? 'Collapse' : 'Expand'} ${title}`}
       >
         <span>{title}</span>
         <ChevronDown className={cn('w-4 h-4 transition-transform', open && 'rotate-180')} />
@@ -207,6 +211,7 @@ interface SessionContextMessage {
 export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDetailSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
+  const prefersReducedMotion = useReducedMotion()
   const [sessionMessages, setSessionMessages] = useState<SessionContextMessage[]>([])
   const [sessionContextLoading, setSessionContextLoading] = useState(false)
   const [sessionContextError, setSessionContextError] = useState<string | null>(null)
@@ -297,7 +302,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
           initial={isMobile ? { y: '100%' } : { x: '100%' }}
           animate={isMobile ? { y: 0 } : { x: 0 }}
           exit={isMobile ? { y: '100%' } : { x: '100%' }}
-          transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 350, damping: 35 }}
           role="dialog"
           aria-modal="true"
           aria-label="Trade entry details"
@@ -335,7 +340,7 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors"
+              className="focus-champagne p-1.5 rounded-lg text-muted-foreground hover:text-ivory hover:bg-white/5 transition-colors"
               aria-label="Close trade details"
             >
               <X className="w-5 h-5" />
@@ -350,7 +355,16 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
             {/* Screenshot */}
             {entry.screenshot_url && (
               <div className="rounded-xl overflow-hidden border border-white/[0.08]">
-                <img src={entry.screenshot_url} alt="Trade screenshot" className="w-full object-contain max-h-[300px] bg-black/40" />
+                <div className="relative h-[300px] w-full bg-black/40">
+                  <Image
+                    src={entry.screenshot_url}
+                    alt="Trade screenshot"
+                    fill
+                    unoptimized
+                    sizes="(max-width: 768px) 100vw, 600px"
+                    className="object-contain"
+                  />
+                </div>
               </div>
             )}
 
@@ -549,18 +563,26 @@ export function EntryDetailSheet({ entry, onClose, onEdit, onDelete }: EntryDeta
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-white/[0.06] flex items-center gap-2">
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors">
+            <button
+              type="button"
+              aria-label="Share this trade"
+              className="focus-champagne flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
+            >
               <Share2 className="w-3.5 h-3.5" /> Share
             </button>
             <button
+              type="button"
               onClick={() => { onEdit(entry); onClose() }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
+              aria-label="Edit this trade"
+              className="focus-champagne flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-ivory border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
             >
               <Pencil className="w-3.5 h-3.5" /> Edit
             </button>
             <button
+              type="button"
               onClick={() => { onDelete(entry.id); onClose() }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-red-400/60 hover:text-red-400 border border-red-500/10 hover:bg-red-500/5 transition-colors ml-auto"
+              aria-label="Delete this trade"
+              className="focus-champagne flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-red-400/60 hover:text-red-400 border border-red-500/10 hover:bg-red-500/5 transition-colors ml-auto"
             >
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
