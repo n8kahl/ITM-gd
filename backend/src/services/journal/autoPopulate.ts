@@ -2,75 +2,51 @@ import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { isUSEasternDST } from '../marketHours';
 
-interface TrackedSetupRow {
-  id: string;
-  symbol: string;
-  setup_type: string;
-  direction: 'bullish' | 'bearish' | 'neutral';
-  status: 'active' | 'triggered' | 'invalidated' | 'archived';
-  tracked_at: string;
-  opportunity_data: Record<string, unknown> | null;
-}
-
-interface TriggeredAlertRow {
-  id: string;
-  symbol: string;
-  alert_type: string;
-  target_value: number;
-  triggered_at: string;
-  notes: string | null;
-}
-
-interface PositionSessionRow {
-  id: string;
-  symbol: string;
-  position_type: string;
-  entry_price: number;
-  entry_date: string;
-  quantity: number;
-  status: string;
-  close_date: string | null;
-  close_price: number | null;
-  pnl: number | null;
-  pnl_pct: number | null;
-  current_price: number | null;
-  created_at: string;
-  updated_at: string;
-  tags: string[] | null;
-}
-
 interface MessageRow {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
+  session_id: string | null;
   content: string;
   created_at: string;
 }
 
 interface ExistingDraftRow {
-  id: string;
-  session_context: Record<string, unknown> | null;
+  session_id: string | null;
+  symbol: string | null;
 }
 
-interface DraftTradeInsert {
+interface JournalDraftInsert {
   user_id: string;
+  trade_date: string;
   symbol: string;
-  position_type: 'call' | 'put' | 'call_spread' | 'put_spread' | 'iron_condor' | 'stock';
-  strategy: string;
-  entry_date: string;
-  entry_price: number;
-  exit_date: string;
-  exit_price: number;
-  quantity: number;
-  pnl: number;
-  pnl_pct: number;
-  hold_time_days: number;
-  trade_outcome: 'win' | 'loss' | 'breakeven';
-  exit_reason: string;
-  lessons_learned: string;
+  direction: 'long' | 'short';
+  entry_price: number | null;
+  exit_price: number | null;
+  strategy: string | null;
+  setup_notes: string;
   tags: string[];
-  draft_status: 'draft';
-  auto_generated: true;
-  session_context: Record<string, unknown>;
+  smart_tags: string[];
+  session_id: string;
+  is_draft: true;
+  draft_status: 'pending';
+  draft_expires_at: string;
+  is_open: false;
+}
+
+interface DraftCandidate {
+  symbol: string;
+  direction: 'long' | 'short';
+  entryPrice: number | null;
+  exitPrice: number | null;
+  strategy: string | null;
+  notes: string;
+}
+
+interface DraftCandidateAccumulator {
+  symbol: string;
+  direction: 'long' | 'short';
+  entryPrice: number | null;
+  exitPrice: number | null;
+  strategy: string | null;
+  snippets: string[];
 }
 
 export interface AutoPopulateRunStats {
@@ -79,11 +55,11 @@ export interface AutoPopulateRunStats {
   generated: number;
   skippedExisting: number;
   sourceCounts: {
-    trackedSetups: number;
-    triggeredAlerts: number;
-    positions: number;
-    conversations: number;
+    sessions: number;
+    messages: number;
+    detectedTrades: number;
   };
+  notified: number;
 }
 
 export interface AutoPopulateBatchStats {
@@ -92,46 +68,65 @@ export interface AutoPopulateBatchStats {
   generated: number;
   skippedExisting: number;
   failed: number;
+  notified: number;
 }
 
-const SUPPORTED_POSITION_TYPES = new Set<DraftTradeInsert['position_type']>([
-  'call',
-  'put',
-  'call_spread',
-  'put_spread',
-  'iron_condor',
-  'stock',
+const MAX_CANDIDATES_PER_SESSION = 10;
+const MAX_INSERTS_PER_USER = 50;
+const DRAFT_EXPIRY_HOURS = 48;
+
+const IGNORE_SYMBOLS = new Set([
+  'I',
+  'A',
+  'THE',
+  'AND',
+  'OR',
+  'TO',
+  'FOR',
+  'WITH',
+  'THIS',
+  'THAT',
+  'LONG',
+  'SHORT',
+  'CALL',
+  'PUT',
+  'SPREAD',
+  'DTE',
+  'VWAP',
+  'ATR',
 ]);
 
-function parseFiniteNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return parsed;
+const SETUP_KEYWORDS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\borb\b/i, label: 'ORB' },
+  { pattern: /break\s*(and|&)\s*retest/i, label: 'Break & Retest' },
+  { pattern: /\bbreakout\b/i, label: 'Breakout' },
+  { pattern: /\bpullback\b/i, label: 'Pullback' },
+  { pattern: /\breversal\b/i, label: 'Reversal' },
+  { pattern: /\btrend\b/i, label: 'Trend Continuation' },
+];
+
+function asDateParts(marketDate: string): { year: number; month: number; day: number } {
+  const [yearRaw, monthRaw, dayRaw] = marketDate.split('-');
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error(`Invalid marketDate format: ${marketDate}`);
+  }
+
+  return { year, month, day };
 }
 
-function toPositiveNumber(value: unknown, fallback: number): number {
-  const parsed = parseFiniteNumber(value);
-  if (parsed === null) return fallback;
-  if (parsed <= 0) return fallback;
-  return Number(parsed.toFixed(2));
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object') return {};
-  return value as Record<string, unknown>;
-}
-
-function calculateOutcome(pnl: number): 'win' | 'loss' | 'breakeven' {
-  if (pnl > 0) return 'win';
-  if (pnl < 0) return 'loss';
-  return 'breakeven';
+function getEasternOffsetHours(marketDate: string): number {
+  const { year, month, day } = asDateParts(marketDate);
+  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return isUSEasternDST(noonUtc) ? -4 : -5;
 }
 
 function etDateToUtcRange(marketDate: string): { startIso: string; endIso: string } {
-  const [year, month, day] = marketDate.split('-').map((part) => Number(part));
-  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
-  const offset = isUSEasternDST(noonUtc) ? -4 : -5;
+  const { year, month, day } = asDateParts(marketDate);
+  const offset = getEasternOffsetHours(marketDate);
 
   const startUtcMs = Date.UTC(year, month - 1, day, 0 - offset, 0, 0);
   const endUtcMs = startUtcMs + (24 * 60 * 60 * 1000);
@@ -142,426 +137,380 @@ function etDateToUtcRange(marketDate: string): { startIso: string; endIso: strin
   };
 }
 
-function mapDirectionToPositionType(direction: TrackedSetupRow['direction']): DraftTradeInsert['position_type'] {
-  if (direction === 'bearish') return 'put';
-  if (direction === 'bullish') return 'call';
-  return 'stock';
+function marketDateToAutoDraftTimestamp(marketDate: string): string {
+  const { year, month, day } = asDateParts(marketDate);
+  const offset = getEasternOffsetHours(marketDate);
+  const utcHour = 16 - offset;
+
+  return new Date(Date.UTC(year, month - 1, day, utcHour, 5, 0)).toISOString();
 }
 
-function normalizePositionType(type: string): DraftTradeInsert['position_type'] {
-  const normalized = type.toLowerCase() as DraftTradeInsert['position_type'];
-  if (SUPPORTED_POSITION_TYPES.has(normalized)) return normalized;
-  return 'stock';
+function buildDraftDedupKey(sessionId: string, symbol: string): string {
+  return `${sessionId}:${symbol.toUpperCase()}`;
 }
 
-function buildLessons(sourceType: string, symbol: string): string {
-  if (sourceType === 'tracked_setup') {
-    return `Review whether ${symbol} setup rules were followed at entry, stop, and target.`;
+function detectDirection(text: string): 'long' | 'short' {
+  const normalized = text.toLowerCase();
+  if (
+    normalized.includes('short')
+    || normalized.includes('put')
+    || normalized.includes('bearish')
+    || normalized.includes('sell')
+  ) {
+    return 'short';
   }
-  if (sourceType === 'triggered_alert') {
-    return `Document whether the ${symbol} alert translated into a valid trade setup or a false signal.`;
-  }
-  if (sourceType === 'position_event') {
-    return `Capture what worked or failed in risk management for ${symbol}, including sizing and stop discipline.`;
-  }
-  return `Summarize the trading thesis discussed for ${symbol} and define the next execution improvement.`;
+  return 'long';
 }
 
-function extractConversationSymbols(messages: MessageRow[]): Map<string, string[]> {
-  const symbolMap = new Map<string, string[]>();
-  const symbolPattern = /\b[A-Z]{2,5}\b/g;
+function extractSymbolCandidates(text: string): string[] {
+  const matches = text.match(/\b[A-Z]{1,5}\b/g) || [];
+  return matches
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter((symbol) => symbol.length > 0 && !IGNORE_SYMBOLS.has(symbol));
+}
+
+function toCandidatePrice(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed <= 0 || parsed > 100000) return null;
+  return Number(parsed.toFixed(2));
+}
+
+export function extractMentionedPrices(text: string, max: number = 2): number[] {
+  const matches = Array.from(
+    text.matchAll(/(?:^|[^\d])\$?(\d{1,5}(?:\.\d{1,2})?)(?!\d)/g),
+    (match) => match[1],
+  );
+  const unique = new Set<number>();
+
+  for (const match of matches) {
+    const normalized = match.trim();
+    const candidate = toCandidatePrice(normalized);
+    if (candidate === null) continue;
+    unique.add(candidate);
+    if (unique.size >= max) break;
+  }
+
+  return Array.from(unique.values());
+}
+
+export function extractSetupType(text: string): string | null {
+  for (const rule of SETUP_KEYWORDS) {
+    if (rule.pattern.test(text)) {
+      return rule.label;
+    }
+  }
+  return null;
+}
+
+function truncateSnippet(text: string, maxLength: number = 220): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, maxLength - 1)}…`;
+}
+
+export function extractSessionDraftCandidates(messages: MessageRow[], maxCandidates: number = MAX_CANDIDATES_PER_SESSION): DraftCandidate[] {
+  const candidates = new Map<string, DraftCandidateAccumulator>();
 
   for (const message of messages) {
-    const matches = message.content.toUpperCase().match(symbolPattern) || [];
-    for (const symbol of matches) {
-      if (symbol.length < 2 || symbol.length > 5) continue;
-      const existing = symbolMap.get(symbol) || [];
-      if (existing.length < 3) {
-        existing.push(message.content.slice(0, 240));
+    const content = typeof message.content === 'string' ? message.content.trim() : '';
+    if (!content) continue;
+
+    const symbols = extractSymbolCandidates(content);
+    if (symbols.length === 0) continue;
+
+    const prices = extractMentionedPrices(content, 2);
+    const strategy = extractSetupType(content);
+    const direction = detectDirection(content);
+    const snippet = truncateSnippet(content);
+
+    for (const symbol of symbols) {
+      const existing = candidates.get(symbol);
+      if (!existing) {
+        candidates.set(symbol, {
+          symbol,
+          direction,
+          entryPrice: prices[0] ?? null,
+          exitPrice: prices[1] ?? null,
+          strategy,
+          snippets: [snippet],
+        });
+      } else {
+        if (existing.direction !== 'short' && direction === 'short') {
+          existing.direction = 'short';
+        }
+        if (existing.entryPrice === null && prices[0] !== undefined) {
+          existing.entryPrice = prices[0];
+        }
+        if (existing.exitPrice === null && prices[1] !== undefined) {
+          existing.exitPrice = prices[1];
+        }
+        if (!existing.strategy && strategy) {
+          existing.strategy = strategy;
+        }
+        if (existing.snippets.length < 3) {
+          existing.snippets.push(snippet);
+        }
       }
-      symbolMap.set(symbol, existing);
+
+      if (candidates.size >= maxCandidates) break;
     }
+
+    if (candidates.size >= maxCandidates) break;
   }
 
-  return symbolMap;
+  return Array.from(candidates.values()).map((candidate) => ({
+    symbol: candidate.symbol,
+    direction: candidate.direction,
+    entryPrice: candidate.entryPrice,
+    exitPrice: candidate.exitPrice,
+    strategy: candidate.strategy,
+    notes: candidate.snippets.join(' | '),
+  }));
 }
 
-async function loadCandidateUserIds(): Promise<string[]> {
+async function loadCandidateUserIdsForMarketDate(marketDate: string): Promise<string[]> {
+  const { startIso, endIso } = etDateToUtcRange(marketDate);
   const userIds = new Set<string>();
 
-  const tables: Array<{ table: string; column: string }> = [
-    { table: 'ai_coach_users', column: 'user_id' },
-    { table: 'ai_coach_watchlists', column: 'user_id' },
-    { table: 'ai_coach_tracked_setups', column: 'user_id' },
-  ];
+  const { data, error } = await supabase
+    .from('ai_coach_messages')
+    .select('user_id')
+    .gte('created_at', startIso)
+    .lt('created_at', endIso)
+    .limit(5000);
 
-  for (const source of tables) {
-    const { data, error } = await supabase
-      .from(source.table)
-      .select(source.column)
-      .limit(5000);
+  if (error) {
+    logger.warn('Auto-populate: failed to load candidate users from ai_coach_messages', {
+      marketDate,
+      error: error.message,
+      code: (error as { code?: string }).code,
+    });
+    return [];
+  }
 
-    if (error) {
-      logger.warn('Auto-populate: failed to load candidate users from table', {
-        table: source.table,
-        error: error.message,
-        code: (error as { code?: string }).code,
-      });
-      continue;
-    }
-
-    for (const row of data || []) {
-      const record = row as unknown as { [key: string]: unknown };
-      const value = record[source.column];
-      if (typeof value === 'string' && value.length > 0) {
-        userIds.add(value);
-      }
+  for (const row of data || []) {
+    const record = row as unknown as { user_id?: unknown };
+    if (typeof record.user_id === 'string' && record.user_id.length > 0) {
+      userIds.add(record.user_id);
     }
   }
 
   return Array.from(userIds);
 }
 
-function baseDraftTrade(input: {
-  userId: string;
-  symbol: string;
-  positionType: DraftTradeInsert['position_type'];
-  strategy: string;
-  entryPrice: number;
-  quantity: number;
-  marketDate: string;
-  autoDraftKey: string;
-  sourceType: 'tracked_setup' | 'triggered_alert' | 'position_event' | 'conversation';
-  sourceId: string;
-  entryContext: Record<string, unknown>;
-  marketConditions: Record<string, unknown>;
-  aiConversationSummary: string;
-  suggestedLessons: string;
-  tags: string[];
-  pnl?: number;
-  exitPrice?: number;
-  exitReason?: string;
-}): DraftTradeInsert {
-  const quantity = Math.max(1, Math.trunc(Math.abs(input.quantity)));
-  const entryPrice = toPositiveNumber(input.entryPrice, 1);
-  const exitPrice = toPositiveNumber(input.exitPrice ?? entryPrice, entryPrice);
-  const pnl = Number((input.pnl ?? ((exitPrice - entryPrice) * quantity * (input.positionType === 'stock' ? 1 : 100))).toFixed(2));
-  const costBasis = entryPrice * quantity * (input.positionType === 'stock' ? 1 : 100);
-  const pnlPct = costBasis > 0
-    ? Number(((pnl / costBasis) * 100).toFixed(2))
-    : 0;
-
-  return {
-    user_id: input.userId,
-    symbol: input.symbol.toUpperCase(),
-    position_type: input.positionType,
-    strategy: input.strategy,
-    entry_date: input.marketDate,
-    entry_price: entryPrice,
-    exit_date: input.marketDate,
-    exit_price: exitPrice,
-    quantity,
-    pnl,
-    pnl_pct: pnlPct,
-    hold_time_days: 0,
-    trade_outcome: calculateOutcome(pnl),
-    exit_reason: input.exitReason || 'Auto-generated draft for review',
-    lessons_learned: input.suggestedLessons,
-    tags: Array.from(new Set(input.tags)).slice(0, 20),
-    draft_status: 'draft',
-    auto_generated: true,
-    session_context: {
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      autoDraftKey: input.autoDraftKey,
-      generatedAt: new Date().toISOString(),
-      entryContext: input.entryContext,
-      marketConditions: input.marketConditions,
-      aiConversationSummary: input.aiConversationSummary,
-      suggestedLessons: input.suggestedLessons,
-    },
-  };
-}
-
 async function loadExistingDraftKeys(userId: string, marketDate: string): Promise<Set<string>> {
+  const { startIso, endIso } = etDateToUtcRange(marketDate);
+
   const { data, error } = await supabase
-    .from('ai_coach_trades')
-    .select('id, session_context')
+    .from('journal_entries')
+    .select('session_id,symbol')
     .eq('user_id', userId)
-    .eq('entry_date', marketDate)
-    .eq('auto_generated', true)
-    .eq('draft_status', 'draft');
+    .gte('trade_date', startIso)
+    .lt('trade_date', endIso)
+    .not('session_id', 'is', null)
+    .not('symbol', 'is', null);
 
   if (error) {
-    logger.warn('Auto-populate: failed to load existing drafts', {
+    logger.warn('Auto-populate: failed to load existing journal draft keys', {
       userId,
       marketDate,
       error: error.message,
       code: (error as { code?: string }).code,
     });
-    return new Set();
+    return new Set<string>();
   }
 
   const keys = new Set<string>();
   for (const row of (data || []) as ExistingDraftRow[]) {
-    const context = asRecord(row.session_context);
-    const key = context.autoDraftKey;
-    if (typeof key === 'string' && key.length > 0) {
-      keys.add(key);
-    }
+    if (!row.session_id || !row.symbol) continue;
+    keys.add(buildDraftDedupKey(row.session_id, row.symbol));
   }
 
   return keys;
+}
+
+async function upsertAutoJournalNotification(input: {
+  userId: string;
+  marketDate: string;
+  createdCount: number;
+  sessionsScanned: number;
+}): Promise<boolean> {
+  if (input.createdCount <= 0) return false;
+
+  const title = 'Auto-Journal Drafts Ready';
+  const message = `We detected ${input.createdCount} trade${input.createdCount === 1 ? '' : 's'} from today. Review and confirm your journal entries.`;
+
+  const { error } = await supabase
+    .from('journal_notifications')
+    .upsert({
+      user_id: input.userId,
+      type: 'auto_journal_ready',
+      market_date: input.marketDate,
+      title,
+      message,
+      payload: {
+        created: input.createdCount,
+        sessionsScanned: input.sessionsScanned,
+      },
+      read_at: null,
+    }, { onConflict: 'user_id,type,market_date' });
+
+  if (error) {
+    logger.warn('Auto-populate: failed to upsert in-app journal notification', {
+      userId: input.userId,
+      marketDate: input.marketDate,
+      error: error.message,
+      code: (error as { code?: string }).code,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function toDraftInsert(input: {
+  userId: string;
+  marketDate: string;
+  sessionId: string;
+  candidate: DraftCandidate;
+}): JournalDraftInsert {
+  return {
+    user_id: input.userId,
+    trade_date: marketDateToAutoDraftTimestamp(input.marketDate),
+    symbol: input.candidate.symbol,
+    direction: input.candidate.direction,
+    entry_price: input.candidate.entryPrice,
+    exit_price: input.candidate.exitPrice,
+    strategy: input.candidate.strategy,
+    setup_notes: `Auto-draft from AI Coach session ${input.sessionId}:\n\n${input.candidate.notes}`,
+    tags: ['ai-session-draft', 'auto-journal'],
+    smart_tags: ['Auto Draft'],
+    session_id: input.sessionId,
+    is_draft: true,
+    draft_status: 'pending',
+    draft_expires_at: new Date(Date.now() + (DRAFT_EXPIRY_HOURS * 60 * 60 * 1000)).toISOString(),
+    is_open: false,
+  };
 }
 
 export class JournalAutoPopulateService {
   async generateDraftsForUser(userId: string, marketDate: string): Promise<AutoPopulateRunStats> {
     const { startIso, endIso } = etDateToUtcRange(marketDate);
 
-    const [trackedSetupsRes, triggeredAlertsRes, positionsRes, messagesRes] = await Promise.all([
-      supabase
-        .from('ai_coach_tracked_setups')
-        .select('id, symbol, setup_type, direction, status, tracked_at, opportunity_data')
-        .eq('user_id', userId)
-        .gte('tracked_at', startIso)
-        .lt('tracked_at', endIso)
-        .order('tracked_at', { ascending: false })
-        .limit(200),
-      supabase
-        .from('ai_coach_alerts')
-        .select('id, symbol, alert_type, target_value, triggered_at, notes')
-        .eq('user_id', userId)
-        .eq('status', 'triggered')
-        .gte('triggered_at', startIso)
-        .lt('triggered_at', endIso)
-        .order('triggered_at', { ascending: false })
-        .limit(200),
-      supabase
-        .from('ai_coach_positions')
-        .select('id, symbol, position_type, entry_price, entry_date, quantity, status, close_date, close_price, pnl, pnl_pct, current_price, created_at, updated_at, tags')
-        .eq('user_id', userId)
-        .or(`and(created_at.gte.${startIso},created_at.lt.${endIso}),and(updated_at.gte.${startIso},updated_at.lt.${endIso})`)
-        .order('updated_at', { ascending: false })
-        .limit(300),
-      supabase
-        .from('ai_coach_messages')
-        .select('id, role, content, created_at')
-        .eq('user_id', userId)
-        .gte('created_at', startIso)
-        .lt('created_at', endIso)
-        .order('created_at', { ascending: false })
-        .limit(400),
-    ]);
+    const { data: messagesData, error: messagesError } = await supabase
+      .from('ai_coach_messages')
+      .select('session_id,content,created_at')
+      .eq('user_id', userId)
+      .gte('created_at', startIso)
+      .lt('created_at', endIso)
+      .order('created_at', { ascending: true })
+      .limit(2000);
 
-    if (trackedSetupsRes.error) {
-      throw new Error(`Failed to load tracked setups: ${trackedSetupsRes.error.message}`);
-    }
-    if (triggeredAlertsRes.error) {
-      throw new Error(`Failed to load triggered alerts: ${triggeredAlertsRes.error.message}`);
-    }
-    if (positionsRes.error) {
-      throw new Error(`Failed to load position events: ${positionsRes.error.message}`);
-    }
-    if (messagesRes.error) {
-      throw new Error(`Failed to load ai conversation events: ${messagesRes.error.message}`);
+    if (messagesError) {
+      throw new Error(`Failed to load AI Coach messages: ${messagesError.message}`);
     }
 
-    const trackedSetups = (trackedSetupsRes.data || []) as TrackedSetupRow[];
-    const triggeredAlerts = (triggeredAlertsRes.data || []) as TriggeredAlertRow[];
-    const positions = (positionsRes.data || []) as PositionSessionRow[];
-    const messages = (messagesRes.data || []) as MessageRow[];
+    const messages = (messagesData || []) as MessageRow[];
+    const messagesBySession = new Map<string, MessageRow[]>();
 
-    const conversationSymbols = extractConversationSymbols(messages);
+    for (const message of messages) {
+      if (!message.session_id || message.session_id.length === 0) continue;
+      const existing = messagesBySession.get(message.session_id) || [];
+      existing.push(message);
+      messagesBySession.set(message.session_id, existing);
+    }
 
-    const drafts: DraftTradeInsert[] = [];
-
-    for (const setup of trackedSetups) {
-      const data = asRecord(setup.opportunity_data);
-      const suggestedTrade = asRecord(data.suggestedTrade);
-      const metadata = asRecord(data.metadata);
-      const autoDraftKey = `setup:${setup.id}:${marketDate}`;
-      const symbol = setup.symbol.toUpperCase();
-
-      drafts.push(baseDraftTrade({
+    if (messagesBySession.size === 0) {
+      return {
         userId,
-        symbol,
-        positionType: mapDirectionToPositionType(setup.direction),
-        strategy: setup.setup_type,
-        entryPrice: toPositiveNumber(suggestedTrade.entry ?? data.currentPrice, 1),
-        quantity: 1,
         marketDate,
-        autoDraftKey,
-        sourceType: 'tracked_setup',
-        sourceId: setup.id,
-        entryContext: {
-          setupType: setup.setup_type,
-          direction: setup.direction,
-          status: setup.status,
-          levels: metadata.levels || null,
-          vwap: metadata.vwap || null,
-          orb: metadata.orb || null,
+        generated: 0,
+        skippedExisting: 0,
+        sourceCounts: {
+          sessions: 0,
+          messages: messages.length,
+          detectedTrades: 0,
         },
-        marketConditions: {
-          trend: metadata.trend || 'unknown',
-          volatilityRegime: metadata.volatilityRegime || metadata.volatility || 'unknown',
-          volume: metadata.volume || 'unknown',
-        },
-        aiConversationSummary: (conversationSymbols.get(symbol) || []).join(' | ') || `Setup tracked for ${symbol}.`,
-        suggestedLessons: buildLessons('tracked_setup', symbol),
-        tags: ['auto-draft', 'setup', setup.setup_type],
-      }));
-    }
-
-    for (const alert of triggeredAlerts) {
-      const autoDraftKey = `alert:${alert.id}:${marketDate}`;
-      const symbol = alert.symbol.toUpperCase();
-
-      drafts.push(baseDraftTrade({
-        userId,
-        symbol,
-        positionType: 'stock',
-        strategy: `alert_${alert.alert_type}`,
-        entryPrice: toPositiveNumber(alert.target_value, 1),
-        quantity: 1,
-        marketDate,
-        autoDraftKey,
-        sourceType: 'triggered_alert',
-        sourceId: alert.id,
-        entryContext: {
-          alertType: alert.alert_type,
-          targetValue: alert.target_value,
-        },
-        marketConditions: {
-          trend: 'unknown',
-          volatilityRegime: 'unknown',
-          volume: 'unknown',
-        },
-        aiConversationSummary: (conversationSymbols.get(symbol) || []).join(' | ') || `Alert triggered for ${symbol}.`,
-        suggestedLessons: buildLessons('triggered_alert', symbol),
-        tags: ['auto-draft', 'alert', alert.alert_type],
-        exitReason: alert.notes || 'Alert triggered during session',
-      }));
-    }
-
-    for (const position of positions) {
-      const autoDraftKey = `position:${position.id}:${marketDate}`;
-      const symbol = position.symbol.toUpperCase();
-      const closePrice = parseFiniteNumber(position.close_price);
-      const currentPrice = parseFiniteNumber(position.current_price);
-      const pnl = parseFiniteNumber(position.pnl);
-
-      drafts.push(baseDraftTrade({
-        userId,
-        symbol,
-        positionType: normalizePositionType(position.position_type),
-        strategy: `${position.status}_position_event`,
-        entryPrice: toPositiveNumber(position.entry_price, 1),
-        quantity: Math.max(1, Math.abs(Math.trunc(position.quantity))),
-        marketDate,
-        autoDraftKey,
-        sourceType: 'position_event',
-        sourceId: position.id,
-        entryContext: {
-          positionStatus: position.status,
-          entryDate: position.entry_date,
-          closeDate: position.close_date,
-        },
-        marketConditions: {
-          trend: 'unknown',
-          volatilityRegime: 'unknown',
-          volume: 'unknown',
-        },
-        aiConversationSummary: (conversationSymbols.get(symbol) || []).join(' | ') || `Position event captured for ${symbol}.`,
-        suggestedLessons: buildLessons('position_event', symbol),
-        tags: ['auto-draft', 'position', ...(position.tags || [])],
-        pnl: pnl ?? undefined,
-        exitPrice: closePrice ?? currentPrice ?? undefined,
-        exitReason: position.status === 'closed'
-          ? 'Position closed during session'
-          : 'Position state changed during session',
-      }));
-    }
-
-    for (const [symbol, excerpts] of conversationSymbols.entries()) {
-      const autoDraftKey = `conversation:${symbol}:${marketDate}`;
-      drafts.push(baseDraftTrade({
-        userId,
-        symbol,
-        positionType: 'stock',
-        strategy: 'ai_conversation',
-        entryPrice: 1,
-        quantity: 1,
-        marketDate,
-        autoDraftKey,
-        sourceType: 'conversation',
-        sourceId: symbol,
-        entryContext: {
-          source: 'ai_coach_messages',
-        },
-        marketConditions: {
-          trend: 'unknown',
-          volatilityRegime: 'unknown',
-          volume: 'unknown',
-        },
-        aiConversationSummary: excerpts.join(' | '),
-        suggestedLessons: buildLessons('conversation', symbol),
-        tags: ['auto-draft', 'conversation'],
-        exitReason: 'Draft from AI Coach trade conversation',
-      }));
+        notified: 0,
+      };
     }
 
     const existingDraftKeys = await loadExistingDraftKeys(userId, marketDate);
 
-    const uniqueByKey = new Map<string, DraftTradeInsert>();
-    for (const draft of drafts) {
-      const autoDraftKey = String(asRecord(draft.session_context).autoDraftKey || '');
-      if (!autoDraftKey) continue;
-      if (!uniqueByKey.has(autoDraftKey)) {
-        uniqueByKey.set(autoDraftKey, draft);
+    const candidateRows: JournalDraftInsert[] = [];
+    const dedupedByKey = new Map<string, JournalDraftInsert>();
+
+    for (const [sessionId, sessionMessages] of messagesBySession.entries()) {
+      const candidates = extractSessionDraftCandidates(sessionMessages, MAX_CANDIDATES_PER_SESSION);
+      for (const candidate of candidates) {
+        const dedupKey = buildDraftDedupKey(sessionId, candidate.symbol);
+        if (existingDraftKeys.has(dedupKey)) continue;
+        if (dedupedByKey.has(dedupKey)) continue;
+
+        const draftRow = toDraftInsert({
+          userId,
+          marketDate,
+          sessionId,
+          candidate,
+        });
+
+        dedupedByKey.set(dedupKey, draftRow);
       }
     }
 
-    const inserts = Array.from(uniqueByKey.values())
-      .filter((draft) => !existingDraftKeys.has(String(asRecord(draft.session_context).autoDraftKey || '')));
+    for (const row of dedupedByKey.values()) {
+      candidateRows.push(row);
+      if (candidateRows.length >= MAX_INSERTS_PER_USER) break;
+    }
 
-    if (inserts.length > 0) {
-      const { error } = await supabase
-        .from('ai_coach_trades')
-        .insert(inserts);
+    if (candidateRows.length > 0) {
+      const { error: insertError } = await supabase
+        .from('journal_entries')
+        .insert(candidateRows);
 
-      if (error) {
-        throw new Error(`Failed to persist auto-generated drafts: ${error.message}`);
+      if (insertError) {
+        throw new Error(`Failed to persist auto-generated journal drafts: ${insertError.message}`);
       }
     }
+
+    const notified = await upsertAutoJournalNotification({
+      userId,
+      marketDate,
+      createdCount: candidateRows.length,
+      sessionsScanned: messagesBySession.size,
+    });
 
     return {
       userId,
       marketDate,
-      generated: inserts.length,
-      skippedExisting: uniqueByKey.size - inserts.length,
+      generated: candidateRows.length,
+      skippedExisting: dedupedByKey.size - candidateRows.length,
       sourceCounts: {
-        trackedSetups: trackedSetups.length,
-        triggeredAlerts: triggeredAlerts.length,
-        positions: positions.length,
-        conversations: conversationSymbols.size,
+        sessions: messagesBySession.size,
+        messages: messages.length,
+        detectedTrades: dedupedByKey.size,
       },
+      notified: notified ? 1 : 0,
     };
   }
 
   async runForMarketDate(marketDate: string, userIds?: string[]): Promise<AutoPopulateBatchStats> {
     const candidates = userIds && userIds.length > 0
       ? userIds
-      : await loadCandidateUserIds();
+      : await loadCandidateUserIdsForMarketDate(marketDate);
 
     let generated = 0;
     let skippedExisting = 0;
     let failed = 0;
+    let notified = 0;
 
     for (const userId of candidates) {
       try {
         const stats = await this.generateDraftsForUser(userId, marketDate);
         generated += stats.generated;
         skippedExisting += stats.skippedExisting;
+        notified += stats.notified;
       } catch (error) {
         failed += 1;
         logger.warn('Auto-populate: failed for user', {
@@ -578,6 +527,7 @@ export class JournalAutoPopulateService {
       generated,
       skippedExisting,
       failed,
+      notified,
     };
   }
 }

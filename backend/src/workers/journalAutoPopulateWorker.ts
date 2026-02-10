@@ -11,7 +11,7 @@ import {
   registerWorker,
 } from '../services/workerHealth';
 
-const JOURNAL_AUTOPOP_TARGET_MINUTES_ET = (16 * 60) + 15; // 4:15 PM ET
+const JOURNAL_AUTOPOP_TARGET_MINUTES_ET = (16 * 60) + 5; // 4:05 PM ET
 const JOURNAL_AUTOPOP_CHECK_INTERVAL_MS = 60_000;
 const WORKER_NAME = 'journal_autopopulate_worker';
 

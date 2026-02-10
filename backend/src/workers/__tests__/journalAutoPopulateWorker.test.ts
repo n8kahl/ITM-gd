@@ -1,8 +1,8 @@
 import { shouldGenerateAutoJournalDrafts } from '../journalAutoPopulateWorker';
 
 describe('journalAutoPopulateWorker', () => {
-  it('should run after 4:15 PM ET on trading day when not yet generated', () => {
-    const now = new Date('2026-02-10T21:30:00.000Z'); // 4:30 PM ET (EST)
+  it('should run at or after 4:05 PM ET on trading day when not yet generated', () => {
+    const now = new Date('2026-02-10T21:05:00.000Z'); // 4:05 PM ET (EST)
     const result = shouldGenerateAutoJournalDrafts(now, null);
 
     expect(result.shouldRun).toBe(true);
@@ -10,7 +10,7 @@ describe('journalAutoPopulateWorker', () => {
   });
 
   it('should not run before target time', () => {
-    const now = new Date('2026-02-10T20:00:00.000Z'); // 3:00 PM ET
+    const now = new Date('2026-02-10T21:04:00.000Z'); // 4:04 PM ET
     const result = shouldGenerateAutoJournalDrafts(now, null);
 
     expect(result.shouldRun).toBe(false);
