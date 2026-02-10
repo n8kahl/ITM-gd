@@ -1,5 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
 import {
+  aiCoachBypassToken,
+  aiCoachBypassUserId,
   e2eBackendUrl,
   getAICoachAuthHeaders,
   isAICoachLiveMode,
@@ -104,51 +106,33 @@ test.describe('AI Coach — Rate Limiting', () => {
 })
 
 test.describe('AI Coach — WebSocket Connection', () => {
-  test('should accept WebSocket connections at /ws/prices with symbols and setup channels', async ({ page }) => {
+  test('should reject unauthenticated WebSocket connections at /ws/prices', async ({ page }) => {
     // Use the page to test WebSocket (Playwright can't directly connect to WebSockets via request API)
-    const wsConnected = await page.evaluate(async (backendUrl) => {
-      return new Promise<boolean>((resolve) => {
+    const wsRejected = await page.evaluate(async (backendUrl) => {
+      return new Promise<{ closed: boolean; code: number | null; reason: string }>((resolve) => {
         const ws = new WebSocket(`${backendUrl.replace('http', 'ws')}/ws/prices`)
         const timeout = setTimeout(() => {
           ws.close()
-          resolve(false)
+          resolve({ closed: false, code: null, reason: 'timeout' })
         }, 5000)
 
-        ws.onopen = () => {
+        ws.onclose = (event) => {
           clearTimeout(timeout)
-          // Send symbol + setup channel subscriptions
-          ws.send(JSON.stringify({ type: 'subscribe', symbols: ['SPX'] }))
-          ws.send(JSON.stringify({ type: 'subscribe', channels: ['setups:user-123'] }))
-          // Wait briefly for a response
-          ws.onmessage = (event) => {
-            try {
-              const msg = JSON.parse(event.data)
-              if (msg.type === 'error') {
-                ws.close()
-                resolve(false)
-                return
-              }
-            } catch {
-              // ignore parse errors
-            }
-            ws.close()
-            resolve(true)
-          }
-          // Resolve true even if no message comes back — connection was established
-          setTimeout(() => {
-            ws.close()
-            resolve(true)
-          }, 2000)
+          resolve({
+            closed: true,
+            code: event.code,
+            reason: event.reason,
+          })
         }
 
         ws.onerror = () => {
-          clearTimeout(timeout)
-          resolve(false)
+          // close handler performs final assertion payload
         }
       })
     }, BACKEND_URL)
 
-    expect(wsConnected).toBe(true)
+    expect(wsRejected.closed).toBe(true)
+    expect(wsRejected.code).toBe(4401)
   })
 })
 
@@ -228,6 +212,70 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
     expect(typeof briefPayload.marketDate).toBe('string')
     expect(typeof briefPayload.viewed).toBe('boolean')
     expect(briefPayload.brief).toBeDefined()
+  })
+
+  test('websocket should accept bypass token and enforce user channel authorization', async ({ page, request }) => {
+    test.setTimeout(90000)
+
+    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!watchlistResponse) return
+
+    const wsResult = await page.evaluate(async ({ backendUrl, token, userId }) => {
+      return new Promise<{ opened: boolean; gotStatus: boolean; gotForbiddenError: boolean }>((resolve) => {
+        const wsUrl = `${backendUrl.replace('http', 'ws')}/ws/prices?token=${encodeURIComponent(token)}`
+        const ws = new WebSocket(wsUrl)
+        let gotStatus = false
+        let gotForbiddenError = false
+
+        const timeout = setTimeout(() => {
+          ws.close()
+          resolve({ opened: false, gotStatus, gotForbiddenError })
+        }, 6000)
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'subscribe', channels: [`setups:${userId}`] }))
+          ws.send(JSON.stringify({ type: 'subscribe', channels: ['setups:not-your-user'] }))
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'status') {
+              gotStatus = true
+            }
+            if (msg.type === 'error' && String(msg.message || '').includes('Forbidden channel')) {
+              gotForbiddenError = true
+            }
+            if (gotStatus && gotForbiddenError) {
+              clearTimeout(timeout)
+              ws.close()
+              resolve({ opened: true, gotStatus, gotForbiddenError })
+            }
+          } catch {
+            // Ignore malformed socket payloads for this gate.
+          }
+        }
+
+        ws.onerror = () => {
+          clearTimeout(timeout)
+          resolve({ opened: false, gotStatus, gotForbiddenError })
+        }
+
+        ws.onclose = () => {
+          // Fallback resolution if closed before both signals are observed.
+          clearTimeout(timeout)
+          resolve({ opened: gotStatus, gotStatus, gotForbiddenError })
+        }
+      })
+    }, {
+      backendUrl: e2eBackendUrl,
+      token: aiCoachBypassToken,
+      userId: aiCoachBypassUserId,
+    })
+
+    expect(wsResult.opened).toBe(true)
+    expect(wsResult.gotStatus).toBe(true)
+    expect(wsResult.gotForbiddenError).toBe(true)
   })
 
   test('earnings endpoints should return authenticated responses', async ({ request }) => {

@@ -1,6 +1,6 @@
 # AI Coach V2 Production Status
 
-**Last Updated:** 2026-02-09  
+**Last Updated:** 2026-02-10  
 **Branch:** `main`  
 **Intent:** Track implementation status, production gates, and test evidence for V2 rollout.
 **Canonical Implementation Spec:** `/Users/natekahl/ITM-gd/docs/ai-coach/AI_COACH_V2_REBUILD_SPEC.md` (source import from `/Users/natekahl/Desktop/AI_COACH_V2_REBUILD_SPEC.pdf`)
@@ -27,10 +27,72 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
   - `/Users/natekahl/ITM-gd/backend/src/chatkit/systemPrompt.ts`
 
+### Production Hardening Pass (2026-02-10)
+- Security and auth hardening:
+  - Shared auth token verification utility now used across HTTP + WebSocket auth paths.
+  - WebSocket connections require valid auth for `/ws/prices`, and setup/position channels are user-authorized only.
+  - `/Users/natekahl/ITM-gd/backend/src/lib/tokenAuth.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/middleware/auth.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+- Streaming reliability:
+  - Replaced pseudo-streaming with true OpenAI token streaming and tool-call loop parity in stream service.
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/streamService.ts`
+- Prompt and contract alignment:
+  - Added user-context prompt personalization (tier/experience/mobile context).
+  - Standardized optional `sessionId` behavior between schema and frontend API calls.
+  - Added standardized `freshness` metadata to core market tool payloads so delayed/stale responses are explicit.
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/promptContext.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/chatService.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/chatValidation.ts`
+  - `/Users/natekahl/ITM-gd/lib/api/ai-coach.ts`
+- Symbol and widget coverage:
+  - Canonical symbol validation applied for chat tool handlers and chart route.
+  - Widget extraction expanded to render structured cards for:
+    - 0DTE analysis
+    - IV analysis
+    - Earnings calendar
+    - Earnings analysis
+    - Journal insights
+    - Trade history
+  - `/Users/natekahl/ITM-gd/backend/src/chatkit/functionHandlers.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/schemas/chartValidation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/chart.ts`
+  - `/Users/natekahl/ITM-gd/components/ai-coach/widget-cards.tsx`
+- Integration/E2E gate hardening:
+  - Added backend chat route integration tests covering:
+    - generated `sessionId` behavior
+    - message trim + mobile-context propagation
+    - OpenAI-style failure mapping to 503
+    - SSE stream behavior and stream-error fallbacks
+  - Added WebSocket auth/authz integration tests covering:
+    - unauthorized close path (`4401`)
+    - forbidden cross-user channel subscription rejection
+    - authorized per-user channel subscription with targeted setup update delivery
+  - Updated E2E API spec to align with hardened WebSocket model:
+    - unauthenticated WS must be rejected
+    - authenticated bypass WS must connect and reject foreign channels
+  - `/Users/natekahl/ITM-gd/backend/src/routes/__tests__/chat.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/websocket.authz.test.ts`
+  - `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-api.spec.ts`
+
 ### Validation Evidence
 - Backend unit tests: `pnpm --dir backend test -- functionHandlers.test.ts` (pass)
 - Backend compile: `pnpm --dir backend build` (pass)
 - Frontend TypeScript check: `pnpm exec tsc --noEmit` (pass)
+- Backend full suite: `pnpm --dir backend test` (pass, 64 suites / 607 tests)
+- Backend targeted hardening suite:
+  - `pnpm --dir backend test -- websocket.test.ts functionHandlers.test.ts` (pass)
+- Backend integration hardening suite:
+  - `pnpm --dir backend test -- chat.test.ts websocket.authz.test.ts websocket.test.ts functionHandlers.test.ts` (pass)
+- Staging live-gate preflight:
+  - `pnpm ai-coach:staging:preflight` (pass, ready with 0 failures / 1 warning for optional shared-secret bypass)
+- Staging workflow dispatch evidence:
+  - Dispatched from `main`: run `21854157091` (failed), run `21854230407` (failed)
+  - Failure reason: `e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts` still asserts stale UI copy (`AI Coach Center`) on default branch workflow source.
+  - Workspace fix applied: resilient selector update in `/Users/natekahl/ITM-gd/e2e/specs/ai-coach/ai-coach-workflow-live.spec.ts`.
+- Frontend targeted lint:
+  - `pnpm exec eslint hooks/use-ai-coach-chat.ts hooks/use-price-stream.ts components/ai-coach/tracked-setups-panel.tsx components/ai-coach/position-tracker.tsx components/ai-coach/widget-cards.tsx lib/api/ai-coach.ts` (pass)
 
 ### Phase 2 In Progress (Completed in this session)
 - Welcome view hero redesign and cleanup:

@@ -66,6 +66,21 @@ function invalidSymbolError(): { error: string; message: string } {
   };
 }
 
+interface FreshnessMeta {
+  asOf: string;
+  source: string;
+  delayed: boolean;
+  staleAfterSeconds: number;
+  warning?: string;
+}
+
+function withFreshness<T extends object>(payload: T, freshness: FreshnessMeta): T & { freshness: FreshnessMeta } {
+  return {
+    ...payload,
+    freshness,
+  };
+}
+
 export async function executeFunctionCall(functionCall: FunctionCall, context?: FunctionCallContext): Promise<any> {
   const { name, arguments: argsString } = functionCall;
   let args: Record<string, unknown>;
@@ -180,7 +195,7 @@ async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) 
     );
 
     // Return simplified response for AI (remove some metadata)
-    return {
+    return withFreshness({
       symbol: levels.symbol,
       currentPrice: levels.currentPrice,
       levels: {
@@ -191,7 +206,12 @@ async function handleGetKeyLevels(args: { symbol: string; timeframe?: string }) 
       },
       marketContext: levels.marketContext,
       timestamp: levels.timestamp
-    };
+    }, {
+      asOf: levels.timestamp || new Date().toISOString(),
+      source: 'key_levels',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to fetch levels',
@@ -223,7 +243,7 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
     if (intradayData.length > 0) {
       // Market is open or has today's data
       const latestCandle = intradayData[intradayData.length - 1];
-      return {
+      return withFreshness({
         symbol: validSymbol,
         price: latestCandle.c,
         timestamp: new Date(latestCandle.t).toISOString(),
@@ -231,7 +251,12 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
         low: latestCandle.l,
         volume: latestCandle.v,
         isDelayed: false
-      };
+      }, {
+        asOf: new Date(latestCandle.t).toISOString(),
+        source: 'intraday',
+        delayed: false,
+        staleAfterSeconds: 90,
+      });
     }
 
     // Fallback to daily data (covers weekends + holidays with 7-day lookback)
@@ -239,17 +264,24 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
     if (dailyData.length > 0) {
       const latestBar = dailyData[dailyData.length - 1];
       const marketStatus = getMarketStatusService();
-      return {
+      const delayedAsOf = new Date(latestBar.t).toISOString();
+      return withFreshness({
         symbol: validSymbol,
         price: latestBar.c,
-        timestamp: new Date(latestBar.t).toISOString(),
+        timestamp: delayedAsOf,
         high: latestBar.h,
         low: latestBar.l,
         volume: latestBar.v,
         isDelayed: true,
         priceAsOf: 'Last trading day close',
         marketStatusMessage: marketStatus.message || 'Market is currently closed'
-      };
+      }, {
+        asOf: delayedAsOf,
+        source: 'daily_close',
+        delayed: true,
+        staleAfterSeconds: 24 * 60 * 60,
+        warning: 'Using delayed daily close because intraday feed is unavailable.',
+      });
     }
 
     return {
@@ -297,7 +329,7 @@ async function handleGetOptionsChain(args: {
     );
 
     // Simplify for AI - return only most relevant data
-    return {
+    return withFreshness({
       symbol: chain.symbol,
       currentPrice: chain.currentPrice,
       expiry: chain.expiry,
@@ -331,7 +363,12 @@ async function handleGetOptionsChain(args: {
         vega: p.vega?.toFixed(2),
         inTheMoney: p.inTheMoney
       }))
-    };
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'options_chain',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to fetch options chain',
@@ -371,7 +408,7 @@ async function handleGetGammaExposure(args: {
       'get_gamma_exposure',
     );
 
-    return {
+    return withFreshness({
       symbol: profile.symbol,
       spotPrice: profile.spotPrice,
       regime: profile.regime,
@@ -382,7 +419,12 @@ async function handleGetGammaExposure(args: {
       expirationsAnalyzed: profile.expirationsAnalyzed,
       calculatedAt: profile.calculatedAt,
       gexByStrike: profile.gexByStrike,
-    };
+    }, {
+      asOf: profile.calculatedAt || new Date().toISOString(),
+      source: 'gamma_exposure',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to calculate gamma exposure',
@@ -414,7 +456,12 @@ async function handleGetZeroDTEAnalysis(args: {
       'get_zero_dte_analysis',
     );
 
-    return analysis;
+    return withFreshness(analysis, {
+      asOf: new Date().toISOString(),
+      source: 'zero_dte_analysis',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to analyze 0DTE structure',
@@ -453,7 +500,13 @@ async function handleGetIVAnalysis(args: {
       FUNCTION_TIMEOUT_MS,
       'get_iv_analysis',
     );
-    return profile;
+    const asOf = typeof profile.asOf === 'string' ? profile.asOf : new Date().toISOString();
+    return withFreshness(profile, {
+      asOf,
+      source: 'iv_analysis',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to analyze implied volatility',
@@ -593,7 +646,7 @@ async function handleGetSPXGamePlan(args: { include_spy?: boolean }) {
       ? expectedMove / ratio
       : null;
 
-    return {
+    return withFreshness({
       symbol: 'SPX',
       currentPrice: spxPriceVal > 0 ? Number(spxPriceVal.toFixed(2)) : null,
       spyPrice: includeSpy && spyPriceVal > 0 ? Number(spyPriceVal.toFixed(2)) : null,
@@ -607,7 +660,12 @@ async function handleGetSPXGamePlan(args: { include_spy?: boolean }) {
       gexProfile: spxGex,
       zeroDTE: spxZeroDTE,
       setupContext: buildSetupContext(spxPriceVal, levelsData, spxGex, gammaRegime),
-    };
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'spx_game_plan',
+      delayed: false,
+      staleAfterSeconds: 120,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to generate SPX game plan',
@@ -635,12 +693,17 @@ async function handleGetEarningsCalendar(args: {
       'get_earnings_calendar',
     );
 
-    return {
+    return withFreshness({
       watchlist,
       daysAhead,
       count: events.length,
       events,
-    };
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'earnings_calendar',
+      delayed: false,
+      staleAfterSeconds: 6 * 60 * 60,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to fetch earnings calendar',
@@ -668,7 +731,13 @@ async function handleGetEarningsAnalysis(args: { symbol: string }) {
       'get_earnings_analysis',
     );
 
-    return analysis;
+    const asOf = typeof analysis.asOf === 'string' ? analysis.asOf : new Date().toISOString();
+    return withFreshness(analysis, {
+      asOf,
+      source: 'earnings_analysis',
+      delayed: false,
+      staleAfterSeconds: 30 * 60,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to fetch earnings analysis',
@@ -1553,7 +1622,12 @@ async function handleGetMacroContext(args: { symbol?: string }) {
       };
     }
 
-    return result;
+    return withFreshness(result, {
+      asOf: new Date().toISOString(),
+      source: 'macro_context',
+      delayed: false,
+      staleAfterSeconds: 6 * 60 * 60,
+    });
   } catch (error: any) {
     return {
       error: 'Failed to fetch macro context',

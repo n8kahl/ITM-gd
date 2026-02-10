@@ -35,7 +35,24 @@ import type { PositionType } from '@/lib/api/ai-coach'
 // TYPES
 // ============================================
 
-export type WidgetType = 'key_levels' | 'position_summary' | 'pnl_tracker' | 'alert_status' | 'market_overview' | 'macro_context' | 'options_chain' | 'gex_profile' | 'scan_results' | 'current_price' | 'spx_game_plan'
+export type WidgetType =
+  | 'key_levels'
+  | 'position_summary'
+  | 'pnl_tracker'
+  | 'alert_status'
+  | 'market_overview'
+  | 'macro_context'
+  | 'options_chain'
+  | 'gex_profile'
+  | 'scan_results'
+  | 'current_price'
+  | 'spx_game_plan'
+  | 'zero_dte_analysis'
+  | 'iv_analysis'
+  | 'earnings_calendar'
+  | 'earnings_analysis'
+  | 'journal_insights'
+  | 'trade_history'
 
 export interface WidgetData {
   type: WidgetType
@@ -114,6 +131,24 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
       break
     case 'spx_game_plan':
       content = <SPXGamePlanCard data={widget.data} />
+      break
+    case 'zero_dte_analysis':
+      content = <ZeroDTEAnalysisCard data={widget.data} />
+      break
+    case 'iv_analysis':
+      content = <IVAnalysisCard data={widget.data} />
+      break
+    case 'earnings_calendar':
+      content = <EarningsCalendarCard data={widget.data} />
+      break
+    case 'earnings_analysis':
+      content = <EarningsAnalysisCard data={widget.data} />
+      break
+    case 'journal_insights':
+      content = <JournalInsightsCard data={widget.data} />
+      break
+    case 'trade_history':
+      content = <TradeHistoryCard data={widget.data} />
       break
     default:
       return null
@@ -998,6 +1033,319 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
   )
 }
 
+function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = (data.symbol as string) || 'SPX'
+  const expectedMove = (data.expectedMove as Record<string, unknown> | null) || null
+  const topContracts = Array.isArray(data.topContracts)
+    ? data.topContracts as Array<Record<string, unknown>>
+    : []
+
+  const currentPrice = parseNullableNumeric(expectedMove?.currentPrice) ?? 0
+  const totalExpectedMove = parseNullableNumeric(expectedMove?.totalExpectedMove)
+  const usedPct = parseNullableNumeric(expectedMove?.usedPct)
+  const remainingMove = parseNullableNumeric(expectedMove?.remainingMove)
+  const minutesLeft = parseNullableNumeric(expectedMove?.minutesLeft)
+  const hasZeroDTE = Boolean(data.hasZeroDTE)
+
+  const actions: WidgetAction[] = [
+    chartAction(symbol, currentPrice, '1D', '0DTE Context'),
+    optionsAction(symbol, currentPrice),
+    chatAction(`Summarize ${symbol} 0DTE risk using expected move, remaining move, and gamma profile.`),
+  ]
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Workflow className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-xs font-medium text-white">{symbol} 0DTE</span>
+        </div>
+        {minutesLeft != null && (
+          <span className="text-[10px] text-white/50">{Math.max(0, Math.round(minutesLeft))}m left</span>
+        )}
+      </div>
+
+      {!hasZeroDTE && (
+        <p className="text-[11px] text-amber-300/80">{String(data.message || 'No 0DTE expiration detected today.')}</p>
+      )}
+
+      {hasZeroDTE && (
+        <div className="space-y-2 text-[11px]">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+              <p className="text-white/45">Expected Move</p>
+              <p className="font-mono text-white">{totalExpectedMove != null ? `${totalExpectedMove.toFixed(2)} pts` : '—'}</p>
+            </div>
+            <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+              <p className="text-white/45">Move Used</p>
+              <p className="font-mono text-white">{usedPct != null ? `${usedPct.toFixed(1)}%` : '—'}</p>
+            </div>
+          </div>
+          <p className="text-white/55">
+            Remaining move:
+            <span className="ml-1 font-mono text-emerald-300">
+              {remainingMove != null ? `${remainingMove.toFixed(2)} pts` : '—'}
+            </span>
+          </p>
+
+          {topContracts.length > 0 && (
+            <div className="pt-1 border-t border-white/10">
+              <p className="text-[10px] uppercase tracking-wide text-white/45 mb-1">Most Active</p>
+              <div className="space-y-1">
+                {topContracts.slice(0, 3).map((contract, idx) => (
+                  <div key={`${contract.type as string}-${contract.strike as number}-${idx}`} className="flex items-center justify-between text-[10px]">
+                    <span className="text-white/70">
+                      {(contract.type as string || '').toUpperCase()} {parseNumeric(contract.strike).toFixed(0)}
+                    </span>
+                    <span className="font-mono text-white/60">Vol {Math.round(parseNumeric(contract.volume))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <WidgetActionBar actions={actions} compact />
+    </div>
+  )
+}
+
+function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = (data.symbol as string) || 'SPX'
+  const currentPrice = parseNullableNumeric(data.currentPrice) ?? 0
+  const ivRank = (data.ivRank as Record<string, unknown> | null) || null
+  const skew = (data.skew as Record<string, unknown> | null) || null
+  const termStructure = (data.termStructure as Record<string, unknown> | null) || null
+  const expirations = Array.isArray(termStructure?.expirations)
+    ? termStructure?.expirations as Array<Record<string, unknown>>
+    : []
+
+  const actions: WidgetAction[] = [
+    optionsAction(symbol, currentPrice),
+    chartAction(symbol, currentPrice, '1D', 'IV Regime'),
+    chatAction(`Interpret ${symbol} IV rank, skew, and term structure for day-trade risk today.`),
+  ]
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-sky-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-xs font-medium text-white">{symbol} IV Profile</span>
+        </div>
+        <span className="text-[10px] text-white/45">{String(data.asOf || '').slice(11, 16)} ET</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Current IV</p>
+          <p className="font-mono text-white">
+            {parseNullableNumeric(ivRank?.currentIV) != null ? `${parseNumeric(ivRank?.currentIV).toFixed(1)}%` : '—'}
+          </p>
+        </div>
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">IV Rank</p>
+          <p className="font-mono text-white">
+            {parseNullableNumeric(ivRank?.ivRank) != null ? `${parseNumeric(ivRank?.ivRank).toFixed(1)}%` : '—'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-2 text-[11px] text-white/65 space-y-1">
+        <p>
+          Skew:
+          <span className="ml-1 font-mono text-white/80">{String(skew?.skewDirection || 'unknown')}</span>
+        </p>
+        <p>
+          Term Structure:
+          <span className="ml-1 font-mono text-white/80">{String(termStructure?.shape || 'unknown')}</span>
+        </p>
+      </div>
+
+      {expirations.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10 space-y-1 text-[10px]">
+          {expirations.slice(0, 3).map((row) => (
+            <div key={String(row.date)} className="flex items-center justify-between text-white/60">
+              <span>{String(row.date)}</span>
+              <span className="font-mono">{parseNumeric(row.atmIV).toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <WidgetActionBar actions={actions} compact />
+    </div>
+  )
+}
+
+function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
+  const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
+  const watchlist = Array.isArray(data.watchlist) ? data.watchlist as string[] : []
+  const daysAhead = parseNumeric(data.daysAhead)
+  const cardActions: WidgetAction[] = [
+    chatAction('Summarize this earnings calendar and highlight the highest-risk names for options day traders.'),
+    copyAction(`Earnings watchlist: ${watchlist.join(', ')}`),
+  ]
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-fuchsia-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Calendar className="w-3.5 h-3.5 text-fuchsia-400" />
+          <span className="text-xs font-medium text-white">Earnings Calendar</span>
+        </div>
+        <span className="text-[10px] text-white/45">{Math.round(daysAhead)}d</span>
+      </div>
+
+      {events.length === 0 && (
+        <p className="text-[11px] text-white/55">No earnings events found for the selected watchlist window.</p>
+      )}
+
+      {events.length > 0 && (
+        <div className="space-y-1 text-[11px]">
+          {events.slice(0, 5).map((event, idx) => (
+            <div key={`${String(event.symbol)}-${String(event.date)}-${idx}`} className="flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1">
+              <span className="font-medium text-white/85">{String(event.symbol)}</span>
+              <span className="text-white/50">{String(event.date)}</span>
+              <span className="text-white/65">{String(event.time || event.timing || '')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <WidgetActionBar actions={cardActions} compact />
+    </div>
+  )
+}
+
+function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = (data.symbol as string) || 'TICKER'
+  const expectedMove = (data.expectedMove as Record<string, unknown> | null) || null
+  const strategies = Array.isArray(data.suggestedStrategies)
+    ? data.suggestedStrategies as Array<Record<string, unknown>>
+    : []
+  const points = parseNullableNumeric(expectedMove?.points)
+  const pct = parseNullableNumeric(expectedMove?.pct)
+  const currentPrice = parseNullableNumeric((data as Record<string, unknown>).currentPrice) ?? 0
+  const cardActions: WidgetAction[] = [
+    optionsAction(symbol, currentPrice),
+    chartAction(symbol, currentPrice, '1D', 'Earnings Setup'),
+    chatAction(`Rank the pre-earnings strategies for ${symbol} by risk/reward and IV crush risk.`),
+  ]
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-amber-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Bell className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-xs font-medium text-white">{symbol} Earnings Setup</span>
+        </div>
+        <span className="text-[10px] text-white/45">{String(data.earningsDate || 'TBD')}</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Expected Move</p>
+          <p className="font-mono text-white">{points != null ? `${points.toFixed(2)} pts` : '—'}</p>
+        </div>
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Expected Move %</p>
+          <p className="font-mono text-white">{pct != null ? `${pct.toFixed(2)}%` : '—'}</p>
+        </div>
+      </div>
+
+      {strategies.length > 0 && (
+        <div className="mt-2 space-y-1 text-[10px]">
+          <p className="uppercase tracking-wide text-white/45">Top Strategies</p>
+          {strategies.slice(0, 2).map((strategy, idx) => (
+            <div key={`${String(strategy.name)}-${idx}`} className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+              <p className="text-white/80 font-medium">{String(strategy.name || 'Strategy')}</p>
+              <p className="text-white/55 line-clamp-2">{String(strategy.description || '')}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <WidgetActionBar actions={cardActions} compact />
+    </div>
+  )
+}
+
+function JournalInsightsCard({ data }: { data: Record<string, unknown> }) {
+  const tradeCount = parseNumeric(data.tradeCount)
+  const summary = String(data.summary || 'No journal summary available.')
+  const period = String(data.period || '30d')
+  const cardActions: WidgetAction[] = [
+    chatAction('Turn these journal insights into three concrete rules for tomorrow.'),
+    copyAction(summary),
+  ]
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-teal-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <BarChart2 className="w-3.5 h-3.5 text-teal-400" />
+          <span className="text-xs font-medium text-white">Journal Insights</span>
+        </div>
+        <span className="text-[10px] text-white/45">{period}</span>
+      </div>
+
+      <p className="text-[11px] text-white/60 mb-2">Trades analyzed: <span className="font-mono text-white/85">{tradeCount}</span></p>
+      <p className="text-[11px] leading-relaxed text-white/70 line-clamp-4">{summary}</p>
+
+      <WidgetActionBar actions={cardActions} compact />
+    </div>
+  )
+}
+
+function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = (data.symbol as string) || 'All Symbols'
+  const summary = (data.summary as Record<string, unknown> | null) || null
+  const trades = Array.isArray(data.trades) ? data.trades as Array<Record<string, unknown>> : []
+  const cardActions: WidgetAction[] = [
+    chatAction(`Use this ${symbol} trade history to identify the top two recurring mistakes and fixes.`),
+    copyAction(`Win rate: ${String(summary?.winRate || 'N/A')} | Total PnL: ${String(summary?.totalPnl || 'N/A')}`),
+  ]
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-3 border-violet-500/10 mt-2 max-w-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Search className="w-3.5 h-3.5 text-violet-400" />
+          <span className="text-xs font-medium text-white">{symbol} Trade History</span>
+        </div>
+        <span className="text-[10px] text-white/45">{String(summary?.totalTrades ?? trades.length)} trades</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-[11px] mb-2">
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Win Rate</p>
+          <p className="font-mono text-white">{String(summary?.winRate || 'N/A')}</p>
+        </div>
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Total PnL</p>
+          <p className="font-mono text-white">{String(summary?.totalPnl || 'N/A')}</p>
+        </div>
+      </div>
+
+      {trades.length > 0 && (
+        <div className="space-y-1 text-[10px] text-white/60">
+          {trades.slice(0, 3).map((trade, idx) => (
+            <div key={`${String(trade.tradeDate)}-${idx}`} className="flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1">
+              <span>{String(trade.tradeDate)}</span>
+              <span>{String(trade.outcome || '')}</span>
+              <span className="font-mono">{String(trade.pnl || '—')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <WidgetActionBar actions={cardActions} compact />
+    </div>
+  )
+}
+
 // ============================================
 // UTILITY: Parse widget data from function calls
 // ============================================
@@ -1087,6 +1435,37 @@ export function extractWidgets(functionCalls?: Array<{
       case 'scan_opportunities': {
         if (result.error) break
         widgets.push({ type: 'scan_results', data: result })
+        break
+      }
+      case 'get_zero_dte_analysis': {
+        if (result.error) break
+        widgets.push({ type: 'zero_dte_analysis', data: result })
+        break
+      }
+      case 'get_iv_analysis': {
+        if (result.error) break
+        widgets.push({ type: 'iv_analysis', data: result })
+        break
+      }
+      case 'get_earnings_calendar': {
+        if (result.error) break
+        widgets.push({ type: 'earnings_calendar', data: result })
+        break
+      }
+      case 'get_earnings_analysis': {
+        if (result.error) break
+        widgets.push({ type: 'earnings_analysis', data: result })
+        break
+      }
+      case 'get_journal_insights': {
+        if (result.error) break
+        widgets.push({ type: 'journal_insights', data: result })
+        break
+      }
+      case 'get_trade_history_for_symbol':
+      case 'get_trade_history': {
+        if (result.error) break
+        widgets.push({ type: 'trade_history', data: result })
         break
       }
     }

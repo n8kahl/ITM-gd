@@ -215,6 +215,8 @@ describe('Function Handlers', () => {
       expect(result).toHaveProperty('timestamp');
       expect(result).toHaveProperty('high', 5920);
       expect(result).toHaveProperty('low', 5905);
+      expect(result).toHaveProperty('freshness.source', 'intraday');
+      expect(result).toHaveProperty('freshness.delayed', false);
       expect(mockFetchIntradayData).toHaveBeenCalledWith('SPX');
     });
 
@@ -316,6 +318,7 @@ describe('Function Handlers', () => {
       expect(result.calls[0]).toHaveProperty('strike', 5900);
       expect(result.calls[0]).toHaveProperty('delta');
       expect(result.calls[0]).toHaveProperty('iv');
+      expect(result).toHaveProperty('freshness.source', 'options_chain');
       expect(mockFetchOptionsChain).toHaveBeenCalledWith('SPX', undefined, 10);
     });
 
@@ -368,6 +371,7 @@ describe('Function Handlers', () => {
       expect(result).toHaveProperty('maxGEXStrike', 6000);
       expect(result.keyLevels).toHaveLength(1);
       expect(result.gexByStrike).toHaveLength(1);
+      expect(result).toHaveProperty('freshness.source', 'gamma_exposure');
       expect(mockCalculateGEXProfile).toHaveBeenCalledWith('SPX', {
         expiry: undefined,
         strikeRange: 25,
@@ -419,6 +423,7 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('symbol', 'SPX');
       expect(result).toHaveProperty('hasZeroDTE', true);
+      expect(result).toHaveProperty('freshness.source', 'zero_dte_analysis');
       expect(mockAnalyzeZeroDTE).toHaveBeenCalledWith('SPX', {
         strike: 6000,
         type: 'call',
@@ -476,6 +481,7 @@ describe('Function Handlers', () => {
       expect(result).toHaveProperty('ivRank');
       expect(result).toHaveProperty('skew');
       expect(result).toHaveProperty('termStructure');
+      expect(result).toHaveProperty('freshness.source', 'iv_analysis');
       expect(mockAnalyzeIVProfile).toHaveBeenCalledWith('SPX', {
         expiry: undefined,
         strikeRange: 15,
@@ -571,6 +577,7 @@ describe('Function Handlers', () => {
       expect(result).toHaveProperty('count', 2);
       expect(result).toHaveProperty('daysAhead', 10);
       expect(result.events[0]).toHaveProperty('symbol', 'AAPL');
+      expect(result).toHaveProperty('freshness.source', 'earnings_calendar');
       expect(mockGetEarningsCalendar).toHaveBeenCalledWith(['AAPL', 'NVDA'], 10);
     });
   });
@@ -604,6 +611,7 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('symbol', 'AAPL');
       expect(result).toHaveProperty('expectedMove');
+      expect(result).toHaveProperty('freshness.source', 'earnings_analysis');
       expect(mockGetEarningsAnalysis).toHaveBeenCalledWith('AAPL');
     });
 

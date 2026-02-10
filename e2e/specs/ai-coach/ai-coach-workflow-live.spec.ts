@@ -52,7 +52,7 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
 
       await page.goto(AI_COACH_URL)
       await page.waitForLoadState('networkidle')
-      await expect(page.getByText('AI Coach Center').first()).toBeVisible()
+      await expect(page.getByText(/AI Coach Center|Command Center/i).first()).toBeVisible()
 
       await page.getByRole('button', { name: 'Scanner' }).first().click()
       await expect(page.getByText('Opportunity Scanner')).toBeVisible()
@@ -67,7 +67,7 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       }
       await expect(page.getByText('Failed to scan for opportunities. Please try again.')).toHaveCount(0)
 
-      await page.getByRole('button', { name: 'Tracked' }).first().click()
+      await page.getByRole('button', { name: /Tracked|Watchlist/i }).first().click()
       await expect(page.getByText('Tracked Setups')).toBeVisible()
       const simulateDetectionResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups/e2e/simulate-detected`, {
         headers: authHeaders,
@@ -96,7 +96,7 @@ test.describe('AI Coach — Live Workflow (Backend Integrated)', () => {
       const briefResponsePromise = page.waitForResponse((response) => (
         response.url().includes('/api/brief/today') && response.request().method() === 'GET'
       ))
-      await page.getByRole('button', { name: 'Brief' }).first().click()
+      await page.getByRole('button', { name: /Brief|Daily Brief/i }).first().click()
       const briefResponse = await briefResponsePromise
       expect(briefResponse.status()).toBe(200)
       await expect(page.getByText('Morning Brief')).toBeVisible()

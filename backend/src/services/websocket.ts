@@ -136,6 +136,7 @@ async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevCl
 let wss: WebSocketServer | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let initialPollTimeout: ReturnType<typeof setTimeout> | null = null;
 let unsubscribeSetupEvents: (() => void) | null = null;
 let unsubscribePositionEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
@@ -430,6 +431,10 @@ function getCurrentPollInterval(): number {
 }
 
 function startPolling(): void {
+  if (initialPollTimeout) {
+    clearTimeout(initialPollTimeout);
+    initialPollTimeout = null;
+  }
   if (pollTimer) clearInterval(pollTimer);
 
   const poll = async () => {
@@ -440,7 +445,10 @@ function startPolling(): void {
   };
 
   // Start first poll after 5 seconds
-  setTimeout(poll, 5_000);
+  initialPollTimeout = setTimeout(async () => {
+    initialPollTimeout = null;
+    await poll();
+  }, 5_000);
 }
 
 function startHeartbeat(): void {
@@ -557,6 +565,10 @@ export function shutdownWebSocket(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  if (initialPollTimeout) {
+    clearTimeout(initialPollTimeout);
+    initialPollTimeout = null;
+  }
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
@@ -579,3 +591,15 @@ export function shutdownWebSocket(): void {
   }
   logger.info('WebSocket server shut down');
 }
+
+export const __testables = {
+  isSymbolSubscription,
+  normalizeSetupChannel,
+  normalizePositionChannel,
+  normalizeRealtimeChannel,
+  getChannelOwnerId,
+  isRealtimeChannelAuthorized,
+  toSetupChannel,
+  toPositionChannel,
+  extractWsToken,
+};

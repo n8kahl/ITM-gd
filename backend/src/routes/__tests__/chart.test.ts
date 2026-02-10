@@ -136,6 +136,34 @@ describe('Chart Routes', () => {
     expect(mockGetAggregates).not.toHaveBeenCalled();
   });
 
+  it('accepts symbols containing dot separators', async () => {
+    mockGetAggregates.mockResolvedValue({
+      status: 'OK',
+      ticker: 'BRK.B',
+      queryCount: 1,
+      resultsCount: 1,
+      adjusted: true,
+      request_id: 'test',
+      count: 1,
+      results: [
+        {
+          t: 1770647400000,
+          o: 450.12,
+          h: 451.2,
+          l: 449.85,
+          c: 450.55,
+          v: 1234,
+        } as any,
+      ],
+    } as any);
+
+    const res = await request(app).get('/api/chart/brk.b?timeframe=1D');
+
+    expect(res.status).toBe(200);
+    expect(res.body.symbol).toBe('BRK.B');
+    expect(mockGetAggregates).toHaveBeenCalledWith('BRK.B', 1, 'day', expect.any(String), expect.any(String));
+  });
+
   it('returns Massive provider indicators when includeIndicators=true', async () => {
     mockGetAggregates.mockResolvedValue({
       status: 'OK',

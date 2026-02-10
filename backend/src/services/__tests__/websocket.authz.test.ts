@@ -1,0 +1,240 @@
+import http from 'http';
+import express from 'express';
+import WebSocket from 'ws';
+import { AuthTokenError, verifyAuthToken } from '../../lib/tokenAuth';
+import { publishSetupStatusUpdate } from '../setupPushChannel';
+import { initWebSocket, shutdownWebSocket } from '../websocket';
+
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+jest.mock('../../config/massive', () => ({
+  getMinuteAggregates: jest.fn().mockResolvedValue([]),
+  getDailyAggregates: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock('../marketHours', () => ({
+  getMarketStatus: jest.fn(() => ({
+    status: 'closed',
+    session: 'none',
+    message: 'Market closed',
+  })),
+}));
+
+jest.mock('../../lib/tokenAuth', () => {
+  const actual = jest.requireActual('../../lib/tokenAuth');
+  return {
+    ...actual,
+    verifyAuthToken: jest.fn(),
+  };
+});
+
+const mockVerifyAuthToken = verifyAuthToken as jest.MockedFunction<typeof verifyAuthToken>;
+
+async function createServerWithWebSocket(): Promise<{ server: http.Server; wsBaseUrl: string }> {
+  const app = express();
+  app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
+  const server = http.createServer(app);
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+
+  initWebSocket(server);
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Failed to determine dynamic server port');
+  }
+
+  return {
+    server,
+    wsBaseUrl: `ws://127.0.0.1:${address.port}/ws/prices`,
+  };
+}
+
+async function closeServer(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function waitForMessage(
+  ws: WebSocket,
+  predicate: (payload: Record<string, unknown>) => boolean,
+  timeoutMs: number = 3000,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      ws.off('message', onMessage);
+      reject(new Error('Timed out waiting for websocket message'));
+    }, timeoutMs);
+
+    const onMessage = (raw: WebSocket.RawData) => {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(raw.toString()) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+
+      if (!predicate(parsed)) return;
+      clearTimeout(timeout);
+      ws.off('message', onMessage);
+      resolve(parsed);
+    };
+
+    ws.on('message', onMessage);
+  });
+}
+
+function connectForClose(
+  url: string,
+  timeoutMs: number = 3000,
+): Promise<{ code: number; reason: string; messages: Array<Record<string, unknown>> }> {
+  return new Promise((resolve, reject) => {
+    const messages: Array<Record<string, unknown>> = [];
+    const ws = new WebSocket(url);
+
+    const timeout = setTimeout(() => {
+      ws.terminate();
+      reject(new Error('Timed out waiting for websocket close'));
+    }, timeoutMs);
+
+    ws.on('message', (raw) => {
+      try {
+        messages.push(JSON.parse(raw.toString()) as Record<string, unknown>);
+      } catch {
+        // Ignore malformed payloads in close-path assertions.
+      }
+    });
+
+    ws.on('close', (code, reason) => {
+      clearTimeout(timeout);
+      resolve({ code, reason: reason.toString(), messages });
+    });
+
+    ws.on('error', () => {
+      // close handler captures the final state for assertions
+    });
+  });
+}
+
+describe('websocket auth + authorization integration', () => {
+  let server: http.Server | null = null;
+  let wsBaseUrl = '';
+  let wsClient: WebSocket | null = null;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const setup = await createServerWithWebSocket();
+    server = setup.server;
+    wsBaseUrl = setup.wsBaseUrl;
+  });
+
+  afterEach(async () => {
+    if (wsClient) {
+      wsClient.removeAllListeners();
+      if (wsClient.readyState === WebSocket.OPEN || wsClient.readyState === WebSocket.CONNECTING) {
+        wsClient.close();
+      }
+      wsClient = null;
+    }
+
+    shutdownWebSocket();
+
+    if (server) {
+      await closeServer(server);
+      server = null;
+    }
+  });
+
+  it('rejects unauthorized websocket clients with 4401', async () => {
+    mockVerifyAuthToken.mockRejectedValue(new AuthTokenError(401, 'Invalid or expired token'));
+
+    const result = await connectForClose(`${wsBaseUrl}?token=bad-token`);
+
+    expect(result.code).toBe(4401);
+    expect(result.reason).toContain('Invalid or expired token');
+    expect(result.messages.some((msg) => msg.type === 'error')).toBe(true);
+  });
+
+  it('rejects forbidden channel subscriptions for authenticated users', async () => {
+    mockVerifyAuthToken.mockResolvedValue({
+      id: 'user-123',
+      source: 'supabase',
+    } as any);
+
+    wsClient = new WebSocket(`${wsBaseUrl}?token=valid-token`);
+    await new Promise<void>((resolve, reject) => {
+      wsClient!.once('open', () => resolve());
+      wsClient!.once('error', reject);
+    });
+
+    wsClient.send(JSON.stringify({
+      type: 'subscribe',
+      channels: ['setups:other-user'],
+    }));
+
+    const errorMsg = await waitForMessage(
+      wsClient,
+      (msg) => msg.type === 'error' && String(msg.message || '').includes('Forbidden channel'),
+    );
+
+    expect(errorMsg.type).toBe('error');
+    expect(String(errorMsg.message)).toContain('Forbidden channel');
+  });
+
+  it('allows authorized setup channel subscriptions and delivers targeted setup_update events', async () => {
+    mockVerifyAuthToken.mockResolvedValue({
+      id: 'User-ABC',
+      source: 'supabase',
+    } as any);
+
+    wsClient = new WebSocket(`${wsBaseUrl}?token=valid-token`);
+    await new Promise<void>((resolve, reject) => {
+      wsClient!.once('open', () => resolve());
+      wsClient!.once('error', reject);
+    });
+
+    wsClient.send(JSON.stringify({
+      type: 'subscribe',
+      channels: ['setups:user-abc'],
+    }));
+
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        publishSetupStatusUpdate({
+          setupId: 'setup-1',
+          userId: 'USER-ABC',
+          symbol: 'SPX',
+          setupType: 'gamma_squeeze',
+          previousStatus: 'active',
+          status: 'triggered',
+          currentPrice: 6020,
+          reason: 'target_reached',
+          evaluatedAt: new Date().toISOString(),
+        });
+        resolve();
+      }, 30);
+    });
+
+    const updateMsg = await waitForMessage(
+      wsClient,
+      (msg) => msg.type === 'setup_update' && msg.channel === 'setups:user-abc',
+    );
+
+    expect(updateMsg.type).toBe('setup_update');
+    expect(updateMsg.channel).toBe('setups:user-abc');
+    expect((updateMsg.data as Record<string, unknown>).setupId).toBe('setup-1');
+  });
+});

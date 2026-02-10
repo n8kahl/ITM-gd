@@ -1,6 +1,6 @@
 # AI Coach V2 Production Execution Plan
 
-Status: In Progress  
+Status: In Progress (P0 Complete, P1 Complete, P2 In Progress)  
 Owner: AI Engineering  
 Last Updated: 2026-02-10
 
@@ -13,6 +13,23 @@ Deliver a production-grade AI Coach that is reliable, secure, and trusted as the
 - Tool/prompt behavior is consistent with routing promises (all valid symbols supported).
 - Beginner vs advanced response style adapts from user context.
 - Core workflows have regression coverage in unit/integration/E2E tests.
+
+## Execution Update (2026-02-10)
+Completed:
+1. Shared token auth for HTTP + WebSocket with e2e bypass safeguards.
+2. WebSocket authz hardened (user-bound channels, unauthorized close paths).
+3. OpenAI true streaming enabled with function-call loop parity and shared persistence.
+4. Chat contract alignment completed (`sessionId` optionality + whitespace validation).
+5. Symbol validation unified across chat handlers/routes using canonical symbol rules.
+6. Prompt personalization wired from user profile (tier/experience/mobile).
+7. Freshness metadata standardized for core market tool responses (`key_levels`, `current_price`, options, gamma, IV, earnings, macro, SPX game plan).
+8. Widget extraction expanded to structured cards for 0DTE, IV, earnings, journal insights, and trade history.
+9. Regression coverage added/updated for auth, streaming, schema, symbol route behavior, and freshness metadata.
+10. Added chat route integration tests and WebSocket auth/authz integration tests (unauthorized/forbidden/authorized channel paths).
+11. Updated live E2E API spec to enforce WebSocket auth requirement and channel ownership behavior.
+
+Remaining (to close V2 gate):
+1. Final release checklist pass on staging with live-data smoke validation (latest dispatched run on `main` failed on stale UI selector in `ai-coach-workflow-live.spec.ts`; fix is implemented in workspace and requires merge to default branch before rerun).
 
 ## Delivery Phases
 
