@@ -32,6 +32,11 @@ interface LessonData {
   quiz: QuizQuestionData[] | null
 }
 
+interface LessonResponse {
+  success: boolean
+  data?: LessonData
+}
+
 // ============================================
 // PAGE COMPONENT
 // ============================================
@@ -53,79 +58,12 @@ export default function LessonPage() {
         const res = await fetch(`/api/academy/lessons/${lessonId}`)
         if (!res.ok) throw new Error('Failed to fetch lesson')
 
-        const json = await res.json()
-        const raw = json?.data ?? json
-
-        // Determine content type from lesson_type field
-        let contentType: 'markdown' | 'video' | 'mixed' = 'markdown'
-        if (raw.lesson_type === 'video') contentType = 'video'
-        else if (raw.lesson_type === 'interactive') contentType = 'mixed'
-
-        // Transform quiz data for the QuizEngine
-        let quiz: QuizQuestionData[] | null = null
-        if (raw.quiz?.questions?.length > 0) {
-          quiz = raw.quiz.questions.map((q: Record<string, unknown>) => ({
-            id: q.id as string,
-            question: q.question as string,
-            options: q.options as Array<{ id: string; text: string }>,
-            explanation: q.explanation as string,
-          }))
+        const payload: LessonResponse = await res.json()
+        if (!payload.success || !payload.data) {
+          throw new Error('Invalid lesson payload')
         }
 
-        // Build sidebar lessons from navigation context
-        const courseData = raw.courses || {}
-        const sidebarLessons: SidebarLesson[] = []
-        // We'll use a minimal sidebar with current lesson info
-        if (raw.navigation?.previous) {
-          sidebarLessons.push({
-            id: raw.navigation.previous.id,
-            title: raw.navigation.previous.title,
-            isCompleted: false,
-            isCurrent: false,
-          })
-        }
-        sidebarLessons.push({
-          id: raw.id,
-          title: raw.title,
-          isCompleted: raw.user_progress?.status === 'completed',
-          isCurrent: true,
-        })
-        if (raw.navigation?.next) {
-          sidebarLessons.push({
-            id: raw.navigation.next.id,
-            title: raw.navigation.next.title,
-            isCompleted: false,
-            isCurrent: false,
-          })
-        }
-
-        setLesson({
-          id: raw.id,
-          title: raw.title,
-          content: raw.content_markdown || '',
-          contentType,
-          videoUrl: raw.video_url || null,
-          durationMinutes: raw.estimated_minutes || raw.duration_minutes || 5,
-          order: raw.display_order || 1,
-          isCompleted: raw.user_progress?.status === 'completed',
-          course: {
-            slug: courseData.slug || '',
-            title: courseData.title || '',
-            lessons: sidebarLessons,
-          },
-          quiz,
-        })
-
-        // Record view progress
-        try {
-          await fetch(`/api/academy/lessons/${lessonId}/progress`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'view' }),
-          })
-        } catch {
-          // Silent fail
-        }
+        setLesson(payload.data)
       } catch (error) {
         console.error('Error fetching lesson:', error)
       } finally {
@@ -136,12 +74,24 @@ export default function LessonPage() {
     if (lessonId) fetchLesson()
   }, [lessonId])
 
-  // Auto-save scroll progress (debounced view tracking)
+  // Auto-save scroll progress
   const handleProgressUpdate = useCallback(
-    async (_scrollPercent: number) => {
-      // View tracking is handled on initial load
+    async (scrollPercent: number) => {
+      if (!lessonId) return
+      try {
+        await fetch(`/api/academy/lessons/${lessonId}/progress`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'view',
+            time_spent_seconds: Math.max(5, Math.round(scrollPercent / 10)),
+          }),
+        })
+      } catch {
+        // Silent fail for progress saves
+      }
     },
-    []
+    [lessonId]
   )
 
   // Mark lesson as complete
@@ -179,24 +129,28 @@ export default function LessonPage() {
 
   // Handle quiz completion
   const handleQuizComplete = useCallback(
-    async (score: number, total: number, passed: boolean) => {
-      if (!lessonId || !lesson?.quiz) return
+    async (
+      _score: number,
+      _total: number,
+      _passed: boolean,
+      answers?: Array<{ question_id: string; selected_answer: string }>
+    ) => {
+      if (!lessonId) return
+      if (!answers || answers.length === 0) return
+
       try {
-        // Transform answers for the quiz API
-        const answers = lesson.quiz.map((q) => ({
-          question_id: q.id,
-          selected_option_id: '', // Will be provided by the actual quiz engine callback
-        }))
-        // The actual quiz submission is handled by QuizEngine internally
-        void answers
-        void score
-        void total
-        void passed
+        await fetch(`/api/academy/lessons/${lessonId}/quiz`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            answers,
+          }),
+        })
       } catch {
         // Silent fail
       }
     },
-    [lessonId, lesson?.quiz]
+    [lessonId]
   )
 
   // Loading state
@@ -244,10 +198,11 @@ export default function LessonPage() {
       </button>
 
       <div className="flex min-h-screen">
-        {/* Sidebar */}
+        {/* Sidebar - Desktop always visible, Mobile toggleable */}
         <div
           className={cn(
             'shrink-0 transition-all duration-300',
+            // Mobile: overlay
             'fixed lg:relative z-20',
             'top-0 left-0 bottom-0',
             'w-[280px]',
@@ -287,7 +242,7 @@ export default function LessonPage() {
             onProgressUpdate={handleProgressUpdate}
           />
 
-          {/* Quiz section */}
+          {/* Quiz section (if lesson has a quiz) */}
           {lesson.quiz && lesson.quiz.length > 0 && (
             <div className="px-6 py-6 max-w-3xl">
               <QuizEngine
@@ -305,7 +260,6 @@ export default function LessonPage() {
       <AiTutorPanel
         lessonId={lesson.id}
         lessonTitle={lesson.title}
-        courseTitle={lesson.course.title}
       />
     </div>
   )

@@ -90,8 +90,12 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
         throw new Error(data.error || 'Failed to generate lesson content')
       }
 
-      const data = await response.json()
-      setGenerated(data)
+      const payload = await response.json()
+      if (!payload.success || !payload.data) {
+        throw new Error('Invalid generate response')
+      }
+
+      setGenerated(payload.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during generation')
     } finally {
@@ -125,8 +129,12 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
         throw new Error(data.error || 'Failed to save lesson')
       }
 
-      const data = await response.json()
-      onSave?.({ id: data.id, title: generated.title })
+      const payload = await response.json()
+      if (!payload.success || !payload.data?.id) {
+        throw new Error('Invalid save response')
+      }
+
+      onSave?.({ id: payload.data.id, title: generated.title })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while saving')
     } finally {

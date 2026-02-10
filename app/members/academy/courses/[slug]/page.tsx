@@ -13,7 +13,9 @@ import {
   PlayCircle,
   CheckCircle2,
   Lock,
+  BarChart3,
 } from 'lucide-react'
+import { ProgressRing } from '@/components/academy/progress-ring'
 
 // ============================================
 // TYPES
@@ -24,7 +26,7 @@ interface CourseLesson {
   title: string
   order: number
   durationMinutes: number
-  contentType: string
+  contentType: 'markdown' | 'video' | 'mixed'
   isCompleted: boolean
   isLocked: boolean
 }
@@ -33,12 +35,21 @@ interface CourseDetail {
   slug: string
   title: string
   description: string
+  longDescription: string
   thumbnailUrl: string | null
   difficulty: 'beginner' | 'intermediate' | 'advanced'
+  path: string
   estimatedMinutes: number
   lessons: CourseLesson[]
   totalLessons: number
   completedLessons: number
+  objectives: string[]
+  prerequisites: string[]
+}
+
+interface CourseDetailResponse {
+  success: boolean
+  data?: CourseDetail
 }
 
 const difficultyConfig = {
@@ -72,33 +83,12 @@ export default function CourseDetailPage() {
         const res = await fetch(`/api/academy/courses/${slug}`)
         if (!res.ok) throw new Error('Failed to fetch course')
 
-        const json = await res.json()
-        const raw = json?.data ?? json
+        const payload: CourseDetailResponse = await res.json()
+        if (!payload.success || !payload.data) {
+          throw new Error('Invalid course payload')
+        }
 
-        // Transform API response to page shape
-        const lessons: CourseLesson[] = (raw.lessons || []).map(
-          (l: Record<string, unknown>, idx: number) => ({
-            id: l.id as string,
-            title: l.title as string,
-            order: (l.display_order as number) ?? idx + 1,
-            durationMinutes: (l.estimated_minutes as number) || (l.duration_minutes as number) || 5,
-            contentType: (l.lesson_type as string) || 'text',
-            isCompleted: (l.user_progress as { status?: string })?.status === 'completed',
-            isLocked: false,
-          })
-        )
-
-        setCourse({
-          slug: raw.slug,
-          title: raw.title,
-          description: raw.description || '',
-          thumbnailUrl: raw.thumbnail_url || null,
-          difficulty: (raw.difficulty_level || raw.difficulty || 'beginner') as CourseDetail['difficulty'],
-          estimatedMinutes: Math.round((raw.estimated_hours || 1) * 60),
-          lessons,
-          totalLessons: raw.lesson_count || lessons.length,
-          completedLessons: raw.completed_count || lessons.filter((l) => l.isCompleted).length,
-        })
+        setCourse(payload.data)
       } catch (error) {
         console.error('Error fetching course:', error)
       } finally {
@@ -147,6 +137,8 @@ export default function CourseDetailPage() {
       ? Math.round((course.completedLessons / course.totalLessons) * 100)
       : 0
   const diff = difficultyConfig[course.difficulty]
+
+  // Find the next uncompleted lesson
   const nextLesson = course.lessons.find((l) => !l.isCompleted && !l.isLocked)
 
   return (
@@ -183,7 +175,11 @@ export default function CourseDetailPage() {
               <BookOpen className="w-16 h-16 text-emerald-500/20" />
             </div>
           )}
+
+          {/* Overlay gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-[#0A0A0B]/40 to-transparent" />
+
+          {/* Difficulty badge */}
           <div className="absolute top-4 left-4">
             <span
               className={cn(
@@ -202,9 +198,10 @@ export default function CourseDetailPage() {
             {course.title}
           </h1>
           <p className="text-sm text-white/60 leading-relaxed max-w-2xl">
-            {course.description}
+            {course.longDescription || course.description}
           </p>
 
+          {/* Meta */}
           <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-white/40">
             <span className="flex items-center gap-1">
               <BookOpen className="w-3.5 h-3.5" />
@@ -213,6 +210,10 @@ export default function CourseDetailPage() {
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               {course.estimatedMinutes} min total
+            </span>
+            <span className="flex items-center gap-1">
+              <BarChart3 className="w-3.5 h-3.5" />
+              {course.path}
             </span>
           </div>
 
@@ -250,6 +251,51 @@ export default function CourseDetailPage() {
         </div>
       </motion.div>
 
+      {/* Objectives and Prerequisites */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {course.objectives.length > 0 && (
+          <div
+            className={cn(
+              'rounded-xl p-5',
+              'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5'
+            )}
+          >
+            <h3 className="text-sm font-semibold text-white mb-3">
+              What You Will Learn
+            </h3>
+            <ul className="space-y-2">
+              {course.objectives.map((obj, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-white/60">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                  {obj}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {course.prerequisites.length > 0 && (
+          <div
+            className={cn(
+              'rounded-xl p-5',
+              'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5'
+            )}
+          >
+            <h3 className="text-sm font-semibold text-white mb-3">
+              Prerequisites
+            </h3>
+            <ul className="space-y-2">
+              {course.prerequisites.map((prereq, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-white/60">
+                  <BookOpen className="w-3.5 h-3.5 text-white/30 mt-0.5 shrink-0" />
+                  {prereq}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
       {/* Lesson list */}
       <div
         className={cn(
@@ -276,6 +322,7 @@ export default function CourseDetailPage() {
                   : 'hover:bg-white/[0.03]'
               )}
             >
+              {/* Status icon */}
               <div className="shrink-0">
                 {lesson.isCompleted ? (
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -285,6 +332,8 @@ export default function CourseDetailPage() {
                   <PlayCircle className="w-5 h-5 text-white/30" />
                 )}
               </div>
+
+              {/* Lesson info */}
               <div className="flex-1 min-w-0">
                 <p
                   className={cn(
@@ -302,6 +351,8 @@ export default function CourseDetailPage() {
                   <span className="capitalize">{lesson.contentType}</span>
                 </div>
               </div>
+
+              {/* Arrow */}
               {!lesson.isLocked && (
                 <ChevronLeft className="w-4 h-4 text-white/20 rotate-180 shrink-0" />
               )}

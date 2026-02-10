@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
+import { toSafeErrorMessage } from '@/lib/academy/api-utils'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -28,9 +29,7 @@ function normalizeCourseRelation(
 
 /**
  * GET /api/admin/academy/analytics
- * Admin only. Learning analytics: completion rates, quiz scores,
- * daily active learners, popular courses, and engagement trends.
- * Query params: days (default 30)
+ * Admin-only academy analytics using current production schema.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -42,113 +41,96 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const days = Math.min(365, Math.max(1, parseInt(searchParams.get('days') || '30', 10)))
+    const days = Math.min(365, Math.max(1, Number.parseInt(searchParams.get('days') || '30', 10)))
     const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Run all analytics queries in parallel
     const [
       totalLearnersResult,
-      activeLearnersResult,
       lessonCompletionsResult,
       courseCompletionsResult,
-      quizStatsResult,
-      topCoursesResult,
+      quizRowsResult,
+      courseProgressRowsResult,
       onboardingResult,
-      xpStatsResult,
-      dailyActivityResult,
+      xpActivityRowsResult,
+      dailyActivityRowsResult,
+      activeProgressRowsResult,
     ] = await Promise.all([
-      // Total learners (users with learning profiles)
       supabaseAdmin
         .from('user_learning_profiles')
         .select('id', { count: 'exact', head: true }),
-
-      // Active learners in period
-      supabaseAdmin
-        .from('user_lesson_progress')
-        .select('user_id', { count: 'exact', head: true })
-        .gte('updated_at', sinceDate),
-
-      // Lesson completions in period
       supabaseAdmin
         .from('user_lesson_progress')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'completed')
         .gte('completed_at', sinceDate),
-
-      // Course completions in period
       supabaseAdmin
         .from('user_course_progress')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'completed')
         .gte('completed_at', sinceDate),
-
-      // Quiz statistics
       supabaseAdmin
-        .from('quiz_attempts')
-        .select('score_pct, passed')
-        .gte('created_at', sinceDate),
-
-      // Top courses by enrollment
+        .from('user_lesson_progress')
+        .select('quiz_score, quiz_attempts')
+        .gt('quiz_attempts', 0),
       supabaseAdmin
         .from('user_course_progress')
-        .select('course_id, courses(title, slug)')
-        .gte('created_at', sinceDate),
-
-      // Onboarding completion rate
+        .select('course_id, courses(title, slug)'),
       supabaseAdmin
         .from('user_learning_profiles')
         .select('id', { count: 'exact', head: true })
         .gte('created_at', sinceDate),
-
-      // XP distribution
       supabaseAdmin
-        .from('xp_transactions')
-        .select('amount, source')
-        .gte('created_at', sinceDate),
-
-      // Daily activity for the period (last 30 items max)
+        .from('user_learning_activity_log')
+        .select('activity_type, xp_earned')
+        .gte('created_at', sinceDate)
+        .gt('xp_earned', 0),
+      supabaseAdmin
+        .from('user_learning_activity_log')
+        .select('user_id, created_at')
+        .gte('created_at', sinceDate)
+        .order('created_at', { ascending: true }),
       supabaseAdmin
         .from('user_lesson_progress')
-        .select('updated_at, status')
-        .gte('updated_at', sinceDate)
-        .order('updated_at', { ascending: true }),
+        .select('user_id, started_at, completed_at')
+        .or(`started_at.gte.${sinceDate},completed_at.gte.${sinceDate}`),
     ])
 
-    // Compute quiz averages
-    const quizAttempts = quizStatsResult.data || []
-    const avgQuizScore =
-      quizAttempts.length > 0
-        ? Math.round(
-            quizAttempts.reduce((sum, q) => sum + (q.score_pct || 0), 0) /
-              quizAttempts.length
-          )
-        : 0
-    const quizPassRate =
-      quizAttempts.length > 0
-        ? Math.round(
-            (quizAttempts.filter((q) => q.passed).length / quizAttempts.length) *
-              100
-          )
-        : 0
+    const activeLearners = new Set<string>()
+    for (const row of activeProgressRowsResult.data || []) {
+      if (row.user_id) {
+        activeLearners.add(row.user_id)
+      }
+    }
 
-    // Compute top courses
+    const quizRows = quizRowsResult.data || []
+    const scoredQuizRows = quizRows.filter((row) => typeof row.quiz_score === 'number')
+    const avgQuizScore = scoredQuizRows.length > 0
+      ? Math.round(scoredQuizRows.reduce((sum, row) => sum + (row.quiz_score || 0), 0) / scoredQuizRows.length)
+      : 0
+    const quizPassRate = scoredQuizRows.length > 0
+      ? Math.round((scoredQuizRows.filter((row) => (row.quiz_score || 0) >= 70).length / scoredQuizRows.length) * 100)
+      : 0
+
     const courseCounts = new Map<string, { count: number; title: string; slug: string }>()
-    for (const entry of topCoursesResult.data || []) {
-      const id = entry.course_id
-      const existing = courseCounts.get(id)
-      const courseInfo = normalizeCourseRelation(entry.courses)
+    for (const row of courseProgressRowsResult.data || []) {
+      const courseId = row.course_id
+      if (!courseId) continue
+
+      const existing = courseCounts.get(courseId)
+      const courseInfo = normalizeCourseRelation(row.courses)
       if (existing) {
-        existing.count++
+        existing.count += 1
       } else {
-        courseCounts.set(id, {
+        courseCounts.set(courseId, {
           count: 1,
           title: courseInfo?.title || 'Unknown',
           slug: courseInfo?.slug || '',
         })
       }
     }
+
     const topCourses = Array.from(courseCounts.entries())
       .map(([course_id, info]) => ({
         course_id,
@@ -159,41 +141,44 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.enrollments - a.enrollments)
       .slice(0, 10)
 
-    // Compute XP breakdown by source
     const xpBySource = new Map<string, number>()
     let totalXpAwarded = 0
-    for (const tx of xpStatsResult.data || []) {
-      const current = xpBySource.get(tx.source) || 0
-      xpBySource.set(tx.source, current + (tx.amount || 0))
-      totalXpAwarded += tx.amount || 0
+    for (const row of xpActivityRowsResult.data || []) {
+      const source = row.activity_type || 'unknown'
+      const amount = row.xp_earned || 0
+      xpBySource.set(source, (xpBySource.get(source) || 0) + amount)
+      totalXpAwarded += amount
     }
 
-    // Compute daily active learners (grouped by date)
-    const dailyActivity = new Map<string, Set<string>>()
-    // We don't have user_id in the select, so count by activity instead
-    const dailyCompletions = new Map<string, number>()
-    for (const entry of dailyActivityResult.data || []) {
-      const date = new Date(entry.updated_at).toISOString().split('T')[0]
-      dailyCompletions.set(date, (dailyCompletions.get(date) || 0) + 1)
+    const dailyActivityMap = new Map<string, Set<string>>()
+    for (const row of dailyActivityRowsResult.data || []) {
+      if (!row.created_at || !row.user_id) continue
+      const date = row.created_at.slice(0, 10)
+      const users = dailyActivityMap.get(date) || new Set<string>()
+      users.add(row.user_id)
+      dailyActivityMap.set(date, users)
     }
 
-    const dailyActivityArray = Array.from(dailyCompletions.entries())
-      .map(([date, activities]) => ({ date, activities }))
+    const dailyActivity = Array.from(dailyActivityMap.entries())
+      .map(([date, users]) => ({
+        date,
+        activities: users.size,
+      }))
       .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30) // Last 30 days
+      .slice(-30)
 
     return NextResponse.json({
       success: true,
       data: {
         overview: {
           total_learners: totalLearnersResult.count || 0,
-          active_learners: activeLearnersResult.count || 0,
+          active_learners: activeLearners.size,
           lessons_completed: lessonCompletionsResult.count || 0,
           courses_completed: courseCompletionsResult.count || 0,
           new_onboardings: onboardingResult.count || 0,
         },
         quiz_stats: {
-          total_attempts: quizAttempts.length,
+          total_attempts: quizRows.reduce((sum, row) => sum + (row.quiz_attempts || 0), 0),
           avg_score: avgQuizScore,
           pass_rate: quizPassRate,
         },
@@ -202,13 +187,14 @@ export async function GET(request: NextRequest) {
           total_awarded: totalXpAwarded,
           by_source: Object.fromEntries(xpBySource),
         },
-        daily_activity: dailyActivityArray,
+        daily_activity: dailyActivity,
         period_days: days,
       },
     })
   } catch (error) {
+    console.error('academy analytics failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

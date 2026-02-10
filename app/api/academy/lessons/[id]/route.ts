@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
+import { toSafeErrorMessage } from '@/lib/academy/api-utils'
+
+interface QuizOption {
+  id: string
+  text: string
+}
+
+interface RawQuizQuestion {
+  id: string
+  text: string
+  options: QuizOption[]
+  correct_answer: string
+  explanation?: string
+}
+
+interface RawLessonQuiz {
+  questions?: RawQuizQuestion[]
+}
 
 /**
  * GET /api/academy/lessons/[id]
- * Full lesson content including quiz data and user progress.
+ * Returns lesson payload tailored for the academy lesson page.
  */
 export async function GET(
   request: NextRequest,
@@ -21,32 +39,23 @@ export async function GET(
     const { user, supabase } = auth
     const { id } = await params
 
-    // Fetch lesson with course info
     const { data: lesson, error: lessonError } = await supabase
       .from('lessons')
       .select(`
         id,
         title,
-        slug,
+        course_id,
+        content_markdown,
         lesson_type,
+        video_url,
         estimated_minutes,
         duration_minutes,
         display_order,
-        is_free_preview,
-        video_url,
-        content_markdown,
-        course_id,
         quiz_data,
-        activity_data,
-        ai_tutor_context,
-        ai_tutor_chips,
-        key_takeaways,
-        created_at,
-        updated_at,
         courses(id, title, slug)
       `)
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (lessonError || !lesson) {
       return NextResponse.json(
@@ -55,72 +64,100 @@ export async function GET(
       )
     }
 
-    // Parse quiz data from the lesson's JSONB field
-    const quizData = lesson.quiz_data as {
-      questions?: Array<{
-        id: string
-        question: string
-        options: Array<{ id: string; text: string }>
-        correct_option_id: string
-        explanation: string
-      }>
-      passing_score?: number
-    } | null
+    const courseRelation = Array.isArray(lesson.courses)
+      ? lesson.courses[0]
+      : lesson.courses
 
-    const quizQuestions = quizData?.questions || []
+    const [allCourseLessonsResult, progressResult, currentProgressResult] = await Promise.all([
+      supabase
+        .from('lessons')
+        .select('id, title, display_order, estimated_minutes, duration_minutes')
+        .eq('course_id', lesson.course_id)
+        .order('display_order', { ascending: true }),
+      supabase
+        .from('user_lesson_progress')
+        .select('lesson_id, status')
+        .eq('user_id', user.id)
+        .eq('course_id', lesson.course_id),
+      supabase
+        .from('user_lesson_progress')
+        .select('status')
+        .eq('user_id', user.id)
+        .eq('lesson_id', lesson.id)
+        .maybeSingle(),
+    ])
 
-    // Fetch user progress for this lesson
-    const { data: progress } = await supabase
-      .from('user_lesson_progress')
-      .select('status, completed_at, quiz_score, quiz_attempts, quiz_responses, activity_completed, time_spent_seconds, notes')
-      .eq('user_id', user.id)
-      .eq('lesson_id', id)
-      .maybeSingle()
+    if (allCourseLessonsResult.error || progressResult.error) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to load lesson metadata' },
+        { status: 500 }
+      )
+    }
 
-    // Get previous and next lessons in the same course
-    const { data: siblingLessons } = await supabase
-      .from('lessons')
-      .select('id, title, slug, display_order')
-      .eq('course_id', lesson.course_id)
-      .order('display_order', { ascending: true })
-
-    const currentIndex = (siblingLessons || []).findIndex(
-      (l: { id: string }) => l.id === id
+    const progressByLesson = new Map(
+      (progressResult.data || []).map((row) => [row.lesson_id, row.status])
     )
-    const prevLesson = currentIndex > 0 ? siblingLessons![currentIndex - 1] : null
-    const nextLesson =
-      currentIndex >= 0 && currentIndex < (siblingLessons?.length || 0) - 1
-        ? siblingLessons![currentIndex + 1]
-        : null
+
+    const sidebarLessons = (allCourseLessonsResult.data || []).map((courseLesson, index, list) => {
+      const status = progressByLesson.get(courseLesson.id) || 'not_started'
+      const isCompleted = status === 'completed'
+
+      const previousLesson = index > 0 ? list[index - 1] : null
+      const previousCompleted = previousLesson
+        ? progressByLesson.get(previousLesson.id) === 'completed'
+        : true
+
+      return {
+        id: courseLesson.id,
+        title: courseLesson.title,
+        order: courseLesson.display_order || index + 1,
+        durationMinutes: courseLesson.estimated_minutes || courseLesson.duration_minutes || 0,
+        isCompleted,
+        isLocked: !isCompleted && !previousCompleted,
+      }
+    })
+
+    const quizData = (lesson.quiz_data || {}) as RawLessonQuiz
+    const quizQuestions = Array.isArray(quizData.questions)
+      ? quizData.questions.map((question) => ({
+          id: question.id,
+          question: question.text,
+          options: question.options || [],
+          correctOptionId: question.correct_answer,
+          explanation: question.explanation,
+        }))
+      : null
+
+    const contentType =
+      lesson.lesson_type === 'video'
+        ? 'video'
+        : lesson.lesson_type === 'text'
+          ? 'markdown'
+          : 'mixed'
 
     return NextResponse.json({
       success: true,
       data: {
-        ...lesson,
-        quiz: {
-          questions: quizQuestions.map(({ correct_option_id, ...q }) => q),
-          passing_score: quizData?.passing_score ?? 70,
-          total_questions: quizQuestions.length,
+        id: lesson.id,
+        title: lesson.title,
+        content: lesson.content_markdown || '',
+        contentType,
+        videoUrl: lesson.video_url,
+        durationMinutes: lesson.estimated_minutes || lesson.duration_minutes || 0,
+        order: lesson.display_order || 1,
+        isCompleted: currentProgressResult.data?.status === 'completed',
+        course: {
+          slug: courseRelation?.slug || '',
+          title: courseRelation?.title || 'Course',
+          lessons: sidebarLessons,
         },
-        user_progress: progress || {
-          status: 'not_started',
-          completed_at: null,
-          quiz_score: null,
-          quiz_attempts: 0,
-          quiz_responses: null,
-          activity_completed: false,
-          time_spent_seconds: 0,
-          notes: null,
-        },
-        navigation: {
-          previous: prevLesson,
-          next: nextLesson,
-        },
+        quiz: quizQuestions,
       },
     })
   } catch (error) {
+    console.error('academy lesson failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

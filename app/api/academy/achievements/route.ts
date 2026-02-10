@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
+import { toSafeErrorMessage } from '@/lib/academy/api-utils'
+
+interface AchievementMetadata {
+  title?: string
+  description?: string
+  icon?: string
+  category?: string
+  tier?: string
+}
 
 /**
  * GET /api/academy/achievements
- * List user achievements with pagination.
- * Query params: page (default 1), limit (default 20), category (optional filter)
+ * Lists user achievements with lightweight pagination.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,44 +26,56 @@ export async function GET(request: NextRequest) {
 
     const { user, supabase } = auth
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
-    const category = searchParams.get('category')
+    const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.min(50, Math.max(1, Number.parseInt(searchParams.get('limit') || '20', 10)))
+    const category = searchParams.get('category')?.trim().toLowerCase() || null
     const offset = (page - 1) * limit
 
-    // Build query for user achievements
-    let query = supabase
+    const { data: rows, error, count } = await supabase
       .from('user_achievements')
       .select(
-        '*, achievements(id, name, code, description, icon, badge_image_url, category, tier, xp_reward)',
+        'id, achievement_type, achievement_key, achievement_data, xp_earned, verification_code, earned_at, trade_card_image_url',
         { count: 'exact' }
       )
       .eq('user_id', user.id)
       .order('earned_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (category) {
-      query = query.eq('achievements.category', category)
-    }
-
-    const { data: userAchievements, error, count } = await query
-
     if (error) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to load achievements' },
         { status: 500 }
       )
     }
 
-    // Also fetch total available achievements for progress display
-    const { count: totalAvailable } = await supabase
-      .from('achievements')
-      .select('id', { count: 'exact', head: true })
+    let achievements = (rows || []).map((row) => {
+      const metadata = (row.achievement_data || {}) as AchievementMetadata
+      return {
+        id: row.id,
+        achievement_type: row.achievement_type,
+        achievement_key: row.achievement_key,
+        title: metadata.title || row.achievement_key,
+        description: metadata.description || row.achievement_type.replace(/_/g, ' '),
+        icon: metadata.icon || null,
+        category: metadata.category || row.achievement_type,
+        tier: metadata.tier || null,
+        xp_earned: row.xp_earned,
+        verification_code: row.verification_code,
+        trade_card_image_url: row.trade_card_image_url,
+        earned_at: row.earned_at,
+      }
+    })
+
+    if (category) {
+      achievements = achievements.filter((achievement) =>
+        achievement.category.toLowerCase() === category
+      )
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        achievements: userAchievements || [],
+        achievements,
         pagination: {
           page,
           limit,
@@ -64,13 +84,14 @@ export async function GET(request: NextRequest) {
         },
         summary: {
           earned: count || 0,
-          total_available: totalAvailable || 0,
+          total_available: count || 0,
         },
       },
     })
   } catch (error) {
+    console.error('academy achievements failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

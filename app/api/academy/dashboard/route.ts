@@ -1,11 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
-import { getUserTier, getAccessibleTiers } from '@/lib/academy/get-user-tier'
+import {
+  getAccessibleTierIds,
+  resolveUserMembershipTier,
+  toSafeErrorMessage,
+} from '@/lib/academy/api-utils'
+
+interface DashboardCourse {
+  id: string
+  title: string
+  slug: string
+  description: string | null
+  thumbnail_url: string | null
+  difficulty_level: 'beginner' | 'intermediate' | 'advanced'
+  tier_required: 'core' | 'pro' | 'executive'
+  estimated_hours: number | null
+  learning_paths?: { name?: string | null } | Array<{ name?: string | null }> | null
+}
+
+function normalizePathName(course: DashboardCourse): string {
+  if (Array.isArray(course.learning_paths)) {
+    return course.learning_paths[0]?.name || 'General'
+  }
+
+  return course.learning_paths?.name || 'General'
+}
 
 /**
  * GET /api/academy/dashboard
- * Returns the full dashboard payload: stats, current lesson, recommended courses,
- * recent achievements — shaped exactly for the AcademyHub component.
+ * Returns dashboard payload consumed by academy-hub UI.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -19,172 +42,182 @@ export async function GET(request: NextRequest) {
 
     const { user, supabase } = auth
 
-    // Get user tier for course filtering
-    const userTier = await getUserTier(supabase, user.id)
-    const accessibleTiers = getAccessibleTiers(userTier)
+    const userTier = await resolveUserMembershipTier(user, supabase)
+    const accessibleTiers = getAccessibleTierIds(userTier)
 
-    // Fetch all dashboard data in parallel
-    const [
-      xpResult,
-      currentLessonResult,
-      achievementsResult,
-      coursesResult,
-      activityResult,
-      lessonProgressResult,
-      courseProgressResult,
-    ] = await Promise.all([
-      // XP + streak data from user_xp table
+    const [xpResult, currentLessonResult, recentAchievementsResult, courseProgressResult, lessonProgressResult, coursesResult, activityResult] = await Promise.all([
       supabase
         .from('user_xp')
-        .select('total_xp, current_rank, current_streak, longest_streak, last_activity_date, lessons_completed_count, courses_completed_count, quizzes_passed_count')
+        .select('total_xp, current_streak')
         .eq('user_id', user.id)
         .maybeSingle(),
-
-      // Current in-progress lesson
       supabase
         .from('user_lesson_progress')
-        .select('lesson_id, status, lessons(id, title, slug, estimated_minutes, course_id, courses(id, title, slug))')
+        .select(`
+          lesson_id,
+          course_id,
+          status,
+          lessons!inner(id, title, courses(id, title, slug))
+        `)
         .eq('user_id', user.id)
         .eq('status', 'in_progress')
+        .order('started_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
-
-      // Recent achievements (last 5)
       supabase
         .from('user_achievements')
-        .select('id, achievement_type, achievement_key, achievement_data, xp_earned, earned_at')
+        .select('id, achievement_key, achievement_type, achievement_data, earned_at')
         .eq('user_id', user.id)
         .order('earned_at', { ascending: false })
         .limit(5),
-
-      // All published courses with lesson counts (for recommendations + totals)
-      supabase
-        .from('courses')
-        .select('id, title, slug, description, thumbnail_url, difficulty_level, tier_required, estimated_hours, display_order, lessons(id)')
-        .eq('is_published', true)
-        .order('display_order', { ascending: true }),
-
-      // Recent activity log (last 7 days for active days)
-      supabase
-        .from('user_learning_activity_log')
-        .select('created_at')
-        .eq('user_id', user.id)
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-
-      // All lesson progress for counting
-      supabase
-        .from('user_lesson_progress')
-        .select('lesson_id, status, quiz_score')
-        .eq('user_id', user.id),
-
-      // Course progress
       supabase
         .from('user_course_progress')
         .select('course_id, status')
         .eq('user_id', user.id),
+      supabase
+        .from('user_lesson_progress')
+        .select('course_id, lesson_id, status, quiz_score')
+        .eq('user_id', user.id),
+      supabase
+        .from('courses')
+        .select(`
+          id,
+          title,
+          slug,
+          description,
+          thumbnail_url,
+          difficulty_level,
+          tier_required,
+          estimated_hours,
+          learning_paths:learning_path_id(name)
+        `)
+        .eq('is_published', true)
+        .in('tier_required', accessibleTiers)
+        .order('display_order', { ascending: true })
+        .limit(12),
+      supabase
+        .from('user_learning_activity_log')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false }),
     ])
 
-    // Parse XP data
-    const xp = xpResult.data || {
-      total_xp: 0,
-      current_rank: 'Rookie',
-      current_streak: 0,
-      longest_streak: 0,
-      last_activity_date: null,
-      lessons_completed_count: 0,
-      courses_completed_count: 0,
-      quizzes_passed_count: 0,
+    const courses = (coursesResult.data || []) as DashboardCourse[]
+    const courseIds = courses.map((course) => course.id)
+
+    const { data: lessonsForCourses } = courseIds.length > 0
+      ? await supabase
+          .from('lessons')
+          .select('id, course_id, estimated_minutes')
+          .in('course_id', courseIds)
+      : { data: [] as Array<{ id: string; course_id: string; estimated_minutes: number | null }> }
+
+    const lessonCountByCourse = new Map<string, number>()
+    const estimatedMinutesByCourse = new Map<string, number>()
+    for (const lesson of lessonsForCourses || []) {
+      lessonCountByCourse.set(lesson.course_id, (lessonCountByCourse.get(lesson.course_id) || 0) + 1)
+      estimatedMinutesByCourse.set(
+        lesson.course_id,
+        (estimatedMinutesByCourse.get(lesson.course_id) || 0) + (lesson.estimated_minutes || 0)
+      )
     }
 
-    // Filter courses accessible by user tier
-    const allCourses = (coursesResult.data || []).filter((c) =>
-      accessibleTiers.includes(c.tier_required || 'core')
-    )
+    const lessonProgressRows = lessonProgressResult.data || []
+    const completedLessonsByCourse = new Map<string, number>()
+    let lessonsCompleted = 0
+    let quizzesPassed = 0
+    for (const row of lessonProgressRows) {
+      if (row.status === 'completed') {
+        lessonsCompleted += 1
+        completedLessonsByCourse.set(row.course_id, (completedLessonsByCourse.get(row.course_id) || 0) + 1)
+      }
 
-    // Count totals
-    const totalCourses = allCourses.length
-    const totalLessons = allCourses.reduce(
-      (sum, c) => sum + (c.lessons?.length || 0),
-      0
-    )
-
-    // Count completed from progress records
-    const completedLessons = (lessonProgressResult.data || []).filter(
-      (p) => p.status === 'completed'
-    ).length
-    const quizzesPassed = (lessonProgressResult.data || []).filter(
-      (p) => p.quiz_score !== null && p.quiz_score >= 70
-    ).length
-    const coursesCompleted = (courseProgressResult.data || []).filter(
-      (p) => p.status === 'completed'
-    ).length
-
-    // Build active days array (unique dates in the past week)
-    const activeDays = [
-      ...new Set(
-        (activityResult.data || []).map((a) =>
-          new Date(a.created_at).toISOString().slice(0, 10)
-        )
-      ),
-    ]
-
-    // Build current lesson info
-    let currentLesson = null
-    if (currentLessonResult.data) {
-      const lp = currentLessonResult.data
-      const lessonRaw = lp.lessons as unknown
-      const lesson = (Array.isArray(lessonRaw) ? lessonRaw[0] : lessonRaw) as { id: string; title: string; slug: string; estimated_minutes: number; course_id: string; courses: unknown } | null
-      if (lesson) {
-        const courseLessonsCount = allCourses.find(
-          (c) => c.id === lesson.course_id
-        )?.lessons?.length || 0
-        const completedInCourse = (lessonProgressResult.data || []).filter(
-          (p) => p.status === 'completed'
-        ).length
-        currentLesson = {
-          lessonId: lesson.id,
-          lessonTitle: lesson.title,
-          courseTitle: (Array.isArray(lesson.courses) ? lesson.courses[0]?.title : (lesson.courses as { title?: string })?.title) || '',
-          courseSlug: (Array.isArray(lesson.courses) ? lesson.courses[0]?.slug : (lesson.courses as { slug?: string })?.slug) || '',
-          progress: courseLessonsCount > 0
-            ? Math.round((completedInCourse / courseLessonsCount) * 100)
-            : 0,
-          totalLessons: courseLessonsCount,
-          currentLesson: completedInCourse + 1,
-        }
+      if ((row.quiz_score || 0) >= 70) {
+        quizzesPassed += 1
       }
     }
 
-    // Build recommended courses (first 4 not completed)
-    const completedCourseIds = new Set(
-      (courseProgressResult.data || [])
-        .filter((p) => p.status === 'completed')
-        .map((p) => p.course_id)
-    )
-    const recommendedCourses = allCourses
-      .filter((c) => !completedCourseIds.has(c.id))
-      .slice(0, 4)
-      .map((course) => ({
+    const courseProgressRows = courseProgressResult.data || []
+    const coursesCompleted = courseProgressRows.filter((row) => row.status === 'completed').length
+
+    const totalLessons = Array.from(lessonCountByCourse.values()).reduce((sum, value) => sum + value, 0)
+    const totalCourses = courses.length
+
+    const recommendedCourses = courses.slice(0, 4).map((course) => {
+      const totalLessonsForCourse = lessonCountByCourse.get(course.id) || 0
+      const completedLessons = completedLessonsByCourse.get(course.id) || 0
+      return {
         slug: course.slug,
         title: course.title,
         description: course.description || '',
         thumbnailUrl: course.thumbnail_url,
-        difficulty: (course.difficulty_level || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
-        path: '',
-        totalLessons: course.lessons?.length || 0,
-        completedLessons: 0,
-        estimatedMinutes: Math.round((course.estimated_hours || 1) * 60),
-      }))
+        difficulty: course.difficulty_level,
+        path: normalizePathName(course),
+        totalLessons: totalLessonsForCourse,
+        completedLessons,
+        estimatedMinutes: estimatedMinutesByCourse.get(course.id) || Math.round((course.estimated_hours || 0) * 60),
+      }
+    })
 
-    // Build achievements
-    const recentAchievements = (achievementsResult.data || []).map((a) => ({
-      id: a.id,
-      title: (a.achievement_data as Record<string, string>)?.title || a.achievement_key,
-      description: (a.achievement_data as Record<string, string>)?.description || '',
-      icon: (a.achievement_data as Record<string, string>)?.icon,
-      earnedAt: a.earned_at,
-      category: a.achievement_type,
-    }))
+    const activityDates = new Set(
+      (activityResult.data || [])
+        .map((row) => row.created_at)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .map((value) => value.slice(0, 10))
+    )
+
+    const recentAchievements = (recentAchievementsResult.data || []).map((achievement) => {
+      const metadata = achievement.achievement_data as { title?: string; description?: string; icon?: string; category?: string } | null
+      return {
+        id: achievement.id,
+        title: metadata?.title || achievement.achievement_key,
+        description: metadata?.description || achievement.achievement_type.replace(/_/g, ' '),
+        icon: metadata?.icon || undefined,
+        earnedAt: achievement.earned_at,
+        category: metadata?.category || achievement.achievement_type,
+      }
+    })
+
+    let currentLesson: {
+      lessonId: string
+      lessonTitle: string
+      courseTitle: string
+      courseSlug: string
+      progress: number
+      totalLessons: number
+      currentLesson: number
+    } | null = null
+
+    if (currentLessonResult.data?.lesson_id && currentLessonResult.data.course_id) {
+      const lessonRelation = Array.isArray(currentLessonResult.data.lessons)
+        ? currentLessonResult.data.lessons[0]
+        : currentLessonResult.data.lessons
+
+      const courseRelation = Array.isArray(lessonRelation?.courses)
+        ? lessonRelation?.courses[0]
+        : lessonRelation?.courses
+
+      const { data: orderedLessons } = await supabase
+        .from('lessons')
+        .select('id')
+        .eq('course_id', currentLessonResult.data.course_id)
+        .order('display_order', { ascending: true })
+
+      const currentLessonIndex = (orderedLessons || []).findIndex(
+        (lesson) => lesson.id === currentLessonResult.data?.lesson_id
+      )
+
+      currentLesson = {
+        lessonId: currentLessonResult.data.lesson_id,
+        lessonTitle: lessonRelation?.title || 'Current Lesson',
+        courseTitle: courseRelation?.title || 'Course',
+        courseSlug: courseRelation?.slug || '',
+        progress: currentLessonResult.data.status === 'completed' ? 100 : 50,
+        totalLessons: orderedLessons?.length || 0,
+        currentLesson: currentLessonIndex >= 0 ? currentLessonIndex + 1 : 1,
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -192,12 +225,12 @@ export async function GET(request: NextRequest) {
         stats: {
           coursesCompleted,
           totalCourses,
-          lessonsCompleted: completedLessons,
+          lessonsCompleted,
           totalLessons,
           quizzesPassed,
-          currentXp: xp.total_xp,
-          currentStreak: xp.current_streak,
-          activeDays,
+          currentXp: xpResult.data?.total_xp || 0,
+          currentStreak: xpResult.data?.current_streak || 0,
+          activeDays: Array.from(activityDates),
         },
         currentLesson,
         recommendedCourses,
@@ -205,8 +238,9 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
+    console.error('academy dashboard failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }

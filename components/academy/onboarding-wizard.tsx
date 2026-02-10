@@ -150,10 +150,48 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
       // Submit onboarding
       setIsSubmitting(true)
       try {
+        const experienceLevel =
+          data.experienceLevel === 'brand-new'
+            ? 'never'
+            : data.experienceLevel
+
+        const weeklyMinutes = (() => {
+          switch (data.weeklyHours) {
+            case '1-2':
+              return 90
+            case '3-5':
+              return 240
+            case '5-10':
+              return 450
+            case '10+':
+              return 720
+            default:
+              return 120
+          }
+        })()
+
+        const brokerStatus =
+          data.hasBroker === 'yes'
+            ? 'setup'
+            : data.hasBroker === 'no' || data.hasBroker === 'paper'
+              ? 'not_setup'
+              : 'choosing'
+
         const response = await fetch('/api/academy/onboarding', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify({
+            experience_level: experienceLevel,
+            learning_goals: data.goals,
+            weekly_time_minutes: weeklyMinutes,
+            broker_status: brokerStatus,
+            preferred_lesson_type: 'video',
+            onboarding_data: {
+              quiz_answers: data.quizAnswers,
+              broker_name: data.brokerName || null,
+              raw: data,
+            },
+          }),
         })
 
         if (response.ok) {

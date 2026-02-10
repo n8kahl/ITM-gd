@@ -10,6 +10,11 @@
 
 /* Light mode variables (fallback, not primary) */
 :root {
+  /* Build-safe defaults (we do not rely on Google Fonts at build time). */
+  --font-inter: ui-sans-serif;
+  --font-playfair: ui-serif;
+  --font-geist-mono: ui-monospace;
+
   --background: #0A0A0B;
   --foreground: #F5F5F0;
   --card: rgba(18, 18, 20, 0.7);

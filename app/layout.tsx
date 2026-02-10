@@ -1,33 +1,10 @@
 import React from "react"
 import type { Metadata } from 'next'
-import { Inter, Playfair_Display } from 'next/font/google'
-import { Geist_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
 import { StructuredData } from '@/components/seo/structured-data'
 import Link from 'next/link'
 import { User } from 'lucide-react'
 import './globals.css'
-
-// Body font - clean, modern sans-serif
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-// Display font - premium editorial serif for headings
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  variable: "--font-playfair",
-  display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
-
-// Monospace font for code
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-});
 
 export const metadata: Metadata = {
   title: 'Trade In The Money - Premium Trade Alerts & Education',
@@ -85,7 +62,7 @@ export default async function RootLayout({
       <head>
         <StructuredData nonce={nonce} />
       </head>
-      <body className={`${inter.variable} ${playfair.variable} ${geistMono.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         {/* Mobile Header Login Icon - visible only on mobile, hidden when navbar is present */}
         <Link
           href="/login"

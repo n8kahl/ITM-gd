@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { toSafeErrorMessage } from '@/lib/academy/api-utils'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -8,95 +9,88 @@ function getSupabaseAdmin() {
   )
 }
 
+interface AchievementMetadata {
+  title?: string
+  description?: string
+  icon?: string
+  category?: string
+  tier?: string
+}
+
 /**
  * GET /api/academy/achievements/[code]
- * Public verification endpoint (no auth required).
- * Verifies an achievement by its unique code and returns public details.
+ * Public verification endpoint backed by user_achievements.verification_code.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
     const { code } = await params
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Look up the achievement verification record
-    const { data: verification, error } = await supabaseAdmin
-      .from('achievement_verifications')
-      .select(`
-        id,
-        verification_code,
-        earned_at,
-        user_id,
-        achievement_id,
-        achievements(
-          id,
-          name,
-          description,
-          icon,
-          badge_image_url,
-          category,
-          tier
-        )
-      `)
+    const { data: achievement, error } = await supabaseAdmin
+      .from('user_achievements')
+      .select('id, user_id, achievement_type, achievement_key, achievement_data, xp_earned, verification_code, earned_at, trade_card_image_url')
       .eq('verification_code', code)
       .maybeSingle()
 
     if (error) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to verify achievement' },
         { status: 500 }
       )
     }
 
-    if (!verification) {
-      // Fallback: try looking up by achievement code in user_achievements
-      const { data: achievement } = await supabaseAdmin
-        .from('achievements')
-        .select('id, name, description, icon, badge_image_url, category, tier')
-        .eq('code', code)
-        .maybeSingle()
-
-      if (!achievement) {
-        return NextResponse.json(
-          { success: false, error: 'Achievement not found' },
-          { status: 404 }
-        )
-      }
-
-      // Return achievement info without user verification details
-      return NextResponse.json({
-        success: true,
-        data: {
-          verified: false,
-          achievement,
-          message: 'Achievement exists but no verification record found for this code.',
-        },
-      })
+    if (!achievement) {
+      return NextResponse.json(
+        { success: false, error: 'Achievement not found' },
+        { status: 404 }
+      )
     }
 
-    // Get limited user info (display name only, for privacy)
-    const { data: userProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('display_name, avatar_url')
-      .eq('id', verification.user_id)
-      .maybeSingle()
+    const metadata = (achievement.achievement_data || {}) as AchievementMetadata
+
+    const [discordProfileResult, authUserResult] = await Promise.all([
+      supabaseAdmin
+        .from('user_discord_profiles')
+        .select('discord_username, discord_avatar')
+        .eq('user_id', achievement.user_id)
+        .maybeSingle(),
+      supabaseAdmin.auth.admin.getUserById(achievement.user_id),
+    ])
+
+    const memberName =
+      discordProfileResult.data?.discord_username ||
+      authUserResult.data.user?.user_metadata?.full_name ||
+      authUserResult.data.user?.email?.split('@')[0] ||
+      'TITM Member'
 
     return NextResponse.json({
       success: true,
       data: {
         verified: true,
-        achievement: verification.achievements,
-        earned_at: verification.earned_at,
-        earner: userProfile
-          ? { display_name: userProfile.display_name, avatar_url: userProfile.avatar_url }
-          : null,
+        achievement: {
+          id: achievement.id,
+          title: metadata.title || achievement.achievement_key,
+          description: metadata.description || achievement.achievement_type.replace(/_/g, ' '),
+          icon: metadata.icon || null,
+          category: metadata.category || achievement.achievement_type,
+          tier: metadata.tier || null,
+          xp_earned: achievement.xp_earned,
+          trade_card_image_url: achievement.trade_card_image_url,
+        },
+        earned_at: achievement.earned_at,
+        earner: {
+          display_name: memberName,
+          avatar_url: discordProfileResult.data?.discord_avatar || null,
+        },
       },
     })
   } catch (error) {
+    console.error('academy achievement verification failed', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
   }
