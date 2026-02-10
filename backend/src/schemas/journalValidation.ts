@@ -3,7 +3,7 @@ import { z } from 'zod';
 const journalPositionTypeSchema = z.enum(['call', 'put', 'stock']);
 
 export const createTradeSchema = z.object({
-  symbol: z.string().min(1).max(10).transform(s => s.toUpperCase()),
+  symbol: z.string().min(1).max(10).transform((s) => s.toUpperCase()),
   position_type: journalPositionTypeSchema,
   strategy: z.string().max(100).optional().nullable(),
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -17,7 +17,7 @@ export const createTradeSchema = z.object({
 });
 
 export const updateTradeSchema = z.object({
-  symbol: z.string().min(1).max(10).transform(s => s.toUpperCase()).optional(),
+  symbol: z.string().min(1).max(10).transform((s) => s.toUpperCase()).optional(),
   position_type: journalPositionTypeSchema.optional(),
   strategy: z.string().max(100).optional().nullable(),
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -66,25 +66,27 @@ export const getJournalInsightsQuerySchema = z.object({
   }, z.boolean()).optional().default(false),
 });
 
+export const importTradeRowSchema = z.object({
+  symbol: z.string().min(1),
+  position_type: z.string().optional(),
+  type: z.string().optional(),
+  strategy: z.string().optional().nullable(),
+  entry_date: z.string().optional(),
+  entryDate: z.string().optional(),
+  entry_price: z.number().optional(),
+  entryPrice: z.number().optional(),
+  exit_date: z.string().optional().nullable(),
+  exitDate: z.string().optional().nullable(),
+  exit_price: z.number().optional().nullable(),
+  exitPrice: z.number().optional().nullable(),
+  quantity: z.number().optional(),
+  pnl: z.number().optional().nullable(),
+  pnl_pct: z.number().optional().nullable(),
+  trade_outcome: z.string().optional().nullable(),
+  hold_time_days: z.number().optional().nullable(),
+  tags: z.array(z.string()).optional(),
+});
+
 export const importTradesSchema = z.object({
-  trades: z.array(z.object({
-    symbol: z.string().min(1),
-    position_type: z.string().optional(),
-    type: z.string().optional(),
-    strategy: z.string().optional().nullable(),
-    entry_date: z.string().optional(),
-    entryDate: z.string().optional(),
-    entry_price: z.number().optional(),
-    entryPrice: z.number().optional(),
-    exit_date: z.string().optional().nullable(),
-    exitDate: z.string().optional().nullable(),
-    exit_price: z.number().optional().nullable(),
-    exitPrice: z.number().optional().nullable(),
-    quantity: z.number().optional(),
-    pnl: z.number().optional().nullable(),
-    pnl_pct: z.number().optional().nullable(),
-    trade_outcome: z.string().optional().nullable(),
-    hold_time_days: z.number().optional().nullable(),
-    tags: z.array(z.string()).optional(),
-  })).min(1).max(500),
+  trades: z.array(importTradeRowSchema).min(1).max(500),
 });
