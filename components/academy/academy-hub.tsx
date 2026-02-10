@@ -172,11 +172,34 @@ export function AcademyHub({
                 <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-              {recommendedCourses.slice(0, 4).map((course) => (
-                <CourseCard key={course.slug} course={course} />
-              ))}
-            </div>
+            {recommendedCourses.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+                {recommendedCourses.slice(0, 4).map((course) => (
+                  <CourseCard key={course.slug} course={course} />
+                ))}
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  'rounded-xl p-5',
+                  'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5'
+                )}
+              >
+                <p className="text-sm text-white/70">
+                  No courses are available yet.
+                </p>
+                <p className="text-xs text-white/40 mt-1">
+                  If this is unexpected, the Academy curriculum database seed may not have been applied.
+                </p>
+                <Link
+                  href="/members/academy/courses"
+                  className="inline-flex items-center gap-2 mt-3 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                >
+                  Open course catalog
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
+            )}
           </motion.div>
         </div>
 

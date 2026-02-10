@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import {
-  getAccessibleTierIds,
-  resolveUserMembershipTier,
   toSafeErrorMessage,
 } from '@/lib/academy/api-utils'
 
@@ -48,9 +46,6 @@ export async function GET(
     const { user, supabase } = auth
     const { slug } = await params
 
-    const userTier = await resolveUserMembershipTier(user, supabase)
-    const accessibleTiers = getAccessibleTierIds(userTier)
-
     const { data: course, error: courseError } = await supabase
       .from('courses')
       .select(`
@@ -66,7 +61,6 @@ export async function GET(
       `)
       .eq('slug', slug)
       .eq('is_published', true)
-      .in('tier_required', accessibleTiers)
       .maybeSingle()
 
     if (courseError || !course) {

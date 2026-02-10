@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import {
-  getAccessibleTierIds,
-  resolveUserMembershipTier,
   toSafeErrorMessage,
 } from '@/lib/academy/api-utils'
 
@@ -50,8 +48,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { user, supabase } = auth
-    const userTier = await resolveUserMembershipTier(user, supabase)
-    const accessibleTiers = getAccessibleTierIds(userTier)
 
     const [profileResult, progressResult] = await Promise.all([
       supabase
@@ -104,7 +100,7 @@ export async function GET(request: NextRequest) {
 
       for (const rawLesson of (inProgressLessons || []) as LessonWithCourse[]) {
         const course = normalizeCourseRelation(rawLesson.courses)
-        if (!course || !accessibleTiers.includes(course.tier_required)) {
+        if (!course) {
           continue
         }
 
@@ -151,7 +147,7 @@ export async function GET(request: NextRequest) {
           if (inProgressLessonIds.has(rawLesson.id)) continue
 
           const course = normalizeCourseRelation(rawLesson.courses)
-          if (!course || !accessibleTiers.includes(course.tier_required)) {
+          if (!course) {
             continue
           }
 
@@ -200,7 +196,7 @@ export async function GET(request: NextRequest) {
         if (inProgressLessonIds.has(rawLesson.id)) continue
 
         const course = normalizeCourseRelation(rawLesson.courses)
-        if (!course || !accessibleTiers.includes(course.tier_required)) {
+        if (!course) {
           continue
         }
 

@@ -83,6 +83,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger: Auto-create trade when position is closed
+DROP TRIGGER IF EXISTS position_closed_trigger ON ai_coach_positions;
 CREATE TRIGGER position_closed_trigger
   AFTER UPDATE ON ai_coach_positions
   FOR EACH ROW
@@ -106,6 +107,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger: Auto-update position metrics
+DROP TRIGGER IF EXISTS update_position_metrics_trigger ON ai_coach_positions;
 CREATE TRIGGER update_position_metrics_trigger
   BEFORE UPDATE ON ai_coach_positions
   FOR EACH ROW
@@ -127,6 +129,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger: Auto-increment session message count
+DROP TRIGGER IF EXISTS increment_session_message_count_trigger ON ai_coach_messages;
 CREATE TRIGGER increment_session_message_count_trigger
   AFTER INSERT ON ai_coach_messages
   FOR EACH ROW

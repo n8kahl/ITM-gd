@@ -2,7 +2,7 @@
 -- Purpose: Track user LEAPS (Long-Term Equity Anticipation Securities) positions
 -- Used by: /api/leaps routes, analyze_leaps_position AI function
 
-CREATE TABLE ai_coach_leaps_positions (
+CREATE TABLE IF NOT EXISTS ai_coach_leaps_positions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   symbol TEXT NOT NULL,
@@ -36,26 +36,30 @@ CREATE TABLE ai_coach_leaps_positions (
 );
 
 -- Indexes
-CREATE INDEX idx_leaps_positions_user_id ON ai_coach_leaps_positions(user_id);
-CREATE INDEX idx_leaps_positions_symbol ON ai_coach_leaps_positions(symbol);
-CREATE INDEX idx_leaps_positions_expiry ON ai_coach_leaps_positions(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_leaps_positions_user_id ON ai_coach_leaps_positions(user_id);
+CREATE INDEX IF NOT EXISTS idx_leaps_positions_symbol ON ai_coach_leaps_positions(symbol);
+CREATE INDEX IF NOT EXISTS idx_leaps_positions_expiry ON ai_coach_leaps_positions(expiry_date);
 
 -- Enable RLS
 ALTER TABLE ai_coach_leaps_positions ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+DROP POLICY IF EXISTS "Users can view own LEAPS positions" ON ai_coach_leaps_positions;
 CREATE POLICY "Users can view own LEAPS positions"
   ON ai_coach_leaps_positions FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own LEAPS positions" ON ai_coach_leaps_positions;
 CREATE POLICY "Users can insert own LEAPS positions"
   ON ai_coach_leaps_positions FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own LEAPS positions" ON ai_coach_leaps_positions;
 CREATE POLICY "Users can update own LEAPS positions"
   ON ai_coach_leaps_positions FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own LEAPS positions" ON ai_coach_leaps_positions;
 CREATE POLICY "Users can delete own LEAPS positions"
   ON ai_coach_leaps_positions FOR DELETE
   USING (auth.uid() = user_id);
