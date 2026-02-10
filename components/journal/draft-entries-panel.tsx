@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { FileClock, Check, X, Loader2 } from 'lucide-react'
 import type { JournalEntry } from '@/lib/types/journal'
 import { toast } from 'sonner'
@@ -8,6 +8,17 @@ import { createAppError, createAppErrorFromResponse, notifyAppError } from '@/li
 
 interface DraftEntriesPanelProps {
   onUpdated?: () => void
+}
+
+interface AutoJournalNotification {
+  id: string
+  type: 'auto_journal_ready'
+  market_date: string
+  title: string
+  message: string
+  payload: Record<string, unknown> | null
+  created_at: string
+  read_at: string | null
 }
 
 const AUTO_JOURNAL_RUN_KEY = 'journal-auto-journal-last-run-et'
@@ -47,6 +58,8 @@ export function DraftEntriesPanel({ onUpdated }: DraftEntriesPanelProps) {
   const [drafts, setDrafts] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [autoGenerating, setAutoGenerating] = useState(false)
+  const [notice, setNotice] = useState<AutoJournalNotification | null>(null)
+  const seenNoticeIdsRef = useRef<Set<string>>(new Set())
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -54,6 +67,17 @@ export function DraftEntriesPanel({ onUpdated }: DraftEntriesPanelProps) {
       if (!response.ok) throw await createAppErrorFromResponse(response)
       const result = await response.json()
       setDrafts(Array.isArray(result.data) ? result.data : [])
+
+      const nextNotice = result?.notification
+      if (nextNotice && typeof nextNotice.id === 'string' && typeof nextNotice.message === 'string') {
+        setNotice(nextNotice as AutoJournalNotification)
+        if (!seenNoticeIdsRef.current.has(nextNotice.id)) {
+          toast.message(nextNotice.message)
+          seenNoticeIdsRef.current.add(nextNotice.id)
+        }
+      } else {
+        setNotice(null)
+      }
     } catch (error) {
       notifyAppError(createAppError(error))
     } finally {
@@ -150,6 +174,13 @@ export function DraftEntriesPanel({ onUpdated }: DraftEntriesPanelProps) {
             Detect Today&apos;s Drafts
           </button>
         </div>
+
+        {notice ? (
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+            <p className="text-xs font-medium text-emerald-300">{notice.title}</p>
+            <p className="mt-0.5 text-[11px] text-emerald-100/90">{notice.message}</p>
+          </div>
+        ) : null}
       </section>
     )
   }
@@ -175,6 +206,13 @@ export function DraftEntriesPanel({ onUpdated }: DraftEntriesPanelProps) {
       </div>
 
       <div className="space-y-2">
+        {notice ? (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+            <p className="text-xs font-medium text-emerald-300">{notice.title}</p>
+            <p className="mt-0.5 text-[11px] text-emerald-100/90">{notice.message}</p>
+          </div>
+        ) : null}
+
         {drafts.map((draft) => (
           <div key={draft.id} className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
             <div className="flex items-start justify-between gap-2">
