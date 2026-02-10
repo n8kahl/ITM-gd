@@ -58,11 +58,13 @@ describe('Chat Service', () => {
           message_count: 5,
           created_at: '2026-02-03T12:00:00Z',
           updated_at: '2026-02-03T12:30:00Z',
+          expires_at: '2026-05-04T12:00:00Z',
         },
       ];
 
       const chain: any = {
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockResolvedValue({ data: mockSessions, error: null }),
       };
@@ -78,6 +80,7 @@ describe('Chat Service', () => {
     it('should throw on database error', async () => {
       const chain: any = {
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockResolvedValue({ data: null, error: { message: 'DB error' } }),
       };
@@ -112,6 +115,7 @@ describe('Chat Service', () => {
       // First call: verify session exists
       const sessionChain: any = {
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({ data: { id: 'session-1' }, error: null }),
       };
       const sessionSelect = jest.fn().mockReturnValue(sessionChain);
@@ -147,6 +151,7 @@ describe('Chat Service', () => {
     it('should throw when session not found', async () => {
       const sessionChain: any = {
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({ data: null, error: { message: 'not found' } }),
       };
       const sessionSelect = jest.fn().mockReturnValue(sessionChain);
@@ -169,6 +174,7 @@ describe('Chat Service', () => {
 
       const sessionChain: any = {
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({ data: { id: 'session-1' }, error: null }),
       };
       const sessionSelect = jest.fn().mockReturnValue(sessionChain);
@@ -239,42 +245,55 @@ describe('Chat Service', () => {
   });
 
   describe('deleteSession', () => {
-    it('should delete session and cascade messages', async () => {
-      // First: verify session
-      const sessionChain: any = {
+    it('should archive session for the requesting user', async () => {
+      const archiveChain: any = {
         eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: { id: 'session-1' }, error: null }),
+        is: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: { id: 'session-1' },
+          error: null,
+        }),
       };
-      const sessionSelect = jest.fn().mockReturnValue(sessionChain);
-
-      // Second: delete
-      const deleteChain: any = {
-        eq: jest.fn().mockResolvedValue({ error: null }),
-      };
-      const deleteFn = jest.fn().mockReturnValue(deleteChain);
-
-      let callCount = 0;
-      mockFrom.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return { select: sessionSelect };
-        return { delete: deleteFn };
-      });
+      const updateFn = jest.fn().mockReturnValue(archiveChain);
+      mockFrom.mockReturnValue({ update: updateFn });
 
       const result = await deleteSession('session-1', 'user-1');
 
       expect(result).toEqual({ success: true });
+      expect(updateFn).toHaveBeenCalled();
     });
 
     it('should throw when session not found', async () => {
-      const sessionChain: any = {
+      const archiveChain: any = {
         eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: null, error: { message: 'not found' } }),
+        is: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
       };
-      const sessionSelect = jest.fn().mockReturnValue(sessionChain);
-      mockFrom.mockReturnValue({ select: sessionSelect });
+      const updateFn = jest.fn().mockReturnValue(archiveChain);
+      mockFrom.mockReturnValue({ update: updateFn });
 
       await expect(deleteSession('bad-id', 'user-1')).rejects.toThrow(
         'Session not found or access denied'
+      );
+    });
+
+    it('should throw when archive update fails', async () => {
+      const archiveChain: any = {
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'DB error' },
+        }),
+      };
+      const updateFn = jest.fn().mockReturnValue(archiveChain);
+      mockFrom.mockReturnValue({ update: updateFn });
+
+      await expect(deleteSession('session-1', 'user-1')).rejects.toThrow(
+        'Failed to delete session: DB error'
       );
     });
   });

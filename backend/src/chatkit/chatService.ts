@@ -234,6 +234,7 @@ export async function getOrCreateSession(sessionId: string, userId: string) {
     .select('*')
     .eq('id', sessionId)
     .eq('user_id', userId)
+    .is('archived_at', null)
     .maybeSingle();
 
   if (fetchError) {
@@ -304,8 +305,9 @@ export async function saveMessage(
 export async function getUserSessions(userId: string, limit: number = 10) {
   const { data: sessions, error } = await supabase
     .from('ai_coach_sessions')
-    .select('id, title, message_count, created_at, updated_at')
+    .select('id, title, message_count, created_at, updated_at, expires_at')
     .eq('user_id', userId)
+    .is('archived_at', null)
     .order('updated_at', { ascending: false })
     .limit(limit);
 
@@ -331,6 +333,7 @@ export async function getSessionMessages(
     .select('id')
     .eq('id', sessionId)
     .eq('user_id', userId)
+    .is('archived_at', null)
     .single();
 
   if (sessionError || !session) {
@@ -381,27 +384,30 @@ export async function updateSessionTitle(sessionId: string, firstMessage: string
 }
 
 /**
- * Delete a session and all its messages
+ * Soft-delete a session by archiving it
  */
 export async function deleteSession(sessionId: string, userId: string) {
-  const { data: session, error: fetchError } = await supabase
+  const nowIso = new Date().toISOString();
+
+  const { data: archivedSession, error: archiveError } = await supabase
     .from('ai_coach_sessions')
-    .select('id')
+    .update({
+      archived_at: nowIso,
+      ended_at: nowIso,
+      updated_at: nowIso,
+    })
     .eq('id', sessionId)
     .eq('user_id', userId)
-    .single();
+    .is('archived_at', null)
+    .select('id')
+    .maybeSingle();
 
-  if (fetchError || !session) {
-    throw new Error('Session not found or access denied');
+  if (archiveError) {
+    throw new Error(`Failed to delete session: ${archiveError.message}`);
   }
 
-  const { error: deleteError } = await supabase
-    .from('ai_coach_sessions')
-    .delete()
-    .eq('id', sessionId);
-
-  if (deleteError) {
-    throw new Error(`Failed to delete session: ${deleteError.message}`);
+  if (!archivedSession) {
+    throw new Error('Session not found or access denied');
   }
 
   return { success: true };
