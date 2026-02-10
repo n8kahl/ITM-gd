@@ -43,6 +43,7 @@ interface CourseDetail {
   lessons: CourseLesson[]
   totalLessons: number
   completedLessons: number
+  resumeLessonId?: string | null
   objectives: string[]
   prerequisites: string[]
 }
@@ -138,8 +139,9 @@ export default function CourseDetailPage() {
       : 0
   const diff = difficultyConfig[course.difficulty]
 
-  // Find the next uncompleted lesson
+  // Fallback for legacy payloads that do not include resumeLessonId yet.
   const nextLesson = course.lessons.find((l) => !l.isCompleted && !l.isLocked)
+  const resumeLessonId = course.resumeLessonId || nextLesson?.id || null
 
   const heroImageSrc = resolveCourseImage({
     slug: course.slug,
@@ -243,9 +245,9 @@ export default function CourseDetailPage() {
               </div>
             </div>
 
-            {nextLesson ? (
+            {resumeLessonId ? (
               <Link
-                href={`/members/academy/learn/${nextLesson.id}`}
+                href={`/members/academy/learn/${resumeLessonId}`}
                 className={cn(
                   'shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium',
                   'bg-emerald-500 hover:bg-emerald-600 text-white',

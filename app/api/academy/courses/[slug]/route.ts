@@ -3,6 +3,7 @@ import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import {
   toSafeErrorMessage,
 } from '@/lib/academy/api-utils'
+import { resolveAcademyResumeTarget } from '@/lib/academy/resume'
 
 interface LessonRow {
   id: string
@@ -80,11 +81,14 @@ export async function GET(
       learningPathName = learningPath?.name || 'General'
     }
 
-    const { data: lessons, error: lessonsError } = await supabase
-      .from('lessons')
-      .select('id, title, lesson_type, estimated_minutes, duration_minutes, display_order')
-      .eq('course_id', typedCourse.id)
-      .order('display_order', { ascending: true })
+    const [{ data: lessons, error: lessonsError }, resumeTarget] = await Promise.all([
+      supabase
+        .from('lessons')
+        .select('id, title, lesson_type, estimated_minutes, duration_minutes, display_order')
+        .eq('course_id', typedCourse.id)
+        .order('display_order', { ascending: true }),
+      resolveAcademyResumeTarget(supabase, { userId: user.id, courseId: typedCourse.id }),
+    ])
 
     if (lessonsError) {
       return NextResponse.json(
@@ -148,6 +152,7 @@ export async function GET(
         lessons: mappedLessons,
         totalLessons: mappedLessons.length,
         completedLessons,
+        resumeLessonId: resumeTarget?.lessonId || null,
         objectives: [],
         prerequisites: [],
       },

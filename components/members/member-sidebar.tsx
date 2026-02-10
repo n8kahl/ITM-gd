@@ -36,6 +36,26 @@ function getIconForTab(tab: TabConfig): LucideIcon {
   return ICON_MAP[tab.tab_id] || LayoutDashboard
 }
 
+function getTabHref(tab: TabConfig): string {
+  const rawHref = tab.path.startsWith('/') ? tab.path : `/members/${tab.path}`
+  if (tab.tab_id === 'library' && rawHref === '/members/library') {
+    return '/members/academy/courses'
+  }
+  return rawHref
+}
+
+function isLibraryPath(pathname: string): boolean {
+  return pathname === '/members/library' || pathname.startsWith('/members/academy')
+}
+
+function isTabActive(pathname: string, tab: TabConfig, href: string): boolean {
+  if (tab.tab_id === 'library') {
+    return pathname === href || pathname.startsWith(`${href}/`) || isLibraryPath(pathname)
+  }
+
+  return pathname === href || (href !== '/members' && pathname.startsWith(href))
+}
+
 // ============================================
 // TIER BADGE
 // ============================================
@@ -142,8 +162,8 @@ export function MemberSidebar() {
       <nav className="flex-1 px-3 pt-4 pb-2 space-y-0.5 overflow-y-auto">
         {visibleTabs.map((tab) => {
           const Icon = getIconForTab(tab)
-          const href = tab.path.startsWith('/') ? tab.path : `/members/${tab.path}`
-          const isActive = pathname === href || (href !== '/members' && pathname.startsWith(href))
+          const href = getTabHref(tab)
+          const isActive = isTabActive(pathname, tab, href)
 
           return (
             <Link

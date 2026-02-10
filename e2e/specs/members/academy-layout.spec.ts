@@ -230,6 +230,23 @@ test.describe('Academy lesson layout and navigation', () => {
     await page.waitForURL('**/members/academy/learn/lesson-3')
   })
 
+  test('keeps sidebar completion button fully visible on desktop lesson layout', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await setupLessonMocks(page)
+
+    await page.goto('/members/academy/learn/lesson-2')
+
+    const sidebarCompleteButton = page.getByTestId('sidebar-mark-complete')
+    await expect(sidebarCompleteButton).toBeVisible()
+
+    const buttonBox = await sidebarCompleteButton.boundingBox()
+    const viewport = page.viewportSize()
+    expect(buttonBox).not.toBeNull()
+    if (buttonBox && viewport) {
+      expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(viewport.height)
+    }
+  })
+
   test('keeps academy sub-navigation states consistent across views', async ({ page }) => {
     await setupCourseCatalogMocks(page)
 

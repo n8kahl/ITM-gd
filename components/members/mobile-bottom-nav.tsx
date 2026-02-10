@@ -30,10 +30,19 @@ const PRIMARY_TABS: NavTab[] = [
   { id: 'dashboard', label: 'Dashboard', href: '/members', icon: LayoutDashboard },
   { id: 'journal', label: 'Journal', href: '/members/journal', icon: BookOpen },
   { id: 'ai-coach', label: 'AI Coach', href: '/members/ai-coach', icon: Bot },
-  { id: 'library', label: 'Library', href: '/members/library', icon: GraduationCap },
+  { id: 'library', label: 'Library', href: '/members/academy/courses', icon: GraduationCap },
 ]
 
-function isActivePath(pathname: string, href: string): boolean {
+function isLibraryPath(pathname: string): boolean {
+  return pathname === '/members/library' || pathname.startsWith('/members/academy')
+}
+
+function isActivePath(pathname: string, tab: NavTab): boolean {
+  const { href, id } = tab
+  if (id === 'library') {
+    return pathname === href || pathname.startsWith(`${href}/`) || isLibraryPath(pathname)
+  }
+
   if (href === '/members') return pathname === '/members'
   return pathname === href || pathname.startsWith(`${href}/`)
 }
@@ -94,7 +103,7 @@ export function MemberBottomNav() {
         <div className="flex items-end justify-around gap-1">
           {PRIMARY_TABS.map((tab) => {
             const Icon = tab.icon
-            const active = isActivePath(pathname, tab.href)
+            const active = isActivePath(pathname, tab)
             return (
               <Link
                 key={tab.id}

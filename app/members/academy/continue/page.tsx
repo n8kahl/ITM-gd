@@ -13,22 +13,59 @@ interface ContinueResponse {
   }
 }
 
+interface ResumeTarget {
+  lessonId: string
+  lessonTitle: string
+  lessonNumber: number
+  totalLessons: number
+  courseProgressPercent: number
+  courseSlug: string
+  courseTitle: string
+  resumeUrl: string
+}
+
+interface ResumeResponse {
+  success: boolean
+  data?: {
+    target: ResumeTarget | null
+  }
+}
+
 export default function AcademyContinuePage() {
   const [courses, setCourses] = useState<CourseCardData[]>([])
+  const [resumeTarget, setResumeTarget] = useState<ResumeTarget | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadCourses() {
-      try {
-        const response = await fetch('/api/academy/courses')
-        if (!response.ok) throw new Error('Failed to load courses')
-        const payload = (await response.json()) as ContinueResponse
-        setCourses(payload.data?.courses || [])
-      } catch (error) {
-        console.error('Continue page load failed', error)
-      } finally {
-        setLoading(false)
+      const [coursesResult, resumeResult] = await Promise.allSettled([
+        fetch('/api/academy/courses'),
+        fetch('/api/academy/resume'),
+      ])
+
+      if (coursesResult.status === 'fulfilled' && coursesResult.value.ok) {
+        try {
+          const payload = (await coursesResult.value.json()) as ContinueResponse
+          setCourses(payload.data?.courses || [])
+        } catch (error) {
+          console.error('Continue page courses parse failed', error)
+        }
+      } else if (coursesResult.status === 'rejected') {
+        console.error('Continue page courses load failed', coursesResult.reason)
       }
+
+      if (resumeResult.status === 'fulfilled' && resumeResult.value.ok) {
+        try {
+          const payload = (await resumeResult.value.json()) as ResumeResponse
+          setResumeTarget(payload.data?.target || null)
+        } catch (error) {
+          console.error('Continue page resume parse failed', error)
+        }
+      } else if (resumeResult.status === 'rejected') {
+        console.error('Continue page resume load failed', resumeResult.reason)
+      }
+
+      setLoading(false)
     }
 
     loadCourses()
@@ -61,6 +98,25 @@ export default function AcademyContinuePage() {
         </p>
       </div>
 
+      {resumeTarget && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+            Next Up
+          </p>
+          <h2 className="mt-1 text-base font-semibold text-white">{resumeTarget.lessonTitle}</h2>
+          <p className="mt-1 text-xs text-white/70">
+            {resumeTarget.courseTitle} • Lesson {resumeTarget.lessonNumber} of {resumeTarget.totalLessons} • {resumeTarget.courseProgressPercent}% complete
+          </p>
+          <Link
+            href={resumeTarget.resumeUrl}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-600 transition-colors"
+          >
+            Resume Next Lesson
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
       {inProgressCourses.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {inProgressCourses.map((course) => (
@@ -69,9 +125,13 @@ export default function AcademyContinuePage() {
         </div>
       ) : (
         <div className="rounded-2xl border border-white/10 bg-[#0A0A0B]/60 backdrop-blur-xl p-6">
-          <h2 className="text-base font-semibold text-white">No in-progress courses yet</h2>
+          <h2 className="text-base font-semibold text-white">
+            {resumeTarget ? 'No additional in-progress courses' : 'No in-progress courses yet'}
+          </h2>
           <p className="mt-1 text-sm text-white/60">
-            Start any course and your resume queue will appear here automatically.
+            {resumeTarget
+              ? 'Your next lesson is ready above. Start any other course and it will appear in this queue.'
+              : 'Start any course and your resume queue will appear here automatically.'}
           </p>
           <Link
             href="/members/academy/courses"

@@ -140,6 +140,7 @@ export function LessonSidebar({
       {onMarkComplete && (
         <div className="p-4 border-t border-white/5">
           <button
+            data-testid="sidebar-mark-complete"
             onClick={onMarkComplete}
             disabled={isMarkingComplete || isCurrentCompleted}
             className={cn(

@@ -347,7 +347,7 @@ export default function LessonPage() {
             'shrink-0 transition-all duration-300',
             // Mobile: overlay
             'fixed lg:relative z-20',
-            'top-14 left-0 bottom-0',
+            'top-14 left-0 bottom-0 lg:top-0 lg:left-auto lg:bottom-auto',
             'w-[280px]',
             showSidebar
               ? 'translate-x-0'

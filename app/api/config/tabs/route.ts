@@ -12,7 +12,7 @@ const DEFAULT_TABS = [
   { tab_id: 'dashboard', label: 'Command Center', icon: 'LayoutDashboard', path: '/members', required_tier: 'core', sort_order: 0, is_required: true, mobile_visible: true, is_active: true },
   { tab_id: 'journal', label: 'Trade Journal', icon: 'BookOpen', path: '/members/journal', required_tier: 'core', sort_order: 1, is_required: false, mobile_visible: true, is_active: true },
   { tab_id: 'ai-coach', label: 'AI Coach', icon: 'Bot', path: '/members/ai-coach', required_tier: 'pro', sort_order: 2, is_required: false, mobile_visible: true, is_active: true, badge_text: 'Beta', badge_variant: 'emerald' },
-  { tab_id: 'library', label: 'Training Library', icon: 'GraduationCap', path: '/members/library', required_tier: 'core', sort_order: 3, is_required: false, mobile_visible: false, is_active: true },
+  { tab_id: 'library', label: 'Training Library', icon: 'GraduationCap', path: '/members/academy/courses', required_tier: 'core', sort_order: 3, is_required: false, mobile_visible: false, is_active: true },
   { tab_id: 'studio', label: 'Trade Studio', icon: 'Palette', path: '/members/studio', required_tier: 'executive', sort_order: 4, is_required: false, mobile_visible: false, is_active: true },
   { tab_id: 'profile', label: 'Profile', icon: 'UserCircle', path: '/members/profile', required_tier: 'core', sort_order: 99, is_required: true, mobile_visible: true, is_active: true },
 ]

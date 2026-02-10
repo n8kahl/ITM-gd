@@ -3,6 +3,7 @@ import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import {
   toSafeErrorMessage,
 } from '@/lib/academy/api-utils'
+import { resolveAcademyResumeTarget } from '@/lib/academy/resume'
 
 interface DashboardCourse {
   id: string
@@ -40,24 +41,11 @@ export async function GET(request: NextRequest) {
 
     const { user, supabase } = auth
 
-    const [xpResult, currentLessonResult, recentAchievementsResult, courseProgressResult, lessonProgressResult, coursesResult, activityResult] = await Promise.all([
+    const [xpResult, recentAchievementsResult, courseProgressResult, lessonProgressResult, coursesResult, activityResult, resumeTarget] = await Promise.all([
       supabase
         .from('user_xp')
         .select('total_xp, current_streak')
         .eq('user_id', user.id)
-        .maybeSingle(),
-      supabase
-        .from('user_lesson_progress')
-        .select(`
-          lesson_id,
-          course_id,
-          status,
-          lessons!inner(id, title, courses(id, title, slug))
-        `)
-        .eq('user_id', user.id)
-        .eq('status', 'in_progress')
-        .order('started_at', { ascending: false })
-        .limit(1)
         .maybeSingle(),
       supabase
         .from('user_achievements')
@@ -95,6 +83,7 @@ export async function GET(request: NextRequest) {
         .eq('user_id', user.id)
         .gte('created_at', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false }),
+      resolveAcademyResumeTarget(supabase, { userId: user.id }),
     ])
 
     const courses = (coursesResult.data || []) as DashboardCourse[]
@@ -186,7 +175,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    let currentLesson: {
+    const currentLesson: {
       lessonId: string
       lessonTitle: string
       courseTitle: string
@@ -194,37 +183,17 @@ export async function GET(request: NextRequest) {
       progress: number
       totalLessons: number
       currentLesson: number
-    } | null = null
-
-    if (currentLessonResult.data?.lesson_id && currentLessonResult.data.course_id) {
-      const lessonRelation = Array.isArray(currentLessonResult.data.lessons)
-        ? currentLessonResult.data.lessons[0]
-        : currentLessonResult.data.lessons
-
-      const courseRelation = Array.isArray(lessonRelation?.courses)
-        ? lessonRelation?.courses[0]
-        : lessonRelation?.courses
-
-      const { data: orderedLessons } = await supabase
-        .from('lessons')
-        .select('id')
-        .eq('course_id', currentLessonResult.data.course_id)
-        .order('display_order', { ascending: true })
-
-      const currentLessonIndex = (orderedLessons || []).findIndex(
-        (lesson) => lesson.id === currentLessonResult.data?.lesson_id
-      )
-
-      currentLesson = {
-        lessonId: currentLessonResult.data.lesson_id,
-        lessonTitle: lessonRelation?.title || 'Current Lesson',
-        courseTitle: courseRelation?.title || 'Course',
-        courseSlug: courseRelation?.slug || '',
-        progress: currentLessonResult.data.status === 'completed' ? 100 : 50,
-        totalLessons: orderedLessons?.length || 0,
-        currentLesson: currentLessonIndex >= 0 ? currentLessonIndex + 1 : 1,
-      }
-    }
+    } | null = resumeTarget
+      ? {
+          lessonId: resumeTarget.lessonId,
+          lessonTitle: resumeTarget.lessonTitle,
+          courseTitle: resumeTarget.courseTitle,
+          courseSlug: resumeTarget.courseSlug,
+          progress: resumeTarget.courseProgressPercent,
+          totalLessons: resumeTarget.totalLessons,
+          currentLesson: resumeTarget.lessonNumber,
+        }
+      : null
 
     return NextResponse.json({
       success: true,
