@@ -29,7 +29,6 @@ function LoginContent() {
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [checkingAuth, setCheckingAuth] = useState(true)
   const [isStandalone, setIsStandalone] = useState(false)
   const [showIOSInfo, setShowIOSInfo] = useState(false)
 
@@ -38,12 +37,21 @@ function LoginContent() {
     setIsStandalone(isIOSStandalone())
   }, [])
 
-  // Check if user is already logged in
+  // Redirect authenticated users when session is readily available.
+  // This check is intentionally non-blocking; middleware remains the source of truth.
   useEffect(() => {
     const checkAuth = async () => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
       try {
         const supabase = createBrowserSupabase()
-        const { data: { session } } = await supabase.auth.getSession()
+        const getSessionWithTimeout = Promise.race([
+          supabase.auth.getSession(),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('getSession timeout')), 4000)
+          }),
+        ])
+
+        const { data: { session } } = await getSessionWithTimeout
         if (session) {
           // Already logged in - determine appropriate redirect
           // Check if user has admin access via app_metadata
@@ -62,7 +70,9 @@ function LoginContent() {
       } catch (err) {
         console.error('Auth check error:', err)
       } finally {
-        setCheckingAuth(false)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
       }
     }
 
@@ -132,29 +142,6 @@ function LoginContent() {
       setError(err instanceof Error ? err.message : 'Failed to connect to Discord')
       setIsLoading(false)
     }
-  }
-
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center relative overflow-hidden">
-        <AuroraBackground />
-        <div className="text-center relative z-10">
-          <div className="mx-auto mb-4">
-            <SparkleLog
-              src={BRAND_LOGO_SRC}
-              alt={BRAND_NAME}
-              width={48}
-              height={48}
-              sparkleCount={8}
-              enableFloat={false}
-              enableGlow={true}
-              glowIntensity="medium"
-            />
-          </div>
-          <p className="text-white/60">Checking authentication...</p>
-        </div>
-      </div>
-    )
   }
 
   return (

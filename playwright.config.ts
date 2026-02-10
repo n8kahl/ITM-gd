@@ -79,6 +79,7 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    serviceWorkers: 'block',
     // Viewport for consistent testing
     viewport: { width: 1280, height: 720 },
   },
@@ -109,7 +110,7 @@ export default defineConfig({
     // All other tests
     {
       name: 'chromium',
-      testIgnore: /auth-health-check\.spec\.ts/,
+      testIgnore: [/auth-health-check\.spec\.ts/, /ai-coach.*\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
     },
     // Mobile testing for responsive auth

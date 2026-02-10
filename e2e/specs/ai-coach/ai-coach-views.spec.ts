@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 /**
  * AI Coach E2E Tests — Center Panel Views
@@ -13,26 +13,30 @@ import { test, expect } from '@playwright/test'
  */
 
 const AI_COACH_URL = '/members/ai-coach'
+const WELCOME_VIEW_HEADING = /Ready to execute the session plan\?/i
 
 // Helper to bypass auth for testing — uses a mock session cookie
-async function navigateAsAuthenticatedUser(page: any) {
+async function navigateAsAuthenticatedUser(page: Page) {
   // Navigate to the AI Coach page
   // If redirected to login, this test suite requires a test user setup
   await page.goto(AI_COACH_URL)
   await page.waitForLoadState('networkidle')
 }
 
+async function waitForWelcomeView(page: Page) {
+  await expect(page.getByRole('heading', { name: WELCOME_VIEW_HEADING })).toBeVisible({ timeout: 10000 })
+}
+
 test.describe('AI Coach — Page Load', () => {
   test('should load the AI Coach page', async ({ page }) => {
     await page.goto(AI_COACH_URL)
-    await expect(page).toHaveTitle(/ITM|AI Coach/i)
+    await expect(page).toHaveTitle(/Trade In The Money|ITM|AI Coach/i)
   })
 
   test('should display the AI Coach header', async ({ page }) => {
     await navigateAsAuthenticatedUser(page)
     // The page should have AI Coach branding
-    const heading = page.locator('text=AI Coach')
-    await expect(heading.first()).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('main h3:visible', { hasText: 'AI Coach' }).first()).toBeVisible({ timeout: 10000 })
   })
 })
 
@@ -58,24 +62,24 @@ test.describe('AI Coach — Onboarding Flow', () => {
     // Click Next through all steps
     const nextButton = page.locator('button:has-text("Next")')
 
-    // Step 1 → Step 2
+    // Step 1 -> Step 2
     await nextButton.click()
     await expect(page.locator('text=Market Analysis').first()).toBeVisible()
 
-    // Step 2 → Step 3
+    // Step 2 -> Step 3
     await nextButton.click()
     await expect(page.locator('text=Options & Positions').first()).toBeVisible()
 
-    // Step 3 → Step 4
+    // Step 3 -> Step 4
     await nextButton.click()
     await expect(page.locator('text=Trading Tools').first()).toBeVisible()
 
-    // Step 4 → Complete
+    // Step 4 -> Complete
     const getStartedButton = page.locator('button:has-text("Get Started")')
     await getStartedButton.click()
 
     // Should now show the welcome view
-    await expect(page.locator('text=AI Coach Center').first()).toBeVisible()
+    await waitForWelcomeView(page)
   })
 
   test('should skip onboarding', async ({ page }) => {
@@ -86,7 +90,7 @@ test.describe('AI Coach — Onboarding Flow', () => {
     await skipButton.click()
 
     // Should show the welcome/home view
-    await expect(page.locator('text=AI Coach Center').first()).toBeVisible()
+    await waitForWelcomeView(page)
   })
 
   test('should not show onboarding after completion', async ({ page }) => {
@@ -98,8 +102,8 @@ test.describe('AI Coach — Onboarding Flow', () => {
     await navigateAsAuthenticatedUser(page)
 
     // Should show welcome view directly
-    await expect(page.locator('text=AI Coach Center').first()).toBeVisible({ timeout: 10000 })
-    await expect(page.locator('text=Your intelligent trading companion')).not.toBeVisible()
+    await waitForWelcomeView(page)
+    await expect(page.getByRole('heading', { name: 'Welcome to AI Coach' })).not.toBeVisible()
   })
 })
 
@@ -110,65 +114,66 @@ test.describe('AI Coach — Center Panel Views', () => {
       localStorage.setItem('ai-coach-onboarding-complete', 'true')
     })
     await navigateAsAuthenticatedUser(page)
-    await page.waitForSelector('text=AI Coach Center', { timeout: 10000 })
+    await waitForWelcomeView(page)
   })
 
   test('should display quick access cards on welcome view', async ({ page }) => {
     // Check for feature cards
-    await expect(page.locator('text=Live Chart').first()).toBeVisible()
-    await expect(page.locator('text=Options').first()).toBeVisible()
-    await expect(page.locator('text=Analyze').first()).toBeVisible()
-    await expect(page.locator('text=Journal').first()).toBeVisible()
-    await expect(page.locator('text=Alerts').first()).toBeVisible()
-    await expect(page.locator('text=Scanner').first()).toBeVisible()
-    await expect(page.locator('text=LEAPS').first()).toBeVisible()
-    await expect(page.locator('text=Macro').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Live Chart/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Options/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Analyze/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Daily Brief/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Journal/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Scanner/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^LEAPS/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Macro/i })).toBeVisible()
   })
 
   test('should navigate to Chart view', async ({ page }) => {
-    await page.locator('text=Live Chart').first().click()
-    await expect(page.locator('text=Chart').first()).toBeVisible()
+    await page.getByRole('button', { name: /Live Chart/i }).click()
+    await expect(page.getByRole('heading', { name: /Chart$/i })).toBeVisible()
     // Chart tab should be active in the tab bar
-    const chartTab = page.locator('button:has-text("Chart")').first()
-    await expect(chartTab).toBeVisible()
+    const chartTab = page.getByRole('tab', { name: 'Chart' })
+    await expect(chartTab).toHaveAttribute('aria-selected', 'true')
   })
 
   test('should navigate to Options view', async ({ page }) => {
     // Click Options card from welcome
-    const optionsCard = page.locator('button:has-text("Options")').first()
-    await optionsCard.click()
+    await page.getByRole('button', { name: /^Options/i }).click()
     // Tab bar should appear
-    const optionsTab = page.locator('button:has-text("Options")')
-    await expect(optionsTab.first()).toBeVisible()
+    const optionsTab = page.getByRole('tab', { name: 'Options' })
+    await expect(optionsTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('combobox').first()).toBeVisible()
   })
 
   test('should navigate to Journal view', async ({ page }) => {
-    await page.locator('button:has-text("Journal")').first().click()
+    await page.getByRole('button', { name: /^Journal/i }).click()
     await expect(page.locator('text=Trade Journal').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('should navigate to Alerts view', async ({ page }) => {
-    await page.locator('button:has-text("Alerts")').first().click()
+    await page.getByRole('button', { name: /More Tools/i }).click()
+    await page.getByRole('button', { name: /^Alerts$/ }).click()
     // Alerts panel should appear
-    await expect(page.locator('text=Alerts').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Price Alerts' })).toBeVisible({ timeout: 10000 })
   })
 
   test('should navigate to Scanner view', async ({ page }) => {
-    await page.locator('button:has-text("Scanner")').first().click()
+    await page.getByRole('button', { name: /^Scanner/i }).click()
     await expect(page.locator('text=Opportunity Scanner').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('should return to Home from tab bar', async ({ page }) => {
     // Go to Chart first
-    await page.locator('text=Live Chart').first().click()
+    await page.getByRole('button', { name: /Live Chart/i }).click()
     await page.waitForTimeout(500)
 
     // Click Home button
-    const homeButton = page.locator('button:has-text("Home")')
+    const homeButton = page.getByRole('button', { name: 'Go to home view' })
     await homeButton.click()
 
     // Should be back at welcome view
-    await expect(page.locator('text=AI Coach Center').first()).toBeVisible()
+    await waitForWelcomeView(page)
   })
 })
 
@@ -201,14 +206,14 @@ test.describe('AI Coach — Example Prompts', () => {
       localStorage.setItem('ai-coach-onboarding-complete', 'true')
     })
     await navigateAsAuthenticatedUser(page)
-    await page.waitForSelector('text=AI Coach Center', { timeout: 10000 })
+    await waitForWelcomeView(page)
   })
 
   test('should display example prompt cards', async ({ page }) => {
-    await expect(page.locator('text=Key Levels').first()).toBeVisible()
-    await expect(page.locator('text=Market Status').first()).toBeVisible()
-    await expect(page.locator('text=ATR Analysis').first()).toBeVisible()
-    await expect(page.locator('text=VWAP Check').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /SPX Game Plan/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Morning Brief/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Best Setup Now/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /SPX vs SPY/i }).first()).toBeVisible()
   })
 })
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { Loader2, RefreshCw, Waves, TrendingUp, TrendingDown } from 'lucide-react'
+import { Info, Loader2, RefreshCw, Waves, TrendingUp, TrendingDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { IVAnalysisResponse } from '@/lib/api/ai-coach'
 
@@ -29,6 +29,18 @@ export function IVDashboard({
 }: IVDashboardProps) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="mb-3 rounded border border-blue-500/30 bg-blue-500/10 p-2.5 text-[11px] text-blue-100/90">
+        <div className="mb-1 flex items-center gap-1.5">
+          <Info className="h-3.5 w-3.5 text-blue-300" />
+          <span className="font-medium">Implied Volatility Guide</span>
+        </div>
+        <ul className="space-y-0.5 text-blue-100/75">
+          <li><strong>IV Rank:</strong> Position of current IV inside the 52-week range.</li>
+          <li><strong>Term Structure:</strong> IV by expiration; steep curves imply event risk.</li>
+          <li><strong>Skew:</strong> Put-vs-call demand imbalance (fear vs upside chase).</li>
+        </ul>
+      </div>
+
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Waves className="h-3.5 w-3.5 text-violet-300" />
@@ -111,4 +123,3 @@ export function IVDashboard({
     </div>
   )
 }
-

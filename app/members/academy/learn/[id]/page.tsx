@@ -5,12 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
-import { Menu, X, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { Bookmark, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Menu, X } from 'lucide-react'
 import { LessonPlayer } from '@/components/academy/lesson-player'
+import type { LessonChunk } from '@/components/academy/lesson-chunk-renderer'
 import { LessonSidebar, type SidebarLesson } from '@/components/academy/lesson-sidebar'
 import { AiTutorPanel } from '@/components/academy/ai-tutor-panel'
 import { QuizEngine } from '@/components/academy/quiz-engine'
 import type { QuizQuestionData } from '@/components/academy/quiz-question'
+import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 // ============================================
 // TYPES
@@ -21,6 +23,7 @@ interface LessonData {
   title: string
   content: string
   contentType: 'markdown' | 'video' | 'mixed'
+  chunkData?: LessonChunk[] | null
   videoUrl: string | null
   durationMinutes: number
   order: number
@@ -36,6 +39,7 @@ interface LessonData {
 interface LessonResponse {
   success: boolean
   data?: LessonData
+  error?: string
 }
 
 // ============================================
@@ -49,25 +53,48 @@ export default function LessonPage() {
 
   const [lesson, setLesson] = useState<LessonData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [lessonError, setLessonError] = useState<string | null>(null)
+  const [isLessonNotFound, setIsLessonNotFound] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [isMarkingComplete, setIsMarkingComplete] = useState(false)
+  const [isLessonSaved, setIsLessonSaved] = useState(false)
+  const [isSavingLesson, setIsSavingLesson] = useState(false)
 
   // Fetch lesson data
   useEffect(() => {
     async function fetchLesson() {
       setIsLoading(true)
+      setLessonError(null)
+      setIsLessonNotFound(false)
+
       try {
         const res = await fetch(`/api/academy/lessons/${lessonId}`)
-        if (!res.ok) throw new Error('Failed to fetch lesson')
+        const payload = (await res.json().catch(() => null)) as LessonResponse | null
 
-        const payload: LessonResponse = await res.json()
-        if (!payload.success || !payload.data) {
+        if (!res.ok) {
+          if (res.status === 404) {
+            setLesson(null)
+            setIsLessonNotFound(true)
+            return
+          }
+
+          throw new Error(
+            payload?.error ||
+              (res.status === 401
+                ? 'Your session has expired. Refresh and sign in again.'
+                : 'Failed to fetch lesson')
+          )
+        }
+
+        if (!payload?.success || !payload.data) {
           throw new Error('Invalid lesson payload')
         }
 
         setLesson(payload.data)
       } catch (error) {
         console.error('Error fetching lesson:', error)
+        setLesson(null)
+        setLessonError(error instanceof Error ? error.message : 'Unable to load lesson')
       } finally {
         setIsLoading(false)
       }
@@ -75,6 +102,26 @@ export default function LessonPage() {
 
     if (lessonId) fetchLesson()
   }, [lessonId])
+
+  useEffect(() => {
+    async function fetchSavedState() {
+      if (!lesson?.id) return
+      try {
+        const response = await fetch('/api/academy/saved')
+        if (!response.ok) return
+        const payload = await response.json()
+        const savedItems = Array.isArray(payload?.data?.items) ? payload.data.items : []
+        const isSaved = savedItems.some((item: { entity_type?: string; entity_id?: string }) =>
+          item?.entity_type === 'lesson' && item?.entity_id === lesson.id
+        )
+        setIsLessonSaved(isSaved)
+      } catch {
+        // no-op
+      }
+    }
+
+    void fetchSavedState()
+  }, [lesson?.id])
 
   // Auto-save scroll progress
   const handleProgressUpdate = useCallback(
@@ -140,6 +187,30 @@ export default function LessonPage() {
   const handleMarkComplete = useCallback(async () => {
     await markLessonComplete()
   }, [markLessonComplete])
+
+  const handleToggleLessonSaved = useCallback(async () => {
+    if (!lesson || isSavingLesson) return
+    setIsSavingLesson(true)
+    try {
+      const response = await fetch('/api/academy/saved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_type: 'lesson',
+          entity_id: lesson.id,
+        }),
+      })
+      if (!response.ok) return
+      const payload = await response.json()
+      if (payload?.success) {
+        setIsLessonSaved(Boolean(payload?.data?.saved))
+      }
+    } catch {
+      // no-op
+    } finally {
+      setIsSavingLesson(false)
+    }
+  }, [isSavingLesson, lesson])
 
   // Handle quiz completion
   const handleQuizComplete = useCallback(
@@ -287,7 +358,7 @@ export default function LessonPage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src="/logo.png" alt="Loading" fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
           </div>
           <p className="text-sm text-white/40">Loading lesson...</p>
         </div>
@@ -296,6 +367,34 @@ export default function LessonPage() {
   }
 
   if (!lesson) {
+    if (!isLessonNotFound) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh] px-4">
+          <div className="text-center max-w-md">
+            <p className="text-lg font-semibold text-white mb-2">Unable to load lesson</p>
+            <p className="text-sm text-white/55">
+              {lessonError || 'An unexpected error occurred while loading this lesson.'}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => router.refresh()}
+                className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.06] transition-colors"
+              >
+                Retry
+              </button>
+              <Link
+                href="/members/academy/courses"
+                className="rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-500/20 transition-colors"
+              >
+                Back to Library
+              </Link>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
@@ -310,19 +409,37 @@ export default function LessonPage() {
 
   return (
     <div className="relative space-y-3">
-      <div className="flex items-center gap-2 text-xs text-white/45">
-        <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
-          Training Library
-        </Link>
-        <span>/</span>
-        <Link
-          href={`/members/academy/courses/${lesson.course.slug}`}
-          className="hover:text-white/70 transition-colors"
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-white/45">
+          <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
+            Training Library
+          </Link>
+          <span>/</span>
+          <Link
+            href={`/members/academy/courses/${lesson.course.slug}`}
+            className="hover:text-white/70 transition-colors"
+          >
+            {lesson.course.title}
+          </Link>
+          <span>/</span>
+          <span className="truncate text-white/70">{lesson.title}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleToggleLessonSaved}
+          disabled={isSavingLesson}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+            isLessonSaved
+              ? 'border-emerald-500/45 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
+              : 'border-white/20 bg-white/[0.03] text-white/75 hover:bg-white/[0.06]',
+            isSavingLesson && 'cursor-not-allowed opacity-70'
+          )}
         >
-          {lesson.course.title}
-        </Link>
-        <span>/</span>
-        <span className="text-white/70 truncate">{lesson.title}</span>
+          {isSavingLesson ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bookmark className="h-3.5 w-3.5" />}
+          {isLessonSaved ? 'Saved' : 'Save Lesson'}
+        </button>
       </div>
 
       {/* Mobile sidebar toggle */}
@@ -376,10 +493,12 @@ export default function LessonPage() {
         {/* Main content area */}
         <div className="flex-1 min-w-0 bg-transparent">
           <LessonPlayer
+            key={lesson.id}
             lessonId={lesson.id}
             title={lesson.title}
             content={lesson.content}
             contentType={lesson.contentType}
+            chunkData={lesson.chunkData || null}
             videoUrl={lesson.videoUrl}
             durationMinutes={lesson.durationMinutes}
             onProgressUpdate={handleProgressUpdate}

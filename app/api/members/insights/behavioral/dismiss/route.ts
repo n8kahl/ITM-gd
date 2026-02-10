@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { dismissBehavioralSchema } from '@/lib/validation/journal-api'
+import { dismissBehavioralSchema } from '@/lib/validation/journal-entry'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
 
 export async function POST(request: NextRequest) {

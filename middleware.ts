@@ -89,6 +89,14 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
 
+  // Canonical route for the legacy members library namespace.
+  if (pathname === '/members/library') {
+    return addSecurityHeaders(
+      NextResponse.redirect(getAbsoluteUrl('/members/academy/courses', request), 308),
+      nonce,
+    )
+  }
+
   // E2E auth bypass for deterministic Playwright coverage on middleware-protected routes.
   // Production guard is required so test headers can never bypass auth in live environments.
   const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'

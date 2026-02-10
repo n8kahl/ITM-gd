@@ -29,9 +29,54 @@ export async function createRequestSupabaseClient(
   return createServerSupabaseClient()
 }
 
+function shouldUseE2EBypass(request: NextRequest): boolean {
+  if (process.env.NODE_ENV === 'production') return false
+  if (process.env.E2E_BYPASS_AUTH !== 'true') return false
+  return request.headers.get('x-e2e-bypass-auth') === '1'
+}
+
+function createE2EBypassAuth(request: NextRequest): { user: User; supabase: SupabaseClient } | null {
+  if (!shouldUseE2EBypass(request)) return null
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceRoleKey) {
+    console.warn('[request-auth] E2E bypass requested but Supabase service role configuration is missing.')
+    return null
+  }
+
+  const bypassUserId =
+    request.headers.get('x-e2e-bypass-user-id') ||
+    process.env.E2E_BYPASS_AUTH_USER_ID ||
+    '00000000-0000-4000-8000-000000000001'
+
+  const supabase = createClient(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+
+  const bypassUser = {
+    id: bypassUserId,
+    aud: 'authenticated',
+    role: 'authenticated',
+    app_metadata: { provider: 'email', providers: ['email'] },
+    user_metadata: {},
+    created_at: new Date(0).toISOString(),
+  } as User
+
+  return { user: bypassUser, supabase }
+}
+
 export async function getAuthenticatedUserFromRequest(
   request: NextRequest,
 ): Promise<{ user: User; supabase: SupabaseClient } | null> {
+  const bypassAuth = createE2EBypassAuth(request)
+  if (bypassAuth) {
+    return bypassAuth
+  }
+
   const supabase = await createRequestSupabaseClient(request)
   const { data: { user }, error } = await supabase.auth.getUser()
 
@@ -41,4 +86,3 @@ export async function getAuthenticatedUserFromRequest(
 
   return { user, supabase }
 }
-

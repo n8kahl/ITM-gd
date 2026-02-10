@@ -405,6 +405,28 @@ export function OptionsHeatmap({
         )}
       </div>
 
+      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+        <p className="mb-2 text-xs font-medium text-white/70">Heatmap Legend</p>
+        <div className="grid grid-cols-2 gap-2 text-[10px] text-white/65">
+          <div>
+            <span className="font-medium text-emerald-300">Green intensity</span>
+            <p>Higher call-side pressure / bullish participation.</p>
+          </div>
+          <div>
+            <span className="font-medium text-red-300">Red intensity</span>
+            <p>Higher put-side pressure / hedging demand.</p>
+          </div>
+          <div>
+            <span className="font-medium text-yellow-300">Spot line</span>
+            <p>Current underlying price reference across strikes.</p>
+          </div>
+          <div>
+            <span className="font-medium text-violet-300">GEX mode</span>
+            <p>Color polarity marks positive vs negative gamma zones.</p>
+          </div>
+        </div>
+      </div>
+
       {selectedCell && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
           <div className="mb-2 flex items-center justify-between">

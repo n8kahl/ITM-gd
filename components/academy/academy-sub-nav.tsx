@@ -4,43 +4,36 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
+  Bookmark,
   House,
   LibraryBig,
   CirclePlay,
   RotateCcw,
-  Bookmark,
-  type LucideIcon,
 } from 'lucide-react'
 
-interface AcademyNavItem {
-  id: string
-  label: string
-  href: string
-  icon: LucideIcon
-}
-
-const ACADEMY_NAV_ITEMS: AcademyNavItem[] = [
+const ACADEMY_NAV_ITEMS = [
   { id: 'home', label: 'Home', href: '/members/academy', icon: House },
-  { id: 'library', label: 'Library', href: '/members/academy/courses', icon: LibraryBig },
+  { id: 'explore', label: 'Explore', href: '/members/academy/courses', icon: LibraryBig },
   { id: 'continue', label: 'Continue', href: '/members/academy/continue', icon: CirclePlay },
-  { id: 'review', label: 'Review Queue', href: '/members/academy/review', icon: RotateCcw },
+  { id: 'review', label: 'Review', href: '/members/academy/review', icon: RotateCcw },
   { id: 'saved', label: 'Saved', href: '/members/academy/saved', icon: Bookmark },
 ]
 
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === '/members/academy') {
-    return pathname === href
+function isActivePath(pathname: string, hrefValue: string): boolean {
+  if (hrefValue === '/members/academy') {
+    return pathname === hrefValue
   }
 
-  if (href === '/members/academy/courses') {
+  if (hrefValue === '/members/academy/courses') {
     return (
-      pathname === href ||
+      pathname === hrefValue ||
+      pathname === '/members/library' ||
       pathname.startsWith('/members/academy/courses/') ||
       pathname.startsWith('/members/academy/learn/')
     )
   }
 
-  return pathname === href || pathname.startsWith(`${href}/`)
+  return pathname === hrefValue || pathname.startsWith(`${hrefValue}/`)
 }
 
 export function AcademySubNav() {

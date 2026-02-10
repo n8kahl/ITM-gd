@@ -1366,15 +1366,24 @@ export function extractWidgets(functionCalls?: Array<{
     switch (fc.function) {
       case 'get_key_levels': {
         if (result.error) break
+        const levels = (result.levels as Record<string, unknown>) || {}
+        const resistanceRaw = (levels.resistance as Array<Record<string, unknown>>) || []
+        const supportRaw = (levels.support as Array<Record<string, unknown>>) || []
         widgets.push({
           type: 'key_levels',
           data: {
             symbol: result.symbol,
             currentPrice: result.currentPrice,
-            resistance: (result.levels as Record<string, unknown>)?.resistance,
-            support: (result.levels as Record<string, unknown>)?.support,
-            vwap: ((result.levels as Record<string, unknown>)?.indicators as Record<string, unknown>)?.vwap,
-            atr14: ((result.levels as Record<string, unknown>)?.indicators as Record<string, unknown>)?.atr14,
+            resistance: resistanceRaw.map((level) => ({
+              ...level,
+              name: String(level.name || level.type || 'Resistance'),
+            })),
+            support: supportRaw.map((level) => ({
+              ...level,
+              name: String(level.name || level.type || 'Support'),
+            })),
+            vwap: (levels.indicators as Record<string, unknown>)?.vwap,
+            atr14: (levels.indicators as Record<string, unknown>)?.atr14,
           },
         })
         break

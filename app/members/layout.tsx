@@ -160,6 +160,3 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
-
-// Re-export hook for convenience
-export { useMemberAuth, useMemberAuth as useMemberSession } from '@/contexts/MemberAuthContext'

@@ -1,21 +1,13 @@
 'use client'
 
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, BrainCircuit, Wrench, Search, Activity, PenSquare, NotebookPen } from 'lucide-react'
+import { User, BrainCircuit, Wrench, Search, Activity, PenSquare } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { sanitizeContent } from '@/lib/sanitize'
-import {
-  AI_COACH_CURRENT_SESSION_STORAGE_KEY,
-  type ChatMessage,
-} from '@/hooks/use-ai-coach-chat'
-import {
-  buildJournalPrefillSearchParams,
-  extractJournalPrefillFromAssistantMessage,
-} from '@/lib/journal/ai-coach-bridge'
+import { type ChatMessage } from '@/hooks/use-ai-coach-chat'
 import { WidgetCard, extractWidgets } from './widget-cards'
 import { FollowUpChips } from './follow-up-chips'
 
@@ -29,36 +21,12 @@ interface ChatMessageProps {
  * and inline generative UI widgets.
  */
 export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSendPrompt }: ChatMessageProps) {
-  const router = useRouter()
   const isUser = message.role === 'user'
 
   const widgets = useMemo(() => {
     if (isUser || !message.functionCalls) return []
     return extractWidgets(message.functionCalls)
   }, [isUser, message.functionCalls])
-
-  const journalPrefill = useMemo(() => {
-    if (isUser || message.isStreaming || !message.content) return null
-    return extractJournalPrefillFromAssistantMessage({
-      role: message.role,
-      content: message.content,
-      functionCalls: message.functionCalls,
-    })
-  }, [isUser, message.content, message.functionCalls, message.isStreaming, message.role])
-
-  const handleLogTrade = useCallback(() => {
-    if (!journalPrefill) return
-
-    const nextPrefill = { ...journalPrefill }
-    if (typeof window !== 'undefined') {
-      const sessionId = window.sessionStorage.getItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY)
-      if (sessionId && !nextPrefill.session_id) {
-        nextPrefill.session_id = sessionId
-      }
-    }
-
-    router.push(`/members/journal?${buildJournalPrefillSearchParams(nextPrefill).toString()}`)
-  }, [journalPrefill, router])
 
   return (
     <motion.div
@@ -129,19 +97,6 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
               {widgets.map((widget, i) => (
                 <WidgetCard key={i} widget={widget} />
               ))}
-            </div>
-          )}
-
-          {journalPrefill && (
-            <div className="mt-1">
-              <button
-                type="button"
-                onClick={handleLogTrade}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15 hover:text-emerald-200"
-              >
-                <NotebookPen className="h-3.5 w-3.5" />
-                Log This Trade
-              </button>
             </div>
           )}
 

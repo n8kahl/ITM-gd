@@ -1,14 +1,16 @@
 'use client'
 
+import { useEffect, useState, type MouseEvent } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { Clock, BookOpen, Sparkles, Target } from 'lucide-react'
+import { Clock, BookOpen, Sparkles, Target, Bookmark, Loader2 } from 'lucide-react'
 import { ProgressRing } from '@/components/academy/progress-ring'
 import { resolveCourseImage } from '@/lib/academy/course-images'
 
 export interface CourseCardData {
+  id?: string
   slug: string
   title: string
   description: string
@@ -21,6 +23,7 @@ export interface CourseCardData {
   skills?: string[]
   microLearningAvailable?: boolean
   lastUpdatedAt?: string | null
+  isSaved?: boolean
 }
 
 interface CourseCardProps {
@@ -45,6 +48,13 @@ const difficultyConfig = {
 }
 
 export function CourseCard({ course, className, density = 'comfortable' }: CourseCardProps) {
+  const [isSaved, setIsSaved] = useState(Boolean(course.isSaved))
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    setIsSaved(Boolean(course.isSaved))
+  }, [course.isSaved])
+
   const progress =
     course.totalLessons > 0
       ? Math.round((course.completedLessons / course.totalLessons) * 100)
@@ -65,19 +75,47 @@ export function CourseCard({ course, className, density = 'comfortable' }: Cours
     return parsed.toLocaleDateString()
   })()
 
+  const handleToggleSave = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!course.id || isSaving) return
+
+    setIsSaving(true)
+    try {
+      const response = await fetch('/api/academy/saved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_type: 'course',
+          entity_id: course.id,
+        }),
+      })
+
+      if (!response.ok) return
+      const payload = await response.json()
+      if (payload?.success) {
+        setIsSaved(Boolean(payload?.data?.saved))
+      }
+    } catch {
+      // no-op
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
-    <Link href={`/members/academy/courses/${course.slug}`}>
-      <motion.div
-        whileHover={{ y: -2 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        className={cn(
-          'group rounded-xl overflow-hidden',
-          'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5',
-          'hover:border-emerald-500/30 transition-colors duration-300',
-          density === 'compact' ? 'min-h-[250px]' : '',
-          className
-        )}
-      >
+    <motion.div
+      whileHover={{ y: -2 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      className={cn(
+        'group relative rounded-xl overflow-hidden',
+        'bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5',
+        'hover:border-emerald-500/30 transition-colors duration-300',
+        density === 'compact' ? 'min-h-[250px]' : '',
+        className
+      )}
+    >
+      <Link href={`/members/academy/courses/${course.slug}`} className="block">
         {/* Thumbnail */}
         <div className="relative aspect-video bg-white/5 overflow-hidden">
           <Image
@@ -109,7 +147,7 @@ export function CourseCard({ course, className, density = 'comfortable' }: Cours
 
           {/* Progress ring overlay */}
           {progress > 0 && (
-            <div className="absolute top-2 right-2">
+            <div className="absolute top-2 right-12">
               <ProgressRing
                 progress={progress}
                 size={32}
@@ -192,7 +230,24 @@ export function CourseCard({ course, className, density = 'comfortable' }: Cours
             <div className="text-[10px] text-white/35">Updated {lastUpdatedLabel}</div>
           )}
         </div>
-      </motion.div>
-    </Link>
+      </Link>
+
+      <button
+        type="button"
+        aria-label={isSaved ? 'Unsave course' : 'Save course'}
+        aria-pressed={isSaved}
+        onClick={handleToggleSave}
+        disabled={!course.id || isSaving}
+        className={cn(
+          'absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors',
+          isSaved
+            ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-200'
+            : 'border-white/20 bg-[#0A0A0B]/75 text-white/65 hover:text-white hover:bg-[#0A0A0B]/90',
+          (!course.id || isSaving) && 'cursor-not-allowed opacity-70'
+        )}
+      >
+        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
+      </button>
+    </motion.div>
   )
 }

@@ -32,6 +32,34 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_fibonacci_levels',
+      description: 'Calculate Fibonacci retracement levels for a symbol using recent swing high/low.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'The stock or index symbol (e.g., SPX, NDX, AAPL, QQQ)'
+          },
+          timeframe: {
+            type: 'string',
+            enum: ['daily', '1h', '15m', '5m'],
+            description: 'Timeframe label for Fibonacci calculation',
+            default: 'daily'
+          },
+          lookback: {
+            type: 'number',
+            description: 'Number of bars to scan for swing points (2-100, default: 20)',
+            default: 20
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_current_price',
       description: 'Get the current real-time price for a symbol.',
       parameters: {

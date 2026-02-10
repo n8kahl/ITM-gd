@@ -98,10 +98,9 @@ describe('notifyAppError', () => {
 
 describe('withExponentialBackoff', () => {
   it('retries and eventually succeeds', async () => {
-    const operation = vi
-      .fn<[], Promise<string>>()
-      .mockRejectedValueOnce(new Error('temporary'))
-      .mockResolvedValueOnce('ok')
+    const operation = vi.fn()
+    operation.mockRejectedValueOnce(new Error('temporary'))
+    operation.mockResolvedValueOnce('ok')
 
     const result = await withExponentialBackoff(operation, { retries: 2, baseDelayMs: 0 })
 
@@ -110,7 +109,7 @@ describe('withExponentialBackoff', () => {
   })
 
   it('throws after max retries are exhausted', async () => {
-    const operation = vi.fn<[], Promise<string>>().mockRejectedValue(new Error('still failing'))
+    const operation = vi.fn().mockRejectedValue(new Error('still failing'))
 
     await expect(
       withExponentialBackoff(operation, { retries: 1, baseDelayMs: 0 }),

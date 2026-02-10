@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
-import { dashboardLayoutSchema } from '@/lib/validation/journal-api'
+import { dashboardLayoutSchema } from '@/lib/validation/journal-entry'
 
 export async function GET(request: NextRequest) {
   try {

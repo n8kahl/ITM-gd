@@ -17,6 +17,7 @@ import {
   CACHE_TTL
 } from './cache';
 import { getMarketStatus as getMarketStatusService } from '../marketHours';
+import { analyzeLevelTests } from './levelTestTracker';
 
 export interface LevelItem {
   type: string;
@@ -26,8 +27,12 @@ export interface LevelItem {
   distanceATR: number;
   strength: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical';
   description: string;
+  displayLabel?: string;
+  displayContext?: string;
+  side?: 'resistance' | 'support';
   testsToday?: number;
   lastTest?: string | null;
+  holdRate?: number | null;
 }
 
 export interface LevelsResponse {
@@ -85,17 +90,57 @@ function calculateDistanceMetrics(currentPrice: number, levelPrice: number, atr1
   };
 }
 
+/**
+ * Build a human-readable label/context pair for chart-side level rendering.
+ */
+function generateDisplayLabel(
+  type: string,
+  price: number,
+  distancePct: number,
+  distanceATR: number,
+  side: 'resistance' | 'support',
+): { label: string; context: string } {
+  const directionSymbol = side === 'resistance' ? '↑' : '↓';
+  const signedDistancePct = `${distancePct >= 0 ? '+' : ''}${distancePct.toFixed(2)}%`;
+  const signedDistanceAtr = `${distanceATR >= 0 ? '+' : ''}${distanceATR.toFixed(2)} ATR`;
+
+  const label = `${type} $${price.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+  return {
+    label,
+    context: `${directionSymbol} ${signedDistancePct} / ${signedDistanceAtr}`,
+  };
+}
+
 function splitBySide(
-  level: LevelItem,
+  level: Omit<LevelItem, 'displayLabel' | 'displayContext' | 'side'>,
   currentPrice: number,
   resistance: LevelItem[],
   support: LevelItem[],
 ): void {
+  const side: 'resistance' | 'support' = level.price >= currentPrice ? 'resistance' : 'support';
+  const display = generateDisplayLabel(
+    level.type,
+    level.price,
+    level.distancePct,
+    level.distanceATR,
+    side,
+  );
+  const enrichedLevel: LevelItem = {
+    ...level,
+    side,
+    displayLabel: display.label,
+    displayContext: display.context,
+  };
+
   if (level.price >= currentPrice) {
-    resistance.push(level);
+    resistance.push(enrichedLevel);
     return;
   }
-  support.push(level);
+  support.push(enrichedLevel);
 }
 
 function resolveCurrentPrice(
@@ -253,19 +298,50 @@ export async function calculateLevels(
       }, currentPrice, resistance, support);
     }
 
+    const marketDate = new Date().toISOString().slice(0, 10);
+    const levelTestMap = await analyzeLevelTests(
+      symbol,
+      [...resistance, ...support],
+      intradayData,
+      currentPrice,
+      `${symbol}:${timeframe}:${marketDate}`,
+    );
+
+    const resistanceWithTests = resistance.map((level) => {
+      const key = `${level.type}_${level.price.toFixed(2)}`;
+      const history = levelTestMap.get(key);
+      return {
+        ...level,
+        testsToday: history?.testsToday || 0,
+        lastTest: history?.lastTest || null,
+        holdRate: history?.holdRate ?? null,
+      };
+    });
+
+    const supportWithTests = support.map((level) => {
+      const key = `${level.type}_${level.price.toFixed(2)}`;
+      const history = levelTestMap.get(key);
+      return {
+        ...level,
+        testsToday: history?.testsToday || 0,
+        lastTest: history?.lastTest || null,
+        holdRate: history?.holdRate ?? null,
+      };
+    });
+
     // Sort resistance by distance (closest first)
-    resistance.sort((a, b) => a.distance - b.distance);
+    resistanceWithTests.sort((a, b) => a.distance - b.distance);
 
     // Sort support by distance (closest first, but in reverse since they're negative)
-    support.sort((a, b) => b.distance - a.distance);
+    supportWithTests.sort((a, b) => b.distance - a.distance);
 
     const result: LevelsResponse = {
       symbol,
       timestamp: new Date().toISOString(),
       currentPrice: Number(currentPrice.toFixed(2)),
       levels: {
-        resistance,
-        support,
+        resistance: resistanceWithTests,
+        support: supportWithTests,
         pivots,
         indicators: {
           vwap,

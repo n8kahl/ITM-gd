@@ -6,16 +6,45 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight, TrendingUp, TrendingDown, BookOpen } from 'lucide-react'
-import { getEntries } from '@/app/actions/journal'
+import type { JournalDirection, JournalEntry } from '@/lib/types/journal'
 
 interface Entry {
   id: string
   trade_date: string
   symbol: string
-  direction: 'long' | 'short' | 'neutral' | null
+  direction: JournalDirection | null
   pnl: number | null
   pnl_percentage: number | null
   is_winner: boolean | null
+}
+
+function toRecentEntry(entry: JournalEntry): Entry {
+  return {
+    id: entry.id,
+    trade_date: entry.trade_date,
+    symbol: entry.symbol,
+    direction: entry.direction,
+    pnl: entry.pnl,
+    pnl_percentage: entry.pnl_percentage,
+    is_winner: entry.is_winner,
+  }
+}
+
+async function loadRecentEntries(): Promise<Entry[]> {
+  const response = await fetch('/api/members/journal?limit=5&offset=0&sortBy=trade_date&sortDir=desc', {
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    return []
+  }
+
+  const payload = await response.json().catch(() => null)
+  if (!payload?.success || !Array.isArray(payload.data)) {
+    return []
+  }
+
+  return (payload.data as JournalEntry[]).map(toRecentEntry)
 }
 
 export function RecentEntries() {
@@ -23,25 +52,30 @@ export function RecentEntries() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const loadEntries = async () => {
-      const result = await getEntries({ limit: 5, orderBy: 'trade_date', orderDirection: 'desc' })
-      if (result.success && result.data) {
-        setEntries(result.data)
+    let active = true
+
+    const run = async () => {
+      const loaded = await loadRecentEntries()
+      if (active) {
+        setEntries(loaded)
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
-    loadEntries()
+    void run()
+
+    return () => {
+      active = false
+    }
   }, [])
 
   const formatCurrency = (value: number | null) => {
     if (value === null) return '-'
-    const formatted = new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 2
+      minimumFractionDigits: 2,
     }).format(value)
-    return formatted
   }
 
   const formatPercentage = (value: number | null) => {
@@ -53,7 +87,7 @@ export function RecentEntries() {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     })
   }
 
@@ -61,13 +95,13 @@ export function RecentEntries() {
     return (
       <Card className="glass-card-heavy border-white/10">
         <CardHeader>
-          <div className="h-6 bg-white/10 rounded w-32 mb-2 animate-pulse" />
-          <div className="h-4 bg-white/10 rounded w-48 animate-pulse" />
+          <div className="mb-2 h-6 w-32 animate-pulse rounded bg-white/10" />
+          <div className="h-4 w-48 animate-pulse rounded bg-white/10" />
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 bg-white/5 rounded animate-pulse" />
+              <div key={i} className="h-16 animate-pulse rounded bg-white/5" />
             ))}
           </div>
         </CardContent>
@@ -81,7 +115,7 @@ export function RecentEntries() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-emerald-500" />
+              <BookOpen className="h-5 w-5 text-emerald-500" />
               Recent Trades
             </CardTitle>
             <CardDescription>Your latest journal entries</CardDescription>
@@ -89,7 +123,7 @@ export function RecentEntries() {
           <Link href="/members/journal">
             <Button variant="ghost" size="sm" className="gap-2">
               View All
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
         </div>
@@ -97,8 +131,8 @@ export function RecentEntries() {
       <CardContent>
         {entries.length === 0 ? (
           <div className="py-12 text-center">
-            <BookOpen className="w-12 h-12 text-white/20 mx-auto mb-3" />
-            <p className="text-white/60 mb-4">No trades logged yet</p>
+            <BookOpen className="mx-auto mb-3 h-12 w-12 text-white/20" />
+            <p className="mb-4 text-white/60">No trades logged yet</p>
             <Link href="/members/journal">
               <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600">
                 Log Your First Trade
@@ -110,47 +144,40 @@ export function RecentEntries() {
             {entries.map((entry) => (
               <div
                 key={entry.id}
-                className="flex items-center justify-between p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-white/5"
+                className="flex flex-1 items-center justify-between rounded-lg border border-white/5 bg-white/5 p-4 transition-colors hover:bg-white/10"
               >
-                <div className="flex items-center gap-4 flex-1">
-                  {/* Date */}
-                  <div className="text-sm text-white/60 min-w-[60px]" suppressHydrationWarning>
+                <div className="flex flex-1 items-center gap-4">
+                  <div className="min-w-[60px] text-sm text-white/60" suppressHydrationWarning>
                     {formatDate(entry.trade_date)}
                   </div>
 
-                  {/* Symbol */}
-                  <div className="font-bold text-emerald-500 min-w-[80px]">
+                  <div className="min-w-[80px] font-bold text-emerald-500">
                     {entry.symbol}
                   </div>
 
-                  {/* Direction Badge */}
-                  {entry.direction && (
+                  {entry.direction ? (
                     <Badge
                       variant={entry.direction === 'long' ? 'default' : 'secondary'}
                       className={
                         entry.direction === 'long'
-                          ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30'
-                          : entry.direction === 'short'
-                          ? 'bg-red-500/20 text-red-500 border-red-500/30'
-                          : 'bg-gray-500/20 text-gray-500 border-gray-500/30'
+                          ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-500'
+                          : 'border-red-500/30 bg-red-500/20 text-red-500'
                       }
                     >
-                      {entry.direction === 'long' && <TrendingUp className="w-3 h-3 mr-1" />}
-                      {entry.direction === 'short' && <TrendingDown className="w-3 h-3 mr-1" />}
+                      {entry.direction === 'long' ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
                       {entry.direction.toUpperCase()}
                     </Badge>
-                  )}
+                  ) : null}
                 </div>
 
-                {/* P&L */}
                 <div className="text-right">
                   <div
                     className={`font-mono font-bold ${
                       entry.pnl && entry.pnl > 0
                         ? 'text-emerald-500'
                         : entry.pnl && entry.pnl < 0
-                        ? 'text-red-500'
-                        : 'text-white/60'
+                          ? 'text-red-500'
+                          : 'text-white/60'
                     }`}
                     suppressHydrationWarning
                   >

@@ -29,7 +29,7 @@ This documentation covers every aspect of the AI Coach product, from initial con
 - [Levels Engine](./features/levels-engine/SPEC.md) - PDH, PMH, pivots, VWAP, ATR calculations
 - [Options Analysis](./features/options-analysis/SPEC.md) - Greeks, IV, options chains
 - [Trade Companion](./features/trade-companion/SPEC.md) - Conversational AI behavior
-- [Trade Journal](./features/trade-journal/SPEC.md) - Historical performance & pattern recognition
+- [Trade Journal V2](../specs/TRADE_JOURNAL_V2_SPEC.md) - Manual-first journaling, import, screenshots, and analytics
 - [Opportunity Scanner](./features/opportunity-scanner/SPEC.md) - Proactive setup discovery
 - [SPX/NDX Specialization](./features/spx-ndx-specialization/SPEC.md) - Index-specific features
 
@@ -105,7 +105,7 @@ This documentation covers every aspect of the AI Coach product, from initial con
 │   │   ├── GREEKS_ENGINE.md
 │   │   └── TEST_CASES.md
 │   ├── /trade-companion
-│   ├── /trade-journal
+│   ├── /trade-journal (deprecated; replaced by ../specs/TRADE_JOURNAL_V2_SPEC.md)
 │   ├── /opportunity-scanner
 │   ├── /swings-leaps-module
 │   └── /spx-ndx-specialization

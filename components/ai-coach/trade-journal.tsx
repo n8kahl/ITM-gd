@@ -96,7 +96,6 @@ export function TradeJournal({ onClose }: TradeJournalProps) {
         () => getTrades(token, {
           limit: 50,
           outcome: filterOutcome || undefined,
-          draft_status: 'published',
         }),
         {
           onRetry: ({ nextAttempt, maxAttempts }) => {

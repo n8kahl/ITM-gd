@@ -34,6 +34,7 @@ export interface AcademyResumeTarget {
   resumeUrl: string
   courseUrl: string
   source: 'in_progress' | 'next_unlocked'
+  source_reason: 'last_in_progress' | 'next_unlocked' | 'first_lesson'
 }
 
 type ResolveResumeTargetOptions = {
@@ -66,12 +67,14 @@ function buildResumeTarget(
   scopedCourse: CourseWithLessons,
   lesson: LessonRow,
   completedLessons: number,
-  source: AcademyResumeTarget['source']
+  sourceReason: AcademyResumeTarget['source_reason']
 ): AcademyResumeTarget {
   const lessonIndex = scopedCourse.lessons.findIndex((courseLesson) => courseLesson.id === lesson.id)
   const totalLessons = scopedCourse.lessons.length
   const courseProgressPercent =
     totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
+  const source: AcademyResumeTarget['source'] =
+    sourceReason === 'last_in_progress' ? 'in_progress' : 'next_unlocked'
 
   return {
     lessonId: lesson.id,
@@ -86,6 +89,7 @@ function buildResumeTarget(
     resumeUrl: `/members/academy/learn/${lesson.id}`,
     courseUrl: `/members/academy/courses/${scopedCourse.course.slug}`,
     source,
+    source_reason: sourceReason,
   }
 }
 
@@ -195,7 +199,7 @@ export async function resolveAcademyResumeTarget(
         scopedCourse,
         lesson,
         completedLessonsByCourseId.get(scopedCourse.course.id) || 0,
-        'in_progress'
+        'last_in_progress'
       )
     }
   }
@@ -221,6 +225,17 @@ export async function resolveAcademyResumeTarget(
         )
       }
     }
+  }
+
+  const firstCourse = scopedCourses[0]
+  const firstLesson = firstCourse?.lessons[0]
+  if (firstCourse && firstLesson) {
+    return buildResumeTarget(
+      firstCourse,
+      firstLesson,
+      completedLessonsByCourseId.get(firstCourse.course.id) || 0,
+      'first_lesson'
+    )
   }
 
   return null

@@ -1,6 +1,6 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z, ZodError } from 'zod'
-import { errorResponse, successResponse } from '@/lib/api/response'
+import { errorResponse } from '@/lib/api/response'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { contractTypeSchema, directionSchema, journalEntryCreateSchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
 import { sanitizeJournalEntries, sanitizeJournalEntry, sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
@@ -212,16 +212,15 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    return successResponse(
-      sanitizeJournalEntries(data),
-      {
-        total: count ?? 0,
-        streaks: {
-          current_streak: streak?.current_streak ?? 0,
-          longest_streak: streak?.longest_streak ?? 0,
-        },
+    return NextResponse.json({
+      success: true,
+      data: sanitizeJournalEntries(data),
+      total: count ?? 0,
+      streaks: {
+        current_streak: streak?.current_streak ?? 0,
+        longest_streak: streak?.longest_streak ?? 0,
       },
-    )
+    })
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
 
@@ -270,7 +269,7 @@ export async function POST(request: NextRequest) {
 
     await recalculateStreaks(supabase, user.id)
 
-    return successResponse(sanitizeJournalEntry(data))
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(data) })
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
 
@@ -350,7 +349,7 @@ export async function PATCH(request: NextRequest) {
       await recalculateStreaks(supabase, user.id)
     }
 
-    return successResponse(sanitizeJournalEntry(data))
+    return NextResponse.json({ success: true, data: sanitizeJournalEntry(data) })
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
 
@@ -403,7 +402,7 @@ export async function DELETE(request: NextRequest) {
 
     await recalculateStreaks(supabase, user.id)
 
-    return successResponse({ deletedId: parsed.id })
+    return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
 

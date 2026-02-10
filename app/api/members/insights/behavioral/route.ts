@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { behavioralQuerySchema } from '@/lib/validation/journal-api'
+import { behavioralQuerySchema } from '@/lib/validation/journal-entry'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
 
 export async function GET(request: NextRequest) {

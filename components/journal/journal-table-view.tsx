@@ -34,9 +34,16 @@ interface JournalTableViewProps {
   onSelectEntry: (entry: JournalEntry) => void
   onEditEntry: (entry: JournalEntry) => void
   onDeleteEntry: (entryId: string) => void
+  disableActions?: boolean
 }
 
-export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDeleteEntry }: JournalTableViewProps) {
+export function JournalTableView({
+  entries,
+  onSelectEntry,
+  onEditEntry,
+  onDeleteEntry,
+  disableActions = false,
+}: JournalTableViewProps) {
   if (entries.length === 0) return null
 
   return (
@@ -152,16 +159,18 @@ export function JournalTableView({ entries, onSelectEntry, onEditEntry, onDelete
                       <button
                         type="button"
                         aria-label="Edit trade"
+                        disabled={disableActions}
                         onClick={(e) => { e.stopPropagation(); onEditEntry(entry) }}
-                        className="focus-champagne p-1.5 rounded-md hover:bg-white/[0.06] text-muted-foreground hover:text-ivory transition-colors"
+                        className="focus-champagne p-1.5 rounded-md hover:bg-white/[0.06] text-muted-foreground hover:text-ivory transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
                         aria-label="Delete trade"
+                        disabled={disableActions}
                         onClick={(e) => { e.stopPropagation(); onDeleteEntry(entry.id) }}
-                        className="focus-champagne p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                        className="focus-champagne p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
