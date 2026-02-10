@@ -1,26 +1,17 @@
 import { BrowserContext, Page } from '@playwright/test'
 
 /**
- * Authenticate as admin by setting the titm_admin cookie
+ * Authenticate as admin for E2E by enabling middleware bypass headers.
  */
 export async function authenticateAsAdmin(context: BrowserContext): Promise<void> {
-  await context.addCookies([
-    {
-      name: 'titm_admin',
-      value: 'true',
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-  ])
+  await context.setExtraHTTPHeaders({ 'x-e2e-bypass-auth': '1' })
 }
 
 /**
  * Clear admin authentication
  */
 export async function clearAdminAuth(context: BrowserContext): Promise<void> {
+  await context.setExtraHTTPHeaders({})
   await context.clearCookies()
 }
 
@@ -30,6 +21,6 @@ export async function clearAdminAuth(context: BrowserContext): Promise<void> {
  */
 export async function verifyAdminProtection(page: Page, url: string): Promise<boolean> {
   await page.goto(url)
-  // Without admin cookie, should redirect to home
-  return page.url().includes('/') && !page.url().includes('/admin')
+  // Without bypass/auth, admin routes should redirect away.
+  return !page.url().includes('/admin')
 }

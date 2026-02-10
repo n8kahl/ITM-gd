@@ -744,7 +744,14 @@ function ChatArea({
               <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <p className="text-xs text-red-400 flex-1">{error}</p>
-                <button onClick={onClearError} className="text-red-400/60 hover:text-red-400"><X className="w-3 h-3" /></button>
+                <button
+                  type="button"
+                  onClick={onClearError}
+                  aria-label="Dismiss error"
+                  className="text-red-400/60 hover:text-red-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             </motion.div>
           )}

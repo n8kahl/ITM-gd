@@ -20,30 +20,21 @@ test.describe('Server-Side OAuth Callback Flow @critical', () => {
     // Page should return 200
     expect(response?.status()).toBe(200)
 
-    // Should show authentication/redirect message
+    // Should show callback/loading/redirect message
     const bodyText = await page.locator('body').textContent()
-    expect(bodyText).toMatch(/Authenticating|Redirecting|secure authentication/i)
+    expect(bodyText).toMatch(/Loading|Authenticating|Redirecting|secure authentication/i)
   })
 
-  test('SSA-002: /auth/callback without code redirects to API route', async ({ page }) => {
-    // Track navigation
-    const navigations: string[] = []
-    page.on('framenavigated', frame => {
-      if (frame === page.mainFrame()) {
-        navigations.push(frame.url())
-      }
-    })
+  test('SSA-002: /auth/callback without code forwards then redirects to login', async ({ page }) => {
+    const forwardedRequest = page.waitForRequest((request) => (
+      request.url().includes('/api/auth/callback')
+    ))
 
-    await page.goto('/auth/callback')
+    await page.goto('/auth/callback', { waitUntil: 'domcontentloaded' })
+    await forwardedRequest
 
-    // Wait for client-side redirect to API route
-    await page.waitForTimeout(2000)
-
-    // Should have navigated to /api/auth/callback
-    const finalUrl = page.url()
-    const hasApiCallback = navigations.some(url => url.includes('/api/auth/callback'))
-
-    expect(hasApiCallback || finalUrl.includes('/api/auth/callback')).toBeTruthy()
+    await page.waitForURL(/\/login/)
+    expect(page.url()).toContain('error=oauth')
   })
 
   test('SSA-003: /api/auth/callback without code redirects to login with error', async ({ page }) => {
@@ -67,22 +58,14 @@ test.describe('Server-Side OAuth Callback Flow @critical', () => {
   })
 
   test('SSA-005: /auth/callback preserves redirect query param', async ({ page }) => {
-    const navigations: string[] = []
-    page.on('framenavigated', frame => {
-      if (frame === page.mainFrame()) {
-        navigations.push(frame.url())
-      }
-    })
+    const forwardedRequest = page.waitForRequest((request) => (
+      request.url().includes('/api/auth/callback')
+      && request.url().includes('redirect=%2Fmembers%2Flibrary')
+    ))
 
-    await page.goto('/auth/callback?redirect=/members/library')
-    await page.waitForTimeout(2000)
-
-    // The redirect param should be forwarded to API route
-    const hasRedirectParam = navigations.some(url =>
-      url.includes('/api/auth/callback') && url.includes('redirect')
-    )
-
-    expect(hasRedirectParam).toBeTruthy()
+    await page.goto('/auth/callback?redirect=/members/library', { waitUntil: 'domcontentloaded' })
+    const request = await forwardedRequest
+    expect(request.url()).toContain('redirect=%2Fmembers%2Flibrary')
   })
 
   test('SSA-006: /auth/callback does NOT call exchangeCodeForSession client-side', async ({ page }) => {

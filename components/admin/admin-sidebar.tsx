@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
-  BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity,
+  BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity, PanelTop,
   ChevronRight, LogOut, Wand2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -31,13 +31,14 @@ const navigation = [
       { name: 'Studio Hub', href: '/admin/studio', icon: Wand2 },
     ]
   },
-  {
-    group: 'System',
-    items: [
-      { name: 'Analytics', href: '/admin/analytics', icon: Activity },
-      { name: 'Settings', href: '/admin/settings', icon: Sliders },
-    ]
-  },
+      {
+        group: 'System',
+        items: [
+          { name: 'Analytics', href: '/admin/analytics', icon: Activity },
+          { name: 'Member Tabs', href: '/admin/tabs', icon: PanelTop },
+          { name: 'Settings', href: '/admin/settings', icon: Sliders },
+        ]
+      },
 ]
 
 export function AdminSidebar() {

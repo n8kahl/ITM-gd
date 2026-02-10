@@ -6,7 +6,7 @@ export const requireAICoachLiveReadiness = process.env.E2E_AI_COACH_REQUIRE_LIVE
 
 export const e2eBackendUrl = process.env.E2E_BACKEND_URL
   || process.env.NEXT_PUBLIC_AI_COACH_API_URL
-  || 'http://localhost:3001'
+  || 'http://127.0.0.1:3001'
 
 export const aiCoachBypassUserId = process.env.E2E_BYPASS_USER_ID || e2eBypassUserId
 export const aiCoachBypassToken = process.env.E2E_BYPASS_TOKEN || e2eBypassToken

@@ -68,7 +68,11 @@ function addSecurityHeaders(response: NextResponse, nonce: string): NextResponse
   // and has been removed from modern browsers. CSP replaces it.
   response.headers.set('X-XSS-Protection', '0')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  // Only send HSTS in production over HTTPS. Sending HSTS on localhost breaks
+  // local development and Playwright by forcing HTTP -> HTTPS upgrades.
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
   return response
 }
 
@@ -102,11 +106,17 @@ export async function middleware(request: NextRequest) {
   const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
   const e2eBypassHeader = request.headers.get('x-e2e-bypass-auth') === '1'
   const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
-  if (e2eBypassAllowed && e2eBypassHeader && pathname.startsWith('/members')) {
-    const response = NextResponse.next({
-      request: { headers: requestHeaders },
-    })
-    return addSecurityHeaders(response, nonce)
+  if (e2eBypassAllowed && e2eBypassHeader) {
+    const bypassPrefixes = ['/members', '/admin', '/join-discord']
+    const shouldBypass = bypassPrefixes.some((prefix) => (
+      pathname === prefix || pathname.startsWith(prefix + '/')
+    ))
+    if (shouldBypass) {
+      const response = NextResponse.next({
+        request: { headers: requestHeaders },
+      })
+      return addSecurityHeaders(response, nonce)
+    }
   }
 
   // For routes that don't need auth, pass through with security headers only

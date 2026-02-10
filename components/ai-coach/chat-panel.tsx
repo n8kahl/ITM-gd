@@ -202,7 +202,9 @@ export function ChatPanel({
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <p className="text-xs text-red-400 flex-1">{error}</p>
                 <button
+                  type="button"
                   onClick={onClearError}
+                  aria-label="Dismiss error"
                   className="text-red-400/60 hover:text-red-400"
                 >
                   <X className="w-3 h-3" />

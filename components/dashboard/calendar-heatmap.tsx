@@ -285,30 +285,41 @@ export function CalendarHeatmap() {
                   const annotationSet = dateStr ? annotations.get(dateStr) : null
                   const firstAnnotation = annotationSet?.values().next().value as AnnotationType | undefined
 
+                  if (!dateStr) {
+                    return (
+                      <div
+                        key={`${weekIndex}-${dayIndex}`}
+                        style={{
+                          width: cellSize,
+                          height: cellSize,
+                          backgroundColor: 'transparent',
+                        }}
+                        className="relative cursor-default rounded-[2px] transition-all duration-150"
+                        aria-hidden="true"
+                      />
+                    )
+                  }
+
                   return (
                     <button
                       key={`${weekIndex}-${dayIndex}`}
                       type="button"
-                      disabled={!dateStr}
                       style={{
                         width: cellSize,
                         height: cellSize,
-                        backgroundColor: dateStr
-                          ? gradientColor(dayData?.pnl ?? 0, dayData?.trade_count ?? 0, maxAbsPnl)
-                          : 'transparent',
+                        backgroundColor: gradientColor(dayData?.pnl ?? 0, dayData?.trade_count ?? 0, maxAbsPnl),
                       }}
                       className={cn(
-                        'relative rounded-[2px] transition-all duration-150',
-                        dateStr ? 'cursor-pointer hover:ring-1 hover:ring-white/20' : 'cursor-default',
-                        dateStr && (dayData?.trade_count ?? 0) === 0 && 'bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.02),rgba(255,255,255,0.02)_2px,rgba(255,255,255,0.04)_2px,rgba(255,255,255,0.04)_4px)]',
+                        'relative cursor-pointer rounded-[2px] transition-all duration-150 hover:ring-1 hover:ring-white/20',
+                        (dayData?.trade_count ?? 0) === 0 && 'bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.02),rgba(255,255,255,0.02)_2px,rgba(255,255,255,0.04)_2px,rgba(255,255,255,0.04)_4px)]',
                       )}
-                      onMouseEnter={() => setHoveredDate(dateStr || null)}
+                      onMouseEnter={() => setHoveredDate(dateStr)}
                       onMouseLeave={() => setHoveredDate(null)}
                       onClick={() => {
-                        if (!dateStr) return
                         router.push(`/members/journal?from=${dateStr}&to=${dateStr}`)
                       }}
-                      title={dateStr || ''}
+                      title={dateStr}
+                      aria-label={`Open trading journal for ${dateStr}`}
                     >
                       {firstAnnotation && (
                         <span className="absolute -right-0.5 -top-0.5 rounded-full bg-black/60 p-[1px]">
@@ -371,4 +382,3 @@ export function CalendarHeatmap() {
     </div>
   )
 }
-

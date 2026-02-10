@@ -134,6 +134,8 @@ export function Onboarding({ onComplete, onSkip, onTryFeature }: OnboardingProps
           {ONBOARDING_STEPS.map((_, idx) => (
             <button
               key={idx}
+              type="button"
+              aria-label={`Go to onboarding step ${idx + 1}: ${ONBOARDING_STEPS[idx].title}`}
               onClick={() => setCurrentStep(idx)}
               className={cn(
                 'w-2 h-2 rounded-full transition-all duration-300',

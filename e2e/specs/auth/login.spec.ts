@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test.describe('Login Page', () => {
   test('displays login page with Discord button', async ({ page }) => {
     await page.goto('/login')
-    await expect(page.getByRole('heading', { name: /Welcome to TradeITM/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Welcome Back/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /Log in with Discord/i })).toBeVisible()
   })
 
@@ -25,7 +25,7 @@ test.describe('Login Page', () => {
     const backLink = page.getByRole('link', { name: /Back to Home/i })
     await expect(backLink).toBeVisible()
     await backLink.click()
-    await expect(page).toHaveURL('/')
+    await expect(page).toHaveURL(/\/$/)
   })
 
   test('has link to pricing/membership plans', async ({ page }) => {

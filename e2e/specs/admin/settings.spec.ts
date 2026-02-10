@@ -8,10 +8,10 @@ test.describe('Admin: Configuration Center', () => {
     await setupAdminApiMocks(page)
   })
 
-  test('displays configuration center page', async ({ page }) => {
+  test('displays Discord configuration page', async ({ page }) => {
     await page.goto('/admin/settings')
-    await expect(page.getByRole('heading', { name: /Configuration Center/i })).toBeVisible()
-    await expect(page.getByText(/Manage system secrets and configuration/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Discord Configuration/i })).toBeVisible()
+    await expect(page.getByText(/Configure your Discord integration settings/i)).toBeVisible()
   })
 
   test('shows security notice about masked values', async ({ page }) => {
@@ -22,18 +22,20 @@ test.describe('Admin: Configuration Center', () => {
 
   test('displays Discord integration settings', async ({ page }) => {
     await page.goto('/admin/settings')
-    await expect(page.getByText(/Discord Integration/i)).toBeVisible()
-    await expect(page.getByText(/Discord Guild ID/i)).toBeVisible()
+    await expect(page.getByText(/Discord Integration/i).first()).toBeVisible()
+    await expect(page.getByText(/Guild ID/i).first()).toBeVisible()
   })
 
-  test('displays Telegram notification settings', async ({ page }) => {
+  test('displays AI system prompt section', async ({ page }) => {
     await page.goto('/admin/settings')
-    await expect(page.getByText(/Telegram Notifications/i)).toBeVisible()
+    await expect(page.getByText(/AI System Prompt/i)).toBeVisible()
+    await expect(page.getByText(/System Prompt Content/i)).toBeVisible()
   })
 
-  test('displays API Keys section', async ({ page }) => {
+  test('displays membership tier mapping section', async ({ page }) => {
     await page.goto('/admin/settings')
-    await expect(page.getByText(/API Keys/i)).toBeVisible()
+    await expect(page.getByText(/Membership Tier Mapping/i)).toBeVisible()
+    await expect(page.getByText(/Map Discord role IDs to membership tiers/i)).toBeVisible()
   })
 
   test('shows masked values with dots', async ({ page }) => {
@@ -46,13 +48,14 @@ test.describe('Admin: Configuration Center', () => {
   test('has reveal button for sensitive values', async ({ page }) => {
     await page.goto('/admin/settings')
     // Look for buttons that can reveal/hide values (should have title or aria-label)
-    const revealButtons = page.getByTitle(/Reveal|Hide/i)
+    const revealButtons = page.getByTitle(/Show|Hide/i)
     await expect(revealButtons.first()).toBeVisible()
   })
 
-  test('has add setting button', async ({ page }) => {
+  test('has add tier mapping controls', async ({ page }) => {
     await page.goto('/admin/settings')
-    await expect(page.getByRole('button', { name: /Add Setting/i })).toBeVisible()
+    await expect(page.getByPlaceholder(/Discord Role ID/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Add$/i })).toBeVisible()
   })
 
   test('has refresh button', async ({ page }) => {
@@ -60,15 +63,15 @@ test.describe('Admin: Configuration Center', () => {
     await expect(page.getByRole('button', { name: /Refresh/i })).toBeVisible()
   })
 
-  test('shows test notification button for Telegram', async ({ page }) => {
+  test('shows test connection button', async ({ page }) => {
     await page.goto('/admin/settings')
-    await expect(page.getByRole('button', { name: /Test Notification/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Test Connection/i })).toBeVisible()
   })
 
-  test('can open add setting modal', async ({ page }) => {
+  test('shows save actions for settings sections', async ({ page }) => {
     await page.goto('/admin/settings')
-    await page.getByRole('button', { name: /Add Setting/i }).click()
-    await expect(page.getByText(/Add New Setting/i)).toBeVisible()
-    await expect(page.getByPlaceholder(/setting_key/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Save Configuration/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Save AI Prompt/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Save Tier Mapping/i })).toBeVisible()
   })
 })

@@ -1,54 +1,46 @@
 import { test, expect } from '@playwright/test'
 
+test.use({
+  extraHTTPHeaders: {
+    'x-e2e-bypass-auth': '1',
+  },
+})
+
 test.describe('Join Discord Page', () => {
-  test('displays join Discord page correctly', async ({ page }) => {
+  test('displays membership required page correctly', async ({ page }) => {
     await page.goto('/join-discord')
-    await expect(page.getByRole('heading', { name: /Join.*Discord/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Active Membership Required/i })).toBeVisible()
+    await expect(page.getByText(/could not verify your access/i)).toBeVisible()
   })
 
-  test('shows warning about not being a server member', async ({ page }) => {
+  test('shows access denied warning copy', async ({ page }) => {
     await page.goto('/join-discord')
-    await expect(page.getByText(/must be a member of the TradeITM Discord/i)).toBeVisible()
+    await expect(page.getByText(/Access Denied/i)).toBeVisible()
+    await expect(page.getByText(/does not have an active TradeITM membership role/i)).toBeVisible()
   })
 
-  test('has join Discord button', async ({ page }) => {
+  test('has membership plans call-to-action link', async ({ page }) => {
     await page.goto('/join-discord')
-    const joinButton = page.getByRole('link', { name: /Join.*Discord/i })
-    await expect(joinButton).toBeVisible()
+    const plansLink = page.getByRole('link', { name: /View Membership Plans/i })
+    await expect(plansLink).toBeVisible()
+    await expect(plansLink).toHaveAttribute('href', /#pricing/)
   })
 
-  test('join button opens in new tab', async ({ page }) => {
+  test('has refresh access button', async ({ page }) => {
     await page.goto('/join-discord')
-    const joinButton = page.getByRole('link', { name: /Join.*Discord/i })
-    await expect(joinButton).toHaveAttribute('target', '_blank')
-  })
-
-  test('join button has correct Discord invite link', async ({ page }) => {
-    await page.goto('/join-discord')
-    const joinButton = page.getByRole('link', { name: /Join.*Discord/i })
-    const href = await joinButton.getAttribute('href')
-    expect(href).toContain('discord')
-  })
-
-  test('displays steps to get access', async ({ page }) => {
-    await page.goto('/join-discord')
-    // Should show numbered steps or instructions
-    await expect(page.getByText(/step|Click|join|accept|return/i).first()).toBeVisible()
-  })
-
-  test('has try again button', async ({ page }) => {
-    await page.goto('/join-discord')
-    await expect(page.getByRole('button', { name: /Try Again/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Refresh Access/i })).toBeVisible()
   })
 
   test('has sign out option', async ({ page }) => {
     await page.goto('/join-discord')
-    await expect(page.getByRole('button', { name: /Sign out|Log out/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Sign out and go back/i })).toBeVisible()
   })
 
   test('has contact support link', async ({ page }) => {
     await page.goto('/join-discord')
-    await expect(page.getByRole('link', { name: /Contact|Support/i })).toBeVisible()
+    const supportLink = page.getByRole('link', { name: /Contact Support/i })
+    await expect(supportLink).toBeVisible()
+    await expect(supportLink).toHaveAttribute('href', /mailto:support@tradeitm\.com/)
   })
 
   test('has back to home link', async ({ page }) => {
@@ -56,14 +48,11 @@ test.describe('Join Discord Page', () => {
     const backLink = page.getByRole('link', { name: /Back to Home/i })
     await expect(backLink).toBeVisible()
     await backLink.click()
-    await expect(page).toHaveURL('/')
+    await expect(page).toHaveURL(/\/$/)
   })
 
-  test('shows Discord icon or branding', async ({ page }) => {
+  test('renders iconography', async ({ page }) => {
     await page.goto('/join-discord')
-    // Page should have Discord-related iconography
-    const svgElements = page.locator('svg')
-    const count = await svgElements.count()
-    expect(count).toBeGreaterThan(0)
+    await expect(page.locator('main svg').first()).toBeVisible()
   })
 })

@@ -30,8 +30,8 @@ test.describe('Admin: Discord Role Mapping', () => {
 
   test('displays existing role mappings', async ({ page }) => {
     await page.goto('/admin/roles')
-    await expect(page.getByText('Core Sniper')).toBeVisible()
-    await expect(page.getByText('Pro Sniper')).toBeVisible()
+    await expect(page.getByText('Core Sniper').first()).toBeVisible()
+    await expect(page.getByText('Pro Sniper').first()).toBeVisible()
   })
 
   test('shows available permissions', async ({ page }) => {
@@ -53,8 +53,8 @@ test.describe('Admin: Discord Role Mapping', () => {
   test('redirects unauthenticated users', async ({ page, context }) => {
     await clearAdminAuth(context)
     await page.goto('/admin/roles')
-    // Should redirect to home page
-    await page.waitForURL('/')
-    expect(page.url()).not.toContain('/admin')
+    // Should redirect to login page
+    await page.waitForURL(/\/login/)
+    expect(page.url()).toContain('/login')
   })
 })

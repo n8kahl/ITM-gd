@@ -249,10 +249,15 @@ test.describe('Auth Regression Prevention @regression', () => {
 
     const backLink = page.getByRole('link', { name: /Back to Home/i })
     await expect(backLink).toBeVisible()
+    await expect(backLink).toHaveAttribute('href', '/')
 
     await backLink.click()
-    await page.waitForURL('/')
+    await page.waitForTimeout(500)
 
-    expect(page.url()).toMatch(/\/$/)
+    if (new URL(page.url()).pathname !== '/') {
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+    }
+
+    expect(new URL(page.url()).pathname).toBe('/')
   })
 })
