@@ -31,6 +31,15 @@ import {
   type AppError,
 } from '@/lib/error-handler'
 import { useIsMobile } from '@/hooks/use-is-mobile'
+import {
+  enqueueOfflineJournalMutation,
+  getOfflineMutationCount,
+  mergeServerEntriesWithPendingOffline,
+  readCachedJournalEntries,
+  readOfflineJournalMutations,
+  writeCachedJournalEntries,
+  writeOfflineJournalMutations,
+} from '@/lib/journal/offline-storage'
 
 function applyFilters(entries: JournalEntry[], filters: JournalFilters): JournalEntry[] {
   let filtered = [...entries]
@@ -132,6 +141,10 @@ export default function JournalPage() {
   const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
   const [pullDistance, setPullDistance] = useState(0)
   const [isPullRefreshing, setIsPullRefreshing] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
+  const [isSyncingOfflineQueue, setIsSyncingOfflineQueue] = useState(false)
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0)
+  const [showingCachedEntries, setShowingCachedEntries] = useState(false)
 
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)
   const [entryPrefill, setEntryPrefill] = useState<JournalPrefillPayload | null>(null)
@@ -159,6 +172,33 @@ export default function JournalPage() {
     window.addEventListener('resize', syncViewForViewport)
     return () => window.removeEventListener('resize', syncViewForViewport)
   }, [preferredDesktopView])
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+
+    const syncOnlineStatus = () => setIsOnline(navigator.onLine)
+    syncOnlineStatus()
+    setOfflineQueueCount(getOfflineMutationCount())
+
+    const cachedEntries = readCachedJournalEntries()
+    const queuedOptimisticEntries = mergeServerEntriesWithPendingOffline([])
+    if (cachedEntries.length > 0 || queuedOptimisticEntries.length > 0) {
+      setEntries((prev) => {
+        if (prev.length > 0) return prev
+        const merged = mergeServerEntriesWithPendingOffline(cachedEntries)
+        return merged.length > 0 ? merged : prev
+      })
+      setShowingCachedEntries(cachedEntries.length > 0)
+      setLoading(false)
+    }
+
+    window.addEventListener('online', syncOnlineStatus)
+    window.addEventListener('offline', syncOnlineStatus)
+    return () => {
+      window.removeEventListener('online', syncOnlineStatus)
+      window.removeEventListener('offline', syncOnlineStatus)
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -212,6 +252,17 @@ export default function JournalPage() {
   const loadEntries = useCallback(async (): Promise<boolean> => {
     let succeeded = false
     try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cachedEntries = mergeServerEntriesWithPendingOffline(readCachedJournalEntries())
+        setOfflineQueueCount(getOfflineMutationCount())
+        if (cachedEntries.length > 0) {
+          setEntries(cachedEntries)
+          setShowingCachedEntries(true)
+          succeeded = true
+        }
+        return succeeded
+      }
+
       const response = await withExponentialBackoff(
         () => fetch('/api/members/journal?limit=500'),
         { retries: 2, baseDelayMs: 400 },
@@ -226,9 +277,26 @@ export default function JournalPage() {
         throw createAppError('Journal response format was invalid.')
       }
 
-      setEntries(result.data)
+      const mergedEntries = mergeServerEntriesWithPendingOffline(result.data)
+      setEntries(mergedEntries)
+      writeCachedJournalEntries(result.data)
+      setShowingCachedEntries(false)
+      setOfflineQueueCount(getOfflineMutationCount())
       succeeded = true
     } catch (error) {
+      const cachedEntries = mergeServerEntriesWithPendingOffline(readCachedJournalEntries())
+      if (cachedEntries.length > 0) {
+        setEntries(cachedEntries)
+        setShowingCachedEntries(true)
+        setOfflineQueueCount(getOfflineMutationCount())
+
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          toast.info('Offline mode: showing cached journal entries')
+          succeeded = true
+          return succeeded
+        }
+      }
+
       const appError = (error && typeof error === 'object' && 'category' in error)
         ? error as AppError
         : createAppError(error)
@@ -249,6 +317,91 @@ export default function JournalPage() {
     void loadEntries()
   }, [loadEntries])
 
+  const flushOfflineQueue = useCallback(async (): Promise<boolean> => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return false
+
+    const queuedMutations = readOfflineJournalMutations()
+    if (queuedMutations.length === 0) {
+      setOfflineQueueCount(0)
+      return true
+    }
+
+    setIsSyncingOfflineQueue(true)
+    const remaining: typeof queuedMutations = []
+    let syncedCount = 0
+
+    for (const queuedMutation of queuedMutations) {
+      try {
+        const response = await fetch('/api/members/journal', {
+          method: queuedMutation.method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(queuedMutation.payload),
+        })
+
+        if (!response.ok) {
+          throw await createAppErrorFromResponse(response)
+        }
+
+        const payload = await response.json()
+        if (!payload?.success) {
+          throw createAppError('Queued trade sync did not return success.')
+        }
+
+        syncedCount += 1
+
+        if (queuedMutation.method === 'POST' && payload?.data?.id) {
+          fetch('/api/members/journal/enrich', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entryId: payload.data.id }),
+          })
+            .then(() => fetch('/api/members/journal/grade', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ entryId: payload.data.id }),
+            }))
+            .catch((error) => {
+              console.error('[Journal] Deferred enrich/grade failed:', error)
+            })
+        }
+      } catch {
+        remaining.push(queuedMutation)
+      }
+    }
+
+    writeOfflineJournalMutations(remaining)
+    setOfflineQueueCount(remaining.length)
+    setIsSyncingOfflineQueue(false)
+
+    if (syncedCount > 0) {
+      toast.success(`Synced ${syncedCount} offline trade${syncedCount === 1 ? '' : 's'}`)
+      await loadEntries()
+    }
+
+    if (remaining.length > 0) {
+      toast.error(`${remaining.length} offline trade${remaining.length === 1 ? '' : 's'} still pending sync`)
+    }
+
+    return remaining.length === 0
+  }, [loadEntries])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleOnline = () => {
+      void flushOfflineQueue()
+    }
+
+    window.addEventListener('online', handleOnline)
+    if (navigator.onLine) {
+      void flushOfflineQueue()
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [flushOfflineQueue])
+
   const filteredEntries = useMemo(() => applyFilters(entries, filters), [entries, filters])
   const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters])
 
@@ -263,6 +416,29 @@ export default function JournalPage() {
 
   const handleSave = useCallback(async (data: Record<string, unknown>) => {
     const method = data.id ? 'PATCH' : 'POST'
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const queuedMutation = enqueueOfflineJournalMutation(method, data)
+      setOfflineQueueCount((prev) => prev + 1)
+      setShowingCachedEntries(true)
+
+      if (method === 'POST') {
+        const optimisticEntries = mergeServerEntriesWithPendingOffline(entries)
+        const optimistic = optimisticEntries.find((entry) => entry.offline_queue_id === queuedMutation.id) || null
+        if (optimistic) {
+          setEntries(optimisticEntries)
+          writeCachedJournalEntries(optimisticEntries)
+          toast.success('Trade saved offline. We will sync when you reconnect.')
+          return optimistic
+        }
+        return null
+      } else {
+        toast.success('Trade update queued. It will sync when you reconnect.')
+        const existingEntry = entries.find((entry) => entry.id === data.id) || null
+        return existingEntry
+      }
+    }
+
     const response = await fetch('/api/members/journal', {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -296,7 +472,7 @@ export default function JournalPage() {
 
     await loadEntries()
     return result.data as JournalEntry
-  }, [loadEntries])
+  }, [entries, loadEntries])
 
   const handleDelete = useCallback(async (entryId: string) => {
     if (!confirm('Delete this trade? This action cannot be undone.')) return
@@ -343,6 +519,18 @@ export default function JournalPage() {
     const resolved = typeof nextValue === 'boolean' ? nextValue : !Boolean(entry.is_favorite)
 
     try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineJournalMutation('PATCH', { id: entry.id, is_favorite: resolved })
+        setOfflineQueueCount((prev) => prev + 1)
+        setEntries((prev) => prev.map((item) => (
+          item.id === entry.id
+            ? { ...item, is_favorite: resolved, sync_status: 'pending_offline' }
+            : item
+        )))
+        toast.success(`${resolved ? 'Favorited' : 'Unfavorited'} offline. Pending sync.`)
+        return
+      }
+
       const response = await fetch('/api/members/journal', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -451,6 +639,37 @@ export default function JournalPage() {
               : 'Pull to refresh'}
           </div>
         </div>
+      )}
+
+      {(showingCachedEntries || !isOnline || offlineQueueCount > 0) && (
+        <section className="glass-card rounded-xl border border-white/[0.1] px-4 py-3" aria-live="polite">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-ivory">
+                {!isOnline ? 'Offline mode enabled' : 'Pending offline sync'}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {offlineQueueCount > 0
+                  ? `${offlineQueueCount} trade${offlineQueueCount === 1 ? '' : 's'} waiting to sync.`
+                  : showingCachedEntries
+                  ? 'Showing cached journal entries while we revalidate.'
+                  : 'Connection restored.'}
+              </p>
+            </div>
+
+            {offlineQueueCount > 0 && (
+              <button
+                type="button"
+                onClick={() => { void flushOfflineQueue() }}
+                disabled={!isOnline || isSyncingOfflineQueue}
+                className="focus-champagne inline-flex h-10 items-center justify-center rounded-lg border border-white/[0.12] px-3 text-xs font-medium text-ivory transition-colors hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Sync offline trades now"
+              >
+                {isSyncingOfflineQueue ? 'Syncing...' : 'Sync now'}
+              </button>
+            )}
+          </div>
+        </section>
       )}
 
       <div className="flex items-start justify-between gap-3">

@@ -61,6 +61,8 @@ export interface JournalEntry {
   is_favorite: boolean
   created_at: string
   updated_at: string
+  sync_status?: 'synced' | 'pending_offline'
+  offline_queue_id?: string | null
 }
 
 export interface JournalFilters {

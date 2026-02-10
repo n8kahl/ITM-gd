@@ -192,6 +192,7 @@ export function JournalCardView({
         const hasScreenshot = !!(entry.screenshot_url || entry.screenshot_storage_path)
         const isVerified = entry.verification?.isVerified
         const isFavorite = Boolean(entry.is_favorite)
+        const isPendingSync = entry.sync_status === 'pending_offline'
         const currentOffset = swipeOffset[entry.id] ?? (revealedEntryId === entry.id ? -ACTION_REVEAL_WIDTH : 0)
 
         return (
@@ -297,6 +298,11 @@ export function JournalCardView({
                     <span className="inline-flex items-center gap-1 rounded-full border border-champagne/25 bg-champagne/10 px-2 py-0.5 text-[10px] font-medium text-champagne">
                       <Star className="h-3 w-3 fill-champagne" />
                       Favorite
+                    </span>
+                  )}
+                  {isPendingSync && (
+                    <span className="inline-flex items-center rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-300">
+                      Pending Sync
                     </span>
                   )}
                 </div>
