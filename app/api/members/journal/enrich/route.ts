@@ -9,6 +9,43 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
+function resolveTradeTimestamp({
+  entryId,
+  userId,
+  fieldName,
+  value,
+  fallbackIso,
+}: {
+  entryId: string
+  userId: string
+  fieldName: 'entry_timestamp' | 'exit_timestamp'
+  value: unknown
+  fallbackIso: string
+}): number {
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value).getTime()
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+    console.warn(`[journal-enrich] Invalid ${fieldName}; using fallback time`, {
+      entryId,
+      userId,
+      fieldName,
+      received: value,
+      fallbackIso,
+    })
+    return new Date(fallbackIso).getTime()
+  }
+
+  console.warn(`[journal-enrich] Missing ${fieldName}; using fallback time`, {
+    entryId,
+    userId,
+    fieldName,
+    fallbackIso,
+  })
+  return new Date(fallbackIso).getTime()
+}
+
 /**
  * POST /api/members/journal/enrich
  * Enriches a journal entry with Massive.com market context data.
@@ -73,12 +110,20 @@ export async function POST(request: NextRequest) {
       const dailyBars = dailyData.results || []
 
       // Calculate VWAP at entry/exit times
-      const entryTimestamp = entry.entry_timestamp
-        ? new Date(entry.entry_timestamp).getTime()
-        : new Date(`${tradeDate}T10:00:00-05:00`).getTime()
-      const exitTimestamp = entry.exit_timestamp
-        ? new Date(entry.exit_timestamp).getTime()
-        : new Date(`${tradeDate}T15:00:00-05:00`).getTime()
+      const entryTimestamp = resolveTradeTimestamp({
+        entryId,
+        userId,
+        fieldName: 'entry_timestamp',
+        value: entry.entry_timestamp,
+        fallbackIso: `${tradeDate}T10:00:00-05:00`,
+      })
+      const exitTimestamp = resolveTradeTimestamp({
+        entryId,
+        userId,
+        fieldName: 'exit_timestamp',
+        value: entry.exit_timestamp,
+        fallbackIso: `${tradeDate}T15:00:00-05:00`,
+      })
 
       // Find bars at entry/exit
       const entryBar = minuteBars.find((b: any) => b.t >= entryTimestamp) || minuteBars[0]

@@ -90,6 +90,22 @@ function normalizeJournalWritePayload(
     payload.trade_date = new Date().toISOString()
   }
 
+  const entryTimestamp = getFirstDefined<unknown>(input.entry_timestamp, input.entryTimestamp)
+  if (entryTimestamp !== undefined) {
+    payload.entry_timestamp =
+      typeof entryTimestamp === 'string' && entryTimestamp.trim().length > 0
+        ? entryTimestamp.trim()
+        : null
+  }
+
+  const exitTimestamp = getFirstDefined<unknown>(input.exit_timestamp, input.exitTimestamp)
+  if (exitTimestamp !== undefined) {
+    payload.exit_timestamp =
+      typeof exitTimestamp === 'string' && exitTimestamp.trim().length > 0
+        ? exitTimestamp.trim()
+        : null
+  }
+
   if (input.symbol !== undefined) {
     payload.symbol =
       typeof input.symbol === 'string' && input.symbol.trim().length > 0

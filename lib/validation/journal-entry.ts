@@ -12,6 +12,8 @@ const dateLikeSchema = z.string().trim().refine((value) => {
   message: 'Expected ISO date format (YYYY-MM-DD or ISO 8601 datetime)',
 })
 
+const isoDateTimeSchema = z.string().trim().datetime({ offset: true })
+
 const nullableBoundedNumber = (min: number, max: number) => z.preprocess((value) => {
   if (value === null || value === undefined) return value
   if (typeof value === 'string') {
@@ -54,6 +56,10 @@ export const journalEntrySchema = z.object({
   direction: directionSchema.optional(),
   trade_date: dateLikeSchema.optional(),
   tradeDate: dateLikeSchema.optional(),
+  entry_timestamp: z.union([isoDateTimeSchema, z.null()]).optional(),
+  entryTimestamp: z.union([isoDateTimeSchema, z.null()]).optional(),
+  exit_timestamp: z.union([isoDateTimeSchema, z.null()]).optional(),
+  exitTimestamp: z.union([isoDateTimeSchema, z.null()]).optional(),
 
   entry_price: nullableBoundedNumber(0, 999_999).optional(),
   exit_price: nullableBoundedNumber(0, 999_999).optional(),
