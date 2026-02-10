@@ -1,10 +1,14 @@
 import Link from "next/link";
+import type { Metadata } from 'next'
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { ContactLink } from "@/components/ui/contact-link";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Terms of Service - Trade In The Money",
   description: "Terms of Service for Trade In The Money trading signals and education platform.",
+  alternates: {
+    canonical: '/terms-of-service',
+  },
 };
 
 export default function TermsOfService() {

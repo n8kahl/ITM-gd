@@ -7,11 +7,16 @@ import { User } from 'lucide-react'
 import { AppToaster } from '@/components/ui/app-toaster'
 import './globals.css'
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tradeitm.com'
+
 export const metadata: Metadata = {
   title: 'Trade In The Money - Premium Trade Alerts & Education',
   description: 'Join the elite trading community. Get real-time trade alerts, expert education, and proven strategies from professional traders. Quality setups alerted daily.',
   generator: 'TradeITM',
-  metadataBase: new URL('https://trade-itm-prod.up.railway.app'),
+  metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: '/',
+  },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
