@@ -13,7 +13,6 @@ import {
   CandlestickChart,
   TableProperties,
   Calculator,
-  Camera,
   BookOpen,
   Bell,
   Search,
@@ -174,7 +173,6 @@ const TABS: Array<{
   { view: 'tracked', icon: ListChecks, label: 'Watchlist', group: 'portfolio' },
   { view: 'alerts', icon: Bell, label: 'Alerts', group: 'monitor' },
   { view: 'brief', icon: Sunrise, label: 'Daily Brief', group: 'monitor' },
-  { view: 'screenshot', icon: Camera, label: 'Screenshot', group: 'monitor' },
   { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
   { view: 'earnings', icon: Calendar, label: 'Earnings', group: 'research' },
   { view: 'macro', icon: Globe, label: 'Macro', group: 'research' },
@@ -741,10 +739,6 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                 setActiveView('journal')
                 setCenterView('journal')
               }}
-              onShowAlerts={() => {
-                setActiveView('alerts')
-                setCenterView('alerts')
-              }}
               onShowBrief={() => {
                 setActiveView('brief')
                 setCenterView('brief')
@@ -753,9 +747,13 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                 setActiveView('scanner')
                 setCenterView('scanner')
               }}
-              onShowTracked={() => {
-                setActiveView('tracked')
-                setCenterView('tracked')
+              onShowLeaps={() => {
+                setActiveView('leaps')
+                setCenterView('leaps')
+              }}
+              onShowMacro={() => {
+                setActiveView('macro')
+                setCenterView('macro')
               }}
             />
           )}
@@ -1156,10 +1154,10 @@ function WelcomeView({
   onShowOptions,
   onShowPosition,
   onShowJournal,
-  onShowAlerts,
   onShowBrief,
   onShowScanner,
-  onShowTracked,
+  onShowLeaps,
+  onShowMacro,
 }: {
   accessToken?: string
   displayName?: string
@@ -1168,10 +1166,10 @@ function WelcomeView({
   onShowOptions: () => void
   onShowPosition: () => void
   onShowJournal: () => void
-  onShowAlerts: () => void
   onShowBrief: () => void
   onShowScanner: () => void
-  onShowTracked: () => void
+  onShowLeaps: () => void
+  onShowMacro: () => void
 }) {
   const [clockTick, setClockTick] = useState(0)
   const [spxTicker, setSpxTicker] = useState<{
@@ -1323,9 +1321,9 @@ function WelcomeView({
     { label: 'Analyze', subtitle: 'P&L & Risk', icon: Calculator, onClick: onShowPosition },
     { label: 'Daily Brief', subtitle: 'Pre-Market', icon: Sunrise, onClick: onShowBrief },
     { label: 'Journal', subtitle: 'Trade Log', icon: BookOpen, onClick: onShowJournal },
-    { label: 'Alerts', subtitle: 'Price Watch', icon: Bell, onClick: onShowAlerts },
     { label: 'Scanner', subtitle: 'Find Setups', icon: Search, onClick: onShowScanner },
-    { label: 'Watchlist', subtitle: 'Manage Setups', icon: ListChecks, onClick: onShowTracked },
+    { label: 'LEAPS', subtitle: 'Long Dated', icon: Clock, onClick: onShowLeaps },
+    { label: 'Macro', subtitle: 'Events & Flows', icon: Globe, onClick: onShowMacro },
   ]
 
   const containerMotion = {

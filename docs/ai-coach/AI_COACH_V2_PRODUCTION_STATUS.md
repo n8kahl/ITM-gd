@@ -177,6 +177,10 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Added animated chat empty-state icon pulse/bob micro-animation for a more polished idle experience.
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
   - `/Users/natekahl/ITM-gd/app/members/ai-coach/page.tsx`
+- Navigation declutter continuation:
+  - Removed `Screenshot` from the main center-panel tab rail to reduce tool clutter (screenshot analysis remains available from chat upload).
+  - Updated welcome quick-access grid to the spec-aligned set (`Chart`, `Options`, `Analyze`, `Journal`, `Daily Brief`, `Scanner`, `LEAPS`, `Macro`).
+  - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
 
