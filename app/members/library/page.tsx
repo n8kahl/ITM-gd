@@ -1,25 +1,18 @@
 'use client'
 
-import { BookOpen } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function LibraryPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace('/members/academy')
+  }, [router])
+
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
-      <Card className="bg-[#0a0a0b] border-white/10 max-w-lg w-full">
-        <CardContent className="py-16 px-8 text-center">
-          <div className="w-24 h-24 mx-auto mb-8 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 flex items-center justify-center">
-            <BookOpen className="w-12 h-12 text-emerald-500" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-3">Coming Soon</h1>
-          <p className="text-white/60 text-lg mb-6">
-            The course library is currently under development.
-          </p>
-          <p className="text-white/40 text-sm">
-            Check back soon for premium trading courses and educational content.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="text-white/40 text-sm">Redirecting to Academy...</div>
     </div>
   )
 }
