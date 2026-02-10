@@ -330,35 +330,38 @@ export function WinRateChart({ percentage = 87, className }: WinRateChartProps) 
         }}
       />
 
-      <ResponsiveContainer width="100%" height="100%">
-        <RadialBarChart
-          cx="50%"
-          cy="50%"
-          innerRadius="65%"
-          outerRadius="85%"
-          barSize={8}
-          data={data}
-          startAngle={90}
-          endAngle={-270}
-        >
-          <PolarAngleAxis
-            type="number"
-            domain={[0, 100]}
-            angleAxisId={0}
-            tick={false}
-          />
-          <RadialBar
-            background={{ fill: "rgba(255,255,255,0.05)" }}
-            dataKey="value"
-            cornerRadius={4}
-            isAnimationActive={false}
-            fill={COLORS.bullish}
-          />
-        </RadialBarChart>
-      </ResponsiveContainer>
+      <div className="h-full w-full" aria-hidden="true">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart
+            cx="50%"
+            cy="50%"
+            innerRadius="65%"
+            outerRadius="85%"
+            barSize={8}
+            data={data}
+            startAngle={90}
+            endAngle={-270}
+          >
+            <PolarAngleAxis
+              type="number"
+              domain={[0, 100]}
+              angleAxisId={0}
+              tick={false}
+            />
+            <RadialBar
+              background={{ fill: "rgba(255,255,255,0.05)" }}
+              dataKey="value"
+              cornerRadius={4}
+              isAnimationActive={false}
+              fill={COLORS.bullish}
+            />
+          </RadialBarChart>
+        </ResponsiveContainer>
+      </div>
 
       {/* Center content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="sr-only">Win rate {currentValue}%</span>
         <span
           className="text-4xl md:text-5xl font-serif font-medium tracking-tight"
           style={{ color: COLORS.champagne }}

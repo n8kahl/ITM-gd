@@ -1,5 +1,6 @@
 import { executeFunctionCall } from '../functionHandlers';
 const mockExitAdvisorGenerateAdvice = jest.fn();
+const mockHasRequiredTierForUser = jest.fn();
 
 // Mock logger
 jest.mock('../../lib/logger', () => ({
@@ -19,6 +20,10 @@ jest.mock('../../lib/circuitBreaker', () => ({
   massiveCircuit: {
     execute: jest.fn((fn) => fn()),
   },
+}));
+
+jest.mock('../../middleware/requireTier', () => ({
+  hasRequiredTierForUser: (...args: any[]) => mockHasRequiredTierForUser(...args),
 }));
 
 // Mock Supabase
@@ -113,6 +118,7 @@ describe('Function Handlers', () => {
     jest.clearAllMocks();
     mockExitAdvisorGenerateAdvice.mockReset();
     mockGetJournalInsightsForUser.mockReset();
+    mockHasRequiredTierForUser.mockResolvedValue(true);
   });
 
   describe('get_key_levels', () => {
@@ -390,6 +396,24 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Failed to calculate gamma exposure');
       expect(result).toHaveProperty('message', 'Symbol not supported');
+    });
+
+    it('enforces pro tier access for authenticated users', async () => {
+      mockHasRequiredTierForUser.mockResolvedValue(false);
+
+      const result = await executeFunctionCall(
+        {
+          name: 'get_gamma_exposure',
+          arguments: JSON.stringify({ symbol: 'SPX' }),
+        },
+        { userId: 'user-1' },
+      );
+
+      expect(result).toEqual({
+        error: 'This feature requires a Pro subscription',
+        requiredTier: 'pro',
+      });
+      expect(mockCalculateGEXProfile).not.toHaveBeenCalled();
     });
   });
 

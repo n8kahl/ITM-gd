@@ -44,6 +44,7 @@ export interface ChatSession {
   message_count: number
   created_at: string
   updated_at: string
+  expires_at?: string | null
 }
 
 export type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'

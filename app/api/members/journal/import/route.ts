@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ZodError } from 'zod'
 import { getRequestUserId, getSupabaseAdminClient } from '@/lib/api/member-auth'
 import { importTradesSchema } from '@/lib/validation/journal-api'
+import { importBrokerNameSchema } from '@/lib/validation/journal-entry'
 
 type ContractType = 'stock' | 'call' | 'put' | 'spread'
 
@@ -103,13 +105,14 @@ export async function POST(request: NextRequest) {
     }
 
     const parsed = importTradesSchema.parse(await request.json())
+    const broker = importBrokerNameSchema.parse(parsed.broker)
     const supabase = getSupabaseAdminClient()
 
     const { data: importRecord, error: importCreateError } = await supabase
       .from('import_history')
       .insert({
         user_id: userId,
-        broker_name: parsed.broker,
+        broker_name: broker,
         file_name: parsed.fileName,
         record_count: parsed.rows.length,
         status: 'processing',
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: importCreateError?.message || 'Failed to initialize import' }, { status: 500 })
     }
 
-    const normalizedRows = parsed.rows.map((row) => normalizeImportedRow(row as Record<string, unknown>, parsed.broker))
+    const normalizedRows = parsed.rows.map((row) => normalizeImportedRow(row as Record<string, unknown>, broker))
       .filter((row) => row.symbol.length > 0)
 
     const symbols = Array.from(new Set(normalizedRows.map((row) => row.symbol)))
@@ -226,8 +229,12 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json({ success: false, error: 'Invalid import payload' }, { status: 400 })
+    if (error instanceof ZodError) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid import payload',
+        details: error.flatten(),
+      }, { status: 400 })
     }
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },

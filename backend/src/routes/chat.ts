@@ -180,7 +180,7 @@ router.delete(
       const userId = req.user!.id;
       const { sessionId } = (req as any).validatedParams;
       await deleteSession(sessionId, userId);
-      return res.json({ success: true, message: 'Session deleted successfully' });
+      return res.json({ success: true, message: 'Session archived successfully' });
     } catch (error: any) {
       logger.error('Error deleting session', { error: error?.message || String(error) });
       if (error.message.includes('not found') || error.message.includes('access denied')) {

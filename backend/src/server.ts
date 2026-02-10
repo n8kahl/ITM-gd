@@ -34,6 +34,7 @@ import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWo
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startJournalAutoPopulateWorker, stopJournalAutoPopulateWorker } from './workers/journalAutoPopulateWorker';
 import { startJournalInsightsWorker, stopJournalInsightsWorker } from './workers/journalInsightsWorker';
+import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
@@ -191,6 +192,7 @@ async function start() {
     startPositionTrackerWorker();
     startJournalAutoPopulateWorker();
     startJournalInsightsWorker();
+    startSessionCleanupWorker();
     startSetupDetectorService();
     startWorkerHealthAlertWorker();
   } catch (error) {
@@ -214,6 +216,7 @@ async function gracefulShutdown(signal: string) {
     stopPositionTrackerWorker();
     stopJournalAutoPopulateWorker();
     stopJournalInsightsWorker();
+    stopSessionCleanupWorker();
     stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
     shutdownWebSocket();

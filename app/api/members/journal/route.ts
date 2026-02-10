@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { ZodError } from 'zod'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
+import { journalEntrySchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -86,6 +88,22 @@ function normalizeJournalWritePayload(
     payload.trade_date = tradeDate
   } else if (mode === 'create') {
     payload.trade_date = new Date().toISOString()
+  }
+
+  const entryTimestamp = getFirstDefined<unknown>(input.entry_timestamp, input.entryTimestamp)
+  if (entryTimestamp !== undefined) {
+    payload.entry_timestamp =
+      typeof entryTimestamp === 'string' && entryTimestamp.trim().length > 0
+        ? entryTimestamp.trim()
+        : null
+  }
+
+  const exitTimestamp = getFirstDefined<unknown>(input.exit_timestamp, input.exitTimestamp)
+  if (exitTimestamp !== undefined) {
+    payload.exit_timestamp =
+      typeof exitTimestamp === 'string' && exitTimestamp.trim().length > 0
+        ? exitTimestamp.trim()
+        : null
   }
 
   if (input.symbol !== undefined) {
@@ -383,7 +401,8 @@ export async function POST(request: NextRequest) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     }
-    const payload = normalizeJournalWritePayload(body, 'create')
+    const parsedBody = journalEntrySchema.parse(body)
+    const payload = normalizeJournalWritePayload(parsedBody, 'create')
     const symbol = typeof payload.symbol === 'string' ? payload.symbol : ''
     if (!symbol || !symbol.trim()) {
       return NextResponse.json({ error: 'Symbol is required' }, { status: 400 })
@@ -414,6 +433,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: sanitizeJournalEntry(entry, 'new-entry') })
   } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json({
+        error: 'Invalid journal entry payload',
+        details: error.flatten(),
+      }, { status: 400 })
+    }
+
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
     }, { status: 500 })
@@ -443,8 +469,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Entry ID is required' }, { status: 400 })
     }
 
+    const parsedUpdates = journalEntryUpdateSchema.parse(rawUpdates)
+
     // Map any legacy field names to canonical names
-    const updates: Record<string, unknown> = { ...rawUpdates }
+    const updates: Record<string, unknown> = { ...parsedUpdates }
     if ('trade_type' in updates) {
       updates.direction = updates.trade_type
       delete updates.trade_type
@@ -479,6 +507,13 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: sanitizeJournalEntry(data[0], 'updated-entry') })
   } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json({
+        error: 'Invalid journal update payload',
+        details: error.flatten(),
+      }, { status: 400 })
+    }
+
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
     }, { status: 500 })

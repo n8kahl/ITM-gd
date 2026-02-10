@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
     }
 
-    const grade = gradeTrade({
+    const grade = await gradeTrade({
       symbol: entry.symbol,
       direction: entry.direction,
       entry_price: toNumber(entry.entry_price),
