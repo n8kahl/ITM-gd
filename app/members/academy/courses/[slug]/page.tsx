@@ -243,7 +243,7 @@ export default function CourseDetailPage() {
               </div>
             </div>
 
-            {nextLesson && (
+            {nextLesson ? (
               <Link
                 href={`/members/academy/learn/${nextLesson.id}`}
                 className={cn(
@@ -254,6 +254,18 @@ export default function CourseDetailPage() {
               >
                 <PlayCircle className="w-4 h-4" />
                 {progress > 0 ? 'Continue' : 'Start Course'}
+              </Link>
+            ) : (
+              <Link
+                href="/members/academy/review"
+                className={cn(
+                  'shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium',
+                  'bg-emerald-500/20 text-emerald-300 border border-emerald-500/35',
+                  'hover:bg-emerald-500/30 transition-colors'
+                )}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Course Complete
               </Link>
             )}
           </div>

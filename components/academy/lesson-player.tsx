@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
+import { useEffect, useRef, useCallback, useState, useMemo, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { Clock, BookOpen, PlayCircle } from 'lucide-react'
@@ -17,6 +17,7 @@ interface LessonPlayerProps {
   videoUrl?: string | null
   durationMinutes?: number
   onProgressUpdate?: (scrollPercent: number) => void
+  footer?: ReactNode
   className?: string
 }
 
@@ -28,6 +29,7 @@ export function LessonPlayer({
   videoUrl,
   durationMinutes,
   onProgressUpdate,
+  footer,
   className,
 }: LessonPlayerProps) {
   const contentRef = useRef<HTMLDivElement>(null)
@@ -88,7 +90,7 @@ export function LessonPlayer({
   }, [videoUrl])
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn('flex flex-col h-full min-h-0', className)}>
       {/* Lesson header */}
       <div className="px-6 py-4 border-b border-white/5 shrink-0">
         <h1 className="text-lg font-semibold text-white">{title}</h1>
@@ -110,7 +112,7 @@ export function LessonPlayer({
       <div
         ref={contentRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10"
+        className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10"
       >
         <div className="px-6 py-6 space-y-6 max-w-3xl">
           {/* Video embed */}
@@ -143,6 +145,12 @@ export function LessonPlayer({
                 {content}
               </ReactMarkdown>
             </article>
+          )}
+
+          {footer && (
+            <div className="pt-2">
+              {footer}
+            </div>
           )}
         </div>
       </div>

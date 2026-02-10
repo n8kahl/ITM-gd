@@ -32,6 +32,14 @@ function isActivePath(pathname: string, href: string): boolean {
     return pathname === href
   }
 
+  if (href === '/members/academy/courses') {
+    return (
+      pathname === href ||
+      pathname.startsWith('/members/academy/courses/') ||
+      pathname.startsWith('/members/academy/learn/')
+    )
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

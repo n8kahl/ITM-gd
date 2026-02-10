@@ -112,6 +112,17 @@ export default defineConfig({
       testMatch: /auth-health-check\.spec\.ts/,
       use: { ...devices['iPhone 13'] },
     },
+    // Mobile regression coverage for member academy UX
+    {
+      name: 'mobile-members',
+      testMatch: /academy-layout\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
+        extraHTTPHeaders: {
+          'x-e2e-bypass-auth': '1',
+        },
+      },
+    },
   ],
   webServer: webServers,
 })

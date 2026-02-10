@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
 import { LessonPlayer } from '@/components/academy/lesson-player'
 import { LessonSidebar, type SidebarLesson } from '@/components/academy/lesson-sidebar'
 import { AiTutorPanel } from '@/components/academy/ai-tutor-panel'
@@ -44,6 +44,7 @@ interface LessonResponse {
 
 export default function LessonPage() {
   const params = useParams()
+  const router = useRouter()
   const lessonId = params.id as string
 
   const [lesson, setLesson] = useState<LessonData | null>(null)
@@ -95,9 +96,8 @@ export default function LessonPage() {
     [lessonId]
   )
 
-  // Mark lesson as complete
-  const handleMarkComplete = useCallback(async () => {
-    if (!lesson || isMarkingComplete) return
+  const markLessonComplete = useCallback(async () => {
+    if (!lesson || isMarkingComplete) return false
     setIsMarkingComplete(true)
     try {
       const res = await fetch(`/api/academy/lessons/${lesson.id}/progress`, {
@@ -109,24 +109,37 @@ export default function LessonPage() {
       if (res.ok) {
         setLesson((prev) => {
           if (!prev) return prev
+          const currentIndex = prev.course.lessons.findIndex((l) => l.id === prev.id)
           return {
             ...prev,
             isCompleted: true,
             course: {
               ...prev.course,
-              lessons: prev.course.lessons.map((l) =>
-                l.id === prev.id ? { ...l, isCompleted: true } : l
+              lessons: prev.course.lessons.map((l, index) =>
+                l.id === prev.id
+                  ? { ...l, isCompleted: true, isLocked: false }
+                  : index === currentIndex + 1
+                    ? { ...l, isLocked: false }
+                    : l
               ),
             },
           }
         })
+        return true
       }
+      return false
     } catch (error) {
       console.error('Error marking complete:', error)
+      return false
     } finally {
       setIsMarkingComplete(false)
     }
   }, [lesson, isMarkingComplete])
+
+  // Mark lesson as complete
+  const handleMarkComplete = useCallback(async () => {
+    await markLessonComplete()
+  }, [markLessonComplete])
 
   // Handle quiz completion
   const handleQuizComplete = useCallback(
@@ -153,6 +166,120 @@ export default function LessonPage() {
     },
     [lessonId]
   )
+
+  const hasQuiz = !!lesson?.quiz?.length
+  const currentLessonIndex = lesson
+    ? lesson.course.lessons.findIndex((courseLesson) => courseLesson.id === lesson.id)
+    : -1
+
+  const previousLesson = useMemo(() => {
+    if (!lesson) return null
+    if (currentLessonIndex <= 0) return null
+    return lesson.course.lessons[currentLessonIndex - 1] || null
+  }, [lesson, currentLessonIndex])
+
+  const nextLesson = useMemo(() => {
+    if (!lesson) return null
+    if (currentLessonIndex < 0) return null
+    for (let index = currentLessonIndex + 1; index < lesson.course.lessons.length; index += 1) {
+      const candidate = lesson.course.lessons[index]
+      if (!candidate.isLocked) return candidate
+    }
+    return null
+  }, [lesson, currentLessonIndex])
+
+  const immediateNextLesson = useMemo(() => {
+    if (!lesson) return null
+    if (currentLessonIndex < 0) return null
+    return lesson.course.lessons[currentLessonIndex + 1] || null
+  }, [lesson, currentLessonIndex])
+
+  const isCourseComplete = useMemo(() => {
+    if (!lesson) return false
+    return lesson.course.lessons.every((courseLesson) =>
+      courseLesson.id === lesson.id ? lesson.isCompleted : courseLesson.isCompleted
+    )
+  }, [lesson])
+
+  const primaryActionLabel = !lesson
+    ? 'Complete Course'
+    : lesson.isCompleted
+      ? nextLesson
+        ? 'Next Lesson'
+        : isCourseComplete
+          ? 'Course Complete'
+          : 'Return to Course'
+      : immediateNextLesson
+        ? 'Complete & Next Lesson'
+        : 'Complete Course'
+
+  const handlePrimaryAction = useCallback(async () => {
+    if (!lesson) return
+    if (isMarkingComplete) return
+
+    if (!lesson.isCompleted) {
+      const completed = await markLessonComplete()
+      if (!completed) return
+    }
+
+    const nextTarget = lesson.isCompleted ? nextLesson : immediateNextLesson
+    if (nextTarget) {
+      router.push(`/members/academy/learn/${nextTarget.id}`)
+      return
+    }
+
+    router.push(`/members/academy/courses/${lesson.course.slug}`)
+  }, [immediateNextLesson, isMarkingComplete, lesson, markLessonComplete, nextLesson, router])
+
+  const lessonActions = lesson ? (
+    <section
+      data-testid="lesson-actions"
+      className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
+      aria-label="Lesson actions"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-white">Lesson checkpoints</p>
+          <p className="text-xs text-white/50">
+            {lesson.isCompleted
+              ? 'This lesson is complete. Continue when you are ready.'
+              : 'Mark this lesson complete to unlock progress and the next step.'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {previousLesson && (
+            <button
+              type="button"
+              data-testid="lesson-secondary-action"
+              onClick={() => router.push(`/members/academy/learn/${previousLesson.id}`)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.06] transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </button>
+          )}
+
+          <button
+            type="button"
+            data-testid="lesson-primary-action"
+            onClick={handlePrimaryAction}
+            disabled={isMarkingComplete}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors',
+              'border border-emerald-500/50 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30',
+              isMarkingComplete && 'cursor-not-allowed opacity-70'
+            )}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {isMarkingComplete ? 'Saving...' : primaryActionLabel}
+            {!isMarkingComplete && (lesson.isCompleted ? nextLesson : immediateNextLesson) && (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+    </section>
+  ) : null
 
   // Loading state
   if (isLoading) {
@@ -256,17 +383,22 @@ export default function LessonPage() {
             videoUrl={lesson.videoUrl}
             durationMinutes={lesson.durationMinutes}
             onProgressUpdate={handleProgressUpdate}
+            footer={!hasQuiz ? lessonActions : undefined}
           />
 
           {/* Quiz section (if lesson has a quiz) */}
-          {lesson.quiz && lesson.quiz.length > 0 && (
+          {hasQuiz && (
             <div className="px-6 py-6 max-w-3xl">
               <QuizEngine
-                questions={lesson.quiz}
+                questions={lesson.quiz ?? []}
                 title="Lesson Quiz"
                 passingScore={70}
                 onComplete={handleQuizComplete}
               />
+
+              <div className="mt-4">
+                {lessonActions}
+              </div>
             </div>
           )}
         </div>
