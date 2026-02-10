@@ -55,10 +55,16 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 1,
   timeout: 30000, // 30 second timeout per test
   expect: {
     timeout: 10000, // 10 second timeout for expect assertions
+    toHaveScreenshot: {
+      // Allow minor anti-aliasing/font rendering variance across CI runners.
+      maxDiffPixelRatio: 0.02,
+      animations: 'disabled',
+      caret: 'hide',
+    },
   },
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
