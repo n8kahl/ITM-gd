@@ -58,6 +58,7 @@ export interface JournalEntry {
   is_open: boolean
   enriched_at: string | null
   share_count: number
+  is_favorite: boolean
   created_at: string
   updated_at: string
 }

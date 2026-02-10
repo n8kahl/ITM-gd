@@ -258,6 +258,13 @@ function normalizeJournalWritePayload(
     payload.is_draft = parseMaybeBoolean(input.is_draft)
   }
 
+  if (input.is_favorite !== undefined) {
+    const maybeFavorite = parseMaybeBoolean(input.is_favorite)
+    if (maybeFavorite !== null) {
+      payload.is_favorite = maybeFavorite
+    }
+  }
+
   if (input.draft_expires_at !== undefined) {
     payload.draft_expires_at = parseMaybeDateString(input.draft_expires_at)
   }

@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, type TouchEvent } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Plus, BookOpen } from 'lucide-react'
+import { Plus, BookOpen, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_FILTERS } from '@/lib/types/journal'
+import { cn } from '@/lib/utils'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
@@ -29,6 +30,7 @@ import {
   withExponentialBackoff,
   type AppError,
 } from '@/lib/error-handler'
+import { useIsMobile } from '@/hooks/use-is-mobile'
 
 function applyFilters(entries: JournalEntry[], filters: JournalFilters): JournalEntry[] {
   let filtered = [...entries]
@@ -92,6 +94,8 @@ function applyFilters(entries: JournalEntry[], filters: JournalFilters): Journal
 
 const VIEW_PREFERENCE_KEY = 'journal-view-preference'
 const DATE_FILTER_PARAM_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const PULL_REFRESH_THRESHOLD = 56
+const PULL_REFRESH_MAX_DISTANCE = 90
 
 function countActiveFilters(filters: JournalFilters): number {
   let count = 0
@@ -118,11 +122,16 @@ function sanitizeDateFilterParam(value: string | null): string | null {
 
 export default function JournalPage() {
   const searchParams = useSearchParams()
+  const isMobile = useIsMobile()
   const openedPrefillKeyRef = useRef<string | null>(null)
+  const pullStartYRef = useRef<number | null>(null)
+  const isPullingRef = useRef(false)
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [preferredDesktopView, setPreferredDesktopView] = useState<JournalFilters['view']>(DEFAULT_FILTERS.view)
   const [filters, setFilters] = useState<JournalFilters>(DEFAULT_FILTERS)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
 
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)
   const [entryPrefill, setEntryPrefill] = useState<JournalPrefillPayload | null>(null)
@@ -200,7 +209,8 @@ export default function JournalPage() {
     })
   }, [searchParams])
 
-  const loadEntries = useCallback(async () => {
+  const loadEntries = useCallback(async (): Promise<boolean> => {
+    let succeeded = false
     try {
       const response = await withExponentialBackoff(
         () => fetch('/api/members/journal?limit=500'),
@@ -217,6 +227,7 @@ export default function JournalPage() {
       }
 
       setEntries(result.data)
+      succeeded = true
     } catch (error) {
       const appError = (error && typeof error === 'object' && 'category' in error)
         ? error as AppError
@@ -231,6 +242,7 @@ export default function JournalPage() {
     } finally {
       setLoading(false)
     }
+    return succeeded
   }, [])
 
   useEffect(() => {
@@ -327,6 +339,86 @@ export default function JournalPage() {
     setSelectedEntry(entry)
   }, [])
 
+  const handleToggleFavorite = useCallback(async (entry: JournalEntry, nextValue?: boolean) => {
+    const resolved = typeof nextValue === 'boolean' ? nextValue : !Boolean(entry.is_favorite)
+
+    try {
+      const response = await fetch('/api/members/journal', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entry.id, is_favorite: resolved }),
+      })
+
+      if (!response.ok) {
+        throw await createAppErrorFromResponse(response)
+      }
+
+      setEntries((prev) => prev.map((item) => (
+        item.id === entry.id
+          ? { ...item, is_favorite: resolved }
+          : item
+      )))
+      toast.success(resolved ? 'Marked as favorite' : 'Removed from favorites')
+    } catch (error) {
+      const appError = (error && typeof error === 'object' && 'category' in error)
+        ? error as AppError
+        : createAppError(error)
+
+      notifyAppError(appError)
+    }
+  }, [])
+
+  const refreshEntries = useCallback(async () => {
+    setIsPullRefreshing(true)
+    const success = await loadEntries()
+    if (success) {
+      toast.success('Journal refreshed')
+    }
+    setIsPullRefreshing(false)
+  }, [loadEntries])
+
+  const handleTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    if (!isMobile || entrySheetOpen || selectedEntry) return
+    if (window.scrollY > 0) return
+
+    pullStartYRef.current = event.touches[0]?.clientY ?? null
+    isPullingRef.current = pullStartYRef.current !== null
+  }, [entrySheetOpen, isMobile, selectedEntry])
+
+  const handleTouchMove = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    if (!isMobile || !isPullingRef.current || pullStartYRef.current === null) return
+    if (window.scrollY > 0) return
+
+    const currentY = event.touches[0]?.clientY ?? pullStartYRef.current
+    const delta = currentY - pullStartYRef.current
+
+    if (delta <= 0) {
+      setPullDistance(0)
+      return
+    }
+
+    const dampened = Math.min(PULL_REFRESH_MAX_DISTANCE, delta * 0.42)
+    setPullDistance(dampened)
+
+    if (delta > 8) {
+      event.preventDefault()
+    }
+  }, [isMobile])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isMobile) return
+    isPullingRef.current = false
+    pullStartYRef.current = null
+
+    if (pullDistance >= PULL_REFRESH_THRESHOLD && !isPullRefreshing) {
+      setPullDistance(0)
+      void refreshEntries()
+      return
+    }
+
+    setPullDistance(0)
+  }, [isMobile, isPullRefreshing, pullDistance, refreshEntries])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -334,14 +426,33 @@ export default function JournalPage() {
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
             <Image src="/logo.png" alt="TradeITM" fill className="object-contain" />
           </div>
-          <p className="text-muted-foreground text-sm">Loading your journal...</p>
+          <p className="text-muted-foreground text-sm" aria-live="polite">Loading your journal...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-5">
+    <div
+      className="relative min-h-[calc(100dvh-7rem)] space-y-5"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+    >
+      {(pullDistance > 0 || isPullRefreshing) && (
+        <div className="pointer-events-none sticky top-0 z-20 flex justify-center" aria-live="polite">
+          <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-[#0A0A0B]/85 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
+            <RefreshCw className={cn('h-3.5 w-3.5', isPullRefreshing && 'animate-spin text-emerald-400')} />
+            {isPullRefreshing
+              ? 'Refreshing journal...'
+              : pullDistance >= PULL_REFRESH_THRESHOLD
+              ? 'Release to refresh'
+              : 'Pull to refresh'}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl lg:text-2xl font-serif text-ivory font-medium tracking-tight flex items-center gap-2.5">
@@ -364,13 +475,14 @@ export default function JournalPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/members/journal/analytics"
-            className="px-3.5 py-2.5 rounded-xl border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05] transition-colors"
+            className="focus-champagne px-3.5 py-2.5 rounded-xl border border-white/[0.1] text-sm text-ivory hover:bg-white/[0.05] transition-colors"
           >
             Analytics
           </Link>
           <button
             onClick={handleNewEntry}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
+            className="focus-champagne flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
+            aria-label="Log a new trade"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Log Trade</span>
@@ -428,13 +540,14 @@ export default function JournalPage() {
           onSelectEntry={handleSelectEntry}
           onEditEntry={handleEditEntry}
           onDeleteEntry={handleDelete}
+          onToggleFavorite={handleToggleFavorite}
         />
       )}
 
       <button
         type="button"
         onClick={handleNewEntry}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-[0_8px_30px_rgba(16,185,129,0.35)] transition-colors hover:bg-emerald-500 md:hidden"
+        className="focus-champagne fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-[0_8px_30px_rgba(16,185,129,0.35)] transition-colors hover:bg-emerald-500 md:hidden"
         aria-label="Log trade"
       >
         <Plus className="h-5 w-5" />
