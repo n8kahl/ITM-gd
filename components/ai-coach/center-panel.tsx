@@ -756,6 +756,10 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                 setActiveView('journal')
                 setCenterView('journal')
               }}
+              onShowAlerts={() => {
+                setActiveView('alerts')
+                setCenterView('alerts')
+              }}
               onShowBrief={() => {
                 setActiveView('brief')
                 setCenterView('brief')
@@ -764,14 +768,23 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                 setActiveView('scanner')
                 setCenterView('scanner')
               }}
+              onShowTracked={() => {
+                setActiveView('tracked')
+                setCenterView('tracked')
+              }}
               onShowLeaps={() => {
                 setActiveView('leaps')
                 setCenterView('leaps')
+              }}
+              onShowEarnings={() => {
+                setActiveView('earnings')
+                setCenterView('earnings')
               }}
               onShowMacro={() => {
                 setActiveView('macro')
                 setCenterView('macro')
               }}
+              onShowPreferences={() => setIsPreferencesOpen(true)}
             />
           )}
 
@@ -1171,10 +1184,14 @@ function WelcomeView({
   onShowOptions,
   onShowPosition,
   onShowJournal,
+  onShowAlerts,
   onShowBrief,
   onShowScanner,
+  onShowTracked,
   onShowLeaps,
+  onShowEarnings,
   onShowMacro,
+  onShowPreferences,
 }: {
   accessToken?: string
   displayName?: string
@@ -1183,10 +1200,14 @@ function WelcomeView({
   onShowOptions: () => void
   onShowPosition: () => void
   onShowJournal: () => void
+  onShowAlerts: () => void
   onShowBrief: () => void
   onShowScanner: () => void
+  onShowTracked: () => void
   onShowLeaps: () => void
+  onShowEarnings: () => void
   onShowMacro: () => void
+  onShowPreferences: () => void
 }) {
   const [clockTick, setClockTick] = useState(0)
   const [spxTicker, setSpxTicker] = useState<{
@@ -1215,6 +1236,7 @@ function WelcomeView({
     isLoading: true,
     error: null,
   })
+  const [showMoreTools, setShowMoreTools] = useState(false)
 
   useEffect(() => {
     const interval = setInterval(() => setClockTick((value) => value + 1), 60_000)
@@ -1341,6 +1363,15 @@ function WelcomeView({
     { label: 'Scanner', subtitle: 'Find Setups', icon: Search, onClick: onShowScanner },
     { label: 'LEAPS', subtitle: 'Long Dated', icon: Clock, onClick: onShowLeaps },
     { label: 'Macro', subtitle: 'Events & Flows', icon: Globe, onClick: onShowMacro },
+  ]
+  const secondaryTools: Array<{
+    label: string
+    onClick: () => void
+  }> = [
+    { label: 'Alerts', onClick: onShowAlerts },
+    { label: 'Watchlist', onClick: onShowTracked },
+    { label: 'Earnings', onClick: onShowEarnings },
+    { label: 'Settings', onClick: onShowPreferences },
   ]
 
   const containerMotion = {
@@ -1573,6 +1604,48 @@ function WelcomeView({
                 </motion.button>
               )
             })}
+          </motion.div>
+
+          <motion.div
+            variants={containerMotion}
+            initial="hidden"
+            animate="show"
+            className="mt-3"
+          >
+            <motion.button
+              type="button"
+              onClick={() => setShowMoreTools((current) => !current)}
+              className="w-full inline-flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/65 hover:text-white/80 hover:bg-white/10 transition-colors"
+              {...PRESSABLE_PROPS}
+            >
+              <span>More Tools</span>
+              <span className="text-white/35">{showMoreTools ? 'Hide' : 'Show'}</span>
+            </motion.button>
+            <AnimatePresence initial={false}>
+              {showMoreTools && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, height: 0 }}
+                  animate={{ opacity: 1, y: 0, height: 'auto' }}
+                  exit={{ opacity: 0, y: -4, height: 0 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    {secondaryTools.map((tool) => (
+                      <motion.button
+                        key={tool.label}
+                        type="button"
+                        onClick={tool.onClick}
+                        className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-xs text-white/60 hover:text-white/80 hover:border-emerald-500/30 hover:bg-emerald-500/10 transition-colors"
+                        {...PRESSABLE_PROPS}
+                      >
+                        {tool.label}
+                      </motion.button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       </div>

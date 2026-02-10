@@ -181,6 +181,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
   - Removed `Screenshot` from the main center-panel tab rail to reduce tool clutter (screenshot analysis remains available from chat upload).
   - Updated welcome quick-access grid to the spec-aligned set (`Chart`, `Options`, `Analyze`, `Journal`, `Daily Brief`, `Scanner`, `LEAPS`, `Macro`).
   - Refined tab-rail affordances with an icon-only Home control and hover/focus group labels (`Analyze`, `Portfolio`, `Monitor`, `Research`) to improve scanability.
+  - Added collapsible `More Tools` section on welcome view for lower-frequency actions (`Alerts`, `Watchlist`, `Earnings`, `Settings`) so access remains one-click without overloading the primary grid.
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
