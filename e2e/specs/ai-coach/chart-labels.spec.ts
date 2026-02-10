@@ -29,6 +29,52 @@ async function fulfillJson(route: Route, body: unknown, status: number = 200) {
 }
 
 async function setupBaselineRoutes(page: Page) {
+  await page.addInitScript((chartResponse) => {
+    const originalFetch = window.fetch.bind(window)
+    const jsonResponse = (body: unknown, status = 200) => new Response(
+      JSON.stringify(body),
+      {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : undefined
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+      const method = (init?.method || request?.method || 'GET').toUpperCase()
+
+      if (url.includes('/api/chat/sessions/')) {
+        return jsonResponse({ messages: [], total: 0, hasMore: false })
+      }
+
+      if (url.includes('/api/chat/sessions')) {
+        if (method === 'DELETE') return jsonResponse({ success: true })
+        return jsonResponse({ sessions: [], count: 0 })
+      }
+
+      if (url.includes('/api/chart/')) {
+        return jsonResponse(chartResponse)
+      }
+
+      return originalFetch(input, init)
+    }
+  }, {
+    symbol: 'SPX',
+    timeframe: '1D',
+    bars: [
+      { time: 1770748200, open: 5940, high: 5960, low: 5930, close: 5950, volume: 1000000 },
+      { time: 1770751800, open: 5950, high: 5965, low: 5945, close: 5958, volume: 1100000 },
+    ],
+    count: 2,
+    timestamp: new Date().toISOString(),
+    cached: false,
+  })
+
   await page.route('**/api/chat/sessions*', async (route: Route) => {
     await fulfillJson(route, { sessions: [], count: 0 })
   })
