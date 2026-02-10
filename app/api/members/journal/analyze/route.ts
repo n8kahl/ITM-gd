@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2) Rate limit (per user)
-    const rateCheck = checkRateLimit(user.id, RATE_LIMITS.analyzeScreenshot)
+    const rateCheck = await checkRateLimit(user.id, RATE_LIMITS.analyzeScreenshot)
     if (!rateCheck.success) {
       const retryAfterSec = Math.ceil((rateCheck.resetAt - Date.now()) / 1000)
       return NextResponse.json(
