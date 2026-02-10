@@ -1,6 +1,100 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
+import { MassiveAggsResponseSchema, type MassiveBar } from '@/lib/types/massive-api'
+
+type TradeDirection = 'long' | 'short' | 'neutral'
+
+interface JournalEntryForEnrich {
+  id: string
+  user_id: string
+  symbol: string | null
+  trade_date: string | null
+  entry_price: number | null
+  exit_price: number | null
+  direction: TradeDirection | null
+  entry_timestamp: string | null
+  exit_timestamp: string | null
+  contract_type: 'call' | 'put' | null
+  strike_price: number | null
+  expiration_date: string | null
+  dte_at_entry: number | null
+  dte_at_exit: number | null
+}
+
+interface LevelDistance {
+  name: string
+  price: number
+  distance: number
+}
+
+interface TradeContextPoint {
+  timestamp: string
+  price: number
+  vwap: number
+  atr14: number
+  volumeVsAvg: number
+  distanceFromPDH: number
+  distanceFromPDL: number
+  nearestLevel: LevelDistance
+}
+
+type MarketTrend = 'bullish' | 'bearish' | 'neutral'
+type SessionType = 'trending' | 'range-bound' | 'volatile'
+
+interface DayContext {
+  marketTrend: MarketTrend
+  atrUsed: number
+  sessionType: SessionType
+  keyLevelsActive: {
+    pdh: number
+    pdl: number
+    pdc: number
+    vwap: number
+    atr14: number
+    pivotPP: number
+    pivotR1: number
+    pivotS1: number
+  }
+}
+
+interface OptionsContext {
+  ivRankAtEntry: number
+  dteAtEntry: number
+  ivAtExit: number
+  ivAtEntry: number
+}
+
+interface MarketContext {
+  entryContext?: TradeContextPoint
+  exitContext?: TradeContextPoint
+  dayContext?: DayContext
+  optionsContext?: OptionsContext
+}
+
+interface TradeVerification {
+  isVerified: boolean
+  confidence: 'exact' | 'close'
+  entryPriceMatch: boolean
+  exitPriceMatch: boolean
+  priceSource: 'massive-1min'
+  verifiedAt: string
+}
+
+interface EnrichmentUpdateData {
+  enriched_at: string
+  market_context?: MarketContext
+  verification?: TradeVerification
+  smart_tags?: string[]
+  mfe_percent?: number
+  mae_percent?: number
+  hold_duration_min?: number
+  contract_type?: 'call' | 'put'
+  strike_price?: number | null
+  expiration_date?: string | null
+  dte_at_entry?: number
+  dte_at_exit?: number
+}
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -67,12 +161,14 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // Fetch the entry
-    const { data: entry, error: entryError } = await supabase
+    const { data: entryData, error: entryError } = await supabase
       .from('journal_entries')
       .select('*')
       .eq('id', entryId)
       .eq('user_id', userId)
       .single()
+
+    const entry = entryData as JournalEntryForEnrich | null
 
     if (entryError || !entry) {
       return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
@@ -96,18 +192,18 @@ export async function POST(request: NextRequest) {
       fetch(`https://api.massive.com/v2/aggs/ticker/${ticker}/range/1/day/${new Date(new Date(tradeDate).getTime() - 30 * 86400000).toISOString().split('T')[0]}/${tradeDate}?apiKey=${apiKey}`),
     ])
 
-    let marketContext: Record<string, any> = {}
-    let verification: Record<string, any> = {}
+    let marketContext: MarketContext = {}
+    let verification: TradeVerification | null = null
     let mfePercent: number | null = null
     let maePercent: number | null = null
     let holdDurationMin: number | null = null
 
     if (minuteRes.ok && dailyRes.ok) {
-      const minuteData = await minuteRes.json()
-      const dailyData = await dailyRes.json()
+      const minuteData = MassiveAggsResponseSchema.parse(await minuteRes.json())
+      const dailyData = MassiveAggsResponseSchema.parse(await dailyRes.json())
 
-      const minuteBars = minuteData.results || []
-      const dailyBars = dailyData.results || []
+      const minuteBars = minuteData.results
+      const dailyBars = dailyData.results
 
       // Calculate VWAP at entry/exit times
       const entryTimestamp = resolveTradeTimestamp({
@@ -126,8 +222,8 @@ export async function POST(request: NextRequest) {
       })
 
       // Find bars at entry/exit
-      const entryBar = minuteBars.find((b: any) => b.t >= entryTimestamp) || minuteBars[0]
-      const exitBar = minuteBars.find((b: any) => b.t >= exitTimestamp) || minuteBars[minuteBars.length - 1]
+      const entryBar = minuteBars.find((b: MassiveBar) => b.t >= entryTimestamp) || minuteBars[0]
+      const exitBar = minuteBars.find((b: MassiveBar) => b.t >= exitTimestamp) || minuteBars[minuteBars.length - 1]
 
       // Calculate VWAP up to entry time
       let cTPV = 0, cVol = 0
@@ -152,7 +248,7 @@ export async function POST(request: NextRequest) {
       // Calculate ATR(14) from daily bars
       let atr14 = 0
       if (dailyBars.length >= 15) {
-        const trs = dailyBars.slice(-15).map((d: any, i: number, arr: any[]) => {
+        const trs = dailyBars.slice(-15).map((d: MassiveBar, i: number, arr: MassiveBar[]) => {
           if (i === 0) return d.h - d.l
           const prevClose = arr[i - 1].c
           return Math.max(d.h - d.l, Math.abs(d.h - prevClose), Math.abs(d.l - prevClose))
@@ -169,7 +265,7 @@ export async function POST(request: NextRequest) {
       // Volume comparison (today vs 20-day avg)
       const recentDailyBars = dailyBars.slice(-21, -1)
       const avgVolume = recentDailyBars.length > 0
-        ? recentDailyBars.reduce((s: number, d: any) => s + d.v, 0) / recentDailyBars.length
+        ? recentDailyBars.reduce((s: number, d: MassiveBar) => s + d.v, 0) / recentDailyBars.length
         : 1
       const todayVolume = dailyBars[dailyBars.length - 1]?.v || 0
       const volumeVsAvg = avgVolume > 0 ? todayVolume / avgVolume : 1
@@ -202,10 +298,10 @@ export async function POST(request: NextRequest) {
       }, { name: 'None', price: 0, distance: Infinity })
 
       // MFE / MAE over the active trade window.
-      const activeBars = minuteBars.filter((bar: any) => bar.t >= entryTimestamp && bar.t <= exitTimestamp)
+      const activeBars = minuteBars.filter((bar: MassiveBar) => bar.t >= entryTimestamp && bar.t <= exitTimestamp)
       if (activeBars.length > 0 && ep > 0) {
-        const highestHigh = activeBars.reduce((max: number, bar: any) => Math.max(max, bar.h), activeBars[0].h)
-        const lowestLow = activeBars.reduce((min: number, bar: any) => Math.min(min, bar.l), activeBars[0].l)
+        const highestHigh = activeBars.reduce((max: number, bar: MassiveBar) => Math.max(max, bar.h), activeBars[0].h)
+        const lowestLow = activeBars.reduce((min: number, bar: MassiveBar) => Math.min(min, bar.l), activeBars[0].l)
         if (entry.direction === 'short') {
           mfePercent = ((ep - lowestLow) / ep) * 100
           maePercent = ((highestHigh - ep) / ep) * 100
@@ -224,8 +320,12 @@ export async function POST(request: NextRequest) {
       const dayLow = dailyBars[dailyBars.length - 1]?.l || 0
       const dayClose = dailyBars[dailyBars.length - 1]?.c || 0
       const atrUsed = atr14 > 0 ? (dayHigh - dayLow) / atr14 : 0
-      const marketTrend = dayClose > entryVwap && dayClose > pp ? 'bullish' : dayClose < entryVwap && dayClose < pp ? 'bearish' : 'neutral'
-      const sessionType = atrUsed > 1.2 ? 'trending' : atrUsed < 0.6 ? 'range-bound' : 'volatile'
+      const marketTrend: MarketTrend = dayClose > entryVwap && dayClose > pp
+        ? 'bullish'
+        : dayClose < entryVwap && dayClose < pp
+          ? 'bearish'
+          : 'neutral'
+      const sessionType: SessionType = atrUsed > 1.2 ? 'trending' : atrUsed < 0.6 ? 'range-bound' : 'volatile'
 
       marketContext = {
         entryContext: {
@@ -285,14 +385,14 @@ export async function POST(request: NextRequest) {
     const smartTags = generateSmartTags(marketContext, entry)
 
     // Update the entry
-    const updateData: Record<string, any> = {
+    const updateData: EnrichmentUpdateData = {
       enriched_at: new Date().toISOString(),
     }
 
-    if (Object.keys(marketContext).length > 0) {
+    if (marketContext.entryContext || marketContext.exitContext || marketContext.dayContext || marketContext.optionsContext) {
       updateData.market_context = marketContext
     }
-    if (Object.keys(verification).length > 0) {
+    if (verification) {
       updateData.verification = verification
     }
     if (smartTags.length > 0) {
@@ -354,8 +454,8 @@ export async function POST(request: NextRequest) {
 /**
  * Generate smart tags based on market context data
  */
-function generateSmartTags(context: any, entry: any): string[] {
-  if (!context?.entryContext) return []
+function generateSmartTags(context: MarketContext, _entry: JournalEntryForEnrich): string[] {
+  if (!context.entryContext) return []
   const tags: string[] = []
   const ec = context.entryContext
   const dc = context.dayContext
@@ -387,12 +487,13 @@ function generateSmartTags(context: any, entry: any): string[] {
   if (dc?.sessionType === 'range-bound') tags.push('Range Day')
 
   // Options context
-  if (context.optionsContext) {
-    if (context.optionsContext.ivRankAtEntry >= 70) tags.push('High IV Entry')
-    if (context.optionsContext.ivRankAtEntry <= 20) tags.push('Low IV Entry')
-    if (context.optionsContext.dteAtEntry === 0) tags.push('0-DTE')
-    if (context.optionsContext.dteAtEntry <= 1) tags.push('Same-Day Exp')
-    if (context.optionsContext.ivAtExit < context.optionsContext.ivAtEntry * 0.8) tags.push('IV Crush')
+  const oc = context.optionsContext
+  if (oc) {
+    if (oc.ivRankAtEntry >= 70) tags.push('High IV Entry')
+    if (oc.ivRankAtEntry <= 20) tags.push('Low IV Entry')
+    if (oc.dteAtEntry === 0) tags.push('0-DTE')
+    if (oc.dteAtEntry <= 1) tags.push('Same-Day Exp')
+    if (oc.ivAtExit < oc.ivAtEntry * 0.8) tags.push('IV Crush')
   }
 
   return tags
