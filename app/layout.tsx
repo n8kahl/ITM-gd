@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { StructuredData } from '@/components/seo/structured-data'
 import Link from 'next/link'
 import { User } from 'lucide-react'
+import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register'
 import { AppToaster } from '@/components/ui/app-toaster'
 import './globals.css'
 
@@ -69,6 +70,7 @@ export default async function RootLayout({
         <StructuredData nonce={nonce} />
       </head>
       <body className="font-sans antialiased">
+        <ServiceWorkerRegister />
         {/* Mobile Header Login Icon - visible only on mobile, hidden when navbar is present */}
         <Link
           href="/login"

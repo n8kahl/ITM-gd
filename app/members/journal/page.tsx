@@ -94,7 +94,13 @@ export default function JournalPage() {
   useEffect(() => {
     if (typeof navigator === 'undefined') return
 
-    const updateOnline = () => setIsOnline(navigator.onLine)
+    const updateOnline = () => {
+      setIsOnline(navigator.onLine)
+
+      if (navigator.onLine && navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'JOURNAL_SYNC_NOW' })
+      }
+    }
     updateOnline()
 
     window.addEventListener('online', updateOnline)
@@ -160,10 +166,6 @@ export default function JournalPage() {
   }, [entries])
 
   const handleSave = useCallback(async (input: Record<string, unknown>) => {
-    if (!isOnline) {
-      throw new Error('You are offline. Writing is disabled.')
-    }
-
     const method = editEntry ? 'PATCH' : 'POST'
     const response = await fetch('/api/members/journal', {
       method,
@@ -180,6 +182,13 @@ export default function JournalPage() {
       throw new Error(payload.error || 'Failed to save entry')
     }
 
+    if (payload.meta?.queued) {
+      setError('Offline mode: this trade was queued and will sync automatically when your connection returns.')
+      setEditEntry(null)
+      void loadEntries()
+      return {} as JournalEntry
+    }
+
     const nextEntry = sanitizeJournalEntry(payload.data)
 
     setEntries((prev) => {
@@ -192,7 +201,7 @@ export default function JournalPage() {
     setEditEntry(null)
     void loadEntries()
     return nextEntry
-  }, [editEntry, isOnline, loadEntries])
+  }, [editEntry, loadEntries])
 
   const handleRequestDelete = useCallback((entryId: string) => {
     const target = entries.find((entry) => entry.id === entryId)
@@ -201,7 +210,7 @@ export default function JournalPage() {
   }, [entries])
 
   const handleDeleteConfirmed = useCallback(async () => {
-    if (!deleteTarget || !isOnline || deleteBusy) return
+    if (!deleteTarget || deleteBusy) return
 
     setDeleteBusy(true)
 
@@ -228,11 +237,9 @@ export default function JournalPage() {
     } finally {
       setDeleteBusy(false)
     }
-  }, [deleteBusy, deleteTarget, isOnline, loadEntries])
+  }, [deleteBusy, deleteTarget, loadEntries])
 
   const handleToggleFavorite = useCallback(async (entry: JournalEntry, nextValue?: boolean) => {
-    if (!isOnline) return
-
     const response = await fetch('/api/members/journal', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -250,11 +257,16 @@ export default function JournalPage() {
       return
     }
 
+    if (payload.meta?.queued) {
+      setError('Offline mode: favorite update queued and will sync automatically.')
+      return
+    }
+
     const updated = sanitizeJournalEntry(payload.data)
     setEntries((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
-  }, [isOnline])
+  }, [])
 
-  const disableActions = !isOnline
+  const disableActions = false
 
   return (
     <div className="space-y-4">
@@ -306,7 +318,7 @@ export default function JournalPage() {
 
       {!isOnline ? (
         <div className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
-          You&apos;re offline. You can view cached entries, but create/edit/delete is disabled.
+          You&apos;re offline. Journal mutations will be queued and synced automatically when your connection returns.
         </div>
       ) : null}
 
