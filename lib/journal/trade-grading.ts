@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export interface TradeGradeDimension {
   grade: string
   score: number
@@ -58,6 +60,213 @@ function scoreToGrade(score: number): string {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+const OPENAI_TIMEOUT_MS = 15_000
+const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
+
+const gptDimensionSchema = z.object({
+  grade: z.string().min(1).max(4),
+  score: z.number().min(0).max(100),
+  feedback: z.string().min(1).max(2_000),
+})
+
+const gptGradeResultSchema = z.object({
+  overall_grade: z.string().min(1).max(4),
+  score: z.number().min(0).max(100),
+  dimensions: z.object({
+    setup: gptDimensionSchema,
+    execution: gptDimensionSchema,
+    risk: gptDimensionSchema,
+    outcome: gptDimensionSchema,
+  }),
+  improvement_tips: z.array(z.string().min(1).max(500)).max(10),
+  pattern_flags: z.array(z.string().min(1).max(100)).max(20),
+})
+
+function normalizeGPTGrade(result: z.infer<typeof gptGradeResultSchema>): TradeGradeResult {
+  return {
+    overall_grade: result.overall_grade,
+    score: round2(clamp(result.score, 0, 100)),
+    dimensions: {
+      setup: {
+        ...result.dimensions.setup,
+        score: round2(clamp(result.dimensions.setup.score, 0, 100)),
+      },
+      execution: {
+        ...result.dimensions.execution,
+        score: round2(clamp(result.dimensions.execution.score, 0, 100)),
+      },
+      risk: {
+        ...result.dimensions.risk,
+        score: round2(clamp(result.dimensions.risk.score, 0, 100)),
+      },
+      outcome: {
+        ...result.dimensions.outcome,
+        score: round2(clamp(result.dimensions.outcome.score, 0, 100)),
+      },
+    },
+    improvement_tips: result.improvement_tips,
+    pattern_flags: result.pattern_flags,
+    graded_at: new Date().toISOString(),
+    model: 'gpt-4o',
+  }
+}
+
+async function gradeTradeWithGPT(input: TradeGradeInput, apiKey: string): Promise<TradeGradeResult> {
+  const controller = new AbortController()
+  const timeoutHandle = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0.2,
+        tool_choice: {
+          type: 'function',
+          function: {
+            name: 'grade_trade',
+          },
+        },
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'grade_trade',
+              description: 'Return a structured trade grade assessment.',
+              parameters: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  overall_grade: {
+                    type: 'string',
+                    description: 'Letter grade from A+ through F',
+                  },
+                  score: {
+                    type: 'number',
+                    minimum: 0,
+                    maximum: 100,
+                  },
+                  dimensions: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      setup: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          grade: { type: 'string' },
+                          score: { type: 'number', minimum: 0, maximum: 100 },
+                          feedback: { type: 'string' },
+                        },
+                        required: ['grade', 'score', 'feedback'],
+                      },
+                      execution: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          grade: { type: 'string' },
+                          score: { type: 'number', minimum: 0, maximum: 100 },
+                          feedback: { type: 'string' },
+                        },
+                        required: ['grade', 'score', 'feedback'],
+                      },
+                      risk: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          grade: { type: 'string' },
+                          score: { type: 'number', minimum: 0, maximum: 100 },
+                          feedback: { type: 'string' },
+                        },
+                        required: ['grade', 'score', 'feedback'],
+                      },
+                      outcome: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          grade: { type: 'string' },
+                          score: { type: 'number', minimum: 0, maximum: 100 },
+                          feedback: { type: 'string' },
+                        },
+                        required: ['grade', 'score', 'feedback'],
+                      },
+                    },
+                    required: ['setup', 'execution', 'risk', 'outcome'],
+                  },
+                  improvement_tips: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  pattern_flags: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                },
+                required: ['overall_grade', 'score', 'dimensions', 'improvement_tips', 'pattern_flags'],
+              },
+            },
+          },
+        ],
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You are an expert trading performance coach.',
+              'Grade each trade based on setup quality, risk management, execution quality, discipline, and psychology.',
+              'Use only the supplied trade context.',
+              'Be specific in the feedback, concise in tips, and objective in scores.',
+            ].join(' '),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              instruction: 'Grade this trade and call the grade_trade function with your structured result.',
+              trade_context: input,
+            }),
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`OpenAI request failed with status ${response.status}`)
+    }
+
+    const payload = await response.json() as {
+      choices?: Array<{
+        message?: {
+          tool_calls?: Array<{
+            type?: string
+            function?: {
+              name?: string
+              arguments?: string
+            }
+          }>
+        }
+      }>
+    }
+
+    const toolCall = payload.choices?.[0]?.message?.tool_calls?.find(
+      (call) => call.type === 'function' && call.function?.name === 'grade_trade',
+    )
+    const rawArguments = toolCall?.function?.arguments
+    if (!rawArguments) {
+      throw new Error('Missing grade_trade function response')
+    }
+
+    const parsedArguments = JSON.parse(rawArguments) as unknown
+    const validated = gptGradeResultSchema.parse(parsedArguments)
+    return normalizeGPTGrade(validated)
+  } finally {
+    clearTimeout(timeoutHandle)
+  }
 }
 
 function buildSetupDimension(input: TradeGradeInput): TradeGradeDimension {
@@ -187,7 +396,10 @@ function buildOutcomeDimension(input: TradeGradeInput): TradeGradeDimension {
   }
 }
 
-export function gradeTrade(input: TradeGradeInput): TradeGradeResult {
+/**
+ * Grades a trade using the deterministic local scoring model.
+ */
+export function gradeTradeRuleBased(input: TradeGradeInput): TradeGradeResult {
   const setup = buildSetupDimension(input)
   const execution = buildExecutionDimension(input)
   const risk = buildRiskDimension(input)
@@ -239,6 +451,22 @@ export function gradeTrade(input: TradeGradeInput): TradeGradeResult {
     improvement_tips: tips,
     pattern_flags: flags,
     graded_at: new Date().toISOString(),
-    model: 'rule-based-v1',
+    model: 'rule-based-v1-fallback',
+  }
+}
+
+/**
+ * Grades a trade with GPT-4o function calling and falls back to the local model when unavailable.
+ */
+export async function gradeTrade(input: TradeGradeInput): Promise<TradeGradeResult> {
+  const openaiApiKey = process.env.OPENAI_API_KEY
+  if (!openaiApiKey) {
+    return gradeTradeRuleBased(input)
+  }
+
+  try {
+    return await gradeTradeWithGPT(input, openaiApiKey)
+  } catch {
+    return gradeTradeRuleBased(input)
   }
 }
