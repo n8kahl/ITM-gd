@@ -2,16 +2,18 @@
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
   endpoint TEXT NOT NULL UNIQUE,
   subscription JSONB NOT NULL,
-  user_agent TEXT,
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  last_success_at TIMESTAMPTZ,
-  last_error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE push_subscriptions
+  ADD COLUMN IF NOT EXISTS user_agent TEXT,
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS last_error TEXT;
 
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 
@@ -20,29 +22,29 @@ CREATE POLICY users_select_own_push_subscriptions
   ON push_subscriptions
   FOR SELECT
   TO authenticated
-  USING (auth.uid() = user_id);
+  USING ((auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS users_insert_own_push_subscriptions ON push_subscriptions;
 CREATE POLICY users_insert_own_push_subscriptions
   ON push_subscriptions
   FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK ((auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS users_update_own_push_subscriptions ON push_subscriptions;
 CREATE POLICY users_update_own_push_subscriptions
   ON push_subscriptions
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+  USING ((auth.uid())::text = user_id::text)
+  WITH CHECK ((auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS users_delete_own_push_subscriptions ON push_subscriptions;
 CREATE POLICY users_delete_own_push_subscriptions
   ON push_subscriptions
   FOR DELETE
   TO authenticated
-  USING (auth.uid() = user_id);
+  USING ((auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS service_role_manage_push_subscriptions ON push_subscriptions;
 CREATE POLICY service_role_manage_push_subscriptions
