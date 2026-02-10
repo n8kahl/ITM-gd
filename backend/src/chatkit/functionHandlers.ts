@@ -23,6 +23,7 @@ import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackSchol
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
 import { journalPatternAnalyzer } from '../services/journal/patternAnalyzer';
 import { isValidSymbol, normalizeSymbol, POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
+import { hasRequiredTierForUser } from '../middleware/requireTier';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
@@ -52,6 +53,12 @@ async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: st
 }
 
 const FUNCTION_TIMEOUT_MS = 10000; // 10 second timeout per function call
+const PREMIUM_FUNCTIONS = new Set([
+  'get_gamma_exposure',
+  'get_zero_dte_analysis',
+  'get_iv_analysis',
+  'get_earnings_analysis',
+]);
 
 function toValidSymbol(symbol: unknown): string | null {
   if (typeof symbol !== 'string') return null;
@@ -93,6 +100,23 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
   // Validate required fields based on function name
   if (!args || typeof args !== 'object') {
     throw new Error('Function arguments must be a JSON object');
+  }
+
+  if (context?.userId && PREMIUM_FUNCTIONS.has(name)) {
+    try {
+      const hasTier = await hasRequiredTierForUser(context.userId, ['pro']);
+      if (!hasTier) {
+        return {
+          error: 'This feature requires a Pro subscription',
+          requiredTier: 'pro',
+        };
+      }
+    } catch (_error) {
+      return {
+        error: 'Subscription verification unavailable',
+        message: 'Unable to verify subscription tier. Please try again shortly.',
+      };
+    }
   }
 
   // Cast args to `any` at the dispatch layer — each handler validates its own inputs
