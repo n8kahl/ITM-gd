@@ -574,6 +574,7 @@ function ChatArea({
   }, [])
 
   const handleFileDrop = useCallback((file: File) => {
+    if (isBusy) return
     const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
     if (!allowed.includes(file.type) || file.size > 10 * 1024 * 1024) return
 
@@ -585,7 +586,24 @@ function ChatArea({
       setStagedImage({ base64, mimeType: file.type, preview: dataUrl })
     }
     reader.readAsDataURL(file)
-  }, [])
+  }, [isBusy])
+
+  const handlePasteImage = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isBusy) return
+
+    const clipboardItems = Array.from(e.clipboardData?.items ?? [])
+    const imageItem = clipboardItems.find(
+      (item) => item.kind === 'file' && item.type.startsWith('image/')
+    )
+
+    if (!imageItem) return
+
+    const file = imageItem.getAsFile()
+    if (!file) return
+
+    e.preventDefault()
+    handleFileDrop(file)
+  }, [handleFileDrop, isBusy])
 
   return (
     <div className="flex h-full bg-[#0A0A0B]" ref={chatContainerRef}>
@@ -794,6 +812,7 @@ function ChatArea({
                 setInputValue(e.target.value)
                 autoResizeInput(e.target)
               }}
+              onPaste={handlePasteImage}
               onKeyDown={handleKeyDown}
               placeholder={isBusy ? 'Processing...' : rotatingPlaceholder}
               disabled={isBusy}
