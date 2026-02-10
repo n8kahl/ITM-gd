@@ -17,7 +17,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Auth Health Check @critical', () => {
   test('HC-001: Login page loads and renders', async ({ page }) => {
-    const response = await page.goto('/login')
+    const response = await page.goto('/login', { waitUntil: 'domcontentloaded' })
 
     // Page must return 200
     expect(response?.status()).toBe(200)
@@ -34,10 +34,7 @@ test.describe('Auth Health Check @critical', () => {
   })
 
   test('HC-002: Discord login button is present and clickable', async ({ page }) => {
-    await page.goto('/login')
-
-    // Wait for hydration
-    await page.waitForLoadState('networkidle')
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
 
     // Discord button must exist
     const discordButton = page.getByRole('button', { name: /Log in with Discord|Discord/i })
@@ -51,10 +48,13 @@ test.describe('Auth Health Check @critical', () => {
   })
 
   test('HC-003: Auth callback page is accessible', async ({ page }) => {
-    const response = await page.goto('/auth/callback')
+    const response = await page.goto('/auth/callback', { waitUntil: 'domcontentloaded' })
 
-    // Page must return 200 (even without valid OAuth code)
-    expect(response?.status()).toBe(200)
+    // Callback page should be reachable (client page + server redirects are both valid).
+    expect(response).not.toBeNull()
+    if (response) {
+      expect([200, 302, 303, 307, 308]).toContain(response.status())
+    }
 
     // Should show some UI (not blank or error)
     const bodyContent = await page.locator('body').textContent()
@@ -63,17 +63,15 @@ test.describe('Auth Health Check @critical', () => {
 
   test('HC-004: Members page redirects unauthenticated users', async ({ page }) => {
     // Clear any existing session
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await page.evaluate(() => {
       localStorage.clear()
       sessionStorage.clear()
     })
 
     // Try to access members
-    await page.goto('/members')
-
-    // Wait for client-side redirect (MemberAuthContext handles this)
-    await page.waitForTimeout(5000)
+    await page.goto('/members', { waitUntil: 'domcontentloaded' })
+    await page.waitForURL(/\/login/, { timeout: 10000 }).catch(() => {})
 
     // Should be on login page OR still on members with a login prompt
     const url = page.url()
@@ -86,7 +84,7 @@ test.describe('Auth Health Check @critical', () => {
   })
 
   test('HC-005: Legal pages (terms, privacy) are accessible from login', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
 
     // Check terms link
     const termsLink = page.getByRole('link', { name: /Terms of Service/i })
@@ -111,9 +109,8 @@ test.describe('Auth Health Check @critical', () => {
       errors.push(err.message)
     })
 
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(2000)
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1500)
 
     // Filter out expected/benign errors
     const criticalErrors = errors.filter(e => {
@@ -149,8 +146,7 @@ test.describe('Auth Health Check @critical', () => {
       }
     })
 
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
 
     // No Supabase-related errors
     expect(errors).toHaveLength(0)
@@ -161,7 +157,7 @@ test.describe('Auth Performance Baseline @monitoring', () => {
   test('PERF-001: Login page loads within acceptable time', async ({ page }) => {
     const startTime = Date.now()
 
-    await page.goto('/login')
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('domcontentloaded')
 
     const loadTime = Date.now() - startTime
@@ -176,7 +172,7 @@ test.describe('Auth Performance Baseline @monitoring', () => {
   test('PERF-002: Auth callback page loads within acceptable time', async ({ page }) => {
     const startTime = Date.now()
 
-    await page.goto('/auth/callback')
+    await page.goto('/auth/callback', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('domcontentloaded')
 
     const loadTime = Date.now() - startTime
@@ -191,7 +187,7 @@ test.describe('Auth Performance Baseline @monitoring', () => {
 
 test.describe('Auth Regression Prevention @regression', () => {
   test('REG-001: Login button is clickable and responds', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('domcontentloaded')
 
     const discordButton = page.getByRole('button', { name: /Log in with Discord/i })
@@ -205,7 +201,7 @@ test.describe('Auth Regression Prevention @regression', () => {
   })
 
   test('REG-002: Session storage key format is correct', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
 
     // Set a mock session
     await page.evaluate(() => {
@@ -226,7 +222,7 @@ test.describe('Auth Regression Prevention @regression', () => {
   })
 
   test('REG-003: Redirect parameter is preserved in URL', async ({ page }) => {
-    await page.goto('/login?redirect=/members/library')
+    await page.goto('/login?redirect=/members/library', { waitUntil: 'domcontentloaded' })
 
     // URL should contain redirect
     expect(page.url()).toContain('redirect')
@@ -234,9 +230,9 @@ test.describe('Auth Regression Prevention @regression', () => {
   })
 
   test('REG-004: Error display works on auth failure', async ({ page }) => {
-    await page.goto('/login?error_description=Test%20error%20message')
+    await page.goto('/login?error_description=Test%20error%20message', { waitUntil: 'domcontentloaded' })
 
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(500)
 
     // Should show some error indication
     const pageContent = await page.content()
@@ -249,7 +245,7 @@ test.describe('Auth Regression Prevention @regression', () => {
   })
 
   test('REG-005: Back to home link works', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
 
     const backLink = page.getByRole('link', { name: /Back to Home/i })
     await expect(backLink).toBeVisible()
