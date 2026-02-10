@@ -183,6 +183,13 @@ const PRESSABLE_PROPS = {
   whileTap: { scale: 0.98 },
 }
 
+const TAB_GROUP_LABELS: Record<'analyze' | 'portfolio' | 'monitor' | 'research', string> = {
+  analyze: 'Analyze',
+  portfolio: 'Portfolio',
+  monitor: 'Monitor',
+  research: 'Research',
+}
+
 // Level annotation colors by type
 const LEVEL_COLORS: Record<string, string> = {
   PDH: '#ef4444',
@@ -611,12 +618,12 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
               setActiveView('welcome')
               setCenterView(null)
             }}
-            className="flex items-center gap-1.5 text-xs text-white/40 hover:text-emerald-300 px-3 py-2.5 transition-colors shrink-0 border-r border-white/5 min-h-[44px]"
+            className="group/home mx-1 my-1 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/45 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-300 shrink-0"
             aria-label="Go to home view"
             {...PRESSABLE_PROPS}
           >
             <Home className="w-3.5 h-3.5" />
-            Home
+            <span className="sr-only">Home</span>
           </motion.button>
           <div className="relative flex-1 min-w-0">
             <motion.button
@@ -660,9 +667,19 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
                 const previousGroup = index > 0 ? TABS[index - 1].group : null
                 const showDivider = previousGroup !== null && previousGroup !== tab.group
                 return (
-                  <div key={tab.view} className="flex items-center">
+                  <div key={tab.view} className="group/segment relative flex items-center">
+                    {previousGroup === null && (
+                      <span className="pointer-events-none absolute -top-2 left-2 text-[9px] uppercase tracking-[0.1em] text-white/20 opacity-0 transition-opacity group-hover/segment:opacity-100 group-focus-within/segment:opacity-100">
+                        {TAB_GROUP_LABELS[tab.group]}
+                      </span>
+                    )}
                     {showDivider && (
-                      <div className="w-px h-5 bg-white/10 mx-1.5" aria-hidden />
+                      <>
+                        <div className="w-px h-5 bg-white/10 mx-1.5" aria-hidden />
+                        <span className="pointer-events-none absolute -top-2 left-4 text-[9px] uppercase tracking-[0.1em] text-white/20 opacity-0 transition-opacity group-hover/segment:opacity-100 group-focus-within/segment:opacity-100">
+                          {TAB_GROUP_LABELS[tab.group]}
+                        </span>
+                      </>
                     )}
                     <motion.button
                       onClick={() => {

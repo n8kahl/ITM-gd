@@ -180,6 +180,7 @@ All phase decisions, testing gates, and acceptance criteria in this status docum
 - Navigation declutter continuation:
   - Removed `Screenshot` from the main center-panel tab rail to reduce tool clutter (screenshot analysis remains available from chat upload).
   - Updated welcome quick-access grid to the spec-aligned set (`Chart`, `Options`, `Analyze`, `Journal`, `Daily Brief`, `Scanner`, `LEAPS`, `Macro`).
+  - Refined tab-rail affordances with an icon-only Home control and hover/focus group labels (`Analyze`, `Portfolio`, `Monitor`, `Research`) to improve scanability.
   - `/Users/natekahl/ITM-gd/components/ai-coach/center-panel.tsx`
 
 ## 1) Delivered on `main` (merged from `Aiupgrade`)
