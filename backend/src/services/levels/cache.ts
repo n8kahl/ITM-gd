@@ -14,8 +14,8 @@ export const CACHE_TTL = {
   // ATR - cache for 1 hour (doesn't change much intraday)
   ATR: 60 * 60, // 3600 seconds
 
-  // Full levels response - cache for 1 minute (balances freshness and performance)
-  LEVELS: 60 // 60 seconds
+  // Full levels response - cache for 5 minutes (Phase 3.7 target)
+  LEVELS: 300 // 300 seconds
 };
 
 /**
