@@ -25,6 +25,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  List,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -44,6 +45,7 @@ import { EarningsDashboard } from './earnings-dashboard'
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
 import { MorningBriefPanel } from './morning-brief'
 import { TrackedSetupsPanel } from './tracked-setups-panel'
+import { WatchlistPanel } from './watchlist-panel'
 import { WidgetContextMenu } from './widget-context-menu'
 import { WorkflowBreadcrumb } from './workflow-breadcrumb'
 import { PreferencesPanel } from './preferences-panel'
@@ -155,6 +157,7 @@ type CenterView =
   | 'leaps'
   | 'earnings'
   | 'macro'
+  | 'watchlist'
   | 'preferences'
 
 interface CenterPanelProps {
@@ -206,6 +209,7 @@ const TABS: Array<{
   { view: 'journal', icon: BookOpen, label: 'Journal', group: 'portfolio' },
   { view: 'tracked', icon: ListChecks, label: 'Tracked', group: 'portfolio' },
   { view: 'alerts', icon: Bell, label: 'Alerts', group: 'monitor' },
+  { view: 'watchlist', icon: List, label: 'Watchlist', group: 'monitor' },
   { view: 'brief', icon: Sunrise, label: 'Daily Brief', group: 'monitor' },
   { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
   { view: 'earnings', icon: Calendar, label: 'Earnings', group: 'research' },
@@ -907,6 +911,20 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
               setActiveView('welcome')
               setCenterView(null)
             }} />
+          )}
+
+          {activeView === 'watchlist' && (
+            <WatchlistPanel
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+              onNavigateChart={(symbol) => {
+                handleSymbolChange(symbol)
+                setActiveView('chart')
+                setCenterView('chart')
+              }}
+            />
           )}
 
           {activeView === 'brief' && (

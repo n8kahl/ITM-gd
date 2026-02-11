@@ -24,6 +24,7 @@ export type WorkflowCenterView =
   | 'leaps'
   | 'earnings'
   | 'macro'
+  | 'watchlist'
   | 'preferences'
 
 export interface WorkflowLevel {
