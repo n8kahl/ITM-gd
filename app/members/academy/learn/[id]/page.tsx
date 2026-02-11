@@ -35,6 +35,8 @@ interface LessonData {
   }
   quiz: QuizQuestionData[] | null
   aiTutorChips: string[]
+  keyTakeaways?: string[]
+  competencyKeys?: string[]
 }
 
 interface LessonResponse {
@@ -303,54 +305,72 @@ export default function LessonPage() {
     router.push(`/members/academy/courses/${lesson.course.slug}`)
   }, [immediateNextLesson, isMarkingComplete, lesson, markLessonComplete, nextLesson, router])
 
-  const lessonActions = lesson ? (
-    <section
-      data-testid="lesson-actions"
-      className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
-      aria-label="Lesson actions"
-    >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-white">Lesson checkpoints</p>
-          <p className="text-xs text-white/50">
-            {lesson.isCompleted
-              ? 'This lesson is complete. Continue when you are ready.'
-              : 'Mark this lesson complete to unlock progress and the next step.'}
+  const lessonClosingPanel = lesson ? (
+    <div className="space-y-3">
+      {Array.isArray(lesson.keyTakeaways) && lesson.keyTakeaways.length > 0 && (
+        <section className="glass-card-heavy rounded-xl border border-white/10 p-4">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-emerald-300">
+            Key Takeaways
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {previousLesson && (
+          <ul className="mt-3 space-y-2">
+            {lesson.keyTakeaways.slice(0, 6).map((takeaway) => (
+              <li key={takeaway} className="flex items-start gap-2 text-xs text-white/70">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-300 shrink-0" />
+                <span>{takeaway}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section
+        data-testid="lesson-actions"
+        className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
+        aria-label="Lesson actions"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">Lesson checkpoints</p>
+            <p className="text-xs text-white/50">
+              {lesson.isCompleted
+                ? 'This lesson is complete. Continue when you are ready.'
+                : 'Mark this lesson complete to unlock progress and the next step.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {previousLesson && (
+              <button
+                type="button"
+                data-testid="lesson-secondary-action"
+                onClick={() => router.push(`/members/academy/learn/${previousLesson.id}`)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.06] transition-colors"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </button>
+            )}
+
             <button
               type="button"
-              data-testid="lesson-secondary-action"
-              onClick={() => router.push(`/members/academy/learn/${previousLesson.id}`)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.06] transition-colors"
+              data-testid="lesson-primary-action"
+              onClick={handlePrimaryAction}
+              disabled={isMarkingComplete}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors',
+                'border border-emerald-500/50 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30',
+                isMarkingComplete && 'cursor-not-allowed opacity-70'
+              )}
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {isMarkingComplete ? 'Saving...' : primaryActionLabel}
+              {!isMarkingComplete && (lesson.isCompleted ? nextLesson : immediateNextLesson) && (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
             </button>
-          )}
-
-          <button
-            type="button"
-            data-testid="lesson-primary-action"
-            onClick={handlePrimaryAction}
-            disabled={isMarkingComplete}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors',
-              'border border-emerald-500/50 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30',
-              isMarkingComplete && 'cursor-not-allowed opacity-70'
-            )}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {isMarkingComplete ? 'Saving...' : primaryActionLabel}
-            {!isMarkingComplete && (lesson.isCompleted ? nextLesson : immediateNextLesson) && (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
-          </button>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   ) : null
 
   // Loading state
@@ -503,7 +523,7 @@ export default function LessonPage() {
             videoUrl={lesson.videoUrl}
             durationMinutes={lesson.durationMinutes}
             onProgressUpdate={handleProgressUpdate}
-            footer={!hasQuiz ? lessonActions : undefined}
+            footer={!hasQuiz ? lessonClosingPanel : undefined}
           />
 
           {/* Quiz section (if lesson has a quiz) */}
@@ -517,7 +537,7 @@ export default function LessonPage() {
               />
 
               <div className="mt-4">
-                {lessonActions}
+                {lessonClosingPanel}
               </div>
             </div>
           )}

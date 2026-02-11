@@ -142,7 +142,7 @@ function createE2EBypassAuthState(): MemberAuthState {
       description: 'Playwright E2E bypass permission',
       granted_by_role: 'role-pro',
     }],
-    allowedTabs: ['dashboard', 'ai-coach', 'journal', 'library', 'profile'],
+    allowedTabs: ['dashboard', 'ai-coach', 'journal', 'library', 'social', 'profile'],
     tabConfigs: [],
     isLoading: false,
     isAuthenticated: true,
@@ -305,11 +305,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
     switch (tier) {
       case 'executive':
-        return ['dashboard', 'ai-coach', 'journal', 'library', 'studio', 'profile']
+        return ['dashboard', 'ai-coach', 'journal', 'library', 'social', 'studio', 'profile']
       case 'pro':
-        return ['dashboard', 'ai-coach', 'journal', 'library', 'profile']
+        return ['dashboard', 'ai-coach', 'journal', 'library', 'social', 'profile']
       case 'core':
-        return ['dashboard', 'journal', 'profile']
+        return ['dashboard', 'journal', 'social', 'profile']
       default:
         return ['dashboard', 'profile']
     }
@@ -338,7 +338,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       console.error('fetchAllowedTabs error:', error)
       return []
     }
-  }, [])
+  }, [getAllowedTabsForTier])
 
   // Refs for stable access to latest callback versions (breaks dependency chains)
   const getMembershipTierRef = useRef(getMembershipTier)
@@ -786,7 +786,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // 2. Legacy permission names: 'access_trading_journal', etc.
   const hasPermission = useCallback((permissionName: string): boolean => {
     // Check if it's a tab ID (Simple RBAC)
-    const tabIds = ['dashboard', 'journal', 'library', 'profile', 'ai-coach']
+    const tabIds = ['dashboard', 'journal', 'library', 'social', 'profile', 'ai-coach']
     if (tabIds.includes(permissionName)) {
       return state.allowedTabs.includes(permissionName)
     }
@@ -955,7 +955,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       const visibleTabs = getVisibleTabs()
       setState(prev => ({ ...prev, tabConfigs: visibleTabs }))
     }
-  }, [allTabConfigs, state.profile?.membership_tier])
+  }, [allTabConfigs, getVisibleTabs, state.profile])
 
   const value = useMemo<MemberAuthContextValue>(() => ({
     ...state,

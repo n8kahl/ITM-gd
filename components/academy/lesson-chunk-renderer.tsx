@@ -7,7 +7,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type TouchEvent } from 'react'
-import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -24,8 +23,8 @@ import { ChunkProgressDots } from '@/components/academy/chunk-progress-dots'
 import { INTERACTIVE_REGISTRY, isInteractiveComponentId } from '@/components/academy/interactive'
 import { AnnotatedChartRenderer } from '@/components/academy/annotated-chart-renderer'
 import { ScenarioWalkthroughRenderer } from '@/components/academy/scenario-walkthrough-renderer'
+import { AcademyMarkdown } from '@/components/academy/academy-markdown'
 
-const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false })
 const remarkGfm = import('remark-gfm').then((module) => module.default)
 
 export interface QuickCheckData {
@@ -58,6 +57,7 @@ interface LessonChunkRendererProps {
   currentChunkIndex: number
   onChunkComplete: (index: number) => void
   onNavigate: (direction: 'prev' | 'next') => void
+  onFinish?: () => void
   lessonId: string
   className?: string
 }
@@ -106,6 +106,7 @@ export function LessonChunkRenderer({
   currentChunkIndex,
   onChunkComplete,
   onNavigate,
+  onFinish,
   lessonId,
   className,
 }: LessonChunkRendererProps) {
@@ -155,8 +156,12 @@ export function LessonChunkRenderer({
     if (!chunk) return
     if (nextBlocked) return
     markChunkComplete(currentChunkIndex)
+    if (currentChunkIndex >= chunks.length - 1) {
+      onFinish?.()
+      return
+    }
     onNavigate('next')
-  }, [chunk, currentChunkIndex, markChunkComplete, nextBlocked, onNavigate])
+  }, [chunk, chunks.length, currentChunkIndex, markChunkComplete, nextBlocked, onFinish, onNavigate])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -237,9 +242,7 @@ export function LessonChunkRenderer({
             )}
           </div>
           {chunk.content && (
-            <article className="prose prose-invert prose-emerald max-w-none text-sm prose-p:text-white/70">
-              <ReactMarkdown remarkPlugins={remarkPlugins}>{chunk.content}</ReactMarkdown>
-            </article>
+            <AcademyMarkdown variant="chunk">{chunk.content}</AcademyMarkdown>
           )}
         </div>
       )
@@ -326,9 +329,7 @@ export function LessonChunkRenderer({
             <ClipboardList className="h-4 w-4" />
             Applied Drill
           </div>
-          <article className="prose prose-invert prose-emerald max-w-none text-sm prose-p:text-white/75">
-            <ReactMarkdown remarkPlugins={remarkPlugins}>{chunk.content || ''}</ReactMarkdown>
-          </article>
+          <AcademyMarkdown variant="chunk">{chunk.content || ''}</AcademyMarkdown>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href={`/members/journal?academy_lesson=${lessonId}&academy_chunk=${chunk.id}`}
@@ -358,9 +359,7 @@ export function LessonChunkRenderer({
             Reflection
           </div>
           {chunk.content && (
-            <article className="prose prose-invert prose-emerald max-w-none text-sm prose-p:text-white/75">
-              <ReactMarkdown remarkPlugins={remarkPlugins}>{chunk.content}</ReactMarkdown>
-            </article>
+            <AcademyMarkdown variant="chunk">{chunk.content}</AcademyMarkdown>
           )}
           <textarea
             value={reflectionValue}
@@ -461,9 +460,9 @@ export function LessonChunkRenderer({
 
     /* ── Default: rich text / markdown ────────────────────────────── */
     return (
-      <article className="prose prose-invert prose-emerald max-w-none text-sm prose-p:text-white/75">
-        <ReactMarkdown remarkPlugins={remarkPlugins}>{chunk.content || ''}</ReactMarkdown>
-      </article>
+      <div className="glass-card-heavy rounded-xl border border-white/10 p-5">
+        <AcademyMarkdown variant="chunk">{chunk.content || ''}</AcademyMarkdown>
+      </div>
     )
   }
 
@@ -529,13 +528,18 @@ export function LessonChunkRenderer({
                 : 'border-emerald-500/45 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25'
             )}
           >
-            {currentChunkIndex >= chunks.length - 1 ? 'Finish Lesson' : 'Next Chunk'}
+            {currentChunkIndex >= chunks.length - 1 ? 'Continue' : 'Next Chunk'}
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
         {nextBlocked && (
           <p className="mt-2 text-xs text-white/45">
             Answer the quick check to continue.
+          </p>
+        )}
+        {currentChunkIndex >= chunks.length - 1 && !nextBlocked && (
+          <p className="mt-2 text-xs text-white/45">
+            Continue to key takeaways and completion.
           </p>
         )}
       </div>

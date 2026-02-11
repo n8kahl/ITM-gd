@@ -248,7 +248,7 @@ export default function RolesPage() {
             className="border-white/20 text-white hover:bg-white/5"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Sync Roles
+            Reload
           </Button>
           <Button
             onClick={handleAddRole}

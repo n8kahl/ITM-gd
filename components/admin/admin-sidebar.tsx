@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap,
   BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity, PanelTop,
-  ChevronRight, LogOut, Wand2
+  ChevronRight, LogOut, Wand2, Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
@@ -18,6 +18,7 @@ const navigation = [
     group: 'Growth & Sales',
     items: [
       { name: 'Leads Pipeline', href: '/admin/leads', icon: Users },
+      { name: 'Notifications', href: '/admin/notifications', icon: Bell },
       { name: 'Live Chat', href: '/admin/chat', icon: MessageSquare },
       { name: 'Packages', href: '/admin/packages', icon: Tag },
     ]
@@ -35,6 +36,8 @@ const navigation = [
         group: 'System',
         items: [
           { name: 'Analytics', href: '/admin/analytics', icon: Activity },
+          { name: 'Member Access', href: '/admin/members-access', icon: ShieldAlert },
+          { name: 'Role Permissions', href: '/admin/roles', icon: Shield },
           { name: 'Member Tabs', href: '/admin/tabs', icon: PanelTop },
           { name: 'Settings', href: '/admin/settings', icon: Sliders },
         ]

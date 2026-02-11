@@ -325,6 +325,7 @@ serve(async (req) => {
             ...user.app_metadata,
             is_admin: hasAdminPermission,
             is_member: hasMemberPermission,
+            discord_roles: discordRoles,
           }
         }
       )

@@ -1,14 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState, useMemo, type ReactNode } from 'react'
-import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { Clock, BookOpen, PlayCircle } from 'lucide-react'
 import { LessonChunkRenderer, type LessonChunk } from '@/components/academy/lesson-chunk-renderer'
-
-// Lazy-load react-markdown for code splitting
-const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false })
-const remarkGfm = import('remark-gfm').then((m) => m.default)
+import { AcademyMarkdown } from '@/components/academy/academy-markdown'
 
 interface LessonPlayerProps {
   lessonId: string
@@ -36,18 +32,10 @@ export function LessonPlayer({
   className,
 }: LessonPlayerProps) {
   const contentRef = useRef<HTMLDivElement>(null)
-  const [remarkPlugin, setRemarkPlugin] = useState<any[]>([])
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastProgressRef = useRef(0)
   const [currentChunk, setCurrentChunk] = useState(0)
   const [completedChunks, setCompletedChunks] = useState<number[]>([])
-
-  // Load remark-gfm plugin
-  useEffect(() => {
-    remarkGfm.then((plugin) => {
-      setRemarkPlugin([plugin])
-    })
-  }, [])
 
   const hasChunks = Array.isArray(chunkData) && chunkData.length > 0
 
@@ -112,6 +100,12 @@ export function LessonPlayer({
     })
   }, [chunkData])
 
+  const handleChunkFinish = useCallback(() => {
+    const el = contentRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [])
+
   useEffect(() => {
     if (!hasChunks || !onProgressUpdate || !chunkData) return
     const viewed = new Set<number>([...completedChunks, currentChunk]).size
@@ -144,13 +138,17 @@ export function LessonPlayer({
         onScroll={!hasChunks ? handleScroll : undefined}
         className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10"
       >
-        <div className={cn('px-6 py-6', hasChunks ? 'max-w-4xl' : 'space-y-6 max-w-3xl')}>
+        <div className={cn(
+          'px-6 py-6 mx-auto w-full',
+          hasChunks ? 'max-w-4xl' : 'space-y-6 max-w-3xl'
+        )}>
           {hasChunks && chunkData ? (
             <LessonChunkRenderer
               chunks={chunkData}
               currentChunkIndex={currentChunk}
               onChunkComplete={handleChunkComplete}
               onNavigate={handleChunkNavigate}
+              onFinish={handleChunkFinish}
               lessonId={lessonId}
             />
           ) : (
@@ -180,11 +178,7 @@ export function LessonPlayer({
 
               {/* Markdown content */}
               {(contentType === 'markdown' || contentType === 'mixed') && content && (
-                <article className="prose prose-invert prose-emerald max-w-none prose-headings:font-semibold prose-headings:text-white prose-p:text-white/70 prose-p:leading-relaxed prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-white prose-code:text-emerald-300 prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-[#141416] prose-pre:border prose-pre:border-white/10 prose-blockquote:border-emerald-500/50 prose-blockquote:text-white/60 prose-li:text-white/70 prose-th:text-white/80 prose-td:text-white/60 prose-hr:border-white/10">
-                  <ReactMarkdown remarkPlugins={remarkPlugin}>
-                    {content}
-                  </ReactMarkdown>
-                </article>
+                <AcademyMarkdown variant="lesson">{content}</AcademyMarkdown>
               )}
 
               {footer && (
@@ -193,6 +187,12 @@ export function LessonPlayer({
                 </div>
               )}
             </>
+          )}
+
+          {hasChunks && footer && (
+            <div className="pt-6">
+              {footer}
+            </div>
           )}
         </div>
       </div>

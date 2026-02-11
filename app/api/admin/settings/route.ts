@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { key, value, description } = body
+    const { key, value } = body
 
     if (!key) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('app_settings')
-      .insert({ key, value, description })
+      .insert({ key, value })
       .select()
       .single()
 
@@ -103,7 +103,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { key, value, description } = body
+    const { key, value } = body
 
     if (!key) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
@@ -114,7 +114,6 @@ export async function PATCH(request: NextRequest) {
     // Build update object
     const updates: Record<string, any> = {}
     if (value !== undefined) updates.value = value
-    if (description !== undefined) updates.description = description
     updates.updated_at = new Date().toISOString()
 
     const { data, error } = await supabase
@@ -131,7 +130,7 @@ export async function PATCH(request: NextRequest) {
       // Setting doesn't exist, create it
       const { data: newData, error: insertError } = await supabase
         .from('app_settings')
-        .insert({ key, value, description })
+        .insert({ key, value })
         .select()
         .single()
 

@@ -4,6 +4,16 @@ import { cookies } from 'next/headers'
 import { getSafeRedirect } from '@/lib/safe-redirect'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
 
+// Only this Discord role ID may access the Members area.
+const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
+
+function extractDiscordRoleIds(meta: unknown): string[] {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return []
+  const roles = (meta as { discord_roles?: unknown }).discord_roles
+  if (!Array.isArray(roles)) return []
+  return roles.map((id) => String(id)).filter(Boolean)
+}
+
 /**
  * Server-side OAuth callback handler
  *
@@ -201,26 +211,73 @@ export async function GET(request: NextRequest) {
       console.log('→ Redirecting to /join-discord (user not in Discord server)')
       redirectUrl = '/join-discord'
     }
-    // User explicitly requested a destination
-    else if (next) {
-      const safeNext = getSafeRedirect(next)
-      console.log('→ Redirecting to requested destination:', safeNext)
-      redirectUrl = safeNext
-    }
-    // Admin users go to admin dashboard
-    else if (isAdmin) {
-      console.log('→ Redirecting to /admin (admin user)')
-      redirectUrl = '/admin'
-    }
-    // Members go to member portal
-    else if (isMember) {
-      console.log('→ Redirecting to /members (member user)')
-      redirectUrl = '/members'
-    }
-    // Default: members area (middleware will handle auth)
     else {
-      console.log('→ Redirecting to /members (default)')
-      redirectUrl = '/members'
+      // Members area access is restricted to a single Discord role ID.
+      let hasMembersRole = false
+
+      // 1) Prefer JWT app_metadata (best case: edge function stored discord_roles).
+      const rolesFromJwt = extractDiscordRoleIds(currentSession.user.app_metadata)
+      hasMembersRole = rolesFromJwt.includes(MEMBERS_REQUIRED_ROLE_ID)
+
+      // 2) Fall back to edge function response.
+      if (!hasMembersRole && syncResult?.success) {
+        const rolesFromSync = Array.isArray((syncResult as any).roles)
+          ? (syncResult as any).roles.map((r: any) => String(r?.id)).filter(Boolean)
+          : []
+        hasMembersRole = rolesFromSync.includes(MEMBERS_REQUIRED_ROLE_ID)
+      }
+
+      // 3) Final fallback: cached DB profile (works even if claims didn't propagate yet).
+      if (!hasMembersRole) {
+        try {
+          const { data: discordProfile } = await supabase
+            .from('user_discord_profiles')
+            .select('discord_roles')
+            .eq('user_id', currentSession.user.id)
+            .maybeSingle()
+          if (Array.isArray(discordProfile?.discord_roles)) {
+            hasMembersRole = discordProfile.discord_roles
+              .map((id: unknown) => String(id))
+              .includes(MEMBERS_REQUIRED_ROLE_ID)
+          }
+        } catch (err) {
+          console.warn('Role lookup failed during callback (non-fatal):', err)
+        }
+      }
+
+      // User explicitly requested a destination
+      if (next) {
+        const safeNext = getSafeRedirect(next)
+
+        // Block direct member-area redirects when missing the required role.
+        if (safeNext === '/members' || safeNext.startsWith('/members/')) {
+          if (!hasMembersRole) {
+            console.log('→ Redirecting to /access-denied (missing required members role)')
+            redirectUrl = '/access-denied?area=members'
+          } else {
+            console.log('→ Redirecting to requested destination:', safeNext)
+            redirectUrl = safeNext
+          }
+        } else {
+          console.log('→ Redirecting to requested destination:', safeNext)
+          redirectUrl = safeNext
+        }
+      }
+      // Admin users go to admin dashboard
+      else if (isAdmin) {
+        console.log('→ Redirecting to /admin (admin user)')
+        redirectUrl = '/admin'
+      }
+      // Members (role-gated) go to member portal
+      else if (hasMembersRole) {
+        console.log('→ Redirecting to /members (authorized member role)')
+        redirectUrl = '/members'
+      }
+      // Default: deny
+      else {
+        console.log('→ Redirecting to /access-denied (missing required members role)')
+        redirectUrl = '/access-denied?area=members'
+      }
     }
 
     return NextResponse.redirect(getAbsoluteUrl(redirectUrl, request))

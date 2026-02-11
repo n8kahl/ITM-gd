@@ -3,6 +3,9 @@ import type { NextRequest } from 'next/server'
 import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
 
+// Only this Discord role ID may access the Members area (UI + APIs).
+const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
+
 /**
  * Validate redirect path to prevent open redirect attacks.
  * Only allows relative paths starting with / that don't contain protocol markers.
@@ -77,10 +80,55 @@ function addSecurityHeaders(response: NextResponse, nonce: string): NextResponse
 }
 
 // Prefixes that require authentication / authorization checks
-const AUTH_PREFIXES = ['/api/admin', '/admin', '/members', '/join-discord', '/login', '/auth/callback', '/api/auth/callback']
+const AUTH_PREFIXES = [
+  '/api/admin',
+  '/admin',
+  '/api/members',
+  '/api/academy',
+  '/api/social',
+  '/members',
+  '/join-discord',
+  '/login',
+  '/auth/callback',
+  '/api/auth/callback',
+]
 
 function requiresAuth(pathname: string): boolean {
   return AUTH_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
+}
+
+function isApiRoute(pathname: string): boolean {
+  return pathname === '/api' || pathname.startsWith('/api/')
+}
+
+function isAdminRoute(pathname: string): boolean {
+  return pathname === '/admin' || pathname.startsWith('/admin/') ||
+    pathname === '/api/admin' || pathname.startsWith('/api/admin/')
+}
+
+function isMembersAreaRoute(pathname: string): boolean {
+  return pathname === '/members' || pathname.startsWith('/members/') ||
+    pathname === '/api/members' || pathname.startsWith('/api/members/') ||
+    pathname === '/api/academy' || pathname.startsWith('/api/academy/') ||
+    pathname === '/api/social' || pathname.startsWith('/api/social/')
+}
+
+function extractDiscordRoleIds(user: any): string[] {
+  const fromAppMeta = (user?.app_metadata as { discord_roles?: unknown } | undefined)?.discord_roles
+  if (Array.isArray(fromAppMeta)) {
+    return fromAppMeta.map((id) => String(id)).filter(Boolean)
+  }
+
+  const fromUserMeta = (user?.user_metadata as { discord_roles?: unknown } | undefined)?.discord_roles
+  if (Array.isArray(fromUserMeta)) {
+    return fromUserMeta.map((id) => String(id)).filter(Boolean)
+  }
+
+  return []
+}
+
+function jsonError(message: string, status: number): NextResponse {
+  return NextResponse.json({ success: false, error: message }, { status })
 }
 
 export async function middleware(request: NextRequest) {
@@ -107,7 +155,15 @@ export async function middleware(request: NextRequest) {
   const e2eBypassHeader = request.headers.get('x-e2e-bypass-auth') === '1'
   const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
   if (e2eBypassAllowed && e2eBypassHeader) {
-    const bypassPrefixes = ['/members', '/admin', '/join-discord']
+    const bypassPrefixes = [
+      '/members',
+      '/admin',
+      '/api/members',
+      '/api/academy',
+      '/api/social',
+      '/api/admin',
+      '/join-discord',
+    ]
     const shouldBypass = bypassPrefixes.some((prefix) => (
       pathname === prefix || pathname.startsWith(prefix + '/')
     ))
@@ -165,10 +221,23 @@ export async function middleware(request: NextRequest) {
   // ============================================
   // ADMIN ROUTES PROTECTION
   // ============================================
-  if (pathname.startsWith('/admin')) {
+  if (isAdminRoute(pathname)) {
     // Strict Discord-only authentication
     // Only users with is_admin claim (from Discord roles) can access
+    if (!isAuthenticated) {
+      if (isApiRoute(pathname)) {
+        return addSecurityHeaders(jsonError('Unauthorized', 401), nonce)
+      }
+
+      const loginUrl = getAbsoluteUrl('/login', request)
+      loginUrl.searchParams.set('redirect', pathname)
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
+    }
+
     if (!isAdmin) {
+      if (isApiRoute(pathname)) {
+        return addSecurityHeaders(jsonError('Forbidden', 403), nonce)
+      }
       // Not authorized - redirect to login
       const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
@@ -182,15 +251,53 @@ export async function middleware(request: NextRequest) {
   // ============================================
   // MEMBERS ROUTES PROTECTION
   // ============================================
-  if (pathname.startsWith('/members')) {
+  if (isMembersAreaRoute(pathname)) {
     if (!isAuthenticated) {
+      if (isApiRoute(pathname)) {
+        return addSecurityHeaders(jsonError('Unauthorized', 401), nonce)
+      }
       // Not logged in - redirect to login
       const loginUrl = getAbsoluteUrl('/login', request)
       loginUrl.searchParams.set('redirect', pathname)
       return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
-    // User is authenticated - proceed
+    let roleIds = extractDiscordRoleIds(user)
+
+    // Fallback: query cached Discord profile roles if JWT metadata does not include them.
+    if (roleIds.length === 0) {
+      try {
+        const rolesResult = await Promise.race([
+          supabase
+            .from('user_discord_profiles')
+            .select('discord_roles')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('roles lookup timeout')), 2000)),
+        ]) as any
+
+        const discordRoles = rolesResult?.data?.discord_roles
+        if (Array.isArray(discordRoles)) {
+          roleIds = discordRoles.map((id: unknown) => String(id)).filter(Boolean)
+        }
+      } catch (err) {
+        console.warn('[Middleware] Failed to lookup user_discord_profiles.discord_roles:', err)
+      }
+    }
+
+    const hasMembersRole = roleIds.includes(MEMBERS_REQUIRED_ROLE_ID)
+
+    if (!hasMembersRole) {
+      if (isApiRoute(pathname)) {
+        return addSecurityHeaders(jsonError('Forbidden', 403), nonce)
+      }
+
+      const deniedUrl = getAbsoluteUrl('/access-denied', request)
+      deniedUrl.searchParams.set('area', 'members')
+      return addSecurityHeaders(NextResponse.redirect(deniedUrl), nonce)
+    }
+
+    // Authenticated + authorized - proceed
     return addSecurityHeaders(response, nonce)
   }
 

@@ -60,6 +60,8 @@ export async function GET(
         duration_minutes,
         display_order,
         quiz_data,
+        key_takeaways,
+        competency_keys,
         ai_tutor_chips,
         courses(id, title, slug)
       `)
@@ -173,6 +175,16 @@ export async function GET(
         .filter((chip): chip is string => typeof chip === 'string' && chip.trim().length > 0)
         .slice(0, 6)
       : []
+    const keyTakeaways = Array.isArray(lesson.key_takeaways)
+      ? lesson.key_takeaways
+        .filter((takeaway): takeaway is string => typeof takeaway === 'string' && takeaway.trim().length > 0)
+        .slice(0, 8)
+      : []
+    const competencyKeys = Array.isArray(lesson.competency_keys)
+      ? lesson.competency_keys
+        .filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
+        .slice(0, 4)
+      : []
 
     return NextResponse.json({
       success: true,
@@ -193,6 +205,8 @@ export async function GET(
         },
         quiz: quizQuestions,
         aiTutorChips: tutorChips,
+        keyTakeaways,
+        competencyKeys,
       },
     })
   } catch (error) {
