@@ -96,7 +96,7 @@ export function MemberSidebar() {
 
   return (
     <aside className={cn(
-      'hidden lg:flex w-[280px] flex-col fixed inset-y-0 left-0 z-40 relative overflow-hidden',
+      'hidden lg:flex w-[280px] flex-col fixed inset-y-0 left-0 z-40 overflow-hidden',
       'bg-[#0A0A0B]/88 backdrop-blur-2xl',
       'border-r border-transparent',
     )}>
