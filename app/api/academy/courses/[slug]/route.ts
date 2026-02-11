@@ -8,7 +8,7 @@ import { resolveAcademyResumeTarget } from '@/lib/academy/resume'
 interface LessonRow {
   id: string
   title: string
-  lesson_type: 'video' | 'text' | 'interactive' | 'scenario' | 'practice' | 'guided' | null
+  lesson_type: 'video' | 'text' | 'chunk' | 'interactive' | 'scenario' | 'practice' | 'guided' | null
   estimated_minutes: number | null
   duration_minutes: number | null
   display_order: number
@@ -129,6 +129,8 @@ export async function GET(
           ? 'video'
           : lesson.lesson_type === 'text'
             ? 'markdown'
+            : lesson.lesson_type === 'chunk'
+              ? 'chunk'
             : 'mixed',
         isCompleted,
         isLocked: false, // TODO: restore gating → !isCompleted && !previousCompleted

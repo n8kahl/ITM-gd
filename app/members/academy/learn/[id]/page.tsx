@@ -22,7 +22,7 @@ interface LessonData {
   id: string
   title: string
   content: string
-  contentType: 'markdown' | 'video' | 'mixed'
+  contentType: 'markdown' | 'video' | 'mixed' | 'chunk'
   chunkData?: LessonChunk[] | null
   videoUrl: string | null
   durationMinutes: number
@@ -373,6 +373,22 @@ export default function LessonPage() {
     </div>
   ) : null
 
+  const lessonFooter = lesson ? (
+    <div className="space-y-4">
+      {hasQuiz && (
+        <div className="max-w-3xl">
+          <QuizEngine
+            questions={lesson.quiz ?? []}
+            title="Lesson Quiz"
+            passingScore={70}
+            onComplete={handleQuizComplete}
+          />
+        </div>
+      )}
+      {lessonClosingPanel}
+    </div>
+  ) : null
+
   // Loading state
   if (isLoading) {
     return (
@@ -523,24 +539,8 @@ export default function LessonPage() {
             videoUrl={lesson.videoUrl}
             durationMinutes={lesson.durationMinutes}
             onProgressUpdate={handleProgressUpdate}
-            footer={!hasQuiz ? lessonClosingPanel : undefined}
+            footer={lessonFooter}
           />
-
-          {/* Quiz section (if lesson has a quiz) */}
-          {hasQuiz && (
-            <div className="px-6 py-6 max-w-3xl">
-              <QuizEngine
-                questions={lesson.quiz ?? []}
-                title="Lesson Quiz"
-                passingScore={70}
-                onComplete={handleQuizComplete}
-              />
-
-              <div className="mt-4">
-                {lessonClosingPanel}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

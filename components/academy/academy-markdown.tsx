@@ -13,6 +13,23 @@ const remarkGfm = import('remark-gfm').then((module) => module.default)
 
 type MarkdownVariant = 'lesson' | 'chunk'
 
+type CalloutTone = 'emerald' | 'champagne' | 'red' | 'neutral'
+
+const CALLOUT_META: Record<string, { label: string; tone: CalloutTone }> = {
+  rule: { label: 'Rule', tone: 'champagne' },
+  checklist: { label: 'Checklist', tone: 'emerald' },
+  mistake: { label: 'Common Mistake', tone: 'red' },
+  example: { label: 'Example', tone: 'neutral' },
+  why: { label: 'Why It Matters', tone: 'champagne' },
+  protip: { label: 'Pro Tip', tone: 'emerald' },
+  math: { label: 'Quick Math', tone: 'neutral' },
+  note: { label: 'Note', tone: 'neutral' },
+  tip: { label: 'Tip', tone: 'emerald' },
+  important: { label: 'Important', tone: 'champagne' },
+  warning: { label: 'Warning', tone: 'red' },
+  caution: { label: 'Caution', tone: 'red' },
+}
+
 const PROSE_BASE =
   'prose prose-invert prose-emerald max-w-none ' +
   'prose-headings:font-semibold prose-headings:text-white ' +
@@ -45,6 +62,69 @@ interface AcademyMarkdownProps {
   className?: string
 }
 
+function extractCalloutFromText(
+  value: string
+): { type: string; title: string | null; remainder: string } | null {
+  const trimmed = value.trimStart()
+  const firstLine = trimmed.split('\n')[0] || ''
+  const match = firstLine.match(/^\[!(?<type>[A-Za-z_-]+)\](?:\s+(?<title>.*))?$/)
+  if (!match?.groups?.type) return null
+
+  const type = match.groups.type.toLowerCase().replace(/_/g, '-')
+  const title = typeof match.groups.title === 'string' && match.groups.title.trim().length > 0
+    ? match.groups.title.trim()
+    : null
+
+  const remainder = trimmed.slice(firstLine.length).replace(/^\n+/, '')
+  return { type, title, remainder }
+}
+
+function remarkAcademyCallouts() {
+  return (tree: any) => {
+    const visit = (node: any) => {
+      if (!node || typeof node !== 'object') return
+
+      if (node.type === 'blockquote' && Array.isArray(node.children) && node.children.length > 0) {
+        const first = node.children[0]
+        if (first?.type === 'paragraph' && Array.isArray(first.children) && first.children.length > 0) {
+          const firstChild = first.children[0]
+          if (firstChild?.type === 'text' && typeof firstChild.value === 'string') {
+            const parsed = extractCalloutFromText(firstChild.value)
+            if (parsed) {
+              if (parsed.remainder.trim().length > 0) {
+                firstChild.value = parsed.remainder
+              } else {
+                first.children.shift()
+                if (first.children.length === 0) {
+                  node.children.shift()
+                }
+              }
+
+              const meta = CALLOUT_META[parsed.type] || { label: parsed.type.toUpperCase(), tone: 'neutral' as const }
+              const className = `academy-callout academy-callout--${meta.tone}`
+
+              node.data = node.data || {}
+              node.data.hProperties = {
+                ...(node.data.hProperties || {}),
+                'data-callout': parsed.type,
+                'data-callout-label': meta.label,
+                'data-callout-title': parsed.title || '',
+                className,
+              }
+            }
+          }
+        }
+      }
+
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) visit(child)
+      }
+    }
+
+    visit(tree)
+  }
+}
+
 export function AcademyMarkdown({ children, variant = 'lesson', className }: AcademyMarkdownProps) {
   const [remarkPlugins, setRemarkPlugins] = useState<any[]>([])
 
@@ -52,7 +132,7 @@ export function AcademyMarkdown({ children, variant = 'lesson', className }: Aca
     let mounted = true
     remarkGfm.then((plugin) => {
       if (!mounted) return
-      setRemarkPlugins([plugin])
+      setRemarkPlugins([plugin, remarkAcademyCallouts])
     })
     return () => {
       mounted = false
@@ -61,6 +141,32 @@ export function AcademyMarkdown({ children, variant = 'lesson', className }: Aca
 
   const components = useMemo(() => {
     return {
+      blockquote: (props: any) => {
+        const calloutType = typeof props?.['data-callout'] === 'string' ? props['data-callout'] : null
+        const calloutLabel = typeof props?.['data-callout-label'] === 'string' ? props['data-callout-label'] : null
+        const calloutTitle = typeof props?.['data-callout-title'] === 'string' ? props['data-callout-title'] : null
+
+        if (!calloutType) {
+          return <blockquote {...props} />
+        }
+
+        return (
+          <aside
+            className={cn('academy-callout', props.className)}
+            data-callout={calloutType}
+          >
+            <div className="academy-callout__header">
+              <span className="academy-callout__label">{calloutLabel || calloutType}</span>
+              {calloutTitle && calloutTitle.trim().length > 0 && (
+                <span className="academy-callout__title">{calloutTitle}</span>
+              )}
+            </div>
+            <div className="academy-callout__body">
+              {props.children}
+            </div>
+          </aside>
+        )
+      },
       a: (props: any) => {
         const href = typeof props.href === 'string' ? props.href : ''
         const isExternal = /^https?:\/\//i.test(href)
@@ -73,9 +179,11 @@ export function AcademyMarkdown({ children, variant = 'lesson', className }: Aca
         )
       },
       img: (props: any) => {
+        const alt = typeof props.alt === 'string' ? props.alt : ''
         return (
           <img
             {...props}
+            alt={alt}
             loading="lazy"
             decoding="async"
             className={cn('my-4', props.className)}
@@ -125,4 +233,3 @@ export function AcademyMarkdown({ children, variant = 'lesson', className }: Aca
     </article>
   )
 }
-

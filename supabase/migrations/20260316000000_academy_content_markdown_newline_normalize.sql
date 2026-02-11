@@ -9,8 +9,7 @@
 BEGIN;
 
 UPDATE public.lessons
-SET content_markdown = replace(content_markdown, E'\\\\n', E'\n')
-WHERE content_markdown LIKE E'%\\\\n%';
+SET content_markdown = replace(content_markdown, chr(92) || 'n', chr(10))
+WHERE content_markdown LIKE ('%' || chr(92) || 'n' || '%');
 
 COMMIT;
-

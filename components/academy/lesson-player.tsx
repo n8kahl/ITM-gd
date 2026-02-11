@@ -10,7 +10,7 @@ interface LessonPlayerProps {
   lessonId: string
   title: string
   content: string
-  contentType: 'markdown' | 'video' | 'mixed'
+  contentType: 'markdown' | 'video' | 'mixed' | 'chunk'
   chunkData?: LessonChunk[] | null
   videoUrl?: string | null
   durationMinutes?: number
@@ -126,7 +126,13 @@ export function LessonPlayer({
             </span>
             <span className="flex items-center gap-1">
               <BookOpen className="w-3 h-3" />
-              {contentType === 'video' ? 'Video Lesson' : contentType === 'mixed' ? 'Video + Reading' : 'Reading'}
+              {contentType === 'video'
+                ? 'Video Lesson'
+                : contentType === 'mixed'
+                  ? 'Video + Reading'
+                  : contentType === 'chunk'
+                    ? 'Guided Lesson'
+                    : 'Reading'}
             </span>
           </div>
         )}
