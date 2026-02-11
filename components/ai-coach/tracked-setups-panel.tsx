@@ -70,7 +70,6 @@ const ACTIVE_STATUS_FILTERS: Array<{ value: ActiveStatusFilter; label: string }>
 ]
 
 const HISTORY_STATUS_FILTERS: Array<{ value: HistoryStatusFilter; label: string }> = [
-  { value: 'invalidated', label: 'Invalidated' },
   { value: 'archived', label: 'Archived' },
   { value: 'all', label: 'All' },
 ]
@@ -416,7 +415,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
       ) {
         const revertStatus = previousStatus as Exclude<TrackedSetupStatus, 'invalidated'>
         toast('Setup invalidated', {
-          description: `${result.trackedSetup.symbol} ${result.trackedSetup.setup_type} moved to history.`,
+          description: `${result.trackedSetup.symbol} ${result.trackedSetup.setup_type} removed from tracked setups.`,
           duration: 8000,
           action: {
             label: 'Undo',
@@ -785,7 +784,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
             <p className="text-sm text-white/40">{view === 'history' ? 'No history yet' : 'No active setups'}</p>
             <p className="text-xs text-white/25 mt-1">
               {view === 'history'
-                ? 'Archived and invalidated setups will appear here.'
+                ? 'Archived setups will appear here.'
                 : 'Track scanner ideas to monitor them through the day.'}
             </p>
           </div>

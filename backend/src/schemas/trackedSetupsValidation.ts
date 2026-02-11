@@ -11,6 +11,7 @@ const symbolSchema = z
   });
 
 const statusSchema = z.enum(['active', 'triggered', 'invalidated', 'archived']);
+const listStatusSchema = z.enum(['active', 'triggered', 'archived']);
 
 export const createTrackedSetupSchema = z.object({
   source_opportunity_id: z.string().trim().min(1).max(255).optional(),
@@ -31,7 +32,7 @@ export const trackedSetupIdSchema = z.object({
 });
 
 export const getTrackedSetupsQuerySchema = z.object({
-  status: statusSchema.optional(),
+  status: listStatusSchema.optional(),
   view: z.enum(['active', 'history']).optional(),
 });
 

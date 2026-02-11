@@ -1870,6 +1870,7 @@ export async function setMorningBriefViewed(
 // ============================================
 
 export type TrackedSetupStatus = 'active' | 'triggered' | 'invalidated' | 'archived'
+export type TrackedSetupsListStatus = Exclude<TrackedSetupStatus, 'invalidated'>
 
 export interface TrackedSetup {
   id: string
@@ -1890,7 +1891,7 @@ export interface TrackedSetup {
 
 export async function getTrackedSetups(
   token: string,
-  options?: { status?: TrackedSetupStatus; view?: 'active' | 'history' },
+  options?: { status?: TrackedSetupsListStatus; view?: 'active' | 'history' },
   signal?: AbortSignal
 ): Promise<{ trackedSetups: TrackedSetup[] }> {
   const params = new URLSearchParams()

@@ -41,7 +41,7 @@ router.get(
       if (status) {
         query = query.eq('status', status);
       } else if (view === 'history') {
-        query = query.in('status', ['invalidated', 'archived']);
+        query = query.eq('status', 'archived');
       } else if (view === 'active') {
         query = query.in('status', ['active', 'triggered']);
       } else {

@@ -45,14 +45,14 @@ describe('filterTrackedSetups', () => {
     expect(filtered.map((setup) => setup.id)).toEqual(['a', 'b'])
   })
 
-  it('returns only invalidated + archived for history view all filter', () => {
+  it('returns only archived setups for history view all filter', () => {
     const filtered = filterTrackedSetups(setups, 'history', 'all', 'all')
-    expect(filtered.map((setup) => setup.id)).toEqual(['c', 'd'])
+    expect(filtered.map((setup) => setup.id)).toEqual(['d'])
   })
 
-  it('applies history invalidated-only filter', () => {
-    const filtered = filterTrackedSetups(setups, 'history', 'all', 'invalidated')
-    expect(filtered.map((setup) => setup.id)).toEqual(['c'])
+  it('applies history archived-only filter', () => {
+    const filtered = filterTrackedSetups(setups, 'history', 'all', 'archived')
+    expect(filtered.map((setup) => setup.id)).toEqual(['d'])
   })
 })
 
@@ -104,20 +104,21 @@ describe('normalizeTrackedSetupsPreferences', () => {
   it('falls back to defaults for invalid payloads', () => {
     expect(normalizeTrackedSetupsPreferences(null)).toEqual(DEFAULT_TRACKED_SETUPS_PREFERENCES)
     expect(normalizeTrackedSetupsPreferences({ view: 'bad', sortMode: 'bad' })).toEqual(DEFAULT_TRACKED_SETUPS_PREFERENCES)
+    expect(normalizeTrackedSetupsPreferences({ historyStatusFilter: 'invalidated' })).toEqual(DEFAULT_TRACKED_SETUPS_PREFERENCES)
   })
 
   it('accepts valid values', () => {
     const normalized = normalizeTrackedSetupsPreferences({
       view: 'history',
       activeStatusFilter: 'triggered',
-      historyStatusFilter: 'invalidated',
+      historyStatusFilter: 'archived',
       sortMode: 'closest_to_trigger',
     })
 
     expect(normalized).toEqual({
       view: 'history',
       activeStatusFilter: 'triggered',
-      historyStatusFilter: 'invalidated',
+      historyStatusFilter: 'archived',
       sortMode: 'closest_to_trigger',
     })
   })

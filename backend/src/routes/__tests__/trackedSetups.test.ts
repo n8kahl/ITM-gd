@@ -143,8 +143,15 @@ describe('Tracked Setups Routes', () => {
 
       await request(app).get('/api/tracked-setups?view=history');
 
-      expect(selectChain.in).toHaveBeenCalledWith('status', ['invalidated', 'archived']);
+      expect(selectChain.eq).toHaveBeenCalledWith('status', 'archived');
+      expect(selectChain.in).not.toHaveBeenCalled();
       expect(selectChain.neq).not.toHaveBeenCalled();
+    });
+
+    it('rejects status=invalidated for listing', async () => {
+      const res = await request(app).get('/api/tracked-setups?status=invalidated');
+
+      expect(res.status).toBe(400);
     });
   });
 

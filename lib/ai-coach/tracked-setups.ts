@@ -2,7 +2,7 @@ import type { TrackedSetup, TrackedSetupStatus } from '@/lib/api/ai-coach'
 
 export type TrackedSetupsView = 'active' | 'history'
 export type ActiveStatusFilter = 'all' | 'active' | 'triggered'
-export type HistoryStatusFilter = 'all' | 'invalidated' | 'archived'
+export type HistoryStatusFilter = 'all' | 'archived'
 export type TrackedSetupsSortMode = 'newest' | 'highest_score' | 'closest_to_trigger'
 
 export interface TrackedSetupsPreferences {
@@ -91,7 +91,7 @@ export function matchesTrackedSetupsFilter(
     return status === activeStatusFilter
   }
 
-  if (status !== 'invalidated' && status !== 'archived') return false
+  if (status !== 'archived') return false
   if (historyStatusFilter === 'all') return true
   return status === historyStatusFilter
 }
@@ -148,7 +148,7 @@ function normalizeActiveStatusFilter(value: unknown): ActiveStatusFilter {
 }
 
 function normalizeHistoryStatusFilter(value: unknown): HistoryStatusFilter {
-  if (value === 'all' || value === 'invalidated' || value === 'archived') return value
+  if (value === 'all' || value === 'archived') return value
   return DEFAULT_TRACKED_SETUPS_PREFERENCES.historyStatusFilter
 }
 
