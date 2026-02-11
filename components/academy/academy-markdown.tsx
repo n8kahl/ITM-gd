@@ -67,12 +67,13 @@ function extractCalloutFromText(
 ): { type: string; title: string | null; remainder: string } | null {
   const trimmed = value.trimStart()
   const firstLine = trimmed.split('\n')[0] || ''
-  const match = firstLine.match(/^\[!(?<type>[A-Za-z_-]+)\](?:\s+(?<title>.*))?$/)
-  if (!match?.groups?.type) return null
+  const match = firstLine.match(/^\[!([A-Za-z_-]+)\](?:\s+(.*))?$/)
+  if (!match?.[1]) return null
 
-  const type = match.groups.type.toLowerCase().replace(/_/g, '-')
-  const title = typeof match.groups.title === 'string' && match.groups.title.trim().length > 0
-    ? match.groups.title.trim()
+  const type = match[1].toLowerCase().replace(/_/g, '-')
+  const rawTitle = match[2]
+  const title = typeof rawTitle === 'string' && rawTitle.trim().length > 0
+    ? rawTitle.trim()
     : null
 
   const remainder = trimmed.slice(firstLine.length).replace(/^\n+/, '')
