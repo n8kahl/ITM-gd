@@ -24,6 +24,7 @@ interface TraderIdentityCardProps {
     nextRankXp: number
   } | null
   isOwnProfile?: boolean
+  loading?: boolean
   onEditProfile?: () => void
   className?: string
 }
@@ -88,6 +89,7 @@ export function TraderIdentityCard({
   membershipTier,
   academyData,
   isOwnProfile = true,
+  loading = false,
   onEditProfile,
   className,
 }: TraderIdentityCardProps) {
@@ -101,10 +103,20 @@ export function TraderIdentityCard({
         className={cn('glass-card-heavy border-white/[0.08]', className)}
       >
         <CardContent className="p-6">
-          <div className="flex items-center justify-center gap-2 py-12">
-            <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-            <span className="text-sm text-[#9A9A9A]">Loading profile...</span>
-          </div>
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+              <span className="text-sm text-[#9A9A9A]">Loading profile...</span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+              <User className="w-8 h-8 text-[#9A9A9A]" />
+              <p className="text-sm text-[#9A9A9A]">Profile unavailable</p>
+              <p className="text-xs text-[#9A9A9A]/60">
+                Please try refreshing the page
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     )
