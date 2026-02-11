@@ -19,14 +19,13 @@ import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 const pageVariants = {
   initial: { opacity: 0, y: 8, filter: 'blur(4px)' },
   animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
-  exit: { opacity: 0, y: -4, filter: 'blur(2px)' },
+  exit: { opacity: 0, y: -4 },
 }
 
 const pageTransition = {
-  type: 'spring' as const,
-  stiffness: 300,
-  damping: 30,
-  mass: 0.8,
+  type: 'tween' as const,
+  duration: 0.2,
+  ease: [0.23, 1, 0.32, 1] as [number, number, number, number],
 }
 
 // ============================================
