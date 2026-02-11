@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-02-11T01:01:35.084Z",
+  "finishedAt": "2026-02-11T01:02:04.264Z",
+  "durationMs": 29178,
+  "total": 8,
+  "passed": 3,
+  "failed": 5,
+  "warningCases": 8,
+  "passRatePct": 37.5,
+  "avgScore": 82,
+  "latency": {
+    "p50": 2053,
+    "p90": 7268,
+    "p95": 7268,
+    "max": 7268
+  },
+  "widgetCounts": {
+    "current_price": 3,
+    "key_levels": 3,
+    "market_overview": 1,
+    "macro_context": 1,
+    "options_chain": 1,
+    "spx_game_plan": 1
+  },
+  "functionCounts": {
+    "get_current_price": 3,
+    "get_key_levels": 3,
+    "get_gamma_exposure": 1,
+    "get_market_status": 1,
+    "get_macro_context": 1,
+    "show_chart": 1,
+    "get_options_chain": 1,
+    "get_spx_game_plan": 1,
+    "get_zero_dte_analysis": 1
+  },
+  "config": {
+    "categoryFilter": null,
+    "delayMs": 600,
+    "strictContract": true
+  }
+}

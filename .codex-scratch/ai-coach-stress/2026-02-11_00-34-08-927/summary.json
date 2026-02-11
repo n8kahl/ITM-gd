@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-02-11T00:34:08.927Z",
+  "finishedAt": "2026-02-11T00:35:01.710Z",
+  "durationMs": 52782,
+  "total": 24,
+  "passed": 14,
+  "failed": 10,
+  "warningCases": 11,
+  "passRatePct": 58.3,
+  "avgScore": 54.5,
+  "latency": {
+    "p50": 2294,
+    "p90": 9745,
+    "p95": 11155,
+    "max": 12084
+  },
+  "widgetCounts": {
+    "key_levels": 4,
+    "earnings_calendar": 1,
+    "market_overview": 1,
+    "options_chain": 1,
+    "position_summary": 1,
+    "scan_results": 1,
+    "spx_game_plan": 1,
+    "trade_history": 1
+  },
+  "functionCounts": {
+    "get_key_levels": 4,
+    "get_earnings_calendar": 1,
+    "get_gamma_exposure": 1,
+    "get_iv_analysis": 1,
+    "get_market_status": 1,
+    "get_fibonacci_levels": 1,
+    "get_options_chain": 1,
+    "analyze_position": 1,
+    "scan_opportunities": 1,
+    "get_spx_game_plan": 1,
+    "get_trade_history_for_symbol": 1,
+    "get_zero_dte_analysis": 1
+  }
+}

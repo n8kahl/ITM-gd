@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TITM Profile & Trade Social — Feature Proposal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --emerald: #10B981;
+            --champagne: #F3E5AB;
+            --bg-dark: #0A0A0B;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.10);
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.70);
+            --text-tertiary: rgba(255, 255, 255, 0.50);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Typography */
+        h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--emerald), var(--champagne));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--emerald);
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        section {
+            margin-bottom: 6rem;
+            scroll-margin-top: 6rem;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6rem;
+            background: linear-gradient(180deg, rgba(10, 10, 11, 0.95) 0%, rgba(10, 10, 11, 0.8) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+        }
+
+        .nav-brand {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--emerald);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--emerald);
+        }
+
+        /* Hero / Cover */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(243, 229, 171, 0.05) 100%);
+            border-bottom: 1px solid var(--border-color);
+            margin-top: 6rem;
+        }
+
+        .hero-content {
+            max-width: 900px;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--champagne);
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            margin-bottom: 2rem;
+            font-weight: 600;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .hero .subtitle {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .meta {
+            color: var(--text-tertiary);
+            font-size: 1rem;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-4px);
+        }
+
+        .card-highlight {
+            border: 1px solid var(--emerald);
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        /* Executive Summary */
+        .summary-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .summary-item {
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border-left: 3px solid var(--emerald);
+            border-radius: 0.5rem;
+        }
+
+        .summary-item h4 {
+            color: var(--emerald);
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Current State Section */
+        .mockup-current {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+
+        .mockup-container {
+            background: rgba(10, 10, 11, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 500px;
+            margin: 0 auto;
+            margin-top: 1.5rem;
+        }
+
+        .profile-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .avatar-placeholder {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--emerald), var(--champagne));
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+
+        .tier-badge {
+            display: inline-block;
+            background: var(--emerald);
+            color: #000;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .profile-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .profile-handle {
+            color: var(--text-tertiary);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .button {
+            background: var(--emerald);
+            color: #000;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+        }
+
+        .button-secondary {
+            background: transparent;
+            color: var(--emerald);
+            border: 1px solid var(--emerald);
+        }
+
+        .button-secondary:hover {
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+        }
+
+        /* Proposed Sections Grid */
+        .sections-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .section-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .section-card:hover {
+            border-color: var(--emerald);
+            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.1);
+        }
+
+        .section-card-header {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(243, 229, 171, 0.05));
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem;
+            padding-bottom: 1rem;
+        }
+
+        .section-card-header h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .section-label {
+            color: var(--champagne);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .section-card-body {
+            padding: 1.5rem;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 0.75rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .feature-list li:before {
+            content: "◆";
+            position: absolute;
+            left: 0;
+            color: var(--emerald);
+            font-size: 0.6rem;
+        }
+
+        /* Mockup Sections */
+        .mockup-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .mockup-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 2rem;
+        }
+
+        .mockup-section h3 {
+            margin-bottom: 1.5rem;
+        }
+
+        /* Profile Hub Mockups */
+        .trader-identity-card {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(243, 229, 171, 0.03) 100%);
+            border: 1px solid var(--emerald);
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+
+        .trader-avatar-large {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, var(--emerald), var(--champagne), var(--emerald));
+            margin: 0 auto 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.3);
+        }
+
+        .trader-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .trader-handle {
+            color: var(--text-tertiary);
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+        }
+
+        .trader-badges {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .badge {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid var(--emerald);
+            color: var(--emerald);
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.4rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, var(--emerald), var(--champagne));
+            height: 100%;
+            width: 65%;
+            border-radius: 1rem;
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--emerald);
+        }
+
+        .stat-label {
+            color: var(--text-tertiary);
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+
+        /* Trading Transcript Mockup */
+        .transcript-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .transcript-stat {
+            background: rgba(16, 185, 129, 0.05);
+            border: 1px solid var(--emerald);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .transcript-stat .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--emerald);
+        }
+
+        .transcript-stat .label {
+            color: var(--text-tertiary);
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Feed Mockup */
+        .feed-card {
+            background: rgba(16, 185, 129, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .feed-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .feed-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--emerald), var(--champagne));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .feed-user-info {
+            flex: 1;
+        }
+
+        .feed-user-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .feed-user-meta {
+            color: var(--text-tertiary);
+            font-size: 0.8rem;
+        }
+
+        .feed-content {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .feed-content-label {
+            color: var(--champagne);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .feed-trade-summary {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .feed-trade-item {
+            background: rgba(16, 185, 129, 0.1);
+            padding: 0.75rem;
+            border-radius: 0.4rem;
+            font-size: 0.85rem;
+        }
+
+        .feed-trade-label {
+            color: var(--text-tertiary);
+            font-size: 0.7rem;
+        }
+
+        .feed-trade-value {
+            color: var(--emerald);
+            font-weight: 700;
+        }
+
+        .feed-actions {
+            display: flex;
+            gap: 1.5rem;
+            color: var(--text-tertiary);
+            font-size: 0.85rem;
+        }
+
+        .feed-action {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .feed-action:hover {
+            color: var(--emerald);
+        }
+
+        /* Leaderboard Mockup */
+        .leaderboard-table {
+            width: 100%;
+            margin-top: 1.5rem;
+        }
+
+        .leaderboard-row {
+            display: grid;
+            grid-template-columns: 60px 1fr 120px 120px;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .leaderboard-row:hover {
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .leaderboard-rank {
+            font-weight: 700;
+            color: var(--champagne);
+            font-size: 1.2rem;
+        }
+
+        .leaderboard-user {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .leaderboard-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--emerald), var(--champagne));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .leaderboard-name {
+            font-weight: 600;
+        }
+
+        .leaderboard-stat {
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .leaderboard-stat.positive {
+            color: var(--emerald);
+        }
+
+        /* Data Architecture */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 1.5rem;
+        }
+
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .schema-table th {
+            background: rgba(16, 185, 129, 0.1);
+            border-bottom: 2px solid var(--emerald);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--emerald);
+        }
+
+        .schema-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .schema-table tr:hover td {
+            background: rgba(16, 185, 129, 0.02);
+        }
+
+        /* Roadmap */
+        .roadmap-phase {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--emerald);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .phase-number {
+            display: inline-block;
+            background: var(--emerald);
+            color: #000;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin-right: 1rem;
+        }
+
+        .phase-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .phase-duration {
+            color: var(--champagne);
+            font-size: 0.85rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .phase-items {
+            list-style: none;
+            padding-left: 1rem;
+        }
+
+        .phase-items li {
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .phase-items li:before {
+            content: "→";
+            color: var(--emerald);
+            margin-right: 0.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            h2 {
+                font-size: 1.8rem;
+            }
+
+            h3 {
+                font-size: 1.3rem;
+            }
+
+            .nav-links {
+                gap: 1rem;
+            }
+
+            .summary-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sections-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-row {
+                grid-template-columns: 1fr;
+            }
+
+            .leaderboard-row {
+                grid-template-columns: 40px 1fr 80px;
+            }
+
+            .leaderboard-stat {
+                font-size: 0.85rem;
+            }
+
+            .container {
+                padding: 0 1rem;
+            }
+
+            .modal-title {
+                font-size: 1.3rem;
+            }
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border-color);
+            padding: 3rem 2rem;
+            text-align: center;
+            color: var(--text-tertiary);
+            margin-top: 6rem;
+        }
+
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Tabs */
+        .tab-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .tab.active {
+            border-bottom-color: var(--emerald);
+            color: var(--emerald);
+        }
+
+        .tab:hover {
+            color: var(--emerald);
+        }
+
+        /* Privacy Indicator */
+        .privacy-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-tertiary);
+            font-size: 0.85rem;
+            margin-top: 1rem;
+        }
+
+        .toggle-switch {
+            width: 40px;
+            height: 24px;
+            background: rgba(16, 185, 129, 0.3);
+            border: 1px solid var(--emerald);
+            border-radius: 12px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active {
+            background: rgba(16, 185, 129, 0.6);
+        }
+
+        .toggle-switch:after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: var(--text-primary);
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s ease;
+        }
+
+        .toggle-switch.active:after {
+            left: 20px;
+        }
+
+        /* Highlight box */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(243, 229, 171, 0.05));
+            border: 1px solid var(--emerald);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-top: 1.5rem;
+        }
+
+        .highlight-box strong {
+            color: var(--emerald);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-brand">TITM Proposal</div>
+        <ul class="nav-links">
+            <li><a href="#executive">Executive Summary</a></li>
+            <li><a href="#current">Current State</a></li>
+            <li><a href="#profile-hub">Profile Hub</a></li>
+            <li><a href="#social-feed">Social Feed</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#roadmap">Roadmap</a></li>
+        </ul>
+    </nav>
+
+    <!-- Hero / Cover Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="version-badge">Proposal Document — February 2026</div>
+            <h1>Profile & Trade Social</h1>
+            <p class="subtitle">Reimagining the Member Experience for TITM's Premium Platform</p>
+            <div class="meta">
+                <div><strong>Status:</strong> Feature Proposal</div>
+                <div><strong>Version:</strong> 1.0</div>
+                <div><strong>Target:</strong> Q1 2026</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Executive Summary -->
+    <section id="executive">
+        <div class="container">
+            <h2>Executive Summary</h2>
+            <p>The current Profile page is a basic settings interface featuring avatar management, tier badges, Discord role synchronization, and account controls. However, there are <strong>no social features currently enabled</strong>—despite the <code>shared_trade_cards</code> table existing in the database with unused capacity.</p>
+            <p>With the recent completion of four major features—Training (Academy with XP, ranks, achievements, trade card generation), AI Coach (sessions, market analysis, position tracking), Journal (full trade logging with AI grading, analytics, equity curves), and Discord Integration (role sync, RBAC)—we now have an incredible data foundation to build a truly premium Profile Hub and Trade Social experience.</p>
+
+            <div class="summary-content">
+                <div class="summary-item">
+                    <h4>The Opportunity</h4>
+                    <p>Transform the Profile page from a basic settings interface into a comprehensive trading identity & community hub that showcases member achievements, tracks trading performance, and enables premium social features—all while respecting privacy and maintaining the quiet luxury aesthetic.</p>
+                </div>
+                <div class="summary-item">
+                    <h4>The Foundation</h4>
+                    <p>Academy ranks, XP systems, AI grading, trade journals, discord roles, achievement badges, and trade card generation are all complete. We simply need to wire them together into a cohesive, premium UI experience.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Current State -->
+    <section id="current">
+        <div class="container">
+            <h2>Current State</h2>
+            <p>The existing Profile page is a straightforward settings interface. While functional, it doesn't leverage the wealth of data now available across Academy, Journal, AI Coach, and Discord.</p>
+
+            <div class="mockup-current">
+                <h3 style="margin-top: 0;">Basic Profile Page (Current)</h3>
+                <div class="mockup-container">
+                    <div class="profile-header">
+                        <div class="avatar-placeholder">JD</div>
+                        <div class="tier-badge">EXECUTIVE</div>
+                        <div class="profile-name">John Doe</div>
+                        <div class="profile-handle">@johndoe</div>
+                        <p style="color: var(--text-tertiary); font-size: 0.9rem; margin-bottom: 1rem;">Member since Oct 2024</p>
+                    </div>
+                    <div style="padding: 1.5rem 0; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
+                        <p style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;"><strong>Discord Roles:</strong></p>
+                        <div class="trader-badges">
+                            <div class="badge">Options Trader</div>
+                            <div class="badge">Course Alum</div>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button class="button">Manage Profile</button>
+                        <button class="button button-secondary">Sign Out</button>
+                    </div>
+                </div>
+                <p style="margin-top: 1.5rem; color: var(--text-tertiary); text-align: center;"><em>Functional but limited. No data visualization, no social features, no trading identity.</em></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Profile Hub Section -->
+    <section id="profile-hub">
+        <div class="container">
+            <h2>Proposed Profile Hub — 6 Core Sections</h2>
+            <p>Transform the profile experience into a premium trading identity & analytics center. Each section is self-contained, privacy-controlled, and visually cohesive.</p>
+
+            <!-- Section A -->
+            <div class="mockup-grid">
+                <div class="mockup-section">
+                    <h3>Section A: Trader Identity Card</h3>
+                    <p>A hero card that defines your trading presence on the platform. Large, glowing avatar, tier badge, academy rank, total XP, and curated trading DNA tags.</p>
+
+                    <div class="trader-identity-card">
+                        <div class="trader-avatar-large">📈</div>
+                        <div class="trader-name">Alex Chen</div>
+                        <div class="trader-handle">@alextrader</div>
+                        <div class="trader-badges">
+                            <div class="badge">Executive Tier</div>
+                            <div class="badge">Emerald Rank</div>
+                            <div class="badge">150 Day Streak</div>
+                        </div>
+
+                        <div style="background: rgba(16, 185, 129, 0.1); border-radius: 0.5rem; padding: 1rem; margin-top: 1rem;">
+                            <div style="font-size: 0.8rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">TRADER DNA</div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
+                                <span style="background: rgba(16, 185, 129, 0.2); padding: 0.25rem 0.75rem; border-radius: 0.3rem; font-size: 0.8rem;">Options Spreads</span>
+                                <span style="background: rgba(16, 185, 129, 0.2); padding: 0.25rem 0.75rem; border-radius: 0.3rem; font-size: 0.8rem;">SPY Focus</span>
+                                <span style="background: rgba(16, 185, 129, 0.2); padding: 0.25rem 0.75rem; border-radius: 0.3rem; font-size: 0.8rem;">Day Trader</span>
+                            </div>
+                        </div>
+
+                        <div class="stat-row">
+                            <div class="stat-item">
+                                <div class="stat-value">3,450</div>
+                                <div class="stat-label">Total XP</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">Emerald</div>
+                                <div class="stat-label">Rank</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <div style="color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: 0.75rem;">XP to Diamond: 1,550</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 69%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="button-group" style="margin-top: 1.5rem;">
+                            <button class="button">Share Profile</button>
+                            <button class="button button-secondary">Edit Bio</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section B -->
+                <div class="mockup-section">
+                    <h3>Section B: Trading Transcript</h3>
+                    <p>Aggregated, verified trading statistics computed server-side from journal entries and AI Coach sessions. Includes win rate, profit factor, best month, and discipline score.</p>
+
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--emerald); border-radius: 0.75rem; padding: 1rem; margin-top: 1.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; color: var(--emerald);">
+                            <span style="font-weight: 700;">✓ VERIFIED STATS</span>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary);">All metrics computed server-side from journal entries. Not self-reported.</p>
+                    </div>
+
+                    <div class="transcript-stats">
+                        <div class="transcript-stat">
+                            <div class="value">247</div>
+                            <div class="label">Total Trades</div>
+                        </div>
+                        <div class="transcript-stat">
+                            <div class="value">62.4%</div>
+                            <div class="label">Win Rate</div>
+                        </div>
+                        <div class="transcript-stat">
+                            <div class="value">2.1</div>
+                            <div class="label">Profit Factor</div>
+                        </div>
+                        <div class="transcript-stat">
+                            <div class="value">Aug 2025</div>
+                            <div class="label">Best Month</div>
+                        </div>
+                    </div>
+
+                    <div class="transcript-stats" style="margin-top: 1rem;">
+                        <div class="transcript-stat">
+                            <div class="value">8.4/10</div>
+                            <div class="label">Discipline</div>
+                        </div>
+                        <div class="transcript-stat">
+                            <div class="value">SPY</div>
+                            <div class="label">Most Profitable</div>
+                        </div>
+                        <div class="transcript-stat">
+                            <div class="value">52 Days</div>
+                            <div class="label">Win Streak</div>
+                        </div>
+                        <div class="transcript-stat">
+                            <div class="value">A- Grade</div>
+                            <div class="label">AI Coach Avg</div>
+                        </div>
+                    </div>
+
+                    <div class="privacy-toggle">
+                        <span>Public Stats Visibility</span>
+                        <div class="toggle-switch active"></div>
+                    </div>
+                </div>
+
+                <!-- Section C -->
+                <div class="mockup-section">
+                    <h3>Section C: Academy Progress & Credentials</h3>
+                    <p>Learning paths, courses completed, earned achievements with trade card images, rank progression, certification verification codes, and learning streaks.</p>
+
+                    <div style="margin-top: 1.5rem;">
+                        <div style="margin-bottom: 1.5rem;">
+                            <h4 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Options Mastery Path</h4>
+                            <div class="progress-bar" style="height: 10px;">
+                                <div class="progress-fill" style="width: 75%;"></div>
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 0.4rem;">6 of 8 courses completed</div>
+                        </div>
+
+                        <div style="margin-bottom: 1.5rem;">
+                            <h4 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Trading Psychology Path</h4>
+                            <div class="progress-bar" style="height: 10px;">
+                                <div class="progress-fill" style="width: 100%;"></div>
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 0.4rem;">5 of 5 courses completed ✓</div>
+                        </div>
+                    </div>
+
+                    <h4 style="font-size: 1rem; margin-top: 1.5rem; margin-bottom: 1rem;">Recent Achievements</h4>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--emerald); border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 0.4rem;">🏆</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">Ace Trader</div>
+                        </div>
+                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--emerald); border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 0.4rem;">🔥</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">Win Streak 50</div>
+                        </div>
+                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--emerald); border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 0.4rem;">💎</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">Emerald Rank</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-row" style="border-top: 1px solid var(--border-color); margin-top: 1.5rem; padding-top: 1.5rem;">
+                        <div class="stat-item">
+                            <div class="stat-value">150</div>
+                            <div class="stat-label">Learning Days</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">28</div>
+                            <div class="stat-label">Certifications</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section D -->
+                <div class="mockup-section">
+                    <h3>Section D: Discord & Community</h3>
+                    <p>Discord connection status, synced avatar, server roles with color badges, community standing, and message activity (future).</p>
+
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 0.25rem;">Discord Status</div>
+                                <div style="color: var(--text-tertiary); font-size: 0.9rem;">Connected as @alextrader</div>
+                            </div>
+                            <div style="background: var(--emerald); color: #000; padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 700;">SYNCED</div>
+                        </div>
+
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600;">ACTIVE SERVER ROLES</div>
+                            <div class="trader-badges">
+                                <div style="background: rgba(16, 185, 129, 0.3); border: 1px solid var(--emerald); color: var(--emerald); padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 600;">Options Trader</div>
+                                <div style="background: rgba(243, 229, 171, 0.2); border: 1px solid var(--champagne); color: var(--champagne); padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 600;">Course Alum</div>
+                                <div style="background: rgba(100, 200, 255, 0.2); border: 1px solid rgba(100, 200, 255, 0.8); color: rgba(100, 200, 255, 0.8); padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 600;">Elite Trader</div>
+                            </div>
+                        </div>
+
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 1.5rem; margin-top: 1.5rem;">
+                            <div style="font-size: 0.8rem; color: var(--text-tertiary);">COMMUNITY STANDING</div>
+                            <div class="stat-row" style="margin-top: 1rem; border-top: none; padding-top: 0;">
+                                <div class="stat-item">
+                                    <div class="stat-value">8 months</div>
+                                    <div class="stat-label">Member Since</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">142</div>
+                                    <div class="stat-label">Messages</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="button" style="width: 100%; margin-top: 1.5rem; justify-content: center;">Open Discord Server</button>
+                </div>
+
+                <!-- Section E -->
+                <div class="mockup-section">
+                    <h3>Section E: WHOP & Affiliate Hub</h3>
+                    <p>WHOP membership status, personal affiliate tracking, referral earnings, and shareable affiliate card generator with deep link to dashboard.</p>
+
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                            <div style="font-weight: 600;">WHOP Membership Status</div>
+                            <div style="background: var(--emerald); color: #000; padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 700;">ACTIVE</div>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary);">Premium membership active since November 2025</p>
+                    </div>
+
+                    <div style="background: rgba(243, 229, 171, 0.05); border: 1px solid rgba(243, 229, 171, 0.3); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="font-size: 0.75rem; color: var(--champagne); font-weight: 700; text-transform: uppercase; margin-bottom: 1rem;">Your Affiliate URL</div>
+                        <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.75rem; font-family: monospace; font-size: 0.85rem; word-break: break-all; margin-bottom: 0.75rem;">tradeitm.com/join?ref=alextrader</div>
+                        <button class="button" style="font-size: 0.85rem; padding: 0.5rem 1rem;">Copy Link</button>
+                    </div>
+
+                    <div class="stat-row" style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                        <div class="stat-item">
+                            <div class="stat-value">24</div>
+                            <div class="stat-label">Total Referrals</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">18</div>
+                            <div class="stat-label">Active</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">$3,240</div>
+                            <div class="stat-label">Earnings</div>
+                        </div>
+                    </div>
+
+                    <p style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-tertiary);">You rank #7 on the affiliate leaderboard</p>
+                </div>
+
+                <!-- Section F -->
+                <div class="mockup-section">
+                    <h3>Section F: Settings & Preferences</h3>
+                    <p>Profile privacy controls, notification preferences, AI Coach trading parameters, display settings, and data export tools.</p>
+
+                    <div style="margin-top: 1.5rem;">
+                        <h4 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 1rem;">Privacy Controls</h4>
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem; margin-bottom: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">Trading Transcript Public</div>
+                                    <div style="font-size: 0.8rem; color: var(--text-tertiary);">Show verified stats on your profile</div>
+                                </div>
+                                <div class="toggle-switch active"></div>
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem; margin-bottom: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">Show on Leaderboards</div>
+                                    <div style="font-size: 0.8rem; color: var(--text-tertiary);">Appear in public rankings</div>
+                                </div>
+                                <div class="toggle-switch active"></div>
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">Trade Sharing Notifications</div>
+                                    <div style="font-size: 0.8rem; color: var(--text-tertiary);">Get alerts when peers like your trades</div>
+                                </div>
+                                <div class="toggle-switch"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 2rem;">
+                        <h4 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 1rem;">AI Coach Preferences</h4>
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem;">
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Risk Tolerance</label>
+                                <select style="width: 100%; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; border-radius: 0.4rem;">
+                                    <option>Moderate (Recommended)</option>
+                                    <option>Conservative</option>
+                                    <option>Aggressive</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Preferred Symbols</label>
+                                <input type="text" placeholder="SPY, QQQ, AAPL" style="width: 100%; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; border-radius: 0.4rem;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 2rem;">
+                        <button class="button button-secondary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;">Export All Data</button>
+                        <button class="button button-secondary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;">Sync Discord</button>
+                        <button class="button button-secondary" style="width: 100%; justify-content: center;">Sign Out</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Social Feed Section -->
+    <section id="social-feed">
+        <div class="container">
+            <h2>Proposed Trade Social Feed — 5 Features</h2>
+            <p>Transform shared trades into a premium social experience. Vertical feed, multiple card templates, leaderboards, achievement gallery, and community highlights.</p>
+
+            <div class="mockup-grid">
+                <!-- Feature 1: The Feed -->
+                <div class="mockup-section">
+                    <h3>Feature 1: The Community Feed</h3>
+                    <p>Vertical scrolling feed of trade cards from community members. Filter by trade results, achievements, and milestones. Sort by latest, liked, or P&L.</p>
+
+                    <div class="tab-group" style="margin-top: 1.5rem;">
+                        <div class="tab active">All</div>
+                        <div class="tab">Trades</div>
+                        <div class="tab">Achievements</div>
+                        <div class="tab">Featured</div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <div class="feed-card">
+                            <div class="feed-header">
+                                <div class="feed-avatar">MC</div>
+                                <div class="feed-user-info">
+                                    <div class="feed-user-name">Maria Chen <span style="color: var(--champagne); font-size: 0.85rem;">• Executive</span></div>
+                                    <div class="feed-user-meta">2 hours ago</div>
+                                </div>
+                            </div>
+                            <div class="feed-content">
+                                <div class="feed-content-label">📊 Trade Result</div>
+                                <div class="feed-trade-summary">
+                                    <div class="feed-trade-item">
+                                        <div class="feed-trade-label">Symbol</div>
+                                        <div class="feed-trade-value">SPY 500 Call Spread</div>
+                                    </div>
+                                    <div class="feed-trade-item">
+                                        <div class="feed-trade-label">P&L</div>
+                                        <div class="feed-trade-value" style="color: #10B981;">+$340</div>
+                                    </div>
+                                    <div class="feed-trade-item">
+                                        <div class="feed-trade-label">Win Rate</div>
+                                        <div class="feed-trade-value">7-1</div>
+                                    </div>
+                                    <div class="feed-trade-item">
+                                        <div class="feed-trade-label">AI Grade</div>
+                                        <div class="feed-trade-value">A</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="feed-actions">
+                                <div class="feed-action">❤️ 24</div>
+                                <div class="feed-action">💬 3</div>
+                                <div class="feed-action">🔗 Share</div>
+                            </div>
+                        </div>
+
+                        <div class="feed-card">
+                            <div class="feed-header">
+                                <div class="feed-avatar" style="background: linear-gradient(135deg, #10B981, #F3E5AB);">JS</div>
+                                <div class="feed-user-info">
+                                    <div class="feed-user-name">James Smith <span style="color: var(--emerald); font-size: 0.85rem;">• Core</span></div>
+                                    <div class="feed-user-meta">4 hours ago</div>
+                                </div>
+                            </div>
+                            <div class="feed-content">
+                                <div class="feed-content-label">🏆 Achievement Unlocked</div>
+                                <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--emerald); border-radius: 0.5rem; padding: 1rem; text-align: center;">
+                                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">💎</div>
+                                    <div style="font-weight: 600;">Reached Diamond Rank</div>
+                                    <div style="color: var(--text-tertiary); font-size: 0.85rem; margin-top: 0.5rem;">5,000 XP Milestone</div>
+                                </div>
+                            </div>
+                            <div class="feed-actions">
+                                <div class="feed-action">❤️ 18</div>
+                                <div class="feed-action">💬 2</div>
+                                <div class="feed-action">🔗 Share</div>
+                            </div>
+                        </div>
+
+                        <div class="feed-card">
+                            <div class="feed-header">
+                                <div class="feed-avatar" style="background: linear-gradient(135deg, var(--champagne), var(--emerald));">RK</div>
+                                <div class="feed-user-info">
+                                    <div class="feed-user-name">Raj Kapoor <span style="color: var(--champagne); font-size: 0.85rem;">• Pro</span></div>
+                                    <div class="feed-user-meta">6 hours ago</div>
+                                </div>
+                            </div>
+                            <div class="feed-content">
+                                <div class="feed-content-label">🔥 Milestone</div>
+                                <div style="background: rgba(243, 229, 171, 0.1); border: 1px solid var(--champagne); border-radius: 0.5rem; padding: 1rem; text-align: center;">
+                                    <div style="font-size: 1.5rem; color: var(--champagne); margin-bottom: 0.5rem;">30-Day Win Streak!</div>
+                                    <div style="color: var(--text-tertiary); font-size: 0.85rem;">All 30 consecutive trades were winners</div>
+                                </div>
+                            </div>
+                            <div class="feed-actions">
+                                <div class="feed-action">❤️ 156</div>
+                                <div class="feed-action">💬 24</div>
+                                <div class="feed-action">🔗 Share</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 2: Trade Card Sharing -->
+                <div class="mockup-section">
+                    <h3>Feature 2: Trade Card Sharing</h3>
+                    <p>From Journal: "Share to Community" generates card with multiple templates (dark-elite, emerald-gradient, champagne-premium, minimal, story). Pick format (landscape, story, square).</p>
+
+                    <div class="highlight-box">
+                        <strong>Workflow:</strong> Complete a trade in Journal → Click "Share to Community" → Pick template & format → Preview → Auto-generate image via Satori → Post to feed + optional Discord webhook
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <h4 style="font-size: 1rem; color: var(--emerald); margin-bottom: 1rem;">Template Previews</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(10, 10, 11, 0.8)); border: 1px solid var(--emerald); border-radius: 0.5rem; padding: 1rem; aspect-ratio: 16/10; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--emerald); font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem;">Dark Elite</div>
+                                <div style="font-size: 2rem;">📊</div>
+                            </div>
+                            <div style="background: linear-gradient(135deg, var(--emerald), rgba(16, 185, 129, 0.3)); border: 1px solid var(--emerald); border-radius: 0.5rem; padding: 1rem; aspect-ratio: 16/10; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                                <div style="font-size: 0.75rem; color: #000; font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem;">Emerald</div>
+                                <div style="font-size: 2rem;">💚</div>
+                            </div>
+                            <div style="background: linear-gradient(135deg, var(--champagne), rgba(243, 229, 171, 0.2)); border: 1px solid var(--champagne); border-radius: 0.5rem; padding: 1rem; aspect-ratio: 16/10; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                                <div style="font-size: 0.75rem; color: #000; font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem;">Champagne</div>
+                                <div style="font-size: 2rem;">✨</div>
+                            </div>
+                            <div style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; aspect-ratio: 16/10; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-tertiary); font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem;">Minimal</div>
+                                <div style="font-size: 2rem;">▪️</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <h4 style="font-size: 1rem; color: var(--emerald); margin-bottom: 1rem;">Format Options</h4>
+                        <div class="tab-group">
+                            <div class="tab active">Landscape (Feed)</div>
+                            <div class="tab">Story (Instagram)</div>
+                            <div class="tab">Square (Twitter)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 3: Leaderboards -->
+                <div class="mockup-section">
+                    <h3>Feature 3: Leaderboards</h3>
+                    <p>Weekly, monthly, all-time rankings across Win Rate, P&L, Win Streak, Academy XP, and Discipline. Opt-in only. "Your Position" highlight.</p>
+
+                    <div class="tab-group" style="margin-top: 1.5rem;">
+                        <div class="tab active">All-Time</div>
+                        <div class="tab">Monthly</div>
+                        <div class="tab">Weekly</div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <h4 style="font-size: 1rem; color: var(--emerald); margin-bottom: 0.75rem;">Win Rate Leaderboard</h4>
+                        <div class="leaderboard-table">
+                            <div class="leaderboard-row" style="background: rgba(16, 185, 129, 0.08);">
+                                <div class="leaderboard-rank">🥇 1</div>
+                                <div class="leaderboard-user">
+                                    <div class="leaderboard-avatar">MC</div>
+                                    <div>
+                                        <div class="leaderboard-name">Maria Chen</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-tertiary);">Executive • 247 trades</div>
+                                    </div>
+                                </div>
+                                <div class="leaderboard-stat positive">68.4%</div>
+                            </div>
+                            <div class="leaderboard-row">
+                                <div class="leaderboard-rank">🥈 2</div>
+                                <div class="leaderboard-user">
+                                    <div class="leaderboard-avatar" style="background: linear-gradient(135deg, var(--champagne), var(--emerald));">RK</div>
+                                    <div>
+                                        <div class="leaderboard-name">Raj Kapoor</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-tertiary);">Pro • 189 trades</div>
+                                    </div>
+                                </div>
+                                <div class="leaderboard-stat positive">66.1%</div>
+                            </div>
+                            <div class="leaderboard-row">
+                                <div class="leaderboard-rank">🥉 3</div>
+                                <div class="leaderboard-user">
+                                    <div class="leaderboard-avatar" style="background: linear-gradient(135deg, #64C8FF, #10B981);">AB</div>
+                                    <div>
+                                        <div class="leaderboard-name">Alex Brown</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-tertiary);">Executive • 312 trades</div>
+                                    </div>
+                                </div>
+                                <div class="leaderboard-stat positive">64.9%</div>
+                            </div>
+                            <div class="leaderboard-row">
+                                <div class="leaderboard-rank">4</div>
+                                <div class="leaderboard-user">
+                                    <div class="leaderboard-avatar">JD</div>
+                                    <div>
+                                        <div class="leaderboard-name">John Doe</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-tertiary);">Core • 156 trades</div>
+                                    </div>
+                                </div>
+                                <div class="leaderboard-stat positive">62.4%</div>
+                            </div>
+                            <div class="leaderboard-row">
+                                <div class="leaderboard-rank">5</div>
+                                <div class="leaderboard-user">
+                                    <div class="leaderboard-avatar" style="background: linear-gradient(135deg, #FF6B6B, #FFE066);">SL</div>
+                                    <div>
+                                        <div class="leaderboard-name">Sarah Lee</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-tertiary);">Pro • 234 trades</div>
+                                    </div>
+                                </div>
+                                <div class="leaderboard-stat positive">61.5%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--emerald); border-radius: 0.75rem; padding: 1rem; margin-top: 1.5rem;">
+                        <div style="font-size: 0.8rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">YOUR POSITION</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600;">You (John Doe)</div>
+                                <div style="font-size: 0.85rem; color: var(--text-tertiary);">62.4% Win Rate</div>
+                            </div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--emerald);">4th</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 4: Achievement Gallery -->
+                <div class="mockup-section">
+                    <h3>Feature 4: Achievement Gallery</h3>
+                    <p>Community wall of earned achievements. Filter by type. Click to view full card with verification code. Verification link: tradeitm.com/verify/[code]</p>
+
+                    <div class="tab-group" style="margin-top: 1.5rem;">
+                        <div class="tab active">All</div>
+                        <div class="tab">Track Complete</div>
+                        <div class="tab">Course</div>
+                        <div class="tab">Streak</div>
+                        <div class="tab">Rank Up</div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+                        <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)); border: 1px solid var(--emerald); border-radius: 0.75rem; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🏆</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Ace Trader</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">5 wins in a row</div>
+                            <div style="font-size: 0.7rem; color: var(--champagne); margin-top: 0.5rem;">By Maria Chen</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, rgba(243, 229, 171, 0.15), rgba(243, 229, 171, 0.05)); border: 1px solid var(--champagne); border-radius: 0.75rem; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">💎</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Diamond Rank</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">5,000 XP</div>
+                            <div style="font-size: 0.7rem; color: var(--champagne); margin-top: 0.5rem;">By James Smith</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)); border: 1px solid var(--emerald); border-radius: 0.75rem; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔥</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">50 Day Streak</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">Consecutive learning</div>
+                            <div style="font-size: 0.7rem; color: var(--champagne); margin-top: 0.5rem;">By Raj Kapoor</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)); border: 1px solid var(--emerald); border-radius: 0.75rem; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">📚</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Path Complete</div>
+                            <div style="font-size: 0.75rem; color: var(--text-tertiary);">Options Mastery</div>
+                            <div style="font-size: 0.7rem; color: var(--champagne); margin-top: 0.5rem;">By Sarah Lee</div>
+                        </div>
+                    </div>
+
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-top: 2rem;">
+                        <h4 style="font-size: 1rem; color: var(--emerald); margin-bottom: 1rem;">Share Your Achievement</h4>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Verify your achievements using this code:</p>
+                        <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.75rem; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.75rem; word-break: break-all;">
+                            tradeitm.com/verify/ACH-2025-JD-1847
+                        </div>
+                        <button class="button" style="font-size: 0.85rem;">Copy Verification Link</button>
+                    </div>
+                </div>
+
+                <!-- Feature 5: Community Highlights -->
+                <div class="mockup-section">
+                    <h3>Feature 5: Community Highlights</h3>
+                    <p>Admin-curated featured trades, "Trade of the Week" spotlight, member spotlights, and community stats dashboard.</p>
+
+                    <div style="background: linear-gradient(135deg, rgba(243, 229, 171, 0.15), rgba(16, 185, 129, 0.05)); border: 2px solid var(--champagne); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="font-size: 0.75rem; color: var(--champagne); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem;">✨ Trade of the Week</div>
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 60px; height: 60px; background: linear-gradient(135deg, var(--emerald), var(--champagne)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.25rem;">MC</div>
+                            <div>
+                                <div style="font-weight: 700; font-size: 1rem;">Maria Chen's SPY Iron Condor</div>
+                                <div style="color: var(--text-tertiary); font-size: 0.85rem;">3 days ago • 127 likes • $1,240 P&L</div>
+                            </div>
+                        </div>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary);">An exemplary risk/reward setup with superior discipline. Maria entered at optimal levels, managed the position with precision, and exited ahead of schedule.</p>
+                        <button class="button" style="margin-top: 1rem; font-size: 0.85rem;">View Full Card</button>
+                    </div>
+
+                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)); border: 2px solid var(--emerald); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="font-size: 0.75rem; color: var(--emerald); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem;">👤 Member Spotlight</div>
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 60px; height: 60px; background: conic-gradient(from 0deg, var(--emerald), var(--champagne), var(--emerald)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.25rem;">RK</div>
+                            <div>
+                                <div style="font-weight: 700; font-size: 1rem;">Raj Kapoor — Master of Streaks</div>
+                                <div style="color: var(--text-tertiary); font-size: 0.85rem;">Pro Member • 30-Day Win Streak • 189 trades</div>
+                            </div>
+                        </div>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Raj shares his journey from novice to consistent winner. Read about his psychology techniques, position sizing, and how he maintained discipline through market volatility.</p>
+                        <button class="button" style="font-size: 0.85rem;">Read Interview</button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 2rem;">
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--emerald);">12,847</div>
+                            <div style="color: var(--text-tertiary); font-size: 0.85rem; margin-top: 0.5rem;">Total Trades Logged</div>
+                        </div>
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--emerald);">62.1%</div>
+                            <div style="color: var(--text-tertiary); font-size: 0.85rem; margin-top: 0.5rem;">Community Avg Win Rate</div>
+                        </div>
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--emerald);">Wednesday</div>
+                            <div style="color: var(--text-tertiary); font-size: 0.85rem; margin-top: 0.5rem;">Most Active Day</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section id="architecture">
+        <div class="container">
+            <h2>Data Architecture</h2>
+            <p>New database tables and extensions required to support Profile Hub and Trade Social features.</p>
+
+            <div class="table-container">
+                <table class="schema-table">
+                    <thead>
+                        <tr>
+                            <th>Table Name</th>
+                            <th>Purpose</th>
+                            <th>Key Fields</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>member_profiles</code></td>
+                            <td>Extended profile data for Trader Identity Card section</td>
+                            <td>user_id, bio, tagline, custom_avatar, privacy_settings, whop_affiliate_url, verified_at</td>
+                        </tr>
+                        <tr>
+                            <td><code>social_feed_items</code></td>
+                            <td>Feed entries linking trades, achievements, milestones</td>
+                            <td>id, user_id, item_type (trade/achievement/milestone), reference_id, created_at, visibility</td>
+                        </tr>
+                        <tr>
+                            <td><code>social_likes</code></td>
+                            <td>Likes on feed items</td>
+                            <td>id, user_id, feed_item_id, created_at</td>
+                        </tr>
+                        <tr>
+                            <td><code>social_comments</code></td>
+                            <td>Comments on feed items (future)</td>
+                            <td>id, user_id, feed_item_id, content, created_at, edited_at</td>
+                        </tr>
+                        <tr>
+                            <td><code>affiliate_referrals</code></td>
+                            <td>Referral tracking for WHOP integration</td>
+                            <td>id, referrer_id, referred_id, status, whop_data, created_at, converted_at</td>
+                        </tr>
+                        <tr>
+                            <td><code>leaderboard_snapshots</code></td>
+                            <td>Periodic computed leaderboard data</td>
+                            <td>id, period (weekly/monthly/alltime), category, user_id, rank, value, snapshot_date</td>
+                        </tr>
+                        <tr>
+                            <td><code>profile_views</code></td>
+                            <td>Analytics: who viewed whose profile</td>
+                            <td>id, viewer_id, profile_user_id, created_at</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card-highlight" style="margin-top: 2rem;">
+                <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Integration Points</h3>
+                <div class="feature-list">
+                    <li><strong>Academy System:</strong> Pull user_xp, ranks, achievements from existing tables</li>
+                    <li><strong>Journal System:</strong> Link journal_entries to social_feed_items; compute stats via RPC</li>
+                    <li><strong>AI Coach:</strong> Pull grades, recommendations for trading transcript display</li>
+                    <li><strong>Discord Integration:</strong> Sync roles, webhook for trade sharing notifications</li>
+                    <li><strong>Trade Card Generation:</strong> Reuse existing Satori + Resvg pipeline for feed card templates</li>
+                    <li><strong>WHOP API:</strong> REST endpoints for membership status, referral tracking, earnings</li>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap Section -->
+    <section id="roadmap">
+        <div class="container">
+            <h2>Implementation Roadmap</h2>
+            <p>Phased approach over 7 weeks. Each phase builds incrementally to a complete, production-ready system.</p>
+
+            <div style="margin-top: 2rem;">
+                <div class="roadmap-phase">
+                    <div style="display: flex; align-items: flex-start;">
+                        <div class="phase-number">1</div>
+                        <div style="flex: 1;">
+                            <div class="phase-title">Profile Hub Foundation</div>
+                            <div class="phase-duration">2 weeks (Jan 20 – Feb 3)</div>
+                            <ul class="phase-items">
+                                <li>Create member_profiles table with RLS policies</li>
+                                <li>Build Trader Identity Card UI component</li>
+                                <li>Implement Trading Transcript stats queries (RPC functions)</li>
+                                <li>Wire Academy Progress section (pull user_xp, ranks, achievements)</li>
+                                <li>Design & implement Settings & Preferences modal</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="roadmap-phase">
+                    <div style="display: flex; align-items: flex-start;">
+                        <div class="phase-number">2</div>
+                        <div style="flex: 1;">
+                            <div class="phase-title">Trade Social Feed & Sharing</div>
+                            <div class="phase-duration">2 weeks (Feb 4 – Feb 18)</div>
+                            <ul class="phase-items">
+                                <li>Create social_feed_items & social_likes tables</li>
+                                <li>Build vertical feed UI with filtering (tabs: All, Trades, Achievements, Featured)</li>
+                                <li>Implement "Share to Community" button in Journal</li>
+                                <li>Create trade card template selector (dark-elite, emerald, champagne, minimal)</li>
+                                <li>Auto-generate card images via Satori pipeline</li>
+                                <li>Build feed pagination & load-more functionality</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="roadmap-phase">
+                    <div style="display: flex; align-items: flex-start;">
+                        <div class="phase-number">3</div>
+                        <div style="flex: 1;">
+                            <div class="phase-title">Leaderboards & Achievement Gallery</div>
+                            <div class="phase-duration">1 week (Feb 19 – Feb 25)</div>
+                            <ul class="phase-items">
+                                <li>Create leaderboard_snapshots table with scheduling</li>
+                                <li>Build leaderboard UI (weekly, monthly, all-time tabs)</li>
+                                <li>Implement category tabs (Win Rate, P&L, Streak, XP, Discipline)</li>
+                                <li>Add "Your Position" highlight for logged-in user</li>
+                                <li>Build Achievement Gallery with filterable grid</li>
+                                <li>Generate verification codes for achievements</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="roadmap-phase">
+                    <div style="display: flex; align-items: flex-start;">
+                        <div class="phase-number">4</div>
+                        <div style="flex: 1;">
+                            <div class="phase-title">WHOP Integration & Affiliate Hub</div>
+                            <div class="phase-duration">1 week (Feb 26 – Mar 4)</div>
+                            <ul class="phase-items">
+                                <li>Create affiliate_referrals table</li>
+                                <li>Integrate WHOP REST API for membership status</li>
+                                <li>Build Affiliate Hub section with referral tracking</li>
+                                <li>Implement referral URL generation & copy button</li>
+                                <li>Wire earnings display from WHOP webhooks</li>
+                                <li>Add affiliate leaderboard position display</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="roadmap-phase">
+                    <div style="display: flex; align-items: flex-start;">
+                        <div class="phase-number">5</div>
+                        <div style="flex: 1;">
+                            <div class="phase-title">Community Highlights & Polish</div>
+                            <div class="phase-duration">1 week (Mar 5 – Mar 11)</div>
+                            <ul class="phase-items">
+                                <li>Build Community Highlights section (admin-curated)</li>
+                                <li>Implement Trade of the Week & Member Spotlight components</li>
+                                <li>Add community stats dashboard</li>
+                                <li>Implement Discord webhook for trade sharing notifications</li>
+                                <li>Full QA & performance testing</li>
+                                <li>Polish animations & transitions</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="highlight-box" style="margin-top: 2rem;">
+                <strong>Post-Launch (Ongoing):</strong> Comments on feed items, profile view analytics, social followers/follows, advanced feed algorithm (trending vs. chronological), Discord bot commands for trade sharing, mobile app integration, and premium notification system.
+            </div>
+        </div>
+    </section>
+
+    <!-- Technical Notes Section -->
+    <section>
+        <div class="container">
+            <h2>Technical Implementation Notes</h2>
+
+            <div class="sections-grid">
+                <div class="card">
+                    <h3>Stats Computation</h3>
+                    <p>All metrics in Trading Transcript are computed server-side via Supabase RPC functions. This ensures data integrity and prevents user manipulation. Functions aggregate journal_entries, user_xp, and ai_coach_sessions in real-time.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Trade Card Generation</h3>
+                    <p>Reuse existing Satori + Resvg pipeline. Pass trade data + selected template to image generation service. Store generated images in Supabase Storage. Return CDN URLs for feed display.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Feed Pagination</h3>
+                    <p>Use cursor-based pagination via Supabase. Each feed load fetches 20 items sorted by created_at desc. Cursor points to last item's ID. Prevents offset issues at scale.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Privacy Controls</h3>
+                    <p>Implement RLS policies on social_feed_items, member_profiles. Privacy settings stored in member_profiles table. Enforce at query level. Options: public, private, friends-only.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Leaderboard Performance</h3>
+                    <p>Pre-compute daily snapshots via scheduled edge function. Store in leaderboard_snapshots. Queries read from snapshots (no live aggregation). Updates overnight during low-traffic windows.</p>
+                </div>
+
+                <div class="card">
+                    <h3>WHOP Integration</h3>
+                    <p>Use WHOP's REST API + webhooks. Sync membership status on login. Listen for referral conversions via webhook. Store in affiliate_referrals table. Earnings computed from WHOP API responses.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <p style="margin-bottom: 1rem;">TITM Profile & Trade Social — Feature Proposal Document</p>
+            <p style="font-size: 0.85rem;">Prepared February 2026 | Version 1.0 | Internal Use Only</p>
+        </div>
+    </footer>
+
+</body>
+</html>

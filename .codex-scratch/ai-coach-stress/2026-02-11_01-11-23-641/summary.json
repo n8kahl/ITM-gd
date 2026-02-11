@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-02-11T01:11:23.641Z",
+  "finishedAt": "2026-02-11T01:11:30.311Z",
+  "durationMs": 6669,
+  "total": 2,
+  "passed": 2,
+  "failed": 0,
+  "warningCases": 1,
+  "passRatePct": 100,
+  "avgScore": 99,
+  "latency": {
+    "p50": 2495,
+    "p90": 3364,
+    "p95": 3364,
+    "max": 3364
+  },
+  "widgetCounts": {
+    "key_levels": 2,
+    "current_price": 2
+  },
+  "functionCounts": {
+    "get_key_levels": 2,
+    "get_current_price": 2,
+    "show_chart": 2
+  },
+  "config": {
+    "categoryFilter": [
+      "levels"
+    ],
+    "delayMs": 400,
+    "strictContract": true
+  }
+}

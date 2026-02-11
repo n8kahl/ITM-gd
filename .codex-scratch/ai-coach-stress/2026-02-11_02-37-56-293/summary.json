@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-02-11T02:37:56.293Z",
+  "finishedAt": "2026-02-11T02:39:20.496Z",
+  "durationMs": 84201,
+  "total": 5,
+  "passed": 5,
+  "failed": 0,
+  "warningCases": 5,
+  "passRatePct": 100,
+  "avgScore": 68.4,
+  "latency": {
+    "p50": 11591,
+    "p90": 34258,
+    "p95": 34258,
+    "max": 34258
+  },
+  "widgetCounts": {
+    "key_levels": 2,
+    "current_price": 2,
+    "options_chain": 2
+  },
+  "functionCounts": {
+    "get_gamma_exposure": 2,
+    "show_chart": 3,
+    "get_key_levels": 2,
+    "get_current_price": 2,
+    "get_earnings_analysis": 1,
+    "get_iv_analysis": 2,
+    "get_options_chain": 2
+  },
+  "config": {
+    "categoryFilter": [
+      "advanced"
+    ],
+    "delayMs": 350,
+    "strictContract": true
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-02-11T00:59:38.655Z",
+  "finishedAt": "2026-02-11T00:59:49.961Z",
+  "durationMs": 11305,
+  "total": 12,
+  "passed": 0,
+  "failed": 12,
+  "warningCases": 12,
+  "passRatePct": 0,
+  "avgScore": 0,
+  "latency": {
+    "p50": 107,
+    "p90": 165,
+    "p95": 392,
+    "max": 392
+  },
+  "widgetCounts": {},
+  "functionCounts": {},
+  "config": {
+    "categoryFilter": null,
+    "delayMs": 800,
+    "strictContract": true
+  }
+}

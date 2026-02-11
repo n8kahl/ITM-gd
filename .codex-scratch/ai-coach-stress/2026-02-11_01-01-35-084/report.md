@@ -1,0 +1,142 @@
+# AI Coach Temporary Stress Report
+
+## Run Config
+- API base: http://127.0.0.1:3001
+- Prompts file: /Users/natekahl/ITM-gd/scripts/ai-coach/stress-prompts.temp.json
+- Iterations: 1
+- Concurrency: 1
+- Timeout per request: 90000ms
+- Strict contract gating: enabled
+- Delay between requests: 600ms
+- Category filter: all
+- Output dir: /Users/natekahl/ITM-gd/.codex-scratch/ai-coach-stress/2026-02-11_01-01-35-084
+
+## Summary
+- Total requests: 8
+- Passed: 3
+- Failed: 5
+- Warning cases: 8
+- Pass rate: 37.5%
+- Average score: 82
+- Latency p50/p90/p95/max: 2053ms / 7268ms / 7268ms / 7268ms
+- Duration: 29178ms
+
+## Widget Coverage
+- current_price: 3
+- key_levels: 3
+- market_overview: 1
+- macro_context: 1
+- options_chain: 1
+- spx_game_plan: 1
+
+## Function Coverage
+- get_current_price: 3
+- get_key_levels: 3
+- get_gamma_exposure: 1
+- get_market_status: 1
+- get_macro_context: 1
+- show_chart: 1
+- get_options_chain: 1
+- get_spx_game_plan: 1
+- get_zero_dte_analysis: 1
+
+## Findings
+### FAIL zero-dte-risk#1
+- Category: options
+- Status: 200 | Score: 56 | Latency: 1759ms
+- Functions: get_zero_dte_analysis
+- Widgets: none
+- Widget actions: none
+- Warnings: function_errors:1, no_widgets_for_data_prompt, missing_widgets:zero_dte_analysis, contract_blocking:missing_required_functions:get_current_price,get_earnings_analysis, contract_warnings:missing_recommended_functions:show_chart,get_iv_analysis,get_options_chain|missing_bull_bear_duality|missing_symbol_coverage:ALYZE,DTE,CTURE,RIGHT,ECTED,MOVE,USED,INING,GAMMA
+- Contract blocking: missing_required_functions:get_current_price,get_earnings_analysis
+- Contract warnings: missing_recommended_functions:show_chart,get_iv_analysis,get_options_chain, missing_bull_bear_duality, missing_symbol_coverage:ALYZE,DTE,CTURE,RIGHT,ECTED,MOVE,USED,INING,GAMMA
+- Prompt: Analyze SPX 0DTE structure right now: expected move used, remaining move, and gamma risk.
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **SPX** - Remaining required tools: get_current_price, get_zero_dte_analysis, get_earnings_analysis Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalidation and 2 levels."
+
+### FAIL gex-profile-spx#1
+- Category: options
+- Status: 200 | Score: 58 | Latency: 1806ms
+- Functions: get_gamma_exposure
+- Widgets: none
+- Widget actions: none
+- Warnings: function_errors:1, no_widgets_for_data_prompt, missing_widgets:gex_profile, contract_blocking:missing_chart_sync:show_chart_not_called, contract_warnings:missing_recommended_functions:show_chart|missing_symbol_coverage:GAMMA,OSURE,OFILE,FLIP,MAX,GEX,TRIKE,TIONS,MEAN,RSION,VS,TREND
+- Contract blocking: missing_chart_sync:show_chart_not_called
+- Contract warnings: missing_recommended_functions:show_chart, missing_symbol_coverage:GAMMA,OSURE,OFILE,FLIP,MAX,GEX,TRIKE,TIONS,MEAN,RSION,VS,TREND
+- Prompt: Give me SPX gamma exposure profile with flip level, max GEX strike, and implications for mean reversion vs trend.
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **SPX** - Remaining required tools: get_gamma_exposure Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalidation and 2 levels."
+
+### FAIL spx-game-plan#1
+- Category: core
+- Status: 200 | Score: 78 | Latency: 7268ms
+- Functions: get_spx_game_plan
+- Widgets: spx_game_plan
+- Widget actions: spx_game_plan: Show on Chart | View Options | Set Alert | Ask AI
+- Warnings: contract_blocking:missing_required_functions:show_chart,get_key_levels,get_gamma_exposure|missing_chart_sync:show_chart_not_called, contract_warnings:missing_recommended_functions:get_market_status,show_chart|missing_bull_bear_duality|missing_symbol_coverage:S,EVELS,GAMMA,FLIP,ECTED,MOVE,LLISH,ARISH,RADAY,ETUPS
+- Contract blocking: missing_required_functions:show_chart,get_key_levels,get_gamma_exposure, missing_chart_sync:show_chart_not_called
+- Contract warnings: missing_recommended_functions:get_market_status,show_chart, missing_bull_bear_duality, missing_symbol_coverage:S,EVELS,GAMMA,FLIP,ECTED,MOVE,LLISH,ARISH,RADAY,ETUPS
+- Prompt: Give me today's SPX game plan with key levels, gamma flip, expected move, and the best bullish/bearish intraday setups.
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **SPX** - Completed tools: get_spx_game_plan - Remaining required tools: show_chart, get_key_levels, get_gamma_exposure Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalidation and 2 leve…
+
+### FAIL market-status#1
+- Category: context
+- Status: 200 | Score: 88 | Latency: 1599ms
+- Functions: get_market_status, get_macro_context
+- Widgets: market_overview, macro_context
+- Widget actions: market_overview: Open Chart | Ask AI; macro_context: Ask AI
+- Warnings: contract_blocking:missing_required_functions:get_current_price, contract_warnings:missing_recommended_functions:show_chart|missing_symbol_coverage:RKETS,OPEN,RIGHT,HOULD,DJUST,ENESS,SSION
+- Contract blocking: missing_required_functions:get_current_price
+- Contract warnings: missing_recommended_functions:show_chart, missing_symbol_coverage:RKETS,OPEN,RIGHT,HOULD,DJUST,ENESS,SSION
+- Prompt: Are markets open right now and how should I adjust aggressiveness in this session?
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **RKETS** - Completed tools: get_market_status, get_macro_context - Remaining required tools: get_current_price Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalidation and 2 levels."
+
+### FAIL spx-key-levels#1
+- Category: levels
+- Status: 200 | Score: 88 | Latency: 5571ms
+- Functions: get_key_levels, get_current_price
+- Widgets: key_levels, current_price
+- Widget actions: key_levels: Show on Chart | View Options | Ask AI; current_price: Show on Chart | View Options | Set Alert
+- Warnings: contract_blocking:missing_chart_sync:show_chart_not_called, contract_warnings:missing_recommended_functions:show_chart|missing_symbol_coverage:PPORT,TANCE,EVELS,RIGHT,DOES,VWAP,SIT
+- Contract blocking: missing_chart_sync:show_chart_not_called
+- Contract warnings: missing_recommended_functions:show_chart, missing_symbol_coverage:PPORT,TANCE,EVELS,RIGHT,DOES,VWAP,SIT
+- Prompt: What are SPX key support and resistance levels right now and where does VWAP sit?
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **SPX** - Completed tools: get_key_levels, get_current_price - Key levels: PDC **$6964.82**, PDL **$6905.87** - SPX snapshot: Spot **$6941.81**, High **$6986.83**, Low **$6937.53** Follow up with a narrower ask for full detail, for …
+
+### WARN ndx-levels#1
+- Category: levels
+- Status: 200 | Score: 94 | Latency: 2053ms
+- Functions: get_key_levels, show_chart
+- Widgets: key_levels
+- Widget actions: key_levels: Show on Chart | View Options | Ask AI
+- Warnings: contract_warnings:missing_recommended_functions:get_current_price|missing_bull_bear_duality|missing_symbol_coverage:EVELS,NGEST,UENCE,ATION,OINTS,AKOUT
+- Contract blocking: none
+- Contract warnings: missing_recommended_functions:get_current_price, missing_bull_bear_duality, missing_symbol_coverage:EVELS,NGEST,UENCE,ATION,OINTS,AKOUT
+- Prompt: Show me NDX levels with strongest confluence and invalidation points for a breakout trade.
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **NDX** - Completed tools: get_key_levels, show_chart - Key levels: PDC **$25268.14**, PDL **$24876.28** Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalidation and 2 levels."
+
+### WARN current-price-spx#1
+- Category: context
+- Status: 200 | Score: 96 | Latency: 2077ms
+- Functions: get_current_price, get_key_levels
+- Widgets: current_price, key_levels
+- Widget actions: current_price: Show on Chart | View Options | Set Alert; key_levels: Show on Chart | View Options | Ask AI
+- Warnings: contract_warnings:missing_recommended_functions:show_chart|missing_symbol_coverage:S,RRENT,HIGH,LOW
+- Contract blocking: none
+- Contract warnings: missing_recommended_functions:show_chart, missing_symbol_coverage:S,RRENT,HIGH,LOW
+- Prompt: What's the current SPX price with today's high and low?
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **SPX** - Completed tools: get_current_price, get_key_levels - Key levels: PDC **$6964.82**, PDL **$6905.87** - SPX snapshot: Spot **$6941.81**, High **$6986.83**, Low **$6937.53** Follow up with a narrower ask for full detail, for …
+
+### WARN options-chain-spx#1
+- Category: options
+- Status: 200 | Score: 98 | Latency: 2215ms
+- Functions: get_options_chain, get_current_price
+- Widgets: options_chain, current_price
+- Widget actions: options_chain: View Options | Open Chart | Ask AI; current_price: Show on Chart | View Options | Set Alert
+- Warnings: contract_warnings:missing_symbol_coverage:PULL,TIONS,CHAIN,AREST,ATION,FLAG,MOST,EVANT,RIKES,ROUND
+- Contract blocking: none
+- Contract warnings: missing_symbol_coverage:PULL,TIONS,CHAIN,AREST,ATION,FLAG,MOST,EVANT,RIKES,ROUND
+- Prompt: Pull SPX options chain for nearest expiration and flag the most relevant strikes around spot.
+- Response preview: I gathered live data but hit the response budget before full analysis. - Focus symbol: **SPX** - Completed tools: get_options_chain, get_current_price - SPX snapshot: Spot **$6941.81**, High **$6986.83**, Low **$6937.53** Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalida…
+
+
+## Recommendation
+- Address FAIL cases first (non-200 responses or malformed payloads), then rerun with `--iterations 2 --concurrency 4`.

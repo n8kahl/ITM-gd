@@ -1,0 +1,19 @@
+{
+  "startedAt": "2026-02-11T00:31:59.635Z",
+  "finishedAt": "2026-02-11T00:32:00.867Z",
+  "durationMs": 1232,
+  "total": 24,
+  "passed": 0,
+  "failed": 24,
+  "warningCases": 21,
+  "passRatePct": 0,
+  "avgScore": 0,
+  "latency": {
+    "p50": 45,
+    "p90": 60,
+    "p95": 755,
+    "max": 796
+  },
+  "widgetCounts": {},
+  "functionCounts": {}
+}

@@ -1,0 +1,52 @@
+{
+  "startedAt": "2026-02-11T01:57:08.066Z",
+  "finishedAt": "2026-02-11T02:04:23.775Z",
+  "durationMs": 435708,
+  "total": 23,
+  "passed": 21,
+  "failed": 2,
+  "warningCases": 14,
+  "passRatePct": 91.3,
+  "avgScore": 81.9,
+  "latency": {
+    "p50": 18609,
+    "p90": 32497,
+    "p95": 34422,
+    "max": 39947
+  },
+  "widgetCounts": {
+    "spx_game_plan": 2,
+    "key_levels": 5,
+    "current_price": 5,
+    "options_chain": 9,
+    "earnings_calendar": 1,
+    "journal_insights": 2,
+    "trade_history": 1
+  },
+  "functionCounts": {
+    "get_gamma_exposure": 3,
+    "get_spx_game_plan": 2,
+    "get_earnings_analysis": 4,
+    "get_key_levels": 5,
+    "get_current_price": 5,
+    "show_chart": 5,
+    "get_iv_analysis": 7,
+    "get_options_chain": 9,
+    "get_earnings_calendar": 1,
+    "get_journal_insights": 2,
+    "get_trade_history_for_symbol": 1,
+    "get_zero_dte_analysis": 1
+  },
+  "config": {
+    "categoryFilter": [
+      "beginner",
+      "advanced",
+      "options",
+      "strategy",
+      "earnings",
+      "journal"
+    ],
+    "delayMs": 1400,
+    "strictContract": true
+  }
+}
