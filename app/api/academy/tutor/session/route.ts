@@ -33,7 +33,6 @@ type TutorLesson = {
   title: string
   slug: string | null
   course_id: string
-  difficulty_level: string | null
   content_markdown: string | null
   chunk_data: unknown
   competency_keys: string[] | null
@@ -94,7 +93,7 @@ function buildTutorSystemPrompt(args: {
     '',
     `LESSON: ${args.lesson.title}`,
     `COURSE: ${args.courseTitle || 'Unknown'}`,
-    `DIFFICULTY: ${args.lesson.difficulty_level || 'unknown'}`,
+    'DIFFICULTY: unknown',
     '',
     'LESSON CONTENT SUMMARY:',
     args.lesson.content_markdown ? String(args.lesson.content_markdown).slice(0, 2000) : '(no content available)',
@@ -172,11 +171,18 @@ export async function POST(request: NextRequest) {
 
     const { data: lesson, error: lessonError } = await supabaseAdmin
       .from('lessons')
-      .select('id, title, slug, course_id, difficulty_level, content_markdown, chunk_data, competency_keys, ai_tutor_context, key_takeaways')
+      .select('id, title, slug, course_id, content_markdown, chunk_data, competency_keys, ai_tutor_context, key_takeaways')
       .eq('id', lessonId)
       .maybeSingle()
 
-    if (lessonError || !lesson) {
+    if (lessonError) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to load lesson for tutor' },
+        { status: 500 }
+      )
+    }
+
+    if (!lesson) {
       return NextResponse.json(
         { success: false, error: 'Lesson not found' },
         { status: 404 }
