@@ -8,6 +8,7 @@ import {
   createTrackedSetupSchema,
   updateTrackedSetupSchema,
   trackedSetupIdSchema,
+  bulkDeleteTrackedSetupsSchema,
   getTrackedSetupsQuerySchema,
   simulateDetectedSetupSchema,
 } from '../schemas/trackedSetupsValidation';
@@ -345,6 +346,47 @@ router.patch(
       });
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to update tracked setup', message: error.message });
+    }
+  }
+);
+
+/**
+ * DELETE /api/tracked-setups
+ * Bulk deletes tracked setups for current user.
+ */
+router.delete(
+  '/',
+  authenticateToken,
+  validateBody(bulkDeleteTrackedSetupsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const { ids } = (req as any).validatedBody as { ids: string[] };
+      const dedupedIds = Array.from(new Set(ids));
+
+      const { data, error } = await supabase
+        .from('ai_coach_tracked_setups')
+        .delete()
+        .eq('user_id', userId)
+        .in('id', dedupedIds)
+        .select('id');
+
+      if (error) {
+        throw new Error(`Failed to bulk delete tracked setups: ${error.message}`);
+      }
+
+      const deletedIds = (data || [])
+        .map((row) => row.id)
+        .filter((value): value is string => typeof value === 'string');
+
+      res.json({
+        success: true,
+        requestedCount: dedupedIds.length,
+        deletedCount: deletedIds.length,
+        deletedIds,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to bulk delete tracked setups', message: error.message });
     }
   }
 );

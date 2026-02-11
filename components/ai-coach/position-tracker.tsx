@@ -74,6 +74,7 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [adviceWarning, setAdviceWarning] = useState<string | null>(null)
   const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [flashPnl, setFlashPnl] = useState<Record<string, boolean>>({})
@@ -122,13 +123,11 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
     }
 
     setError(null)
+    setAdviceWarning(null)
 
     try {
-      const [live, advice] = await runWithRetry(
-        () => Promise.all([
-          getLivePositions(token),
-          getPositionAdvice(token),
-        ]),
+      const live = await runWithRetry(
+        () => getLivePositions(token),
         {
           onRetry: ({ nextAttempt, maxAttempts }) => {
             if (!isBackground) {
@@ -141,11 +140,24 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
       setPositions(live.positions)
       setLastUpdated(live.timestamp)
 
-      const grouped: Record<string, PositionAdvice[]> = {}
-      for (const row of advice.advice) {
-        grouped[row.positionId] = [...(grouped[row.positionId] || []), row]
+      try {
+        const advice = await runWithRetry(
+          () => getPositionAdvice(token),
+          { maxAttempts: 2 },
+        )
+        const grouped: Record<string, PositionAdvice[]> = {}
+        for (const row of advice.advice) {
+          grouped[row.positionId] = [...(grouped[row.positionId] || []), row]
+        }
+        setAdviceByPosition(grouped)
+      } catch (adviceErr) {
+        const message = adviceErr instanceof AICoachAPIError
+          ? adviceErr.apiError.message
+          : 'Live advice is temporarily unavailable'
+        setAdviceWarning(message)
+        // Keep positions visible even if advisory service is degraded.
+        setAdviceByPosition({})
       }
-      setAdviceByPosition(grouped)
     } catch (err) {
       const message = err instanceof AICoachAPIError
         ? err.apiError.message
@@ -258,6 +270,11 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
         )}
         {retryNotice && (
           <p className="text-[11px] text-amber-300/80">{retryNotice}</p>
+        )}
+        {adviceWarning && !error && (
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <p className="text-xs text-amber-300">{adviceWarning}</p>
+          </div>
         )}
 
         {error && (

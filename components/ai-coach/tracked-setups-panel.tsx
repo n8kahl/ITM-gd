@@ -37,6 +37,7 @@ import {
   getTrackedSetups,
   updateTrackedSetup,
   deleteTrackedSetup,
+  deleteTrackedSetupsBulk,
   AICoachAPIError,
   type TrackedSetup,
   type TrackedSetupStatus,
@@ -561,31 +562,53 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     setError(null)
     ids.forEach((id) => setMutating(id, true))
 
-    let successCount = 0
-    let failureCount = 0
-    const deletedIds = new Set<string>()
+    try {
+      let deletedIds = new Set<string>()
 
-    for (const id of ids) {
       try {
-        await deleteTrackedSetup(id, token)
-        successCount += 1
-        deletedIds.add(id)
-      } catch {
-        failureCount += 1
-      } finally {
-        setMutating(id, false)
+        const result = await deleteTrackedSetupsBulk(ids, token)
+        deletedIds = new Set(result.deletedIds)
+      } catch (bulkErr) {
+        // Backward-compatible fallback while API rolls out.
+        if (!(bulkErr instanceof AICoachAPIError) || (bulkErr.status !== 404 && bulkErr.status !== 405)) {
+          throw bulkErr
+        }
+
+        for (const id of ids) {
+          try {
+            await deleteTrackedSetup(id, token)
+            deletedIds.add(id)
+          } catch {
+            // Continue deleting best effort and report partial failures below.
+          }
+        }
       }
-    }
 
-    if (successCount > 0) {
-      setTrackedSetups((prev) => prev.filter((setup) => !deletedIds.has(setup.id)))
-      toast.success(`${successCount} setup${successCount === 1 ? '' : 's'} deleted`)
-    }
-    if (failureCount > 0) {
-      setError(`Failed to delete ${failureCount} setup${failureCount === 1 ? '' : 's'}`)
-    }
+      const successCount = deletedIds.size
+      const failureCount = ids.length - successCount
 
-    setSelectedIds(new Set())
+      if (successCount > 0) {
+        setTrackedSetups((prev) => prev.filter((setup) => !deletedIds.has(setup.id)))
+        toast.success(`${successCount} setup${successCount === 1 ? '' : 's'} deleted`)
+      }
+
+      if (failureCount > 0) {
+        const failedIds = ids.filter((id) => !deletedIds.has(id))
+        setError(`Failed to delete ${failureCount} setup${failureCount === 1 ? '' : 's'}`)
+        toast.error(`Failed to delete ${failureCount} setup${failureCount === 1 ? '' : 's'}`)
+        setSelectedIds(new Set(failedIds))
+      } else {
+        setSelectedIds(new Set())
+      }
+    } catch (err) {
+      const message = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to delete selected setups'
+      setError(message)
+      toast.error('Failed to delete selected setups')
+    } finally {
+      ids.forEach((id) => setMutating(id, false))
+    }
   }, [selectedIds, setMutating, token])
 
   const statusFilters = view === 'active' ? ACTIVE_STATUS_FILTERS : HISTORY_STATUS_FILTERS

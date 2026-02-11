@@ -1253,6 +1253,183 @@ export interface JournalInsightsResponse {
   cached: boolean
 }
 
+interface MembersApiSuccess<T> {
+  success: true
+  data: T
+  [key: string]: unknown
+}
+
+interface MembersApiError {
+  success?: false
+  error?: string
+  message?: string
+}
+
+interface MembersJournalEntry {
+  id: string
+  user_id?: string
+  symbol?: string
+  contract_type?: JournalPositionType
+  strategy?: string | null
+  trade_date?: string
+  entry_price?: number | null
+  exit_price?: number | null
+  position_size?: number | null
+  pnl?: number | null
+  pnl_percentage?: number | null
+  is_open?: boolean
+  hold_duration_min?: number | null
+  execution_notes?: string | null
+  lessons_learned?: string | null
+  tags?: string[]
+  market_context?: Record<string, unknown> | null
+  created_at?: string
+  updated_at?: string
+}
+
+interface MembersJournalAnalytics {
+  period_start: string
+  total_trades: number
+  winning_trades: number
+  losing_trades: number
+  win_rate: number | null
+  total_pnl: number
+  avg_pnl: number | null
+  profit_factor: number | null
+  avg_hold_minutes: number | null
+  hourly_pnl: Array<{ hour: number; pnl: number; count: number }>
+  symbol_stats: Array<{ symbol: string; pnl: number; count: number; win_rate: number }>
+  equity_curve: Array<{ date: string; equity: number; drawdown: number }>
+}
+
+function toIsoDateFromDay(value?: string): string {
+  if (!value) return new Date().toISOString()
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return new Date().toISOString()
+  return new Date(parsed).toISOString()
+}
+
+function toTradeOutcome(pnl: number | null | undefined): TradeOutcome | undefined {
+  if (typeof pnl !== 'number' || !Number.isFinite(pnl)) return undefined
+  if (pnl > 0) return 'win'
+  if (pnl < 0) return 'loss'
+  return 'breakeven'
+}
+
+function mapMembersEntryToTradeEntry(entry: MembersJournalEntry): TradeEntry {
+  const pnl = typeof entry.pnl === 'number' ? entry.pnl : null
+  const holdDays = typeof entry.hold_duration_min === 'number'
+    ? Math.max(0, Math.round((entry.hold_duration_min / 1440) * 10) / 10)
+    : null
+
+  return {
+    id: entry.id,
+    user_id: entry.user_id || '',
+    symbol: entry.symbol || '',
+    position_type: entry.contract_type || 'stock',
+    strategy: entry.strategy || undefined,
+    entry_date: entry.trade_date || new Date().toISOString(),
+    entry_price: typeof entry.entry_price === 'number' ? entry.entry_price : 0,
+    exit_date: entry.is_open ? undefined : (entry.trade_date || undefined),
+    exit_price: typeof entry.exit_price === 'number' ? entry.exit_price : undefined,
+    quantity: typeof entry.position_size === 'number' && Number.isFinite(entry.position_size)
+      ? Math.max(1, Math.round(entry.position_size))
+      : 1,
+    pnl: pnl ?? undefined,
+    pnl_pct: typeof entry.pnl_percentage === 'number' ? entry.pnl_percentage : undefined,
+    trade_outcome: entry.is_open ? undefined : toTradeOutcome(pnl),
+    hold_time_days: holdDays ?? undefined,
+    exit_reason: entry.execution_notes || undefined,
+    lessons_learned: entry.lessons_learned || undefined,
+    tags: Array.isArray(entry.tags) ? entry.tags : [],
+    auto_generated: false,
+    session_context: entry.market_context || undefined,
+    created_at: entry.created_at || new Date().toISOString(),
+    updated_at: entry.updated_at || new Date().toISOString(),
+  }
+}
+
+async function parseMembersError(response: Response): Promise<APIError> {
+  const payload: MembersApiError = await response.json().catch(() => ({}))
+  return {
+    error: payload.error || 'Network error',
+    message: payload.error || payload.message || `Request failed with status ${response.status}`,
+  }
+}
+
+function buildMembersAuthHeaders(token?: string): HeadersInit {
+  return token
+    ? { 'Authorization': `Bearer ${token}` }
+    : {}
+}
+
+function buildJournalInsightsFromAnalytics(
+  analytics: MembersJournalAnalytics,
+  period: '7d' | '30d' | '90d',
+): JournalInsightsResponse {
+  const hourBuckets = analytics.hourly_pnl
+    .slice()
+    .sort((a, b) => a.hour - b.hour)
+    .map((bucket) => {
+      const wins = Math.max(0, Math.round((bucket.count * Math.max(0, Math.min(100, bucket.pnl >= 0 ? 60 : 40))) / 100))
+      const losses = Math.max(0, bucket.count - wins)
+      return {
+        bucket: `${String(bucket.hour).padStart(2, '0')}:00`,
+        trades: bucket.count,
+        wins,
+        losses,
+        winRate: bucket.count > 0 ? (wins / bucket.count) * 100 : 0,
+        avgPnl: bucket.count > 0 ? bucket.pnl / bucket.count : 0,
+      }
+    })
+
+  const setups = analytics.symbol_stats.slice(0, 6).map((row) => ({
+    setup: row.symbol,
+    trades: row.count,
+    wins: Math.round((row.win_rate / 100) * row.count),
+    losses: Math.max(0, row.count - Math.round((row.win_rate / 100) * row.count)),
+    winRate: row.win_rate,
+    avgPnl: row.count > 0 ? row.pnl / row.count : 0,
+  }))
+
+  const periodDays = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const start = analytics.period_start
+  const end = new Date().toISOString()
+  const summary = analytics.total_trades === 0
+    ? 'No trades in selected period yet.'
+    : `Win rate ${Number(analytics.win_rate || 0).toFixed(1)}% across ${analytics.total_trades} trades with total P&L ${analytics.total_pnl >= 0 ? '+' : ''}$${analytics.total_pnl.toFixed(2)}.`
+
+  return {
+    userId: 'current-user',
+    period: { start, end, days: periodDays },
+    insights: {
+      summary,
+      tradeCount: analytics.total_trades,
+      timeOfDay: {
+        summary: hourBuckets.length > 0
+          ? 'Performance varies by session hour; prioritize highest win-rate windows.'
+          : 'Not enough trades to evaluate time-of-day edge.',
+        buckets: hourBuckets,
+      },
+      setupAnalysis: {
+        summary: setups.length > 0
+          ? 'Best-performing symbols surfaced from recent journal history.'
+          : 'Not enough setup data to rank patterns yet.',
+        setups,
+      },
+      behavioral: {
+        revengeTradingIncidents: 0,
+      },
+      riskManagement: {
+        summary: analytics.profit_factor != null
+          ? `Profit factor ${analytics.profit_factor.toFixed(2)} with average hold ${((analytics.avg_hold_minutes || 0) / 1440).toFixed(1)} days.`
+          : 'Insufficient closed trades for robust risk metrics.',
+      },
+    },
+    cached: false,
+  }
+}
+
 /**
  * Get trades with optional filters
  */
@@ -1270,22 +1447,44 @@ export async function getTrades(
   if (options?.limit) params.set('limit', options.limit.toString())
   if (options?.offset) params.set('offset', options.offset.toString())
   if (options?.symbol) params.set('symbol', options.symbol)
-  if (options?.strategy) params.set('strategy', options.strategy)
-  if (options?.outcome) params.set('outcome', options.outcome)
+  if (options?.strategy) params.set('strategy', options.strategy) // server-side filter not currently supported
+  if (options?.outcome === 'win') params.set('isWinner', 'true')
+  if (options?.outcome === 'loss') params.set('isWinner', 'false')
+  params.set('sortBy', 'trade_date')
+  params.set('sortDir', 'desc')
 
-  const response = await fetch(`${API_BASE}/api/journal/trades?${params}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+  const response = await fetch(`/api/members/journal?${params.toString()}`, {
+    headers: buildMembersAuthHeaders(token),
+    credentials: 'include',
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as {
+    success?: boolean
+    data?: MembersJournalEntry[]
+    total?: number
+  }
+
+  const allTrades = Array.isArray(payload.data)
+    ? payload.data.map((entry) => mapMembersEntryToTradeEntry(entry))
+    : []
+
+  const filtered = options?.outcome === 'breakeven'
+    ? allTrades.filter((trade) => trade.trade_outcome === 'breakeven')
+    : allTrades
+
+  const total = typeof payload.total === 'number' ? payload.total : filtered.length
+  const offset = options?.offset ?? 0
+
+  return {
+    trades: filtered,
+    total,
+    hasMore: offset + filtered.length < total,
+  }
 }
 
 /**
@@ -1295,24 +1494,36 @@ export async function createTrade(
   trade: TradeCreateInput,
   token: string
 ): Promise<TradeEntry> {
-  const response = await fetch(`${API_BASE}/api/journal/trades`, {
+  const response = await fetch('/api/members/journal', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      ...buildMembersAuthHeaders(token),
     },
-    body: JSON.stringify(trade),
+    credentials: 'include',
+    body: JSON.stringify({
+      symbol: trade.symbol,
+      contract_type: trade.position_type,
+      strategy: trade.strategy,
+      trade_date: toIsoDateFromDay(trade.entry_date),
+      entry_price: trade.entry_price,
+      exit_price: trade.exit_price ?? null,
+      position_size: trade.quantity,
+      is_open: trade.exit_price == null,
+      exit_timestamp: trade.exit_date ? toIsoDateFromDay(trade.exit_date) : null,
+      execution_notes: trade.exit_reason ?? null,
+      lessons_learned: trade.lessons_learned ?? null,
+      tags: trade.tags ?? [],
+    }),
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as MembersApiSuccess<MembersJournalEntry>
+  return mapMembersEntryToTradeEntry(payload.data)
 }
 
 /**
@@ -1323,24 +1534,37 @@ export async function updateTrade(
   updates: Partial<TradeCreateInput>,
   token: string
 ): Promise<TradeEntry> {
-  const response = await fetch(`${API_BASE}/api/journal/trades/${id}`, {
-    method: 'PUT',
+  const response = await fetch('/api/members/journal', {
+    method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      ...buildMembersAuthHeaders(token),
     },
-    body: JSON.stringify(updates),
+    credentials: 'include',
+    body: JSON.stringify({
+      id,
+      symbol: updates.symbol,
+      contract_type: updates.position_type,
+      strategy: updates.strategy,
+      trade_date: updates.entry_date ? toIsoDateFromDay(updates.entry_date) : undefined,
+      entry_price: updates.entry_price,
+      exit_price: updates.exit_price,
+      position_size: updates.quantity,
+      is_open: updates.exit_price == null ? undefined : false,
+      exit_timestamp: updates.exit_date ? toIsoDateFromDay(updates.exit_date) : undefined,
+      execution_notes: updates.exit_reason,
+      lessons_learned: updates.lessons_learned,
+      tags: updates.tags,
+    }),
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as MembersApiSuccess<MembersJournalEntry>
+  return mapMembersEntryToTradeEntry(payload.data)
 }
 
 /**
@@ -1350,20 +1574,19 @@ export async function deleteTrade(
   id: string,
   token: string
 ): Promise<{ success: boolean }> {
-  const response = await fetch(`${API_BASE}/api/journal/trades/${id}`, {
+  const response = await fetch(`/api/members/journal?id=${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${token}` },
+    headers: buildMembersAuthHeaders(token),
+    credentials: 'include',
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as { success?: boolean }
+  return { success: payload.success !== false }
 }
 
 /**
@@ -1372,19 +1595,94 @@ export async function deleteTrade(
 export async function getTradeAnalytics(
   token: string
 ): Promise<TradeAnalyticsResponse> {
-  const response = await fetch(`${API_BASE}/api/journal/analytics`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+  const response = await fetch('/api/members/journal/analytics?period=all', {
+    headers: buildMembersAuthHeaders(token),
+    credentials: 'include',
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as MembersApiSuccess<MembersJournalAnalytics>
+  const analytics = payload.data
+
+  const equityCurve = analytics.equity_curve.map((point, index) => ({
+    date: point.date,
+    pnl: index === 0
+      ? point.equity
+      : point.equity - (analytics.equity_curve[index - 1]?.equity || 0),
+  }))
+
+  let avgWin = 0
+  let avgLoss = 0
+  let byStrategy: Record<string, { count: number; pnl: number; winRate: number }> = {}
+
+  try {
+    const detailResponse = await fetch('/api/members/journal?limit=500&offset=0&sortBy=trade_date&sortDir=desc', {
+      headers: buildMembersAuthHeaders(token),
+      credentials: 'include',
+    })
+
+    if (detailResponse.ok) {
+      const detailPayload = await detailResponse.json() as { data?: MembersJournalEntry[] }
+      const closedTrades = (detailPayload.data || [])
+        .map((entry) => mapMembersEntryToTradeEntry(entry))
+        .filter((entry) => entry.trade_outcome != null)
+
+      const wins = closedTrades.filter((entry) => typeof entry.pnl === 'number' && entry.pnl > 0)
+      const losses = closedTrades.filter((entry) => typeof entry.pnl === 'number' && entry.pnl < 0)
+
+      avgWin = wins.length > 0
+        ? wins.reduce((sum, entry) => sum + (entry.pnl || 0), 0) / wins.length
+        : 0
+      avgLoss = losses.length > 0
+        ? losses.reduce((sum, entry) => sum + (entry.pnl || 0), 0) / losses.length
+        : 0
+
+      const strategyMap: Record<string, { count: number; pnl: number; wins: number }> = {}
+      for (const trade of closedTrades) {
+        const key = trade.strategy?.trim() || 'Unspecified'
+        if (!strategyMap[key]) {
+          strategyMap[key] = { count: 0, pnl: 0, wins: 0 }
+        }
+        strategyMap[key].count += 1
+        strategyMap[key].pnl += trade.pnl || 0
+        if ((trade.pnl || 0) > 0) strategyMap[key].wins += 1
+      }
+
+      byStrategy = Object.fromEntries(
+        Object.entries(strategyMap).map(([key, value]) => ([
+          key,
+          {
+            count: value.count,
+            pnl: value.pnl,
+            winRate: value.count > 0 ? (value.wins / value.count) * 100 : 0,
+          },
+        ])),
+      )
+    }
+  } catch {
+    // Keep summary available if optional detail query fails.
+  }
+
+  return {
+    summary: {
+      totalTrades: analytics.total_trades,
+      wins: analytics.winning_trades,
+      losses: analytics.losing_trades,
+      breakeven: Math.max(0, analytics.total_trades - analytics.winning_trades - analytics.losing_trades),
+      winRate: Number(analytics.win_rate || 0),
+      totalPnl: analytics.total_pnl,
+      avgWin,
+      avgLoss,
+      profitFactor: Number(analytics.profit_factor || 0),
+      avgHoldDays: Number((analytics.avg_hold_minutes || 0) / 1440),
+    },
+    equityCurve,
+    byStrategy,
+  }
 }
 
 /**
@@ -1399,21 +1697,18 @@ export async function getJournalInsights(
 ): Promise<JournalInsightsResponse> {
   const params = new URLSearchParams()
   if (options?.period) params.set('period', options.period)
-  if (options?.forceRefresh) params.set('forceRefresh', 'true')
-
-  const response = await fetch(`${API_BASE}/api/journal/insights?${params}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+  const response = await fetch(`/api/members/journal/analytics?${params.toString() || 'period=30d'}`, {
+    headers: buildMembersAuthHeaders(token),
+    credentials: 'include',
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as MembersApiSuccess<MembersJournalAnalytics>
+  return buildJournalInsightsFromAnalytics(payload.data, options?.period || '30d')
 }
 
 /**
@@ -1424,24 +1719,42 @@ export async function importTrades(
   token: string,
   broker?: string
 ): Promise<{ imported: number; total: number }> {
-  const response = await fetch(`${API_BASE}/api/journal/import`, {
+  const response = await fetch('/api/members/journal/import', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      ...buildMembersAuthHeaders(token),
     },
-    body: JSON.stringify({ trades, broker }),
+    credentials: 'include',
+    body: JSON.stringify({
+      broker: broker || 'interactive_brokers',
+      fileName: 'ai-coach-import.json',
+      rows: trades.map((trade) => ({
+        symbol: trade.symbol,
+        contract_type: trade.position_type,
+        strategy: trade.strategy,
+        entry_date: trade.entry_date,
+        entry_price: trade.entry_price,
+        exit_date: trade.exit_date,
+        exit_price: trade.exit_price,
+        quantity: trade.quantity,
+      })),
+    }),
   })
 
   if (!response.ok) {
-    const error: APIError = await response.json().catch(() => ({
-      error: 'Network error',
-      message: `Request failed with status ${response.status}`,
-    }))
+    const error = await parseMembersError(response)
     throw new AICoachAPIError(response.status, error)
   }
 
-  return response.json()
+  const payload = await response.json() as MembersApiSuccess<{
+    inserted?: number
+  }>
+
+  return {
+    imported: Number(payload.data.inserted || 0),
+    total: trades.length,
+  }
 }
 
 // ============================================
@@ -1985,6 +2298,31 @@ export async function deleteTrackedSetup(
       headers: {},
     },
     token
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+export async function deleteTrackedSetupsBulk(
+  ids: string[],
+  token: string,
+): Promise<{ success: boolean; requestedCount: number; deletedCount: number; deletedIds: string[] }> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/tracked-setups`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    },
+    token,
   )
 
   if (!response.ok) {

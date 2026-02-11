@@ -435,6 +435,57 @@ describe('Tracked Setups Routes', () => {
     });
   });
 
+  describe('DELETE /api/tracked-setups', () => {
+    it('bulk deletes tracked setups and returns deleted ids', async () => {
+      const deleteChain: any = {
+        eq: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        select: jest.fn().mockResolvedValue({
+          data: [
+            { id: '88888888-8888-8888-8888-888888888888' },
+            { id: '99999999-9999-9999-9999-999999999999' },
+          ],
+          error: null,
+        }),
+      };
+
+      mockFrom.mockReturnValue({
+        delete: jest.fn().mockReturnValue(deleteChain),
+      });
+
+      const res = await request(app)
+        .delete('/api/tracked-setups')
+        .send({
+          ids: [
+            '88888888-8888-8888-8888-888888888888',
+            '99999999-9999-9999-9999-999999999999',
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(deleteChain.eq).toHaveBeenCalledWith('user_id', 'test-user-123');
+      expect(deleteChain.in).toHaveBeenCalledWith('id', [
+        '88888888-8888-8888-8888-888888888888',
+        '99999999-9999-9999-9999-999999999999',
+      ]);
+      expect(res.body.success).toBe(true);
+      expect(res.body.requestedCount).toBe(2);
+      expect(res.body.deletedCount).toBe(2);
+      expect(res.body.deletedIds).toEqual([
+        '88888888-8888-8888-8888-888888888888',
+        '99999999-9999-9999-9999-999999999999',
+      ]);
+    });
+
+    it('validates ids payload for bulk delete', async () => {
+      const res = await request(app)
+        .delete('/api/tracked-setups')
+        .send({ ids: [] });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('DELETE /api/tracked-setups/:id', () => {
     it('deletes tracked setup', async () => {
       const deleteChain: any = {

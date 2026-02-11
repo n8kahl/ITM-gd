@@ -31,6 +31,10 @@ export const trackedSetupIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const bulkDeleteTrackedSetupsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+});
+
 export const getTrackedSetupsQuerySchema = z.object({
   status: listStatusSchema.optional(),
   view: z.enum(['active', 'history']).optional(),
