@@ -139,6 +139,7 @@ export default function ProfilePage() {
         membershipTier={authProfile?.membership_tier}
         academyData={academyData}
         isOwnProfile
+        loading={loading}
         onEditProfile={() => setSettingsOpen(true)}
       />
 
