@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { Counter } from '@/components/ui/counter'
 
 // ============================================
 // TYPES
@@ -160,21 +161,30 @@ export function LiveMarketTicker() {
           const quote = quotes[symbol]
           const hasQuotePrice = quote?.price != null
           const isUp = (quote?.change ?? 0) >= 0
-          const formattedPrice = hasQuotePrice && quote ? formatPrice(quote.price as number) : '—'
 
           return (
             <div key={symbol} className="flex items-center gap-2 flex-shrink-0">
               <span className="text-xs text-muted-foreground font-medium">{symbol}</span>
-              <span className="font-mono text-sm font-semibold text-ivory tabular-nums">
-                {hasQuotePrice ? `$${formattedPrice}` : '—'}
-              </span>
+              {hasQuotePrice && quote ? (
+                <Counter
+                  value={quote.price as number}
+                  className="text-sm font-semibold text-ivory"
+                  format={(value) => `$${formatPrice(value)}`}
+                  flashDirection={isUp ? 'up' : 'down'}
+                />
+              ) : (
+                <span className="font-mono text-sm font-semibold text-ivory tabular-nums">—</span>
+              )}
               {quote?.changePercent != null && (
-                <span className={cn(
+                <Counter
+                  value={quote.changePercent}
+                  className={cn(
                   'font-mono text-xs tabular-nums',
                   isUp ? 'text-emerald-400' : 'text-red-400'
-                )}>
-                  {isUp ? '+' : ''}{quote.changePercent.toFixed(2)}%
-                </span>
+                  )}
+                  format={(value) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`}
+                  flashDirection={isUp ? 'up' : 'down'}
+                />
               )}
             </div>
           )
@@ -187,27 +197,33 @@ export function LiveMarketTicker() {
         {metrics.vwap != null && (
           <div className="flex items-center gap-1.5 flex-shrink-0 hidden md:flex">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">VWAP</span>
-            <span className="font-mono text-xs text-ivory tabular-nums">
-              ${formatPrice(metrics.vwap)}
-            </span>
+            <Counter
+              value={metrics.vwap}
+              className="text-xs text-ivory"
+              format={(value) => `$${formatPrice(value)}`}
+            />
           </div>
         )}
 
         {metrics.atr != null && (
           <div className="flex items-center gap-1.5 flex-shrink-0 hidden md:flex">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">ATR</span>
-            <span className="font-mono text-xs text-ivory tabular-nums">
-              ${metrics.atr.toFixed(2)}
-            </span>
+            <Counter
+              value={metrics.atr}
+              className="text-xs text-ivory"
+              format={(value) => `$${value.toFixed(2)}`}
+            />
           </div>
         )}
 
         {metrics.ivRank != null && (
           <div className="flex items-center gap-1.5 flex-shrink-0 hidden lg:flex">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">IV Rank</span>
-            <span className={cn('font-mono text-xs tabular-nums', getIVRankColor(metrics.ivRank))}>
-              {metrics.ivRank}%
-            </span>
+            <Counter
+              value={metrics.ivRank}
+              className={cn('text-xs', getIVRankColor(metrics.ivRank))}
+              format={(value) => `${value.toFixed(0)}%`}
+            />
           </div>
         )}
 

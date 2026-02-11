@@ -10,6 +10,7 @@ import {
   BarChart3,
 } from 'lucide-react'
 import { StatCard } from '@/components/ui/stat-card'
+import { SpotlightCard } from '@/components/ui/spotlight-card'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 interface DashboardStats {
@@ -23,6 +24,9 @@ interface DashboardStats {
   trades_mtd: number
   trades_last_month: number
 }
+
+type StatCardAccent = 'emerald' | 'champagne' | 'red' | 'neutral'
+type StatCardTrendDirection = 'up' | 'down' | 'neutral'
 
 export function DashboardStatCards() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -78,64 +82,84 @@ export function DashboardStatCards() {
   const tradesLastMonth = stats?.trades_last_month ?? 0
 
   // Determine AI grade accent
-  const gradeAccent = aiGrade.startsWith('A')
-    ? 'emerald' as const
+  const gradeAccent: StatCardAccent = aiGrade.startsWith('A')
+    ? 'emerald'
     : aiGrade.startsWith('B')
-    ? 'champagne' as const
+    ? 'champagne'
     : aiGrade.startsWith('C') || aiGrade === '—'
-    ? 'neutral' as const
-    : 'red' as const
+    ? 'neutral'
+    : 'red'
+
+  const cards = [
+    {
+      key: 'win-rate',
+      label: 'Win Rate',
+      value: `${winRate.toFixed(1)}%`,
+      icon: Target,
+      accent: (winRate >= 50 ? 'emerald' : 'red') as StatCardAccent,
+      trend: stats?.pnl_change_pct != null ? {
+        value: `${stats.pnl_change_pct > 0 ? '+' : ''}${stats.pnl_change_pct.toFixed(1)}% vs last month`,
+        direction: (stats.pnl_change_pct >= 0 ? 'up' : 'down') as StatCardTrendDirection,
+      } : undefined,
+    },
+    {
+      key: 'pnl',
+      label: 'P&L This Month',
+      value: `${pnlPositive ? '+' : ''}$${Math.abs(pnlMtd).toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      })}`,
+      icon: pnlPositive ? TrendingUp : TrendingDown,
+      accent: (pnlPositive ? 'emerald' : 'red') as StatCardAccent,
+    },
+    {
+      key: 'streak',
+      label: 'Current Streak',
+      value: `${streak} ${streakType === 'win' ? 'W' : 'L'}${streak >= 3 && streakType === 'win' ? ' \uD83D\uDD25' : ''}`,
+      icon: Flame,
+      accent: (
+        streakType === 'win' && streak >= 5
+          ? 'champagne'
+          : streakType === 'win'
+            ? 'emerald'
+            : 'red'
+      ) as StatCardAccent,
+      trend: { value: `Best: ${bestStreak}`, direction: 'neutral' as StatCardTrendDirection },
+    },
+    {
+      key: 'ai-grade',
+      label: 'Avg AI Grade',
+      value: aiGrade,
+      icon: GraduationCap,
+      accent: gradeAccent,
+    },
+    {
+      key: 'trades',
+      label: 'Trades This Month',
+      value: String(tradesMtd),
+      icon: BarChart3,
+      accent: 'neutral' as StatCardAccent,
+      trend: tradesLastMonth > 0 ? {
+        value: `vs ${tradesLastMonth} last month`,
+        direction: 'neutral' as StatCardTrendDirection,
+      } : undefined,
+    },
+  ]
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
-      {/* Win Rate */}
-      <StatCard
-        label="Win Rate"
-        value={`${winRate.toFixed(1)}%`}
-        icon={Target}
-        accent={winRate >= 50 ? 'emerald' : 'red'}
-        trend={stats?.pnl_change_pct != null ? {
-          value: `${stats.pnl_change_pct > 0 ? '+' : ''}${stats.pnl_change_pct.toFixed(1)}% vs last month`,
-          direction: stats.pnl_change_pct >= 0 ? 'up' : 'down',
-        } : undefined}
-      />
-
-      {/* P&L MTD */}
-      <StatCard
-        label="P&L This Month"
-        value={`${pnlPositive ? '+' : ''}$${Math.abs(pnlMtd).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
-        icon={pnlPositive ? TrendingUp : TrendingDown}
-        accent={pnlPositive ? 'emerald' : 'red'}
-      />
-
-      {/* Current Streak */}
-      <StatCard
-        label="Current Streak"
-        value={`${streak} ${streakType === 'win' ? 'W' : 'L'}${streak >= 3 && streakType === 'win' ? ' \uD83D\uDD25' : ''}`}
-        icon={Flame}
-        accent={streakType === 'win' && streak >= 5 ? 'champagne' : streakType === 'win' ? 'emerald' : 'red'}
-        trend={{ value: `Best: ${bestStreak}`, direction: 'neutral' }}
-      />
-
-      {/* AI Grade */}
-      <StatCard
-        label="Avg AI Grade"
-        value={aiGrade}
-        icon={GraduationCap}
-        accent={gradeAccent}
-      />
-
-      {/* Trades MTD */}
-      <StatCard
-        label="Trades This Month"
-        value={String(tradesMtd)}
-        icon={BarChart3}
-        accent="neutral"
-        trend={tradesLastMonth > 0 ? {
-          value: `vs ${tradesLastMonth} last month`,
-          direction: 'neutral',
-        } : undefined}
-      />
+      {cards.map((card) => (
+        <SpotlightCard key={card.key}>
+          <StatCard
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            accent={card.accent}
+            trend={card.trend}
+            className="bg-transparent border-0 hover:border-0 hover:-translate-y-0"
+          />
+        </SpotlightCard>
+      ))}
     </div>
   )
 }

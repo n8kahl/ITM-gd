@@ -43,16 +43,16 @@ export function BentoCard({
     });
   };
 
-  // Refined, subtle spotlight colors
+  // Premium spotlight colors tuned for the member glass theme.
   const spotlightColor =
     spotlight === "gold"
-      ? "rgba(16, 185, 129, 0.08)"
-      : "rgba(4, 120, 87, 0.10)";
+      ? "rgba(245,237,204,0.12)"
+      : "rgba(16,185,129,0.12)";
 
   const borderColor =
     spotlight === "gold"
-      ? "rgba(232, 228, 217, 0.3)"
-      : "rgba(4, 120, 87, 0.4)";
+      ? "rgba(245,237,204,0.3)"
+      : "rgba(16,185,129,0.28)";
 
   return (
     <motion.div
@@ -77,7 +77,7 @@ export function BentoCard({
         className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700"
         style={{
           background: isHovered
-            ? `radial-gradient(500px circle at ${mousePosition.x}px ${mousePosition.y}px, ${spotlightColor}, transparent 40%)`
+            ? `radial-gradient(600px circle at ${mousePosition.x}px ${mousePosition.y}px, ${spotlightColor}, transparent 40%)`
             : "none",
         }}
       />

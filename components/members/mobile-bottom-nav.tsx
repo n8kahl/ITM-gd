@@ -56,10 +56,6 @@ export function MemberBottomNav() {
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    setMoreOpen(false)
-  }, [pathname])
-
-  useEffect(() => {
     const handleClickAway = (event: MouseEvent) => {
       if (!moreMenuRef.current) return
       if (moreMenuRef.current.contains(event.target as Node)) return
@@ -72,7 +68,10 @@ export function MemberBottomNav() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden">
-      <nav className="bg-[#0A0A0B]/98 backdrop-blur-[24px] border-t border-white/[0.06] px-2 pt-2 pb-[calc(0.625rem+env(safe-area-inset-bottom))]">
+      <nav
+        className="glass-panel-premium border-t border-white/[0.06] px-2 pt-2 pb-safe"
+        style={{ backdropFilter: 'blur(20px) saturate(180%)' }}
+      >
         <div className="flex items-end justify-around gap-1">
           {PRIMARY_TABS.map((tab) => {
             const Icon = tab.icon
@@ -81,7 +80,10 @@ export function MemberBottomNav() {
               <Link
                 key={tab.id}
                 href={tab.href}
-                onClick={triggerHaptic}
+                onClick={() => {
+                  triggerHaptic()
+                  setMoreOpen(false)
+                }}
                 className="relative flex-1 max-w-[84px] flex flex-col items-center justify-center py-1.5"
                 aria-current={active ? 'page' : undefined}
               >
@@ -89,20 +91,32 @@ export function MemberBottomNav() {
                   <motion.div
                     layoutId="member-mobile-active"
                     className="absolute -top-1 h-0.5 w-8 rounded-full bg-emerald-400"
-                    transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 30 }}
                   />
                 )}
 
-                <span className={cn(
-                  'inline-flex items-center justify-center rounded-lg p-1.5 transition-colors',
-                  active ? 'bg-emerald-500/20 text-emerald-300' : 'text-muted-foreground',
-                )}>
-                  <Icon className="w-5 h-5" />
-                </span>
+                {active && (
+                  <motion.div
+                    layoutId="member-mobile-active-glow"
+                    className="pointer-events-none absolute inset-x-2 bottom-5 h-8 rounded-full bg-emerald-500/10 blur-lg"
+                    transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+                  />
+                )}
+
+                <motion.span
+                  animate={active ? { scale: [1, 1.1, 1] } : { scale: 1 }}
+                  transition={{ duration: 0.22 }}
+                  className={cn(
+                    'relative inline-flex items-center justify-center rounded-lg p-1.5 transition-colors',
+                    active ? 'bg-emerald-500/20 text-emerald-300' : 'text-muted-foreground',
+                  )}
+                >
+                  <Icon className={cn('w-5 h-5 transition-all', active && 'fill-current')} />
+                </motion.span>
 
                 <span className={cn(
-                  'text-[10px] font-medium mt-0.5 leading-none transition-colors',
-                  active ? 'text-emerald-300' : 'text-muted-foreground',
+                  'text-[10px] mt-0.5 leading-none transition-colors',
+                  active ? 'font-bold text-emerald-300' : 'font-normal text-muted-foreground',
                 )}>
                   {tab.label}
                 </span>
@@ -132,8 +146,8 @@ export function MemberBottomNav() {
                 <Ellipsis className="w-5 h-5" />
               </span>
               <span className={cn(
-                'text-[10px] font-medium mt-0.5 leading-none transition-colors',
-                moreOpen ? 'text-emerald-300' : 'text-muted-foreground',
+                'text-[10px] mt-0.5 leading-none transition-colors',
+                moreOpen ? 'font-bold text-emerald-300' : 'font-normal text-muted-foreground',
               )}>
                 More
               </span>
@@ -150,7 +164,10 @@ export function MemberBottomNav() {
                 >
                   <Link
                     href="/members/profile"
-                    onClick={triggerHaptic}
+                    onClick={() => {
+                      triggerHaptic()
+                      setMoreOpen(false)
+                    }}
                     className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06]"
                   >
                     <UserCircle className="w-4 h-4 text-emerald-300" />
@@ -159,7 +176,10 @@ export function MemberBottomNav() {
 
                   <Link
                     href="/members/profile?view=settings"
-                    onClick={triggerHaptic}
+                    onClick={() => {
+                      triggerHaptic()
+                      setMoreOpen(false)
+                    }}
                     className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06]"
                   >
                     <Settings className="w-4 h-4 text-emerald-300" />

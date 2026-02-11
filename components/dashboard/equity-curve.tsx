@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { Counter } from '@/components/ui/counter'
 
 // ============================================
 // TYPES
@@ -116,12 +117,15 @@ export function EquityCurve() {
         <div>
           <h3 className="text-sm font-medium text-ivory">P&L Equity Curve</h3>
           {hasData && (
-            <p className={cn(
-              'font-mono text-lg font-semibold tabular-nums mt-0.5',
-              isPositive ? 'text-emerald-400' : 'text-red-400'
-            )}>
-              {isPositive ? '+' : ''}${currentPnl.toLocaleString('en-US', { minimumFractionDigits: 0 })}
-            </p>
+            <Counter
+              value={currentPnl}
+              className={cn(
+                'text-lg font-semibold mt-0.5',
+                isPositive ? 'text-emerald-400' : 'text-red-400',
+              )}
+              format={(value) => `${value >= 0 ? '+' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 0 })}`}
+              flashDirection={isPositive ? 'up' : 'down'}
+            />
           )}
         </div>
 
@@ -147,7 +151,7 @@ export function EquityCurve() {
       {/* Chart */}
       <div className="h-[240px] lg:h-[280px]">
         {loading ? (
-          <div className="w-full h-full rounded-xl bg-white/[0.02] animate-pulse" />
+          <div className="w-full h-full rounded-xl shimmer-surface" />
         ) : !hasData ? (
           <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
             No trade data yet. Start logging trades to see your equity curve.

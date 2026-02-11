@@ -96,10 +96,15 @@ export function MemberSidebar() {
 
   return (
     <aside className={cn(
-      'hidden lg:flex w-[280px] flex-col fixed inset-y-0 left-0 z-40',
-      'bg-[#0A0A0B]/95 backdrop-blur-[40px]',
-      'border-r border-white/[0.08]',
+      'hidden lg:flex w-[280px] flex-col fixed inset-y-0 left-0 z-40 relative overflow-hidden',
+      'bg-[#0A0A0B]/88 backdrop-blur-2xl',
+      'border-r border-transparent',
     )}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent"
+      />
+
       {/* Brand Header */}
       <div className="px-5 pt-6 pb-4">
         <Link href="/members" className="flex items-center gap-3">
@@ -161,31 +166,31 @@ export function MemberSidebar() {
               key={tab.tab_id}
               href={href}
               className={cn(
-                'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group',
+                'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group overflow-hidden',
                 isActive
-                  ? 'bg-emerald-500/[0.08] text-ivory font-medium'
+                  ? 'text-ivory font-medium'
                   : 'text-muted-foreground hover:text-ivory hover:bg-white/[0.03]'
               )}
             >
-              {/* Active left accent */}
+              {/* Active glow pill */}
               {isActive && (
                 <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-champagne shadow-[0_0_8px_rgba(243,229,171,0.3)]"
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  layoutId="sidebar-glow"
+                  className="absolute inset-0 rounded-lg bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                  transition={{ type: 'spring', stiffness: 280, damping: 26 }}
                 />
               )}
 
               <Icon className={cn(
-                'w-[18px] h-[18px] flex-shrink-0 transition-colors',
+                'relative z-[1] w-[18px] h-[18px] flex-shrink-0 transition-colors',
                 isActive ? 'text-emerald-400' : 'text-muted-foreground group-hover:text-ivory/60'
               )} />
 
-              <span className="flex-1 truncate">{tab.label}</span>
+              <span className="relative z-[1] flex-1 truncate">{tab.label}</span>
 
               {tab.badge_text && (
                 <span className={cn(
-                  'px-1.5 py-0.5 text-[10px] font-medium rounded-full',
+                  'relative z-[1] px-1.5 py-0.5 text-[10px] font-medium rounded-full',
                   tab.badge_variant === 'emerald'
                     ? 'bg-emerald-900/30 text-emerald-400'
                     : tab.badge_variant === 'champagne'

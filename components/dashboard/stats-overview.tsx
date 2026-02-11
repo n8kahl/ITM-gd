@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { TrendingUp, TrendingDown, Target, DollarSign, BarChart3, Calendar } from 'lucide-react'
 import type { JournalEntry } from '@/lib/types/journal'
+import { Counter } from '@/components/ui/counter'
 
 interface JournalStats {
   total_trades: number
@@ -135,21 +136,24 @@ export function StatsOverview() {
   const statCards = [
     {
       title: 'Total P&L',
-      value: formatCurrency(stats.total_pnl),
+      value: stats.total_pnl,
+      format: (value: number) => formatCurrency(value),
       icon: DollarSign,
       color: stats.total_pnl >= 0 ? 'text-emerald-500' : 'text-red-500',
       bgColor: stats.total_pnl >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10',
     },
     {
       title: 'Win Rate',
-      value: `${stats.win_rate?.toFixed(1) || 0}%`,
+      value: stats.win_rate ?? 0,
+      format: (value: number) => `${value.toFixed(1)}%`,
       icon: Target,
       color: stats.win_rate >= 50 ? 'text-emerald-500' : 'text-yellow-500',
       bgColor: stats.win_rate >= 50 ? 'bg-emerald-500/10' : 'bg-yellow-500/10',
     },
     {
       title: 'Total Trades',
-      value: stats.total_trades.toString(),
+      value: stats.total_trades,
+      format: (value: number) => value.toFixed(0),
       icon: BarChart3,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
@@ -157,7 +161,8 @@ export function StatsOverview() {
     },
     {
       title: 'Avg P&L',
-      value: formatCurrency(stats.avg_pnl),
+      value: stats.avg_pnl,
+      format: (value: number) => formatCurrency(value),
       icon: TrendingUp,
       color: stats.avg_pnl >= 0 ? 'text-emerald-500' : 'text-red-500',
       bgColor: stats.avg_pnl >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10',
@@ -178,9 +183,18 @@ export function StatsOverview() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${stat.color}`} suppressHydrationWarning>
-                  {stat.value}
-                </div>
+                <Counter
+                  value={stat.value}
+                  className={`text-2xl font-bold ${stat.color}`}
+                  format={stat.format}
+                  flashDirection={
+                    stat.title === 'Total Trades'
+                      ? 'up'
+                      : stat.value >= 0
+                        ? 'up'
+                        : 'down'
+                  }
+                />
                 {stat.subtitle ? (
                   <p className="mt-1 text-xs text-white/60">{stat.subtitle}</p>
                 ) : null}
@@ -199,9 +213,12 @@ export function StatsOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-emerald-500" suppressHydrationWarning>
-              {formatCurrency(stats.best_trade)}
-            </div>
+            <Counter
+              value={stats.best_trade}
+              className="text-xl font-bold text-emerald-500"
+              format={(value) => formatCurrency(value)}
+              flashDirection="up"
+            />
           </CardContent>
         </Card>
 
@@ -213,9 +230,12 @@ export function StatsOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-red-500" suppressHydrationWarning>
-              {formatCurrency(stats.worst_trade)}
-            </div>
+            <Counter
+              value={stats.worst_trade}
+              className="text-xl font-bold text-red-500"
+              format={(value) => formatCurrency(value)}
+              flashDirection="down"
+            />
           </CardContent>
         </Card>
 

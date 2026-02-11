@@ -340,6 +340,13 @@
     border-color: rgba(255, 255, 255, 0.15);
   }
 
+  .glass-panel-premium {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
   /* Heavy Frosted Crystal - Premium Style */
   .glass-card-heavy {
     background: rgba(255, 255, 255, 0.02);
@@ -386,6 +393,11 @@
     .glass-card {
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
+    }
+
+    .glass-panel-premium {
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
     }
 
     .glass-card-heavy {
@@ -529,6 +541,22 @@
     background: rgba(232, 228, 217, 0.05);
     border-color: rgba(232, 228, 217, 0.40);
     transform: translateY(-2px);
+  }
+
+  .btn-noise {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .btn-noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='buttonNoise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23buttonNoise)'/%3E%3C/svg%3E");
+    mix-blend-mode: soft-light;
   }
 
   /* ============================================
@@ -707,8 +735,12 @@
 @layer utilities {
   /* Selection styling - Emerald Elite */
   ::selection {
-    background: rgba(16, 185, 129, 0.3); /* Emerald Elite */
+    background: rgba(16, 185, 129, 0.3);
     color: #fff;
+  }
+
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 0.625rem);
   }
 
   /* Scrollbar styling - Emerald Luxury */
@@ -794,6 +826,58 @@
     }
     100% {
       background-position: 200% 0;
+    }
+  }
+
+  .shimmer-surface {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .shimmer-surface::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 45%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: shimmer-slide 1.6s linear infinite;
+  }
+
+  @keyframes shimmer-slide {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  .counter-flash-up {
+    animation: counter-flash-up 420ms ease-out forwards;
+  }
+
+  .counter-flash-down {
+    animation: counter-flash-down 420ms ease-out forwards;
+  }
+
+  @keyframes counter-flash-up {
+    from {
+      color: #34D399;
+    }
+    to {
+      color: #F5F5F0;
+    }
+  }
+
+  @keyframes counter-flash-down {
+    from {
+      color: #FB7185;
+    }
+    to {
+      color: #F5F5F0;
     }
   }
 
