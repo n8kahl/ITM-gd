@@ -1,0 +1,86 @@
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap');
+      .title { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; fill: white; }
+      .node-label { font-family: 'Inter', system-ui, sans-serif; font-size: 15px; font-weight: 600; fill: white; text-anchor: middle; }
+      .node-small { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; fill: rgba(255,255,255,0.9); text-anchor: middle; }
+      .decision { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; fill: rgba(255,255,255,0.7); text-anchor: middle; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="rgba(16, 185, 129, 0.6)"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#070809"/>
+
+  <!-- Title -->
+  <text x="640" y="50" class="title" text-anchor="middle">SPX Contract Selection Tree</text>
+
+  <!-- ROOT NODE: What's your timeframe? -->
+  <rect x="520" y="90" width="240" height="60" fill="rgba(16, 185, 129, 0.1)" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="640" y="118" class="node-label">What's your timeframe?</text>
+
+  <!-- BRANCH LINES from root -->
+  <line x1="580" y1="150" x2="380" y2="210" stroke="rgba(16, 185, 129, 0.4)" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="700" y1="150" x2="900" y2="210" stroke="rgba(16, 185, 129, 0.4)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- LEFT BRANCH: 0DTE / Intraday -->
+  <rect x="260" y="210" width="240" height="70" fill="rgba(243, 229, 171, 0.15)" stroke="#F3E5AB" stroke-width="2" rx="8"/>
+  <text x="380" y="235" class="node-label">0DTE / Intraday</text>
+  <text x="380" y="258" class="node-small">Expiration: Same day</text>
+
+  <!-- LEFT SUB-DECISION: Directional? -->
+  <rect x="260" y="320" width="240" height="60" fill="rgba(16, 185, 129, 0.1)" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="380" y="348" class="node-label">Directional?</text>
+
+  <!-- Left branch lines -->
+  <line x1="320" y1="380" x2="220" y2="440" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="260" y="415" class="decision">Yes</text>
+
+  <line x1="440" y1="380" x2="540" y2="440" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="500" y="415" class="decision">No</text>
+
+  <!-- Terminal: Single Call/Put -->
+  <rect x="100" y="440" width="240" height="70" fill="#10B981" opacity="0.3" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="220" y="465" class="node-label">Single Call/Put</text>
+  <text x="220" y="490" class="node-small">ATM ± 10 pts</text>
+
+  <!-- Terminal: Vertical Spread -->
+  <rect x="420" y="440" width="240" height="70" fill="#10B981" opacity="0.3" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="540" y="465" class="node-label">Vertical Spread</text>
+  <text x="540" y="490" class="node-small">5-10 pts wide</text>
+
+  <!-- RIGHT BRANCH: Multi-day / Swing -->
+  <rect x="780" y="210" width="240" height="70" fill="rgba(139, 92, 246, 0.15)" stroke="#8B5CF6" stroke-width="2" rx="8"/>
+  <text x="900" y="235" class="node-label">Multi-day / Swing</text>
+  <text x="900" y="258" class="node-small">Expiration: 2-5 DTE</text>
+
+  <!-- RIGHT SUB-DECISION: High conviction? -->
+  <rect x="780" y="320" width="240" height="60" fill="rgba(16, 185, 129, 0.1)" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="900" y="348" class="node-label">High conviction?</text>
+
+  <!-- Right branch lines -->
+  <line x1="840" y1="380" x2="740" y2="440" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="770" y="415" class="decision">Yes</text>
+
+  <line x1="960" y1="380" x2="1060" y2="440" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="1020" y="415" class="decision">No</text>
+
+  <!-- Terminal: Single Option -->
+  <rect x="620" y="440" width="240" height="70" fill="#10B981" opacity="0.3" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="740" y="465" class="node-label">Single Option</text>
+  <text x="740" y="490" class="node-small">Slight OTM</text>
+
+  <!-- Terminal: Defined-Risk Spread -->
+  <rect x="940" y="440" width="240" height="70" fill="#10B981" opacity="0.3" stroke="#10B981" stroke-width="2" rx="8"/>
+  <text x="1060" y="465" class="node-label">Defined-Risk Spread</text>
+  <text x="1060" y="490" class="node-small">Bull/Bear Call/Put</text>
+
+  <!-- Legend / Info box at bottom -->
+  <rect x="200" y="590" width="880" height="100" fill="rgba(16, 185, 129, 0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1" rx="8"/>
+  <text x="220" y="615" class="node-label" text-anchor="start" fill="#10B981">Decision Framework:</text>
+  <text x="220" y="640" class="decision" text-anchor="start" fill="rgba(255,255,255,0.8)">Start with your timeframe and conviction level. 0DTE trades require tighter directional bias. Multi-day trades allow for defined-risk structures.</text>
+  <text x="220" y="665" class="decision" text-anchor="start" fill="rgba(255,255,255,0.8)">All terminal nodes represent valid strategies—choose based on risk tolerance and expected holding period.</text>
+</svg>

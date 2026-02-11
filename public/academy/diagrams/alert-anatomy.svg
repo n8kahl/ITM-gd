@@ -1,0 +1,87 @@
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap');
+      .title { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; fill: white; }
+      .label { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; font-weight: 600; fill: rgba(255,255,255,0.9); }
+      .annotation { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; fill: rgba(255,255,255,0.7); }
+      .value { font-family: 'Inter', system-ui, sans-serif; font-size: 18px; font-weight: 600; fill: white; }
+      .badge { font-family: 'Inter', system-ui, sans-serif; font-size: 12px; font-weight: 700; fill: #070809; }
+    </style>
+    <marker id="annotation-line" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <circle cx="4" cy="4" r="3" fill="rgba(255,255,255,0.5)"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#070809"/>
+
+  <!-- Title -->
+  <text x="640" y="60" class="title" text-anchor="middle">Anatomy of a Trade Alert</text>
+
+  <!-- Main Alert Card -->
+  <rect x="200" y="120" width="520" height="520" fill="rgba(16, 185, 129, 0.05)" stroke="#10B981" stroke-width="2" rx="16"/>
+
+  <!-- Alert Type Badge -->
+  <rect x="230" y="150" width="100" height="32" fill="#10B981" rx="4"/>
+  <text x="280" y="173" class="badge" text-anchor="middle">ENTRY</text>
+
+  <!-- Ticker & Direction -->
+  <text x="350" y="240" class="value">SPX 4520C</text>
+
+  <!-- Strike & Expiration -->
+  <text x="230" y="295" class="label">Strike: 4520</text>
+  <text x="230" y="325" class="label">Expiration: 0DTE</text>
+
+  <!-- Entry Price Range -->
+  <text x="230" y="380" class="label">Entry Price Range</text>
+  <text x="230" y="405" class="value">$4.20 – $4.80</text>
+
+  <!-- Stop Loss -->
+  <text x="230" y="455" class="label">Stop Loss</text>
+  <text x="230" y="480" class="value" fill="#EA5967">$2.50</text>
+
+  <!-- Target(s) -->
+  <text x="230" y="530" class="label">Targets</text>
+  <text x="230" y="555" class="value" fill="#10B981">$8.00 / $12.00</text>
+
+  <!-- Risk/Reward -->
+  <text x="230" y="605" class="label">Risk/Reward</text>
+  <text x="230" y="630" class="value">1:2.5</text>
+
+  <!-- ANNOTATIONS FROM THE RIGHT -->
+
+  <!-- Alert Type annotation -->
+  <line x1="340" y1="166" x2="560" y2="140" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="570" y="145" class="annotation">Alert Type</text>
+
+  <!-- Ticker annotation -->
+  <line x1="450" y1="240" x2="600" y2="200" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="610" y="205" class="annotation">Ticker & Direction</text>
+
+  <!-- Strike annotation -->
+  <line x1="320" y1="295" x2="560" y2="280" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="570" y="285" class="annotation">Strike & Expiration</text>
+
+  <!-- Entry Price annotation -->
+  <line x1="450" y1="405" x2="600" y2="370" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="610" y="375" class="annotation">Entry Price Range</text>
+
+  <!-- Stop Loss annotation (red dot) -->
+  <line x1="280" y1="480" x2="560" y2="490" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="570" y="495" class="annotation" fill="#EA5967">Stop Loss</text>
+
+  <!-- Targets annotation (green dot) -->
+  <line x1="450" y1="555" x2="600" y2="540" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="610" y="545" class="annotation" fill="#10B981">Target(s)</text>
+
+  <!-- Risk/Reward annotation -->
+  <line x1="320" y1="630" x2="560" y2="660" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
+  <text x="570" y="665" class="annotation">Risk/Reward Ratio</text>
+
+  <!-- Context Notes at bottom (spans both sides) -->
+  <rect x="200" y="680" width="900" height="50" fill="rgba(139, 92, 246, 0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1" rx="8"/>
+  <text x="220" y="695" class="label">Context Notes:</text>
+  <text x="450" y="710" class="annotation">SPX holding above VWAP, momentum confirmed by volume</text>
+
+</svg>

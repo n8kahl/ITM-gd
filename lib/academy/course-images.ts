@@ -5,6 +5,40 @@ interface CourseImageInput {
 }
 
 const ILLUSTRATION_MAP: Array<{ keywords: string[]; src: string }> = [
+  // ── Course-specific matches (checked first, most specific) ──
+  {
+    keywords: ['alert'],
+    src: '/academy/illustrations/trade-management.svg',
+  },
+  {
+    keywords: ['spx', '0dte'],
+    src: '/academy/illustrations/exit-discipline.svg',
+  },
+  {
+    keywords: ['leaps', 'long-term positioning'],
+    src: '/academy/illustrations/market-context.svg',
+  },
+  {
+    keywords: ['psychology', 'mindset'],
+    src: '/academy/illustrations/review-reflection.svg',
+  },
+  {
+    keywords: ['titm', 'methodology'],
+    src: '/academy/illustrations/entry-validation.svg',
+  },
+  {
+    keywords: ['greek', 'decoded'],
+    src: '/academy/illustrations/options-basics.svg',
+  },
+  // ── Broader topic matches (fallback for lessons/generic) ──
+  {
+    keywords: ['risk', 'sizing', 'capital', 'drawdown'],
+    src: '/academy/illustrations/risk-sizing.svg',
+  },
+  {
+    keywords: ['option', 'chain', 'premium', 'iv', 'volatility'],
+    src: '/academy/illustrations/options-basics.svg',
+  },
   {
     keywords: ['context', 'market', 'macro', 'framework'],
     src: '/academy/illustrations/market-context.svg',
@@ -14,11 +48,7 @@ const ILLUSTRATION_MAP: Array<{ keywords: string[]; src: string }> = [
     src: '/academy/illustrations/entry-validation.svg',
   },
   {
-    keywords: ['risk', 'sizing', 'position', 'capital', 'drawdown'],
-    src: '/academy/illustrations/risk-sizing.svg',
-  },
-  {
-    keywords: ['manage', 'management', 'trade plan', 'adjust', 'active trade'],
+    keywords: ['manage', 'trade plan', 'adjust', 'active trade'],
     src: '/academy/illustrations/trade-management.svg',
   },
   {
@@ -28,10 +58,6 @@ const ILLUSTRATION_MAP: Array<{ keywords: string[]; src: string }> = [
   {
     keywords: ['review', 'reflection', 'journal', 'debrief', 'mistake'],
     src: '/academy/illustrations/review-reflection.svg',
-  },
-  {
-    keywords: ['option', 'greeks', 'chain', 'premium', 'iv', 'volatility'],
-    src: '/academy/illustrations/options-basics.svg',
   },
 ]
 

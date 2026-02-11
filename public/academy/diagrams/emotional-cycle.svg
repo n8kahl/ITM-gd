@@ -1,0 +1,69 @@
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap');
+      .title { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; fill: white; }
+      .label { font-family: 'Inter', system-ui, sans-serif; font-size: 18px; font-weight: 600; fill: white; }
+      .sublabel { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; fill: rgba(255,255,255,0.8); }
+      .center-text { font-family: 'Inter', system-ui, sans-serif; font-size: 20px; font-weight: 600; fill: #10B981; text-anchor: middle; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="rgba(255,255,255,0.5)"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#070809"/>
+
+  <!-- Title -->
+  <text x="640" y="60" class="title" text-anchor="middle">The Emotional Cycle of Trading</text>
+
+  <!-- Main oval cycle path -->
+  <ellipse cx="640" cy="360" rx="280" ry="200" fill="none" stroke="rgba(16, 185, 129, 0.15)" stroke-width="2" stroke-dasharray="5,5"/>
+
+  <!-- Arrow lines between states (clockwise) -->
+  <path d="M 910 270 Q 950 300 950 360" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 910 450 Q 950 420 950 360" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 640 530 Q 750 550 870 480" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 370 450 Q 250 450 220 360" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 370 270 Q 250 270 220 360" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 640 190 Q 550 150 440 200" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- State 1: Euphoria (top, green) -->
+  <circle cx="640" cy="140" r="45" fill="#10B981" opacity="0.2" stroke="#10B981" stroke-width="2"/>
+  <text x="640" y="135" class="label" text-anchor="middle">Euphoria</text>
+  <text x="640" y="155" class="sublabel" text-anchor="middle">Just hit a winner!</text>
+
+  <!-- State 2: Overconfidence (top-right, champagne) -->
+  <circle cx="870" cy="220" r="45" fill="#F3E5AB" opacity="0.2" stroke="#F3E5AB" stroke-width="2"/>
+  <text x="870" y="215" class="label" text-anchor="middle">Overconfidence</text>
+  <text x="870" y="235" class="sublabel" text-anchor="middle">I can't lose</text>
+
+  <!-- State 3: Reckless Sizing (right, amber) -->
+  <circle cx="950" cy="360" r="45" fill="#D97706" opacity="0.2" stroke="#D97706" stroke-width="2"/>
+  <text x="950" y="355" class="label" text-anchor="middle">Reckless</text>
+  <text x="950" y="375" class="sublabel" text-anchor="middle">Going bigger</text>
+
+  <!-- State 4: Fear (bottom-right, red) -->
+  <circle cx="870" cy="500" r="45" fill="#EA5967" opacity="0.2" stroke="#EA5967" stroke-width="2"/>
+  <text x="870" y="495" class="label" text-anchor="middle">Fear</text>
+  <text x="870" y="515" class="sublabel" text-anchor="middle">Loss mounting</text>
+
+  <!-- State 5: Revenge Trading (bottom, dark red) -->
+  <circle cx="640" cy="580" r="45" fill="#991B1B" opacity="0.2" stroke="#EA5967" stroke-width="2"/>
+  <text x="640" y="575" class="label" text-anchor="middle">Revenge Trading</text>
+  <text x="640" y="595" class="sublabel" text-anchor="middle">Need to make it back</text>
+
+  <!-- State 6: Apathy / Tilt (left, gray) -->
+  <circle cx="410" cy="500" r="45" fill="#6B7280" opacity="0.2" stroke="#6B7280" stroke-width="2"/>
+  <text x="410" y="495" class="label" text-anchor="middle">Apathy</text>
+  <text x="410" y="515" class="sublabel" text-anchor="middle">What's the point?</text>
+
+  <!-- Center message -->
+  <circle cx="640" cy="360" r="120" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2"/>
+  <text x="640" y="350" class="center-text">Break the Cycle:</text>
+  <text x="640" y="380" class="center-text">Follow Your Process</text>
+
+  <!-- Bottom insight -->
+  <text x="640" y="670" class="sublabel" text-anchor="middle">Emotional discipline and process-based decision-making are critical to long-term trading success</text>
+</svg>

@@ -1,0 +1,139 @@
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@700&display=swap');
+      .title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; fill: white; }
+      .step-title { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; font-weight: 600; fill: white; }
+      .step-text { font-family: 'Inter', system-ui, sans-serif; font-size: 12px; font-weight: 400; fill: rgba(255, 255, 255, 0.8); }
+      .label { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 500; fill: rgba(255, 255, 255, 0.8); }
+      .no-trade { font-family: 'Inter', system-ui, sans-serif; font-size: 15px; font-weight: 600; fill: #EA5967; }
+    </style>
+    <linearGradient id="emerald-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10B981;stop-opacity:0.1" />
+      <stop offset="100%" style="stop-color:#10B981;stop-opacity:0.05" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#070809"/>
+
+  <!-- Title -->
+  <text x="640" y="50" text-anchor="middle" class="title">TITM 5-Step Validation</text>
+
+  <!-- Main flow column -->
+  <g id="flow-column">
+    <!-- Step 1: Market Context -->
+    <rect x="80" y="100" width="280" height="100" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2" rx="12"/>
+    <text x="220" y="130" text-anchor="middle" class="step-title">Market Context</text>
+    <text x="90" y="155" class="step-text">• Check macro environment</text>
+    <text x="90" y="172" class="step-text">• Identify trend direction</text>
+    <text x="90" y="189" class="step-text">• Key support/resistance</text>
+
+    <!-- Arrow down -->
+    <line x1="220" y1="200" x2="220" y2="240" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="220,250 215,240 225,240" fill="#10B981"/>
+
+    <!-- Step 2: Setup Identification -->
+    <rect x="80" y="250" width="280" height="100" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2" rx="12"/>
+    <text x="220" y="280" text-anchor="middle" class="step-title">Setup Identification</text>
+    <text x="90" y="305" class="step-text">• Pattern recognition</text>
+    <text x="90" y="322" class="step-text">• Volume confirmation</text>
+    <text x="90" y="339" class="step-text">• Technical alignment</text>
+
+    <!-- Arrow down -->
+    <line x1="220" y1="350" x2="220" y2="390" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="220,400 215,390 225,390" fill="#10B981"/>
+
+    <!-- Step 3: Entry Criteria -->
+    <rect x="80" y="400" width="280" height="100" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2" rx="12"/>
+    <text x="220" y="430" text-anchor="middle" class="step-title">Entry Criteria</text>
+    <text x="90" y="455" class="step-text">• Entry trigger point</text>
+    <text x="90" y="472" class="step-text">• Timing confirmation</text>
+    <text x="90" y="489" class="step-text">• Price action signal</text>
+
+    <!-- Arrow down -->
+    <line x1="220" y1="500" x2="220" y2="540" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="220,550 215,540 225,540" fill="#10B981"/>
+
+    <!-- Step 4: Risk Parameters -->
+    <rect x="80" y="550" width="280" height="100" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2" rx="12"/>
+    <text x="220" y="580" text-anchor="middle" class="step-title">Risk Parameters</text>
+    <text x="90" y="605" class="step-text">• Position sizing</text>
+    <text x="90" y="622" class="step-text">• Stop loss placement</text>
+    <text x="90" y="639" class="step-text">• Max loss definition</text>
+
+    <!-- Arrow down -->
+    <line x1="220" y1="650" x2="220" y2="690" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="220,700 215,690 225,690" fill="#10B981"/>
+  </g>
+
+  <!-- Step 5: Execution (at bottom, same style) -->
+  <rect x="80" y="690" width="280" height="0" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2" rx="12"/>
+  <text x="220" y="720" text-anchor="middle" class="step-title" opacity="0">Execution</text>
+
+  <!-- Execution step repositioned -->
+  <rect x="420" y="590" width="280" height="100" fill="rgba(16, 185, 129, 0.08)" stroke="#10B981" stroke-width="2" rx="12"/>
+  <text x="560" y="620" text-anchor="middle" class="step-title">Execution</text>
+  <text x="430" y="645" class="step-text">• Order type selection</text>
+  <text x="430" y="662" class="step-text">• Fill management</text>
+  <text x="430" y="679" class="step-text">• Position confirmation</text>
+
+  <!-- Curved arrow from Risk Parameters to Execution -->
+  <path d="M 360 600 Q 390 600 420 600" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="420,600 410,595 410,605" fill="#10B981"/>
+
+  <!-- NO TRADE Box on the right side -->
+  <rect x="920" y="300" width="260" height="120" fill="rgba(234, 89, 103, 0.08)" stroke="#EA5967" stroke-width="2.5" rx="12"/>
+  <text x="1050" y="350" text-anchor="middle" class="step-title" fill="#EA5967">NO TRADE</text>
+  <text x="1050" y="380" text-anchor="middle" class="step-text" fill="rgba(234, 89, 103, 0.9)">Validation Failed</text>
+  <text x="1050" y="400" text-anchor="middle" class="label" fill="rgba(234, 89, 103, 0.8)">Wait for Next Setup</text>
+
+  <!-- Fail arrows (red) pointing to NO TRADE from each step -->
+  <!-- From Step 1 -->
+  <path d="M 360 150 Q 600 150 920 360" fill="none" stroke="#EA5967" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+  <text x="620" y="140" class="label" fill="#EA5967" font-size="12">Fail</text>
+
+  <!-- From Step 2 -->
+  <path d="M 360 300 Q 640 300 920 340" fill="none" stroke="#EA5967" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+  <text x="640" y="285" class="label" fill="#EA5967" font-size="12">Fail</text>
+
+  <!-- From Step 3 -->
+  <path d="M 360 450 Q 640 450 920 380" fill="none" stroke="#EA5967" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+  <text x="640" y="435" class="label" fill="#EA5967" font-size="12">Fail</text>
+
+  <!-- From Step 4 -->
+  <path d="M 360 600 Q 640 600 920 400" fill="none" stroke="#EA5967" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+  <text x="640" y="585" class="label" fill="#EA5967" font-size="12">Fail</text>
+
+  <!-- Success indicator box -->
+  <rect x="420" y="100" width="280" height="120" fill="rgba(16, 185, 129, 0.12)" stroke="#10B981" stroke-width="2" rx="12"/>
+  <text x="560" y="135" text-anchor="middle" class="step-title">All Criteria Met?</text>
+  <text x="430" y="160" class="step-text">✓ Market aligned</text>
+  <text x="430" y="177" class="step-text">✓ Setup confirmed</text>
+  <text x="430" y="194" class="step-text">✓ Entry triggered</text>
+  <text x="430" y="211" class="step-text">✓ Risk defined</text>
+
+  <!-- Arrow from validation to execution path -->
+  <path d="M 560 220 Q 560 400 560 590" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="560,600 555,590 565,590" fill="#10B981"/>
+  <text x="575" y="410" class="label" fill="#10B981" font-size="13">Execute</text>
+
+  <!-- Bottom legend/rules box -->
+  <rect x="80" y="200" width="900" height="0" fill="rgba(255, 255, 255, 0.02)" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1" rx="8"/>
+
+  <!-- Process note -->
+  <rect x="760" y="100" width="380" height="180" fill="rgba(255, 255, 255, 0.02)" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1" rx="8"/>
+  <text x="780" y="130" class="label" fill="rgba(255, 255, 255, 0.9)" font-weight="600">TITM Process:</text>
+
+  <text x="780" y="160" class="step-text" fill="rgba(255, 255, 255, 0.75)">1. Start with market context validation</text>
+  <text x="780" y="180" class="step-text" fill="rgba(255, 255, 255, 0.75)">2. Confirm setup with technical signals</text>
+  <text x="780" y="200" class="step-text" fill="rgba(255, 255, 255, 0.75)">3. Wait for entry trigger confirmation</text>
+  <text x="780" y="220" class="step-text" fill="rgba(255, 255, 255, 0.75)">4. Define risk before entry execution</text>
+  <text x="780" y="240" class="step-text" fill="rgba(255, 255, 255, 0.75)">5. Execute only if all steps align</text>
+  <text x="780" y="265" class="step-text" fill="rgba(234, 89, 103, 0.8)" font-weight="500">No setup = No trade (wait next)</text>
+
+  <!-- Flow direction indicator -->
+  <g opacity="0.4">
+    <text x="560" y="720" text-anchor="middle" class="step-text" fill="rgba(255, 255, 255, 0.5)">Vertical Flow ↓ | Fail Paths → | Success ✓</text>
+  </g>
+</svg>

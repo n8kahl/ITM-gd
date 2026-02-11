@@ -21,6 +21,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChunkProgressDots } from '@/components/academy/chunk-progress-dots'
+import { INTERACTIVE_REGISTRY, isInteractiveComponentId } from '@/components/academy/interactive'
+import { AnnotatedChartRenderer } from '@/components/academy/annotated-chart-renderer'
+import { ScenarioWalkthroughRenderer } from '@/components/academy/scenario-walkthrough-renderer'
 
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false })
 const remarkGfm = import('remark-gfm').then((module) => module.default)
@@ -385,6 +388,78 @@ export function LessonChunkRenderer({
       )
     }
 
+    /* ── Interactive component (greek-visualizer, options-chain-trainer, position-sizer) ── */
+    if (chunk.content_type === 'interactive') {
+      let componentId: string | undefined
+      try {
+        const parsed = JSON.parse(chunk.content || '{}')
+        componentId = parsed.component_id
+      } catch {
+        // Ignore malformed JSON
+      }
+
+      if (componentId && isInteractiveComponentId(componentId)) {
+        const InteractiveComponent = INTERACTIVE_REGISTRY[componentId]
+        return (
+          <div className="glass-card-heavy rounded-xl border border-emerald-500/20 p-5">
+            <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-emerald-300">
+              <PlayCircle className="h-4 w-4" />
+              Interactive Tool
+            </div>
+            <InteractiveComponent />
+          </div>
+        )
+      }
+
+      return (
+        <div className="glass-card-heavy rounded-xl border border-white/10 p-5 text-sm text-white/65">
+          Interactive component is not available for this chunk.
+        </div>
+      )
+    }
+
+    /* ── Annotated chart ──────────────────────────────────────────── */
+    if (chunk.content_type === 'annotated_chart') {
+      try {
+        const chartData = JSON.parse(chunk.content || '{}')
+        return (
+          <AnnotatedChartRenderer
+            title={chartData.title || chunk.title}
+            description={chartData.description}
+            data_points={chartData.data_points || []}
+            annotations={chartData.annotations || []}
+          />
+        )
+      } catch {
+        return (
+          <div className="glass-card-heavy rounded-xl border border-white/10 p-5 text-sm text-white/65">
+            Chart data is not available for this chunk.
+          </div>
+        )
+      }
+    }
+
+    /* ── Scenario walkthrough ─────────────────────────────────────── */
+    if (chunk.content_type === 'scenario_walkthrough') {
+      try {
+        const scenarioData = JSON.parse(chunk.content || '{}')
+        return (
+          <ScenarioWalkthroughRenderer
+            title={scenarioData.title || chunk.title}
+            description={scenarioData.description}
+            steps={scenarioData.steps || []}
+          />
+        )
+      } catch {
+        return (
+          <div className="glass-card-heavy rounded-xl border border-white/10 p-5 text-sm text-white/65">
+            Scenario data is not available for this chunk.
+          </div>
+        )
+      }
+    }
+
+    /* ── Default: rich text / markdown ────────────────────────────── */
     return (
       <article className="prose prose-invert prose-emerald max-w-none text-sm prose-p:text-white/75">
         <ReactMarkdown remarkPlugins={remarkPlugins}>{chunk.content || ''}</ReactMarkdown>
