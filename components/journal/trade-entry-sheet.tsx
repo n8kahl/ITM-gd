@@ -50,6 +50,8 @@ interface EntryFormValues {
   lessons_learned: string
   tags: string
   rating: string
+  screenshot_url: string
+  screenshot_storage_path: string
 }
 
 const EMPTY_VALUES: EntryFormValues = {
@@ -86,6 +88,8 @@ const EMPTY_VALUES: EntryFormValues = {
   lessons_learned: '',
   tags: '',
   rating: '',
+  screenshot_url: '',
+  screenshot_storage_path: '',
 }
 
 function toOptionalNumber(value: string): number | null {
@@ -131,6 +135,8 @@ function getInitialValues(editEntry?: JournalEntry | null): EntryFormValues {
     lessons_learned: editEntry.lessons_learned ?? '',
     tags: editEntry.tags.join(', '),
     rating: editEntry.rating?.toString() ?? '',
+    screenshot_url: editEntry.screenshot_url ?? '',
+    screenshot_storage_path: editEntry.screenshot_storage_path ?? '',
   }
 }
 
@@ -232,6 +238,8 @@ export function TradeEntrySheet({
         .map((tag) => tag.trim())
         .filter(Boolean),
       rating: toOptionalNumber(values.rating),
+      screenshot_url: values.screenshot_url || null,
+      screenshot_storage_path: values.screenshot_storage_path || null,
     }
 
     if (editEntry) {
