@@ -25,8 +25,6 @@ import { AnnotatedChartRenderer } from '@/components/academy/annotated-chart-ren
 import { ScenarioWalkthroughRenderer } from '@/components/academy/scenario-walkthrough-renderer'
 import { AcademyMarkdown } from '@/components/academy/academy-markdown'
 
-const remarkGfm = import('remark-gfm').then((module) => module.default)
-
 export interface QuickCheckData {
   question: string
   options: string[]
@@ -110,15 +108,10 @@ export function LessonChunkRenderer({
   lessonId,
   className,
 }: LessonChunkRendererProps) {
-  const [remarkPlugins, setRemarkPlugins] = useState<any[]>([])
   const [completedChunkIndexes, setCompletedChunkIndexes] = useState<number[]>([])
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
   const [reflectionByChunk, setReflectionByChunk] = useState<Record<number, string>>({})
   const [touchStartX, setTouchStartX] = useState<number | null>(null)
-
-  useEffect(() => {
-    remarkGfm.then((plugin) => setRemarkPlugins([plugin]))
-  }, [])
 
   const chunk = chunks[currentChunkIndex] || null
   const quickCheck = chunk ? parseQuickCheck(chunk) : null

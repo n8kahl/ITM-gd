@@ -89,5 +89,6 @@ export interface TargetableUser {
   user_id: string
   discord_username: string | null
   discord_avatar: string | null
+  discord_user_id: string | null
   has_subscription: boolean
 }
