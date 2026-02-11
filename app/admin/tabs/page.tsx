@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertCircle,
@@ -62,6 +62,7 @@ export default function AdminTabsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const feedbackRef = useRef<HTMLDivElement>(null)
 
   const loadTabs = useCallback(async () => {
     setLoading(true)
@@ -87,6 +88,12 @@ export default function AdminTabsPage() {
   useEffect(() => {
     loadTabs()
   }, [loadTabs])
+
+  useEffect(() => {
+    if ((error || success) && feedbackRef.current) {
+      feedbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [error, success])
 
   const updateTab = (index: number, patch: Partial<TabConfig>) => {
     setTabs((prev) => {
@@ -228,19 +235,21 @@ export default function AdminTabsPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
+      <div ref={feedbackRef}>
+        {error && (
+          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
 
-      {success && (
-        <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-emerald-400">{success}</p>
-        </div>
-      )}
+        {success && (
+          <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-emerald-400">{success}</p>
+          </div>
+        )}
+      </div>
 
       <Card className="bg-[#0a0a0b] border-white/10">
         <CardHeader>

@@ -77,7 +77,7 @@ function addSecurityHeaders(response: NextResponse, nonce: string): NextResponse
 }
 
 // Prefixes that require authentication / authorization checks
-const AUTH_PREFIXES = ['/admin', '/members', '/join-discord', '/login', '/auth/callback', '/api/auth/callback']
+const AUTH_PREFIXES = ['/api/admin', '/admin', '/members', '/join-discord', '/login', '/auth/callback', '/api/auth/callback']
 
 function requiresAuth(pathname: string): boolean {
   return AUTH_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))

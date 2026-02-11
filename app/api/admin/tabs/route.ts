@@ -10,12 +10,28 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-async function requireAdmin(): Promise<{ authorized: boolean; userId?: string }> {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return { authorized: false }
-  const isAdmin = user.app_metadata?.is_admin === true
-  return { authorized: isAdmin, userId: user.id }
+async function requireAdmin(): Promise<{ authorized: boolean; userId?: string; reason?: string }> {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) {
+      console.error('[Admin Tabs API] Auth error:', error.message)
+      return { authorized: false, reason: 'session_expired' }
+    }
+    if (!user) {
+      console.error('[Admin Tabs API] No user in session')
+      return { authorized: false, reason: 'no_session' }
+    }
+    const isAdmin = user.app_metadata?.is_admin === true
+    if (!isAdmin) {
+      console.error('[Admin Tabs API] User is not admin:', user.id)
+      return { authorized: false, reason: 'not_admin' }
+    }
+    return { authorized: true, userId: user.id }
+  } catch (err) {
+    console.error('[Admin Tabs API] requireAdmin exception:', err)
+    return { authorized: false, reason: 'auth_error' }
+  }
 }
 
 /**
@@ -23,10 +39,13 @@ async function requireAdmin(): Promise<{ authorized: boolean; userId?: string }>
  */
 export async function GET() {
   try {
-    const { authorized } = await requireAdmin()
+    const { authorized, reason } = await requireAdmin()
     if (!authorized) {
+      const message = reason === 'session_expired' || reason === 'no_session'
+        ? 'Your session has expired. Please refresh the page and try again.'
+        : 'Admin access required'
       return NextResponse.json(
-        { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin access required' } },
+        { success: false, error: { code: 'UNAUTHORIZED', message } },
         { status: 403 }
       )
     }
@@ -59,10 +78,13 @@ export async function GET() {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const { authorized, userId } = await requireAdmin()
+    const { authorized, userId, reason } = await requireAdmin()
     if (!authorized) {
+      const message = reason === 'session_expired' || reason === 'no_session'
+        ? 'Your session has expired. Please refresh the page and try again.'
+        : 'Admin access required'
       return NextResponse.json(
-        { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin access required' } },
+        { success: false, error: { code: 'UNAUTHORIZED', message } },
         { status: 403 }
       )
     }
