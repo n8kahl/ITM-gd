@@ -70,7 +70,7 @@ export function JournalFilterBar({ filters, onChange, availableTags }: JournalFi
 
   return (
     <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <input
           type="date"
           value={filters.startDate ?? ''}
@@ -130,7 +130,7 @@ export function JournalFilterBar({ filters, onChange, availableTags }: JournalFi
         </select>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <select
           value={filters.sortBy}
           onChange={(event) => handleSortByChange(event.target.value as JournalFilters['sortBy'])}

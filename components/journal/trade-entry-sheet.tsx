@@ -269,9 +269,9 @@ export function TradeEntrySheet({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 w-full max-w-4xl rounded-t-xl border border-white/10 bg-[#101315] p-4 sm:rounded-xl"
+        className="relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-white/10 bg-[#101315] sm:max-h-[90vh] sm:rounded-xl"
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-white/10 bg-[#101315] pb-4">
           <div>
             <h2 className="text-base font-semibold text-ivory">{editEntry ? 'Edit Trade' : 'New Trade'}</h2>
             <p className="text-xs text-muted-foreground">Manual entry only. Session prefill is removed in V2.</p>
@@ -287,24 +287,25 @@ export function TradeEntrySheet({
           </button>
         </div>
 
-        <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setMode('quick')}
-            className={`rounded-md px-3 py-1.5 text-xs ${mode === 'quick' ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
-          >
-            Quick Form
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('full')}
-            className={`rounded-md px-3 py-1.5 text-xs ${mode === 'full' ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
-          >
-            Full Form
-          </button>
-        </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+          <div className="mb-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('quick')}
+              className={`rounded-md px-3 py-1.5 text-xs ${mode === 'quick' ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
+            >
+              Quick Form
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('full')}
+              className={`rounded-md px-3 py-1.5 text-xs ${mode === 'full' ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
+            >
+              Full Form
+            </button>
+          </div>
 
-        {mode === 'quick' ? (
+          {mode === 'quick' ? (
           <QuickEntryForm
             symbol={values.symbol}
             direction={values.direction}
@@ -321,34 +322,37 @@ export function TradeEntrySheet({
             onPnlChange={(value) => updateValue('pnl', value)}
             onSave={handleSave}
           />
-        ) : (
-          <div className="space-y-4">
-            <FullEntryForm
-              values={values}
-              symbolError={symbolError}
-              disabled={!canSave}
-              onChange={updateValue}
-            />
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="h-10 rounded-md border border-white/10 px-4 text-sm text-muted-foreground hover:text-ivory"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
+          ) : (
+            <>
+              <FullEntryForm
+                values={values}
+                symbolError={symbolError}
                 disabled={!canSave}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save
-              </button>
-            </div>
+                onChange={updateValue}
+              />
+            </>
+          )}
+        </div>
+
+        {mode === 'full' && (
+          <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end gap-2 border-t border-white/10 bg-[#101315] p-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="h-10 rounded-md border border-white/10 px-4 text-sm text-muted-foreground hover:text-ivory"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save
+            </button>
           </div>
         )}
 
