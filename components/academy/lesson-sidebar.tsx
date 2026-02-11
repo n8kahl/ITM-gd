@@ -138,7 +138,7 @@ export function LessonSidebar({
 
       {/* Mark complete button */}
       {onMarkComplete && (
-        <div className="p-4 border-t border-white/5">
+        <div className="shrink-0 border-t border-white/5 bg-[#0A0A0B]/90 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-4">
           <button
             data-testid="sidebar-mark-complete"
             onClick={onMarkComplete}

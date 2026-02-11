@@ -146,7 +146,7 @@ export function AiTutorPanel({
         onClick={() => setIsOpen(true)}
         className={cn(
           'fixed z-40',
-          'bottom-24 right-4 lg:bottom-6 lg:right-6',
+          'bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 lg:bottom-6 lg:right-6',
           'w-12 h-12 rounded-full',
           'bg-emerald-500 hover:bg-emerald-600 text-white',
           'shadow-lg shadow-emerald-500/25',
@@ -184,7 +184,7 @@ export function AiTutorPanel({
             className={cn(
               'fixed z-50',
               // Mobile: bottom sheet style
-              'bottom-0 left-0 right-0 h-[75vh]',
+              'bottom-0 left-0 right-0 h-[min(82dvh,760px)]',
               // Desktop: right sidebar
               'lg:top-6 lg:right-6 lg:left-auto lg:bottom-6 lg:h-auto lg:max-h-[calc(100dvh-3rem)] lg:w-[380px]',
               'flex flex-col',

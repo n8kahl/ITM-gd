@@ -409,7 +409,7 @@ export default function LessonPage() {
   }
 
   return (
-    <div className="relative space-y-3 lg:flex lg:h-[calc(100dvh-10.75rem)] lg:flex-col lg:space-y-3 lg:overflow-hidden">
+    <div className="relative flex min-h-[calc(100dvh-6.5rem)] flex-col gap-3 overflow-hidden lg:min-h-[calc(100dvh-7.5rem)]">
       <div className="flex flex-wrap items-center justify-between gap-3 lg:shrink-0">
         <div className="flex min-w-0 items-center gap-2 text-xs text-white/45">
           <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
@@ -458,7 +458,7 @@ export default function LessonPage() {
         {showSidebar ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      <div className="flex min-h-[calc(100vh-7rem)] rounded-2xl border border-white/10 bg-[#0A0A0B]/55 backdrop-blur-xl overflow-hidden lg:min-h-0 lg:flex-1">
+      <div className="flex min-h-0 flex-1 rounded-2xl border border-white/10 bg-[#0A0A0B]/55 backdrop-blur-xl overflow-hidden">
         {/* Sidebar - Desktop always visible, Mobile toggleable */}
         <div
           className={cn(
