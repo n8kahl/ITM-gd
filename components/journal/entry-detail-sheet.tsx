@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Pencil, Star, Trash2, X } from 'lucide-react'
-import type { JournalEntry } from '@/lib/types/journal'
+import { Loader2, Pencil, Star, Trash2, X } from 'lucide-react'
+import type { AITradeAnalysis, JournalEntry } from '@/lib/types/journal'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
+import { AIGradeDisplay } from '@/components/journal/ai-grade-display'
+import { DeleteConfirmationModal } from '@/components/journal/delete-confirmation-modal'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 
 interface EntryDetailSheetProps {
   entry: JournalEntry | null
@@ -40,20 +43,19 @@ export function EntryDetailSheet({
   disableActions = false,
 }: EntryDetailSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const modalRef = useRef<HTMLDivElement>(null)
   const [confirmEntryId, setConfirmEntryId] = useState<string | null>(null)
+  const [grading, setGrading] = useState(false)
+  const [localEntry, setLocalEntry] = useState<JournalEntry | null>(entry)
   const confirmOpen = Boolean(entry?.id && confirmEntryId === entry.id)
+
+  useEffect(() => {
+    setLocalEntry(entry)
+  }, [entry])
 
   useFocusTrap({
     active: Boolean(entry) && !confirmOpen,
     containerRef: panelRef,
     onEscape: onClose,
-  })
-
-  useFocusTrap({
-    active: confirmOpen,
-    containerRef: modalRef,
-    onEscape: () => setConfirmEntryId(null),
   })
 
   useEffect(() => {
@@ -67,7 +69,47 @@ export function EntryDetailSheet({
     }
   }, [entry])
 
+  const handleGrade = async () => {
+    if (!entry || grading) return
+
+    setGrading(true)
+
+    try {
+      const supabase = createBrowserSupabase()
+      const response = await fetch('/api/members/journal/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryIds: [entry.id] }),
+      })
+
+      if (!response.ok) {
+        console.error('Failed to grade trade:', response.statusText)
+        setGrading(false)
+        return
+      }
+
+      const result = await response.json()
+      const aiAnalysis = result?.data?.[0]?.ai_analysis as AITradeAnalysis | undefined
+
+      if (aiAnalysis) {
+        // Update local entry with AI analysis
+        setLocalEntry((prev) => (prev ? { ...prev, ai_analysis: aiAnalysis } : null))
+
+        // Update in database
+        await supabase
+          .from('journal_entries')
+          .update({ ai_analysis: aiAnalysis })
+          .eq('id', entry.id)
+      }
+    } catch (error) {
+      console.error('Grade trade failed:', error)
+    } finally {
+      setGrading(false)
+    }
+  }
+
   if (!entry || typeof document === 'undefined') return null
+  const displayEntry = localEntry || entry
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center">
@@ -81,8 +123,8 @@ export function EntryDetailSheet({
       >
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-ivory">{entry.symbol} Trade</h2>
-            <p className="text-xs text-muted-foreground">{formatDate(entry.trade_date)}</p>
+            <h2 className="text-base font-semibold text-ivory">{displayEntry.symbol} Trade</h2>
+            <p className="text-xs text-muted-foreground">{formatDate(displayEntry.trade_date)}</p>
           </div>
           <button
             type="button"
@@ -95,28 +137,28 @@ export function EntryDetailSheet({
         </div>
 
         <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
-          <Info label="Direction" value={entry.direction.toUpperCase()} />
-          <Info label="Contract" value={entry.contract_type.toUpperCase()} />
-          <Info label="Entry Price" value={entry.entry_price == null ? '—' : `$${entry.entry_price}`} />
-          <Info label="Exit Price" value={entry.exit_price == null ? '—' : `$${entry.exit_price}`} />
-          <Info label="P&L" value={formatCurrency(entry.pnl)} />
-          <Info label="P&L %" value={entry.pnl_percentage == null ? '—' : `${entry.pnl_percentage.toFixed(2)}%`} />
-          <Info label="Open Position" value={entry.is_open ? 'Yes' : 'No'} />
-          <Info label="Favorite" value={entry.is_favorite ? 'Yes' : 'No'} />
+          <Info label="Direction" value={displayEntry.direction.toUpperCase()} />
+          <Info label="Contract" value={displayEntry.contract_type.toUpperCase()} />
+          <Info label="Entry Price" value={displayEntry.entry_price == null ? '—' : `$${displayEntry.entry_price}`} />
+          <Info label="Exit Price" value={displayEntry.exit_price == null ? '—' : `$${displayEntry.exit_price}`} />
+          <Info label="P&L" value={formatCurrency(displayEntry.pnl)} />
+          <Info label="P&L %" value={displayEntry.pnl_percentage == null ? '—' : `${displayEntry.pnl_percentage.toFixed(2)}%`} />
+          <Info label="Open Position" value={displayEntry.is_open ? 'Yes' : 'No'} />
+          <Info label="Favorite" value={displayEntry.is_favorite ? 'Yes' : 'No'} />
         </div>
 
         <div className="mt-4 space-y-3 overflow-y-auto pr-1">
-          {entry.strategy ? <TextBlock label="Strategy" value={entry.strategy} /> : null}
-          {entry.setup_notes ? <TextBlock label="Setup Notes" value={entry.setup_notes} /> : null}
-          {entry.execution_notes ? <TextBlock label="Execution Notes" value={entry.execution_notes} /> : null}
-          {entry.lessons_learned ? <TextBlock label="Lessons Learned" value={entry.lessons_learned} /> : null}
-          {entry.deviation_notes ? <TextBlock label="Deviation Notes" value={entry.deviation_notes} /> : null}
+          {displayEntry.strategy ? <TextBlock label="Strategy" value={displayEntry.strategy} /> : null}
+          {displayEntry.setup_notes ? <TextBlock label="Setup Notes" value={displayEntry.setup_notes} /> : null}
+          {displayEntry.execution_notes ? <TextBlock label="Execution Notes" value={displayEntry.execution_notes} /> : null}
+          {displayEntry.lessons_learned ? <TextBlock label="Lessons Learned" value={displayEntry.lessons_learned} /> : null}
+          {displayEntry.deviation_notes ? <TextBlock label="Deviation Notes" value={displayEntry.deviation_notes} /> : null}
 
-          {entry.tags.length > 0 ? (
+          {displayEntry.tags.length > 0 ? (
             <div>
               <p className="mb-1 text-xs text-muted-foreground">Tags</p>
               <div className="flex flex-wrap gap-2">
-                {entry.tags.map((tag) => (
+                {displayEntry.tags.map((tag) => (
                   <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-ivory">
                     {tag}
                   </span>
@@ -125,19 +167,19 @@ export function EntryDetailSheet({
             </div>
           ) : null}
 
-          {entry.ai_analysis ? (
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-              <p className="mb-2 text-xs text-muted-foreground">AI Grade</p>
-              <div className="flex items-center gap-2 text-sm text-ivory">
-                <Star className="h-4 w-4 text-amber-300" />
-                Grade {entry.ai_analysis.grade}
-              </div>
-              <p className="mt-2 text-xs text-ivory/80">{entry.ai_analysis.entry_quality}</p>
-            </div>
-          ) : null}
+          {displayEntry.ai_analysis && <AIGradeDisplay analysis={displayEntry.ai_analysis} />}
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
+          <button
+            type="button"
+            onClick={handleGrade}
+            disabled={disableActions || grading || Boolean(displayEntry.ai_analysis)}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {grading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
+            {displayEntry.ai_analysis ? 'Graded' : grading ? 'Grading...' : 'Grade Trade'}
+          </button>
           <button
             type="button"
             onClick={() => onEdit(entry)}
@@ -159,43 +201,21 @@ export function EntryDetailSheet({
         </div>
       </div>
 
-      {confirmOpen ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
-          <div
-            ref={modalRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm delete"
-            className="w-full max-w-md rounded-lg border border-white/10 bg-[#111416] p-4"
-          >
-            <h3 className="text-sm font-semibold text-ivory">Delete trade entry?</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {entry.symbol} on {formatDate(entry.trade_date)} with P&L {formatCurrency(entry.pnl)} will be permanently removed.
-            </p>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmEntryId(null)}
-                className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onDelete(entry.id)
-                  setConfirmEntryId(null)
-                  onClose()
-                }}
-                className="h-10 rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-500"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {confirmOpen && (
+        <DeleteConfirmationModal
+          entry={{
+            symbol: displayEntry.symbol,
+            trade_date: displayEntry.trade_date,
+            pnl: displayEntry.pnl,
+          }}
+          onConfirm={() => {
+            onDelete(entry.id)
+            setConfirmEntryId(null)
+            onClose()
+          }}
+          onCancel={() => setConfirmEntryId(null)}
+        />
+      )}
     </div>,
     document.body,
   )
