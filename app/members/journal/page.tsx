@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import Link from 'next/link'
-import { BarChart3, Plus, Upload } from 'lucide-react'
+import { BarChart3, ImagePlus, Plus, Upload } from 'lucide-react'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
@@ -11,6 +11,7 @@ import { JournalCardView } from '@/components/journal/journal-card-view'
 import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
 import { ImportWizard } from '@/components/journal/import-wizard'
+import { ScreenshotQuickAdd } from '@/components/journal/screenshot-quick-add'
 import { readCachedJournalEntries, writeCachedJournalEntries } from '@/lib/journal/offline-storage'
 import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
@@ -85,6 +86,7 @@ export default function JournalPage() {
   const [showImportWizard, setShowImportWizard] = useState(false)
 
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [screenshotQuickAddOpen, setScreenshotQuickAddOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<JournalEntry | null>(null)
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
 
@@ -303,6 +305,16 @@ export default function JournalPage() {
 
           <button
             type="button"
+            onClick={() => setScreenshotQuickAddOpen(true)}
+            disabled={disableActions}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <ImagePlus className="h-4 w-4" />
+            Screenshot
+          </button>
+
+          <button
+            type="button"
             onClick={() => {
               setEditEntry(null)
               setSheetOpen(true)
@@ -390,6 +402,15 @@ export default function JournalPage() {
         onSave={handleSave}
         editEntry={editEntry}
         disabled={disableActions}
+      />
+
+      <ScreenshotQuickAdd
+        open={screenshotQuickAddOpen}
+        onClose={() => setScreenshotQuickAddOpen(false)}
+        onEntryCreated={() => {
+          setScreenshotQuickAddOpen(false)
+          void loadEntries()
+        }}
       />
 
       <EntryDetailSheet
