@@ -60,6 +60,11 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, isAuthenticated, isNotMember, router])
 
+  // Custom route transitions can bypass the default scroll reset.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+
   // Loading state — pulsing logo
   if (isLoading) {
     return (
@@ -118,24 +123,6 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
           exit: { opacity: 0, x: 0, y: -8, scale: 0.995, filter: 'blur(3px)' },
         }
 
-  const backgroundVariants = prefersReducedMotion
-    ? {
-        initial: { opacity: 0.25, x: 0 },
-        animate: { opacity: 0.25, x: 0 },
-        exit: { opacity: 0.25, x: 0 },
-      }
-    : isMobile
-      ? {
-          initial: { opacity: 0.14, x: -18 },
-          animate: { opacity: 0.22, x: 0 },
-          exit: { opacity: 0.1, x: 12 },
-        }
-      : {
-          initial: { opacity: 0.18, x: 0 },
-          animate: { opacity: 0.28, x: 0 },
-          exit: { opacity: 0.15, x: 0 },
-        }
-
   const transition = prefersReducedMotion ? { duration: 0 } : LUXURY_SPRING
 
   return (
@@ -151,21 +138,14 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
         'min-h-screen relative overflow-hidden',
         'lg:pl-[280px]', // offset for sidebar
       )}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`members-bg-${pathname}`}
-            className="pointer-events-none absolute inset-0"
-            variants={backgroundVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={transition}
-            style={{
-              background:
-                'radial-gradient(90% 70% at 15% 5%, rgba(16,185,129,0.12), transparent 60%)',
-            }}
-          />
-        </AnimatePresence>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-60"
+          style={{
+            background:
+              'radial-gradient(55% 42% at 8% 0%, rgba(16,185,129,0.09), transparent 70%)',
+          }}
+        />
 
         <main className="px-4 py-4 lg:px-8 lg:py-6 pb-28 lg:pb-8">
           <AnimatePresence mode="wait">
