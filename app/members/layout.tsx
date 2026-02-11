@@ -12,7 +12,6 @@ import { MobileTopBar } from '@/components/members/mobile-top-bar'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 import { useIsMobile } from '@/hooks/use-is-mobile'
-import { LUXURY_SPRING } from '@/lib/motion-primitives'
 
 // ============================================
 // LAYOUT WRAPPER WITH PROVIDER
@@ -115,15 +114,19 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       ? {
           initial: { opacity: 0.85, x: 28, y: 0, scale: 1, filter: 'blur(2px)' },
           animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' },
-          exit: { opacity: 0.8, x: -18, y: 0, scale: 1, filter: 'blur(1px)' },
+          exit: { opacity: 0, x: -18, y: 0, scale: 1 },
         }
       : {
           initial: { opacity: 0, x: 0, y: 10, scale: 0.99, filter: 'blur(4px)' },
           animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' },
-          exit: { opacity: 0, x: 0, y: -8, scale: 0.995, filter: 'blur(3px)' },
+          exit: { opacity: 0, x: 0, y: -6, scale: 1 },
         }
 
-  const transition = prefersReducedMotion ? { duration: 0 } : LUXURY_SPRING
+  // Tween with fixed duration — spring + blur on exit caused AnimatePresence
+  // mode="wait" to stall indefinitely, blocking incoming page navigation.
+  const transition = prefersReducedMotion
+    ? { duration: 0 }
+    : { type: 'tween' as const, duration: 0.2, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] }
 
   return (
     <div className="min-h-screen bg-[#0A0A0B]">

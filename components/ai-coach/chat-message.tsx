@@ -241,6 +241,10 @@ function MarkdownRenderer({ content }: { content: string }) {
             {children}
           </blockquote>
         ),
+        // Images — suppress broken markdown images; charts use show_chart() function calls
+        img: ({ alt }) => alt ? (
+          <span className="text-xs text-white/40 italic">{alt}</span>
+        ) : null,
       }}
     >
       {sanitized}
