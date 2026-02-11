@@ -325,7 +325,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   // Chart state
   const [chartSymbol, setChartSymbol] = useState('SPX')
-  const [chartTimeframe, setChartTimeframe] = useState<ChartTimeframe>('1D')
+  const [chartTimeframe, setChartTimeframe] = useState<ChartTimeframe>('5m')
   const [chartBars, setChartBars] = useState<ChartBar[]>([])
   const [chartLevels, setChartLevels] = useState<LevelAnnotation[]>([])
   const [chartProviderIndicators, setChartProviderIndicators] = useState<ChartProviderIndicators | null>(null)

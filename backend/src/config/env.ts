@@ -27,7 +27,7 @@ const envSchema = z.object({
   CHAT_MODEL: z.string().default('gpt-4o'),
   MAX_TOKENS: z.string().default('1000').transform(Number),
   TEMPERATURE: z.string().default('0.7').transform(Number),
-  MAX_TOTAL_TOKENS_PER_REQUEST: z.string().default('4000').transform(Number),
+  MAX_TOTAL_TOKENS_PER_REQUEST: z.string().default('8000').transform(Number),
 
   // Supabase
   SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),

@@ -28,6 +28,7 @@ import {
   chatAction,
   copyAction,
   optionsAction,
+  viewAction,
 } from './widget-actions'
 import type { PositionType } from '@/lib/api/ai-coach'
 
@@ -90,6 +91,44 @@ function parseNullableNumeric(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
+}
+
+function formatPrice(value: unknown, digits = 2): string {
+  const numeric = parseNullableNumeric(value)
+  if (numeric == null) return '—'
+  return `$${numeric.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
+}
+
+function formatTime(value: unknown): string {
+  if (typeof value !== 'string' || !value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function premiumCardClass(extra: string): string {
+  return cn(
+    'glass-card-heavy relative mt-2 overflow-hidden rounded-xl border bg-gradient-to-b from-white/[0.04] to-black/25 p-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)]',
+    'before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.06),transparent_42%)]',
+    extra,
+  )
+}
+
+function pillClass(tone: 'neutral' | 'success' | 'danger' | 'warning' | 'info' = 'neutral'): string {
+  if (tone === 'success') return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+  if (tone === 'danger') return 'border-red-500/25 bg-red-500/10 text-red-300'
+  if (tone === 'warning') return 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+  if (tone === 'info') return 'border-sky-500/25 bg-sky-500/10 text-sky-300'
+  return 'border-white/15 bg-white/5 text-white/55'
+}
+
+function normalizeActions(actions: WidgetAction[]): WidgetAction[] {
+  const unique = new Map<string, WidgetAction>()
+  for (const action of actions) {
+    const key = `${action.label}:${action.variant || 'secondary'}`
+    if (!unique.has(key)) unique.set(key, action)
+  }
+  return Array.from(unique.values()).slice(0, 5)
 }
 
 // ============================================
@@ -171,16 +210,18 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
 
 function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   const symbol = data.symbol as string || 'SPX'
-  const currentPrice = data.currentPrice as number || 0
+  const currentPrice = parseNumeric(data.currentPrice)
   const resistance = (data.resistance as Array<{ name: string; price: number; distance?: string }>) || []
   const support = (data.support as Array<{ name: string; price: number; distance?: string }>) || []
   const vwap = data.vwap as number | undefined
   const atr = data.atr14 as number | undefined
-  const cardActions: WidgetAction[] = [
+  const cardActions: WidgetAction[] = normalizeActions([
     chartAction(symbol, currentPrice, '1D', 'Current Price'),
     optionsAction(symbol, currentPrice),
+    alertAction(symbol, currentPrice, 'level_approach', `${symbol} key-level sweep`),
     chatAction(`Summarize ${symbol} key levels and likely scenarios around ${currentPrice.toFixed(2)}.`),
-  ]
+    copyAction(`${symbol} key levels | Spot ${currentPrice.toFixed(2)} | R: ${resistance.slice(0, 2).map((level) => `${level.name} ${level.price}`).join(', ')} | S: ${support.slice(0, 2).map((level) => `${level.name} ${level.price}`).join(', ')}`),
+  ])
 
   const levelActions = (level: { name: string; price: number }, side: 'support' | 'resistance'): WidgetAction[] => ([
     chartAction(symbol, level.price, '1D', level.name),
@@ -195,19 +236,24 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <Target className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-medium text-white">{symbol} Key Levels</span>
         </div>
-        <span className="text-xs font-mono text-white/80">${currentPrice.toLocaleString()}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('neutral'))}>
+            {resistance.length + support.length} levels
+          </span>
+          <span className="text-xs font-mono text-white/80">{formatPrice(currentPrice)}</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px]">
         {/* Resistance */}
         <div className="space-y-1">
-          <p className="text-[10px] text-red-400/60 font-medium uppercase">Resistance</p>
+          <p className="text-[9px] text-red-400/70 font-semibold uppercase tracking-[0.12em]">Resistance</p>
           {resistance.slice(0, 3).map((level) => (
             <WidgetContextMenu key={level.name} actions={levelActions(level, 'resistance')}>
               <button
@@ -216,7 +262,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
                 className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
               >
                 <span className="text-red-400">{level.name}</span>
-                <span className="font-mono text-white/60">${level.price.toLocaleString()}</span>
+                <span className="font-mono text-white/60">{formatPrice(level.price)}</span>
               </button>
             </WidgetContextMenu>
           ))}
@@ -224,7 +270,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
 
         {/* Support */}
         <div className="space-y-1">
-          <p className="text-[10px] text-emerald-400/60 font-medium uppercase">Support</p>
+          <p className="text-[9px] text-emerald-400/70 font-semibold uppercase tracking-[0.12em]">Support</p>
           {support.slice(0, 3).map((level) => (
             <WidgetContextMenu key={level.name} actions={levelActions(level, 'support')}>
               <button
@@ -233,7 +279,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
                 className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
               >
                 <span className="text-emerald-400">{level.name}</span>
-                <span className="font-mono text-white/60">${level.price.toLocaleString()}</span>
+                <span className="font-mono text-white/60">{formatPrice(level.price)}</span>
               </button>
             </WidgetContextMenu>
           ))}
@@ -243,7 +289,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
       {/* Indicators row */}
       {(vwap || atr) && (
         <div className="mt-2 pt-2 border-t border-white/5 flex gap-3 text-[10px] text-white/40">
-          {vwap && <span>VWAP: <span className="text-yellow-400 font-mono">${vwap.toLocaleString()}</span></span>}
+          {vwap && <span>VWAP: <span className="text-yellow-400 font-mono">{formatPrice(vwap)}</span></span>}
           {atr && <span>ATR14: <span className="text-white/60 font-mono">{atr.toFixed(2)}</span></span>}
         </div>
       )}
@@ -267,8 +313,10 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
   const currentValue = parseNumeric(data.currentValue)
   const greeks = data.greeks as { delta?: number; theta?: number; gamma?: number; vega?: number } | undefined
   const pnlPositive = pnl >= 0
+  const riskTone = pnlPct <= -15 ? 'danger' : pnlPct >= 15 ? 'success' : 'neutral'
+  const riskLabel = pnlPct <= -15 ? 'Drawdown' : pnlPct >= 15 ? 'In Profit' : 'Active'
   const entryPrice = parseNumeric(data.entryPrice) || undefined
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, strike),
     optionsAction(symbol, strike, expiry),
     analyzeAction({
@@ -280,24 +328,31 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
       entryPrice: entryPrice || 1,
       entryDate: new Date().toISOString().slice(0, 10),
     }),
-  ]
+    strike != null ? alertAction(symbol, strike, 'level_approach', `${symbol} ${strike} strike watch`) : chatAction(`Create a risk alert plan for this ${symbol} position.`, 'Risk Plan'),
+    chatAction(`What is the best management plan for this ${symbol} ${type.toUpperCase()} right now?`, 'Get Advice'),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-medium text-white">{symbol} {type.toUpperCase()}</span>
           {strike && <span className="text-[10px] text-white/40">${strike}</span>}
         </div>
-        {expiry && <span className="text-[10px] text-white/40">{expiry}</span>}
+        <div className="flex items-center gap-1.5">
+          {expiry && <span className="text-[10px] text-white/40">{expiry}</span>}
+          <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass(riskTone))}>
+            {riskLabel}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center justify-between mb-2">
         <div>
           <p className="text-[10px] text-white/40">P&L</p>
           <p className={cn('text-sm font-bold', pnlPositive ? 'text-emerald-400' : 'text-red-400')}>
-            {pnlPositive ? '+' : ''}${pnl.toFixed(2)}
+            {pnlPositive ? '+' : '-'}${Math.abs(pnl).toFixed(2)}
           </p>
         </div>
         <div className={cn(
@@ -310,7 +365,7 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
       </div>
 
       <div className="text-[10px] text-white/40">
-        Value: <span className="text-white/60 font-mono">${currentValue.toFixed(2)}</span>
+        Value: <span className="text-white/60 font-mono">{formatPrice(currentValue)}</span>
       </div>
 
       {greeks && (
@@ -340,16 +395,21 @@ function PnLTrackerCard({ data }: { data: Record<string, unknown> }) {
     delta?: number; gamma?: number; theta?: number; vega?: number
   } | undefined
   const positive = totalPnl >= 0
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
+    viewAction('position', 'Open Analyzer'),
+    viewAction('journal', 'Open Journal'),
     chatAction('Summarize my portfolio risk and what to manage first.'),
-  ]
+    copyAction(`Portfolio PnL ${positive ? '+' : ''}${totalPnl.toFixed(2)} (${totalPnlPct.toFixed(2)}%), Value ${totalValue.toFixed(2)}`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center gap-1.5 mb-2">
         <Activity className="w-3.5 h-3.5 text-emerald-500" />
         <span className="text-xs font-medium text-white">Portfolio P&L</span>
-        <span className="text-[10px] text-white/30 ml-auto">{positionCount} positions</span>
+        <span className={cn('ml-auto rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass(positive ? 'success' : 'danger'))}>
+          {positionCount} positions
+        </span>
       </div>
 
       <div className="flex items-center justify-between">
@@ -412,26 +472,30 @@ function MarketOverviewCard({ data }: { data: Record<string, unknown> }) {
     'after-hours': 'text-blue-400 bg-blue-500/10',
     closed: 'text-white/40 bg-white/5',
   }
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     chartAction('SPX'),
+    viewAction(status === 'pre-market' ? 'brief' : 'macro', status === 'pre-market' ? 'Open Brief' : 'Open Macro', 'SPX'),
     chatAction('Given current market status, what trading approach should I prioritize?'),
-  ]
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-medium text-white">Market Status</span>
         </div>
         <span className={cn(
-          'px-2 py-0.5 rounded text-[10px] font-medium capitalize',
+          'rounded border px-2 py-0.5 text-[10px] font-medium capitalize',
           statusColors[status] || statusColors.closed
         )}>
           {status}
         </span>
       </div>
       <p className="text-xs text-white/60">{message}</p>
+      {session && session !== 'none' && (
+        <p className="mt-1 text-[10px] text-white/35 uppercase tracking-[0.1em]">Session: {session}</p>
+      )}
       {timeInfo && <p className="text-[10px] text-white/30 mt-1">{timeInfo}</p>}
       <WidgetActionBar actions={actions} compact />
     </div>
@@ -450,15 +514,17 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
     status: string
   }>) || []
   const activeCount = alerts.filter(a => a.status === 'active').length
-  const actions: WidgetAction[] = alerts.length > 0
+  const actions: WidgetAction[] = normalizeActions(alerts.length > 0
     ? [
         chartAction(alerts[0].symbol, alerts[0].target),
         alertAction(alerts[0].symbol, alerts[0].target, 'level_approach', `Alert from widget (${alerts[0].type})`),
+        viewAction('alerts', 'Manage Alerts', alerts[0].symbol),
+        chatAction(`Review my active alerts and suggest which ones to keep or remove.`, 'Review Alerts'),
       ]
-    : [chatAction('Show my active alerts and suggest which ones to keep.')]
+    : [viewAction('alerts', 'Open Alerts'), chatAction('Show my active alerts and suggest which ones to keep.')])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Bell className="w-3.5 h-3.5 text-emerald-500" />
@@ -478,6 +544,7 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
                 chartAction(alert.symbol, alert.target, '1D', `${alert.type}`),
                 optionsAction(alert.symbol, alert.target),
                 alertAction(alert.symbol, alert.target, 'level_approach', `Alert: ${alert.type}`),
+                chatAction(`What should I do if ${alert.symbol} hits ${alert.target}?`, 'Ask AI'),
                 copyAction(`${alert.symbol} ${alert.type} ${alert.target}`),
               ]}
             >
@@ -511,31 +578,40 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
 
 function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
   const symbol = data.symbol as string || '—'
-  const price = data.price as number || 0
+  const price = parseNumeric(data.price)
   const high = data.high as number | undefined
   const low = data.low as number | undefined
+  const change = parseNullableNumeric(data.change)
+  const changePct = parseNullableNumeric(data.changePct)
   const isDelayed = data.isDelayed as boolean || false
   const priceAsOf = data.priceAsOf as string | undefined
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, price),
     optionsAction(symbol, price),
     alertAction(symbol, price, 'level_approach', `${symbol} price watch`),
-  ]
+    chatAction(`Build an actionable intraday plan for ${symbol} around ${price.toFixed(2)}.`, 'Build Plan'),
+    copyAction(`${symbol} ${price.toFixed(2)} | H ${high ?? '—'} | L ${low ?? '—'}`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-medium text-white">{symbol}</span>
-          {isDelayed && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">Delayed</span>}
+          {isDelayed && <span className={cn('text-[9px] px-1.5 py-0.5 rounded border', pillClass('warning'))}>Delayed</span>}
         </div>
-        <span className="text-base font-bold font-mono text-white">${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <span className="text-base font-bold font-mono text-white">{formatPrice(price)}</span>
       </div>
       <div className="flex gap-4 text-[10px] text-white/40">
-        {high != null && <span>H: <span className="font-mono text-white/60">${high.toLocaleString()}</span></span>}
-        {low != null && <span>L: <span className="font-mono text-white/60">${low.toLocaleString()}</span></span>}
-        {priceAsOf && <span className="ml-auto">{priceAsOf}</span>}
+        {high != null && <span>H: <span className="font-mono text-white/60">{formatPrice(high)}</span></span>}
+        {low != null && <span>L: <span className="font-mono text-white/60">{formatPrice(low)}</span></span>}
+        {change != null && (
+          <span className={cn(change >= 0 ? 'text-emerald-300' : 'text-red-300')}>
+            {change >= 0 ? '+' : ''}{change.toFixed(2)}{changePct != null ? ` (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%)` : ''}
+          </span>
+        )}
+        {priceAsOf && <span className="ml-auto">{formatTime(priceAsOf)}</span>}
       </div>
       <WidgetActionBar actions={actions} compact />
     </div>
@@ -550,23 +626,30 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   const calendar = (data.economicCalendar as Array<{ event: string; date: string; impact: string; actual?: string; forecast?: string }>) || []
   const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
   const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
-  const actions: WidgetAction[] = [
+  const highImpactCount = calendar.filter((event) => event.impact === 'High' || event.impact === 'high').length
+  const actions: WidgetAction[] = normalizeActions([
+    symbolImpact?.symbol ? chartAction(symbolImpact.symbol) : viewAction('macro', 'Open Macro'),
+    symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('brief', 'Open Brief'),
     chatAction(symbolImpact?.symbol
       ? `Give me a macro-aware plan for ${symbolImpact.symbol} this week.`
       : 'Summarize the top macro risks and catalysts this week.'),
-  ]
+    copyAction(`Macro context | Fed: ${fedPolicy?.currentRate || 'N/A'} | Tone: ${fedPolicy?.tone || 'N/A'} | Events: ${calendar.slice(0, 3).map((event) => event.event).join(', ')}`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center gap-1.5 mb-3">
         <Globe className="w-3.5 h-3.5 text-emerald-500" />
         <span className="text-xs font-medium text-white">Macro Context</span>
+        <span className={cn('ml-auto rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass(highImpactCount > 0 ? 'warning' : 'neutral'))}>
+          {highImpactCount} high impact
+        </span>
         {symbolImpact?.outlook && (
           <span className={cn(
-            'ml-auto text-[9px] px-1.5 py-0.5 rounded font-medium capitalize',
-            symbolImpact.outlook === 'bullish' ? 'bg-emerald-500/10 text-emerald-400' :
-            symbolImpact.outlook === 'bearish' ? 'bg-red-500/10 text-red-400' :
-            'bg-white/5 text-white/40'
+            'text-[9px] px-1.5 py-0.5 rounded border font-medium capitalize',
+            symbolImpact.outlook === 'bullish' ? pillClass('success') :
+            symbolImpact.outlook === 'bearish' ? pillClass('danger') :
+            pillClass('neutral')
           )}>
             {symbolImpact.outlook}
           </span>
@@ -597,18 +680,27 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
       {calendar.length > 0 && (
         <div className="space-y-1.5">
           {calendar.slice(0, 3).map((event, i) => (
-            <div key={i} className="flex items-center gap-2 text-[11px]">
-              <Calendar className="w-3 h-3 text-white/30 shrink-0" />
-              <span className="text-white/60 truncate flex-1">{event.event}</span>
-              <span className={cn(
-                'px-1 py-0.5 rounded text-[9px] font-medium shrink-0',
-                event.impact === 'High' || event.impact === 'high' ? 'bg-red-500/10 text-red-400' :
-                event.impact === 'Medium' || event.impact === 'medium' ? 'bg-amber-500/10 text-amber-400' :
-                'bg-white/5 text-white/40'
-              )}>
-                {event.impact}
-              </span>
-            </div>
+            <WidgetContextMenu
+              key={`${event.event}-${event.date}-${i}`}
+              actions={normalizeActions([
+                symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '1D', `${event.event}`) : viewAction('macro', 'Open Macro'),
+                chatAction(`How should I position around ${event.event} on ${event.date}?`, 'Ask AI'),
+                copyAction(`${event.event} | ${event.date} | ${event.impact}`, 'Copy Event'),
+              ])}
+            >
+              <button type="button" className="w-full flex items-center gap-2 text-[11px] rounded px-1.5 py-1 hover:bg-white/10 cursor-pointer text-left">
+                <Calendar className="w-3 h-3 text-white/30 shrink-0" />
+                <span className="text-white/60 truncate flex-1">{event.event}</span>
+                <span className={cn(
+                  'px-1 py-0.5 rounded text-[9px] font-medium shrink-0',
+                  event.impact === 'High' || event.impact === 'high' ? 'bg-red-500/10 text-red-400' :
+                  event.impact === 'Medium' || event.impact === 'medium' ? 'bg-amber-500/10 text-amber-400' :
+                  'bg-white/5 text-white/40'
+                )}>
+                  {event.impact}
+                </span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
@@ -630,18 +722,21 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
   const ivRank = data.ivRank as number | undefined
   const calls = (data.calls as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
   const puts = (data.puts as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice, expiry),
     chartAction(symbol, currentPrice),
+    alertAction(symbol, currentPrice, 'level_approach', `${symbol} ATM options focus`),
     chatAction(`Review the ${symbol} ${expiry} options chain and identify the best strikes to monitor.`),
-  ]
+    copyAction(`${symbol} ${expiry} | Spot ${currentPrice} | IV ${ivRank ?? 'N/A'}`),
+  ])
 
   // Show only ATM strikes (3 each)
   const topCalls = calls.slice(0, 3)
   const topPuts = puts.slice(-3)
+  const totalContracts = calls.length + puts.length
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-md">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-md')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -649,6 +744,9 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
         </div>
         <div className="flex items-center gap-2 text-[10px] text-white/40">
           <span>{expiry} ({daysToExpiry}d)</span>
+          <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('info'))}>
+            {totalContracts} contracts
+          </span>
           {ivRank != null && <span className="font-mono">IV: {ivRank}%</span>}
         </div>
       </div>
@@ -743,25 +841,27 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
       },
     }))
   }
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     {
       label: 'Show on Chart',
       icon: Workflow,
       variant: 'primary',
+      tooltip: `${symbol} gamma levels overlay`,
       action: handleShowOnChart,
     },
     optionsAction(symbol, maxGEXStrike || undefined),
     chatAction(`Interpret ${symbol} gamma profile with flip ${flipPoint ?? 'n/a'} and max GEX ${maxGEXStrike ?? 'n/a'}.`),
-  ]
+    copyAction(`${symbol} GEX | Spot ${spotPrice ?? 'N/A'} | Flip ${flipPoint ?? 'N/A'} | Max ${maxGEXStrike ?? 'N/A'}`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-xl">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-xl')}>
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <BarChart2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
           <span className="text-xs font-medium text-white">{symbol} Gamma Exposure</span>
         </div>
-        <span className={cn('px-2 py-0.5 rounded text-[10px] font-medium', regimeBadgeClass)}>
+        <span className={cn('rounded border px-2 py-0.5 text-[10px] font-medium', regimeBadgeClass)}>
           {regime === 'positive_gamma' ? 'Positive Gamma' : regime === 'negative_gamma' ? 'Negative Gamma' : 'Unknown'}
         </span>
       </div>
@@ -869,24 +969,25 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
     ? Math.min(100, Math.abs(((currentPrice - flipPoint) / expectedMove) * 100))
     : null
 
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, currentPrice ?? undefined, '1D', 'SPX Game Plan'),
     optionsAction(symbol, maxGEXStrike ?? undefined),
     chatAction('Turn this SPX game plan into an actionable intraday checklist with bull and bear triggers.'),
-  ]
+    copyAction(`SPX Plan | Spot ${currentPrice ?? 'N/A'} | Flip ${flipPoint ?? 'N/A'} | Max GEX ${maxGEXStrike ?? 'N/A'} | Exp Move ${expectedMove ?? 'N/A'}`),
+  ])
   const alertLevel = flipPoint ?? currentPrice
   if (alertLevel != null) {
     actions.splice(2, 0, alertAction(symbol, alertLevel, 'level_approach', `${symbol} gamma flip`))
   }
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/15 mt-2 max-w-xl">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-xl')}>
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
           <span className="text-xs font-medium text-white">{symbol} Game Plan</span>
         </div>
-        <span className={cn('px-2 py-0.5 rounded text-[10px] font-medium capitalize', regimeBadgeClass)}>
+        <span className={cn('rounded border px-2 py-0.5 text-[10px] font-medium capitalize', regimeBadgeClass)}>
           {gammaRegime} gamma
         </span>
       </div>
@@ -939,13 +1040,37 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
           <div className="rounded border border-white/10 bg-white/5 p-2">
             <p className="text-red-300/80 uppercase text-[9px] mb-1">Resistance</p>
             {topResistance.map((level) => (
-              <p key={`r-${level.name}`} className="font-mono text-white/70">{level.name}: {level.price.toFixed(2)}</p>
+              <WidgetContextMenu
+                key={`r-${level.name}`}
+                actions={normalizeActions([
+                  chartAction(symbol, level.price, '15m', `${level.name}`),
+                  optionsAction(symbol, level.price),
+                  alertAction(symbol, level.price, 'price_above', `${symbol} ${level.name}`),
+                  copyAction(`${symbol} ${level.name} ${level.price.toFixed(2)}`),
+                ])}
+              >
+                <button type="button" className="w-full text-left font-mono text-white/70 rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer">
+                  {level.name}: {level.price.toFixed(2)}
+                </button>
+              </WidgetContextMenu>
             ))}
           </div>
           <div className="rounded border border-white/10 bg-white/5 p-2">
             <p className="text-emerald-300/80 uppercase text-[9px] mb-1">Support</p>
             {topSupport.map((level) => (
-              <p key={`s-${level.name}`} className="font-mono text-white/70">{level.name}: {level.price.toFixed(2)}</p>
+              <WidgetContextMenu
+                key={`s-${level.name}`}
+                actions={normalizeActions([
+                  chartAction(symbol, level.price, '15m', `${level.name}`),
+                  optionsAction(symbol, level.price),
+                  alertAction(symbol, level.price, 'price_below', `${symbol} ${level.name}`),
+                  copyAction(`${symbol} ${level.name} ${level.price.toFixed(2)}`),
+                ])}
+              >
+                <button type="button" className="w-full text-left font-mono text-white/70 rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer">
+                  {level.name}: {level.price.toFixed(2)}
+                </button>
+              </WidgetContextMenu>
             ))}
           </div>
         </div>
@@ -969,22 +1094,32 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
     symbol: string; setupType: string; direction: string; score: number; description: string; currentPrice?: number
   }>) || []
   const count = data.count as number || 0
-  const actions: WidgetAction[] = opportunities.length > 0
+  const bestScore = opportunities.length > 0 ? Math.max(...opportunities.map((opp) => opp.score)) : null
+  const actions: WidgetAction[] = normalizeActions(opportunities.length > 0
     ? [
         chartAction(opportunities[0].symbol, opportunities[0].currentPrice),
         optionsAction(opportunities[0].symbol, opportunities[0].currentPrice),
+        viewAction('tracked', 'Open Tracked', opportunities[0].symbol),
         chatAction(`Review top scanner opportunities and rank by conviction with risk plan.`),
+        copyAction(`Top setup: ${opportunities[0].symbol} ${opportunities[0].setupType} (${opportunities[0].direction}) score ${opportunities[0].score}`),
       ]
-    : [chatAction('Run another opportunity scan and summarize strongest setups.')]
+    : [viewAction('scanner', 'Open Scanner'), chatAction('Run another opportunity scan and summarize strongest setups.')])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Search className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-medium text-white">Scan Results</span>
         </div>
-        <span className="text-[10px] text-white/40">{count} found</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-white/40">{count} found</span>
+          {bestScore != null && (
+            <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass(bestScore >= 80 ? 'success' : 'neutral'))}>
+              Top {Math.round(bestScore)}
+            </span>
+          )}
+        </div>
       </div>
 
       {opportunities.length === 0 ? (
@@ -997,6 +1132,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
               actions={[
                 chartAction(opp.symbol, opp.currentPrice, '15m', `${opp.setupType}`),
                 optionsAction(opp.symbol, opp.currentPrice),
+                opp.currentPrice != null ? alertAction(opp.symbol, opp.currentPrice, 'level_approach', `${opp.symbol} scanner setup`) : chatAction(`Build alert plan for ${opp.symbol}`, 'Alert Plan'),
                 analyzeAction({
                   symbol: opp.symbol,
                   type: opp.direction === 'bearish' ? 'put' : 'call',
@@ -1046,23 +1182,32 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const remainingMove = parseNullableNumeric(expectedMove?.remainingMove)
   const minutesLeft = parseNullableNumeric(expectedMove?.minutesLeft)
   const hasZeroDTE = Boolean(data.hasZeroDTE)
+  const usedRiskTone = usedPct != null && usedPct >= 80 ? 'danger' : usedPct != null && usedPct >= 60 ? 'warning' : 'success'
 
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, currentPrice, '1D', '0DTE Context'),
     optionsAction(symbol, currentPrice),
     chatAction(`Summarize ${symbol} 0DTE risk using expected move, remaining move, and gamma profile.`),
-  ]
+    copyAction(`${symbol} 0DTE | Expected ${totalExpectedMove ?? 'N/A'} | Used ${usedPct ?? 'N/A'}% | Remaining ${remainingMove ?? 'N/A'}`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-emerald-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Workflow className="w-3.5 h-3.5 text-emerald-400" />
           <span className="text-xs font-medium text-white">{symbol} 0DTE</span>
         </div>
-        {minutesLeft != null && (
-          <span className="text-[10px] text-white/50">{Math.max(0, Math.round(minutesLeft))}m left</span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {usedPct != null && (
+            <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass(usedRiskTone))}>
+              {usedPct.toFixed(0)}% used
+            </span>
+          )}
+          {minutesLeft != null && (
+            <span className="text-[10px] text-white/50">{Math.max(0, Math.round(minutesLeft))}m left</span>
+          )}
+        </div>
       </div>
 
       {!hasZeroDTE && (
@@ -1093,12 +1238,22 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
               <p className="text-[10px] uppercase tracking-wide text-white/45 mb-1">Most Active</p>
               <div className="space-y-1">
                 {topContracts.slice(0, 3).map((contract, idx) => (
-                  <div key={`${contract.type as string}-${contract.strike as number}-${idx}`} className="flex items-center justify-between text-[10px]">
-                    <span className="text-white/70">
-                      {(contract.type as string || '').toUpperCase()} {parseNumeric(contract.strike).toFixed(0)}
-                    </span>
-                    <span className="font-mono text-white/60">Vol {Math.round(parseNumeric(contract.volume))}</span>
-                  </div>
+                  <WidgetContextMenu
+                    key={`${contract.type as string}-${contract.strike as number}-${idx}`}
+                    actions={normalizeActions([
+                      chartAction(symbol, parseNumeric(contract.strike), '1D', `0DTE ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)}`),
+                      optionsAction(symbol, parseNumeric(contract.strike)),
+                      alertAction(symbol, parseNumeric(contract.strike), 'level_approach', `${symbol} ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)}`),
+                      copyAction(`${symbol} ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)} vol ${Math.round(parseNumeric(contract.volume))}`),
+                    ])}
+                  >
+                    <button type="button" className="w-full flex items-center justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left text-[10px]">
+                      <span className="text-white/70">
+                        {(contract.type as string || '').toUpperCase()} {parseNumeric(contract.strike).toFixed(0)}
+                      </span>
+                      <span className="font-mono text-white/60">Vol {Math.round(parseNumeric(contract.volume))}</span>
+                    </button>
+                  </WidgetContextMenu>
                 ))}
               </div>
             </div>
@@ -1120,21 +1275,32 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const expirations = Array.isArray(termStructure?.expirations)
     ? termStructure?.expirations as Array<Record<string, unknown>>
     : []
+  const ivRankValue = parseNullableNumeric(ivRank?.ivRank)
+  const ivTone: 'success' | 'warning' | 'danger' | 'neutral' =
+    ivRankValue == null ? 'neutral' : ivRankValue >= 70 ? 'danger' : ivRankValue >= 40 ? 'warning' : 'success'
 
-  const actions: WidgetAction[] = [
+  const actions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
     chartAction(symbol, currentPrice, '1D', 'IV Regime'),
     chatAction(`Interpret ${symbol} IV rank, skew, and term structure for day-trade risk today.`),
-  ]
+    copyAction(`${symbol} IV | Current ${parseNullableNumeric(ivRank?.currentIV) != null ? `${parseNumeric(ivRank?.currentIV).toFixed(1)}%` : 'N/A'} | IV Rank ${parseNullableNumeric(ivRank?.ivRank) != null ? `${parseNumeric(ivRank?.ivRank).toFixed(1)}%` : 'N/A'} | Skew ${String(skew?.skewDirection || 'unknown')}`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-sky-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-sky-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5 text-sky-400" />
           <span className="text-xs font-medium text-white">{symbol} IV Profile</span>
         </div>
-        <span className="text-[10px] text-white/45">{String(data.asOf || '').slice(11, 16)} ET</span>
+        <div className="flex items-center gap-1.5">
+          {ivRankValue != null && (
+            <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass(ivTone))}>
+              IVR {ivRankValue.toFixed(0)}
+            </span>
+          )}
+          <span className="text-[10px] text-white/45">{String(data.asOf || '').slice(11, 16)} ET</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -1166,10 +1332,19 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
       {expirations.length > 0 && (
         <div className="mt-2 pt-2 border-t border-white/10 space-y-1 text-[10px]">
           {expirations.slice(0, 3).map((row) => (
-            <div key={String(row.date)} className="flex items-center justify-between text-white/60">
-              <span>{String(row.date)}</span>
-              <span className="font-mono">{parseNumeric(row.atmIV).toFixed(1)}%</span>
-            </div>
+            <WidgetContextMenu
+              key={String(row.date)}
+              actions={normalizeActions([
+                optionsAction(symbol, currentPrice, String(row.date), 'View Expiry'),
+                chatAction(`Compare ${symbol} volatility term structure for ${String(row.date)} versus front week.`, 'Ask AI'),
+                copyAction(`${symbol} ${String(row.date)} ATM IV ${parseNumeric(row.atmIV).toFixed(1)}%`, 'Copy Row'),
+              ])}
+            >
+              <button type="button" className="w-full flex items-center justify-between rounded px-1 py-0.5 text-white/60 hover:bg-white/10 cursor-pointer text-left">
+                <span>{String(row.date)}</span>
+                <span className="font-mono">{parseNumeric(row.atmIV).toFixed(1)}%</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
@@ -1183,19 +1358,20 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
   const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
   const watchlist = Array.isArray(data.watchlist) ? data.watchlist as string[] : []
   const daysAhead = parseNumeric(data.daysAhead)
-  const cardActions: WidgetAction[] = [
+  const cardActions: WidgetAction[] = normalizeActions([
+    viewAction('earnings', 'Open Earnings'),
     chatAction('Summarize this earnings calendar and highlight the highest-risk names for options day traders.'),
     copyAction(`Earnings watchlist: ${watchlist.join(', ')}`),
-  ]
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-fuchsia-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-fuchsia-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-fuchsia-400" />
           <span className="text-xs font-medium text-white">Earnings Calendar</span>
         </div>
-        <span className="text-[10px] text-white/45">{Math.round(daysAhead)}d</span>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('info'))}>{Math.round(daysAhead)}d window</span>
       </div>
 
       {events.length === 0 && (
@@ -1205,11 +1381,21 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
       {events.length > 0 && (
         <div className="space-y-1 text-[11px]">
           {events.slice(0, 5).map((event, idx) => (
-            <div key={`${String(event.symbol)}-${String(event.date)}-${idx}`} className="flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1">
-              <span className="font-medium text-white/85">{String(event.symbol)}</span>
-              <span className="text-white/50">{String(event.date)}</span>
-              <span className="text-white/65">{String(event.time || event.timing || '')}</span>
-            </div>
+            <WidgetContextMenu
+              key={`${String(event.symbol)}-${String(event.date)}-${idx}`}
+              actions={normalizeActions([
+                chartAction(String(event.symbol), undefined, '1D', 'Earnings Chart'),
+                optionsAction(String(event.symbol), undefined, String(event.date)),
+                chatAction(`Build an earnings plan for ${String(event.symbol)} into ${String(event.date)}.`, 'Build Plan'),
+                copyAction(`${String(event.symbol)} earnings ${String(event.date)} ${String(event.time || event.timing || '')}`, 'Copy Event'),
+              ])}
+            >
+              <button type="button" className="w-full flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1 hover:bg-white/10 cursor-pointer text-left">
+                <span className="font-medium text-white/85">{String(event.symbol)}</span>
+                <span className="text-white/50">{String(event.date)}</span>
+                <span className="text-white/65">{String(event.time || event.timing || '')}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
@@ -1228,20 +1414,33 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const points = parseNullableNumeric(expectedMove?.points)
   const pct = parseNullableNumeric(expectedMove?.pct)
   const currentPrice = parseNullableNumeric((data as Record<string, unknown>).currentPrice) ?? 0
-  const cardActions: WidgetAction[] = [
+  const ivCrushRisk = String((data as Record<string, unknown>).ivCrushRisk || '').toLowerCase()
+  const cardActions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
     chartAction(symbol, currentPrice, '1D', 'Earnings Setup'),
+    currentPrice > 0 ? alertAction(symbol, currentPrice, 'level_approach', `${symbol} earnings watch`) : viewAction('earnings', 'Open Earnings', symbol),
     chatAction(`Rank the pre-earnings strategies for ${symbol} by risk/reward and IV crush risk.`),
-  ]
+    copyAction(`${symbol} earnings expected move ${points ?? 'N/A'} (${pct ?? 'N/A'}%)`),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-amber-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-amber-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Bell className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-xs font-medium text-white">{symbol} Earnings Setup</span>
         </div>
-        <span className="text-[10px] text-white/45">{String(data.earningsDate || 'TBD')}</span>
+        <div className="flex items-center gap-1.5">
+          {ivCrushRisk && (
+            <span className={cn(
+              'rounded border px-1.5 py-0.5 text-[9px] font-medium uppercase',
+              ivCrushRisk.includes('high') ? pillClass('danger') : ivCrushRisk.includes('medium') ? pillClass('warning') : pillClass('success'),
+            )}>
+              {ivCrushRisk} crush
+            </span>
+          )}
+          <span className="text-[10px] text-white/45">{String(data.earningsDate || 'TBD')}</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -1259,10 +1458,26 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
         <div className="mt-2 space-y-1 text-[10px]">
           <p className="uppercase tracking-wide text-white/45">Top Strategies</p>
           {strategies.slice(0, 2).map((strategy, idx) => (
-            <div key={`${String(strategy.name)}-${idx}`} className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
-              <p className="text-white/80 font-medium">{String(strategy.name || 'Strategy')}</p>
-              <p className="text-white/55 line-clamp-2">{String(strategy.description || '')}</p>
-            </div>
+            <WidgetContextMenu
+              key={`${String(strategy.name)}-${idx}`}
+              actions={normalizeActions([
+                analyzeAction({
+                  symbol,
+                  type: 'call',
+                  strike: currentPrice || undefined,
+                  quantity: 1,
+                  entryPrice: 1,
+                  entryDate: new Date().toISOString().slice(0, 10),
+                }, 'Simulate'),
+                chatAction(`Evaluate the ${String(strategy.name || 'strategy')} plan for ${symbol} including IV crush risk.`, 'Ask AI'),
+                copyAction(`${symbol} earnings strategy: ${String(strategy.name || 'Strategy')} - ${String(strategy.description || '')}`, 'Copy Strategy'),
+              ])}
+            >
+              <button type="button" className="w-full rounded border border-white/10 bg-black/20 px-2 py-1.5 hover:bg-white/10 cursor-pointer text-left">
+                <p className="text-white/80 font-medium">{String(strategy.name || 'Strategy')}</p>
+                <p className="text-white/55 line-clamp-2">{String(strategy.description || '')}</p>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}
@@ -1276,19 +1491,21 @@ function JournalInsightsCard({ data }: { data: Record<string, unknown> }) {
   const tradeCount = parseNumeric(data.tradeCount)
   const summary = String(data.summary || 'No journal summary available.')
   const period = String(data.period || '30d')
-  const cardActions: WidgetAction[] = [
+  const cardActions: WidgetAction[] = normalizeActions([
+    viewAction('journal', 'Open Journal'),
     chatAction('Turn these journal insights into three concrete rules for tomorrow.'),
-    copyAction(summary),
-  ]
+    chatAction(`Create a weekly execution checklist from this ${period} journal summary.`, 'Build Checklist'),
+    copyAction(summary, 'Copy Summary'),
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-teal-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-teal-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <BarChart2 className="w-3.5 h-3.5 text-teal-400" />
           <span className="text-xs font-medium text-white">Journal Insights</span>
         </div>
-        <span className="text-[10px] text-white/45">{period}</span>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('info'))}>{period}</span>
       </div>
 
       <p className="text-[11px] text-white/60 mb-2">Trades analyzed: <span className="font-mono text-white/85">{tradeCount}</span></p>
@@ -1303,19 +1520,23 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
   const symbol = (data.symbol as string) || 'All Symbols'
   const summary = (data.summary as Record<string, unknown> | null) || null
   const trades = Array.isArray(data.trades) ? data.trades as Array<Record<string, unknown>> : []
-  const cardActions: WidgetAction[] = [
+  const cardActions: WidgetAction[] = normalizeActions([
+    viewAction('journal', 'Open Journal', symbol !== 'All Symbols' ? symbol : undefined),
+    symbol !== 'All Symbols' ? chartAction(symbol) : viewAction('tracked', 'Open Tracked'),
     chatAction(`Use this ${symbol} trade history to identify the top two recurring mistakes and fixes.`),
     copyAction(`Win rate: ${String(summary?.winRate || 'N/A')} | Total PnL: ${String(summary?.totalPnl || 'N/A')}`),
-  ]
+  ])
 
   return (
-    <div className="glass-card-heavy rounded-xl p-3 border-violet-500/10 mt-2 max-w-sm">
+    <div className={premiumCardClass('border-violet-500/15 max-w-sm')}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Search className="w-3.5 h-3.5 text-violet-400" />
           <span className="text-xs font-medium text-white">{symbol} Trade History</span>
         </div>
-        <span className="text-[10px] text-white/45">{String(summary?.totalTrades ?? trades.length)} trades</span>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('neutral'))}>
+          {String(summary?.totalTrades ?? trades.length)} trades
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px] mb-2">
@@ -1332,11 +1553,20 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
       {trades.length > 0 && (
         <div className="space-y-1 text-[10px] text-white/60">
           {trades.slice(0, 3).map((trade, idx) => (
-            <div key={`${String(trade.tradeDate)}-${idx}`} className="flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1">
-              <span>{String(trade.tradeDate)}</span>
-              <span>{String(trade.outcome || '')}</span>
-              <span className="font-mono">{String(trade.pnl || '—')}</span>
-            </div>
+            <WidgetContextMenu
+              key={`${String(trade.tradeDate)}-${idx}`}
+              actions={normalizeActions([
+                symbol !== 'All Symbols' ? chartAction(symbol, undefined, '1D', 'Trade Context') : viewAction('journal', 'Open Journal'),
+                chatAction(`Review trade on ${String(trade.tradeDate)} (${String(trade.outcome || '')}) and show one improvement.`, 'Ask AI'),
+                copyAction(`${symbol} ${String(trade.tradeDate)} ${String(trade.outcome || '')} ${String(trade.pnl || '—')}`, 'Copy Trade'),
+              ])}
+            >
+              <button type="button" className="w-full flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1 hover:bg-white/10 cursor-pointer text-left">
+                <span>{String(trade.tradeDate)}</span>
+                <span>{String(trade.outcome || '')}</span>
+                <span className="font-mono">{String(trade.pnl || '—')}</span>
+              </button>
+            </WidgetContextMenu>
           ))}
         </div>
       )}

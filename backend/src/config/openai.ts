@@ -6,7 +6,7 @@ const env = getEnv();
 // Create OpenAI client
 export const openaiClient = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
-  timeout: 30000, // 30 second timeout
+  timeout: 60000, // 60 second timeout for complex multi-tool prompts
   // SDK-level retry for transient network/5xx OpenAI failures.
   maxRetries: 3,
 });

@@ -374,7 +374,7 @@ describe('Environment Validation', () => {
       expect(env.CHAT_MODEL).toBe('gpt-4o');
       expect(env.MAX_TOKENS).toBe(1000);
       expect(env.TEMPERATURE).toBe(0.7);
-      expect(env.MAX_TOTAL_TOKENS_PER_REQUEST).toBe(4000);
+      expect(env.MAX_TOTAL_TOKENS_PER_REQUEST).toBe(8000);
       expect(env.REDIS_URL).toBe('redis://localhost:6379');
       expect(env.ALLOWED_ORIGINS).toBe('');
       expect(env.LOG_LEVEL).toBe('info');

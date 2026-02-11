@@ -456,11 +456,29 @@ export function AICoachWorkflowProvider({
       sendToChat(detail.prompt)
     }
 
+    const onView = (event: Event) => {
+      const detail = (event as CustomEvent<{ view?: WorkflowCenterView; symbol?: string; label?: string }>).detail
+      if (!detail?.view) return
+
+      const normalized = normalizeSymbol(detail.symbol)
+      if (normalized) {
+        setActiveSymbol(normalized)
+      }
+
+      setActiveCenterView(detail.view)
+      pushWorkflowStep({
+        label: detail.label || `Open ${detail.view}`,
+        view: detail.view,
+        symbol: normalized || undefined,
+      })
+    }
+
     window.addEventListener('ai-coach-widget-chart', onChart)
     window.addEventListener('ai-coach-widget-options', onOptions)
     window.addEventListener('ai-coach-widget-alert', onAlert)
     window.addEventListener('ai-coach-widget-analyze', onAnalyze)
     window.addEventListener('ai-coach-widget-chat', onChat)
+    window.addEventListener('ai-coach-widget-view', onView)
 
     return () => {
       window.removeEventListener('ai-coach-widget-chart', onChart)
@@ -468,8 +486,9 @@ export function AICoachWorkflowProvider({
       window.removeEventListener('ai-coach-widget-alert', onAlert)
       window.removeEventListener('ai-coach-widget-analyze', onAnalyze)
       window.removeEventListener('ai-coach-widget-chat', onChat)
+      window.removeEventListener('ai-coach-widget-view', onView)
     }
-  }, [analyzeSetup, createAlertAtLevel, sendToChat, viewChartAtLevel, viewOptionsNearStrike])
+  }, [analyzeSetup, createAlertAtLevel, pushWorkflowStep, sendToChat, viewChartAtLevel, viewOptionsNearStrike])
 
   const value = useMemo<AICoachWorkflowContextValue>(() => ({
     activeSymbol,

@@ -6,10 +6,12 @@ import {
   CandlestickChart,
   Calculator,
   Copy,
+  LayoutDashboard,
   MessageSquare,
   TableProperties,
 } from 'lucide-react'
 import type { AlertType, ChartTimeframe, PositionInput } from '@/lib/api/ai-coach'
+import type { WorkflowCenterView } from '@/contexts/AICoachWorkflowContext'
 
 export interface WidgetAction {
   label: string
@@ -30,11 +32,15 @@ export function chartAction(
   level?: number,
   timeframe: ChartTimeframe = '1D',
   label?: string,
+  buttonLabel?: string,
 ): WidgetAction {
   return {
-    label: typeof level === 'number' ? 'Show on Chart' : 'Open Chart',
+    label: buttonLabel || (typeof level === 'number' ? 'Show on Chart' : 'Open Chart'),
     icon: CandlestickChart,
     variant: 'primary',
+    tooltip: typeof level === 'number'
+      ? `${symbol} @ ${level.toFixed(2)} (${timeframe})`
+      : `${symbol} chart (${timeframe})`,
     action: () => {
       dispatchWidgetEvent('ai-coach-widget-chart', {
         symbol,
@@ -50,11 +56,15 @@ export function optionsAction(
   symbol: string,
   strike?: number,
   expiry?: string,
+  buttonLabel?: string,
 ): WidgetAction {
   return {
-    label: 'View Options',
+    label: buttonLabel || 'View Options',
     icon: TableProperties,
     variant: 'secondary',
+    tooltip: expiry
+      ? `${symbol} ${expiry}${typeof strike === 'number' ? ` @ ${strike}` : ''}`
+      : `${symbol}${typeof strike === 'number' ? ` @ ${strike}` : ''}`,
     action: () => {
       dispatchWidgetEvent('ai-coach-widget-options', {
         symbol,
@@ -70,11 +80,13 @@ export function alertAction(
   price: number,
   alertType: AlertType = 'level_approach',
   notes?: string,
+  buttonLabel?: string,
 ): WidgetAction {
   return {
-    label: 'Set Alert',
+    label: buttonLabel || 'Set Alert',
     icon: Bell,
     variant: 'secondary',
+    tooltip: `${symbol} ${price.toFixed(2)} (${alertType})`,
     action: () => {
       dispatchWidgetEvent('ai-coach-widget-alert', {
         symbol,
@@ -86,11 +98,12 @@ export function alertAction(
   }
 }
 
-export function analyzeAction(position: PositionInput): WidgetAction {
+export function analyzeAction(position: PositionInput, buttonLabel = 'Analyze'): WidgetAction {
   return {
-    label: 'Analyze',
+    label: buttonLabel,
     icon: Calculator,
     variant: 'primary',
+    tooltip: `${position.symbol}${position.strike ? ` ${position.strike}` : ''} ${position.type.toUpperCase()}`,
     action: () => {
       dispatchWidgetEvent('ai-coach-widget-analyze', {
         setup: position,
@@ -99,11 +112,12 @@ export function analyzeAction(position: PositionInput): WidgetAction {
   }
 }
 
-export function chatAction(prompt: string): WidgetAction {
+export function chatAction(prompt: string, buttonLabel = 'Ask AI'): WidgetAction {
   return {
-    label: 'Ask AI',
+    label: buttonLabel,
     icon: MessageSquare,
     variant: 'secondary',
+    tooltip: 'Send targeted follow-up prompt',
     action: () => {
       dispatchWidgetEvent('ai-coach-widget-chat', {
         prompt,
@@ -112,11 +126,12 @@ export function chatAction(prompt: string): WidgetAction {
   }
 }
 
-export function copyAction(text: string): WidgetAction {
+export function copyAction(text: string, buttonLabel = 'Copy'): WidgetAction {
   return {
-    label: 'Copy',
+    label: buttonLabel,
     icon: Copy,
     variant: 'secondary',
+    tooltip: 'Copy to clipboard',
     action: async () => {
       if (typeof window === 'undefined') return
 
@@ -134,6 +149,26 @@ export function copyAction(text: string): WidgetAction {
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
+    },
+  }
+}
+
+export function viewAction(
+  view: WorkflowCenterView,
+  buttonLabel = 'Open View',
+  symbol?: string,
+): WidgetAction {
+  return {
+    label: buttonLabel,
+    icon: LayoutDashboard,
+    variant: 'secondary',
+    tooltip: `Open ${buttonLabel}`,
+    action: () => {
+      dispatchWidgetEvent('ai-coach-widget-view', {
+        view,
+        symbol,
+        label: buttonLabel,
+      })
     },
   }
 }

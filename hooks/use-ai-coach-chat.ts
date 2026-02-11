@@ -110,6 +110,16 @@ export function useAICoachChat() {
     return () => { abortControllerRef.current?.abort() }
   }, [])
 
+  const toFiniteNumber = useCallback((value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const normalized = value.replace(/[^0-9.+-]/g, '')
+      const parsed = Number.parseFloat(normalized)
+      if (Number.isFinite(parsed)) return parsed
+    }
+    return null
+  }, [])
+
   /**
    * Extract chart request from function calls
    */
@@ -118,7 +128,6 @@ export function useAICoachChat() {
     const showChartCall = functionCalls.find(fc => fc.function === 'show_chart')
     const gexCall = functionCalls.find(fc => fc.function === 'get_gamma_exposure')
     const spxGamePlanCall = functionCalls.find(fc => fc.function === 'get_spx_game_plan')
-    if (!showChartCall && !gexCall && !spxGamePlanCall) return null
 
     const showChartArgs = showChartCall?.arguments as { symbol?: string; timeframe?: string } | undefined
     const showChartResult = showChartCall?.result as {
@@ -155,34 +164,232 @@ export function useAICoachChat() {
       }
     } | undefined
 
-    const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || 'SPX'
-    const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '1D') as ChartTimeframe
-    const levels = showChartResult?.levels || spxGamePlanResult?.keyLevels
-    const gexProfile = gexResult
-      ? {
-          symbol: gexResult.symbol || symbol,
-          spotPrice: gexResult.spotPrice,
-          flipPoint: gexResult.flipPoint,
-          maxGEXStrike: gexResult.maxGEXStrike,
-          keyLevels: gexResult.keyLevels,
-        }
-      : spxGamePlanResult?.gexProfile
+    // Priority 1: explicit chart directives or SPX game-plan data.
+    if (showChartCall || gexCall || spxGamePlanCall) {
+      const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || 'SPX'
+      const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '1D') as ChartTimeframe
+      const levels = showChartResult?.levels || spxGamePlanResult?.keyLevels
+      const gexProfile = gexResult
         ? {
-            symbol: spxGamePlanResult.gexProfile.symbol || symbol,
-            spotPrice: spxGamePlanResult.gexProfile.spotPrice,
-            flipPoint: spxGamePlanResult.gexProfile.flipPoint,
-            maxGEXStrike: spxGamePlanResult.gexProfile.maxGEXStrike,
-            keyLevels: spxGamePlanResult.gexProfile.keyLevels,
+            symbol: gexResult.symbol || symbol,
+            spotPrice: gexResult.spotPrice,
+            flipPoint: gexResult.flipPoint,
+            maxGEXStrike: gexResult.maxGEXStrike,
+            keyLevels: gexResult.keyLevels,
           }
-      : undefined
+        : spxGamePlanResult?.gexProfile
+          ? {
+              symbol: spxGamePlanResult.gexProfile.symbol || symbol,
+              spotPrice: spxGamePlanResult.gexProfile.spotPrice,
+              flipPoint: spxGamePlanResult.gexProfile.flipPoint,
+              maxGEXStrike: spxGamePlanResult.gexProfile.maxGEXStrike,
+              keyLevels: spxGamePlanResult.gexProfile.keyLevels,
+            }
+          : undefined
 
-    return {
-      symbol,
-      timeframe,
-      levels,
-      gexProfile,
+      return {
+        symbol,
+        timeframe,
+        levels,
+        gexProfile,
+      }
     }
-  }, [])
+
+    // Priority 2: key-level calls should always drive chart context.
+    const keyLevelsCall = functionCalls.find(fc => fc.function === 'get_key_levels')
+    if (keyLevelsCall) {
+      const args = (keyLevelsCall.arguments || {}) as { symbol?: string }
+      const result = (keyLevelsCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        levels?: {
+          resistance?: Array<{ name?: string; type?: string; price: number }>
+          support?: Array<{ name?: string; type?: string; price: number }>
+          indicators?: { vwap?: number; atr14?: number }
+        }
+      }
+      if (!result.error) {
+        return {
+          symbol: result.symbol || args.symbol || 'SPX',
+          timeframe: '1D',
+          levels: result.levels,
+        }
+      }
+    }
+
+    // Priority 3: setup scan results should auto-focus chart with entry/stop/target.
+    const scanCall = functionCalls.find(fc => fc.function === 'scan_opportunities')
+    if (scanCall) {
+      const result = (scanCall.result || {}) as {
+        error?: unknown
+        opportunities?: Array<{
+          symbol?: string
+          direction?: string
+          currentPrice?: number
+          suggestedTrade?: {
+            entry?: number | string
+            stopLoss?: number | string
+            target?: number | string
+          }
+        }>
+      }
+      const top = result.opportunities?.[0]
+      if (!result.error && top?.symbol) {
+        const entry = toFiniteNumber(top.suggestedTrade?.entry)
+        const stopLoss = toFiniteNumber(top.suggestedTrade?.stopLoss)
+        const target = toFiniteNumber(top.suggestedTrade?.target)
+        const spot = toFiniteNumber(top.currentPrice)
+        const direction = String(top.direction || '').toLowerCase()
+
+        const resistance: Array<{ name: string; price: number }> = []
+        const support: Array<{ name: string; price: number }> = []
+
+        if (entry != null) {
+          if (direction === 'bearish') {
+            resistance.push({ name: 'Entry', price: entry })
+          } else {
+            support.push({ name: 'Entry', price: entry })
+          }
+        }
+        if (target != null) {
+          if (entry != null && target >= entry) resistance.push({ name: 'Target', price: target })
+          else support.push({ name: 'Target', price: target })
+        }
+        if (stopLoss != null) {
+          if (entry != null && stopLoss >= entry) resistance.push({ name: 'Stop', price: stopLoss })
+          else support.push({ name: 'Stop', price: stopLoss })
+        }
+        if (spot != null) {
+          support.push({ name: 'Spot', price: spot })
+        }
+
+        return {
+          symbol: top.symbol,
+          timeframe: '15m',
+          levels: {
+            resistance,
+            support,
+          },
+        }
+      }
+    }
+
+    // Priority 4: price/options/position tools provide at least a chart focus line.
+    const currentPriceCall = functionCalls.find(fc => fc.function === 'get_current_price')
+    if (currentPriceCall) {
+      const result = (currentPriceCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        price?: number
+        high?: number
+        low?: number
+      }
+      if (!result.error && result.symbol) {
+        const price = toFiniteNumber(result.price)
+        const high = toFiniteNumber(result.high)
+        const low = toFiniteNumber(result.low)
+        return {
+          symbol: result.symbol,
+          timeframe: '1D',
+          levels: {
+            resistance: high != null ? [{ name: 'High', price: high }] : [],
+            support: [
+              ...(low != null ? [{ name: 'Low', price: low }] : []),
+              ...(price != null ? [{ name: 'Spot', price }] : []),
+            ],
+          },
+        }
+      }
+    }
+
+    const optionsChainCall = functionCalls.find(fc => fc.function === 'get_options_chain')
+    if (optionsChainCall) {
+      const result = (optionsChainCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        currentPrice?: number
+      }
+      if (!result.error && result.symbol) {
+        const currentPrice = toFiniteNumber(result.currentPrice)
+        return {
+          symbol: result.symbol,
+          timeframe: '1D',
+          levels: currentPrice != null
+            ? {
+                support: [{ name: 'Spot', price: currentPrice }],
+                resistance: [],
+              }
+            : undefined,
+        }
+      }
+    }
+
+    const positionCall = functionCalls.find(fc => fc.function === 'analyze_position')
+    if (positionCall) {
+      const result = (positionCall.result || {}) as {
+        error?: unknown
+        position?: { symbol?: string; strike?: number }
+      }
+      if (!result.error && result.position?.symbol) {
+        const strike = toFiniteNumber(result.position.strike)
+        return {
+          symbol: result.position.symbol,
+          timeframe: '1D',
+          levels: strike != null
+            ? {
+                support: [{ name: 'Strike', price: strike }],
+                resistance: [],
+              }
+            : undefined,
+        }
+      }
+    }
+
+    const zeroDteCall = functionCalls.find(fc => fc.function === 'get_zero_dte_analysis')
+    if (zeroDteCall) {
+      const result = (zeroDteCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        expectedMove?: { currentPrice?: number }
+      }
+      if (!result.error && result.symbol) {
+        const currentPrice = toFiniteNumber(result.expectedMove?.currentPrice)
+        return {
+          symbol: result.symbol,
+          timeframe: '1D',
+          levels: currentPrice != null
+            ? {
+                support: [{ name: 'Spot', price: currentPrice }],
+                resistance: [],
+              }
+            : undefined,
+        }
+      }
+    }
+
+    const ivCall = functionCalls.find(fc => fc.function === 'get_iv_analysis')
+    if (ivCall) {
+      const result = (ivCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        currentPrice?: number
+      }
+      if (!result.error && result.symbol) {
+        const currentPrice = toFiniteNumber(result.currentPrice)
+        return {
+          symbol: result.symbol,
+          timeframe: '1D',
+          levels: currentPrice != null
+            ? {
+                support: [{ name: 'Spot', price: currentPrice }],
+                resistance: [],
+              }
+            : undefined,
+        }
+      }
+    }
+    return null
+  }, [toFiniteNumber])
 
   /**
    * Send message with streaming (default) or fallback to non-streaming

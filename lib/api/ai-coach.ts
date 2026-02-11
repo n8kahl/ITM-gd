@@ -34,6 +34,15 @@ export interface ChatMessageResponse {
     arguments: Record<string, unknown>
     result: unknown
   }>
+  contractAudit?: {
+    passed: boolean
+    intents: string[]
+    symbols: string[]
+    requiredFunctions: string[]
+    calledFunctions: string[]
+    blockingViolations: string[]
+    warnings: string[]
+  }
   tokensUsed: number
   responseTime: number
 }
@@ -1999,6 +2008,7 @@ export interface StreamEvent {
 export interface StreamDoneData {
   messageId: string
   functionCalls?: ChatMessageResponse['functionCalls']
+  contractAudit?: ChatMessageResponse['contractAudit']
   tokensUsed: number
   responseTime: number
 }
