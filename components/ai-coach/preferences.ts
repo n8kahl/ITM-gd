@@ -21,7 +21,7 @@ export const AI_COACH_PREFERENCES_STORAGE_KEY = 'ai-coach-preferences-v2'
 export const DEFAULT_AI_COACH_PREFERENCES: AICoachPreferences = {
   riskPerTradePct: 1,
   orbMinutes: 15,
-  defaultChartTimeframe: '1D',
+  defaultChartTimeframe: '5m',
   autoSyncWorkflowSymbol: false,
   notificationsEnabled: true,
   defaultOptionsStrikeRange: 10,
