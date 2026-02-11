@@ -45,6 +45,8 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/.next ./.next
 COPY --from=deps /app/node_modules ./node_modules
 
+RUN mkdir -p /app/.next/cache/images && chown -R nextjs:nodejs /app/.next/cache
+
 USER nextjs
 
 EXPOSE 3000
