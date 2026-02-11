@@ -117,6 +117,7 @@ describe('shareTradeCardSchema', () => {
     })
 
     expect(parsed.share_to_discord).toBe(false)
+    expect(parsed.format).toBe('landscape')
   })
 
   it('rejects unsupported template', () => {
@@ -126,5 +127,20 @@ describe('shareTradeCardSchema', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it('accepts square and story formats', () => {
+    const square = shareTradeCardSchema.safeParse({
+      journal_entry_id: '65f5874a-2c75-4fe7-a4b5-833a42267137',
+      format: 'square',
+    })
+
+    const story = shareTradeCardSchema.safeParse({
+      journal_entry_id: '65f5874a-2c75-4fe7-a4b5-833a42267137',
+      format: 'story',
+    })
+
+    expect(square.success).toBe(true)
+    expect(story.success).toBe(true)
   })
 })

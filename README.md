@@ -1,30 +1,42 @@
-# TradeITM registration checkout
+# TradeITM Platform
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+TradeITM is a Next.js + Supabase member platform for trader education, journaling, and community engagement.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/n8kahls-projects/v0-trade-itm-registration-checkout)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/j9BalWf99HF)
+## Core Features
 
-## Overview
+- Member dashboard with role and tier-based access controls.
+- Trade Journal V2 with analytics, grading, and sharing workflows.
+- Academy training system with XP, ranks, and achievements.
+- Profile Hub with trader identity, transcript, academy progress, Discord sync, and affiliate settings.
+- Trade Social with feed, likes, achievements, highlights, and leaderboards.
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## Profile Hub + Trade Social
 
-## Deployment
+- Profile page: `/members/profile`
+- Social page: `/members/social`
+- Social APIs:
+  - `/api/members/profile`
+  - `/api/members/profile/[userId]`
+  - `/api/members/profile/transcript`
+  - `/api/members/profile/views`
+  - `/api/members/affiliate`
+  - `/api/social/feed`
+  - `/api/social/feed/[itemId]/like`
+  - `/api/social/leaderboard`
+  - `/api/social/community-stats`
+  - `/api/social/share-trade`
+  - `/api/webhooks/whop`
 
-Your project is live at:
+## Local Development
 
-**[https://vercel.com/n8kahls-projects/v0-trade-itm-registration-checkout](https://vercel.com/n8kahls-projects/v0-trade-itm-registration-checkout)**
+```bash
+pnpm install
+pnpm dev
+```
 
-## Build your app
+## Testing
 
-Continue building your app on:
-
-**[https://v0.app/chat/j9BalWf99HF](https://v0.app/chat/j9BalWf99HF)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+```bash
+pnpm test:unit
+pnpm test:e2e
+```

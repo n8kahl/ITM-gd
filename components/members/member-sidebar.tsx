@@ -10,6 +10,7 @@ import {
   Bot,
   GraduationCap,
   Palette,
+  Users,
   UserCircle,
   LogOut,
   Sparkles,
@@ -28,6 +29,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   journal: BookOpen,
   'ai-coach': Bot,
   library: GraduationCap,
+  social: Users,
   studio: Palette,
   profile: UserCircle,
 }
@@ -128,10 +130,13 @@ export function MemberSidebar() {
             {/* Avatar */}
             <div className="relative w-11 h-11 rounded-full flex-shrink-0 ring-2 ring-emerald-500/30 ring-offset-1 ring-offset-[#0A0A0B]">
               {profile.discord_avatar ? (
-                <img
+                <Image
                   src={`https://cdn.discordapp.com/avatars/${profile.discord_user_id}/${profile.discord_avatar}.png`}
                   alt={profile.discord_username || 'User'}
-                  className="w-full h-full rounded-full object-cover"
+                  fill
+                  sizes="44px"
+                  className="rounded-full object-cover"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full h-full rounded-full bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center">

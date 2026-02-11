@@ -66,3 +66,15 @@ Do not use flat colors for cards. Use the "Heavy Glass" utility.
 * **Mastery Arc:** Radar chart uses emerald fill at 30% opacity and champagne accent for top scores.
 * **Review Cards:** Flip-card style pattern with question on front and answer on back.
 * **Progress Dots:** 8px circles, emerald for completed, white/10 for remaining, and emerald ring for current.
+
+## 7. Social Card Templates
+* **Approved Trade Card Templates:** `dark-elite`, `emerald-gradient`, `champagne-premium`, `minimal`, `story`.
+* **Required Visuals:** Symbol, direction, P&L, P&L %, entry/exit price, member identity.
+* **P&L Color Rules:** Positive is emerald (`#10B981`), negative is red (`#EF4444`).
+* **Tier Accents:** Core (emerald), Pro (blue), Executive (champagne).
+* **Template Usage:**
+  - `dark-elite`: default feed and web share.
+  - `emerald-gradient`: top-performing wins and highlight shares.
+  - `champagne-premium`: milestone and premium member stories.
+  - `minimal`: compressed or dense feed contexts.
+  - `story`: vertical social story format.

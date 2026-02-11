@@ -10,6 +10,7 @@ import {
   Bot,
   GraduationCap,
   Ellipsis,
+  Users,
   UserCircle,
   Settings,
   type LucideIcon,
@@ -162,6 +163,18 @@ export function MemberBottomNav() {
                   transition={{ duration: 0.16 }}
                   className="absolute bottom-[calc(100%+0.6rem)] right-0 w-44 rounded-xl border border-white/[0.1] bg-[#0D0D0E]/98 backdrop-blur-xl p-1.5 shadow-[0_20px_45px_rgba(0,0,0,0.4)]"
                 >
+                  <Link
+                    href="/members/social"
+                    onClick={() => {
+                      triggerHaptic()
+                      setMoreOpen(false)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06]"
+                  >
+                    <Users className="w-4 h-4 text-emerald-300" />
+                    Social
+                  </Link>
+
                   <Link
                     href="/members/profile"
                     onClick={() => {

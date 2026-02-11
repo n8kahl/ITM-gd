@@ -71,6 +71,7 @@ export const leaderboardQuerySchema = z.object({
 export const shareTradeCardSchema = z.object({
   journal_entry_id: z.string().uuid(),
   template: z.enum(['dark-elite', 'emerald-gradient', 'champagne-premium', 'minimal', 'story']).default('dark-elite'),
+  format: z.enum(['landscape', 'story', 'square']).default('landscape'),
   visibility: z.enum(['public', 'members', 'private']).default('public'),
   share_to_discord: z.boolean().default(false),
 })

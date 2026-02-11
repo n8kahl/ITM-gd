@@ -159,6 +159,7 @@ export interface SocialFeedItem {
     display_name: string | null
     discord_username: string | null
     discord_avatar: string | null
+    discord_user_id?: string | null
     membership_tier: string | null
   }
   user_has_liked?: boolean
