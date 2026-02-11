@@ -41,7 +41,10 @@ export function WidgetActionBar({ actions, compact = false, className }: WidgetA
         className,
       )}
     >
-      <div className="mb-1 px-1 text-[9px] uppercase tracking-[0.12em] text-white/35">Actions</div>
+      <div className="mb-1 flex items-center justify-between gap-2 px-1 text-[9px] uppercase tracking-[0.12em] text-white/35">
+        <span>Actions</span>
+        <span className="text-[8px] tracking-[0.08em] text-white/25 normal-case">Right-click rows for more</span>
+      </div>
       <div className={cn('flex flex-wrap gap-1.5', compact && 'overflow-x-auto pb-0.5 sm:overflow-visible')}>
         {actions.map((action, index) => {
           const Icon = action.icon

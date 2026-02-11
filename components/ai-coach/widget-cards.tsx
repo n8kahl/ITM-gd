@@ -15,6 +15,7 @@ import {
   Calendar,
   Workflow,
 } from 'lucide-react'
+import type { KeyboardEvent, MouseEvent } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { GEXChart } from './gex-chart'
@@ -129,6 +130,23 @@ function normalizeActions(actions: WidgetAction[]): WidgetAction[] {
     if (!unique.has(key)) unique.set(key, action)
   }
   return Array.from(unique.values()).slice(0, 5)
+}
+
+function shouldIgnoreCardActivation(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest('button, a, input, textarea, select, [role="menuitem"], [data-card-ignore="true"]'))
+}
+
+function handleCardClick(event: MouseEvent<HTMLElement>, onActivate: () => void) {
+  if (shouldIgnoreCardActivation(event.target)) return
+  onActivate()
+}
+
+function handleCardKeyDown(event: KeyboardEvent<HTMLElement>, onActivate: () => void) {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  if (shouldIgnoreCardActivation(event.target)) return
+  event.preventDefault()
+  onActivate()
 }
 
 type ScannerOpportunityLike = {
@@ -361,18 +379,8 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   return (
     <div
       className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
-      onClick={(event) => {
-        const target = event.target as HTMLElement
-        if (target.closest('button, a, input, textarea, select, [role="menuitem"]')) return
-        openCardChart()
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        const target = event.target as HTMLElement
-        if (target.closest('button, a, input, textarea, select, [role="menuitem"]')) return
-        event.preventDefault()
-        openCardChart()
-      }}
+      onClick={(event) => handleCardClick(event, openCardChart)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCardChart)}
       role="button"
       tabIndex={0}
       aria-label={`Open ${symbol} key levels on chart`}
@@ -456,6 +464,9 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
   const riskTone = pnlPct <= -15 ? 'danger' : pnlPct >= 15 ? 'success' : 'neutral'
   const riskLabel = pnlPct <= -15 ? 'Drawdown' : pnlPct >= 15 ? 'In Profit' : 'Active'
   const entryPrice = parseNumeric(data.entryPrice) || undefined
+  const openCard = () => {
+    chartAction(symbol, strike, '5m', `${symbol} ${type}`).action()
+  }
   const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, strike),
     optionsAction(symbol, strike, expiry),
@@ -473,7 +484,14 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} position on chart`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -535,6 +553,9 @@ function PnLTrackerCard({ data }: { data: Record<string, unknown> }) {
     delta?: number; gamma?: number; theta?: number; vega?: number
   } | undefined
   const positive = totalPnl >= 0
+  const openCard = () => {
+    viewAction('position', 'Open Analyzer').action()
+  }
   const actions: WidgetAction[] = normalizeActions([
     viewAction('position', 'Open Analyzer'),
     viewAction('journal', 'Open Journal'),
@@ -543,7 +564,14 @@ function PnLTrackerCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open position analyzer"
+    >
       <div className="flex items-center gap-1.5 mb-2">
         <Activity className="w-3.5 h-3.5 text-emerald-500" />
         <span className="text-xs font-medium text-white">Portfolio P&L</span>
@@ -617,9 +645,19 @@ function MarketOverviewCard({ data }: { data: Record<string, unknown> }) {
     viewAction(status === 'pre-market' ? 'brief' : 'macro', status === 'pre-market' ? 'Open Brief' : 'Open Macro', 'SPX'),
     chatAction('Given current market status, what trading approach should I prioritize?'),
   ])
+  const openCard = () => {
+    chartAction('SPX').action()
+  }
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open SPX market chart"
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5 text-emerald-500" />
@@ -654,6 +692,13 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
     status: string
   }>) || []
   const activeCount = alerts.filter(a => a.status === 'active').length
+  const openCard = () => {
+    if (alerts[0]) {
+      chartAction(alerts[0].symbol, alerts[0].target, '5m', `${alerts[0].type}`).action()
+      return
+    }
+    viewAction('alerts', 'Open Alerts').action()
+  }
   const actions: WidgetAction[] = normalizeActions(alerts.length > 0
     ? [
         chartAction(alerts[0].symbol, alerts[0].target),
@@ -664,7 +709,14 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
     : [viewAction('alerts', 'Open Alerts'), chatAction('Show my active alerts and suggest which ones to keep.')])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open alert context"
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Bell className="w-3.5 h-3.5 text-emerald-500" />
@@ -725,6 +777,9 @@ function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
   const changePct = parseNullableNumeric(data.changePct)
   const isDelayed = data.isDelayed as boolean || false
   const priceAsOf = data.priceAsOf as string | undefined
+  const openCard = () => {
+    chartAction(symbol, price, '5m', 'Current Price').action()
+  }
   const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, price),
     optionsAction(symbol, price),
@@ -734,7 +789,14 @@ function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} price on chart`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
@@ -767,6 +829,13 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
   const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
   const highImpactCount = calendar.filter((event) => event.impact === 'High' || event.impact === 'high').length
+  const openCard = () => {
+    if (symbolImpact?.symbol) {
+      chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context').action()
+      return
+    }
+    viewAction('macro', 'Open Macro').action()
+  }
   const actions: WidgetAction[] = normalizeActions([
     symbolImpact?.symbol ? chartAction(symbolImpact.symbol) : viewAction('macro', 'Open Macro'),
     symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('brief', 'Open Brief'),
@@ -777,7 +846,14 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open macro context"
+    >
       <div className="flex items-center gap-1.5 mb-3">
         <Globe className="w-3.5 h-3.5 text-emerald-500" />
         <span className="text-xs font-medium text-white">Macro Context</span>
@@ -862,6 +938,9 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
   const ivRank = data.ivRank as number | undefined
   const calls = (data.calls as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
   const puts = (data.puts as Array<{ strike: number; last: number; delta: string; iv: string; volume: number }>) || []
+  const openCard = () => {
+    optionsAction(symbol, currentPrice, expiry).action()
+  }
   const actions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice, expiry),
     chartAction(symbol, currentPrice),
@@ -876,7 +955,14 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
   const totalContracts = calls.length + puts.length
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-md')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-md cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} options chain`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -995,7 +1081,14 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-xl')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-xl cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, handleShowOnChart)}
+      onKeyDown={(event) => handleCardKeyDown(event, handleShowOnChart)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} gamma profile on chart`}
+    >
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <BarChart2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -1090,6 +1183,18 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
 
   const resistance = (keyLevels.resistance as Array<{ name?: string; type?: string; price?: number }> | undefined) || []
   const support = (keyLevels.support as Array<{ name?: string; type?: string; price?: number }> | undefined) || []
+  const allResistance = resistance
+    .map((level) => ({
+      name: level.name || level.type || 'Resistance',
+      price: parseNullableNumeric(level.price),
+    }))
+    .filter((level): level is { name: string; price: number } => level.price != null)
+  const allSupport = support
+    .map((level) => ({
+      name: level.name || level.type || 'Support',
+      price: parseNullableNumeric(level.price),
+    }))
+    .filter((level): level is { name: string; price: number } => level.price != null)
   const topResistance = resistance.slice(0, 2).map((level) => ({
     name: level.name || level.type || 'R',
     price: parseNullableNumeric(level.price) ?? 0,
@@ -1108,6 +1213,14 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
   const moveUsedPct = currentPrice != null && expectedMove != null && flipPoint != null && expectedMove > 0
     ? Math.min(100, Math.abs(((currentPrice - flipPoint) / expectedMove) * 100))
     : null
+  const openCard = () => {
+    openKeyLevelsChart({
+      symbol,
+      resistance: allResistance,
+      support: allSupport,
+      timeframe: '15m',
+    })
+  }
 
   const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, currentPrice ?? undefined, '5m', 'SPX Game Plan'),
@@ -1121,7 +1234,14 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
   }
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-xl')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-xl cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} full game plan on chart`}
+    >
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -1247,6 +1367,13 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
   }>) || []
   const count = data.count as number || 0
   const bestScore = opportunities.length > 0 ? Math.max(...opportunities.map((opp) => opp.score)) : null
+  const openCard = () => {
+    if (!opportunities[0]) {
+      viewAction('scanner', 'Open Scanner').action()
+      return
+    }
+    openScannerSetupChart(opportunities[0], '15m')
+  }
   const actions: WidgetAction[] = normalizeActions(opportunities.length > 0
     ? [
         scannerChartAction(opportunities[0], '15m'),
@@ -1258,7 +1385,14 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
     : [viewAction('scanner', 'Open Scanner'), chatAction('Run another opportunity scan and summarize strongest setups.')])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open top scanner setup on chart"
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Search className="w-3.5 h-3.5 text-emerald-500" />
@@ -1340,6 +1474,9 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const minutesLeft = parseNullableNumeric(expectedMove?.minutesLeft)
   const hasZeroDTE = Boolean(data.hasZeroDTE)
   const usedRiskTone = usedPct != null && usedPct >= 80 ? 'danger' : usedPct != null && usedPct >= 60 ? 'warning' : 'success'
+  const openCard = () => {
+    chartAction(symbol, currentPrice, '5m', '0DTE Context').action()
+  }
 
   const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, currentPrice, '5m', '0DTE Context'),
@@ -1349,7 +1486,14 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} 0DTE context on chart`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Workflow className="w-3.5 h-3.5 text-emerald-400" />
@@ -1435,6 +1579,9 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const ivRankValue = parseNullableNumeric(ivRank?.ivRank)
   const ivTone: 'success' | 'warning' | 'danger' | 'neutral' =
     ivRankValue == null ? 'neutral' : ivRankValue >= 70 ? 'danger' : ivRankValue >= 40 ? 'warning' : 'success'
+  const openCard = () => {
+    optionsAction(symbol, currentPrice).action()
+  }
 
   const actions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
@@ -1444,7 +1591,14 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-sky-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-sky-500/15 max-w-sm cursor-pointer hover:border-sky-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} volatility context`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5 text-sky-400" />
@@ -1515,6 +1669,9 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
   const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
   const watchlist = Array.isArray(data.watchlist) ? data.watchlist as string[] : []
   const daysAhead = parseNumeric(data.daysAhead)
+  const openCard = () => {
+    viewAction('earnings', 'Open Earnings').action()
+  }
   const cardActions: WidgetAction[] = normalizeActions([
     viewAction('earnings', 'Open Earnings'),
     chatAction('Summarize this earnings calendar and highlight the highest-risk names for options day traders.'),
@@ -1522,7 +1679,14 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-fuchsia-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-fuchsia-500/15 max-w-sm cursor-pointer hover:border-fuchsia-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open earnings calendar"
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-fuchsia-400" />
@@ -1572,6 +1736,9 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const pct = parseNullableNumeric(expectedMove?.pct)
   const currentPrice = parseNullableNumeric((data as Record<string, unknown>).currentPrice) ?? 0
   const ivCrushRisk = String((data as Record<string, unknown>).ivCrushRisk || '').toLowerCase()
+  const openCard = () => {
+    optionsAction(symbol, currentPrice).action()
+  }
   const cardActions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
     chartAction(symbol, currentPrice, '5m', 'Earnings Setup'),
@@ -1581,7 +1748,14 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-amber-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-amber-500/15 max-w-sm cursor-pointer hover:border-amber-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} earnings options context`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Bell className="w-3.5 h-3.5 text-amber-400" />
@@ -1648,6 +1822,9 @@ function JournalInsightsCard({ data }: { data: Record<string, unknown> }) {
   const tradeCount = parseNumeric(data.tradeCount)
   const summary = String(data.summary || 'No journal summary available.')
   const period = String(data.period || '30d')
+  const openCard = () => {
+    viewAction('journal', 'Open Journal').action()
+  }
   const cardActions: WidgetAction[] = normalizeActions([
     viewAction('journal', 'Open Journal'),
     chatAction('Turn these journal insights into three concrete rules for tomorrow.'),
@@ -1656,7 +1833,14 @@ function JournalInsightsCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-teal-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-teal-500/15 max-w-sm cursor-pointer hover:border-teal-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open journal insights"
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <BarChart2 className="w-3.5 h-3.5 text-teal-400" />
@@ -1677,6 +1861,13 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
   const symbol = (data.symbol as string) || 'All Symbols'
   const summary = (data.summary as Record<string, unknown> | null) || null
   const trades = Array.isArray(data.trades) ? data.trades as Array<Record<string, unknown>> : []
+  const openCard = () => {
+    if (symbol !== 'All Symbols') {
+      chartAction(symbol, undefined, '5m', 'Trade Context').action()
+      return
+    }
+    viewAction('journal', 'Open Journal').action()
+  }
   const cardActions: WidgetAction[] = normalizeActions([
     viewAction('journal', 'Open Journal', symbol !== 'All Symbols' ? symbol : undefined),
     symbol !== 'All Symbols' ? chartAction(symbol) : viewAction('tracked', 'Open Tracked'),
@@ -1685,7 +1876,14 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-violet-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-violet-500/15 max-w-sm cursor-pointer hover:border-violet-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} trade history context`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Search className="w-3.5 h-3.5 text-violet-400" />
