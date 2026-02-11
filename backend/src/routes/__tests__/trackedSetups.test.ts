@@ -14,6 +14,7 @@ jest.mock('../../lib/logger', () => ({
 const mockFrom = jest.fn() as jest.Mock<any, any>;
 const mockGetEnv = jest.fn();
 const mockPublishSetupDetected = jest.fn();
+const mockPublishSetupStatusUpdate = jest.fn();
 
 jest.mock('../../config/database', () => ({
   supabase: {
@@ -27,6 +28,7 @@ jest.mock('../../config/env', () => ({
 
 jest.mock('../../services/setupPushChannel', () => ({
   publishSetupDetected: (...args: any[]) => mockPublishSetupDetected(...args),
+  publishSetupStatusUpdate: (...args: any[]) => mockPublishSetupStatusUpdate(...args),
 }));
 
 jest.mock('../../middleware/auth', () => ({
@@ -63,6 +65,8 @@ describe('Tracked Setups Routes', () => {
 
       const selectChain: any = {
         eq: jest.fn().mockReturnThis(),
+        neq: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         data: setups,
         error: null,
@@ -77,11 +81,15 @@ describe('Tracked Setups Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.trackedSetups).toHaveLength(1);
       expect(res.body.trackedSetups[0].symbol).toBe('SPX');
+      expect(selectChain.neq).toHaveBeenCalledWith('status', 'invalidated');
+      expect(selectChain.in).not.toHaveBeenCalled();
     });
 
     it('applies status filter when provided', async () => {
       const selectChain: any = {
         eq: jest.fn().mockReturnThis(),
+        neq: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         data: [],
         error: null,
@@ -95,6 +103,48 @@ describe('Tracked Setups Routes', () => {
 
       expect(selectChain.eq).toHaveBeenCalledWith('user_id', 'test-user-123');
       expect(selectChain.eq).toHaveBeenCalledWith('status', 'active');
+      expect(selectChain.neq).not.toHaveBeenCalled();
+      expect(selectChain.in).not.toHaveBeenCalled();
+    });
+
+    it('applies view=active filter when status is omitted', async () => {
+      const selectChain: any = {
+        eq: jest.fn().mockReturnThis(),
+        neq: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        data: [],
+        error: null,
+      };
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue(selectChain),
+      });
+
+      await request(app).get('/api/tracked-setups?view=active');
+
+      expect(selectChain.in).toHaveBeenCalledWith('status', ['active', 'triggered']);
+      expect(selectChain.neq).not.toHaveBeenCalled();
+    });
+
+    it('applies view=history filter when status is omitted', async () => {
+      const selectChain: any = {
+        eq: jest.fn().mockReturnThis(),
+        neq: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        data: [],
+        error: null,
+      };
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue(selectChain),
+      });
+
+      await request(app).get('/api/tracked-setups?view=history');
+
+      expect(selectChain.in).toHaveBeenCalledWith('status', ['invalidated', 'archived']);
+      expect(selectChain.neq).not.toHaveBeenCalled();
     });
   });
 
@@ -176,6 +226,18 @@ describe('Tracked Setups Routes', () => {
   describe('PATCH /api/tracked-setups/:id', () => {
     it('updates status and returns tracked setup', async () => {
       const updateSpy = jest.fn();
+      const existingSelectChain: any = {
+        eq: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: {
+            id: '44444444-4444-4444-4444-444444444444',
+            symbol: 'SPX',
+            setup_type: 'breakout',
+            status: 'active',
+          },
+          error: null,
+        }),
+      };
       const updateChain: any = {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
@@ -189,9 +251,13 @@ describe('Tracked Setups Routes', () => {
       };
 
       updateSpy.mockReturnValue(updateChain);
-      mockFrom.mockReturnValue({
-        update: updateSpy,
-      });
+      mockFrom
+        .mockImplementationOnce(() => ({
+          select: jest.fn().mockReturnValue(existingSelectChain),
+        }))
+        .mockImplementationOnce(() => ({
+          update: updateSpy,
+        }));
 
       const res = await request(app)
         .patch('/api/tracked-setups/44444444-4444-4444-4444-444444444444')
@@ -203,17 +269,69 @@ describe('Tracked Setups Routes', () => {
         triggered_at: expect.any(String),
         invalidated_at: null,
       }));
+      expect(mockPublishSetupStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        setupId: '44444444-4444-4444-4444-444444444444',
+        userId: 'test-user-123',
+        symbol: 'SPX',
+        setupType: 'breakout',
+        previousStatus: 'active',
+        status: 'triggered',
+        reason: 'manual_update',
+      }));
     });
 
-    it('returns 404 when tracked setup is not found', async () => {
+    it('does not publish setup_update on notes-only edits', async () => {
+      const existingSelectChain: any = {
+        eq: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: {
+            id: '77777777-7777-7777-7777-777777777777',
+            symbol: 'SPX',
+            setup_type: 'breakout',
+            status: 'active',
+          },
+          error: null,
+        }),
+      };
       const updateChain: any = {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: {
+            id: '77777777-7777-7777-7777-777777777777',
+            symbol: 'SPX',
+            setup_type: 'breakout',
+            status: 'active',
+            notes: 'updated note',
+          },
+          error: null,
+        }),
+      };
+
+      mockFrom
+        .mockImplementationOnce(() => ({
+          select: jest.fn().mockReturnValue(existingSelectChain),
+        }))
+        .mockImplementationOnce(() => ({
+          update: jest.fn().mockReturnValue(updateChain),
+        }));
+
+      const res = await request(app)
+        .patch('/api/tracked-setups/77777777-7777-7777-7777-777777777777')
+        .send({ notes: 'updated note' });
+
+      expect(res.status).toBe(200);
+      expect(mockPublishSetupStatusUpdate).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when tracked setup is not found', async () => {
+      const existingSelectChain: any = {
+        eq: jest.fn().mockReturnThis(),
         maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
       };
 
       mockFrom.mockReturnValue({
-        update: jest.fn().mockReturnValue(updateChain),
+        select: jest.fn().mockReturnValue(existingSelectChain),
       });
 
       const res = await request(app)
@@ -222,6 +340,7 @@ describe('Tracked Setups Routes', () => {
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('Not found');
+      expect(mockPublishSetupStatusUpdate).not.toHaveBeenCalled();
     });
   });
 

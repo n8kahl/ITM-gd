@@ -11,10 +11,10 @@ export interface SetupStatusUpdate {
   userId: string;
   symbol: string;
   setupType: string;
-  previousStatus: 'active';
-  status: 'triggered' | 'invalidated';
-  currentPrice: number;
-  reason: 'target_reached' | 'stop_loss_hit';
+  previousStatus: 'active' | 'triggered' | 'invalidated' | 'archived';
+  status: 'active' | 'triggered' | 'invalidated' | 'archived';
+  currentPrice: number | null;
+  reason: 'target_reached' | 'stop_loss_hit' | 'manual_update';
   evaluatedAt: string;
 }
 

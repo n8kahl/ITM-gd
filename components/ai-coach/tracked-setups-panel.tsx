@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Target,
   CandlestickChart,
@@ -16,6 +16,7 @@ import {
   Edit3,
   Save,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { motion } from 'framer-motion'
@@ -40,20 +41,44 @@ import {
   type TrackedSetup,
   type TrackedSetupStatus,
 } from '@/lib/api/ai-coach'
+import {
+  DEFAULT_TRACKED_SETUPS_PREFERENCES,
+  filterTrackedSetups,
+  loadTrackedSetupsPreferences,
+  saveTrackedSetupsPreferences,
+  sortTrackedSetups,
+  type ActiveStatusFilter,
+  type HistoryStatusFilter,
+  type TrackedSetupsSortMode,
+  type TrackedSetupsView,
+} from '@/lib/ai-coach/tracked-setups'
 
 interface TrackedSetupsPanelProps {
   onClose: () => void
   onSendPrompt?: (prompt: string) => void
 }
 
-type StatusFilter = 'all' | TrackedSetupStatus
+const VIEW_FILTERS: Array<{ value: TrackedSetupsView; label: string }> = [
+  { value: 'active', label: 'Active' },
+  { value: 'history', label: 'History' },
+]
 
-const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
+const ACTIVE_STATUS_FILTERS: Array<{ value: ActiveStatusFilter; label: string }> = [
   { value: 'active', label: 'Active' },
   { value: 'triggered', label: 'Triggered' },
+  { value: 'all', label: 'All' },
+]
+
+const HISTORY_STATUS_FILTERS: Array<{ value: HistoryStatusFilter; label: string }> = [
   { value: 'invalidated', label: 'Invalidated' },
   { value: 'archived', label: 'Archived' },
   { value: 'all', label: 'All' },
+]
+
+const SORT_MODES: Array<{ value: TrackedSetupsSortMode; label: string }> = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'highest_score', label: 'Highest Score' },
+  { value: 'closest_to_trigger', label: 'Closest to Trigger' },
 ]
 
 const STATUS_BADGE_STYLES: Record<TrackedSetupStatus, string> = {
@@ -210,23 +235,49 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryNotice, setRetryNotice] = useState<string | null>(null)
-  const [filterStatus, setFilterStatus] = useState<StatusFilter>('active')
+  const [view, setView] = useState<TrackedSetupsView>(DEFAULT_TRACKED_SETUPS_PREFERENCES.view)
+  const [activeStatusFilter, setActiveStatusFilter] = useState<ActiveStatusFilter>(DEFAULT_TRACKED_SETUPS_PREFERENCES.activeStatusFilter)
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatusFilter>(DEFAULT_TRACKED_SETUPS_PREFERENCES.historyStatusFilter)
+  const [sortMode, setSortMode] = useState<TrackedSetupsSortMode>(DEFAULT_TRACKED_SETUPS_PREFERENCES.sortMode)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [mutatingIds, setMutatingIds] = useState<Record<string, boolean>>({})
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
   const wsRef = useRef<WebSocket | null>(null)
 
-  const fetchSetups = useCallback(async () => {
+  const applyTrackedSetupUpdate = useCallback((trackedSetup: TrackedSetup) => {
+    setTrackedSetups((prev) => {
+      const exists = prev.some((item) => item.id === trackedSetup.id)
+      const next = exists
+        ? prev.map((item) => (item.id === trackedSetup.id ? trackedSetup : item))
+        : [trackedSetup, ...prev]
+
+      return filterTrackedSetups(next, view, activeStatusFilter, historyStatusFilter)
+    })
+  }, [activeStatusFilter, historyStatusFilter, view])
+
+  const fetchSetups = useCallback(async (options?: { silent?: boolean }) => {
     if (!token) return
-    setIsLoading(true)
+    const silent = options?.silent === true
+    if (!silent) setIsLoading(true)
     setError(null)
     setRetryNotice(null)
 
     try {
+      const activeFilter = view === 'active' ? activeStatusFilter : 'all'
+      const historyFilter = view === 'history' ? historyStatusFilter : 'all'
+      const requestedStatus = activeFilter !== 'all'
+        ? activeFilter
+        : historyFilter !== 'all'
+          ? historyFilter
+          : undefined
+
       const result = await runWithRetry(
         () => getTrackedSetups(
           token,
-          filterStatus === 'all' ? undefined : { status: filterStatus },
+          requestedStatus
+            ? { status: requestedStatus }
+            : { view },
         ),
         {
           onRetry: ({ nextAttempt, maxAttempts }) => {
@@ -234,7 +285,9 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
           },
         },
       )
-      setTrackedSetups(result.trackedSetups)
+      setTrackedSetups(
+        filterTrackedSetups(result.trackedSetups, view, activeStatusFilter, historyStatusFilter),
+      )
     } catch (err) {
       const message = err instanceof AICoachAPIError
         ? err.apiError.message
@@ -242,9 +295,29 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
       setError(message)
     } finally {
       setRetryNotice(null)
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
-  }, [filterStatus, token])
+  }, [activeStatusFilter, historyStatusFilter, token, view])
+
+  useEffect(() => {
+    if (!userId) return
+
+    const preferences = loadTrackedSetupsPreferences(userId)
+    setView(preferences.view)
+    setActiveStatusFilter(preferences.activeStatusFilter)
+    setHistoryStatusFilter(preferences.historyStatusFilter)
+    setSortMode(preferences.sortMode)
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
+    saveTrackedSetupsPreferences(userId, {
+      view,
+      activeStatusFilter,
+      historyStatusFilter,
+      sortMode,
+    })
+  }, [activeStatusFilter, historyStatusFilter, sortMode, userId, view])
 
   useEffect(() => {
     void fetchSetups()
@@ -268,7 +341,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
           (message?.type === 'setup_update' || message?.type === 'setup_detected')
           && message?.channel === setupChannel
         ) {
-          void fetchSetups()
+          void fetchSetups({ silent: true })
         }
       } catch {
         // Ignore malformed messages
@@ -284,21 +357,75 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     }
   }, [fetchSetups, token, userId])
 
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const availableIds = new Set(trackedSetups.map((setup) => setup.id))
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (availableIds.has(id)) next.add(id)
+      }
+      return next
+    })
+  }, [trackedSetups])
+
   const setMutating = useCallback((id: string, value: boolean) => {
     setMutatingIds((prev) => ({ ...prev, [id]: value }))
   }, [])
 
-  const handleStatusChange = useCallback(async (id: string, status: TrackedSetupStatus) => {
+  const undoInvalidation = useCallback(async (
+    id: string,
+    previousStatus: Exclude<TrackedSetupStatus, 'invalidated'>,
+  ) => {
     if (!token) return
 
     setMutating(id, true)
     setError(null)
 
     try {
+      const result = await updateTrackedSetup(id, token, { status: previousStatus })
+      applyTrackedSetupUpdate(result.trackedSetup)
+      toast.success('Invalidation reverted')
+    } catch (err) {
+      const message = err instanceof AICoachAPIError
+        ? err.apiError.message
+        : 'Failed to revert invalidation'
+      setError(message)
+      toast.error('Failed to revert invalidation')
+    } finally {
+      setMutating(id, false)
+    }
+  }, [applyTrackedSetupUpdate, setMutating, token])
+
+  const handleStatusChange = useCallback(async (id: string, status: TrackedSetupStatus) => {
+    if (!token) return
+
+    const existingSetup = trackedSetups.find((item) => item.id === id)
+    const previousStatus = existingSetup?.status
+
+    setMutating(id, true)
+    setError(null)
+
+    try {
       const result = await updateTrackedSetup(id, token, { status })
-      setTrackedSetups((prev) => prev.map((item) => (
-        item.id === id ? result.trackedSetup : item
-      )))
+      applyTrackedSetupUpdate(result.trackedSetup)
+
+      if (
+        status === 'invalidated'
+        && previousStatus
+        && previousStatus !== 'invalidated'
+      ) {
+        const revertStatus = previousStatus as Exclude<TrackedSetupStatus, 'invalidated'>
+        toast('Setup invalidated', {
+          description: `${result.trackedSetup.symbol} ${result.trackedSetup.setup_type} moved to history.`,
+          duration: 8000,
+          action: {
+            label: 'Undo',
+            onClick: () => {
+              void undoInvalidation(id, revertStatus)
+            },
+          },
+        })
+      }
     } catch (err) {
       const message = err instanceof AICoachAPIError
         ? err.apiError.message
@@ -307,7 +434,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     } finally {
       setMutating(id, false)
     }
-  }, [setMutating, token])
+  }, [applyTrackedSetupUpdate, setMutating, token, trackedSetups, undoInvalidation])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!token) return
@@ -318,6 +445,12 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     try {
       await deleteTrackedSetup(id, token)
       setTrackedSetups((prev) => prev.filter((item) => item.id !== id))
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
       if (editingNotesId === id) {
         setEditingNotesId(null)
         setNotesDraft('')
@@ -350,9 +483,7 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
 
     try {
       const result = await updateTrackedSetup(id, token, { notes: notesDraft.trim() || null })
-      setTrackedSetups((prev) => prev.map((item) => (
-        item.id === id ? result.trackedSetup : item
-      )))
+      applyTrackedSetupUpdate(result.trackedSetup)
       setEditingNotesId(null)
       setNotesDraft('')
     } catch (err) {
@@ -363,7 +494,102 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     } finally {
       setMutating(id, false)
     }
-  }, [notesDraft, setMutating, token])
+  }, [applyTrackedSetupUpdate, notesDraft, setMutating, token])
+
+  const displayedSetups = useMemo(
+    () => sortTrackedSetups(trackedSetups, sortMode),
+    [sortMode, trackedSetups],
+  )
+
+  const allSelected = displayedSetups.length > 0
+    && displayedSetups.every((setup) => selectedIds.has(setup.id))
+  const selectedCount = selectedIds.size
+
+  const toggleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedIds(new Set())
+      return
+    }
+
+    setSelectedIds(new Set(displayedSetups.map((setup) => setup.id)))
+  }, [allSelected, displayedSetups])
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const runBulkStatusUpdate = useCallback(async (status: TrackedSetupStatus) => {
+    if (!token || selectedIds.size === 0) return
+
+    const ids = Array.from(selectedIds)
+    setError(null)
+    ids.forEach((id) => setMutating(id, true))
+
+    let successCount = 0
+    let failureCount = 0
+
+    for (const id of ids) {
+      try {
+        const result = await updateTrackedSetup(id, token, { status })
+        applyTrackedSetupUpdate(result.trackedSetup)
+        successCount += 1
+      } catch {
+        failureCount += 1
+      } finally {
+        setMutating(id, false)
+      }
+    }
+
+    setSelectedIds(new Set())
+
+    if (successCount > 0) {
+      toast.success(`${successCount} setup${successCount === 1 ? '' : 's'} updated`)
+    }
+    if (failureCount > 0) {
+      setError(`Failed to update ${failureCount} setup${failureCount === 1 ? '' : 's'}`)
+    }
+  }, [applyTrackedSetupUpdate, selectedIds, setMutating, token])
+
+  const runBulkDelete = useCallback(async () => {
+    if (!token || selectedIds.size === 0) return
+
+    const ids = Array.from(selectedIds)
+    setError(null)
+    ids.forEach((id) => setMutating(id, true))
+
+    let successCount = 0
+    let failureCount = 0
+    const deletedIds = new Set<string>()
+
+    for (const id of ids) {
+      try {
+        await deleteTrackedSetup(id, token)
+        successCount += 1
+        deletedIds.add(id)
+      } catch {
+        failureCount += 1
+      } finally {
+        setMutating(id, false)
+      }
+    }
+
+    if (successCount > 0) {
+      setTrackedSetups((prev) => prev.filter((setup) => !deletedIds.has(setup.id)))
+      toast.success(`${successCount} setup${successCount === 1 ? '' : 's'} deleted`)
+    }
+    if (failureCount > 0) {
+      setError(`Failed to delete ${failureCount} setup${failureCount === 1 ? '' : 's'}`)
+    }
+
+    setSelectedIds(new Set())
+  }, [selectedIds, setMutating, token])
+
+  const statusFilters = view === 'active' ? ACTIVE_STATUS_FILTERS : HISTORY_STATUS_FILTERS
 
   return (
     <div className="h-full flex flex-col">
@@ -371,15 +597,17 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
         <div className="flex items-center gap-2">
           <Target className="w-4 h-4 text-emerald-500" />
           <h2 className="text-sm font-medium text-white">Tracked Setups</h2>
-          {trackedSetups.length > 0 && (
+          {displayedSetups.length > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
-              {trackedSetups.length}
+              {displayedSetups.length}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
           <motion.button
-            onClick={fetchSetups}
+            onClick={() => {
+              void fetchSetups()
+            }}
             disabled={isLoading}
             className={cn(
               'flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all',
@@ -403,22 +631,128 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
       </div>
 
       <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 overflow-x-auto">
-        {STATUS_FILTERS.map((status) => (
+        {VIEW_FILTERS.map((candidate) => (
           <motion.button
-            key={status.value}
-            onClick={() => setFilterStatus(status.value)}
+            key={candidate.value}
+            onClick={() => {
+              setView(candidate.value)
+              setSelectedIds(new Set())
+            }}
             className={cn(
               'text-xs px-2 py-1 rounded transition-colors whitespace-nowrap',
-              filterStatus === status.value
+              view === candidate.value
                 ? 'bg-emerald-500/20 text-emerald-400'
                 : 'text-white/40 hover:text-white/60',
             )}
             {...PRESSABLE_PROPS}
           >
-            {status.label}
+            {candidate.label}
+          </motion.button>
+        ))}
+
+        <div className="w-px h-4 bg-white/10 mx-1" />
+
+        {statusFilters.map((candidate) => (
+          <motion.button
+            key={candidate.value}
+            onClick={() => {
+              if (view === 'active') {
+                setActiveStatusFilter(candidate.value as ActiveStatusFilter)
+              } else {
+                setHistoryStatusFilter(candidate.value as HistoryStatusFilter)
+              }
+              setSelectedIds(new Set())
+            }}
+            className={cn(
+              'text-xs px-2 py-1 rounded transition-colors whitespace-nowrap',
+              ((view === 'active' && activeStatusFilter === candidate.value)
+                || (view === 'history' && historyStatusFilter === candidate.value))
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'text-white/40 hover:text-white/60',
+            )}
+            {...PRESSABLE_PROPS}
+          >
+            {candidate.label}
           </motion.button>
         ))}
       </div>
+
+      <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 overflow-x-auto">
+        <span className="text-[10px] uppercase tracking-wide text-white/35">Sort</span>
+        {SORT_MODES.map((mode) => (
+          <motion.button
+            key={mode.value}
+            onClick={() => setSortMode(mode.value)}
+            className={cn(
+              'text-xs px-2 py-1 rounded transition-colors whitespace-nowrap',
+              sortMode === mode.value
+                ? 'bg-sky-500/20 text-sky-300'
+                : 'text-white/40 hover:text-white/60',
+            )}
+            {...PRESSABLE_PROPS}
+          >
+            {mode.label}
+          </motion.button>
+        ))}
+      </div>
+
+      {!isLoading && !error && displayedSetups.length > 0 && (
+        <div className="px-4 py-2 border-b border-white/5 flex items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-xs text-white/60">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="h-3.5 w-3.5 rounded border border-white/30 bg-transparent accent-emerald-500"
+            />
+            Select all
+          </label>
+
+          {selectedCount > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <span className="text-xs text-white/55 whitespace-nowrap">{selectedCount} selected</span>
+              {view === 'active' && (
+                <motion.button
+                  onClick={() => {
+                    void runBulkStatusUpdate('archived')
+                  }}
+                  className="text-[11px] px-2 py-1 rounded border border-white/15 bg-white/10 text-white/70 hover:bg-white/15 whitespace-nowrap"
+                  {...PRESSABLE_PROPS}
+                >
+                  Archive Selected
+                </motion.button>
+              )}
+              {view === 'history' && (
+                <motion.button
+                  onClick={() => {
+                    void runBulkStatusUpdate('active')
+                  }}
+                  className="text-[11px] px-2 py-1 rounded border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/15 whitespace-nowrap"
+                  {...PRESSABLE_PROPS}
+                >
+                  Reopen Selected
+                </motion.button>
+              )}
+              <motion.button
+                onClick={() => {
+                  void runBulkDelete()
+                }}
+                className="text-[11px] px-2 py-1 rounded border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15 whitespace-nowrap"
+                {...PRESSABLE_PROPS}
+              >
+                Delete Selected
+              </motion.button>
+              <motion.button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-[11px] px-2 py-1 rounded border border-white/15 bg-white/10 text-white/70 hover:bg-white/15 whitespace-nowrap"
+                {...PRESSABLE_PROPS}
+              >
+                Clear
+              </motion.button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {isLoading && (
@@ -434,7 +768,9 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
           <div className="text-center py-12">
             <p className="text-sm text-red-400 mb-2">{error}</p>
             <motion.button
-              onClick={fetchSetups}
+              onClick={() => {
+                void fetchSetups()
+              }}
               className="text-xs text-emerald-500 hover:text-emerald-400"
               {...PRESSABLE_PROPS}
             >
@@ -443,19 +779,24 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
           </div>
         )}
 
-        {!isLoading && !error && trackedSetups.length === 0 && (
+        {!isLoading && !error && displayedSetups.length === 0 && (
           <div className="text-center py-16">
             <Target className="w-10 h-10 text-white/10 mx-auto mb-3" />
-            <p className="text-sm text-white/40">No tracked setups</p>
-            <p className="text-xs text-white/25 mt-1">Track scanner ideas to monitor them through the day.</p>
+            <p className="text-sm text-white/40">{view === 'history' ? 'No history yet' : 'No active setups'}</p>
+            <p className="text-xs text-white/25 mt-1">
+              {view === 'history'
+                ? 'Archived and invalidated setups will appear here.'
+                : 'Track scanner ideas to monitor them through the day.'}
+            </p>
           </div>
         )}
 
-        {!isLoading && !error && trackedSetups.length > 0 && (
+        {!isLoading && !error && displayedSetups.length > 0 && (
           <div className="p-4 space-y-3">
-            {trackedSetups.map((setup) => {
+            {displayedSetups.map((setup) => {
               const isMutating = !!mutatingIds[setup.id]
               const isEditingNotes = editingNotesId === setup.id
+              const isSelected = selectedIds.has(setup.id)
               const score = typeof setup.opportunity_data?.score === 'number'
                 ? setup.opportunity_data.score
                 : null
@@ -492,10 +833,24 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
               return (
                 <WidgetContextMenu key={setup.id} actions={contextActions}>
                   <div
-                    className="glass-card-heavy rounded-lg p-3 border border-white/10"
+                    className={cn(
+                      'glass-card-heavy rounded-lg p-3 border border-white/10',
+                      isSelected && 'ring-1 ring-emerald-500/50 border-emerald-500/30',
+                    )}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelection(setup.id)}
+                            className="h-3.5 w-3.5 rounded border border-white/30 bg-transparent accent-emerald-500"
+                          />
+                          <span className="text-[10px] text-white/45 uppercase tracking-wide">
+                            Select
+                          </span>
+                        </div>
                         <div className="flex items-center flex-wrap gap-2">
                           <span className="text-sm font-semibold text-white">{setup.symbol}</span>
                           <span className="text-[11px] text-white/50 uppercase tracking-wide">{setup.setup_type}</span>

@@ -228,9 +228,14 @@ async function setupWorkflowMocks(page: Page) {
         }
 
         const status = parsed.searchParams.get('status')
+        const view = parsed.searchParams.get('view')
         const filtered = status
           ? trackedSetupsInBrowser.filter((setup) => setup.status === status)
-          : trackedSetupsInBrowser
+          : view === 'active'
+            ? trackedSetupsInBrowser.filter((setup) => setup.status === 'active' || setup.status === 'triggered')
+            : view === 'history'
+              ? trackedSetupsInBrowser.filter((setup) => setup.status === 'invalidated' || setup.status === 'archived')
+              : trackedSetupsInBrowser.filter((setup) => setup.status !== 'invalidated')
 
         return jsonResponse({ trackedSetups: filtered })
       }
@@ -533,9 +538,14 @@ async function setupWorkflowMocks(page: Page) {
     }
 
     const status = requestUrl.searchParams.get('status')
+    const view = requestUrl.searchParams.get('view')
     const filtered = status
       ? trackedSetups.filter((setup) => setup.status === status)
-      : trackedSetups
+      : view === 'active'
+        ? trackedSetups.filter((setup) => setup.status === 'active' || setup.status === 'triggered')
+        : view === 'history'
+          ? trackedSetups.filter((setup) => setup.status === 'invalidated' || setup.status === 'archived')
+          : trackedSetups.filter((setup) => setup.status !== 'invalidated')
 
     await route.fulfill({
       status: 200,

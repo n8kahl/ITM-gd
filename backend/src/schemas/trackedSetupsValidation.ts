@@ -32,6 +32,7 @@ export const trackedSetupIdSchema = z.object({
 
 export const getTrackedSetupsQuerySchema = z.object({
   status: statusSchema.optional(),
+  view: z.enum(['active', 'history']).optional(),
 });
 
 export const simulateDetectedSetupSchema = z.object({

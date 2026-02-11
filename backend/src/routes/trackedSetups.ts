@@ -3,7 +3,7 @@ import { authenticateToken } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate';
 import { supabase } from '../config/database';
 import { getEnv } from '../config/env';
-import { publishSetupDetected } from '../services/setupPushChannel';
+import { publishSetupDetected, publishSetupStatusUpdate } from '../services/setupPushChannel';
 import {
   createTrackedSetupSchema,
   updateTrackedSetupSchema,
@@ -31,17 +31,24 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
-      const { status } = (req as any).validatedQuery as { status?: string };
+      const { status, view } = (req as any).validatedQuery as { status?: string; view?: 'active' | 'history' };
 
       let query = supabase
         .from('ai_coach_tracked_setups')
         .select('*')
-        .eq('user_id', userId)
-        .order('tracked_at', { ascending: false });
+        .eq('user_id', userId);
 
       if (status) {
         query = query.eq('status', status);
+      } else if (view === 'history') {
+        query = query.in('status', ['invalidated', 'archived']);
+      } else if (view === 'active') {
+        query = query.in('status', ['active', 'triggered']);
+      } else {
+        query = query.neq('status', 'invalidated');
       }
+
+      query = query.order('tracked_at', { ascending: false });
 
       const { data, error } = await query;
 
@@ -264,6 +271,23 @@ router.patch(
         notes?: string | null;
       };
 
+      const { data: existingSetup, error: existingError } = await supabase
+        .from('ai_coach_tracked_setups')
+        .select('id, symbol, setup_type, status')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existingError) {
+        throw new Error(`Failed to load tracked setup before update: ${existingError.message}`);
+      }
+
+      if (!existingSetup) {
+        res.status(404).json({ error: 'Not found', message: 'Tracked setup not found' });
+        return;
+      }
+
+      const previousStatus = existingSetup.status as 'active' | 'triggered' | 'invalidated' | 'archived';
       const updatePayload: Record<string, unknown> = {};
 
       if (updates.notes !== undefined) {
@@ -300,6 +324,20 @@ router.patch(
       if (!data) {
         res.status(404).json({ error: 'Not found', message: 'Tracked setup not found' });
         return;
+      }
+
+      if (updates.status !== undefined && updates.status !== previousStatus) {
+        publishSetupStatusUpdate({
+          setupId: data.id,
+          userId,
+          symbol: data.symbol || existingSetup.symbol,
+          setupType: data.setup_type || existingSetup.setup_type,
+          previousStatus,
+          status: updates.status,
+          currentPrice: null,
+          reason: 'manual_update',
+          evaluatedAt: new Date().toISOString(),
+        });
       }
 
       res.json({

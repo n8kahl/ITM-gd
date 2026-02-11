@@ -1890,11 +1890,12 @@ export interface TrackedSetup {
 
 export async function getTrackedSetups(
   token: string,
-  options?: { status?: TrackedSetupStatus },
+  options?: { status?: TrackedSetupStatus; view?: 'active' | 'history' },
   signal?: AbortSignal
 ): Promise<{ trackedSetups: TrackedSetup[] }> {
   const params = new URLSearchParams()
   if (options?.status) params.set('status', options.status)
+  if (options?.view) params.set('view', options.view)
 
   const response = await fetchWithAuth(
     `${API_BASE}/api/tracked-setups${params.toString() ? `?${params}` : ''}`,
