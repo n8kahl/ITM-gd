@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Pencil, Share2, Star, Trash2, X } from 'lucide-react'
+import { Loader2, Pencil, Star, Trash2, X } from 'lucide-react'
 import type { AITradeAnalysis, JournalEntry } from '@/lib/types/journal'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { AIGradeDisplay } from '@/components/journal/ai-grade-display'
 import { DeleteConfirmationModal } from '@/components/journal/delete-confirmation-modal'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
-import { ShareTradeSheet } from '@/components/social/share-trade-sheet'
 
 interface EntryDetailSheetProps {
   entry: JournalEntry | null
@@ -47,8 +46,6 @@ export function EntryDetailSheet({
   const [confirmEntryId, setConfirmEntryId] = useState<string | null>(null)
   const [grading, setGrading] = useState(false)
   const [localEntry, setLocalEntry] = useState<JournalEntry | null>(entry)
-  const [shareOpen, setShareOpen] = useState(false)
-  const [alreadyShared, setAlreadyShared] = useState(false)
   const confirmOpen = Boolean(entry?.id && confirmEntryId === entry.id)
 
   useEffect(() => {
@@ -174,18 +171,6 @@ export function EntryDetailSheet({
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
-          {/* Share to Community button — only for closed trades with P&L */}
-          {!displayEntry.is_open && displayEntry.pnl != null && (
-            <button
-              type="button"
-              onClick={() => setShareOpen(true)}
-              disabled={disableActions || alreadyShared}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-500/40 px-4 text-sm text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Share2 className="h-4 w-4" />
-              {alreadyShared ? 'Shared' : 'Share'}
-            </button>
-          )}
           <button
             type="button"
             onClick={handleGrade}
@@ -215,15 +200,6 @@ export function EntryDetailSheet({
           </button>
         </div>
       </div>
-
-      {shareOpen && entry && (
-        <ShareTradeSheet
-          journalEntryId={entry.id}
-          open={shareOpen}
-          onOpenChange={setShareOpen}
-          onShared={() => setAlreadyShared(true)}
-        />
-      )}
 
       {confirmOpen && (
         <DeleteConfirmationModal
