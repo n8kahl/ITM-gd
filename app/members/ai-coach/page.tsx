@@ -677,64 +677,69 @@ function ChatArea({
         <ChatDropOverlay containerRef={chatContainerRef} onFileDrop={handleFileDrop} />
 
         {/* Chat Header */}
-        <div className="px-4 py-3 border-b border-white/5 flex items-center gap-3">
-          <button
-            onClick={toggleSessions}
-            className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
-            title="Toggle sessions (Ctrl/Cmd+/)"
-          >
-            {showSessions ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <BrainCircuit className="w-5 h-5 text-emerald-500 shrink-0" />
-            <h3 className="text-sm font-medium text-white truncate">
-              {currentSessionId ? sessions.find(s => s.id === currentSessionId)?.title || 'Chat' : 'AI Coach'}
-            </h3>
-          </div>
-          <button
-            onClick={() => onSendMessage('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')}
-            className="hidden xl:flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/15 transition-colors"
-            title="Refresh SPX game plan"
-          >
-            {spxHeaderTicker.isLoading ? (
-              <span>SPX loading...</span>
-            ) : spxHeaderTicker.error ? (
-              <span>{spxHeaderTicker.error}</span>
-            ) : (
-              <>
-                <span>SPX {spxHeaderTicker.price?.toLocaleString()}</span>
-                {spxHeaderTicker.change != null && (
-                  <span className={cn(
-                    spxHeaderTicker.change >= 0 ? 'text-emerald-300' : 'text-red-300'
-                  )}>
-                    {spxHeaderTicker.change >= 0 ? '+' : ''}{spxHeaderTicker.change.toFixed(2)}
-                    {spxHeaderTicker.changePct != null ? ` (${spxHeaderTicker.change >= 0 ? '+' : ''}${spxHeaderTicker.changePct.toFixed(2)}%)` : ''}
-                  </span>
+        <div className="border-b border-white/5 px-3 py-2.5 sm:px-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <button
+                onClick={toggleSessions}
+                className="shrink-0 p-1.5 rounded-lg text-white/40 transition-colors hover:bg-white/5 hover:text-white"
+                title="Toggle sessions (Ctrl/Cmd+/)"
+              >
+                {showSessions ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              <BrainCircuit className="h-5 w-5 shrink-0 text-emerald-500" />
+              <h3 className="truncate text-sm font-medium text-white">
+                {currentSessionId ? sessions.find(s => s.id === currentSessionId)?.title || 'Chat' : 'AI Coach'}
+              </h3>
+            </div>
+
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+              <button
+                onClick={() => onSendMessage('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')}
+                className="hidden xl:flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 transition-colors hover:bg-emerald-500/15"
+                title="Refresh SPX game plan"
+              >
+                {spxHeaderTicker.isLoading ? (
+                  <span>SPX loading...</span>
+                ) : spxHeaderTicker.error ? (
+                  <span>{spxHeaderTicker.error}</span>
+                ) : (
+                  <>
+                    <span>SPX {spxHeaderTicker.price?.toLocaleString()}</span>
+                    {spxHeaderTicker.change != null && (
+                      <span className={cn(
+                        spxHeaderTicker.change >= 0 ? 'text-emerald-300' : 'text-red-300'
+                      )}>
+                        {spxHeaderTicker.change >= 0 ? '+' : ''}{spxHeaderTicker.change.toFixed(2)}
+                        {spxHeaderTicker.changePct != null ? ` (${spxHeaderTicker.change >= 0 ? '+' : ''}${spxHeaderTicker.changePct.toFixed(2)}%)` : ''}
+                      </span>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </button>
-          <p className="hidden xl:block text-[10px] text-white/30 whitespace-nowrap">
-            Ctrl/Cmd+K focus | Ctrl/Cmd+/ sessions | Ctrl/Cmd+B collapse
-          </p>
-          <Button
-            onClick={onNewSession}
-            variant="ghost"
-            size="sm"
-            className="text-white/40 hover:text-emerald-500 h-8 px-2"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            <span className="text-xs">New</span>
-          </Button>
-          {onTogglePanelCollapse && (
-            <button
-              onClick={onTogglePanelCollapse}
-              className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
-              title="Collapse chat panel (Ctrl/Cmd+B)"
-            >
-              <PanelLeftClose className="w-4 h-4" />
-            </button>
-          )}
+              </button>
+              <p className="hidden 2xl:block whitespace-nowrap text-[10px] text-white/30">
+                Ctrl/Cmd+K focus | Ctrl/Cmd+/ sessions | Ctrl/Cmd+B collapse
+              </p>
+              <Button
+                onClick={onNewSession}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-white/40 hover:text-emerald-500"
+              >
+                <Plus className="mr-0 h-4 w-4 sm:mr-1" />
+                <span className="hidden text-xs sm:inline">New</span>
+              </Button>
+              {onTogglePanelCollapse && (
+                <button
+                  onClick={onTogglePanelCollapse}
+                  className="p-1.5 rounded-lg text-white/40 transition-colors hover:bg-white/5 hover:text-white"
+                  title="Collapse chat panel (Ctrl/Cmd+B)"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Error / Rate Limit Banners */}

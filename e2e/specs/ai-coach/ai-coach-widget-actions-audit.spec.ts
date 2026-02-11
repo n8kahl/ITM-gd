@@ -137,6 +137,35 @@ async function setupAICoachActionAuditRoutes(page: Page): Promise<string[]> {
               },
             },
           },
+          {
+            function: 'scan_opportunities',
+            arguments: { symbols: ['SPX', 'AAPL'] },
+            result: {
+              opportunities: [
+                {
+                  id: 'scan-1',
+                  type: 'technical',
+                  setupType: 'breakout',
+                  symbol: 'SPX',
+                  direction: 'bullish',
+                  score: 82,
+                  confidence: 0.79,
+                  currentPrice: 6001.25,
+                  description: 'Momentum continuation above opening range high.',
+                  suggestedTrade: {
+                    strategy: 'Long call',
+                    entry: 6003,
+                    stopLoss: 5994,
+                    target: 6018,
+                    expiry: '2026-02-20',
+                  },
+                  metadata: {},
+                  scannedAt: new Date().toISOString(),
+                },
+              ],
+              count: 1,
+            },
+          },
         ],
         tokensUsed: 820,
         responseTime: 1.02,
@@ -274,10 +303,12 @@ test.describe('AI Coach - widget action center audit', () => {
     const keyLevelsCard = page.locator('div.glass-card-heavy', { hasText: 'SPX Key Levels' }).first()
     const currentPriceCard = page.locator('div.glass-card-heavy', { hasText: 'AAPL' }).first()
     const positionCard = page.locator('div.glass-card-heavy', { hasText: 'NVDA CALL' }).first()
+    const scanResultsCard = page.locator('div.glass-card-heavy', { hasText: 'Scan Results' }).first()
 
     await expect(keyLevelsCard).toBeVisible()
     await expect(currentPriceCard).toBeVisible()
     await expect(positionCard).toBeVisible()
+    await expect(scanResultsCard).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
 
     await keyLevelsCard.getByRole('button', { name: /Show on Chart/i }).first().click()
@@ -285,6 +316,12 @@ test.describe('AI Coach - widget action center audit', () => {
 
     await keyLevelsCard.getByRole('button', { name: /View Options/i }).first().click()
     await expect(page.getByRole('tab', { name: 'Options' })).toHaveAttribute('aria-selected', 'true')
+
+    await keyLevelsCard.click()
+    await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
+
+    await scanResultsCard.getByRole('button', { name: /Open SPX breakout setup on chart/i }).first().click()
+    await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
 
     await currentPriceCard.getByRole('button', { name: /Set Alert/i }).first().click()
     await expect(page.getByRole('tab', { name: 'Alerts' })).toHaveAttribute('aria-selected', 'true')

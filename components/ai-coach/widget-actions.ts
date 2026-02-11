@@ -30,7 +30,7 @@ function dispatchWidgetEvent<T>(name: string, detail: T) {
 export function chartAction(
   symbol: string,
   level?: number,
-  timeframe: ChartTimeframe = '1D',
+  timeframe: ChartTimeframe = '5m',
   label?: string,
   buttonLabel?: string,
 ): WidgetAction {

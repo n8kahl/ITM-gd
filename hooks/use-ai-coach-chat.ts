@@ -167,7 +167,7 @@ export function useAICoachChat() {
     // Priority 1: explicit chart directives or SPX game-plan data.
     if (showChartCall || gexCall || spxGamePlanCall) {
       const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || 'SPX'
-      const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '1D') as ChartTimeframe
+      const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '5m') as ChartTimeframe
       const levels = showChartResult?.levels || spxGamePlanResult?.keyLevels
       const gexProfile = gexResult
         ? {
@@ -211,7 +211,7 @@ export function useAICoachChat() {
       if (!result.error) {
         return {
           symbol: result.symbol || args.symbol || 'SPX',
-          timeframe: '1D',
+          timeframe: '5m',
           levels: result.levels,
         }
       }
@@ -290,7 +290,7 @@ export function useAICoachChat() {
         const low = toFiniteNumber(result.low)
         return {
           symbol: result.symbol,
-          timeframe: '1D',
+          timeframe: '5m',
           levels: {
             resistance: high != null ? [{ name: 'High', price: high }] : [],
             support: [
@@ -313,7 +313,7 @@ export function useAICoachChat() {
         const currentPrice = toFiniteNumber(result.currentPrice)
         return {
           symbol: result.symbol,
-          timeframe: '1D',
+          timeframe: '5m',
           levels: currentPrice != null
             ? {
                 support: [{ name: 'Spot', price: currentPrice }],
@@ -334,7 +334,7 @@ export function useAICoachChat() {
         const strike = toFiniteNumber(result.position.strike)
         return {
           symbol: result.position.symbol,
-          timeframe: '1D',
+          timeframe: '5m',
           levels: strike != null
             ? {
                 support: [{ name: 'Strike', price: strike }],
@@ -356,7 +356,7 @@ export function useAICoachChat() {
         const currentPrice = toFiniteNumber(result.expectedMove?.currentPrice)
         return {
           symbol: result.symbol,
-          timeframe: '1D',
+          timeframe: '5m',
           levels: currentPrice != null
             ? {
                 support: [{ name: 'Spot', price: currentPrice }],
@@ -378,7 +378,7 @@ export function useAICoachChat() {
         const currentPrice = toFiniteNumber(result.currentPrice)
         return {
           symbol: result.symbol,
-          timeframe: '1D',
+          timeframe: '5m',
           levels: currentPrice != null
             ? {
                 support: [{ name: 'Spot', price: currentPrice }],

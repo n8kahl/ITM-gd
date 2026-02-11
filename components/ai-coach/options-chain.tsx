@@ -292,7 +292,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
     window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
       detail: {
         symbol,
-        timeframe: '1D',
+        timeframe: '5m',
         gexProfile: {
           symbol: gexProfile.symbol,
           spotPrice: gexProfile.spotPrice,

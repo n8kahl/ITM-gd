@@ -13,6 +13,8 @@ import {
   Activity,
   Zap,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -20,7 +22,6 @@ import { WidgetActionBar } from './widget-action-bar'
 import { WidgetContextMenu } from './widget-context-menu'
 import {
   alertAction,
-  chartAction,
   chatAction,
   copyAction,
   optionsAction,
@@ -34,6 +35,7 @@ import {
   trackSetup,
   AICoachAPIError,
   type ScanOpportunity,
+  type ChartTimeframe,
 } from '@/lib/api/ai-coach'
 import { SymbolSearch } from './symbol-search'
 import { ScannerSkeleton } from './skeleton-loaders'
@@ -81,6 +83,61 @@ function getOpportunityStrike(opportunity: Opportunity): number | undefined {
 
   const entry = parseNumeric(opportunity.suggestedTrade?.entry)
   return entry != null ? entry : undefined
+}
+
+function openOpportunityChart(opportunity: Opportunity, timeframe: ChartTimeframe = '15m') {
+  if (typeof window === 'undefined') return
+
+  const support: Array<{ name: string; price: number }> = []
+  const resistance: Array<{ name: string; price: number }> = []
+
+  const entry = parseNumeric(opportunity.suggestedTrade?.entry)
+  const stopLoss = parseNumeric(opportunity.suggestedTrade?.stopLoss)
+  const target = parseNumeric(opportunity.suggestedTrade?.target)
+  const spot = parseNumeric(opportunity.currentPrice)
+  const isBearish = opportunity.direction === 'bearish'
+
+  if (entry != null) {
+    if (isBearish) resistance.push({ name: 'Entry', price: entry })
+    else support.push({ name: 'Entry', price: entry })
+  }
+
+  if (target != null) {
+    if (entry != null) {
+      if (target >= entry) resistance.push({ name: 'Target', price: target })
+      else support.push({ name: 'Target', price: target })
+    } else if (isBearish) {
+      support.push({ name: 'Target', price: target })
+    } else {
+      resistance.push({ name: 'Target', price: target })
+    }
+  }
+
+  if (stopLoss != null) {
+    if (entry != null) {
+      if (stopLoss >= entry) resistance.push({ name: 'Stop', price: stopLoss })
+      else support.push({ name: 'Stop', price: stopLoss })
+    } else if (isBearish) {
+      resistance.push({ name: 'Stop', price: stopLoss })
+    } else {
+      support.push({ name: 'Stop', price: stopLoss })
+    }
+  }
+
+  if (spot != null) {
+    support.push({ name: 'Spot', price: spot })
+  }
+
+  window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+    detail: {
+      symbol: opportunity.symbol,
+      timeframe,
+      levels: {
+        resistance,
+        support,
+      },
+    },
+  }))
 }
 
 // ============================================
@@ -511,7 +568,13 @@ function OpportunityCard({
   const askPrompt = `Tell me more about this ${opportunity.setupType} setup on ${opportunity.symbol}. What's the risk/reward and how should I trade it?`
 
   const workflowActions: WidgetAction[] = [
-    chartAction(opportunity.symbol, focusPrice, '15m', opportunity.setupType),
+    {
+      label: 'Show on Chart',
+      icon: Activity,
+      variant: 'primary',
+      tooltip: `${opportunity.symbol} ${opportunity.setupType} setup`,
+      action: () => openOpportunityChart(opportunity, '15m'),
+    },
     optionsAction(opportunity.symbol, strike ?? focusPrice, opportunity.suggestedTrade?.expiry),
     alertAction(
       opportunity.symbol,
@@ -541,7 +604,16 @@ function OpportunityCard({
           'glass-card-heavy rounded-lg p-3 border border-white/5 cursor-pointer transition-all hover:border-emerald-500/20',
           expanded && 'border-emerald-500/20'
         )}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => openOpportunityChart(opportunity, '15m')}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            openOpportunityChart(opportunity, '15m')
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Open ${opportunity.symbol} ${opportunity.setupType} setup on chart`}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
@@ -557,6 +629,18 @@ function OpportunityCard({
               <TypeIcon className="w-3 h-3" />
               {opportunity.setupType}
             </span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                setExpanded((prev) => !prev)
+              }}
+              className="rounded border border-white/10 bg-white/5 p-1 text-white/35 transition-colors hover:text-white/70 hover:border-emerald-500/30"
+              title={expanded ? 'Hide details' : 'Show details'}
+              aria-label={expanded ? `Hide ${opportunity.symbol} details` : `Show ${opportunity.symbol} details`}
+            >
+              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
           </div>
         </div>
 
@@ -579,7 +663,7 @@ function OpportunityCard({
 
         {/* Expanded details */}
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+          <div className="mt-3 pt-3 border-t border-white/5 space-y-2" onClick={(event) => event.stopPropagation()}>
             {/* Suggested Trade */}
             {opportunity.suggestedTrade && (
               <div className="bg-white/5 rounded-lg p-2.5">
@@ -647,9 +731,7 @@ function OpportunityCard({
               </div>
             )}
 
-            <div onClick={(event) => event.stopPropagation()}>
-              <WidgetActionBar actions={workflowActions} />
-            </div>
+            <WidgetActionBar actions={workflowActions} />
 
             {/* Ask AI button */}
             <div className="flex items-center gap-2 pt-1">

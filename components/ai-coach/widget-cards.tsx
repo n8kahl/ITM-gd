@@ -30,7 +30,7 @@ import {
   optionsAction,
   viewAction,
 } from './widget-actions'
-import type { PositionType } from '@/lib/api/ai-coach'
+import type { ChartTimeframe, PositionType } from '@/lib/api/ai-coach'
 
 // ============================================
 // TYPES
@@ -131,6 +131,113 @@ function normalizeActions(actions: WidgetAction[]): WidgetAction[] {
   return Array.from(unique.values()).slice(0, 5)
 }
 
+type ScannerOpportunityLike = {
+  symbol: string
+  setupType: string
+  direction: string
+  currentPrice?: number
+  suggestedTrade?: {
+    entry?: number
+    stopLoss?: number
+    target?: number
+  }
+}
+
+type KeyLevelLike = { name: string; price: number; distance?: string }
+
+function openKeyLevelsChart(args: {
+  symbol: string
+  resistance: KeyLevelLike[]
+  support: KeyLevelLike[]
+  vwap?: number
+  atr14?: number
+  timeframe?: ChartTimeframe
+}) {
+  if (typeof window === 'undefined') return
+
+  window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+    detail: {
+      symbol: args.symbol,
+      timeframe: args.timeframe || '5m',
+      levels: {
+        resistance: args.resistance,
+        support: args.support,
+        indicators: {
+          vwap: args.vwap,
+          atr14: args.atr14,
+        },
+      },
+    },
+  }))
+}
+
+function openScannerSetupChart(opportunity: ScannerOpportunityLike, timeframe: ChartTimeframe = '15m') {
+  if (typeof window === 'undefined') return
+
+  const support: Array<{ name: string; price: number }> = []
+  const resistance: Array<{ name: string; price: number }> = []
+
+  const entry = parseNullableNumeric(opportunity.suggestedTrade?.entry)
+  const stopLoss = parseNullableNumeric(opportunity.suggestedTrade?.stopLoss)
+  const target = parseNullableNumeric(opportunity.suggestedTrade?.target)
+  const currentPrice = parseNullableNumeric(opportunity.currentPrice)
+  const direction = String(opportunity.direction || '').toLowerCase()
+
+  if (entry != null) {
+    if (direction === 'bearish') resistance.push({ name: 'Entry', price: entry })
+    else support.push({ name: 'Entry', price: entry })
+  }
+
+  if (target != null) {
+    if (entry != null) {
+      if (target >= entry) resistance.push({ name: 'Target', price: target })
+      else support.push({ name: 'Target', price: target })
+    } else if (direction === 'bearish') {
+      support.push({ name: 'Target', price: target })
+    } else {
+      resistance.push({ name: 'Target', price: target })
+    }
+  }
+
+  if (stopLoss != null) {
+    if (entry != null) {
+      if (stopLoss >= entry) resistance.push({ name: 'Stop', price: stopLoss })
+      else support.push({ name: 'Stop', price: stopLoss })
+    } else if (direction === 'bearish') {
+      resistance.push({ name: 'Stop', price: stopLoss })
+    } else {
+      support.push({ name: 'Stop', price: stopLoss })
+    }
+  }
+
+  if (currentPrice != null) {
+    support.push({ name: 'Spot', price: currentPrice })
+  }
+
+  window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+    detail: {
+      symbol: opportunity.symbol,
+      timeframe,
+      levels: {
+        resistance,
+        support,
+      },
+    },
+  }))
+}
+
+function scannerChartAction(opportunity: ScannerOpportunityLike, timeframe: ChartTimeframe = '15m'): WidgetAction {
+  return {
+    label: 'Show on Chart',
+    icon: Activity,
+    variant: 'primary',
+    tooltip: `${opportunity.symbol} scanner setup (${timeframe})`,
+    action: () => {
+      openScannerSetupChart(opportunity, timeframe)
+    },
+  }
+}
+
 // ============================================
 // WIDGET CARD WRAPPER
 // ============================================
@@ -211,12 +318,28 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
 function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   const symbol = data.symbol as string || 'SPX'
   const currentPrice = parseNumeric(data.currentPrice)
-  const resistance = (data.resistance as Array<{ name: string; price: number; distance?: string }>) || []
-  const support = (data.support as Array<{ name: string; price: number; distance?: string }>) || []
+  const resistance = (data.resistance as KeyLevelLike[]) || []
+  const support = (data.support as KeyLevelLike[]) || []
   const vwap = data.vwap as number | undefined
   const atr = data.atr14 as number | undefined
+  const openCardChart = () => {
+    openKeyLevelsChart({
+      symbol,
+      resistance,
+      support,
+      vwap,
+      atr14: atr,
+      timeframe: '5m',
+    })
+  }
   const cardActions: WidgetAction[] = normalizeActions([
-    chartAction(symbol, currentPrice, '1D', 'Current Price'),
+    {
+      label: 'Show on Chart',
+      icon: Target,
+      variant: 'primary',
+      tooltip: `${symbol} full key levels (5m)`,
+      action: openCardChart,
+    },
     optionsAction(symbol, currentPrice),
     alertAction(symbol, currentPrice, 'level_approach', `${symbol} key-level sweep`),
     chatAction(`Summarize ${symbol} key levels and likely scenarios around ${currentPrice.toFixed(2)}.`),
@@ -224,7 +347,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   const levelActions = (level: { name: string; price: number }, side: 'support' | 'resistance'): WidgetAction[] => ([
-    chartAction(symbol, level.price, '1D', level.name),
+    chartAction(symbol, level.price, '5m', level.name),
     optionsAction(symbol, level.price),
     alertAction(
       symbol,
@@ -236,7 +359,24 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
   ])
 
   return (
-    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+    <div
+      className={premiumCardClass('border-emerald-500/15 max-w-sm cursor-pointer hover:border-emerald-500/30 transition-colors')}
+      onClick={(event) => {
+        const target = event.target as HTMLElement
+        if (target.closest('button, a, input, textarea, select, [role="menuitem"]')) return
+        openCardChart()
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        const target = event.target as HTMLElement
+        if (target.closest('button, a, input, textarea, select, [role="menuitem"]')) return
+        event.preventDefault()
+        openCardChart()
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${symbol} key levels on chart`}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <Target className="w-3.5 h-3.5 text-emerald-500" />
@@ -258,7 +398,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu key={level.name} actions={levelActions(level, 'resistance')}>
               <button
                 type="button"
-                onClick={() => chartAction(symbol, level.price, '1D', level.name).action()}
+                onClick={() => chartAction(symbol, level.price, '5m', level.name).action()}
                 className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
               >
                 <span className="text-red-400">{level.name}</span>
@@ -275,7 +415,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu key={level.name} actions={levelActions(level, 'support')}>
               <button
                 type="button"
-                onClick={() => chartAction(symbol, level.price, '1D', level.name).action()}
+                onClick={() => chartAction(symbol, level.price, '5m', level.name).action()}
                 className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
               >
                 <span className="text-emerald-400">{level.name}</span>
@@ -541,7 +681,7 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={i}
               actions={[
-                chartAction(alert.symbol, alert.target, '1D', `${alert.type}`),
+                chartAction(alert.symbol, alert.target, '5m', `${alert.type}`),
                 optionsAction(alert.symbol, alert.target),
                 alertAction(alert.symbol, alert.target, 'level_approach', `Alert: ${alert.type}`),
                 chatAction(`What should I do if ${alert.symbol} hits ${alert.target}?`, 'Ask AI'),
@@ -683,7 +823,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={`${event.event}-${event.date}-${i}`}
               actions={normalizeActions([
-                symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '1D', `${event.event}`) : viewAction('macro', 'Open Macro'),
+                symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', `${event.event}`) : viewAction('macro', 'Open Macro'),
                 chatAction(`How should I position around ${event.event} on ${event.date}?`, 'Ask AI'),
                 copyAction(`${event.event} | ${event.date} | ${event.impact}`, 'Copy Event'),
               ])}
@@ -759,7 +899,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={i}
               actions={[
-                chartAction(symbol, c.strike, '1D', `${symbol} ${c.strike}C`),
+                chartAction(symbol, c.strike, '5m', `${symbol} ${c.strike}C`),
                 optionsAction(symbol, c.strike, expiry),
                 alertAction(symbol, c.strike, 'level_approach', `${symbol} call strike ${c.strike}`),
                 copyAction(`${symbol} CALL ${c.strike} ${expiry}`),
@@ -779,7 +919,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={i}
               actions={[
-                chartAction(symbol, p.strike, '1D', `${symbol} ${p.strike}P`),
+                chartAction(symbol, p.strike, '5m', `${symbol} ${p.strike}P`),
                 optionsAction(symbol, p.strike, expiry),
                 alertAction(symbol, p.strike, 'level_approach', `${symbol} put strike ${p.strike}`),
                 copyAction(`${symbol} PUT ${p.strike} ${expiry}`),
@@ -830,7 +970,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
     window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
       detail: {
         symbol,
-        timeframe: '1D',
+        timeframe: '5m',
         gexProfile: {
           symbol,
           spotPrice,
@@ -895,7 +1035,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={`${level.strike}-${level.type}`}
               actions={[
-                chartAction(symbol, level.strike, '1D', `GEX ${level.type}`),
+                chartAction(symbol, level.strike, '5m', `GEX ${level.type}`),
                 optionsAction(symbol, level.strike),
                 alertAction(symbol, level.strike, 'level_approach', `${symbol} GEX ${level.type}`),
                 copyAction(`${symbol} GEX ${level.type} ${level.strike}`),
@@ -970,7 +1110,7 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
     : null
 
   const actions: WidgetAction[] = normalizeActions([
-    chartAction(symbol, currentPrice ?? undefined, '1D', 'SPX Game Plan'),
+    chartAction(symbol, currentPrice ?? undefined, '5m', 'SPX Game Plan'),
     optionsAction(symbol, maxGEXStrike ?? undefined),
     chatAction('Turn this SPX game plan into an actionable intraday checklist with bull and bear triggers.'),
     copyAction(`SPX Plan | Spot ${currentPrice ?? 'N/A'} | Flip ${flipPoint ?? 'N/A'} | Max GEX ${maxGEXStrike ?? 'N/A'} | Exp Move ${expectedMove ?? 'N/A'}`),
@@ -1091,13 +1231,25 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
 
 function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
   const opportunities = (data.opportunities as Array<{
-    symbol: string; setupType: string; direction: string; score: number; description: string; currentPrice?: number
+    symbol: string
+    setupType: string
+    direction: string
+    score: number
+    description: string
+    currentPrice?: number
+    suggestedTrade?: {
+      entry?: number
+      stopLoss?: number
+      target?: number
+      strikes?: number[]
+      expiry?: string
+    }
   }>) || []
   const count = data.count as number || 0
   const bestScore = opportunities.length > 0 ? Math.max(...opportunities.map((opp) => opp.score)) : null
   const actions: WidgetAction[] = normalizeActions(opportunities.length > 0
     ? [
-        chartAction(opportunities[0].symbol, opportunities[0].currentPrice),
+        scannerChartAction(opportunities[0], '15m'),
         optionsAction(opportunities[0].symbol, opportunities[0].currentPrice),
         viewAction('tracked', 'Open Tracked', opportunities[0].symbol),
         chatAction(`Review top scanner opportunities and rank by conviction with risk plan.`),
@@ -1130,7 +1282,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={i}
               actions={[
-                chartAction(opp.symbol, opp.currentPrice, '15m', `${opp.setupType}`),
+                scannerChartAction(opp, '15m'),
                 optionsAction(opp.symbol, opp.currentPrice),
                 opp.currentPrice != null ? alertAction(opp.symbol, opp.currentPrice, 'level_approach', `${opp.symbol} scanner setup`) : chatAction(`Build alert plan for ${opp.symbol}`, 'Alert Plan'),
                 analyzeAction({
@@ -1144,7 +1296,12 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
                 chatAction(`Analyze ${opp.symbol} ${opp.setupType} (${opp.direction}) setup and suggest execution details.`),
               ]}
             >
-              <button type="button" className="w-full flex items-start gap-2 text-[11px] rounded px-1.5 py-1 hover:bg-white/10 cursor-pointer text-left">
+              <button
+                type="button"
+                onClick={() => openScannerSetupChart(opp, '15m')}
+                className="w-full flex items-start gap-2 text-[11px] rounded px-1.5 py-1 hover:bg-white/10 cursor-pointer text-left"
+                aria-label={`Open ${opp.symbol} ${opp.setupType} setup on chart`}
+              >
                 <div className={cn(
                   'w-1.5 h-1.5 rounded-full mt-1.5 shrink-0',
                   opp.direction === 'bullish' ? 'bg-emerald-400' :
@@ -1185,7 +1342,7 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const usedRiskTone = usedPct != null && usedPct >= 80 ? 'danger' : usedPct != null && usedPct >= 60 ? 'warning' : 'success'
 
   const actions: WidgetAction[] = normalizeActions([
-    chartAction(symbol, currentPrice, '1D', '0DTE Context'),
+    chartAction(symbol, currentPrice, '5m', '0DTE Context'),
     optionsAction(symbol, currentPrice),
     chatAction(`Summarize ${symbol} 0DTE risk using expected move, remaining move, and gamma profile.`),
     copyAction(`${symbol} 0DTE | Expected ${totalExpectedMove ?? 'N/A'} | Used ${usedPct ?? 'N/A'}% | Remaining ${remainingMove ?? 'N/A'}`),
@@ -1241,7 +1398,7 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
                   <WidgetContextMenu
                     key={`${contract.type as string}-${contract.strike as number}-${idx}`}
                     actions={normalizeActions([
-                      chartAction(symbol, parseNumeric(contract.strike), '1D', `0DTE ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)}`),
+                      chartAction(symbol, parseNumeric(contract.strike), '5m', `0DTE ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)}`),
                       optionsAction(symbol, parseNumeric(contract.strike)),
                       alertAction(symbol, parseNumeric(contract.strike), 'level_approach', `${symbol} ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)}`),
                       copyAction(`${symbol} ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)} vol ${Math.round(parseNumeric(contract.volume))}`),
@@ -1281,7 +1438,7 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
 
   const actions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
-    chartAction(symbol, currentPrice, '1D', 'IV Regime'),
+    chartAction(symbol, currentPrice, '5m', 'IV Regime'),
     chatAction(`Interpret ${symbol} IV rank, skew, and term structure for day-trade risk today.`),
     copyAction(`${symbol} IV | Current ${parseNullableNumeric(ivRank?.currentIV) != null ? `${parseNumeric(ivRank?.currentIV).toFixed(1)}%` : 'N/A'} | IV Rank ${parseNullableNumeric(ivRank?.ivRank) != null ? `${parseNumeric(ivRank?.ivRank).toFixed(1)}%` : 'N/A'} | Skew ${String(skew?.skewDirection || 'unknown')}`),
   ])
@@ -1384,7 +1541,7 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={`${String(event.symbol)}-${String(event.date)}-${idx}`}
               actions={normalizeActions([
-                chartAction(String(event.symbol), undefined, '1D', 'Earnings Chart'),
+                chartAction(String(event.symbol), undefined, '5m', 'Earnings Chart'),
                 optionsAction(String(event.symbol), undefined, String(event.date)),
                 chatAction(`Build an earnings plan for ${String(event.symbol)} into ${String(event.date)}.`, 'Build Plan'),
                 copyAction(`${String(event.symbol)} earnings ${String(event.date)} ${String(event.time || event.timing || '')}`, 'Copy Event'),
@@ -1417,7 +1574,7 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const ivCrushRisk = String((data as Record<string, unknown>).ivCrushRisk || '').toLowerCase()
   const cardActions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
-    chartAction(symbol, currentPrice, '1D', 'Earnings Setup'),
+    chartAction(symbol, currentPrice, '5m', 'Earnings Setup'),
     currentPrice > 0 ? alertAction(symbol, currentPrice, 'level_approach', `${symbol} earnings watch`) : viewAction('earnings', 'Open Earnings', symbol),
     chatAction(`Rank the pre-earnings strategies for ${symbol} by risk/reward and IV crush risk.`),
     copyAction(`${symbol} earnings expected move ${points ?? 'N/A'} (${pct ?? 'N/A'}%)`),
@@ -1556,7 +1713,7 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
             <WidgetContextMenu
               key={`${String(trade.tradeDate)}-${idx}`}
               actions={normalizeActions([
-                symbol !== 'All Symbols' ? chartAction(symbol, undefined, '1D', 'Trade Context') : viewAction('journal', 'Open Journal'),
+                symbol !== 'All Symbols' ? chartAction(symbol, undefined, '5m', 'Trade Context') : viewAction('journal', 'Open Journal'),
                 chatAction(`Review trade on ${String(trade.tradeDate)} (${String(trade.outcome || '')}) and show one improvement.`, 'Ask AI'),
                 copyAction(`${symbol} ${String(trade.tradeDate)} ${String(trade.outcome || '')} ${String(trade.pnl || '—')}`, 'Copy Trade'),
               ])}

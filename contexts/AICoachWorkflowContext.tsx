@@ -204,7 +204,7 @@ export function AICoachWorkflowProvider({
     const normalized = normalizeSymbol(symbol)
     if (!normalized) return
 
-    const timeframe = options?.timeframe || '1D'
+    const timeframe = options?.timeframe || '5m'
     setActiveSymbol(normalized)
     setActiveCenterView('chart')
 
@@ -411,7 +411,7 @@ export function AICoachWorkflowProvider({
       if (step.view === 'chart' && step.symbol) {
         viewChartAtLevel(step.symbol, step.level, {
           label: 'Workflow',
-          timeframe: step.timeframe || '1D',
+          timeframe: step.timeframe || '5m',
           noteStep: false,
         })
       } else if (step.view === 'options' && step.symbol) {
@@ -427,7 +427,7 @@ export function AICoachWorkflowProvider({
       const detail = (event as CustomEvent<{ symbol?: string; level?: number; timeframe?: ChartTimeframe; label?: string }>).detail
       if (!detail?.symbol) return
       viewChartAtLevel(detail.symbol, detail.level, {
-        timeframe: detail.timeframe || '1D',
+        timeframe: detail.timeframe || '5m',
         label: detail.label,
       })
     }
