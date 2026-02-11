@@ -116,8 +116,8 @@ export function LiveMarketTicker() {
         }
         if (Object.keys(newQuotes).length > 0) {
           setQuotes(newQuotes)
-          setConnectionStatus('polling')
         }
+        setConnectionStatus(data.data.source === 'massive' ? 'live' : 'polling')
         if (data.data.metrics) {
           setMetrics(data.data.metrics)
         }

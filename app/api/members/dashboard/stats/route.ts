@@ -115,15 +115,17 @@ async function buildFallbackStats(
     .eq('user_id', userId)
     .single()
 
-  const totalWinners = Number(streakRow?.total_winners || 0)
-  const totalLosers = Number(streakRow?.total_losers || 0)
+  // Determine streak type from recent trades (not cumulative totals)
+  const recentTrades = monthRows.filter((row: any) => row.is_winner != null)
+  const lastTrade = recentTrades[0] // Already sorted DESC
+  const streakType: 'win' | 'loss' = lastTrade?.is_winner === true ? 'win' : 'loss'
 
   return {
     win_rate: round(winRate, 1),
     pnl_mtd: round(pnlMtd),
     pnl_change_pct: round(pnlChangePct, 1),
     current_streak: Number(streakRow?.current_streak || 0),
-    streak_type: totalWinners >= totalLosers ? 'win' : 'loss',
+    streak_type: streakType,
     best_streak: Number(streakRow?.longest_streak || 0),
     avg_ai_grade: avgAiGrade,
     trades_mtd: monthRows.length,

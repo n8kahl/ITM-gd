@@ -63,20 +63,13 @@ export async function GET() {
       }
     }
 
-    // Fallback: return market-closed placeholder data
+    // Fallback: return empty data — never show fake prices
     return NextResponse.json({
       success: true,
       data: {
-        quotes: [
-          { symbol: 'SPX', price: 6042.50, change: 19.25, changePercent: 0.32 },
-          { symbol: 'NDX', price: 21540.00, change: 38.70, changePercent: 0.18 },
-        ],
-        metrics: {
-          vwap: 6035.00,
-          atr: 47.25,
-          ivRank: 42,
-        },
-        source: 'cache',
+        quotes: [],
+        metrics: {},
+        source: 'unavailable',
       },
     })
   } catch {
