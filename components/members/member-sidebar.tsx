@@ -12,7 +12,7 @@ import {
   Palette,
   UserCircle,
   LogOut,
-  Sparkles,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -128,10 +128,13 @@ export function MemberSidebar() {
             {/* Avatar */}
             <div className="relative w-11 h-11 rounded-full flex-shrink-0 ring-2 ring-emerald-500/30 ring-offset-1 ring-offset-[#0A0A0B]">
               {profile.discord_avatar ? (
-                <img
+                <Image
                   src={`https://cdn.discordapp.com/avatars/${profile.discord_user_id}/${profile.discord_avatar}.png`}
                   alt={profile.discord_username || 'User'}
+                  width={44}
+                  height={44}
                   className="w-full h-full rounded-full object-cover"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full h-full rounded-full bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center">
@@ -209,7 +212,7 @@ export function MemberSidebar() {
       {!isExecutive && profile?.membership_tier && (
         <div className="mx-3 mb-3 p-3 rounded-xl glass-card border-champagne/15">
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-champagne" />
+            <Zap className="w-4 h-4 text-champagne" />
             <span className="text-xs font-medium text-champagne">
               Upgrade to {profile.membership_tier === 'core' ? 'Pro' : 'Executive'}
             </span>
