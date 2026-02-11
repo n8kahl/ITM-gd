@@ -1,8 +1,14 @@
+import { NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { successResponse, errorResponse } from '@/lib/api/response'
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit'
 import type { ProfileViewStats } from '@/lib/types/social'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -15,40 +21,36 @@ export async function GET() {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    // Total views
-    const { count: totalViews } = await supabase
-      .from('profile_views')
-      .select('*', { count: 'exact', head: true })
-      .eq('profile_user_id', user.id)
+    // Run all queries in parallel for better performance
+    const [totalResult, weekResult, monthResult, uniqueResult] = await Promise.all([
+      supabase
+        .from('profile_views')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_user_id', user.id),
+      supabase
+        .from('profile_views')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_user_id', user.id)
+        .gte('created_at', weekAgo),
+      supabase
+        .from('profile_views')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_user_id', user.id)
+        .gte('created_at', monthAgo),
+      supabase
+        .from('profile_views')
+        .select('viewer_id')
+        .eq('profile_user_id', user.id)
+        .gte('created_at', monthAgo)
+        .not('viewer_id', 'is', null),
+    ])
 
-    // Views this week
-    const { count: viewsThisWeek } = await supabase
-      .from('profile_views')
-      .select('*', { count: 'exact', head: true })
-      .eq('profile_user_id', user.id)
-      .gte('created_at', weekAgo)
-
-    // Views this month
-    const { count: viewsThisMonth } = await supabase
-      .from('profile_views')
-      .select('*', { count: 'exact', head: true })
-      .eq('profile_user_id', user.id)
-      .gte('created_at', monthAgo)
-
-    // Unique viewers this month
-    const { data: uniqueViewers } = await supabase
-      .from('profile_views')
-      .select('viewer_id')
-      .eq('profile_user_id', user.id)
-      .gte('created_at', monthAgo)
-      .not('viewer_id', 'is', null)
-
-    const uniqueViewerIds = new Set(uniqueViewers?.map(v => v.viewer_id) || [])
+    const uniqueViewerIds = new Set(uniqueResult.data?.map(v => v.viewer_id) || [])
 
     const stats: ProfileViewStats = {
-      total_views: totalViews ?? 0,
-      views_this_week: viewsThisWeek ?? 0,
-      views_this_month: viewsThisMonth ?? 0,
+      total_views: totalResult.count ?? 0,
+      views_this_week: weekResult.count ?? 0,
+      views_this_month: monthResult.count ?? 0,
       unique_viewers_this_month: uniqueViewerIds.size,
     }
 

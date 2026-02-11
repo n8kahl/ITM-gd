@@ -5,6 +5,8 @@
  * Uses Satori (JSX to SVG) + Resvg (SVG to PNG) to generate shareable trade cards.
  */
 
+import { createElement, type CSSProperties, type ReactElement } from 'react'
+
 export type TradeCardTemplate = 'dark-elite' | 'emerald-gradient' | 'champagne-premium' | 'minimal' | 'story'
 export type TradeCardFormat = 'landscape' | 'story' | 'square'
 
@@ -96,7 +98,7 @@ export function buildTradeCardJsx(
   metadata: JournalTradeCardMetadata,
   template: TradeCardTemplate,
   format: TradeCardFormat,
-): React.ReactElement {
+): ReactElement {
   const colors = TEMPLATE_COLORS[template]
   const dims = TRADE_CARD_DIMENSIONS[format]
   const tierColor = TIER_COLORS[metadata.memberTier.toLowerCase()] || colors.accent
@@ -104,7 +106,7 @@ export function buildTradeCardJsx(
   const pnlColor = isWin ? '#10B981' : '#EF4444'
 
   // Satori requires explicit style objects (no Tailwind)
-  const containerStyle: React.CSSProperties = {
+  const containerStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     width: dims.width,
@@ -117,21 +119,21 @@ export function buildTradeCardJsx(
     overflow: 'hidden',
   }
 
-  const headerStyle: React.CSSProperties = {
+  const headerStyle: CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: format === 'story' ? 40 : 24,
   }
 
-  const symbolStyle: React.CSSProperties = {
+  const symbolStyle: CSSProperties = {
     fontSize: format === 'story' ? 48 : 36,
     fontWeight: 700,
     color: colors.text,
     letterSpacing: '-0.02em',
   }
 
-  const directionBadgeStyle: React.CSSProperties = {
+  const directionBadgeStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     padding: '6px 16px',
@@ -143,7 +145,7 @@ export function buildTradeCardJsx(
     border: `1px solid ${metadata.direction === 'LONG' ? '#10B98140' : '#EF444440'}`,
   }
 
-  const pnlStyle: React.CSSProperties = {
+  const pnlStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -151,7 +153,7 @@ export function buildTradeCardJsx(
     flex: 1,
   }
 
-  const pnlValueStyle: React.CSSProperties = {
+  const pnlValueStyle: CSSProperties = {
     fontSize: format === 'story' ? 72 : 56,
     fontWeight: 800,
     color: pnlColor,
@@ -159,39 +161,36 @@ export function buildTradeCardJsx(
     lineHeight: 1,
   }
 
-  const pnlPctStyle: React.CSSProperties = {
+  const pnlPctStyle: CSSProperties = {
     fontSize: format === 'story' ? 28 : 22,
     fontWeight: 500,
     color: `${pnlColor}CC`,
     marginTop: 8,
   }
 
-  const footerStyle: React.CSSProperties = {
+  const footerStyle: CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     marginTop: 'auto',
   }
 
-  const detailStyle: React.CSSProperties = {
+  const detailStyle: CSSProperties = {
     fontSize: 13,
     color: `${colors.text}99`,
     lineHeight: 1.6,
   }
 
-  const brandStyle: React.CSSProperties = {
+  const brandStyle: CSSProperties = {
     fontSize: 14,
     fontWeight: 600,
     color: tierColor,
     textAlign: 'right' as const,
   }
 
-  // Build the element tree using createElement (Satori-compatible)
-  const React = require('react')
-
-  return React.createElement('div', { style: containerStyle },
+  return createElement('div', { style: containerStyle },
     // Gradient overlay
-    React.createElement('div', {
+    createElement('div', {
       style: {
         position: 'absolute',
         top: 0,
@@ -202,11 +201,11 @@ export function buildTradeCardJsx(
       }
     }),
     // Header
-    React.createElement('div', { style: headerStyle },
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 16 } },
-        React.createElement('span', { style: symbolStyle }, metadata.symbol),
-        React.createElement('span', { style: directionBadgeStyle }, metadata.direction),
-        metadata.contractType !== 'Stock' && React.createElement('span', {
+    createElement('div', { style: headerStyle },
+      createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 16 } },
+        createElement('span', { style: symbolStyle }, metadata.symbol),
+        createElement('span', { style: directionBadgeStyle }, metadata.direction),
+        metadata.contractType !== 'Stock' && createElement('span', {
           style: {
             ...directionBadgeStyle,
             color: `${colors.text}AA`,
@@ -215,7 +214,7 @@ export function buildTradeCardJsx(
           }
         }, metadata.contractType),
       ),
-      metadata.aiGrade && React.createElement('div', {
+      metadata.aiGrade && createElement('div', {
         style: {
           fontSize: 20,
           fontWeight: 700,
@@ -227,30 +226,50 @@ export function buildTradeCardJsx(
       }, metadata.aiGrade),
     ),
     // P&L Center
-    React.createElement('div', { style: pnlStyle },
-      React.createElement('div', { style: { fontSize: 14, color: `${colors.text}66`, marginBottom: 8, fontWeight: 500 } }, isWin ? 'PROFIT' : 'LOSS'),
-      React.createElement('div', { style: pnlValueStyle }, metadata.pnl),
-      metadata.pnlPercentage && React.createElement('div', { style: pnlPctStyle }, metadata.pnlPercentage),
+    createElement('div', { style: pnlStyle },
+      createElement('div', { style: { fontSize: 14, color: `${colors.text}66`, marginBottom: 8, fontWeight: 500 } }, isWin ? 'PROFIT' : 'LOSS'),
+      createElement('div', { style: pnlValueStyle }, metadata.pnl),
+      metadata.pnlPercentage && createElement('div', { style: pnlPctStyle }, metadata.pnlPercentage),
     ),
     // Footer
-    React.createElement('div', { style: footerStyle },
-      React.createElement('div', { style: detailStyle },
-        React.createElement('div', null, `Entry: ${metadata.entryPrice} → Exit: ${metadata.exitPrice}`),
-        metadata.strategy && React.createElement('div', null, `Strategy: ${metadata.strategy}`),
-        metadata.holdDuration && React.createElement('div', null, `Duration: ${metadata.holdDuration}`),
-        React.createElement('div', null, metadata.tradeDate),
+    createElement('div', { style: footerStyle },
+      createElement('div', { style: detailStyle },
+        createElement('div', null, `Entry: ${metadata.entryPrice} → Exit: ${metadata.exitPrice}`),
+        metadata.strategy && createElement('div', null, `Strategy: ${metadata.strategy}`),
+        metadata.holdDuration && createElement('div', null, `Duration: ${metadata.holdDuration}`),
+        createElement('div', null, metadata.tradeDate),
       ),
-      React.createElement('div', { style: brandStyle },
-        React.createElement('div', null, metadata.memberName),
-        React.createElement('div', { style: { fontSize: 12, color: `${colors.text}66`, marginTop: 4 } },
+      createElement('div', { style: brandStyle },
+        createElement('div', null, metadata.memberName),
+        createElement('div', { style: { fontSize: 12, color: `${colors.text}66`, marginTop: 4 } },
           `${metadata.memberTier.toUpperCase()} MEMBER`
         ),
-        React.createElement('div', {
+        createElement('div', {
           style: { fontSize: 11, color: `${colors.text}44`, marginTop: 8, fontFamily: 'monospace' }
         }, 'ITM Trading'),
       ),
     ),
   )
+}
+
+// Cache font data to avoid repeated filesystem/network reads
+let cachedFontData: ArrayBuffer | null = null
+
+async function loadFontData(): Promise<ArrayBuffer> {
+  if (cachedFontData) return cachedFontData
+
+  try {
+    const fs = await import('fs')
+    const path = await import('path')
+    const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Regular.ttf')
+    cachedFontData = fs.readFileSync(fontPath).buffer as ArrayBuffer
+  } catch {
+    // Fallback: fetch from Google Fonts CDN
+    const fontRes = await fetch('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2')
+    cachedFontData = await fontRes.arrayBuffer()
+  }
+
+  return cachedFontData
 }
 
 /**
@@ -265,20 +284,7 @@ export async function generateTradeCardImage(
   const satori = (await import('satori')).default
   const { Resvg } = await import('@resvg/resvg-js')
   const dims = TRADE_CARD_DIMENSIONS[format]
-
-  // Load Inter font
-  const fs = await import('fs')
-  const path = await import('path')
-  let fontData: ArrayBuffer
-
-  try {
-    const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Regular.ttf')
-    fontData = fs.readFileSync(fontPath).buffer as ArrayBuffer
-  } catch {
-    // Fallback: fetch from Google Fonts
-    const fontRes = await fetch('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2')
-    fontData = await fontRes.arrayBuffer()
-  }
+  const fontData = await loadFontData()
 
   const jsx = buildTradeCardJsx(metadata, template, format)
 

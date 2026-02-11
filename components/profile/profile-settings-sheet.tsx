@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Loader2, Settings, CheckCircle2 } from 'lucide-react'
+import { Loader2, Settings, CheckCircle2, AlertCircle, X } from 'lucide-react'
 import { PrivacyToggle } from '@/components/profile/privacy-toggle'
 import type {
   MemberProfile,
@@ -54,6 +54,8 @@ export function ProfileSettingsSheet({
   const [aiPrefs, setAiPrefs] = useState<AIPreferences>(DEFAULT_AI_PREFERENCES)
   const [saving, setSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [symbolInput, setSymbolInput] = useState('')
 
   // Sync local state from profile when dialog opens
   useEffect(() => {
@@ -64,12 +66,15 @@ export function ProfileSettingsSheet({
       )
       setAiPrefs(profile.ai_preferences ?? DEFAULT_AI_PREFERENCES)
       setShowSuccess(false)
+      setErrorMessage(null)
+      setSymbolInput('')
     }
   }, [profile, open])
 
   const handleSave = async () => {
     setSaving(true)
     setShowSuccess(false)
+    setErrorMessage(null)
     try {
       await onSave({
         privacy_settings: privacy,
@@ -78,11 +83,28 @@ export function ProfileSettingsSheet({
       })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 3000)
-    } catch {
-      // Error handling is delegated to the parent onSave callback
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Failed to save settings. Please try again.'
+      )
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleAddSymbol = () => {
+    const symbol = symbolInput.trim().toUpperCase()
+    if (symbol && !aiPrefs.preferred_symbols.includes(symbol)) {
+      updateAiPrefs('preferred_symbols', [...aiPrefs.preferred_symbols, symbol])
+    }
+    setSymbolInput('')
+  }
+
+  const handleRemoveSymbol = (symbol: string) => {
+    updateAiPrefs(
+      'preferred_symbols',
+      aiPrefs.preferred_symbols.filter((s) => s !== symbol)
+    )
   }
 
   const updatePrivacy = (key: keyof PrivacySettings, value: boolean | ProfileVisibility) => {
@@ -160,6 +182,35 @@ export function ProfileSettingsSheet({
                 checked={privacy.show_discord_roles}
                 onCheckedChange={(v) => updatePrivacy('show_discord_roles', v)}
               />
+
+              {/* Profile Visibility Selector */}
+              <div className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3 mt-3">
+                <label className="text-sm font-medium text-[#F5F5F0] block mb-1">
+                  Profile Visibility
+                </label>
+                <p className="text-xs text-[#9A9A9A] mb-2">
+                  Control who can view your profile
+                </p>
+                <div className="flex gap-2">
+                  {(['public', 'members', 'private'] as const).map(
+                    (level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => updatePrivacy('profile_visibility', level)}
+                        className={cn(
+                          'flex-1 text-xs py-2 px-3 rounded-md border transition-colors capitalize',
+                          privacy.profile_visibility === level
+                            ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                            : 'border-white/5 text-[#9A9A9A] hover:border-white/10 hover:text-[#F5F5F0]'
+                        )}
+                      >
+                        {level}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -275,6 +326,57 @@ export function ProfileSettingsSheet({
                 </div>
               </div>
 
+              {/* Preferred Symbols */}
+              <div className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3">
+                <label className="text-sm font-medium text-[#F5F5F0] block mb-2">
+                  Preferred Symbols
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={symbolInput}
+                    onChange={(e) => setSymbolInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddSymbol()
+                      }
+                    }}
+                    placeholder="e.g. SPY, AAPL"
+                    className="flex-1 text-sm bg-transparent border border-white/5 rounded-md px-3 py-1.5 text-[#F5F5F0] placeholder:text-[#9A9A9A]/50 focus:outline-none focus:border-emerald-500/30"
+                    maxLength={10}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddSymbol}
+                    className="text-xs"
+                  >
+                    Add
+                  </Button>
+                </div>
+                {aiPrefs.preferred_symbols.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {aiPrefs.preferred_symbols.map((sym) => (
+                      <span
+                        key={sym}
+                        className="inline-flex items-center gap-1 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md px-2 py-0.5"
+                      >
+                        {sym}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSymbol(sym)}
+                          className="hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Trading Style Notes */}
               <div className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3">
                 <label className="text-sm font-medium text-[#F5F5F0] block mb-2">
@@ -294,8 +396,17 @@ export function ProfileSettingsSheet({
           </section>
         </div>
 
-        {/* Save Button + Success Toast */}
+        {/* Save Button + Success/Error Toast */}
         <div className="pt-4 border-t border-white/5">
+          {errorMessage && (
+            <div
+              data-testid="settings-error-toast"
+              className="mb-3 flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2"
+            >
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span className="text-xs text-red-400">{errorMessage}</span>
+            </div>
+          )}
           {showSuccess && (
             <div
               data-testid="settings-success-toast"

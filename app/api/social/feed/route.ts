@@ -2,9 +2,14 @@ import { NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { successResponse, errorResponse } from '@/lib/api/response'
 import { feedQuerySchema, createFeedItemSchema } from '@/lib/validation/social'
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit'
 import type { FeedResponse, SocialFeedItem } from '@/lib/types/social'
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -63,35 +68,48 @@ export async function GET(request: NextRequest) {
     const hasMore = (items?.length ?? 0) > limit
     const feedItems = (items?.slice(0, limit) ?? []) as SocialFeedItem[]
 
-    // Fetch author data for each item
+    // Fetch author data and user likes in parallel, guarding empty arrays
     const userIds = [...new Set(feedItems.map(item => item.user_id))]
-    const { data: profiles } = await supabase
-      .from('member_profiles')
-      .select('user_id, display_name')
-      .in('user_id', userIds)
-
-    // Fetch user likes for the current user
     const feedItemIds = feedItems.map(item => item.id)
-    const { data: userLikes } = await supabase
-      .from('social_likes')
-      .select('feed_item_id')
-      .eq('user_id', user.id)
-      .in('feed_item_id', feedItemIds)
 
-    const likedItemIds = new Set(userLikes?.map(l => l.feed_item_id) || [])
-    const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || [])
+    const [profilesResult, likesResult] = await Promise.all([
+      userIds.length > 0
+        ? supabase
+            .from('member_profiles')
+            .select('user_id, display_name, membership_tier')
+            .in('user_id', userIds)
+        : Promise.resolve({ data: [] }),
+      feedItemIds.length > 0
+        ? supabase
+            .from('social_likes')
+            .select('feed_item_id')
+            .eq('user_id', user.id)
+            .in('feed_item_id', feedItemIds)
+        : Promise.resolve({ data: [] }),
+    ])
 
-    // Enrich feed items
-    const enrichedItems: SocialFeedItem[] = feedItems.map(item => ({
-      ...item,
-      author: {
-        display_name: profileMap.get(item.user_id)?.display_name ?? null,
-        discord_username: null,
-        discord_avatar: null,
-        membership_tier: null,
-      },
-      user_has_liked: likedItemIds.has(item.id),
-    }))
+    const profiles = 'data' in profilesResult ? profilesResult.data : profilesResult
+    const userLikes = 'data' in likesResult ? likesResult.data : likesResult
+
+    const likedItemIds = new Set((userLikes as Array<{ feed_item_id: string }> | null)?.map(l => l.feed_item_id) || [])
+    const profileMap = new Map(
+      (profiles as Array<{ user_id: string; display_name: string | null; membership_tier: string | null }> | null)?.map(p => [p.user_id, p]) || []
+    )
+
+    // Enrich feed items with author data
+    const enrichedItems: SocialFeedItem[] = feedItems.map(item => {
+      const profile = profileMap.get(item.user_id)
+      return {
+        ...item,
+        author: {
+          display_name: profile?.display_name ?? null,
+          discord_username: null,
+          discord_avatar: null,
+          membership_tier: profile?.membership_tier ?? null,
+        },
+        user_has_liked: likedItemIds.has(item.id),
+      }
+    })
 
     const response: FeedResponse = {
       items: enrichedItems,
@@ -111,6 +129,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 

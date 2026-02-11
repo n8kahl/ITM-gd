@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Pencil, Calendar, User } from 'lucide-react'
+import { Loader2, Pencil, Calendar, User } from 'lucide-react'
 import type { MemberProfile, TradingStyle } from '@/lib/types/social'
 
 // ============================================
@@ -14,7 +14,7 @@ import type { MemberProfile, TradingStyle } from '@/lib/types/social'
 // ============================================
 
 interface TraderIdentityCardProps {
-  profile: MemberProfile
+  profile: MemberProfile | null
   discordUsername?: string | null
   discordAvatar?: string | null
   membershipTier?: string | null
@@ -23,6 +23,8 @@ interface TraderIdentityCardProps {
     xp: number
     nextRankXp: number
   } | null
+  isOwnProfile?: boolean
+  onEditProfile?: () => void
   className?: string
 }
 
@@ -85,10 +87,28 @@ export function TraderIdentityCard({
   discordAvatar,
   membershipTier,
   academyData,
+  isOwnProfile = true,
+  onEditProfile,
   className,
 }: TraderIdentityCardProps) {
   const [imgError, setImgError] = useState(false)
   const tierConfig = getTierConfig(membershipTier)
+
+  if (!profile) {
+    return (
+      <Card
+        data-testid="trader-identity-card"
+        className={cn('glass-card-heavy border-white/[0.08]', className)}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center gap-2 py-12">
+            <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+            <span className="text-sm text-[#9A9A9A]">Loading profile...</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const displayName = profile.display_name || discordUsername || 'Trader'
   const avatarUrl = profile.custom_avatar_url || discordAvatar
@@ -217,17 +237,20 @@ export function TraderIdentityCard({
           </div>
         )}
 
-        {/* Edit Profile Button */}
-        <div className="mt-5 pt-4 border-t border-white/5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2 text-xs"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            Edit Profile
-          </Button>
-        </div>
+        {/* Edit Profile Button — only for own profile */}
+        {isOwnProfile && (
+          <div className="mt-5 pt-4 border-t border-white/5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2 text-xs"
+              onClick={onEditProfile}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit Profile
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

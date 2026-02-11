@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, Loader2, Lock } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { EquitySparkline } from '@/components/profile/equity-sparkline'
 import type { TradingTranscript } from '@/lib/types/social'
 
@@ -16,6 +17,7 @@ interface TradingTranscriptProps {
   isOwnProfile: boolean
   isPublic: boolean
   loading: boolean
+  onPrivacyChange?: (visible: boolean) => void
   className?: string
 }
 
@@ -97,6 +99,7 @@ export function TradingTranscriptCard({
   isOwnProfile,
   isPublic,
   loading,
+  onPrivacyChange,
   className,
 }: TradingTranscriptProps) {
   // Loading state
@@ -181,6 +184,20 @@ export function TradingTranscriptCard({
             Verified Stats
           </Badge>
         </div>
+        {/* Privacy toggle — only for own profile */}
+        {isOwnProfile && onPrivacyChange && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
+            <span className="text-xs text-[#9A9A9A]">
+              Visible to other members
+            </span>
+            <Switch
+              data-testid="privacy-transcript-inline-toggle"
+              checked={isPublic}
+              onCheckedChange={onPrivacyChange}
+              aria-label="Toggle transcript visibility"
+            />
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="p-6 pt-4">

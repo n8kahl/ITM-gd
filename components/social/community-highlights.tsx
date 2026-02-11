@@ -12,7 +12,7 @@ import type {
 } from '@/lib/types/social'
 import {
   Loader2,
-  Sparkles,
+  Award,
   TrendingUp,
   TrendingDown,
   User,
@@ -103,7 +103,7 @@ export function CommunityHighlights({ className }: CommunityHighlightsProps) {
       <Card className={cn('glass-card-heavy border-white/[0.06] bg-transparent', className)}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base text-white">
-            <Sparkles className="h-5 w-5 text-emerald-400" />
+            <Award className="h-5 w-5 text-emerald-400" />
             Community Highlights
           </CardTitle>
         </CardHeader>
@@ -119,7 +119,7 @@ export function CommunityHighlights({ className }: CommunityHighlightsProps) {
     <Card className={cn('glass-card-heavy border-white/[0.06] bg-transparent', className)}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base text-white">
-          <Sparkles className="h-5 w-5 text-emerald-400" />
+          <Award className="h-5 w-5 text-emerald-400" />
           Community Highlights
         </CardTitle>
       </CardHeader>

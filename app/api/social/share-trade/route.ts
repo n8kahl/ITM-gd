@@ -2,9 +2,21 @@ import { NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { successResponse, errorResponse } from '@/lib/api/response'
 import { shareTradeCardSchema } from '@/lib/validation/social'
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit'
+import {
+  generateTradeCardImage,
+  formatPnl,
+  formatPnlPercentage,
+  formatHoldDuration,
+} from '@/lib/social/trade-card-generator'
 import type { TradeCardDisplayData } from '@/lib/types/social'
+import type { TradeCardTemplate } from '@/lib/social/trade-card-generator'
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -87,7 +99,70 @@ export async function POST(request: NextRequest) {
       return errorResponse(cardError.message, 500)
     }
 
+    // Fetch member profile for trade card metadata
+    const { data: memberProfile } = await supabase
+      .from('member_profiles')
+      .select('display_name, membership_tier')
+      .eq('user_id', user.id)
+      .single()
+
+    // Generate trade card image (best-effort, don't block the response)
+    let imageUrl: string | null = null
+    try {
+      const metadata = {
+        symbol: entry.symbol,
+        direction: (entry.direction || 'long').toUpperCase() as 'LONG' | 'SHORT',
+        contractType: (entry.contract_type || 'Stock') as 'Stock' | 'Call' | 'Put',
+        pnl: formatPnl(entry.pnl),
+        pnlPercentage: formatPnlPercentage(entry.pnl_percentage ?? null),
+        isWinner: entry.pnl > 0,
+        entryPrice: entry.entry_price ? `$${entry.entry_price}` : 'N/A',
+        exitPrice: entry.exit_price ? `$${entry.exit_price}` : 'N/A',
+        strategy: entry.strategy ?? null,
+        aiGrade: entry.ai_analysis?.grade ?? null,
+        memberName: memberProfile?.display_name || 'ITM Member',
+        memberTier: memberProfile?.membership_tier || 'core',
+        tradeDate: new Date(entry.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        }),
+        holdDuration: formatHoldDuration(entry.hold_duration_minutes ?? null),
+      }
+
+      const imageBuffer = await generateTradeCardImage(
+        metadata,
+        template as TradeCardTemplate,
+      )
+
+      // Upload to Supabase Storage
+      const fileName = `trade-cards/${user.id}/${tradeCard.id}.png`
+      const { error: uploadError } = await supabase.storage
+        .from('public-assets')
+        .upload(fileName, imageBuffer, {
+          contentType: 'image/png',
+          upsert: true,
+        })
+
+      if (!uploadError) {
+        const { data: publicUrl } = supabase.storage
+          .from('public-assets')
+          .getPublicUrl(fileName)
+        imageUrl = publicUrl.publicUrl
+
+        // Update the trade card with the image URL
+        await supabase
+          .from('shared_trade_cards')
+          .update({ image_url: imageUrl, display_data: { ...displayData, image_url: imageUrl } })
+          .eq('id', tradeCard.id)
+      }
+    } catch (imgError) {
+      // Image generation is best-effort — log but don't fail the request
+      console.error('Trade card image generation failed:', imgError)
+    }
+
     // Insert into social_feed_items
+    const feedDisplayData = imageUrl ? { ...displayData, image_url: imageUrl } : displayData
     const { data: feedItem, error: feedError } = await supabase
       .from('social_feed_items')
       .insert({
@@ -95,7 +170,7 @@ export async function POST(request: NextRequest) {
         item_type: 'trade_card',
         reference_id: tradeCard.id,
         reference_table: 'shared_trade_cards',
-        display_data: displayData,
+        display_data: feedDisplayData,
         visibility,
       })
       .select('*')
@@ -108,7 +183,7 @@ export async function POST(request: NextRequest) {
     return successResponse({
       feed_item: feedItem,
       trade_card: tradeCard,
-      image_url: tradeCard.image_url ?? null,
+      image_url: imageUrl,
     })
   } catch (error) {
     return errorResponse(

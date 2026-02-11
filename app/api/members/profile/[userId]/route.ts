@@ -2,11 +2,16 @@ import { NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { successResponse, errorResponse } from '@/lib/api/response'
 import { sanitizeUUID } from '@/lib/sanitize'
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 

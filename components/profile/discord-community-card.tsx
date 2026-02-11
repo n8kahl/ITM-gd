@@ -16,7 +16,7 @@ interface DiscordCommunityCardProps {
   discordUsername?: string | null
   discordAvatar?: string | null
   discordRoles?: string[]
-  onSyncRoles?: () => void
+  onSyncRoles?: () => void | Promise<unknown>
   className?: string
 }
 
@@ -38,10 +38,11 @@ export function DiscordCommunityCard({
     if (!onSyncRoles) return
     setSyncing(true)
     try {
-      onSyncRoles()
+      await onSyncRoles()
+    } catch {
+      // Sync error handled by parent
     } finally {
-      // Allow animation to play briefly
-      setTimeout(() => setSyncing(false), 1000)
+      setSyncing(false)
     }
   }
 

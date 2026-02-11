@@ -1,16 +1,16 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, Loader2 } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { cn } from '@/lib/utils'
 import { TraderIdentityCard } from '@/components/profile/trader-identity-card'
 import { TradingTranscriptCard } from '@/components/profile/trading-transcript'
 import { AcademyProgressCard } from '@/components/profile/academy-progress-card'
 import { DiscordCommunityCard } from '@/components/profile/discord-community-card'
 import { WhopAffiliateCard } from '@/components/profile/whop-affiliate-card'
 import { ProfileSettingsSheet } from '@/components/profile/profile-settings-sheet'
+import { Skeleton } from '@/components/ui/skeleton-loader'
 import type { MemberProfile, TradingTranscript } from '@/lib/types/social'
 
 interface AcademyData {
@@ -42,42 +42,37 @@ export default function ProfilePage() {
     setAffiliateLoading(true)
 
     try {
-      // Fetch all data in parallel
-      const [profileRes, transcriptRes, affiliateRes] = await Promise.all([
+      // Fetch ALL data in parallel (including academy)
+      const [profileRes, transcriptRes, affiliateRes, xpRes] = await Promise.allSettled([
         fetch('/api/members/profile'),
         fetch('/api/members/profile/transcript'),
         fetch('/api/members/affiliate'),
+        fetch('/api/academy/xp'),
       ])
 
-      if (profileRes.ok) {
-        const profileData = await profileRes.json()
+      if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
+        const profileData = await profileRes.value.json()
         setMemberProfile(profileData.data)
       }
 
-      if (transcriptRes.ok) {
-        const transcriptData = await transcriptRes.json()
+      if (transcriptRes.status === 'fulfilled' && transcriptRes.value.ok) {
+        const transcriptData = await transcriptRes.value.json()
         setTranscript(transcriptData.data)
       }
 
-      if (affiliateRes.ok) {
-        const affiliateData = await affiliateRes.json()
+      if (affiliateRes.status === 'fulfilled' && affiliateRes.value.ok) {
+        const affiliateData = await affiliateRes.value.json()
         setAffiliateStats({ stats: affiliateData.data?.stats ?? null })
       }
 
-      // Fetch academy data from XP endpoint if available
-      try {
-        const xpRes = await fetch('/api/academy/xp')
-        if (xpRes.ok) {
-          const xpData = await xpRes.json()
-          setAcademyData({
-            rank: xpData.data?.rank || 'Recruit',
-            xp: xpData.data?.total_xp || 0,
-            nextRankXp: xpData.data?.next_rank_xp || 100,
-            achievementCount: xpData.data?.achievement_count || 0,
-          })
-        }
-      } catch {
-        // Academy data is optional
+      if (xpRes.status === 'fulfilled' && xpRes.value.ok) {
+        const xpData = await xpRes.value.json()
+        setAcademyData({
+          rank: xpData.data?.rank || 'Recruit',
+          xp: xpData.data?.total_xp || 0,
+          nextRankXp: xpData.data?.next_rank_xp || 100,
+          achievementCount: xpData.data?.achievement_count || 0,
+        })
       }
     } catch (error) {
       console.error('Failed to fetch profile data:', error)
@@ -99,18 +94,25 @@ export default function ProfilePage() {
       body: JSON.stringify(updates),
     })
 
-    if (res.ok) {
-      const data = await res.json()
-      setMemberProfile(data.data)
+    if (!res.ok) {
+      throw new Error('Failed to save settings')
     }
+
+    const data = await res.json()
+    setMemberProfile(data.data)
+  }
+
+  const handleTranscriptPrivacyChange = async (visible: boolean) => {
+    await handleSettingsSave({
+      privacy_settings: {
+        ...memberProfile?.privacy_settings,
+        show_transcript: visible,
+      },
+    })
   }
 
   if (loading && !memberProfile) {
-    return (
-      <div className="max-w-4xl mx-auto flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-      </div>
-    )
+    return <Skeleton variant="screen" />
   }
 
   return (
@@ -131,11 +133,13 @@ export default function ProfilePage() {
 
       {/* Section 1: Trader Identity Card */}
       <TraderIdentityCard
-        profile={memberProfile!}
+        profile={memberProfile}
         discordUsername={authProfile?.discord_username}
         discordAvatar={authProfile?.discord_avatar}
         membershipTier={authProfile?.membership_tier}
         academyData={academyData}
+        isOwnProfile
+        onEditProfile={() => setSettingsOpen(true)}
       />
 
       {/* Section 2: Trading Transcript */}
@@ -144,6 +148,7 @@ export default function ProfilePage() {
         isOwnProfile={true}
         isPublic={memberProfile?.privacy_settings?.show_transcript ?? true}
         loading={transcriptLoading}
+        onPrivacyChange={handleTranscriptPrivacyChange}
       />
 
       {/* Section 3: Academy Progress */}

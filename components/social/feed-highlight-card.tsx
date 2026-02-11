@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import type { HighlightDisplayData } from '@/lib/types/social'
-import { Sparkles, User, MessageSquare } from 'lucide-react'
+import { Award, User, MessageSquare } from 'lucide-react'
 
 interface FeedHighlightCardProps {
   displayData: HighlightDisplayData
@@ -16,7 +16,7 @@ const SPOTLIGHT_CONFIG: Record<
 > = {
   trade_of_week: {
     label: 'Trade of the Week',
-    icon: Sparkles,
+    icon: Award,
     color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
   },
   member_spotlight: {

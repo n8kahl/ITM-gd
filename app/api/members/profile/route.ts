@@ -3,9 +3,14 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { successResponse, errorResponse } from '@/lib/api/response'
 import { memberProfileUpdateSchema } from '@/lib/validation/social'
 import { sanitizeContent } from '@/lib/sanitize'
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit'
 import type { MemberProfile } from '@/lib/types/social'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -50,6 +55,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(ip, RATE_LIMITS.apiGeneral)
+  if (!rl.success) return errorResponse('Too many requests', 429)
+
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -67,14 +76,14 @@ export async function PATCH(request: NextRequest) {
 
     const updateData = { ...parsed.data }
 
-    // Sanitize string fields
-    if (updateData.display_name) {
+    // Sanitize string fields (use typeof check to handle empty strings)
+    if (typeof updateData.display_name === 'string') {
       updateData.display_name = sanitizeContent(updateData.display_name)
     }
-    if (updateData.bio) {
+    if (typeof updateData.bio === 'string') {
       updateData.bio = sanitizeContent(updateData.bio)
     }
-    if (updateData.tagline) {
+    if (typeof updateData.tagline === 'string') {
       updateData.tagline = sanitizeContent(updateData.tagline)
     }
 
