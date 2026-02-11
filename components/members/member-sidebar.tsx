@@ -12,7 +12,6 @@ import {
   Palette,
   UserCircle,
   LogOut,
-  RefreshCw,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react'
@@ -90,7 +89,6 @@ export function MemberSidebar() {
     profile,
     getVisibleTabs,
     signOut,
-    syncDiscordRoles,
   } = useMemberAuth()
 
   const visibleTabs = getVisibleTabs()
@@ -148,14 +146,6 @@ export function MemberSidebar() {
             </div>
           </div>
 
-          {/* Sync Button */}
-          <button
-            onClick={() => syncDiscordRoles()}
-            className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] text-muted-foreground hover:text-ivory hover:bg-white/[0.08] text-xs transition-all duration-200"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Sync Roles
-          </button>
         </div>
       )}
 

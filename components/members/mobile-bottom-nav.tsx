@@ -12,12 +12,9 @@ import {
   Ellipsis,
   UserCircle,
   Settings,
-  RefreshCw,
   type LucideIcon,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 interface NavTab {
   id: string
@@ -55,9 +52,7 @@ function triggerHaptic() {
 
 export function MemberBottomNav() {
   const pathname = usePathname()
-  const { syncDiscordRoles } = useMemberAuth()
   const [moreOpen, setMoreOpen] = useState(false)
-  const [syncingRoles, setSyncingRoles] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -74,28 +69,6 @@ export function MemberBottomNav() {
     document.addEventListener('mousedown', handleClickAway)
     return () => document.removeEventListener('mousedown', handleClickAway)
   }, [])
-
-  const handleSyncRoles = async () => {
-    if (syncingRoles) return
-    setSyncingRoles(true)
-    triggerHaptic()
-
-    try {
-      const result = await syncDiscordRoles()
-      if (!result) {
-        toast.info('Sync already in progress. Please wait a moment.')
-      } else if (result.success) {
-        toast.success('Discord roles synced')
-      } else {
-        toast.error('Failed to sync roles')
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to sync roles')
-    } finally {
-      setSyncingRoles(false)
-      setMoreOpen(false)
-    }
-  }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden">
@@ -193,15 +166,6 @@ export function MemberBottomNav() {
                     Settings
                   </Link>
 
-                  <button
-                    type="button"
-                    onClick={handleSyncRoles}
-                    disabled={syncingRoles}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06] disabled:opacity-55"
-                  >
-                    <RefreshCw className={cn('w-4 h-4 text-emerald-300', syncingRoles && 'animate-spin')} />
-                    {syncingRoles ? 'Syncing Roles...' : 'Sync Roles'}
-                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
