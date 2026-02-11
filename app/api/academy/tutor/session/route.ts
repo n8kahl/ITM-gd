@@ -340,8 +340,11 @@ export async function POST(request: NextRequest) {
     // If we have a question, ask the AI Coach backend in the context of this session.
     let firstMessage: { id: string; role: 'assistant'; content: string } | null = null
     if (initialQuestion && typeof initialQuestion === 'string' && initialQuestion.trim().length > 0) {
-      const { data: { session } } = await supabase.auth.getSession()
-      const accessToken = session?.access_token || getBearerToken(request)
+      let accessToken = getBearerToken(request)
+      if (!accessToken) {
+        const { data: { session } } = await supabase.auth.getSession()
+        accessToken = session?.access_token || null
+      }
 
       if (!accessToken) {
         return NextResponse.json(

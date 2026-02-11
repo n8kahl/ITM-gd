@@ -408,8 +408,8 @@ export default function LessonPage() {
   }
 
   return (
-    <div className="relative space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="relative space-y-3 lg:flex lg:h-[calc(100dvh-10.75rem)] lg:flex-col lg:space-y-3 lg:overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 lg:shrink-0">
         <div className="flex min-w-0 items-center gap-2 text-xs text-white/45">
           <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
             Training Library
@@ -457,7 +457,7 @@ export default function LessonPage() {
         {showSidebar ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      <div className="flex min-h-[calc(100vh-7rem)] rounded-2xl border border-white/10 bg-[#0A0A0B]/55 backdrop-blur-xl overflow-hidden">
+      <div className="flex min-h-[calc(100vh-7rem)] rounded-2xl border border-white/10 bg-[#0A0A0B]/55 backdrop-blur-xl overflow-hidden lg:min-h-0 lg:flex-1">
         {/* Sidebar - Desktop always visible, Mobile toggleable */}
         <div
           className={cn(
@@ -465,7 +465,7 @@ export default function LessonPage() {
             // Mobile: overlay
             'fixed lg:relative z-20',
             'top-14 left-0 bottom-0 lg:top-0 lg:left-auto lg:bottom-auto',
-            'w-[280px]',
+            'w-[280px] lg:h-full',
             showSidebar
               ? 'translate-x-0'
               : '-translate-x-full lg:translate-x-0'
@@ -491,7 +491,7 @@ export default function LessonPage() {
         )}
 
         {/* Main content area */}
-        <div className="flex-1 min-w-0 bg-transparent">
+        <div className="flex-1 min-w-0 min-h-0 bg-transparent">
           <LessonPlayer
             key={lesson.id}
             lessonId={lesson.id}

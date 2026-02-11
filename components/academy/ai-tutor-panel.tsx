@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   MessageCircle,
   X,
@@ -10,7 +12,6 @@ import {
   Bot,
   User,
   Loader2,
-  ChevronDown,
 } from 'lucide-react'
 
 interface Message {
@@ -31,6 +32,8 @@ export function AiTutorPanel({
   lessonTitle,
   className,
 }: AiTutorPanelProps) {
+  const { session } = useMemberAuth()
+  const [isMounted, setIsMounted] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -43,6 +46,10 @@ export function AiTutorPanel({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Focus input when panel opens
   useEffect(() => {
@@ -67,9 +74,14 @@ export function AiTutorPanel({
     setIsLoading(true)
 
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`
+      }
+
       const response = await fetch('/api/academy/tutor/session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           lesson_id: lessonId,
           initial_question: trimmed,
@@ -107,7 +119,7 @@ export function AiTutorPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, lessonId, sessionId])
+  }, [input, isLoading, lessonId, session?.access_token, sessionId])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -116,7 +128,9 @@ export function AiTutorPanel({
     }
   }
 
-  return (
+  if (!isMounted || typeof document === 'undefined') return null
+
+  return createPortal(
     <>
       {/* Floating trigger button */}
       <button
@@ -163,10 +177,10 @@ export function AiTutorPanel({
               // Mobile: bottom sheet style
               'bottom-0 left-0 right-0 h-[75vh]',
               // Desktop: right sidebar
-              'lg:top-0 lg:right-0 lg:left-auto lg:bottom-0 lg:h-full lg:w-[380px]',
+              'lg:top-6 lg:right-6 lg:left-auto lg:bottom-6 lg:h-auto lg:max-h-[calc(100dvh-3rem)] lg:w-[380px]',
               'flex flex-col',
               'bg-[#0A0A0B] border-l border-t lg:border-t-0 border-white/10',
-              'rounded-t-2xl lg:rounded-none',
+              'rounded-t-2xl lg:rounded-2xl',
               className
             )}
           >
@@ -328,6 +342,7 @@ export function AiTutorPanel({
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </>,
+    document.body
   )
 }

@@ -143,6 +143,42 @@ async function setupLessonMocks(page: Page) {
   })
 }
 
+async function setupTutorMocks(page: Page) {
+  let responseCount = 0
+
+  await page.route('**/api/academy/tutor/session', async (route: Route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue()
+      return
+    }
+
+    const body = route.request().postDataJSON() as {
+      initial_question?: string
+      session_id?: string | null
+    } | null
+
+    const question = typeof body?.initial_question === 'string'
+      ? body.initial_question.trim()
+      : ''
+
+    responseCount += 1
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          session_id: body?.session_id || 'tutor-session-e2e',
+          reply: question
+            ? `Tutor mock reply #${responseCount}: ${question}`
+            : 'Ask me anything about this lesson',
+        },
+      }),
+    })
+  })
+}
+
 async function setupCourseDetailMocks(page: Page) {
   await page.route(`**/api/academy/courses/${COURSE_SLUG}`, async (route: Route) => {
     await route.fulfill({
@@ -386,6 +422,32 @@ test.describe('Academy lesson layout and navigation', () => {
     if (buttonBox && viewport) {
       expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(viewport.height + 24)
     }
+  })
+
+  test('keeps AI Tutor visible on desktop and sends chat messages end-to-end', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await setupMemberConfigMocks(page)
+    await setupLessonMocks(page)
+    await setupTutorMocks(page)
+
+    await page.goto('/members/academy/learn/lesson-2')
+
+    const openTutorButton = page.getByLabel('Open AI Tutor')
+    await expect(openTutorButton).toBeVisible()
+
+    const triggerBox = await openTutorButton.boundingBox()
+    const viewport = page.viewportSize()
+    expect(triggerBox).not.toBeNull()
+    if (triggerBox && viewport) {
+      expect(triggerBox.y + triggerBox.height).toBeLessThanOrEqual(viewport.height)
+    }
+
+    await openTutorButton.click()
+    await expect(page.getByRole('heading', { name: 'AI Tutor' })).toBeVisible()
+
+    await page.getByPlaceholder('Ask the AI tutor...').fill('What is delta in this lesson?')
+    await page.getByLabel('Send message').click()
+    await expect(page.getByText('Tutor mock reply #1: What is delta in this lesson?')).toBeVisible()
   })
 
   test('shows all five academy tabs and keeps active state across routes', async ({ page }) => {
