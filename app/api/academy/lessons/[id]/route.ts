@@ -121,7 +121,7 @@ export async function GET(
         order: courseLesson.display_order || index + 1,
         durationMinutes: courseLesson.estimated_minutes || courseLesson.duration_minutes || 0,
         isCompleted,
-        isLocked: !isCompleted && !previousCompleted,
+        isLocked: false, // TODO: restore gating → !isCompleted && !previousCompleted
       }
     })
 

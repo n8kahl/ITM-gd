@@ -131,7 +131,7 @@ export async function GET(
             ? 'markdown'
             : 'mixed',
         isCompleted,
-        isLocked: !isCompleted && !previousCompleted,
+        isLocked: false, // TODO: restore gating → !isCompleted && !previousCompleted
       }
     })
 
