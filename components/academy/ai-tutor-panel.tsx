@@ -23,12 +23,14 @@ interface Message {
 interface AiTutorPanelProps {
   lessonId: string
   lessonTitle: string
+  suggestedPrompts?: string[]
   className?: string
 }
 
 export function AiTutorPanel({
   lessonId,
   lessonTitle,
+  suggestedPrompts,
   className,
 }: AiTutorPanelProps) {
   const [isMounted, setIsMounted] = useState(false)
@@ -126,6 +128,14 @@ export function AiTutorPanel({
       sendMessage()
     }
   }
+
+  const promptSuggestions = Array.isArray(suggestedPrompts) && suggestedPrompts.length > 0
+    ? suggestedPrompts.slice(0, 4)
+    : [
+      'Explain the key concepts',
+      'Give me a real-world example',
+      'What should I focus on?',
+    ]
 
   if (!isMounted || typeof document === 'undefined') return null
 
@@ -227,11 +237,7 @@ export function AiTutorPanel({
 
                   {/* Suggested prompts */}
                   <div className="space-y-2 pt-2">
-                    {[
-                      'Explain the key concepts',
-                      'Give me a real-world example',
-                      'What should I focus on?',
-                    ].map((prompt) => (
+                    {promptSuggestions.map((prompt) => (
                       <button
                         key={prompt}
                         onClick={() => {

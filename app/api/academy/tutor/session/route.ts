@@ -37,6 +37,7 @@ type TutorLesson = {
   chunk_data: unknown
   competency_keys: string[] | null
   ai_tutor_context: string | null
+  ai_tutor_chips: string[] | null
   key_takeaways: string[] | null
 }
 
@@ -80,6 +81,9 @@ function buildTutorSystemPrompt(args: {
   const takeaways = Array.isArray(args.lesson.key_takeaways)
     ? args.lesson.key_takeaways.filter(Boolean).slice(0, 10)
     : []
+  const tutorChips = Array.isArray(args.lesson.ai_tutor_chips)
+    ? args.lesson.ai_tutor_chips.filter(Boolean).slice(0, 6)
+    : []
 
   const chunk = resolveChunkContext(args.lesson, args.inputContext.chunkId)
   const chunkTitle = chunk?.title || null
@@ -103,6 +107,9 @@ function buildTutorSystemPrompt(args: {
     '',
     'KEY TAKEAWAYS:',
     takeaways.length > 0 ? takeaways.map((t) => `- ${t}`).join('\n') : '(none)',
+    '',
+    'SUGGESTED MEMBER QUESTIONS:',
+    tutorChips.length > 0 ? tutorChips.map((chip) => `- ${chip}`).join('\n') : '(none)',
     '',
     'CHUNK-LEVEL CONTEXT:',
     chunkTitle ? `- Chunk title: ${chunkTitle}` : '- Chunk title: (not provided)',
@@ -130,6 +137,13 @@ function buildTutorSystemPrompt(args: {
     '- If journal context is provided, tie your explanation to that real trade behavior',
     '- Use practical examples: "When trading SPX 0DTE..."',
     '- Never make up statistics or win rates',
+    '',
+    'RESPONSE QUALITY BAR:',
+    '- Be concise but specific; avoid generic motivation-only replies',
+    '- Default structure: direct answer, why it matters, one practical TITM example, one next step',
+    '- For "What should I focus on?" questions, return top 3 priorities in order',
+    '- Use plain language first, then introduce technical terms',
+    '- End with one short check question to confirm understanding',
   ].join('\n')
 }
 
@@ -171,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     const { data: lesson, error: lessonError } = await supabaseAdmin
       .from('lessons')
-      .select('id, title, slug, course_id, content_markdown, chunk_data, competency_keys, ai_tutor_context, key_takeaways')
+      .select('id, title, slug, course_id, content_markdown, chunk_data, competency_keys, ai_tutor_context, ai_tutor_chips, key_takeaways')
       .eq('id', lessonId)
       .maybeSingle()
 

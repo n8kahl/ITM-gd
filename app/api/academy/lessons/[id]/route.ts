@@ -60,6 +60,7 @@ export async function GET(
         duration_minutes,
         display_order,
         quiz_data,
+        ai_tutor_chips,
         courses(id, title, slug)
       `)
       .eq('id', id)
@@ -167,6 +168,11 @@ export async function GET(
         : lesson.lesson_type === 'text'
           ? 'markdown'
           : 'mixed'
+    const tutorChips = Array.isArray(lesson.ai_tutor_chips)
+      ? lesson.ai_tutor_chips
+        .filter((chip): chip is string => typeof chip === 'string' && chip.trim().length > 0)
+        .slice(0, 6)
+      : []
 
     return NextResponse.json({
       success: true,
@@ -186,6 +192,7 @@ export async function GET(
           lessons: sidebarLessons,
         },
         quiz: quizQuestions,
+        aiTutorChips: tutorChips,
       },
     })
   } catch (error) {

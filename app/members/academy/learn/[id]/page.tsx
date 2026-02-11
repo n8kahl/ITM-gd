@@ -34,6 +34,7 @@ interface LessonData {
     lessons: SidebarLesson[]
   }
   quiz: QuizQuestionData[] | null
+  aiTutorChips: string[]
 }
 
 interface LessonResponse {
@@ -527,6 +528,7 @@ export default function LessonPage() {
       <AiTutorPanel
         lessonId={lesson.id}
         lessonTitle={lesson.title}
+        suggestedPrompts={lesson.aiTutorChips}
       />
     </div>
   )
