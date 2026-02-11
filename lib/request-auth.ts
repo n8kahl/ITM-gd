@@ -77,12 +77,22 @@ export async function getAuthenticatedUserFromRequest(
     return bypassAuth
   }
 
-  const supabase = await createRequestSupabaseClient(request)
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const requestSupabase = await createRequestSupabaseClient(request)
+  const { data: { user: requestUser }, error: requestError } = await requestSupabase.auth.getUser()
 
-  if (error || !user) {
-    return null
+  if (!requestError && requestUser) {
+    return { user: requestUser, supabase: requestSupabase }
   }
 
-  return { user, supabase }
+  // If a stale/invalid bearer token was supplied, retry with cookie-based auth.
+  // This prevents custom Authorization headers from shadowing valid browser sessions.
+  if (getBearerToken(request)) {
+    const cookieSupabase = await createServerSupabaseClient()
+    const { data: { user: cookieUser }, error: cookieError } = await cookieSupabase.auth.getUser()
+    if (!cookieError && cookieUser) {
+      return { user: cookieUser, supabase: cookieSupabase }
+    }
+  }
+
+  return null
 }

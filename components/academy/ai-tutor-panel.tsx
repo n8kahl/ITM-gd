@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import {
   MessageCircle,
   X,
@@ -32,7 +31,6 @@ export function AiTutorPanel({
   lessonTitle,
   className,
 }: AiTutorPanelProps) {
-  const { session } = useMemberAuth()
   const [isMounted, setIsMounted] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -74,14 +72,9 @@ export function AiTutorPanel({
     setIsLoading(true)
 
     try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' }
-      if (session?.access_token) {
-        headers.Authorization = `Bearer ${session.access_token}`
-      }
-
       const response = await fetch('/api/academy/tutor/session', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lesson_id: lessonId,
           initial_question: trimmed,
@@ -90,7 +83,12 @@ export function AiTutorPanel({
       })
 
       if (!response.ok) {
-        throw new Error('Failed to get response')
+        const errorPayload = await response.json().catch(() => null)
+        const errorMessage =
+          errorPayload?.error ||
+          errorPayload?.message ||
+          'Failed to get response'
+        throw new Error(errorMessage)
       }
 
       const payload = await response.json()
@@ -107,19 +105,20 @@ export function AiTutorPanel({
       }
 
       setMessages((prev) => [...prev, assistantMessage])
-    } catch {
+    } catch (error) {
       const errorMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content:
-          'Sorry, I encountered an error. Please try again in a moment.',
+        content: error instanceof Error
+          ? `Sorry, I encountered an error: ${error.message}`
+          : 'Sorry, I encountered an error. Please try again in a moment.',
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, lessonId, session?.access_token, sessionId])
+  }, [input, isLoading, lessonId, sessionId])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

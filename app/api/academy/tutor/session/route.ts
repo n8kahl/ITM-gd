@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { toSafeErrorMessage } from '@/lib/academy/api-utils'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -340,10 +341,13 @@ export async function POST(request: NextRequest) {
     // If we have a question, ask the AI Coach backend in the context of this session.
     let firstMessage: { id: string; role: 'assistant'; content: string } | null = null
     if (initialQuestion && typeof initialQuestion === 'string' && initialQuestion.trim().length > 0) {
-      let accessToken = getBearerToken(request)
+      // Prefer cookie session token (freshest source); fall back to bearer header.
+      const cookieSupabase = await createServerSupabaseClient()
+      const { data: { session: cookieSession } } = await cookieSupabase.auth.getSession()
+      let accessToken = cookieSession?.access_token || null
       if (!accessToken) {
         const { data: { session } } = await supabase.auth.getSession()
-        accessToken = session?.access_token || null
+        accessToken = session?.access_token || getBearerToken(request)
       }
 
       if (!accessToken) {
