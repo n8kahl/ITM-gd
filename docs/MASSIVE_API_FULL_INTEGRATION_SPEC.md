@@ -2,15 +2,17 @@
 
 ## Autonomous Implementation Guide for Codex
 
-**Version:** 1.0.0
-**Date:** 2026-02-11
-**Status:** Ready for Implementation
+**Version:** 1.0.1
+**Date:** 2026-02-12
+**Status:** Repo-aligned for autonomous handoff
 **Scope:** 18 new endpoint integrations, 12 cleanup tasks, full production hardening
+**Repo validation target:** `6326dafebe5299c4a94af17c0e813689d01dbe5b` (HEAD on 2026-02-12)
 
 ---
 
 ## Table of Contents
 
+0. [Repo Alignment (MUST READ)](#0-repo-alignment-must-read)
 1. [Executive Summary](#1-executive-summary)
 2. [Architecture Overview](#2-architecture-overview)
 3. [Current State Audit](#3-current-state-audit)
@@ -29,6 +31,58 @@
 16. [Acceptance Criteria](#16-acceptance-criteria)
 17. [File Manifest](#17-file-manifest)
 18. [Dependency Map](#18-dependency-map)
+
+---
+
+## 0. Repo Alignment (MUST READ)
+
+This section resolves the highest-impact mismatches between this spec and the current repo so implementation can proceed autonomously without “surprise” production blockers.
+
+### 0.1 Massive.com call placement (authoritative decision)
+
+**Decision:** Keep `MASSIVE_API_KEY` **only** in the backend (Express service in `backend/`). The Next.js app **must not** call `api.massive.com` directly in production.
+
+**Why:**
+- The current Docker setup injects `MASSIVE_API_KEY` into the backend container, not the Next.js app container.
+- Centralizing Massive traffic in one service is required for consistent caching, rate limiting, and circuit breaker behavior across:
+  - REST endpoints (`backend/src/routes/*`)
+  - WebSocket price stream (`backend/src/services/websocket.ts`)
+  - Background workers (`backend/src/workers/*`)
+
+**Implementation rule:** Any `app/api/**` dashboard routes added by this spec MUST proxy to backend endpoints (via `NEXT_PUBLIC_AI_COACH_API_URL`) instead of calling Massive.com directly.
+
+### 0.2 Massive client API shape (do not copy the old sample code)
+
+In this repo, `backend/src/config/massive.ts` exports:
+- `massiveClient`: an Axios instance (low-level)
+- many `export async function ...` helpers (high-level; preferred)
+
+**Do not implement new code that calls `massiveClient.getDailyAggregates(...)`** — that method does not exist. New code should call the exported functions (or you may optionally refactor into a typed class wrapper, but then update all call sites consistently).
+
+### 0.3 Env validation truth source
+
+Backend env validation lives in `backend/src/config/env.ts`.
+
+Required vs optional MUST be consistent across:
+- `backend/src/config/env.ts` (Zod schema)
+- `backend/src/config/massive.ts` (must not crash the whole server on import in environments where Massive is intentionally disabled)
+
+This spec’s “graceful degradation” goals require that Massive access failures degrade features, not crash the process.
+
+### 0.4 Test framework reality (repo-aligned)
+
+- **Frontend/Next.js:** Vitest is configured at the repo root (`pnpm test` runs Vitest).
+- **Backend/Express:** Jest is configured in `backend/package.json`.
+
+New tests proposed by this spec MUST use the framework already used in that package (Vitest in root, Jest in backend), unless this spec explicitly adds a migration plan.
+
+### 0.5 Database naming + existing tables
+
+Supabase migrations already include tables for AI Coach insights and caching (e.g., `ai_coach_journal_insights`, `ai_coach_earnings_cache`).
+
+If you introduce new tables in Phase 3/4, they MUST either:
+- reuse/extend existing `ai_coach_*` tables, or
+- create new tables using the same naming pattern (`ai_coach_*`) with clear ownership, RLS, and retention/purge strategy.
 
 ---
 
@@ -86,13 +140,13 @@ backend/src/config/massive.ts (Axios client, 806 lines)
   ├── verifyPrice()            → Trade verification
   └── getIVRank()              → IV Analysis
        ↓
-  Backend Services (levels/, options/, charts/, leaps/)
+  Backend Services (levels/, options/, charts/, leaps/, earnings/, websocket/, workers/)
        ↓
-  ChatKit Function Handlers (functionHandlers.ts)
+  Backend HTTP Routes + ChatKit (Express: backend/src/routes/*, backend/src/chatkit/*)
        ↓
-  Next.js API Routes (app/api/members/)
+  Next.js Frontend (calls backend via NEXT_PUBLIC_AI_COACH_API_URL, plus WS /ws/prices)
        ↓
-  Frontend Components (components/dashboard/, components/ai-coach/)
+  (Optional) Next.js API Routes (app/api/**) for Supabase-backed features
 ```
 
 ### Target Data Flow (Post-Implementation)
@@ -118,13 +172,15 @@ massive.ts (EXPANDED — ~1400 lines)
   ├── [NEW] Conditions & Exchanges Reference
   └── [CONDITIONAL] Benzinga (Earnings, Ratings, Guidance)
        ↓
-  [NEW] Market Data Service Layer (centralized caching + rate limiting)
+  [NEW] Market Data Service Layer (centralized caching + rate limiting + circuit breaker)
        ↓
-  Backend Services (existing + new)
+  Backend Services + Workers + WebSocket (existing + new)
        ↓
   ChatKit Function Handlers (expanded with 10+ new functions)
        ↓
-  Next.js API Routes (existing + 6 new routes)
+  Backend Market Routes (NEW) consumed by:
+    - Next.js UI (server/client)
+    - Next.js API route proxies (member auth + shape normalization)
        ↓
   Frontend Components (existing + 8 new widgets)
 ```
@@ -135,6 +191,7 @@ massive.ts (EXPANDED — ~1400 lines)
 |------|------|---------|
 | Massive Client | `backend/src/config/massive.ts` | Centralized API client (MODIFY) |
 | Market Hours | `backend/src/services/marketHours.ts` | Market status logic (REPLACE INTERNALS) |
+| Market Data Routes | `backend/src/routes/market.ts` | Backend-only market endpoints (NEW) |
 | Options Fetcher | `backend/src/services/options/optionsChainFetcher.ts` | Options chain + Greeks (MODIFY) |
 | Function Handlers | `backend/src/chatkit/functionHandlers.ts` | AI Coach functions (EXPAND) |
 | AI Functions List | `backend/src/chatkit/functions.ts` | Available function definitions (EXPAND) |
@@ -160,7 +217,9 @@ massive.ts (EXPANDED — ~1400 lines)
 | `/v1/indicators/macd/{ticker}` | `getMACDIndicator()` | Charts |
 | `/v3/reference/options/contracts` | `getOptionsContracts()` | Options Chain |
 | `/v3/snapshot/options/{ticker}` | `getOptionsSnapshot()` | Options Chain, GEX |
+| `/v3/reference/options/contracts` (sorted by expiry) | `getOptionsExpirations()` / `getNearestOptionsExpiration()` | Options Chain |
 | `/v3/reference/tickers` | `searchReferenceTickers()` | Ticker search |
+| `/tmx/v1/corporate-events` (optional) | low-level `massiveClient.get()` | Earnings service (conditional, env-gated) |
 
 ### Endpoints NOT Used (Target for Integration)
 
@@ -197,17 +256,33 @@ massive.ts (EXPANDED — ~1400 lines)
 | 1 | Hardcoded risk-free rate (0.045) | HIGH | 4 files |
 | 2 | Hardcoded dividend yields | HIGH | 1 file (13 symbols) |
 | 3 | Direct fetch bypassing massive.ts | HIGH | market-ticker/route.ts |
-| 4 | 161+ console.log in production code | MEDIUM | 40+ files in app/ |
-| 5 | Placeholder IV Rank calculation | MEDIUM | optionsChainFetcher.ts |
-| 6 | Hardcoded holiday calendar (2025-2028) | MEDIUM | marketHours.ts |
-| 7 | TODO: Academy lesson gating disabled | LOW | 2 route files |
-| 8 | Direct OpenAI fetch calls | MEDIUM | 3 route files |
+| 4 | Massive API key not injected into Next.js app runtime | HIGH | docker-compose + deployment env |
+| 5 | Market-ticker route not auth-gated (abuse risk for expensive calls) | MEDIUM | market-ticker/route.ts |
+| 6 | 161+ console.log in production code | MEDIUM | 40+ files in app/ |
+| 7 | Placeholder IV Rank calculation | MEDIUM | optionsChainFetcher.ts |
+| 8 | Hardcoded holiday calendar (2025-2028) | MEDIUM | marketHours.ts |
+| 9 | TODO: Academy lesson gating disabled | LOW | 2 route files |
+| 10 | Direct OpenAI fetch calls | MEDIUM | 3 route files |
 
 ---
 
 ## 4. Phase 0 — Cleanup & Technical Debt
 
 > **Goal:** Eliminate all hardcoded market data, consolidate API access patterns, and prepare the codebase for new integrations.
+
+### Task 0.0 — Align Massive Env + Client Initialization (Crash-Proofing)
+
+**Problem (repo reality):**
+- `backend/src/config/env.ts` currently treats `MASSIVE_API_KEY` as optional.
+- `backend/src/config/massive.ts` currently throws at module import time if `MASSIVE_API_KEY` is missing.
+
+This is incompatible with autonomous testing and with the spec’s “graceful degradation” rules.
+
+**Required fix (pick one, document choice):**
+1) **Make Massive required in production:** Update `backend/src/config/env.ts` to require `MASSIVE_API_KEY` when `NODE_ENV=production` and keep it optional for `test`/local dev, OR
+2) **Make Massive lazy:** Remove the import-time throw in `backend/src/config/massive.ts` and instead throw a typed error only when a Massive method is called without configuration.
+
+**Acceptance:** Backend unit tests can run without `MASSIVE_API_KEY` when Massive calls are mocked, and production startup fails fast with a clear message if Massive is required but misconfigured.
 
 ### Task 0.1 — Create Centralized Market Constants Service
 
@@ -218,8 +293,7 @@ massive.ts (EXPANDED — ~1400 lines)
 ```typescript
 // backend/src/services/marketConstants.ts
 
-import { massiveClient } from '@/backend/src/config/massive';
-import { logger } from '@/backend/src/lib/logger';
+import { logger } from '../lib/logger';
 
 // Cache for API-fetched values
 let cachedRiskFreeRate: number | null = null;
@@ -253,7 +327,7 @@ export async function getRiskFreeRate(): Promise<number> {
 
   try {
     // TODO Phase 5: Fetch from Massive.com Treasury Yields endpoint
-    // const yields = await massiveClient.getTreasuryYields();
+    // const yields = await getTreasuryYields();
     // cachedRiskFreeRate = yields.tenYear / 100;
     cachedRiskFreeRate = FALLBACK_RISK_FREE_RATE;
     lastRateRefresh = Date.now();
@@ -327,16 +401,47 @@ const [spxRes, ndxRes] = await Promise.all([
 
 **Replace with:**
 ```typescript
-import { massiveClient } from '@/backend/src/config/massive';
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 
-// Use centralized client
-const [spxData, ndxData] = await Promise.all([
-  massiveClient.getDailyAggregates('I:SPX', fromDate, toDate),
-  massiveClient.getDailyAggregates('I:NDX', fromDate, toDate),
-]);
+/**
+ * Repo-aligned rule: the Next.js app must NOT call api.massive.com directly in production.
+ * This route becomes an authenticated proxy to the backend market endpoint.
+ *
+ * Backend endpoint to create (Phase 1/2): GET /api/market/indices
+ */
+export async function GET(request: NextRequest) {
+  const auth = await getAuthenticatedUserFromRequest(request)
+  if (!auth?.user) {
+    return NextResponse.json(
+      { success: false, error: { code: 'UNAUTHORIZED', message: 'Please log in' } },
+      { status: 401 },
+    )
+  }
+
+  // Obtain Supabase access token from the server-side client session (cookie or bearer auth).
+  const { data: { session } } = await auth.supabase.auth.getSession()
+  const accessToken = session?.access_token
+
+  const apiBase = String(process.env.NEXT_PUBLIC_AI_COACH_API_URL || '').replace(/\\/$/, '')
+  if (!apiBase || !accessToken) {
+    return NextResponse.json({
+      success: true,
+      data: { quotes: [], metrics: {}, source: 'unavailable' },
+    })
+  }
+
+  const res = await fetch(`${apiBase}/api/market/indices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  })
+
+  const payload = await res.json()
+  return NextResponse.json(payload, { status: res.status })
+}
 ```
 
-**Note:** After Phase 2 (Indices Snapshot integration), this route will be further upgraded to use the snapshot endpoint for richer data in a single call.
+**Note:** After Phase 2 (Indices Snapshot integration), the backend `/api/market/indices` should use the snapshot endpoint for richer data in a single call.
 
 **Test:** Verify route returns same response shape. Integration test against `/api/members/dashboard/market-ticker`.
 
@@ -412,7 +517,7 @@ async function calculateIVRank(symbol: string, currentIV: number): Promise<numbe
   try {
     const to = new Date().toISOString().split('T')[0];
     const from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const dailyBars = await massiveClient.getDailyAggregates(
+    const dailyBars = await getDailyAggregates(
       formatMassiveTicker(symbol), from, to
     );
 
@@ -490,6 +595,32 @@ npx tsc --noEmit --noUnusedLocals --noUnusedParameters 2>&1 | grep "is declared 
 
 > **Goal:** Add the foundational endpoints that fix existing fragilities and unlock data accuracy improvements.
 
+**Routing policy (repo-aligned):**
+- Authoritative implementations live in the backend (Express) under `backend/src/routes/market.ts` as `/api/market/*`.
+- Any `app/api/members/dashboard/*` routes added by this spec are **optional proxies** only, used for same-origin access and cookie-based auth; they must not call Massive.com directly.
+
+### Task 1.0 — Backend Market Router (Required Foundation)
+
+**Create:** `backend/src/routes/market.ts`
+
+**Purpose:** Provide a single backend surface for all market-data endpoints added by this spec, so Massive API key usage, caching, rate limiting, and circuit breaker logic stay centralized.
+
+**Endpoints (phased):**
+- Phase 1:
+  - `GET /api/market/status`
+  - `GET /api/market/holidays`
+  - `GET /api/market/indices`
+- Phase 2:
+  - `GET /api/market/movers`
+  - `GET /api/market/breadth`
+  - `GET /api/market/news`
+
+**Auth:** Require Supabase JWT via `authenticateToken` for all routes (see `backend/src/middleware/auth.ts`).
+
+**Register route:** Modify `backend/src/server.ts` to mount the router:
+- `import marketRouter from './routes/market'`
+- `app.use('/api/market', marketRouter)`
+
 ### Task 1.1 — Market Status Endpoint
 
 **Add to:** `backend/src/config/massive.ts`
@@ -501,8 +632,8 @@ npx tsc --noEmit --noUnusedLocals --noUnusedParameters 2>&1 | grep "is declared 
  * Endpoint: GET /v1/marketstatus/now
  * Returns: Exchange-level status (open, closed, pre-market, after-hours, early-close)
  */
-async getMarketStatus(): Promise<MassiveMarketStatusResponse> {
-  const response = await this.client.get('/v1/marketstatus/now');
+export async function getMarketStatusNow(): Promise<MassiveMarketStatusResponse> {
+  const response = await massiveClient.get<MassiveMarketStatusResponse>('/v1/marketstatus/now');
   return response.data;
 }
 ```
@@ -534,8 +665,8 @@ Replace the hardcoded time-based logic with a hybrid approach:
 // PRIMARY: Use Massive.com API for real-time status
 // FALLBACK: Use existing time-based logic if API unavailable
 
-import { massiveClient } from '@/backend/src/config/massive';
-import { logger } from '@/backend/src/lib/logger';
+import { getMarketStatusNow, type MassiveMarketStatusResponse } from '../config/massive';
+import { logger } from '../lib/logger';
 
 let cachedStatus: MassiveMarketStatusResponse | null = null;
 let lastStatusFetch: number = 0;
@@ -545,7 +676,7 @@ export async function getMarketStatus(now?: Date): Promise<MarketStatus> {
   // Try API first
   if (!cachedStatus || (Date.now() - lastStatusFetch) > STATUS_CACHE_TTL_MS) {
     try {
-      cachedStatus = await massiveClient.getMarketStatus();
+      cachedStatus = await getMarketStatusNow();
       lastStatusFetch = Date.now();
     } catch (error) {
       logger.warn('Market status API unavailable, using fallback', { error });
@@ -561,9 +692,18 @@ export async function getMarketStatus(now?: Date): Promise<MarketStatus> {
 }
 ```
 
+**Repo impact (IMPORTANT):** In the current repo, `getMarketStatus()` is a synchronous function used by:
+- `backend/src/services/websocket.ts`
+- `backend/src/workers/alertWorker.ts`
+- other services that embed market status in responses
+
+This task makes `getMarketStatus()` `async`. You MUST update those call sites to `await` it (or keep the old sync function as `getMarketStatusFallback()` and introduce a new `getMarketStatusAsync()` for call sites that can await).
+
 **Keep the existing `MARKET_HOLIDAYS` object and time-based logic** as the fallback implementation in a separate function `getMarketStatusFallback()`. Do not delete it.
 
-**New API Route:** `app/api/members/dashboard/market-status/route.ts`
+**New backend API Route (authoritative):** `backend/src/routes/market.ts` → `GET /api/market/status` (auth-gated with `authenticateToken`)
+
+**Optional Next.js proxy route (cookie auth, same-origin):** `app/api/members/dashboard/market-status/route.ts` (proxy to backend `/api/market/status`)
 
 ```typescript
 // GET /api/members/dashboard/market-status
@@ -590,8 +730,8 @@ export async function getMarketStatus(now?: Date): Promise<MarketStatus> {
  * Endpoint: GET /v1/marketstatus/upcoming
  * Returns: Array of upcoming holidays with dates and hours
  */
-async getMarketHolidays(): Promise<MassiveMarketHoliday[]> {
-  const response = await this.client.get('/v1/marketstatus/upcoming');
+export async function getMarketHolidaysUpcoming(): Promise<MassiveMarketHoliday[]> {
+  const response = await massiveClient.get<MassiveMarketHoliday[]>('/v1/marketstatus/upcoming');
   return response.data;
 }
 ```
@@ -641,7 +781,9 @@ export async function isHolidayOrEarlyClose(date: string): Promise<{
 
 Add a startup function that fetches holidays from the API and merges them into the `MARKET_HOLIDAYS` object, extending coverage beyond the hardcoded 2025-2028 range.
 
-**New API Route:** `app/api/members/dashboard/market-holidays/route.ts`
+**New backend API Route (authoritative):** `backend/src/routes/market.ts` → `GET /api/market/holidays` (auth-gated with `authenticateToken`)
+
+**Optional Next.js proxy route (cookie auth, same-origin):** `app/api/members/dashboard/market-holidays/route.ts` (proxy to backend `/api/market/holidays`)
 
 ```typescript
 // GET /api/members/dashboard/market-holidays
@@ -683,9 +825,9 @@ Add a startup function that fetches holidays from the API and merges them into t
  * Endpoint: GET /v2/last/trade/{ticker}
  * Returns: Last trade price, size, timestamp, exchange, conditions
  */
-async getLastTrade(ticker: string): Promise<MassiveLastTrade> {
+export async function getLastTrade(ticker: string): Promise<MassiveLastTrade> {
   const formattedTicker = formatMassiveTicker(ticker);
-  const response = await this.client.get(`/v2/last/trade/${formattedTicker}`);
+  const response = await massiveClient.get(`/v2/last/trade/${formattedTicker}`);
   return response.data.results;
 }
 ```
@@ -719,9 +861,9 @@ interface MassiveLastTrade {
  * Endpoint: GET /v2/last/nbbo/{ticker}
  * Returns: Best bid/ask with sizes
  */
-async getLastQuote(ticker: string): Promise<MassiveLastQuote> {
+export async function getLastQuote(ticker: string): Promise<MassiveLastQuote> {
   const formattedTicker = formatMassiveTicker(ticker);
-  const response = await this.client.get(`/v2/last/nbbo/${formattedTicker}`);
+  const response = await massiveClient.get(`/v2/last/nbbo/${formattedTicker}`);
   return response.data.results;
 }
 ```
@@ -797,7 +939,7 @@ export async function getRealTimePrices(symbols: string[]): Promise<Map<string, 
  * Endpoint: GET /v3/reference/dividends
  * Returns: Dividend declarations with ex-date, pay-date, amounts
  */
-async getDividends(
+export async function getDividends(
   ticker: string,
   options?: {
     exDividendDateGte?: string;   // YYYY-MM-DD
@@ -814,7 +956,7 @@ async getDividends(
   if (options?.order) params.order = options.order;
   if (options?.dividendType) params.dividend_type = options.dividendType;
 
-  const response = await this.client.get('/v3/reference/dividends', { params });
+  const response = await massiveClient.get('/v3/reference/dividends', { params });
   return response.data.results || [];
 }
 ```
@@ -846,7 +988,7 @@ export async function refreshDividendYields(symbols: string[]): Promise<void> {
         .toISOString().split('T')[0];
       const today = new Date().toISOString().split('T')[0];
 
-      const dividends = await massiveClient.getDividends(symbol, {
+      const dividends = await getDividends(symbol, {
         exDividendDateGte: oneYearAgo,
         exDividendDateLte: today,
         order: 'desc',
@@ -927,7 +1069,7 @@ export async function checkDividendAlerts(
  * Endpoint: GET /v3/reference/splits
  * Returns: Historical and upcoming splits with ratios
  */
-async getSplits(
+export async function getSplits(
   ticker: string,
   options?: {
     executionDateGte?: string;
@@ -942,7 +1084,7 @@ async getSplits(
   if (options?.limit) params.limit = options.limit;
   if (options?.order) params.order = options.order;
 
-  const response = await this.client.get('/v3/reference/splits', { params });
+  const response = await massiveClient.get('/v3/reference/splits', { params });
   return response.data.results || [];
 }
 ```
@@ -980,9 +1122,9 @@ interface MassiveSplit {
  * Endpoint: GET /v2/snapshot/locale/us/markets/stocks/tickers/{ticker}
  * Returns: Current minute bar, today's bar, previous day bar, last trade, last quote
  */
-async getTickerSnapshot(ticker: string): Promise<MassiveTickerSnapshot> {
+export async function getTickerSnapshot(ticker: string): Promise<MassiveTickerSnapshot> {
   const formattedTicker = formatMassiveTicker(ticker);
-  const response = await this.client.get(
+  const response = await massiveClient.get(
     `/v2/snapshot/locale/us/markets/stocks/tickers/${formattedTicker}`
   );
   return response.data.ticker;
@@ -1038,14 +1180,14 @@ interface MassiveTickerSnapshot {
  * Endpoint: GET /v3/snapshot/indices
  * Returns: Current value, session details, change metrics
  */
-async getIndicesSnapshot(
+export async function getIndicesSnapshot(
   tickers?: string[]    // e.g., ['I:SPX', 'I:NDX', 'I:DJI', 'I:VIX', 'I:RUT']
 ): Promise<MassiveIndexSnapshot[]> {
   const params: Record<string, string> = {};
   if (tickers?.length) {
     params['ticker.any_of'] = tickers.join(',');
   }
-  const response = await this.client.get('/v3/snapshot/indices', { params });
+  const response = await massiveClient.get('/v3/snapshot/indices', { params });
   return response.data.results || [];
 }
 ```
@@ -1070,35 +1212,17 @@ interface MassiveIndexSnapshot {
 }
 ```
 
-**Rewrite:** `app/api/members/dashboard/market-ticker/route.ts`
+**Upgrade backend market endpoint (authoritative):** `backend/src/routes/market.ts` → `GET /api/market/indices`
 
-The entire route should be rewritten to use the indices snapshot endpoint:
+Implement it using the indices snapshot endpoint so the platform gets 5 indices in a single Massive.com call, with backend-controlled caching/rate limiting/circuit breaker.
 
+**Keep:** `app/api/members/dashboard/market-ticker/route.ts` as a proxy (Task 0.2). It must not call Massive.com directly.
+
+Example backend shape (preserve existing frontend expectations):
 ```typescript
-// GET /api/members/dashboard/market-ticker
-// Now returns SPX, NDX, DJI, VIX, RUT in a single API call
-
-import { massiveClient } from '@/backend/src/config/massive';
-
-export async function GET() {
-  const snapshots = await massiveClient.getIndicesSnapshot([
-    'I:SPX', 'I:NDX', 'I:DJI', 'I:VIX', 'I:RUT'
-  ]);
-
-  const indices = snapshots.map(s => ({
-    symbol: s.ticker.replace('I:', ''),
-    name: s.name,
-    value: s.value,
-    change: s.session.change,
-    changePct: s.session.change_percent,
-    high: s.session.high,
-    low: s.session.low,
-    open: s.session.open,
-    previousClose: s.session.previous_close,
-  }));
-
-  return NextResponse.json({ indices, timestamp: Date.now() });
-}
+// GET /api/market/indices
+// Returns the same response shape currently used by LiveMarketTicker:
+// { success: true, data: { quotes: [{ symbol, price, change, changePercent }], metrics: {...}, source }, }
 ```
 
 **Modify:** `components/dashboard/live-market-ticker.tsx`
@@ -1124,13 +1248,13 @@ Expand from showing only SPX/NDX to showing all 5 indices with change percentage
  * Endpoint: GET /v2/snapshot/locale/us/markets/stocks/{direction}
  * Direction: "gainers" or "losers"
  */
-async getMarketMovers(
+export async function getMarketMovers(
   direction: 'gainers' | 'losers',
   includeOtc?: boolean
 ): Promise<MassiveTickerSnapshot[]> {
   const params: Record<string, string> = {};
   if (includeOtc === false) params.include_otc = 'false';
-  const response = await this.client.get(
+  const response = await massiveClient.get(
     `/v2/snapshot/locale/us/markets/stocks/${direction}`,
     { params }
   );
@@ -1138,7 +1262,9 @@ async getMarketMovers(
 }
 ```
 
-**New API Route:** `app/api/members/dashboard/market-movers/route.ts`
+**New backend API Route (authoritative):** `backend/src/routes/market.ts` → `GET /api/market/movers`
+
+**Optional Next.js proxy route (cookie auth, same-origin):** `app/api/members/dashboard/market-movers/route.ts` (proxy to backend `/api/market/movers`)
 
 ```typescript
 // GET /api/members/dashboard/market-movers
@@ -1186,7 +1312,7 @@ async getMarketMovers(
  * Endpoint: GET /v2/aggs/grouped/locale/us/market/stocks/{date}
  * Returns: All stock bars for the day (used for breadth calculations)
  */
-async getGroupedDailyBars(
+export async function getGroupedDailyBars(
   date: string,                    // YYYY-MM-DD
   adjusted?: boolean,
   includeOtc?: boolean
@@ -1195,7 +1321,7 @@ async getGroupedDailyBars(
   if (adjusted !== undefined) params.adjusted = adjusted;
   if (includeOtc !== undefined) params.include_otc = includeOtc;
 
-  const response = await this.client.get(
+  const response = await massiveClient.get(
     `/v2/aggs/grouped/locale/us/market/stocks/${date}`,
     { params }
   );
@@ -1231,7 +1357,9 @@ export async function calculateMarketBreadth(date?: string): Promise<MarketBread
 export async function getMultiDayBreadth(days?: number): Promise<MarketBreadthData[]>;
 ```
 
-**New API Route:** `app/api/members/dashboard/market-breadth/route.ts`
+**New backend API Route (authoritative):** `backend/src/routes/market.ts` → `GET /api/market/breadth`
+
+**Optional Next.js proxy route (cookie auth, same-origin):** `app/api/members/dashboard/market-breadth/route.ts` (proxy to backend `/api/market/breadth`)
 
 ```typescript
 // GET /api/members/dashboard/market-breadth
@@ -1272,7 +1400,7 @@ export async function getMultiDayBreadth(days?: number): Promise<MarketBreadthDa
  * Endpoint: GET /v1/open-close/{ticker}/{date}
  * Returns: Official session prices with pre/after market data
  */
-async getDailyOpenClose(
+export async function getDailyOpenClose(
   ticker: string,
   date: string,          // YYYY-MM-DD
   adjusted?: boolean
@@ -1281,7 +1409,7 @@ async getDailyOpenClose(
   const params: Record<string, boolean> = {};
   if (adjusted !== undefined) params.adjusted = adjusted;
 
-  const response = await this.client.get(
+  const response = await massiveClient.get(
     `/v1/open-close/${formattedTicker}/${date}`,
     { params }
   );
@@ -1329,7 +1457,7 @@ Enhance `get_journal_insights` to include day context from this endpoint.
  * Endpoint: GET /v3/snapshot
  * Returns: Cross-asset snapshots (stocks, options, indices, forex, crypto)
  */
-async getUnifiedSnapshot(
+export async function getUnifiedSnapshot(
   tickers: string[],
   options?: {
     type?: 'stocks' | 'options' | 'indices' | 'forex' | 'crypto';
@@ -1340,7 +1468,7 @@ async getUnifiedSnapshot(
   };
   if (options?.type) params.type = options.type;
 
-  const response = await this.client.get('/v3/snapshot', { params });
+  const response = await massiveClient.get('/v3/snapshot', { params });
   return response.data.results || [];
 }
 ```
@@ -1364,7 +1492,7 @@ async getUnifiedSnapshot(
  * Endpoint: GET /v2/reference/news
  * Returns: News articles with publisher, title, description, tickers, image
  */
-async getNews(options?: {
+export async function getNews(options?: {
   ticker?: string;
   publishedUtcGte?: string;      // ISO 8601
   publishedUtcLte?: string;
@@ -1380,7 +1508,7 @@ async getNews(options?: {
   if (options?.order) params.order = options.order;
   if (options?.sort) params.sort = options.sort;
 
-  const response = await this.client.get('/v2/reference/news', { params });
+  const response = await massiveClient.get('/v2/reference/news', { params });
   return response.data.results || [];
 }
 ```
@@ -1411,7 +1539,9 @@ interface MassiveNewsArticle {
 }
 ```
 
-**New API Route:** `app/api/members/dashboard/news/route.ts`
+**New backend API Route (authoritative):** `backend/src/routes/market.ts` → `GET /api/market/news`
+
+**Optional Next.js proxy route (cookie auth, same-origin):** `app/api/members/dashboard/news/route.ts` (proxy to backend `/api/market/news`)
 
 ```typescript
 // GET /api/members/dashboard/news
@@ -1488,8 +1618,8 @@ interface MassiveNewsArticle {
  * Endpoint: GET /v3/reference/tickers/{ticker}
  * Returns: Company name, description, SIC code, market cap, employees, etc.
  */
-async getTickerDetails(ticker: string): Promise<MassiveTickerDetails> {
-  const response = await this.client.get(`/v3/reference/tickers/${ticker}`);
+export async function getTickerDetails(ticker: string): Promise<MassiveTickerDetails> {
+  const response = await massiveClient.get(`/v3/reference/tickers/${ticker}`);
   return response.data.results;
 }
 ```
@@ -1563,7 +1693,7 @@ interface MassiveTickerDetails {
  * Endpoint: GET /vX/reference/financials
  * Returns: Income statement, balance sheet, cash flow data
  */
-async getFinancials(
+export async function getFinancials(
   ticker: string,
   options?: {
     type?: 'Y' | 'Q' | 'T' | 'YA' | 'QA' | 'TA';  // Annual, Quarterly, Trailing, etc.
@@ -1585,7 +1715,7 @@ async getFinancials(
   if (options?.periodOfReportDateGte) params['period_of_report_date.gte'] = options.periodOfReportDateGte;
   if (options?.periodOfReportDateLte) params['period_of_report_date.lte'] = options.periodOfReportDateLte;
 
-  const response = await this.client.get('/vX/reference/financials', { params });
+  const response = await massiveClient.get('/vX/reference/financials', { params });
   return response.data.results || [];
 }
 ```
@@ -1843,7 +1973,7 @@ Enhance watchlist to use unified snapshot for batch price updates:
 ```typescript
 // Instead of N individual price calls for watchlist symbols,
 // use getUnifiedSnapshot() for all symbols at once
-const snapshots = await massiveClient.getUnifiedSnapshot(
+const snapshots = await getUnifiedSnapshot(
   watchlistSymbols.map(s => formatMassiveTicker(s))
 );
 ```
@@ -1869,7 +1999,7 @@ const snapshots = await massiveClient.getUnifiedSnapshot(
  * Endpoint: GET /v3/trades/{ticker}
  * Returns: Individual trade prints with conditions, exchange, size
  */
-async getHistoricalTrades(
+export async function getHistoricalTrades(
   ticker: string,
   options?: {
     timestampGte?: string;       // Nanoseconds or ISO 8601
@@ -1887,7 +2017,7 @@ async getHistoricalTrades(
   if (options?.order) params.order = options.order;
   if (options?.sort) params.sort = options.sort;
 
-  const response = await this.client.get(`/v3/trades/${formattedTicker}`, { params });
+  const response = await massiveClient.get(`/v3/trades/${formattedTicker}`, { params });
   return response.data.results || [];
 }
 ```
@@ -1922,7 +2052,7 @@ interface MassiveHistoricalTrade {
  * Endpoint: GET /v3/quotes/{ticker}
  * Returns: Bid/ask history for execution quality analysis
  */
-async getHistoricalQuotes(
+export async function getHistoricalQuotes(
   ticker: string,
   options?: {
     timestampGte?: string;
@@ -1939,7 +2069,7 @@ async getHistoricalQuotes(
   if (options?.limit) params.limit = options.limit;
   if (options?.order) params.order = options.order;
 
-  const response = await this.client.get(`/v3/quotes/${formattedTicker}`, { params });
+  const response = await massiveClient.get(`/v3/quotes/${formattedTicker}`, { params });
   return response.data.results || [];
 }
 ```
@@ -2067,14 +2197,14 @@ export async function analyzePortfolioExecutionQuality(
  * Endpoint: GET /v2/aggs/ticker/{optionTicker}/range/{multiplier}/{timespan}/{from}/{to}
  * Returns: Historical price bars for the option itself (not just the underlying)
  */
-async getOptionsAggregates(
+export async function getOptionsAggregates(
   optionTicker: string,          // e.g., "O:SPX260213C05850000"
   multiplier: number,
   timespan: 'minute' | 'hour' | 'day',
   from: string,                  // YYYY-MM-DD
   to: string                     // YYYY-MM-DD
 ): Promise<MassiveAggregate[]> {
-  const response = await this.client.get(
+  const response = await massiveClient.get(
     `/v2/aggs/ticker/${optionTicker}/range/${multiplier}/${timespan}/${from}/${to}`
   );
   return response.data.results || [];
@@ -2116,7 +2246,7 @@ async getOptionsAggregates(
  * Endpoint: GET /v3/reference/conditions
  * Cache indefinitely — these rarely change.
  */
-async getConditions(
+export async function getConditions(
   assetClass?: 'stocks' | 'options',
   dataType?: 'trade' | 'bbo' | 'nbbo'
 ): Promise<MassiveCondition[]> {
@@ -2124,7 +2254,7 @@ async getConditions(
   if (assetClass) params.asset_class = assetClass;
   if (dataType) params.data_type = dataType;
 
-  const response = await this.client.get('/v3/reference/conditions', { params });
+  const response = await massiveClient.get('/v3/reference/conditions', { params });
   return response.data.results || [];
 }
 
@@ -2133,7 +2263,7 @@ async getConditions(
  * Endpoint: GET /v3/reference/exchanges
  * Cache indefinitely.
  */
-async getExchanges(
+export async function getExchanges(
   assetClass?: 'stocks' | 'options' | 'crypto' | 'fx',
   locale?: 'us' | 'global'
 ): Promise<MassiveExchange[]> {
@@ -2141,7 +2271,7 @@ async getExchanges(
   if (assetClass) params.asset_class = assetClass;
   if (locale) params.locale = locale;
 
-  const response = await this.client.get('/v3/reference/exchanges', { params });
+  const response = await massiveClient.get('/v3/reference/exchanges', { params });
   return response.data.results || [];
 }
 ```
@@ -2255,9 +2385,9 @@ export async function getUnusualVolumeSymbols(): Promise<Array<{
 **Before implementing any Task 5.x:** Add a startup check in `massive.ts`:
 
 ```typescript
-async checkBenzingaAvailability(): Promise<boolean> {
+export async function checkBenzingaAvailability(): Promise<boolean> {
   try {
-    await this.client.get('/v1/reference/earnings', { params: { ticker: 'AAPL', limit: 1 } });
+    await massiveClient.get('/v1/reference/earnings', { params: { ticker: 'AAPL', limit: 1 } });
     return true;
   } catch (error) {
     if (error.response?.status === 403) {
@@ -2343,10 +2473,12 @@ async getCorporateGuidance(
 
 ### Test Framework
 
-- **Unit Tests:** Vitest (already configured)
-- **Integration Tests:** Vitest with real API calls (gated behind `MASSIVE_API_KEY` env var)
-- **E2E Tests:** Playwright (already configured)
-- **Component Tests:** Vitest + React Testing Library
+Repo-aligned testing is split by package:
+
+- **Backend (Express in `backend/`):** Jest (already configured via `backend/jest.config.js`)
+- **Frontend/Shared libs (repo root):** Vitest (already configured via `vitest.config.ts`)
+- **E2E Tests:** Playwright (repo root)
+- **Live Massive integration tests:** Jest (backend) gated behind `RUN_INTEGRATION_TESTS=true`
 
 ### Test File Structure
 
@@ -2354,7 +2486,7 @@ async getCorporateGuidance(
 backend/src/
 ├── config/__tests__/
 │   ├── massive.test.ts                  (EXPAND — add new method tests)
-│   └── massive-integration.test.ts      (NEW — live API tests)
+│   └── massive-integration.test.ts      (NEW — live API tests, gated)
 ├── services/__tests__/
 │   ├── marketConstants.test.ts          (NEW)
 │   ├── marketHolidays.test.ts           (NEW)
@@ -2370,12 +2502,8 @@ backend/src/
 └── chatkit/__tests__/
     └── functionHandlers.test.ts         (EXPAND — add new function tests)
 
-app/api/members/dashboard/__tests__/
-├── market-status.test.ts                (NEW)
-├── market-holidays.test.ts              (NEW)
-├── market-movers.test.ts                (NEW)
-├── market-breadth.test.ts               (NEW)
-└── news.test.ts                         (NEW)
+lib/**/__tests__/
+└── (optional) thin tests for Next.js proxy helpers (Vitest)
 ```
 
 ### Test Categories
@@ -2545,6 +2673,10 @@ const RETRY_CONFIG = {
 ### Circuit Breaker
 
 ```typescript
+// Repo note: backend already has a circuit breaker implementation in backend/src/lib/circuitBreaker.ts
+// Integrate it into backend/src/config/massive.ts so ALL Massive calls (routes, websocket, workers)
+// share the same protection behavior.
+//
 // Implement circuit breaker for Massive.com API
 // If 5 consecutive failures within 60 seconds:
 // 1. Open circuit (stop making requests)
@@ -2567,6 +2699,15 @@ const CIRCUIT_BREAKER_CONFIG = {
 ### Massive.com Rate Limits
 
 Implement a client-side rate limiter to stay within plan limits:
+
+**Production requirement (multi-instance):** The limiter MUST be effective across:
+- backend HTTP routes
+- WebSocket polling loops
+- background workers
+
+If the backend can run multiple instances, an in-memory limiter is insufficient. Prefer:
+- Redis-backed counters/queues (use `backend/src/config/redis.ts` when available), with
+- an in-memory fallback only for local development.
 
 ```typescript
 // Rate limiter configuration (adjust based on plan tier)
@@ -2616,11 +2757,11 @@ When approaching rate limits, prioritize requests:
 
 ### New Tables Required
 
-**Migration 1:** `market_data_cache`
+**Migration 1:** `ai_coach_market_data_cache`
 
 ```sql
 -- Persistent cache for expensive/infrequent API responses
-CREATE TABLE IF NOT EXISTS market_data_cache (
+CREATE TABLE IF NOT EXISTS ai_coach_market_data_cache (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cache_key TEXT UNIQUE NOT NULL,
   data JSONB NOT NULL,
@@ -2630,15 +2771,15 @@ CREATE TABLE IF NOT EXISTS market_data_cache (
   metadata JSONB DEFAULT '{}'
 );
 
-CREATE INDEX idx_market_data_cache_key ON market_data_cache(cache_key);
-CREATE INDEX idx_market_data_cache_expires ON market_data_cache(expires_at);
+CREATE INDEX idx_ai_coach_market_data_cache_key ON ai_coach_market_data_cache(cache_key);
+CREATE INDEX idx_ai_coach_market_data_cache_expires ON ai_coach_market_data_cache(expires_at);
 ```
 
-**Migration 2:** `execution_quality_history`
+**Migration 2:** `ai_coach_execution_quality_history`
 
 ```sql
 -- Track execution quality over time for user analytics
-CREATE TABLE IF NOT EXISTS execution_quality_history (
+CREATE TABLE IF NOT EXISTS ai_coach_execution_quality_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   journal_entry_id UUID REFERENCES journal_entries(id) ON DELETE SET NULL,
@@ -2654,15 +2795,15 @@ CREATE TABLE IF NOT EXISTS execution_quality_history (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_execution_quality_user ON execution_quality_history(user_id);
-CREATE INDEX idx_execution_quality_symbol ON execution_quality_history(symbol);
+CREATE INDEX idx_ai_coach_execution_quality_user ON ai_coach_execution_quality_history(user_id);
+CREATE INDEX idx_ai_coach_execution_quality_symbol ON ai_coach_execution_quality_history(symbol);
 ```
 
-**Migration 3:** `proactive_insights_log`
+**Migration 3:** `ai_coach_proactive_insights_log`
 
 ```sql
 -- Log generated insights for analytics and deduplication
-CREATE TABLE IF NOT EXISTS proactive_insights_log (
+CREATE TABLE IF NOT EXISTS ai_coach_proactive_insights_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   insight_type TEXT NOT NULL,
@@ -2676,44 +2817,59 @@ CREATE TABLE IF NOT EXISTS proactive_insights_log (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX idx_proactive_insights_user ON proactive_insights_log(user_id);
-CREATE INDEX idx_proactive_insights_type ON proactive_insights_log(insight_type);
+CREATE INDEX idx_ai_coach_proactive_insights_user ON ai_coach_proactive_insights_log(user_id);
+CREATE INDEX idx_ai_coach_proactive_insights_type ON ai_coach_proactive_insights_log(insight_type);
 ```
 
 ### RLS Policies
 
 ```sql
--- execution_quality_history: Users can only see their own data
-ALTER TABLE execution_quality_history ENABLE ROW LEVEL SECURITY;
+-- ai_coach_execution_quality_history: Users can only see their own data
+ALTER TABLE ai_coach_execution_quality_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own execution quality"
-  ON execution_quality_history FOR SELECT
+  ON ai_coach_execution_quality_history FOR SELECT
   USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own execution quality"
-  ON execution_quality_history FOR INSERT
+  ON ai_coach_execution_quality_history FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- proactive_insights_log: Users can only see their own insights
-ALTER TABLE proactive_insights_log ENABLE ROW LEVEL SECURITY;
+-- ai_coach_proactive_insights_log: Users can only see their own insights
+ALTER TABLE ai_coach_proactive_insights_log ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own insights"
-  ON proactive_insights_log FOR SELECT
+  ON ai_coach_proactive_insights_log FOR SELECT
   USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own insights"
-  ON proactive_insights_log FOR UPDATE
+  ON ai_coach_proactive_insights_log FOR UPDATE
   USING (auth.uid() = user_id);
 
--- market_data_cache: Service role only (no user access)
-ALTER TABLE market_data_cache ENABLE ROW LEVEL SECURITY;
+-- ai_coach_market_data_cache: Service role only (no user access)
+ALTER TABLE ai_coach_market_data_cache ENABLE ROW LEVEL SECURITY;
 -- No user-facing policies — accessed via service role key only
 ```
+
+### Retention / Purge (Production Requirement)
+
+This spec introduces `expires_at` columns. Production MUST include a scheduled purge:
+- Delete expired rows from `ai_coach_market_data_cache` and `ai_coach_proactive_insights_log` at least daily.
+- Prefer Supabase scheduled jobs (pg_cron / scheduled functions) or your deployment scheduler.
 
 ---
 
 ## 15. Environment Variables
 
+### Repo Alignment Notes
+
+- `MASSIVE_API_KEY` is required in the **backend** runtime (Express service in `backend/`).
+- The Next.js app should not need `MASSIVE_API_KEY` if it proxies to backend `/api/market/*` endpoints (Section 0.1).
+- Existing related env vars already in use by the repo and affected by this work:
+  - `NEXT_PUBLIC_AI_COACH_API_URL` (frontend → backend base URL)
+  - `ENABLE_TMX_CORPORATE_EVENTS` (earnings corporate-events endpoint toggle)
+  - `ALPHA_VANTAGE_API_KEY`, `ALPHA_VANTAGE_BASE_URL` (earnings fallback)
+
 ### New Variables
 
 ```env
-# No new required variables — all new endpoints use existing MASSIVE_API_KEY
+# No new required variables — all new endpoints use the existing MASSIVE_API_KEY (backend)
 
 # Optional: Fine-tune behavior
 MASSIVE_RATE_LIMIT_PER_MINUTE=5       # Adjust per plan tier (default: 5)
@@ -2741,7 +2897,7 @@ MASSIVE_BENZINGA_ENABLED: z.coerce.boolean().optional().default(false),
 
 - [ ] No hardcoded risk-free rate outside `marketConstants.ts`
 - [ ] No hardcoded dividend yields outside `marketConstants.ts`
-- [ ] No direct fetch calls to `api.massive.com` outside `massive.ts`
+- [ ] No direct `fetch()`/Axios calls to `api.massive.com` in runtime code outside `backend/src/config/massive.ts`
 - [ ] No `console.log` in `app/` directory (all replaced with logger)
 - [ ] IV Rank uses proper percentile calculation
 - [ ] Clean TypeScript compilation with no unused warnings
@@ -2749,14 +2905,15 @@ MASSIVE_BENZINGA_ENABLED: z.coerce.boolean().optional().default(false),
 
 ### Phase 1 — Core Infrastructure
 
-- [ ] `getMarketStatus()` returns real-time exchange status
-- [ ] `getMarketHolidays()` returns upcoming holidays
+- [ ] `getMarketStatusNow()` fetches real-time exchange status (Massive endpoint)
+- [ ] `getMarketHolidaysUpcoming()` returns upcoming holidays (Massive endpoint)
 - [ ] `getLastTrade()` returns most recent trade
 - [ ] `getLastQuote()` returns current NBBO
 - [ ] `getDividends()` returns dividend history
 - [ ] `getSplits()` returns split history
 - [ ] Market status falls back to time-based logic when API unavailable
 - [ ] Dividend yields auto-refresh from API data
+- [ ] Backend market routes exist: `/api/market/status`, `/api/market/holidays`, `/api/market/indices`
 - [ ] All Phase 1 unit tests pass
 - [ ] All Phase 1 integration tests pass (when `RUN_INTEGRATION_TESTS=true`)
 
@@ -2805,12 +2962,14 @@ MASSIVE_BENZINGA_ENABLED: z.coerce.boolean().optional().default(false),
 - [ ] Circuit breaker protects against Massive.com outages
 - [ ] Rate limiter prevents exceeding plan limits
 - [ ] All new database tables have RLS policies
-- [ ] No references to "Polygon" or "Polygon.io" anywhere in codebase
-- [ ] No instances of `#D4AF37` in any file
+- [ ] No references to "Polygon" or "Polygon.io" in runtime code (`app/`, `backend/`, `components/`, `lib/`) — docs may mention it historically
+- [ ] No instances of `#D4AF37` in runtime code (`app/`, `backend/`, `components/`, `lib/`) — docs/guides may mention it as “forbidden”
 - [ ] All new components follow Emerald Standard design system
-- [ ] Build completes without errors: `npm run build`
-- [ ] All tests pass: `npm run test`
-- [ ] E2E tests pass: `npx playwright test`
+- [ ] Frontend build completes without errors: `pnpm build`
+- [ ] Frontend tests pass: `pnpm test`
+- [ ] Backend build completes without errors: `cd backend && npm run build`
+- [ ] Backend tests pass: `cd backend && npm test`
+- [ ] E2E tests pass: `pnpm test:e2e`
 
 ---
 
@@ -2840,12 +2999,14 @@ backend/src/config/rateLimiter.ts                (Phase 1)
 backend/src/config/__tests__/rateLimiter.test.ts
 backend/src/config/__docs__/massive-api-methods.md  (Phase 0)
 backend/src/__fixtures__/massive/*.json          (All phases)
+backend/src/routes/market.ts                     (Phase 1-2)
+backend/src/routes/__tests__/market.test.ts      (Phase 1-2)
 
-app/api/members/dashboard/market-status/route.ts   (Phase 1)
-app/api/members/dashboard/market-holidays/route.ts  (Phase 1)
-app/api/members/dashboard/market-movers/route.ts    (Phase 2)
-app/api/members/dashboard/market-breadth/route.ts   (Phase 2)
-app/api/members/dashboard/news/route.ts              (Phase 2)
+app/api/members/dashboard/market-status/route.ts   (Phase 1, optional proxy)
+app/api/members/dashboard/market-holidays/route.ts  (Phase 1, optional proxy)
+app/api/members/dashboard/market-movers/route.ts    (Phase 2, optional proxy)
+app/api/members/dashboard/market-breadth/route.ts   (Phase 2, optional proxy)
+app/api/members/dashboard/news/route.ts              (Phase 2, optional proxy)
 
 components/dashboard/market-status-badge.tsx         (Phase 2)
 components/dashboard/market-movers-card.tsx           (Phase 2)
@@ -2859,6 +3020,9 @@ components/dashboard/market-holidays-widget.tsx       (Phase 1)
 backend/src/config/massive.ts                    (All phases — expand methods)
 backend/src/config/env.ts                        (Phase 0 — add optional vars)
 backend/src/services/marketHours.ts              (Phase 1 — add API integration)
+backend/src/server.ts                            (Phase 1 — mount market router)
+backend/src/services/websocket.ts                (Phase 1 — await async market status)
+backend/src/workers/alertWorker.ts               (Phase 1 — await async market status)
 backend/src/services/options/optionsChainFetcher.ts  (Phase 0+1 — fix constants)
 backend/src/services/options/types.ts            (Phase 2+4 — expand types)
 backend/src/services/leaps/rollCalculator.ts     (Phase 0 — use marketConstants)
@@ -2880,6 +3044,7 @@ components/dashboard/customizable-dashboard.tsx  (Phase 2 — add new widgets)
 
 ```
 Phase 0 (Cleanup)
+  ├── Task 0.0: Massive env alignment       (no deps)
   ├── Task 0.1: marketConstants.ts         (no deps)
   ├── Task 0.2: Consolidate market ticker  (no deps)
   ├── Task 0.3: Replace console.log        (needs lib/logger.ts)
@@ -2888,6 +3053,7 @@ Phase 0 (Cleanup)
   └── Task 0.6: Document methods           (after 0.1-0.4)
 
 Phase 1 (Core Infrastructure)
+  ├── Task 1.0: Backend market router      (depends on 0.2)
   ├── Task 1.1: Market Status              (depends on 0.1, 0.2)
   ├── Task 1.2: Market Holidays            (depends on 1.1)
   ├── Task 1.3: Last Trade                 (no deps within phase)

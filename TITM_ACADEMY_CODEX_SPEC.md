@@ -15,7 +15,7 @@
 4. Every modified file must preserve existing functionality unless explicitly marked for removal.
 5. Run `pnpm lint` after every phase. Fix all errors before proceeding.
 6. Run `pnpm playwright test` after Phases 3, 5, 6, and 8. All existing tests must continue passing.
-7. All new components must follow the project conventions in `claude.md` and `docs/BRAND_GUIDELINES.md`.
+7. All new components must follow the project conventions in `CLAUDE.md` and `docs/BRAND_GUIDELINES.md`.
 8. Stack: Next.js 16 (App Router), TypeScript, Tailwind CSS 4, Supabase, Playwright.
 9. Icons: Lucide React. Fonts: Inter (body), Playfair Display (headings), Geist Mono (data).
 10. Colors: Emerald `#10B981`, Champagne `#F3E5AB`, Onyx `#0A0A0B`. NEVER use `#D4AF37`.
@@ -1245,9 +1245,9 @@ pnpm playwright test
 
 **Purpose:** Update all documentation across the repo to reflect the V2 changes.
 
-### 8.1 Update claude.md
+### 8.1 Update CLAUDE.md
 
-**File (modify):** `claude.md`
+**File (modify):** `CLAUDE.md`
 
 Add section:
 
@@ -1299,8 +1299,8 @@ Add a section at the top noting that this spec has been implemented, with cross-
 # Verify documentation files exist
 test -f docs/ACADEMY_V2_ARCHITECTURE.md && echo "PASS"
 
-# Verify claude.md mentions Academy V2
-grep -c "Academy V2" claude.md
+# Verify CLAUDE.md mentions Academy V2
+grep -c "Academy V2" CLAUDE.md
 # Expected: >= 1
 
 # Build passes (documentation changes should not break build)
@@ -1442,7 +1442,7 @@ pnpm build 2>&1 | grep "Route\|Size"
 | `app/api/academy/tutor/session/route.ts` | Add chunk-level context | 4 |
 | `app/api/academy/lessons/[id]/progress/route.ts` | Seed review items on completion | 4 |
 | `e2e/specs/members/academy-layout.spec.ts` | Add new navigation tests | 7 |
-| `claude.md` | Add Academy V2 section | 8 |
+| `CLAUDE.md` | Add Academy V2 section | 8 |
 | `docs/BRAND_GUIDELINES.md` | Add Academy design patterns | 8 |
 | `docs/TITM_ACADEMY_UX_INSTRUCTIONAL_IMPLEMENTATION_SPEC_V2.md` | Mark as implemented | 8 |
 

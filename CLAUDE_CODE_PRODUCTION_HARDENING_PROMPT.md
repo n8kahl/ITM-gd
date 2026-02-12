@@ -2,7 +2,7 @@
 
 You are implementing production-hardening upgrades for the Trade In The Money (TITM) platform — a Next.js 16 + Supabase trading education SaaS. A full audit has been completed (see `docs/TITM_PRODUCTION_READINESS_ANALYSIS.md`) identifying 27 issues across 3 priority tiers.
 
-**Work on a `production-hardening` branch.** Implement each issue as an atomic, testable commit. Follow the existing codebase patterns described in `claude.md`.
+**Work on a `production-hardening` branch.** Implement each issue as an atomic, testable commit. Follow the existing codebase patterns described in `CLAUDE.md`.
 
 ---
 
