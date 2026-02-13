@@ -97,3 +97,41 @@ export function useUpcomingSplits() {
         isError: error,
     };
 }
+
+export interface MarketHealthSnapshot {
+    timestamp: string;
+    status: {
+        isOpen: boolean;
+        session: string;
+        message: string;
+    };
+    indices: {
+        symbol: string;
+        price: number;
+        change: number;
+        changePercent: number;
+    }[];
+    regime: {
+        label: 'Risk-On' | 'Risk-Off' | 'Neutral';
+        description: string;
+        signals: string[];
+    };
+    breadth: {
+        advancers: number;
+        decliners: number;
+        ratio: number;
+        label: string;
+    };
+}
+
+export function useMarketAnalytics() {
+    const { data, error, isLoading } = useSWR<MarketHealthSnapshot>('/api/market/analytics', fetcher, {
+        refreshInterval: 30000, // Poll every 30s
+    });
+
+    return {
+        analytics: data,
+        isLoading,
+        isError: error,
+    };
+}

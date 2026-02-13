@@ -4,6 +4,7 @@ import { getMarketStatus } from '../services/marketHours';
 import { getUpcomingHolidays } from '../services/marketHolidays';
 import { getMarketMovers } from '../services/marketMovers';
 import { getUpcomingSplits } from '../services/stockSplits';
+import { getMarketHealthSnapshot } from '../services/marketAnalytics';
 import { logger } from '../lib/logger';
 
 const router = Router();
@@ -60,6 +61,20 @@ router.get('/splits', async (req: Request, res: Response) => {
     } catch (error) {
         logger.error('Error fetching stock splits:', { error });
         res.status(500).json({ error: 'Failed to fetch stock splits' });
+    }
+});
+
+/**
+ * GET /api/market/analytics
+ * Market health snapshot: regime, breadth, and index summary
+ */
+router.get('/analytics', async (req: Request, res: Response) => {
+    try {
+        const snapshot = await getMarketHealthSnapshot();
+        res.json(snapshot);
+    } catch (error) {
+        logger.error('Error fetching market analytics:', { error });
+        res.status(500).json({ error: 'Failed to fetch market analytics' });
     }
 });
 

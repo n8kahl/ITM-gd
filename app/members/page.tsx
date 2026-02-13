@@ -10,6 +10,9 @@ import { QuickActions } from '@/components/dashboard/quick-actions'
 import { RecentTrades } from '@/components/dashboard/recent-trades'
 import { AIInsights } from '@/components/dashboard/ai-insights'
 import { CalendarHeatmap } from '@/components/dashboard/calendar-heatmap'
+import { MarketAnalyticsCard } from '@/components/dashboard/market-analytics-card'
+import { MarketMoversCard } from '@/components/dashboard/market-movers-card'
+import { StockSplitsCalendar } from '@/components/dashboard/stock-splits-calendar'
 import { FADE_UP_VARIANT, LUXURY_SPRING, STAGGER_CHILDREN } from '@/lib/motion-primitives'
 
 const EquityCurve = dynamic(
@@ -93,6 +96,19 @@ export default function MemberDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <AIInsights />
           <CalendarHeatmap />
+        </div>
+      </motion.section>
+
+      <motion.section
+        role="region"
+        aria-label="Market intelligence"
+        variants={FADE_UP_VARIANT}
+        transition={LUXURY_SPRING}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <MarketAnalyticsCard />
+          <MarketMoversCard />
+          <StockSplitsCalendar />
         </div>
       </motion.section>
     </motion.div>
