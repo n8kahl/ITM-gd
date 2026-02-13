@@ -2,10 +2,10 @@
 
 ## Autonomous Implementation Guide for Codex
 
-**Version:** 1.0.1
-**Date:** 2026-02-12
-**Status:** Repo-aligned for autonomous handoff
-**Scope:** 18 new endpoint integrations, 12 cleanup tasks, full production hardening
+**Version:** 1.1.0
+**Date:** 2026-02-13
+**Status:** Repo-aligned with scope lock + WebSocket-first real-time rules
+**Scope:** phased high-value integration, optional endpoint packs, production hardening
 **Repo validation target:** `6326dafebe5299c4a94af17c0e813689d01dbe5b` (HEAD on 2026-02-12)
 
 ---
@@ -84,13 +84,44 @@ If you introduce new tables in Phase 3/4, they MUST either:
 - reuse/extend existing `ai_coach_*` tables, or
 - create new tables using the same naming pattern (`ai_coach_*`) with clear ownership, RLS, and retention/purge strategy.
 
+### 0.6 Scope lock (prevent overkill in first production cut)
+
+For autonomous handoff and first production deployment, this spec is **value-first**, not “integrate everything first.”
+
+| Bucket | Include in Production Cut A | Defer to Optional Pack |
+|---|---|---|
+| Core market plumbing | Market status, holidays, indices snapshot, last trade/quote | Unified snapshot |
+| Dashboard intelligence | Indices ticker, movers, breadth, news | Expanded widgets not tied to active UX |
+| AI Coach enrichment | News + market breadth context | Deep fundamentals/flow analytics until baseline is stable |
+| Corporate actions | None required for go-live | Dividends + splits |
+
+**Explicit decision:** Dividends and splits are **optional** for Cut A.
+- `getDividends()` is only required when shipping early-assignment/dividend-risk alerts in the same release.
+- `getSplits()` is only required when shipping split-adjusted historical replay/P&L normalization in the same release.
+- Both remain in this document as add-on tasks, but they are not launch blockers.
+
+### 0.7 WebSocket-first real-time policy (multi-user safe)
+
+Use WebSockets wherever the UX is live and user-facing. REST remains for snapshots, backfills, and fallback.
+
+**Required architecture rules:**
+- Browser clients subscribe via backend `ws://.../ws/prices`; no direct Massive.com client-side sockets.
+- Backend must multiplex many users into shared market streams.
+- Backend must keep **one upstream Massive WebSocket connection per feed type per backend instance** (not per user).
+- Downstream subscriptions (symbols/channels) must be reference-counted and fan-out to all subscribed clients.
+- If upstream WS fails, degrade to bounded REST polling with cache + circuit breaker until WS recovers.
+
+**Repo validation notes (current state):**
+- `components/dashboard/live-market-ticker.tsx` still uses REST polling every 15s and should migrate to `/ws/prices`.
+- `components/ai-coach/tracked-setups-panel.tsx` and `components/ai-coach/position-tracker.tsx` currently open separate sockets per component; move to a shared client-side WS manager/provider to keep one socket per user session.
+
 ---
 
 ## 1. Executive Summary
 
 ### What This Spec Covers
 
-This document provides a complete, autonomous implementation plan to upgrade the TITM AI Coach platform from using ~6 Massive.com API endpoint families to using **all 40+ available endpoints**. It includes cleanup of technical debt, new feature integrations, and production hardening.
+This document provides an autonomous implementation plan to upgrade the TITM AI Coach platform from ~6 Massive.com endpoint families to a **high-value, production-safe endpoint set first**, with optional add-on packs after baseline stability.
 
 ### Why This Matters
 
@@ -152,7 +183,9 @@ backend/src/config/massive.ts (Axios client, 806 lines)
 ### Target Data Flow (Post-Implementation)
 
 ```
-Massive.com REST API (https://api.massive.com)
+Massive.com APIs
+  ├── REST API (snapshots, history, reference)
+  └── WebSocket Feed (live trades/quotes)
   ↓
 massive.ts (EXPANDED — ~1400 lines)
   ├── [EXISTING] Aggregates, Indicators, Options Chain
@@ -173,6 +206,7 @@ massive.ts (EXPANDED — ~1400 lines)
   └── [CONDITIONAL] Benzinga (Earnings, Ratings, Guidance)
        ↓
   [NEW] Market Data Service Layer (centralized caching + rate limiting + circuit breaker)
+  [NEW] Realtime Stream Gateway (single upstream WS per feed, multi-tenant fan-out)
        ↓
   Backend Services + Workers + WebSocket (existing + new)
        ↓
@@ -229,8 +263,8 @@ massive.ts (EXPANDED — ~1400 lines)
 | 2 | Market Holidays (`/v1/marketstatus/upcoming`) | CRITICAL | 1 |
 | 3 | Last Trade (`/v2/last/trade/{ticker}`) | HIGH | 1 |
 | 4 | Last Quote (`/v2/last/quote/{ticker}`) | HIGH | 1 |
-| 5 | Dividends Reference (`/v3/reference/dividends`) | HIGH | 1 |
-| 6 | Splits Reference (`/v3/reference/splits`) | HIGH | 1 |
+| 5 | Dividends Reference (`/v3/reference/dividends`) | LOW | 3 (optional pack) |
+| 6 | Splits Reference (`/v3/reference/splits`) | LOW | 3 (optional pack) |
 | 7 | Ticker Snapshot (`/v2/snapshot/locale/us/markets/stocks/tickers/{ticker}`) | HIGH | 2 |
 | 8 | Indices Snapshot (`/v3/snapshot/indices`) | HIGH | 2 |
 | 9 | Gainers/Losers (`/v2/snapshot/locale/us/markets/stocks/{direction}`) | HIGH | 2 |
@@ -599,6 +633,8 @@ npx tsc --noEmit --noUnusedLocals --noUnusedParameters 2>&1 | grep "is declared 
 - Authoritative implementations live in the backend (Express) under `backend/src/routes/market.ts` as `/api/market/*`.
 - Any `app/api/members/dashboard/*` routes added by this spec are **optional proxies** only, used for same-origin access and cookie-based auth; they must not call Massive.com directly.
 
+**Scope lock note:** Task 1.5 (Dividends) and Task 1.6 (Splits) are moved to an optional pack and are not required for Production Cut A.
+
 ### Task 1.0 — Backend Market Router (Required Foundation)
 
 **Create:** `backend/src/routes/market.ts`
@@ -930,6 +966,8 @@ export async function getRealTimePrices(symbols: string[]): Promise<Map<string, 
 
 ### Task 1.5 — Dividends Reference Endpoint
 
+**Scope decision (2026-02-13):** Optional add-on task. Do not block Cut A on this task.
+
 **Add to:** `backend/src/config/massive.ts`
 
 **New Method:**
@@ -1059,6 +1097,8 @@ export async function checkDividendAlerts(
 ---
 
 ### Task 1.6 — Stock Splits Reference Endpoint
+
+**Scope decision (2026-02-13):** Optional add-on task. Do not block Cut A on this task.
 
 **Add to:** `backend/src/config/massive.ts`
 
@@ -1225,15 +1265,39 @@ Example backend shape (preserve existing frontend expectations):
 // { success: true, data: { quotes: [{ symbol, price, change, changePercent }], metrics: {...}, source }, }
 ```
 
-**Modify:** `components/dashboard/live-market-ticker.tsx`
+**Modify:** `components/dashboard/live-market-ticker.tsx`, `hooks/use-price-stream.ts`
 
-Expand from showing only SPX/NDX to showing all 5 indices with change percentages, colored green/red.
+Expand from SPX/NDX to 5 indices and switch to WebSocket live updates (`/ws/prices`) for active sessions.
+- Remove the 15-second REST polling loop for live quotes.
+- Keep `app/api/members/dashboard/market-ticker/route.ts` as bootstrap/fallback shape normalizer only.
 
 **Test:**
 - Unit test: snapshot response mapping
 - Unit test: handles missing indices gracefully
 - Integration test: route returns all 5 indices
 - Visual test: ticker bar renders correctly with 5 indices
+
+### Task 2.2b — Single WebSocket Connection Multiplexing (Required)
+
+**Goal:** Prevent per-component socket sprawl while supporting many users/channels.
+
+**Frontend requirements:**
+- Add a shared WS connection manager/provider (one socket per authenticated browser session).
+- Convert channel consumers to subscribe/unsubscribe through the manager instead of creating new `new WebSocket(...)` instances in each component.
+- Apply to:
+  - `components/ai-coach/tracked-setups-panel.tsx`
+  - `components/ai-coach/position-tracker.tsx`
+  - `components/dashboard/live-market-ticker.tsx`
+
+**Backend requirements:**
+- Keep `/ws/prices` as fan-out hub.
+- If Massive upstream WS is enabled, keep one upstream connection per feed type per instance.
+- Enforce per-user channel authorization exactly as currently implemented.
+
+**Test:**
+- Unit test: manager de-duplicates socket creation with 3+ subscribing widgets.
+- Integration test: one browser session opens one socket while receiving setup/position/price events.
+- Load test: 100+ downstream clients do not create >1 upstream feed socket per backend instance.
 
 ---
 
@@ -2909,10 +2973,10 @@ MASSIVE_BENZINGA_ENABLED: z.coerce.boolean().optional().default(false),
 - [ ] `getMarketHolidaysUpcoming()` returns upcoming holidays (Massive endpoint)
 - [ ] `getLastTrade()` returns most recent trade
 - [ ] `getLastQuote()` returns current NBBO
-- [ ] `getDividends()` returns dividend history
-- [ ] `getSplits()` returns split history
+- [ ] (Optional pack) `getDividends()` returns dividend history
+- [ ] (Optional pack) `getSplits()` returns split history
 - [ ] Market status falls back to time-based logic when API unavailable
-- [ ] Dividend yields auto-refresh from API data
+- [ ] (Optional pack) Dividend yields auto-refresh from API data
 - [ ] Backend market routes exist: `/api/market/status`, `/api/market/holidays`, `/api/market/indices`
 - [ ] All Phase 1 unit tests pass
 - [ ] All Phase 1 integration tests pass (when `RUN_INTEGRATION_TESTS=true`)
@@ -2920,6 +2984,8 @@ MASSIVE_BENZINGA_ENABLED: z.coerce.boolean().optional().default(false),
 ### Phase 2 — Dashboard & Market Intelligence
 
 - [ ] Market ticker route uses indices snapshot (single API call for 5 indices)
+- [ ] Live market ticker consumes `/ws/prices` for active updates (no 15s REST polling loop)
+- [ ] Browser session uses a single shared WebSocket connection across ticker + setup + position widgets
 - [ ] Market movers route returns top gainers/losers
 - [ ] Market breadth calculation returns valid A/D ratios
 - [ ] News route returns ticker-filtered articles
@@ -2961,6 +3027,7 @@ MASSIVE_BENZINGA_ENABLED: z.coerce.boolean().optional().default(false),
 - [ ] All new endpoints cached according to caching architecture table
 - [ ] Circuit breaker protects against Massive.com outages
 - [ ] Rate limiter prevents exceeding plan limits
+- [ ] Realtime gateway uses one upstream Massive WS connection per feed type per backend instance
 - [ ] All new database tables have RLS policies
 - [ ] No references to "Polygon" or "Polygon.io" in runtime code (`app/`, `backend/`, `components/`, `lib/`) — docs may mention it historically
 - [ ] No instances of `#D4AF37` in runtime code (`app/`, `backend/`, `components/`, `lib/`) — docs/guides may mention it as “forbidden”
@@ -3058,12 +3125,13 @@ Phase 1 (Core Infrastructure)
   ├── Task 1.2: Market Holidays            (depends on 1.1)
   ├── Task 1.3: Last Trade                 (no deps within phase)
   ├── Task 1.4: Last Quote + RealTimePrice (depends on 1.3)
-  ├── Task 1.5: Dividends                  (depends on 0.1, 1.4)
-  └── Task 1.6: Splits                     (no deps within phase)
+  ├── Task 1.5: Dividends (optional pack)  (depends on 0.1, 1.4)
+  └── Task 1.6: Splits (optional pack)     (no deps within phase)
 
 Phase 2 (Dashboard)
   ├── Task 2.1: Ticker Snapshot            (no deps within phase)
   ├── Task 2.2: Indices Snapshot           (no deps within phase)
+  ├── Task 2.2b: WS Multiplexing           (depends on 2.2)
   ├── Task 2.3: Gainers/Losers            (depends on 2.1 types)
   ├── Task 2.4: Grouped Daily / Breadth    (no deps within phase)
   ├── Task 2.5: Daily Open/Close           (no deps within phase)
@@ -3097,8 +3165,8 @@ Phase 5 (Benzinga — Conditional)
 ### Tasks That Can Run in Parallel (Within Each Phase)
 
 **Phase 0:** Tasks 0.1, 0.2, 0.3, 0.4 can run in parallel
-**Phase 1:** Tasks 1.1, 1.3, 1.6 can run in parallel; then 1.2 (needs 1.1), 1.4 (needs 1.3), 1.5 (needs 1.4)
-**Phase 2:** Tasks 2.1-2.7 can mostly run in parallel; 2.8 (widgets) runs last
+**Phase 1:** Tasks 1.1 and 1.3 can run in parallel; then 1.2 (needs 1.1), 1.4 (needs 1.3). Optional pack tasks 1.5/1.6 can run after 1.4.
+**Phase 2:** Tasks 2.1, 2.2, 2.3-2.7 can mostly run in parallel; 2.2b (WS multiplexing) depends on 2.2 and should complete before 2.8; 2.8 (widgets) runs last
 **Phase 3:** Tasks 3.1, 3.2 can run in parallel; 3.3-3.7 depend on earlier work
 **Phase 4:** Tasks 4.1, 4.2, 4.4 can run in parallel; 4.3 and 4.5 depend on 4.1/4.2
 
