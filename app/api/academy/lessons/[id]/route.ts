@@ -169,7 +169,9 @@ export async function GET(
         ? 'video'
         : lesson.lesson_type === 'text'
           ? 'markdown'
-          : 'mixed'
+          : lesson.lesson_type === 'chunk'
+            ? 'chunk'
+            : 'mixed'
     const tutorChips = Array.isArray(lesson.ai_tutor_chips)
       ? lesson.ai_tutor_chips
         .filter((chip): chip is string => typeof chip === 'string' && chip.trim().length > 0)

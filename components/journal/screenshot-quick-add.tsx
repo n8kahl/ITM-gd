@@ -15,6 +15,18 @@ interface ScreenshotQuickAddProps {
 }
 
 export function ScreenshotQuickAdd({ open, onClose, onEntryCreated }: ScreenshotQuickAddProps) {
+  if (!open || typeof document === 'undefined') return null
+
+  return createPortal(
+    <ScreenshotQuickAddDialog onClose={onClose} onEntryCreated={onEntryCreated} />,
+    document.body
+  )
+}
+
+function ScreenshotQuickAddDialog({
+  onClose,
+  onEntryCreated,
+}: Omit<ScreenshotQuickAddProps, 'open'>) {
   const containerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -27,33 +39,19 @@ export function ScreenshotQuickAdd({ open, onClose, onEntryCreated }: Screenshot
   const [isDragging, setIsDragging] = useState(false)
 
   useFocusTrap({
-    active: open && !uploading,
+    active: !uploading,
     containerRef,
     onEscape: onClose,
   })
 
   useEffect(() => {
-    if (!open) return
-
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
     return () => {
       document.body.style.overflow = previous
     }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) {
-      // Reset state when modal closes
-      setFile(null)
-      setPreviewUrl(null)
-      setSymbol('')
-      setNotes('')
-      setError(null)
-      setUploadProgress(0)
-    }
-  }, [open])
+  }, [])
 
   const handleFileSelect = useCallback((selectedFile: File) => {
     if (!selectedFile.type.startsWith('image/')) {
@@ -179,9 +177,7 @@ export function ScreenshotQuickAdd({ open, onClose, onEntryCreated }: Screenshot
     }
   }, [file, symbol, notes, onEntryCreated])
 
-  if (!open || typeof document === 'undefined') return null
-
-  return createPortal(
+  return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
       <div className="absolute inset-0" onClick={!uploading ? onClose : undefined} />
 
@@ -333,7 +329,6 @@ export function ScreenshotQuickAdd({ open, onClose, onEntryCreated }: Screenshot
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       </div>
-    </div>,
-    document.body,
+    </div>
   )
 }

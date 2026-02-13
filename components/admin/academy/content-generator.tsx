@@ -18,7 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import ReactMarkdown from 'react-markdown'
+import { AcademyMarkdown } from '@/components/academy/academy-markdown'
 
 interface ContentGeneratorProps {
   courseId: string
@@ -324,9 +324,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
                   {generated.estimated_minutes} min read
                 </span>
               </div>
-              <div className="prose prose-invert prose-emerald max-w-none prose-headings:text-white prose-p:text-white/70 prose-strong:text-white prose-li:text-white/70 prose-code:text-emerald-400 prose-code:bg-emerald-500/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-white/5 prose-pre:border prose-pre:border-white/10 prose-a:text-emerald-400">
-                <ReactMarkdown>{generated.content_markdown}</ReactMarkdown>
-              </div>
+              <AcademyMarkdown variant="lesson">{generated.content_markdown}</AcademyMarkdown>
             </div>
 
             {/* Key Takeaways */}

@@ -27,7 +27,7 @@ interface CourseLesson {
   title: string
   order: number
   durationMinutes: number
-  contentType: 'markdown' | 'video' | 'mixed'
+  contentType: 'markdown' | 'video' | 'mixed' | 'chunk'
   isCompleted: boolean
   isLocked: boolean
 }
@@ -158,6 +158,13 @@ export default function CourseDetailPage() {
       title: lesson.title,
       durationMinutes: Math.max(5, Math.min(10, Math.round(lesson.durationMinutes / 3))),
     }))
+
+  const formatLessonType = (value: CourseLesson['contentType']) => {
+    if (value === 'chunk') return 'Guided'
+    if (value === 'markdown') return 'Reading'
+    if (value === 'video') return 'Video'
+    return 'Mixed'
+  }
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -398,7 +405,7 @@ export default function CourseDetailPage() {
                     <Clock className="w-3 h-3" />
                     {lesson.durationMinutes} min
                   </span>
-                  <span className="capitalize">{lesson.contentType}</span>
+                  <span>{formatLessonType(lesson.contentType)}</span>
                 </div>
               </div>
 
