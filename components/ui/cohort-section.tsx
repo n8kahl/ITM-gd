@@ -35,7 +35,7 @@ const pillars = [
   },
 ];
 
-export function CohortSection({}: CohortSectionProps = {}) {
+export function CohortSection({ }: CohortSectionProps = {}) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -121,7 +121,7 @@ export function CohortSection({}: CohortSectionProps = {}) {
               {/* Subtitle */}
               <RevealContent delay={0.1}>
                 <p className="text-lg text-ivory/70 leading-relaxed max-w-md">
-                  The Next Cohort is starting soon! Our exclusive annual mentorship program for traders ready to
+                  The Next Cohort is starting soon! Our exclusive 90 day mentorship program for traders ready to
                   <span className="text-champagne"> develop their own edge</span>.
                 </p>
               </RevealContent>
@@ -133,7 +133,7 @@ export function CohortSection({}: CohortSectionProps = {}) {
                     <span className="text-5xl md:text-6xl font-serif font-bold text-champagne">
                       $1,500
                     </span>
-                    <span className="text-lg text-ivory/60">/year</span>
+                    <span className="text-lg text-ivory/60">/90 days</span>
                   </div>
                   <p className="text-sm text-ivory/50 italic">
                     Mentorship, not Signals

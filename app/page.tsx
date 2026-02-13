@@ -66,7 +66,7 @@ export default function Home() {
 
   // Legacy handler for contact modal with preset message (kept for fallback)
   const handleCohortContactFallback = () => {
-    setCohortModalMessage("I'm interested in the Precision Cohort annual mentorship program. Here's my trading background:");
+    setCohortModalMessage("I'm interested in the Precision Cohort 90 day mentorship program. Here's my trading background:");
     setIsContactModalOpen(true);
   };
 
@@ -552,7 +552,7 @@ export default function Home() {
         </RevealContent>
       </section>
 
-      {/* Precision Cohort Section - Annual Mentorship */}
+      {/* Precision Cohort Section - 90 Day Mentorship */}
       <CohortSection />
 
       {/* Ribbon Divider */}
