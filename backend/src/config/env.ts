@@ -37,7 +37,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
   // Massive.com
-  MASSIVE_API_KEY: z.string().optional(),
+  MASSIVE_API_KEY: z.string().optional().refine(
+    (key) => process.env.NODE_ENV !== 'production' || (key && key.length > 0),
+    'MASSIVE_API_KEY is required in production'
+  ),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   ALPHA_VANTAGE_BASE_URL: z.string().url().optional(),
 

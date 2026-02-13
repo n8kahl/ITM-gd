@@ -124,6 +124,16 @@ export function getSystemPrompt(userContext?: {
   tier?: string;
   experienceLevel?: string;
   isMobile?: boolean;
+  marketContext?: {
+    isMarketOpen: boolean;
+    marketStatus: string; // 'Open', 'Closed', 'Pre-market', 'After-hours'
+    indices?: {
+      spx?: number;
+      ndx?: number;
+      spxChange?: number;
+      ndxChange?: number;
+    };
+  };
 }): string {
   let prompt = SYSTEM_PROMPT;
 
@@ -146,6 +156,19 @@ export function getSystemPrompt(userContext?: {
   const tier = userContext?.tier;
   if (tier && ALLOWED_TIERS.includes(tier as Tier)) {
     prompt += `\n\nUser subscription tier: ${tier}`;
+  }
+
+  // ADD MARKET CONTEXT
+  if (userContext?.marketContext) {
+    const { isMarketOpen, marketStatus, indices } = userContext.marketContext;
+    prompt += `\n\n## CURRENT MARKET CONTEXT\n- **Status**: ${marketStatus} (${isMarketOpen ? 'Live' : 'Closed'})`;
+
+    if (indices) {
+      if (indices.spx) prompt += `\n- **SPX**: ${indices.spx.toFixed(2)} ${indices.spxChange ? `(${indices.spxChange >= 0 ? '+' : ''}${indices.spxChange.toFixed(2)}%)` : ''}`;
+      if (indices.ndx) prompt += `\n- **NDX**: ${indices.ndx.toFixed(2)} ${indices.ndxChange ? `(${indices.ndxChange >= 0 ? '+' : ''}${indices.ndxChange.toFixed(2)}%)` : ''}`;
+    }
+
+    prompt += '\n\nUse this context to answer basic market questions immediately without calling tools. If the user asks for more specific details or data for other tickers, use the toolset.';
   }
 
   return prompt;

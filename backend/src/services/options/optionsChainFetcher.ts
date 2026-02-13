@@ -8,8 +8,10 @@ import {
   OptionsSnapshot
 } from '../../config/massive';
 import { getDailyAggregates } from '../../config/massive';
+import { getRiskFreeRate, getDividendYield } from '../../services/marketConstants';
 import { cacheGet, cacheSet } from '../../config/redis';
 import { toEasternTime } from '../marketHours';
+import { getRealTimePrice } from '../realTimePrice';
 import {
   OptionContract,
   OptionsMatrixCell,
@@ -31,27 +33,7 @@ import {
  * Caches results for performance
  */
 
-// Default risk-free rate (US 10-year Treasury, update periodically)
-const RISK_FREE_RATE = 0.045; // 4.5%
-
-// Dividend yields for common symbols (used in Black-Scholes fallback)
-const DIVIDEND_YIELDS: { [key: string]: number } = {
-  'SPX': 0.014,   // ~1.4% for S&P 500
-  'NDX': 0.007,   // ~0.7% for NASDAQ-100
-  'QQQ': 0.006,   // ~0.6% for Invesco QQQ
-  'SPY': 0.013,   // ~1.3% for SPDR S&P 500
-  'IWM': 0.012,   // ~1.2% for Russell 2000 ETF
-  'DIA': 0.018,   // ~1.8% for Dow ETF
-  'AAPL': 0.005,  // ~0.5%
-  'MSFT': 0.007,  // ~0.7%
-  'AMZN': 0.0,    // No dividend
-  'GOOGL': 0.005, // ~0.5%
-  'META': 0.004,  // ~0.4%
-  'TSLA': 0.0,    // No dividend
-  'NVDA': 0.0003, // ~0.03%
-};
-// Default for unknown symbols — most large-caps pay ~0.5-1%
-const DEFAULT_DIVIDEND_YIELD = 0.005;
+// Market-data caching (Phase 3.7): keep options data very fresh.
 
 // Market-data caching (Phase 3.7): keep options data very fresh.
 const OPTIONS_CHAIN_CACHE_TTL = 60; // 60 seconds
@@ -72,18 +54,27 @@ function getCurrentEasternDate(now: Date = new Date()): string {
 
 async function getCurrentPrice(symbol: string): Promise<number> {
   const ticker = INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
-  const today = getCurrentEasternDate();
-  // 7-day lookback covers weekends + holidays (longest US market closure = 3 consecutive days)
-  const weekAgo = getCurrentEasternDate(new Date(Date.now() - 7 * 86400000));
 
-  const data = await getDailyAggregates(ticker, weekAgo, today);
+  try {
+    const rtPrice = await getRealTimePrice(ticker);
+    return rtPrice.price;
+  } catch (error) {
+    logger.warn(`Real-time price failed for ${symbol}, falling back to daily aggregates`, { error: error instanceof Error ? error.message : String(error) });
 
-  if (data.length === 0) {
-    throw new Error(`No price data available for ${symbol}`);
+    // Fallback: use daily aggregates
+    const today = getCurrentEasternDate();
+    // 7-day lookback covers weekends + holidays
+    const weekAgo = getCurrentEasternDate(new Date(Date.now() - 7 * 86400000));
+
+    const data = await getDailyAggregates(ticker, weekAgo, today);
+
+    if (data.length === 0) {
+      throw new Error(`No price data available for ${symbol}`);
+    }
+
+    // Return most recent close price
+    return data[data.length - 1].c;
   }
-
-  // Return most recent close price
-  return data[data.length - 1].c;
 }
 
 /**
@@ -185,16 +176,16 @@ function calculateContractGreeks(
   expiryDate: string,
   optionType: 'call' | 'put',
   impliedVolatility: number,
-  symbol: string
+  riskFreeRate: number,
+  dividendYield: number
 ): { delta: number; gamma: number; theta: number; vega: number; rho: number } {
   const timeToExpiry = daysToYears(daysToExpiry(expiryDate));
-  const dividendYield = DIVIDEND_YIELDS[symbol] || DEFAULT_DIVIDEND_YIELD;
 
   const inputs: BlackScholesInputs = {
     spotPrice,
     strikePrice,
     timeToExpiry,
-    riskFreeRate: RISK_FREE_RATE,
+    riskFreeRate,
     volatility: impliedVolatility,
     dividendYield,
     optionType
@@ -211,7 +202,9 @@ function convertToOptionContract(
   massiveContract: MassiveOptionsContract,
   snapshot: OptionsSnapshot,
   currentPrice: number,
-  symbol: string
+  symbol: string,
+  riskFreeRate: number,
+  dividendYield: number
 ): OptionContract {
   const { strike_price, expiration_date, contract_type } = massiveContract;
   const day = snapshot.day || { open: 0, high: 0, low: 0, close: 0, volume: 0 };
@@ -254,7 +247,8 @@ function convertToOptionContract(
       expiration_date,
       contract_type,
       impliedVolatility as number,
-      symbol
+      riskFreeRate,
+      dividendYield
     );
   } else {
     // No IV available, can't calculate Greeks
@@ -309,6 +303,8 @@ export async function fetchOptionsChain(
   try {
     // Get current price
     const currentPrice = await getCurrentPrice(symbol);
+    const riskFreeRate = await getRiskFreeRate();
+    const dividendYield = await getDividendYield(symbol);
 
     // Get expiry date (use nearest if not specified)
     const expiry = expiryDate || await getNearestExpiration(symbol);
@@ -377,7 +373,9 @@ export async function fetchOptionsChain(
         contract,
         snapshot,
         currentPrice,
-        symbol
+        symbol,
+        riskFreeRate,
+        dividendYield
       );
 
       if (contract.contract_type === 'call') {
@@ -597,7 +595,9 @@ export async function fetchOptionContract(
       return null;
     }
 
-    return convertToOptionContract(contract, snapshotRows[0], currentPrice, symbol);
+    const riskFreeRate = await getRiskFreeRate();
+    const dividendYield = await getDividendYield(symbol);
+    return convertToOptionContract(contract, snapshotRows[0], currentPrice, symbol, riskFreeRate, dividendYield);
   } catch (error: any) {
     logger.error('Failed to fetch option contract', { error: error.message });
     return null;

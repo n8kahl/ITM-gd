@@ -9,9 +9,12 @@
  *   - Market session status (pre-market, regular, after-hours, closed)
  */
 
-// NYSE/NASDAQ holidays for 2025-2028
+import { getUpcomingHolidays } from './marketHolidays';
+import { logger } from '../lib/logger';
+
+// NYSE/NASDAQ holidays (initially hardcoded, updated by API)
 // Markets close at 1:00 PM ET on early close days
-const MARKET_HOLIDAYS: Record<string, 'closed' | 'early'> = {
+export let MARKET_HOLIDAYS: Record<string, 'closed' | 'early'> = {
   // 2025
   '2025-01-01': 'closed', // New Year's Day
   '2025-01-20': 'closed', // MLK Day
@@ -180,15 +183,15 @@ export function getMarketStatus(now?: Date): MarketStatus {
     const hours = Math.floor(minutesSinceOpen / 60);
     const mins = minutesSinceOpen % 60;
 
-      return {
-        status: 'open',
-        session: 'regular',
-        message: holiday === 'early'
-          ? 'Market is open (early close today at 1:00 PM ET)'
-          : 'Market is open for regular trading',
-        timeSinceOpen: `${hours}h ${mins}m`,
-        closingTime: formatETTime(regularClose),
-      };
+    return {
+      status: 'open',
+      session: 'regular',
+      message: holiday === 'early'
+        ? 'Market is open (early close today at 1:00 PM ET)'
+        : 'Market is open for regular trading',
+      timeSinceOpen: `${hours}h ${mins}m`,
+      closingTime: formatETTime(regularClose),
+    };
   }
 
   // After-hours: close - 8:00 PM ET (1200 minutes)
@@ -248,4 +251,25 @@ export function isTradingDay(date: Date): boolean {
 export function isMarketOpen(date?: Date): boolean {
   const status = getMarketStatus(date);
   return status.status === 'open';
+}
+
+/**
+ * Initialize market holidays from external API.
+ * This should be called at server startup.
+ */
+export async function initializeMarketHolidays() {
+  try {
+    const holidays = await getUpcomingHolidays(50);
+    logger.info(`Loaded ${holidays.length} upcoming holidays from API`);
+
+    for (const h of holidays) {
+      if (h.status === 'early-close') {
+        MARKET_HOLIDAYS[h.date] = 'early';
+      } else {
+        MARKET_HOLIDAYS[h.date] = 'closed';
+      }
+    }
+  } catch (error: any) {
+    logger.warn('Failed to initialize market holidays from API, using hardcoded defaults', { error: error.message });
+  }
 }

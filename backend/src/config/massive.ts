@@ -6,21 +6,70 @@ import { toEasternTime } from '../services/marketHours';
 
 dotenv.config();
 
-const MASSIVE_API_KEY = process.env.MASSIVE_API_KEY;
-const MASSIVE_BASE_URL = 'https://api.massive.com';
+// Rate limiting configuration
+export const MASSIVE_RATE_LIMIT = {
+  requestsPerSecond: 10,  // Adjust based on your tier
+  burst: 50
+};
 
-if (!MASSIVE_API_KEY) {
-  throw new Error('Missing MASSIVE_API_KEY environment variable');
+export interface MassiveLastTrade {
+  T: string;        // Ticker symbol
+  t: number;        // Timestamp (nanoseconds)
+  y: number;        // Exchange timestamp
+  q: number;        // Sequence number
+  i: string;        // Trade ID
+  x: number;        // Exchange ID
+  s: number;        // Trade size
+  c: number[];      // Condition codes
+  p: number;        // Price
+  z: number;        // Tape (1=A, 2=B, 3=C)
 }
 
+export interface MassiveLastQuote {
+  T: string;        // Ticker symbol
+  t: number;        // Timestamp (nanoseconds)
+  y: number;        // Exchange timestamp
+  q: number;        // Sequence number
+  P: number;        // Bid price
+  S: number;        // Bid size
+  p: number;        // Ask price
+  s: number;        // Ask size
+  z: number;        // Tape
+  X: number;        // Bid exchange ID
+  x: number;        // Ask exchange ID
+  c: number[];      // Condition codes
+}
+
+const MASSIVE_BASE_URL = 'https://api.massive.com';
+
 // Create Axios instance for Massive.com API
+// Lazy initialization: access token is checked in interceptor
 export const massiveClient: AxiosInstance = axios.create({
   baseURL: MASSIVE_BASE_URL,
-  headers: {
-    'Authorization': `Bearer ${MASSIVE_API_KEY}`
-  },
   timeout: 30000
 });
+
+// Add request interceptor to inject token or throw if missing
+massiveClient.interceptors.request.use(
+  (config) => {
+    // In production, env.ts guarantees this is present.
+    // In dev, we check lazily to allow startup without key (unless this specific feature is used).
+    const apiKey = process.env.MASSIVE_API_KEY;
+
+    if (!apiKey) {
+      return Promise.reject(new Error(
+        'MASSIVE_API_KEY is not configured. This feature requires a valid Massive.com API key.'
+      ));
+    }
+
+    config.headers['Authorization'] = `Bearer ${apiKey}`;
+    logger.info(`Massive.com API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 function getCurrentEasternDate(now: Date = new Date()): string {
   return toEasternTime(now).dateStr;
@@ -35,16 +84,7 @@ function toOptionsSnapshotUnderlyingTicker(underlyingTicker: string): string {
   return formatMassiveTicker(normalizeOptionsUnderlyingTicker(underlyingTicker));
 }
 
-// Add request interceptor for logging
-massiveClient.interceptors.request.use(
-  (config) => {
-    logger.info(`Massive.com API Request: ${config.method?.toUpperCase()} ${config.url}`);
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+
 
 // Add response interceptor for error handling
 massiveClient.interceptors.response.use(
@@ -104,6 +144,26 @@ export async function getAggregates(
     logger.error(`Failed to fetch aggregates for ${ticker}`, { error: error.message });
     throw error;
   }
+}
+
+/**
+ * Get the most recent trade for a ticker.
+ * Endpoint: GET /v2/last/trade/{ticker}
+ */
+export async function getLastTrade(ticker: string): Promise<MassiveLastTrade> {
+  const formattedTicker = formatMassiveTicker(ticker);
+  const response = await massiveClient.get(`/v2/last/trade/${formattedTicker}`);
+  return response.data.results;
+}
+
+/**
+ * Get the most recent NBBO quote for a ticker.
+ * Endpoint: GET /v2/last/nbbo/{ticker}
+ */
+export async function getLastQuote(ticker: string): Promise<MassiveLastQuote> {
+  const formattedTicker = formatMassiveTicker(ticker);
+  const response = await massiveClient.get(`/v2/last/nbbo/${formattedTicker}`);
+  return response.data.results;
 }
 
 // Get daily aggregates for a date range (used for PDH, pivots, ATR)

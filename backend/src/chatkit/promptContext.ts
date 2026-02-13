@@ -1,6 +1,8 @@
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
 import { getSystemPrompt } from './systemPrompt';
+import { getMarketStatus } from '../services/marketHours';
+import { getMarketIndicesSnapshot } from '../services/marketIndices';
 
 interface PromptProfile {
   tier?: string;
@@ -90,10 +92,36 @@ export async function buildSystemPromptForUser(
   userId: string,
   options?: { isMobile?: boolean },
 ): Promise<string> {
-  const profile = await loadPromptProfile(userId);
+  // Parallel fetch: Profile + Market Data (Indices only, Status is sync)
+  const [profile, indicesResponse] = await Promise.all([
+    loadPromptProfile(userId),
+    getMarketIndicesSnapshot().catch(err => {
+      logger.warn('Failed to fetch indices for prompt context', { error: err });
+      return null;
+    })
+  ]);
+
+  const marketStatus = getMarketStatus();
+
+  // Parse indices from response array
+  const spxQuote = indicesResponse?.quotes?.find(q => q.symbol === 'SPX');
+  const ndxQuote = indicesResponse?.quotes?.find(q => q.symbol === 'NDX');
+
   return getSystemPrompt({
     tier: profile.tier,
     experienceLevel: profile.experienceLevel,
     isMobile: options?.isMobile === true,
+    marketContext: {
+      isMarketOpen: marketStatus.status === 'open',
+      marketStatus: marketStatus.status === 'open' ? 'Open' :
+        marketStatus.status === 'pre-market' ? 'Pre-market' :
+          marketStatus.status === 'after-hours' ? 'After-hours' : 'Closed',
+      indices: {
+        spx: spxQuote?.price,
+        ndx: ndxQuote?.price,
+        spxChange: spxQuote?.changePercent,
+        ndxChange: ndxQuote?.changePercent,
+      }
+    }
   });
 }

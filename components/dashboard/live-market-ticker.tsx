@@ -1,64 +1,35 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Counter } from '@/components/ui/counter'
-
-// ============================================
-// TYPES
-// ============================================
-
-interface MarketQuote {
-  symbol: string
-  price: number | null
-  change: number | null
-  changePercent: number | null
-  updatedAt: number
-}
-
-interface MarketMetrics {
-  vwap?: number
-  atr?: number
-  ivRank?: number
-}
-
-type ConnectionStatus = 'live' | 'polling' | 'disconnected'
-type MarketStatus = 'pre-market' | 'open' | 'after-hours' | 'closed'
+import { useMarketIndices, useMarketStatus } from '@/hooks/useMarketData'
 
 // ============================================
 // HELPERS
 // ============================================
 
-function getMarketStatus(): MarketStatus {
-  const now = new Date()
-  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
-  const hours = et.getHours()
-  const minutes = et.getMinutes()
-  const day = et.getDay()
-  const time = hours * 60 + minutes
+function getMarketStatusLabel(status: string, session: string): string {
+  if (status === 'closed') return 'Market Closed'
+  if (status === 'early-close') return 'Early Close'
 
-  if (day === 0 || day === 6) return 'closed'
-  if (time >= 240 && time < 570) return 'pre-market'  // 4:00 - 9:30
-  if (time >= 570 && time < 960) return 'open'         // 9:30 - 16:00
-  if (time >= 960 && time < 1200) return 'after-hours'  // 16:00 - 20:00
-  return 'closed'
-}
-
-function getMarketStatusLabel(status: MarketStatus): string {
-  switch (status) {
+  switch (session) {
     case 'pre-market': return 'Pre-Market'
-    case 'open': return 'Market Open'
+    case 'regular': return 'Market Open'
     case 'after-hours': return 'After Hours'
-    case 'closed': return 'Market Closed'
+    default: return 'Market Open'
   }
 }
 
-function getMarketStatusColor(status: MarketStatus): string {
-  switch (status) {
-    case 'open': return 'bg-emerald-400'
+function getMarketStatusColor(status: string, session: string): string {
+  if (status === 'closed') return 'bg-gray-500'
+  if (status === 'early-close') return 'bg-amber-400'
+
+  switch (session) {
+    case 'regular': return 'bg-emerald-400'
     case 'pre-market': return 'bg-amber-400'
     case 'after-hours': return 'bg-blue-400'
-    case 'closed': return 'bg-gray-500'
+    default: return 'bg-gray-500'
   }
 }
 
@@ -79,77 +50,26 @@ function getIVRankColor(ivRank: number): string {
 // ============================================
 
 export function LiveMarketTicker() {
-  const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
-  const [metrics, setMetrics] = useState<MarketMetrics>({})
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
-  const [marketStatus, setMarketStatus] = useState<MarketStatus>(getMarketStatus())
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const { indices, metrics, source, isLoading } = useMarketIndices();
+  const { status: marketStatusData } = useMarketStatus();
 
-  // Update market status every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMarketStatus(getMarketStatus())
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [])
+  // Derived state
+  const isLive = source === 'massive';
+  const currentStatus = marketStatusData?.status || 'closed';
+  const currentSession = marketStatusData?.session || 'closed';
 
-  // Fetch market data via REST polling
-  const fetchMarketData = useCallback(async () => {
-    try {
-      const res = await fetch('/api/members/dashboard/market-ticker')
-      if (!res.ok) throw new Error('Failed to fetch')
-      const data = await res.json()
-
-      if (data.success && data.data) {
-        const newQuotes: Record<string, MarketQuote> = {}
-        for (const q of data.data.quotes || []) {
-          const price = Number(q.price)
-          const change = Number(q.change)
-          const changePercent = Number(q.changePercent)
-          newQuotes[q.symbol] = {
-            symbol: q.symbol,
-            price: Number.isFinite(price) ? price : null,
-            change: Number.isFinite(change) ? change : null,
-            changePercent: Number.isFinite(changePercent) ? changePercent : null,
-            updatedAt: Date.now(),
-          }
-        }
-        if (Object.keys(newQuotes).length > 0) {
-          setQuotes(newQuotes)
-        }
-        setConnectionStatus(data.data.source === 'massive' ? 'live' : 'polling')
-        if (data.data.metrics) {
-          setMetrics(data.data.metrics)
-        }
-      }
-    } catch {
-      setConnectionStatus('disconnected')
-    }
-  }, [])
-
-  // Poll on mount, then every 15 seconds
-  useEffect(() => {
-    fetchMarketData()
-    pollIntervalRef.current = setInterval(fetchMarketData, 15_000)
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-    }
-  }, [fetchMarketData])
-
-  const statusDotColor = connectionStatus === 'live'
+  const statusDotColor = isLive
     ? 'bg-emerald-400'
-    : connectionStatus === 'polling'
-    ? 'bg-amber-400'
-    : 'bg-red-400'
+    : 'bg-amber-400';
 
   return (
     <div className="w-full rounded-xl glass-card py-3 px-4 lg:px-6">
       <div className="flex items-center gap-4 lg:gap-6 overflow-x-auto scrollbar-none">
         {/* Connection indicator */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className={cn('w-1.5 h-1.5 rounded-full', statusDotColor, marketStatus === 'open' && connectionStatus !== 'disconnected' && 'animate-pulse')} />
+          <div className={cn('w-1.5 h-1.5 rounded-full', statusDotColor, currentStatus === 'open' && isLive && 'animate-pulse')} />
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-            {getMarketStatusLabel(marketStatus)}
+            {getMarketStatusLabel(currentStatus, currentSession)}
           </span>
         </div>
 
@@ -157,44 +77,44 @@ export function LiveMarketTicker() {
         <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
 
         {/* Quotes */}
-        {['SPX', 'NDX'].map(symbol => {
-          const quote = quotes[symbol]
-          const hasQuotePrice = quote?.price != null
-          const isUp = (quote?.change ?? 0) >= 0
+        {indices.length === 0 && isLoading ? (
+          <div className="flex items-center gap-4">
+            <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+            <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+          </div>
+        ) : (
+          indices.map(quote => {
+            const isUp = quote.change >= 0
 
-          return (
-            <div key={symbol} className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-xs text-muted-foreground font-medium">{symbol}</span>
-              {hasQuotePrice && quote ? (
+            return (
+              <div key={quote.symbol} className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs text-muted-foreground font-medium">{quote.symbol}</span>
                 <Counter
-                  value={quote.price as number}
+                  value={quote.price}
                   className="text-sm font-semibold text-ivory"
                   format={(value) => `$${formatPrice(value)}`}
                   flashDirection={isUp ? 'up' : 'down'}
                 />
-              ) : (
-                <span className="font-mono text-sm font-semibold text-ivory tabular-nums">—</span>
-              )}
-              {quote?.changePercent != null && (
                 <Counter
                   value={quote.changePercent}
                   className={cn(
-                  'font-mono text-xs tabular-nums',
-                  isUp ? 'text-emerald-400' : 'text-red-400'
+                    'font-mono text-xs tabular-nums',
+                    isUp ? 'text-emerald-400' : 'text-red-400'
                   )}
                   format={(value) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`}
                   flashDirection={isUp ? 'up' : 'down'}
                 />
-              )}
-            </div>
-          )
-        })}
+              </div>
+            )
+          })
+        )}
+
 
         {/* Divider */}
         <div className="w-px h-6 bg-white/[0.08] flex-shrink-0 hidden md:block" />
 
         {/* Metrics */}
-        {metrics.vwap != null && (
+        {metrics?.vwap != null && (
           <div className="flex items-center gap-1.5 flex-shrink-0 hidden md:flex">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">VWAP</span>
             <Counter
@@ -205,7 +125,7 @@ export function LiveMarketTicker() {
           </div>
         )}
 
-        {metrics.atr != null && (
+        {metrics?.atr != null && (
           <div className="flex items-center gap-1.5 flex-shrink-0 hidden md:flex">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">ATR</span>
             <Counter
@@ -216,7 +136,7 @@ export function LiveMarketTicker() {
           </div>
         )}
 
-        {metrics.ivRank != null && (
+        {metrics?.ivRank != null && (
           <div className="flex items-center gap-1.5 flex-shrink-0 hidden lg:flex">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">IV Rank</span>
             <Counter
@@ -231,8 +151,8 @@ export function LiveMarketTicker() {
         <div className="ml-auto flex items-center gap-2 flex-shrink-0 hidden lg:flex">
           <div className={cn(
             'w-2 h-2 rounded-full',
-            getMarketStatusColor(marketStatus),
-            marketStatus === 'open' && 'animate-pulse'
+            getMarketStatusColor(currentStatus, currentSession),
+            currentStatus === 'open' && 'animate-pulse'
           )} />
           <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
             {new Date().toLocaleTimeString('en-US', {

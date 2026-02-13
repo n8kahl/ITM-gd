@@ -21,6 +21,7 @@ import chartRouter from './routes/chart';
 import screenshotRouter from './routes/screenshot';
 import alertsRouter from './routes/alerts';
 import leapsRouter from './routes/leaps';
+import marketRouter from './routes/market';
 import macroRouter from './routes/macro';
 import scannerRouter from './routes/scanner';
 import watchlistRouter from './routes/watchlist';
@@ -37,6 +38,7 @@ import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/s
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
+import { initializeMarketHolidays } from './services/marketHours';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -112,6 +114,7 @@ app.use('/api/chart', chartRouter);
 app.use('/api/screenshot', screenshotRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/leaps', leapsRouter);
+app.use('/api/market', marketRouter);
 app.use('/api/macro', macroRouter);
 app.use('/api/scanner', scannerRouter);
 app.use('/api/watchlist', watchlistRouter);
@@ -198,6 +201,9 @@ async function start() {
     startSessionCleanupWorker();
     startSetupDetectorService();
     startWorkerHealthAlertWorker();
+
+    // Initialize market holidays (async, but don't block server start completely)
+    initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
