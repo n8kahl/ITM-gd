@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TITM Navigation Audit — UX Report</title>
+<style>
+  :root {
+    --emerald: #10B981;
+    --emerald-dim: #065F46;
+    --champagne: #F3E5AB;
+    --onyx: #0A0A0B;
+    --surface: #111214;
+    --surface2: #1A1C1F;
+    --border: rgba(255,255,255,0.08);
+    --text: #E8E8EA;
+    --muted: rgba(255,255,255,0.45);
+    --red: #EF4444;
+    --amber: #F59E0B;
+    --blue: #3B82F6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--onyx);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container { max-width: 1080px; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
+
+  /* Cover */
+  .cover {
+    text-align: center;
+    padding: 4rem 2rem 3rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+  .cover-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--emerald);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 999px;
+    padding: 0.3rem 1rem;
+    margin-bottom: 1.2rem;
+  }
+  .cover h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.6rem;
+  }
+  .cover h1 span { color: var(--emerald); }
+  .cover p { color: var(--muted); font-size: 1rem; max-width: 600px; margin: 0 auto; }
+  .cover-meta {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* Sections */
+  .section {
+    margin-bottom: 3rem;
+  }
+  .section-label {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--emerald);
+    margin-bottom: 0.5rem;
+  }
+  .section h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.4rem;
+  }
+  .section-desc {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin-bottom: 1.5rem;
+    max-width: 700px;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.8rem;
+    color: var(--text);
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
+  }
+  .card-header .icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .icon-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .icon-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .icon-emerald { background: rgba(16,185,129,0.15); color: var(--emerald); }
+  .icon-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+
+  .card-title { font-size: 0.95rem; font-weight: 600; }
+  .card p { color: var(--muted); font-size: 0.88rem; line-height: 1.65; }
+
+  .severity {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    margin-left: auto;
+  }
+  .severity-critical { background: rgba(239,68,68,0.15); color: var(--red); }
+  .severity-major { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .severity-minor { background: rgba(59,130,246,0.15); color: var(--blue); }
+
+  /* Diagrams */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+  }
+  .diagram-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  /* Navigation Map */
+  .nav-map {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .nav-column {
+    flex: 1;
+    min-width: 200px;
+  }
+  .nav-column-header {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--champagne);
+    padding: 0.5rem 0.75rem;
+    background: rgba(243,229,171,0.06);
+    border: 1px solid rgba(243,229,171,0.12);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+  .nav-item {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .nav-item-active {
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.25);
+    color: var(--emerald);
+    font-weight: 500;
+  }
+  .nav-item-inactive {
+    background: var(--surface2);
+    border: 1px solid transparent;
+    color: var(--muted);
+  }
+  .nav-item-missing {
+    background: rgba(239,68,68,0.08);
+    border: 1px dashed rgba(239,68,68,0.3);
+    color: rgba(239,68,68,0.7);
+    font-style: italic;
+  }
+  .nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green { background: var(--emerald); }
+  .dot-red { background: var(--red); }
+  .dot-amber { background: var(--amber); }
+  .dot-blue { background: var(--blue); }
+  .dot-gray { background: rgba(255,255,255,0.2); }
+
+  /* Pattern comparison table */
+  .pattern-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  .pattern-table th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .pattern-table td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top;
+  }
+  .pattern-table tr:last-child td { border-bottom: none; }
+  .pattern-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .tag-link { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag-button { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .tag-radix { background: rgba(168,85,247,0.15); color: #A855F7; }
+  .tag-none { background: rgba(239,68,68,0.1); color: rgba(239,68,68,0.7); }
+  .tag-glow { background: rgba(16,185,129,0.15); color: var(--emerald); }
+  .tag-border { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag-fill { background: rgba(245,158,11,0.15); color: var(--amber); }
+
+  /* Wireframe mockups */
+  .wireframe {
+    background: #060607;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+  .wireframe-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.5rem 1rem;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--border);
+  }
+  .wireframe-body {
+    padding: 0;
+    display: flex;
+    min-height: 340px;
+  }
+
+  /* Desktop wireframe sidebar */
+  .wf-sidebar {
+    width: 200px;
+    border-right: 1px solid var(--border);
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+  .wf-logo {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+    padding: 0 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.5rem;
+  }
+  .wf-logo span { color: var(--emerald); }
+  .wf-nav-item {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--muted);
+  }
+  .wf-nav-active {
+    background: rgba(16,185,129,0.12);
+    color: var(--emerald);
+    font-weight: 500;
+  }
+  .wf-content {
+    flex: 1;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .wf-subnav {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.5rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+  }
+  .wf-subnav-item {
+    font-size: 0.68rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    color: var(--muted);
+  }
+  .wf-subnav-active {
+    background: rgba(16,185,129,0.15);
+    border: 1px solid rgba(16,185,129,0.3);
+    color: var(--emerald);
+    font-weight: 500;
+  }
+  .wf-placeholder {
+    flex: 1;
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.08);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.15);
+    font-size: 0.75rem;
+  }
+
+  /* Mobile wireframe */
+  .wf-mobile {
+    width: 280px;
+    margin: 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--onyx);
+  }
+  .wf-mobile-top {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text);
+    position: relative;
+  }
+  .wf-mobile-top .wf-avatar {
+    position: absolute;
+    right: 12px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--emerald-dim), var(--emerald));
+  }
+  .wf-mobile-content {
+    min-height: 220px;
+    padding: 0.75rem;
+  }
+  .wf-mobile-bottom {
+    display: flex;
+    justify-content: space-around;
+    padding: 0.5rem 0.25rem;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .wf-mobile-tab {
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--muted);
+    padding: 0.25rem;
+    position: relative;
+  }
+  .wf-mobile-tab.active {
+    color: var(--emerald);
+    font-weight: 600;
+  }
+  .wf-mobile-tab.active::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--emerald);
+  }
+  .wf-mobile-tab-icon {
+    font-size: 1rem;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* Comparison layout */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  @media (max-width: 700px) {
+    .comparison { grid-template-columns: 1fr; }
+  }
+  .comp-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  .comp-current { color: var(--red); }
+  .comp-proposed { color: var(--emerald); }
+
+  /* Numbered list */
+  .rec-list {
+    counter-reset: rec;
+    list-style: none;
+    padding: 0;
+  }
+  .rec-list li {
+    counter-increment: rec;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .rec-list li::before {
+    content: counter(rec);
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(16,185,129,0.12);
+    color: var(--emerald);
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+  }
+  .rec-list li strong { color: var(--text); font-weight: 600; }
+
+  /* Score pill */
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .score-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .score-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+  .score-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    min-width: 80px;
+  }
+  .score-val {
+    font-size: 0.75rem;
+    font-weight: 700;
+    min-width: 36px;
+    text-align: right;
+  }
+
+  /* Divider */
+  hr {
+    border: none;
+    height: 1px;
+    background: var(--border);
+    margin: 2.5rem 0;
+  }
+
+  /* Callout */
+  .callout {
+    border-left: 3px solid var(--emerald);
+    padding: 1rem 1.2rem;
+    background: rgba(16,185,129,0.04);
+    border-radius: 0 8px 8px 0;
+    margin: 1.5rem 0;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+  .callout strong { color: var(--text); }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 1rem 0;
+  }
+  .flow-node {
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    white-space: nowrap;
+  }
+  .flow-arrow {
+    color: var(--muted);
+    font-size: 0.8rem;
+    padding: 0 0.3rem;
+  }
+  .flow-node.active {
+    background: rgba(16,185,129,0.12);
+    border-color: rgba(16,185,129,0.3);
+    color: var(--emerald);
+  }
+  .flow-node.problem {
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.25);
+    color: var(--red);
+  }
+
+  /* Impact matrix */
+  .matrix {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+  .matrix-cell {
+    padding: 0.8rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .matrix-cell .val { font-size: 1.4rem; font-weight: 700; }
+  .matrix-cell .label { font-size: 0.7rem; color: var(--muted); margin-top: 0.25rem; }
+
+  .toc {
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .toc-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+  }
+  .toc a {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text);
+    text-decoration: none;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .toc a:hover { color: var(--emerald); }
+  .toc a:last-child { border-bottom: none; }
+  .toc .num { color: var(--emerald); font-weight: 600; margin-right: 0.5rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-badge">UX Audit Report</div>
+  <h1>TITM Navigation <span>System Audit</span></h1>
+  <p>A comprehensive analysis of every navigation pattern across the TradeITM Member Area, with findings, severity ratings, and a unified design proposal.</p>
+  <div class="cover-meta">Prepared for Nate &middot; February 2026 &middot; v1.0</div>
+</div>
+
+<!-- EXECUTIVE SUMMARY -->
+<div class="section" id="summary">
+  <div class="section-label">Executive Summary</div>
+  <h2>7 Navigation Systems, 5 Different Patterns</h2>
+  <p class="section-desc">The TITM Member Area currently uses at least five distinct navigation paradigms across seven different areas. While each works in isolation, the lack of a unified system creates cognitive load, wayfinding confusion, and a fragmented mobile experience.</p>
+
+  <div class="matrix">
+    <div class="matrix-cell">
+      <div class="val" style="color:var(--red)">9/10</div>
+      <div class="label">Admin Fields Broken on Mobile</div>
+    </div>
+    <div class="matrix-cell">
+      <div class="val" style="color:var(--amber)">5</div>
+      <div class="label">Sub-Nav Patterns</div>
+    </div>
+    <div class="matrix-cell">
+      <div class="val" style="color:var(--emerald)">1</div>
+      <div class="label">Wiring Fix Needed</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Core Issue:</strong> The admin tab system is fully built — database, API, admin UI, and context all work. The <code>getMobileTabs()</code> function is exposed and ready. But <code>MemberBottomNav</code> ignores it entirely, using a hardcoded array instead. This single disconnect means 9 of 10 admin-configurable fields (label, path, icon, tier, sort order, badge, mobile_visible, is_active, is_required) have zero effect on mobile. Beyond this pipeline break, each feature area (Academy, AI Coach, Journal, Social, Studio) invents its own sub-navigation from scratch rather than using a shared component.
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <a href="#admin"><span class="num">01</span> Admin Tab System — Full Pipeline Trace</a>
+  <a href="#current"><span class="num">02</span> Current State Map</a>
+  <a href="#findings"><span class="num">03</span> Findings &amp; Issues (19 Items)</a>
+  <a href="#patterns"><span class="num">04</span> Pattern Comparison Matrix</a>
+  <a href="#proposal"><span class="num">05</span> Unified Navigation Proposal</a>
+  <a href="#wireframes"><span class="num">06</span> Wireframe Mockups</a>
+  <a href="#priority"><span class="num">07</span> Priority Roadmap</a>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 1: ADMIN TAB SYSTEM -->
+<!-- ============================================ -->
+<div class="section" id="admin">
+  <div class="section-label">Section 01</div>
+  <h2>Admin Tab System — Full Pipeline Trace</h2>
+  <p class="section-desc">Tracing the complete data flow from the Supabase <code>tab_configurations</code> table through the admin UI, public API, MemberAuthContext, and finally to the sidebar and mobile nav components. This reveals where the pipeline is connected — and where it's broken.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">Data Flow: Database &rarr; API &rarr; Context &rarr; Components</div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem;max-width:720px;margin:0 auto;">
+
+      <!-- Layer 1: Database -->
+      <div style="display:flex;gap:0.75rem;align-items:stretch;">
+        <div style="width:90px;text-align:right;font-size:0.65rem;font-weight:600;color:var(--champagne);padding-top:0.7rem;">DATABASE</div>
+        <div style="flex:1;padding:0.75rem 1rem;border-radius:10px;border:1px solid rgba(243,229,171,0.2);background:rgba(243,229,171,0.04);font-size:0.8rem;">
+          <strong><code>tab_configurations</code></strong> table<br>
+          <span style="color:var(--muted);font-size:0.72rem;">Fields: tab_id, label, icon, path, required_tier, badge_text, badge_variant, description, <strong style="color:var(--champagne)">mobile_visible</strong>, sort_order, is_required, is_active</span><br>
+          <span style="color:var(--muted);font-size:0.72rem;">RLS: Admins write, members read. Seed: 7 default tabs.</span>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:var(--muted);font-size:0.8rem;">&darr;</div>
+
+      <!-- Layer 2: API -->
+      <div style="display:flex;gap:0.75rem;align-items:stretch;">
+        <div style="width:90px;text-align:right;font-size:0.65rem;font-weight:600;color:var(--emerald);padding-top:0.7rem;">API ROUTES</div>
+        <div style="flex:1;display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;padding:0.6rem 0.8rem;border-radius:8px;border:1px solid rgba(16,185,129,0.2);background:rgba(16,185,129,0.04);font-size:0.75rem;">
+            <strong><code>GET /api/config/tabs</code></strong><br>
+            <span style="color:var(--muted);">Public. Returns active tabs sorted by sort_order. 5-min cache. Falls back to hardcoded <code>DEFAULT_TABS</code> if DB unavailable.</span>
+          </div>
+          <div style="flex:1;min-width:200px;padding:0.6rem 0.8rem;border-radius:8px;border:1px solid rgba(16,185,129,0.2);background:rgba(16,185,129,0.04);font-size:0.75rem;">
+            <strong><code>GET/PUT /api/admin/tabs</code></strong><br>
+            <span style="color:var(--muted);">Admin-only. Full CRUD for all tab fields. Upserts by tab_id. Logs to admin_activity_log.</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:var(--muted);font-size:0.8rem;">&darr;</div>
+
+      <!-- Layer 3: Context -->
+      <div style="display:flex;gap:0.75rem;align-items:stretch;">
+        <div style="width:90px;text-align:right;font-size:0.65rem;font-weight:600;color:var(--blue);padding-top:0.7rem;">CONTEXT</div>
+        <div style="flex:1;padding:0.75rem 1rem;border-radius:10px;border:1px solid rgba(59,130,246,0.2);background:rgba(59,130,246,0.04);font-size:0.8rem;">
+          <strong><code>MemberAuthContext.tsx</code></strong><br>
+          <span style="color:var(--muted);font-size:0.72rem;">On mount: fetches <code>/api/config/tabs</code> &rarr; stores in <code>allTabConfigs[]</code><br>
+          Exposes two functions:</span><br>
+          <span style="font-size:0.72rem;">
+            <code style="color:var(--emerald)">getVisibleTabs()</code> &mdash; filters by is_active + tier hierarchy<br>
+            <code style="color:var(--emerald)">getMobileTabs()</code> &mdash; filters <code>getVisibleTabs()</code> by <code>mobile_visible=true</code>, limit 5
+          </span>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:var(--muted);font-size:0.8rem;">&darr;</div>
+
+      <!-- Layer 4: Components -->
+      <div style="display:flex;gap:0.75rem;align-items:stretch;">
+        <div style="width:90px;text-align:right;font-size:0.65rem;font-weight:600;color:var(--text);padding-top:0.7rem;">COMPONENTS</div>
+        <div style="flex:1;display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;padding:0.6rem 0.8rem;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.06);font-size:0.75rem;">
+            <strong>MemberSidebar</strong> (Desktop)<br>
+            <span style="color:var(--emerald);">Uses <code>getVisibleTabs()</code></span><br>
+            <span style="color:var(--muted);">Connected to admin system.</span>
+          </div>
+          <div style="flex:1;min-width:200px;padding:0.6rem 0.8rem;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);font-size:0.75rem;">
+            <strong>MemberBottomNav</strong> (Mobile)<br>
+            <span style="color:var(--red);">Uses HARDCODED <code>PRIMARY_TABS[]</code></span><br>
+            <span style="color:var(--red);">IGNORES <code>getMobileTabs()</code></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Admin Tab Manager (<code>/admin/tabs</code>)</h3>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1rem;">The admin page at <code>/admin/tabs</code> (under System &rarr; Member Tabs) provides full control over every tab field. The admin can configure labels, paths, icons (Lucide name), tier requirements, sort order, badge text/variant, and critically — a <code>mobile_visible</code> checkbox and an <code>is_active</code> toggle per tab.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">Admin Tab Configuration Fields (per tab)</div>
+    <table class="pattern-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Desktop Effect</th>
+          <th>Mobile Effect</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>tab_id</code></td>
+          <td>Text (unique)</td>
+          <td>Matches ICON_MAP key</td>
+          <td>Not used</td>
+          <td><span class="pattern-tag tag-glow">Working</span></td>
+        </tr>
+        <tr>
+          <td><code>label</code></td>
+          <td>Text</td>
+          <td>Shown in sidebar</td>
+          <td style="color:var(--red)">Hardcoded override</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+        <tr>
+          <td><code>path</code></td>
+          <td>Text</td>
+          <td>Link href</td>
+          <td style="color:var(--red)">Hardcoded override</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+        <tr>
+          <td><code>icon</code></td>
+          <td>Lucide name</td>
+          <td>Via ICON_MAP lookup</td>
+          <td style="color:var(--red)">Hardcoded override</td>
+          <td><span class="pattern-tag" style="background:rgba(245,158,11,0.15);color:var(--amber)">Partial</span></td>
+        </tr>
+        <tr>
+          <td><code>required_tier</code></td>
+          <td>core | pro | executive</td>
+          <td>Filters via tier hierarchy</td>
+          <td style="color:var(--red)">No filtering</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+        <tr>
+          <td><code>sort_order</code></td>
+          <td>Integer</td>
+          <td>Controls tab order</td>
+          <td style="color:var(--red)">Hardcoded order</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+        <tr>
+          <td><code>mobile_visible</code></td>
+          <td>Boolean</td>
+          <td>N/A (desktop only)</td>
+          <td style="color:var(--red)"><strong>COMPLETELY IGNORED</strong></td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Dead Code</span></td>
+        </tr>
+        <tr>
+          <td><code>badge_text</code></td>
+          <td>Text | null</td>
+          <td>Shown as pill badge</td>
+          <td style="color:var(--red)">Not rendered</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+        <tr>
+          <td><code>is_active</code></td>
+          <td>Boolean</td>
+          <td>Hides/shows tab</td>
+          <td style="color:var(--red)">No effect</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+        <tr>
+          <td><code>is_required</code></td>
+          <td>Boolean</td>
+          <td>Always shown regardless of tier</td>
+          <td style="color:var(--red)">No effect</td>
+          <td><span class="pattern-tag" style="background:rgba(239,68,68,0.15);color:var(--red)">Broken</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout" style="border-left-color:var(--red);">
+    <strong style="color:var(--red)">Critical Disconnect:</strong> The admin has a fully functional <code>mobile_visible</code> checkbox on every tab. The context already exposes <code>getMobileTabs()</code> which properly filters by that field and limits to 5 items. But <code>MemberBottomNav</code> never calls <code>getMobileTabs()</code> — it renders from a hardcoded array. <strong>9 of 10 admin-configurable fields have zero effect on mobile.</strong>
+  </div>
+
+  <h3>Additional Admin System Gaps</h3>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">A1</div>
+      <span class="card-title"><code>getMobileTabs()</code> Exists But Is Never Called</span>
+      <span class="severity severity-critical">Critical</span>
+    </div>
+    <p>The context provides <code>getMobileTabs()</code> (line 948-950) which filters <code>getVisibleTabs()</code> by <code>mobile_visible</code> and limits to 5. It's properly exposed in the context value (line 968). The <code>MemberBottomNav</code> component never imports or calls it. This is the single most important fix: one line of code to bridge the gap.</p>
+    <p style="margin-top:0.5rem"><strong>Fix:</strong> In <code>mobile-bottom-nav.tsx</code>, replace <code>PRIMARY_TABS</code> with <code>useMemberAuth().getMobileTabs()</code>.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">A2</div>
+      <span class="card-title">Desktop ICON_MAP is Hardcoded Per tab_id</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>The sidebar has a hardcoded <code>ICON_MAP: Record&lt;string, LucideIcon&gt;</code> that maps only 7 known tab_ids to Lucide components: dashboard, journal, ai-coach, library, social, studio, profile. If an admin creates a custom tab (e.g., <code>tab_id: "signals"</code>) and sets <code>icon: "Radio"</code>, the sidebar ignores the <code>icon</code> field and falls back to <code>LayoutDashboard</code>. The admin's icon configuration is effectively decorative — only the tab_id matters.</p>
+    <p style="margin-top:0.5rem"><strong>Fix:</strong> Build a dynamic icon resolver that imports Lucide icons by name string, or expand the ICON_MAP to cover all common Lucide icons.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">A3</div>
+      <span class="card-title">Social Tab is Force-Injected by API</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>The <code>/api/config/tabs</code> route runs <code>withMissingFallbackTabs()</code> which always ensures a "social" tab exists in the response, even if an admin has deactivated or deleted it. This undermines admin control — if an admin sets <code>is_active: false</code> on Social, the API re-injects it.</p>
+    <p style="margin-top:0.5rem"><strong>Fix:</strong> Remove the forced social injection, or make it respect the <code>is_active</code> flag from the database.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">A4</div>
+      <span class="card-title">DEFAULT_TABS Fallback Has Stale Data</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>The API route has a hardcoded <code>DEFAULT_TABS</code> array as fallback if the database is unreachable. This array has <code>library</code> with <code>mobile_visible: false</code> and <code>studio</code> with <code>mobile_visible: false</code>. But the actual database seed migration has <code>library</code> at tier <code>pro</code> (later patched to <code>core</code> by migration 20260210010000) and path <code>/members/library</code> (later patched to <code>/members/academy/courses</code> by migration 20260311000000). The fallback should be the canonical source of truth or be removed.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">A5</div>
+      <span class="card-title">No Sub-Navigation Admin Configuration</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>The admin tab system only controls Level 1 navigation (sidebar/bottom bar tabs). There is no admin interface to configure Level 2 sub-navigation items (e.g., Academy's Home/Explore/Continue/Review/Saved, or Journal's future Entries/Analytics/Import). Sub-nav items are entirely hardcoded in their respective components. Consider whether admins should eventually manage sub-tabs too, or whether that's developer-only.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">A6</div>
+      <span class="card-title">Admin Sidebar is Not Dynamic (By Design)</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>The admin panel's own sidebar (<code>admin-sidebar.tsx</code>) uses a hardcoded navigation array grouped into "Growth &amp; Sales", "Product &amp; Content", and "System". This is acceptable since admin navigation changes infrequently, but it's worth noting the contrast: the member area is designed for dynamic admin control, while the admin area itself is static.</p>
+  </div>
+
+  <h3>Database Schema &amp; Migrations Timeline</h3>
+  <div class="diagram">
+    <div class="diagram-title">Migration History for Tab Configurations</div>
+    <div style="display:flex;flex-direction:column;gap:0.4rem;max-width:650px;">
+      <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+        <div style="width:150px;font-size:0.65rem;font-weight:600;color:var(--champagne);flex-shrink:0;padding-top:2px;">20260209000001</div>
+        <div style="font-size:0.78rem;color:var(--muted);">
+          <strong style="color:var(--text)">Create <code>tab_configurations</code></strong> table with full schema. Seeds 7 tabs. Library at tier <code>pro</code>, path <code>/members/library</code>.
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+        <div style="width:150px;font-size:0.65rem;font-weight:600;color:var(--champagne);flex-shrink:0;padding-top:2px;">20260210010000</div>
+        <div style="font-size:0.78rem;color:var(--muted);">
+          <strong style="color:var(--text)">Downgrade Library tier</strong> from <code>pro</code> to <code>core</code>. Makes Training Library available to all members.
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+        <div style="width:150px;font-size:0.65rem;font-weight:600;color:var(--champagne);flex-shrink:0;padding-top:2px;">20260311000000</div>
+        <div style="font-size:0.78rem;color:var(--muted);">
+          <strong style="color:var(--text)">Canonicalize Library path</strong> from <code>/members/library</code> to <code>/members/academy/courses</code>. The <code>/members/library</code> route becomes a redirect alias only.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Takeaway:</strong> The admin tab system is architecturally sound — the database schema, API, admin UI, and context all work correctly. The single point of failure is the <code>MemberBottomNav</code> component refusing to consume <code>getMobileTabs()</code>. Fixing this one wiring gap unlocks all admin fields for mobile: labels, paths, icons, tiers, sort order, badges, and the <code>mobile_visible</code> toggle. Additionally, the sidebar's hardcoded ICON_MAP should be replaced with a dynamic icon resolver so the admin's <code>icon</code> field actually works for custom tabs.
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 2: CURRENT STATE MAP -->
+<!-- ============================================ -->
+<div class="section" id="current">
+  <div class="section-label">Section 02</div>
+  <h2>Current State Map</h2>
+  <p class="section-desc">Here is every navigation component currently in the codebase, mapped by where it appears and how it renders on desktop vs. mobile.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">Navigation Component Hierarchy</div>
+    <div class="flow">
+      <div class="flow-node active">MembersLayout</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node">MemberSidebar<br><small style="color:var(--muted)">Desktop only</small></div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-node">MobileTopBar<br><small style="color:var(--muted)">Mobile only</small></div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-node">MemberBottomNav<br><small style="color:var(--muted)">Mobile only</small></div>
+    </div>
+    <div style="text-align:center;margin:0.75rem 0">
+      <span style="font-size:0.7rem;color:var(--muted)">Then each feature adds its own sub-navigation:</span>
+    </div>
+    <div class="flow">
+      <div class="flow-node">Academy &rarr; <strong>AcademySubNav</strong><br><small style="color:var(--blue)">Link-based pills</small></div>
+      <div class="flow-arrow">|</div>
+      <div class="flow-node problem">AI Coach &rarr; <strong>Inline toggle</strong><br><small style="color:var(--red)">Custom buttons</small></div>
+      <div class="flow-arrow">|</div>
+      <div class="flow-node problem">Journal &rarr; <strong>None</strong><br><small style="color:var(--red)">Breadcrumbs only</small></div>
+    </div>
+    <div class="flow" style="margin-top:0.5rem">
+      <div class="flow-node problem">Social &rarr; <strong>FeedFilterBar</strong><br><small style="color:var(--red)">Button filters</small></div>
+      <div class="flow-arrow">|</div>
+      <div class="flow-node problem">Studio &rarr; <strong>Radix Tabs</strong><br><small style="color:var(--red)">Shadcn/UI tabs</small></div>
+      <div class="flow-arrow">|</div>
+      <div class="flow-node problem">Profile &rarr; <strong>None</strong><br><small style="color:var(--red)">Flat page</small></div>
+    </div>
+  </div>
+
+  <div class="diagram">
+    <div class="diagram-title">Desktop vs. Mobile — Navigation Parity</div>
+    <div class="nav-map">
+      <div class="nav-column">
+        <div class="nav-column-header">Desktop Sidebar (Dynamic)</div>
+        <div class="nav-item nav-item-active"><div class="nav-dot dot-green"></div> Dashboard</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Journal</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> AI Coach</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Library</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Social</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Studio</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Profile</div>
+        <div style="font-size:0.7rem;color:var(--emerald);padding:0.5rem;text-align:center;">Source: getVisibleTabs() API</div>
+      </div>
+      <div class="nav-column">
+        <div class="nav-column-header">Mobile Bottom Nav (Hardcoded)</div>
+        <div class="nav-item nav-item-active"><div class="nav-dot dot-green"></div> Dashboard</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Journal</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> AI Coach</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-green"></div> Library</div>
+        <div style="font-size:0.6rem;padding:0.3rem 0.5rem;color:var(--muted);margin:0.25rem 0;">--- "More" Menu ---</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-amber"></div> Social</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-amber"></div> Profile</div>
+        <div class="nav-item nav-item-inactive"><div class="nav-dot dot-amber"></div> Settings</div>
+        <div class="nav-item nav-item-missing"><div class="nav-dot dot-red"></div> Studio (missing)</div>
+        <div style="font-size:0.7rem;color:var(--red);padding:0.5rem;text-align:center;">Source: Hardcoded PRIMARY_TABS[]</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 3: FINDINGS -->
+<!-- ============================================ -->
+<div class="section" id="findings">
+  <div class="section-label">Section 03</div>
+  <h2>Findings &amp; Issues</h2>
+  <p class="section-desc">Every inconsistency and UX gap identified across the codebase, rated by severity. This includes 13 UX findings plus 6 admin-system alignment gaps from Section 01.</p>
+
+  <h3>Critical Issues</h3>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">1</div>
+      <span class="card-title">Mobile Nav is Hardcoded, Desktop is Dynamic</span>
+      <span class="severity severity-critical">Critical</span>
+    </div>
+    <p>The desktop <code>MemberSidebar</code> pulls visible tabs from <code>getVisibleTabs()</code> (admin-configurable via the database), but the mobile <code>MemberBottomNav</code> has a hardcoded <code>PRIMARY_TABS[]</code> array. If an admin adds or reorders tabs, only desktop reflects the change. Mobile users see a stale, fixed set of 4 tabs.</p>
+    <p style="margin-top:0.5rem"><strong>Files:</strong> <code>member-sidebar.tsx</code> (line 96: <code>getVisibleTabs()</code>) vs. <code>mobile-bottom-nav.tsx</code> (line 27: hardcoded array)</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">2</div>
+      <span class="card-title">Studio is Unreachable on Mobile</span>
+      <span class="severity severity-critical">Critical</span>
+    </div>
+    <p>The "Studio" tab appears in the desktop sidebar (when enabled) but is completely absent from the mobile bottom nav and the "More" dropdown. Mobile users have no path to the Media Command Studio at all.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">3</div>
+      <span class="card-title">5 Different Sub-Navigation Patterns</span>
+      <span class="severity severity-critical">Critical</span>
+    </div>
+    <p>Each feature area implements its own navigation paradigm from scratch. This creates inconsistency in visual language, interaction patterns, and mental models for the user.</p>
+    <div style="margin-top:0.75rem">
+      <div class="flow">
+        <div class="flow-node" style="border-color:var(--blue)">Academy: Pill Links</div>
+        <div class="flow-node" style="border-color:var(--amber)">AI Coach: Segmented Control</div>
+        <div class="flow-node" style="border-color:var(--red)">Journal: Nothing</div>
+      </div>
+      <div class="flow" style="margin-top:0.4rem">
+        <div class="flow-node" style="border-color:var(--amber)">Social: Filter Buttons</div>
+        <div class="flow-node" style="border-color:#A855F7">Studio: Radix Tabs</div>
+        <div class="flow-node" style="border-color:var(--red)">Profile: Nothing</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Major Issues</h3>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">4</div>
+      <span class="card-title">"Library" Naming Confusion &amp; Alias Spaghetti</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>The sidebar calls it "Library" but it routes to <code>/members/academy/courses</code>. The <code>isLibraryPath()</code> function is duplicated across 3 separate files with slightly different logic. Inside the Academy, users see "Home" and "Explore" which doesn't map to what the sidebar calls "Library." This disconnect requires cognitive overhead to reconcile.</p>
+    <p style="margin-top:0.5rem"><strong>Duplicated in:</strong> <code>member-sidebar.tsx</code> (line 49), <code>mobile-bottom-nav.tsx</code> (line 34), <code>academy-sub-nav.tsx</code> (line 27)</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">5</div>
+      <span class="card-title">No Consistent Page Header Pattern</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>Each page uses a completely different header treatment. Journal has <code>h1 + description + Breadcrumb</code>. Dashboard has <code>WelcomeHeader</code>. AI Coach has no header (jumps right into the tool). Profile has no header. Academy replaces the header with sub-nav. Studio embeds h1 inside its tab component. There is no unified "page header" component.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">6</div>
+      <span class="card-title">Breadcrumbs Used Inconsistently</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>Breadcrumbs appear only on Journal and Journal Analytics pages. They are absent from every other section including Academy (which has the deepest route nesting at 3-4 levels). Users in <code>/members/academy/learn/[id]</code> have no breadcrumb trail to orient themselves.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">7</div>
+      <span class="card-title">Journal Has No Sub-Navigation</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>The Journal page (<code>/members/journal</code>) and its Analytics sub-page (<code>/members/journal/analytics</code>) have no persistent sub-nav. The Analytics link is a standalone button in the page header, and Journal Analytics uses a "Back to Journal" button. This is a dead-end pattern; if Journal gains more sub-pages (e.g., Insights, Playbook, Tags), there's no navigation spine to support them.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">8</div>
+      <span class="card-title">Active State Inconsistency Across 3+ Styles</span>
+      <span class="severity severity-major">Major</span>
+    </div>
+    <p>Active navigation indicators use different visual languages. The sidebar uses an animated emerald glow pill. The mobile bottom nav uses a top emerald bar + icon scale animation. The Academy sub-nav uses a static emerald border + fill. The Social filter uses a solid emerald fill with shadow. The Studio tabs use the Radix/Shadcn default. Users cannot build a consistent mental model of "this is where I am."</p>
+  </div>
+
+  <h3>Minor Issues</h3>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">9</div>
+      <span class="card-title">Mobile Top Bar Has No Functional Navigation</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>The <code>MobileTopBar</code> only shows a centered logo and a profile avatar link. It doesn't display the current page title, breadcrumbs, or any context. On mobile, users rely entirely on the bottom nav to know where they are. For deep pages like <code>/members/academy/learn/[id]</code>, there's no wayfinding at all in the top bar.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">10</div>
+      <span class="card-title">AI Coach Mobile Toggle is Non-Standard</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>The AI Coach uses a custom Chat/Chart segmented toggle (<code>lg:hidden</code>) that doesn't match any other navigation pattern in the app. While it works for two options, it's visually distinct from the Academy sub-nav and would break if a third view (e.g., Sessions, Knowledge Base) is added.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">11</div>
+      <span class="card-title">Magic Number Height Calculations</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>AI Coach uses <code>h-[calc(100dvh-10.5rem)]</code> (mobile) and <code>h-[calc(100dvh-3.5rem)]</code> (desktop). The main layout uses <code>pb-28 lg:pb-8</code> for bottom nav clearance. These magic numbers will break if the top bar height, bottom nav height, or any layout changes. They should reference CSS variables or use a flex-grow approach.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">12</div>
+      <span class="card-title">"Settings" Route is a Query Parameter Hack</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>The mobile "More" menu links to <code>/members/profile?view=settings</code>, but the Profile page doesn't consume this query parameter to auto-open the settings sheet. The Profile page uses a button to open <code>ProfileSettingsSheet</code> as a modal. The query parameter goes unused.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">13</div>
+      <span class="card-title">No Scroll Restoration on Sub-Nav Changes</span>
+      <span class="severity severity-minor">Minor</span>
+    </div>
+    <p>The members layout scrolls to top on every pathname change (<code>window.scrollTo(0, 0)</code>), but the Academy sub-nav is sticky. When switching between Academy tabs, the user loses their scroll position. Tab-style navigation within a feature should preserve scroll or only reset when entering a new feature.</p>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 4: PATTERN COMPARISON -->
+<!-- ============================================ -->
+<div class="section" id="patterns">
+  <div class="section-label">Section 04</div>
+  <h2>Pattern Comparison Matrix</h2>
+  <p class="section-desc">Side-by-side view of how each feature area handles navigation, showing the inconsistency.</p>
+
+  <div class="diagram">
+    <table class="pattern-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Sub-Nav Type</th>
+          <th>Component</th>
+          <th>Active State</th>
+          <th>Breadcrumbs</th>
+          <th>Page Header</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Dashboard</strong></td>
+          <td><span class="pattern-tag tag-none">None</span></td>
+          <td>&mdash;</td>
+          <td>&mdash;</td>
+          <td>No</td>
+          <td>WelcomeHeader</td>
+        </tr>
+        <tr>
+          <td><strong>Academy</strong></td>
+          <td><span class="pattern-tag tag-link">Link Pills</span></td>
+          <td>AcademySubNav</td>
+          <td><span class="pattern-tag tag-border">Border + Fill</span></td>
+          <td>No</td>
+          <td>Sub-nav replaces header</td>
+        </tr>
+        <tr>
+          <td><strong>AI Coach</strong></td>
+          <td><span class="pattern-tag tag-button">Custom Toggle</span></td>
+          <td>Inline buttons</td>
+          <td><span class="pattern-tag tag-fill">Fill + Border</span></td>
+          <td>No</td>
+          <td>None (jumps to tool)</td>
+        </tr>
+        <tr>
+          <td><strong>Journal</strong></td>
+          <td><span class="pattern-tag tag-none">None</span></td>
+          <td>&mdash;</td>
+          <td>&mdash;</td>
+          <td><strong style="color:var(--emerald)">Yes</strong></td>
+          <td>h1 + desc + breadcrumb</td>
+        </tr>
+        <tr>
+          <td><strong>Social</strong></td>
+          <td><span class="pattern-tag tag-button">Filter Buttons</span></td>
+          <td>FeedFilterBar</td>
+          <td><span class="pattern-tag tag-glow">Solid Fill + Shadow</span></td>
+          <td>No</td>
+          <td>None</td>
+        </tr>
+        <tr>
+          <td><strong>Studio</strong></td>
+          <td><span class="pattern-tag tag-radix">Radix Tabs</span></td>
+          <td>StudioTabs</td>
+          <td><span class="pattern-tag tag-fill">Radix Default</span></td>
+          <td>No</td>
+          <td>h1 inside tab component</td>
+        </tr>
+        <tr>
+          <td><strong>Profile</strong></td>
+          <td><span class="pattern-tag tag-none">None</span></td>
+          <td>&mdash;</td>
+          <td>&mdash;</td>
+          <td>No</td>
+          <td>None (settings button only)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <strong>Takeaway:</strong> No two feature areas share the same navigation component, active state style, or page header pattern. A user navigating from Academy (pill links) to Journal (no sub-nav) to AI Coach (segmented toggle) encounters three different paradigms in three clicks.
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 5: UNIFIED PROPOSAL -->
+<!-- ============================================ -->
+<div class="section" id="proposal">
+  <div class="section-label">Section 05</div>
+  <h2>Unified Navigation Proposal</h2>
+  <p class="section-desc">A three-layer navigation system that's consistent, scalable, and fully responsive.</p>
+
+  <h3>The Three-Layer Model</h3>
+
+  <div class="diagram">
+    <div class="diagram-title">Proposed Navigation Architecture</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;max-width:600px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div style="width:80px;text-align:right;font-size:0.7rem;font-weight:600;color:var(--champagne);">Layer 1</div>
+        <div style="flex:1;padding:0.6rem 1rem;border-radius:10px;border:1px solid rgba(243,229,171,0.2);background:rgba(243,229,171,0.06);font-size:0.85rem;">
+          <strong>Global Nav</strong> &mdash; Sidebar (desktop) + Bottom Bar (mobile)
+          <br><span style="color:var(--muted);font-size:0.75rem;">Both powered by same <code>getVisibleTabs()</code> source</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div style="width:80px;text-align:right;font-size:0.7rem;font-weight:600;color:var(--emerald);">Layer 2</div>
+        <div style="flex:1;padding:0.6rem 1rem;border-radius:10px;border:1px solid rgba(16,185,129,0.2);background:rgba(16,185,129,0.06);font-size:0.85rem;">
+          <strong>Feature Sub-Nav</strong> &mdash; Shared <code>&lt;FeatureSubNav /&gt;</code> component
+          <br><span style="color:var(--muted);font-size:0.75rem;">Used by Academy, Journal, AI Coach, Studio. Same visual pattern everywhere.</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div style="width:80px;text-align:right;font-size:0.7rem;font-weight:600;color:var(--blue);">Layer 3</div>
+        <div style="flex:1;padding:0.6rem 1rem;border-radius:10px;border:1px solid rgba(59,130,246,0.2);background:rgba(59,130,246,0.06);font-size:0.85rem;">
+          <strong>Context Bar</strong> &mdash; Breadcrumbs + page title + actions
+          <br><span style="color:var(--muted);font-size:0.75rem;">Every page gets a consistent header with wayfinding context.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Recommendation Details</h3>
+
+  <ol class="rec-list">
+    <li><strong>Wire Mobile Nav to <code>getMobileTabs()</code>:</strong> The function already exists at line 948 of <code>MemberAuthContext.tsx</code> and is already exposed in the context value at line 968. The <code>MemberBottomNav</code> just needs to call <code>useMemberAuth().getMobileTabs()</code> instead of its hardcoded <code>PRIMARY_TABS[]</code>. This single wiring change unlocks all 10 admin fields for mobile: labels, paths, icons, tiers, sort order, badges, and the <code>mobile_visible</code> toggle that the admin UI already exposes. Keep the "More" overflow pattern but populate it dynamically from the remaining tabs beyond the first 4.</li>
+
+    <li><strong>Create a Shared <code>&lt;FeatureSubNav /&gt;</code> Component:</strong> Build one reusable horizontal sub-nav component based on the current <code>AcademySubNav</code> design (the best of the current patterns). Accept an array of <code>{ id, label, href, icon }</code> items. Deploy it in Academy, Journal (Journal + Analytics), Studio, and optionally AI Coach. Use the same emerald pill + border active state everywhere.</li>
+
+    <li><strong>Standardize Page Headers with a <code>&lt;PageHeader /&gt;</code> Component:</strong> Every feature page should render: page title (h1), optional subtitle, breadcrumbs (always), and an actions slot (right side). This replaces the ad-hoc h1, WelcomeHeader, and missing headers across the app. The mobile top bar should display the current page title (derived from the active sidebar tab).</li>
+
+    <li><strong>Add Breadcrumbs Everywhere:</strong> Extend the existing <code>Breadcrumb</code> component usage to all feature areas, not just Journal. Academy's deep routes (<code>/academy/courses/[slug]</code>, <code>/academy/learn/[id]</code>) especially need breadcrumb trails. Consider auto-generating breadcrumbs from route segments.</li>
+
+    <li><strong>Resolve the "Library" &harr; "Academy" Naming:</strong> Pick one name. Recommendation: call it <strong>"Academy"</strong> everywhere (sidebar, mobile nav, and sub-nav). Remove the "Library" alias and the duplicated <code>isLibraryPath()</code> function from three files. Rename the "Explore" tab to "Courses" inside the Academy sub-nav for clarity.</li>
+
+    <li><strong>Add Studio to Mobile Nav:</strong> Include the Studio tab in the mobile bottom nav's overflow menu or, if it's high-priority, promote it to the primary 4-tab bar. Currently, mobile users cannot access Studio at all.</li>
+
+    <li><strong>Make the Mobile Top Bar Contextual:</strong> Replace the static logo-only top bar with a contextual header showing: back arrow (when deeper than L1), current page/feature title, and keep the avatar. This gives mobile users orientation without needing to look at the bottom bar.</li>
+
+    <li><strong>Refactor AI Coach Mobile Toggle:</strong> Replace the custom Chat/Chart segmented control with the shared <code>&lt;FeatureSubNav /&gt;</code> pattern. This unifies the visual language and supports future expansion (e.g., a "Sessions" or "Knowledge" view could be added as another sub-nav item instead of a separate toggle).</li>
+
+    <li><strong>Replace Magic Height Numbers with CSS Variables:</strong> Define <code>--topbar-h</code>, <code>--bottomnav-h</code>, and <code>--subnav-h</code> CSS custom properties. Use <code>calc(100dvh - var(--topbar-h) - var(--bottomnav-h))</code> instead of hardcoded rem values. This makes the AI Coach full-height layout resilient to future nav height changes.</li>
+
+    <li><strong>Fix the Settings Query Parameter:</strong> Either make the Profile page consume <code>?view=settings</code> to auto-open the settings sheet, or remove the query parameter from the mobile nav link and just link to <code>/members/profile</code>.</li>
+  </ol>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 6: WIREFRAMES -->
+<!-- ============================================ -->
+<div class="section" id="wireframes">
+  <div class="section-label">Section 06</div>
+  <h2>Wireframe Mockups</h2>
+  <p class="section-desc">Before and after comparisons showing the proposed unified system.</p>
+
+  <!-- Desktop Wireframe -->
+  <h3>Desktop: Unified Layout with Feature Sub-Nav</h3>
+  <div class="comparison">
+    <div>
+      <div class="comp-label comp-current">Current (Inconsistent)</div>
+      <div class="wireframe">
+        <div class="wireframe-label">Desktop — Journal (No Sub-Nav)</div>
+        <div class="wireframe-body">
+          <div class="wf-sidebar">
+            <div class="wf-logo">Trade<span>ITM</span></div>
+            <div class="wf-nav-item">Dashboard</div>
+            <div class="wf-nav-item wf-nav-active">Journal</div>
+            <div class="wf-nav-item">AI Coach</div>
+            <div class="wf-nav-item">Library</div>
+            <div class="wf-nav-item">Social</div>
+          </div>
+          <div class="wf-content">
+            <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.25rem;">Trade Journal</div>
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.5rem;">Manual-first journaling...</div>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);margin-bottom:0.75rem;">Dashboard &rsaquo; Journal</div>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+              <div style="padding:0.25rem 0.5rem;border:1px solid var(--border);border-radius:6px;font-size:0.65rem;color:var(--muted);">Analytics</div>
+              <div style="padding:0.25rem 0.5rem;border:1px solid var(--border);border-radius:6px;font-size:0.65rem;color:var(--muted);">Import</div>
+              <div style="padding:0.25rem 0.5rem;background:var(--emerald);border-radius:6px;font-size:0.65rem;color:white;">+ New Entry</div>
+            </div>
+            <div class="wf-placeholder">Table content</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="comp-label comp-proposed">Proposed (Unified Sub-Nav)</div>
+      <div class="wireframe">
+        <div class="wireframe-label">Desktop — Journal with FeatureSubNav</div>
+        <div class="wireframe-body">
+          <div class="wf-sidebar">
+            <div class="wf-logo">Trade<span>ITM</span></div>
+            <div class="wf-nav-item">Dashboard</div>
+            <div class="wf-nav-item wf-nav-active">Journal</div>
+            <div class="wf-nav-item">AI Coach</div>
+            <div class="wf-nav-item">Academy</div>
+            <div class="wf-nav-item">Social</div>
+          </div>
+          <div class="wf-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+              <div>
+                <div style="font-size:0.85rem;font-weight:600;">Trade Journal</div>
+                <div style="font-size:0.6rem;color:rgba(255,255,255,0.3);">Dashboard &rsaquo; Journal &rsaquo; Entries</div>
+              </div>
+              <div style="padding:0.25rem 0.5rem;background:var(--emerald);border-radius:6px;font-size:0.65rem;color:white;">+ New Entry</div>
+            </div>
+            <div class="wf-subnav">
+              <div class="wf-subnav-item wf-subnav-active">Entries</div>
+              <div class="wf-subnav-item">Analytics</div>
+              <div class="wf-subnav-item">Import</div>
+            </div>
+            <div class="wf-placeholder">Table content</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Wireframe -->
+  <h3>Mobile: Contextual Top Bar + Consistent Sub-Nav</h3>
+  <div class="comparison">
+    <div>
+      <div class="comp-label comp-current">Current (Static Top Bar)</div>
+      <div style="display:flex;justify-content:center;padding:1rem;">
+        <div class="wf-mobile">
+          <div class="wf-mobile-top">
+            <span style="font-size:0.75rem;font-weight:700;">ITM</span>
+            <div class="wf-avatar"></div>
+          </div>
+          <div class="wf-mobile-content">
+            <div style="font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;">Trade Journal</div>
+            <div style="font-size:0.6rem;color:var(--muted);margin-bottom:0.5rem;">Dashboard &rsaquo; Journal</div>
+            <div style="display:flex;gap:0.3rem;margin-bottom:0.5rem;">
+              <div style="padding:0.2rem 0.4rem;border:1px solid var(--border);border-radius:4px;font-size:0.55rem;color:var(--muted);">Analytics</div>
+              <div style="padding:0.2rem 0.4rem;background:var(--emerald);border-radius:4px;font-size:0.55rem;color:white;">+ New</div>
+            </div>
+            <div class="wf-placeholder" style="min-height:80px;">Content</div>
+          </div>
+          <div class="wf-mobile-bottom">
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#9632;</span> Dash</div>
+            <div class="wf-mobile-tab active"><span class="wf-mobile-tab-icon">&#9632;</span> Journal</div>
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#9632;</span> AI</div>
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#9632;</span> Library</div>
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#8943;</span> More</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="comp-label comp-proposed">Proposed (Contextual Top + Sub-Nav)</div>
+      <div style="display:flex;justify-content:center;padding:1rem;">
+        <div class="wf-mobile">
+          <div class="wf-mobile-top" style="justify-content:flex-start;padding:0 12px;gap:8px;">
+            <span style="font-size:0.65rem;color:var(--emerald);">&larr;</span>
+            <span style="font-size:0.72rem;font-weight:600;">Trade Journal</span>
+            <div class="wf-avatar" style="position:absolute;right:12px;"></div>
+          </div>
+          <div class="wf-mobile-content">
+            <div class="wf-subnav" style="margin-bottom:0.5rem;">
+              <div class="wf-subnav-item wf-subnav-active" style="font-size:0.6rem;">Entries</div>
+              <div class="wf-subnav-item" style="font-size:0.6rem;">Analytics</div>
+              <div class="wf-subnav-item" style="font-size:0.6rem;">Import</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem;">
+              <div style="padding:0.2rem 0.4rem;background:var(--emerald);border-radius:4px;font-size:0.55rem;color:white;">+ New Entry</div>
+            </div>
+            <div class="wf-placeholder" style="min-height:80px;">Content</div>
+          </div>
+          <div class="wf-mobile-bottom">
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#9632;</span> Dash</div>
+            <div class="wf-mobile-tab active"><span class="wf-mobile-tab-icon">&#9632;</span> Journal</div>
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#9632;</span> AI</div>
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#9632;</span> Academy</div>
+            <div class="wf-mobile-tab"><span class="wf-mobile-tab-icon">&#8943;</span> More</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Academy with Breadcrumbs -->
+  <h3>Academy Deep Page: Before &amp; After Breadcrumbs</h3>
+  <div class="comparison">
+    <div>
+      <div class="comp-label comp-current">Current: /academy/learn/[id]</div>
+      <div class="wireframe">
+        <div class="wireframe-label">No breadcrumbs, sub-nav still shows</div>
+        <div style="padding:1rem;">
+          <div class="wf-subnav" style="margin-bottom:0.75rem;">
+            <div class="wf-subnav-item">Home</div>
+            <div class="wf-subnav-item wf-subnav-active">Explore</div>
+            <div class="wf-subnav-item">Continue</div>
+            <div class="wf-subnav-item">Review</div>
+            <div class="wf-subnav-item">Saved</div>
+          </div>
+          <div style="color:var(--red);font-size:0.7rem;margin-bottom:0.5rem;">User is watching lesson 5 of "SPX Scalping" but has no breadcrumb trail. Sub-nav still highlights "Explore" even though user is deep in a lesson.</div>
+          <div class="wf-placeholder" style="min-height:80px;">Lesson player content</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="comp-label comp-proposed">Proposed: Breadcrumbs + Context</div>
+      <div class="wireframe">
+        <div class="wireframe-label">Breadcrumbs provide clear trail</div>
+        <div style="padding:1rem;">
+          <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.5rem;">
+            <span style="color:var(--emerald)">Academy</span> &rsaquo; <span style="color:var(--emerald)">Courses</span> &rsaquo; <span style="color:var(--emerald)">SPX Scalping</span> &rsaquo; <span style="color:var(--text)">Lesson 5: Entry Signals</span>
+          </div>
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.75rem;">Lesson 5: Entry Signals</div>
+          <div class="wf-placeholder" style="min-height:100px;">Lesson player (full width, no sub-nav distraction)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================ -->
+<!-- SECTION 7: PRIORITY ROADMAP -->
+<!-- ============================================ -->
+<div class="section" id="priority">
+  <div class="section-label">Section 07</div>
+  <h2>Priority Roadmap</h2>
+  <p class="section-desc">Recommended implementation order, grouped by impact and effort.</p>
+
+  <h3>Phase 1 — Foundation (Week 1-2)</h3>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1rem;">Fix the structural issues that affect every user on every session.</p>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">P0</div>
+      <span class="card-title">Wire <code>MemberBottomNav</code> to <code>getMobileTabs()</code></span>
+    </div>
+    <p><strong>Effort:</strong> Very Low (1 import + swap array source) &middot; <strong>Impact:</strong> Critical<br>Replace the hardcoded <code>PRIMARY_TABS[]</code> in <code>mobile-bottom-nav.tsx</code> with <code>useMemberAuth().getMobileTabs()</code>. This is the single highest-impact change in the entire audit: it connects the fully-built admin pipeline end-to-end, makes <code>mobile_visible</code> actually work, adds Studio/Social to mobile when admins enable them, and ensures tier-gating works on mobile. The context function already exists and is tested.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">P0</div>
+      <span class="card-title">Build Dynamic Icon Resolver for Sidebar</span>
+    </div>
+    <p><strong>Effort:</strong> Low &middot; <strong>Impact:</strong> High<br>Replace the hardcoded <code>ICON_MAP</code> (7 entries) with a dynamic Lucide icon resolver that reads the admin-configured <code>icon</code> field from <code>TabConfig</code>. Without this, admins can create custom tabs but will always get the fallback <code>LayoutDashboard</code> icon. Options: lazy import from <code>lucide-react</code> by string, or build a lookup map of ~30 common icons.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-red">P0</div>
+      <span class="card-title">Rename "Library" &rarr; "Academy" &amp; Remove Social Force-Injection</span>
+    </div>
+    <p><strong>Effort:</strong> Low &middot; <strong>Impact:</strong> Medium<br>Update the sidebar tab label in the admin DB or rename the tab_id. Remove the triple-duplicated <code>isLibraryPath()</code> function from 3 files. Also remove <code>withMissingFallbackTabs()</code> from the API route so the admin's <code>is_active</code> flag on Social is actually respected.</p>
+  </div>
+
+  <h3>Phase 2 — Shared Components (Week 2-3)</h3>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1rem;">Build the reusable pieces that replace all the one-off patterns.</p>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">P1</div>
+      <span class="card-title">Build <code>&lt;FeatureSubNav /&gt;</code></span>
+    </div>
+    <p><strong>Effort:</strong> Medium &middot; <strong>Impact:</strong> High<br>Create a shared horizontal pill-nav component. Deploy to Academy (replacing current), Journal (new), and Studio (replacing Radix Tabs for navigation). Use the AcademySubNav design as the base template.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">P1</div>
+      <span class="card-title">Build <code>&lt;PageHeader /&gt;</code></span>
+    </div>
+    <p><strong>Effort:</strong> Medium &middot; <strong>Impact:</strong> High<br>Create a universal page header with: title, subtitle slot, breadcrumbs, and right-side actions slot. Deploy on every page. Remove the ad-hoc h1+description patterns and WelcomeHeader (fold its greeting text into the new PageHeader).</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-amber">P1</div>
+      <span class="card-title">Make Mobile Top Bar Contextual</span>
+    </div>
+    <p><strong>Effort:</strong> Low &middot; <strong>Impact:</strong> Medium<br>Show the current feature name in the mobile top bar (derived from the active tab label). Add a back arrow when depth > 1. Keep the avatar on the right.</p>
+  </div>
+
+  <h3>Phase 3 — Polish (Week 3-4)</h3>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1rem;">Consistency and quality-of-life improvements.</p>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">P2</div>
+      <span class="card-title">Unify Active State Animations</span>
+    </div>
+    <p><strong>Effort:</strong> Low &middot; <strong>Impact:</strong> Medium<br>Standardize on one active indicator style: the sidebar's emerald glow pill for the primary nav and the emerald pill + border for the sub-nav. Remove the 3+ competing visual languages.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">P2</div>
+      <span class="card-title">Replace AI Coach Toggle with FeatureSubNav</span>
+    </div>
+    <p><strong>Effort:</strong> Low &middot; <strong>Impact:</strong> Low<br>Replace the custom Chat/Chart segmented control with the shared sub-nav component. This unifies the pattern and supports adding future views (e.g., "Sessions", "Knowledge Base").</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="icon icon-blue">P2</div>
+      <span class="card-title">CSS Variable Height System + Settings Fix</span>
+    </div>
+    <p><strong>Effort:</strong> Low &middot; <strong>Impact:</strong> Low<br>Define nav height CSS variables. Fix the unused <code>?view=settings</code> query parameter. Adjust scroll restoration to not reset within feature sub-nav changes.</p>
+  </div>
+</div>
+
+<hr>
+
+<!-- Closing -->
+<div style="text-align:center;padding:2rem 0;">
+  <div style="font-size:0.7rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--emerald);margin-bottom:0.5rem;">End of Audit</div>
+  <p style="color:var(--muted);font-size:0.85rem;max-width:560px;margin:0 auto;">This report covers 19 findings (13 UX + 6 admin-system alignment) across 7 navigation areas and the full admin pipeline. The most critical fix is a single wiring change: connecting <code>MemberBottomNav</code> to the already-built <code>getMobileTabs()</code> function. The three-layer proposal (Global Nav, Feature Sub-Nav, Context Bar) builds on the existing admin tab configuration system and can be implemented incrementally across 3-4 weeks.</p>
+</div>
+
+</div>
+</body>
+</html>
