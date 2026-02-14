@@ -1,8 +1,18 @@
 
-import useSWR from 'swr';
+'use client'
 
-const fetcher = async (url: string) => {
-    const res = await fetch(url);
+import useSWR from 'swr';
+import { useMemberAuth } from '@/contexts/MemberAuthContext';
+
+type MarketKey = [url: string, token: string];
+
+const fetcher = async (key: MarketKey) => {
+    const [url, token] = key;
+    const res = await fetch(url, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    });
     if (!res.ok) {
         let detail = '';
         try {
@@ -61,7 +71,10 @@ export interface StockSplit {
 }
 
 export function useMarketIndices() {
-    const { data, error, isLoading } = useSWR<MarketIndicesResponse>('/api/market/indices', fetcher, {
+    const { session } = useMemberAuth();
+    const token = session?.access_token;
+
+    const { data, error, isLoading } = useSWR<MarketIndicesResponse>(token ? ['/api/market/indices', token] : null, fetcher, {
         refreshInterval: 10000, // Poll every 10s
     });
 
@@ -75,7 +88,10 @@ export function useMarketIndices() {
 }
 
 export function useMarketStatus() {
-    const { data, error, isLoading } = useSWR<MarketStatusResponse>('/api/market/status', fetcher, {
+    const { session } = useMemberAuth();
+    const token = session?.access_token;
+
+    const { data, error, isLoading } = useSWR<MarketStatusResponse>(token ? ['/api/market/status', token] : null, fetcher, {
         refreshInterval: 60000, // Poll every minute
     });
 
@@ -87,7 +103,11 @@ export function useMarketStatus() {
 }
 
 export function useMarketMovers(limit: number = 5) {
-    const { data, error, isLoading } = useSWR<MarketMoversResponse>(`/api/market/movers?limit=${limit}`, fetcher, {
+    const { session } = useMemberAuth();
+    const token = session?.access_token;
+    const url = `/api/market/movers?limit=${limit}`;
+
+    const { data, error, isLoading } = useSWR<MarketMoversResponse>(token ? [url, token] : null, fetcher, {
         refreshInterval: 60000, // Poll every minute
     });
 
@@ -100,7 +120,10 @@ export function useMarketMovers(limit: number = 5) {
 }
 
 export function useUpcomingSplits() {
-    const { data, error, isLoading } = useSWR<StockSplit[]>('/api/market/splits', fetcher, {
+    const { session } = useMemberAuth();
+    const token = session?.access_token;
+
+    const { data, error, isLoading } = useSWR<StockSplit[]>(token ? ['/api/market/splits', token] : null, fetcher, {
         refreshInterval: 3600000, // Poll every hour
     });
 
@@ -138,7 +161,10 @@ export interface MarketHealthSnapshot {
 }
 
 export function useMarketAnalytics() {
-    const { data, error, isLoading } = useSWR<MarketHealthSnapshot>('/api/market/analytics', fetcher, {
+    const { session } = useMemberAuth();
+    const token = session?.access_token;
+
+    const { data, error, isLoading } = useSWR<MarketHealthSnapshot>(token ? ['/api/market/analytics', token] : null, fetcher, {
         refreshInterval: 30000, // Poll every 30s
     });
 

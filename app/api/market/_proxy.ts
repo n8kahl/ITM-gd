@@ -73,11 +73,18 @@ export async function proxyMarketGet(request: Request, endpoint: MarketEndpoint)
     const upstream = `${backendBase}/api/market/${endpoint}${url.search}`;
 
     let authHeader: string | undefined;
+    const incomingAuth = request.headers.get('authorization') || request.headers.get('Authorization');
+    if (incomingAuth && /^bearer\s+/i.test(incomingAuth)) {
+      authHeader = incomingAuth;
+    }
+
     try {
-      const supabase = await createServerSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        authHeader = `Bearer ${session.access_token}`;
+      if (!authHeader) {
+        const supabase = await createServerSupabaseClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          authHeader = `Bearer ${session.access_token}`;
+        }
       }
     } catch {
       // Keep proxy public when no session is available.
