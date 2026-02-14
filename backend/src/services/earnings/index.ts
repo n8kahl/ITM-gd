@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { massiveClient, getDailyAggregates } from '../../config/massive';
+import { massiveClient, getDailyAggregates, getEarnings } from '../../config/massive';
 import { supabase } from '../../config/database';
 import { POPULAR_SYMBOLS, formatMassiveTicker, sanitizeSymbols } from '../../lib/symbols';
 import { logger } from '../../lib/logger';
@@ -15,6 +15,10 @@ export interface EarningsCalendarEvent {
   date: string;
   time: EarningsTiming;
   confirmed: boolean;
+  name?: string | null;
+  epsEstimate?: number | null;
+  revenueEstimate?: number | null;
+  source?: 'massive_reference' | 'alpha_vantage' | 'tmx_corporate_events';
 }
 
 export interface EarningsHistoricalMove {
@@ -139,6 +143,31 @@ function round(value: number, digits: number = 2): number {
   if (!Number.isFinite(value)) return 0;
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
+}
+
+function parseMaybeNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const safeSize = Math.max(1, Math.floor(size));
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += safeSize) {
+    result.push(items.slice(i, i + safeSize));
+  }
+  return result;
+}
+
+function classifyBenzingaTiming(timeOfDay: unknown): EarningsTiming {
+  const normalized = String(timeOfDay || '').trim().toLowerCase();
+  if (normalized === 'bmo' || normalized.includes('before')) return 'BMO';
+  if (normalized === 'amc' || normalized.includes('after')) return 'AMC';
+  return 'DURING';
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -364,6 +393,7 @@ async function fetchAlphaVantageCalendar(options: CalendarFetchOptions): Promise
           date: String(row.reportDate || '').slice(0, 10),
           time: 'DURING' as EarningsTiming,
           confirmed: true,
+          source: 'alpha_vantage' as const,
         }))
         .filter((event) => (
           event.symbol === symbol
@@ -387,6 +417,60 @@ async function fetchAlphaVantageCalendar(options: CalendarFetchOptions): Promise
   }
 
   return events;
+}
+
+async function fetchBenzingaReferenceEarningsCalendar(options: CalendarFetchOptions): Promise<EarningsCalendarEvent[]> {
+  const symbols = sanitizeWatchlist(options.symbols);
+  if (symbols.length === 0) return [];
+
+  const collected: EarningsCalendarEvent[] = [];
+  const batches = chunk(symbols, 5);
+
+  for (const batch of batches) {
+    const results = await Promise.allSettled(
+      batch.map(async (symbol) => {
+        const earnings = await getEarnings(symbol, {
+          dateGte: options.fromDate,
+          dateLte: options.toDate,
+          limit: 50,
+          order: 'asc',
+        });
+
+        return earnings
+          .map((event) => {
+            const date = String((event as any).date || '').slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+            return {
+              symbol: String((event as any).ticker || symbol).toUpperCase(),
+              name: typeof (event as any).name === 'string' ? (event as any).name : null,
+              date,
+              time: classifyBenzingaTiming((event as any).time_of_day),
+              confirmed: true,
+              epsEstimate: parseMaybeNumber((event as any).eps_estimate),
+              revenueEstimate: parseMaybeNumber((event as any).revenue_estimate),
+              source: 'massive_reference' as const,
+            } satisfies EarningsCalendarEvent;
+          })
+          .filter((entry): entry is EarningsCalendarEvent => entry != null);
+      }),
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        collected.push(...result.value);
+      } else {
+        logger.warn('Massive reference earnings request failed', {
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
+    }
+  }
+
+  return collected
+    .filter((event) => symbols.includes(event.symbol))
+    .filter((event) => event.date >= options.fromDate && event.date <= options.toDate)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
 }
 
 async function fetchAlphaVantageHistoricalEvents(
@@ -694,6 +778,20 @@ export class EarningsService {
     const fromDate = formatDate(today);
     const toDate = formatDate(addDays(today, safeDaysAhead));
 
+    const benzingaEvents = await fetchBenzingaReferenceEarningsCalendar({
+      symbols,
+      fromDate,
+      toDate,
+    });
+
+    if (benzingaEvents.length > 0) {
+      const deduped = Array.from(new Map(
+        benzingaEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
+      ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+      await cacheSet(redisCacheKey, deduped, EARNINGS_REDIS_CACHE_TTL_SECONDS);
+      return deduped;
+    }
+
     const alphaEvents = await fetchAlphaVantageCalendar({
       symbols,
       fromDate,
@@ -731,6 +829,8 @@ export class EarningsService {
           date,
           time: classifyEarningsTiming(event),
           confirmed: Boolean(event.confirmed ?? true),
+          epsEstimate: parseMaybeNumber(event.eps_estimate),
+          source: 'tmx_corporate_events' as const,
         } as EarningsCalendarEvent;
       })
       .filter((event): event is EarningsCalendarEvent => event != null)

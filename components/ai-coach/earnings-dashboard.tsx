@@ -26,6 +26,21 @@ const PRESSABLE_PROPS = {
   whileTap: { scale: 0.98 },
 }
 
+function formatRevenue(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—'
+  if (Math.abs(value) >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`
+  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(0)}M`
+  return `$${value.toFixed(0)}`
+}
+
+function providerLabel(source: EarningsCalendarEvent['source']): string | null {
+  if (!source) return null
+  if (source === 'massive_reference') return 'Massive'
+  if (source === 'tmx_corporate_events') return 'Corporate events'
+  if (source === 'alpha_vantage') return 'Alpha Vantage'
+  return null
+}
+
 function parseWatchlistInput(value: string): string[] {
   return value
     .split(',')
@@ -298,9 +313,26 @@ export function EarningsDashboard({ onClose, onSendPrompt }: EarningsDashboardPr
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-white">{event.symbol}</span>
-                    <span className="text-[10px] text-white/45">{event.time}</span>
+                    <div className="flex items-center gap-1.5">
+                      {providerLabel(event.source) && (
+                        <span className="text-[10px] text-white/40 rounded-full border border-white/10 bg-white/5 px-2 py-0.5">
+                          {providerLabel(event.source)}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-white/45">{event.time}</span>
+                    </div>
                   </div>
                   <div className="mt-1 text-[11px] text-white/55">{event.date}</div>
+                  {(event.epsEstimate != null || event.revenueEstimate != null) && (
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-white/45">
+                      {event.epsEstimate != null && (
+                        <span className="font-mono">EPS est {event.epsEstimate.toFixed(2)}</span>
+                      )}
+                      {event.revenueEstimate != null && (
+                        <span className="font-mono">Rev est {formatRevenue(event.revenueEstimate)}</span>
+                      )}
+                    </div>
+                  )}
                   {!event.confirmed && (
                     <div className="mt-1 text-[10px] text-amber-300/80">Date not yet confirmed</div>
                   )}

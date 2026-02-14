@@ -37,14 +37,14 @@ function resolveLabel(level: ChartLevel): string {
   return level.displayLabel || level.label || `${level.name || level.type || 'Level'} $${level.price.toFixed(2)}`
 }
 
-function resolveContext(level: ChartLevel, currentPrice: number): string {
+export function resolveContext(level: ChartLevel, currentPrice: number): string {
   if (level.displayContext) return level.displayContext
 
   const side = level.side || (level.price >= currentPrice ? 'resistance' : 'support')
   const delta = level.price - currentPrice
   const deltaPct = currentPrice > 0 ? (delta / currentPrice) * 100 : 0
   const dir = side === 'resistance' ? '↑' : '↓'
-  return `${dir} ${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%`
+  return `${dir} ${delta >= 0 ? '+' : ''}${delta.toFixed(2)} pts (${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%)`
 }
 
 function resolveTooltip(level: ChartLevel): string {
@@ -65,12 +65,16 @@ function resolveTooltip(level: ChartLevel): string {
   return lines.join('\n')
 }
 
-export function ChartLevelLabels({ levels, currentPrice, onLevelClick }: ChartLevelLabelsProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const sorted = [...levels]
+export function sortLevelsByDistance(levels: ChartLevel[], currentPrice: number, limit: number = 12): ChartLevel[] {
+  return [...levels]
     .filter((level) => Number.isFinite(level.price))
     .sort((a, b) => Math.abs(a.price - currentPrice) - Math.abs(b.price - currentPrice))
-    .slice(0, 12)
+    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
+}
+
+export function ChartLevelLabels({ levels, currentPrice, onLevelClick }: ChartLevelLabelsProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const sorted = sortLevelsByDistance(levels, currentPrice, 12)
 
   if (sorted.length === 0) return null
 

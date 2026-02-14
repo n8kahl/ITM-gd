@@ -13,6 +13,7 @@ import { CalendarHeatmap } from '@/components/dashboard/calendar-heatmap'
 import { MarketAnalyticsCard } from '@/components/dashboard/market-analytics-card'
 import { MarketMoversCard } from '@/components/dashboard/market-movers-card'
 import { StockSplitsCalendar } from '@/components/dashboard/stock-splits-calendar'
+import { EarningsRadarCard } from '@/components/dashboard/earnings-radar-card'
 import { FADE_UP_VARIANT, LUXURY_SPRING, STAGGER_CHILDREN } from '@/lib/motion-primitives'
 
 const EquityCurve = dynamic(
@@ -106,6 +107,7 @@ export default function MemberDashboard() {
         transition={LUXURY_SPRING}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <EarningsRadarCard />
           <MarketAnalyticsCard />
           <MarketMoversCard />
           <StockSplitsCalendar />
