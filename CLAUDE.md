@@ -33,8 +33,26 @@
 * **Usage:** Options, Stocks, Indices data for the AI Coach backend (`backend/src/config/massive.ts`)
 
 ## Development Context
-* **Full Documentation:** See `claude.md` for comprehensive development guidelines
+* **Full Documentation:** See `CLAUDE.md` for comprehensive development guidelines
 * **Brand Guidelines:** See `docs/BRAND_GUIDELINES.md` for complete design system
 * **AI Coach Docs:** See `docs/ai-coach/` for implementation specs and roadmap
-* **Supabase MCP:** Fully configured - see architecture section in `claude.md`
+* **Supabase MCP:** Fully configured - see architecture section in `CLAUDE.md`
 * **AI-Maintained:** This project is built and maintained by Claude Code with minimal developer intervention
+
+## Profile Hub
+* **Route:** `/members/profile`
+* **Purpose:** Trader identity and account control center.
+* **Sections:** Identity card, trading transcript, academy progress, Discord community, WHOP affiliate, settings.
+* **Key APIs:** `/api/members/profile`, `/api/members/profile/transcript`, `/api/members/affiliate`, `/api/members/profile/views`.
+
+## Trade Social
+* **Route:** `/members/social`
+* **Purpose:** Community feed and performance discovery.
+* **Features:** Feed filters, likes, achievement gallery, community highlights, leaderboard snapshots.
+* **Key APIs:** `/api/social/feed`, `/api/social/feed/[itemId]/like`, `/api/social/leaderboard`, `/api/social/share-trade`, `/api/social/community-stats`.
+
+## WHOP Integration
+* **Webhook Route:** `/api/webhooks/whop`
+* **Required Env Vars:** `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_COMPANY_ID`
+* **Handled Events:** `membership.went_valid`, `membership.went_invalid`, `payment.succeeded`, `setup_intent.succeeded`
+

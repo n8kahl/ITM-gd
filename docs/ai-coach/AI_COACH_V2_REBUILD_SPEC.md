@@ -60,7 +60,7 @@ Phase 6: Seamless Workflow + Polish ............................................
 ### 13.2 Integration Tests ......................................................................................................................... 41
 ### 13.3 Frontend Component Tests ........................................................................................................ 42
 ## 14. Repo Documentation Files to Create ................................................................................................ 43
-## 15. Agent Instructions (For claude.md) ................................................................................................... 44
+## 15. Agent Instructions (For CLAUDE.md) ................................................................................................... 44
 ## 16. Conclusion ........................................................................................................................................ 45
 
 
@@ -1576,18 +1576,18 @@ docs/ai-coach/DATA_MODELS.md All TypeScript interfaces Every type definition, ev
 and DB schemas API request/response shape
 docs/ai-All 27 AI Coach functions Name, params, return type, handler
 coach/FUNCTION_REGISTRY.md location, test file
-claude.md (update existing) Claude Code context file Add V2 rebuild context, phase status,
+CLAUDE.md (update existing) Claude Code context file Add V2 rebuild context, phase status,
 key architecture decisions
 
 
 <!-- Source PDF page 44 -->
 
-## 15. Agent Instructions (For claude.md)
+## 15. Agent Instructions (For CLAUDE.md)
 
-Add the following section to the existing claude.md file at the repo root. This gives Claude Code agents
+Add the following section to the existing CLAUDE.md file at the repo root. This gives Claude Code agents
 the context they need to build each phase correctly.
 
-AGENT PROMPT: claude.md Addition
+AGENT PROMPT: CLAUDE.md Addition
 ## AI Coach V2 Rebuild Context
 
 ### Architecture

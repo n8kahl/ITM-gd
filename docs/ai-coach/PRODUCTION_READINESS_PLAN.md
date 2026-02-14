@@ -149,7 +149,7 @@ Members Journal screenshot feature currently:
 
 ### LOW priority (cleanup)
 
-- Repo hygiene: remove `FETCH_HEAD`, `_tmp_*`, duplicate docs casing (`CLAUDE.md` vs `claude.md`)
+- Repo hygiene: remove `FETCH_HEAD`, `_tmp_*`, duplicate docs casing (standardize on `CLAUDE.md`)
 - Feature-based folder refactor once behavior is stable
 - Design tokens for consistent spacing/typography/radius
 

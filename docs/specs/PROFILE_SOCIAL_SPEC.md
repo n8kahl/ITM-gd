@@ -2002,7 +2002,7 @@ test.describe('Trade Social Feed', () => {
 
 ### Update These Existing Docs
 
-1. **`claude.md`** — Add Profile Hub and Social sections to feature list
+1. **`CLAUDE.md`** — Add Profile Hub and Social sections to feature list
 2. **`docs/BRAND_GUIDELINES.md`** — Add social card template guidelines
 3. **`README.md`** — Update feature list
 
