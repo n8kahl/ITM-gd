@@ -13,7 +13,7 @@ const router = Router();
  * GET /api/market/indices
  * Get snapshot of major market indices (SPX, NDX)
  */
-router.get('/indices', async (req: Request, res: Response) => {
+router.get('/indices', async (_req: Request, res: Response) => {
     try {
         const indices = await getMarketIndicesSnapshot();
         res.json(indices);
@@ -23,7 +23,7 @@ router.get('/indices', async (req: Request, res: Response) => {
     }
 });
 
-router.get('/status', async (req: Request, res: Response) => {
+router.get('/status', async (_req: Request, res: Response) => {
     try {
         const status = getMarketStatus();
         res.json(status);
@@ -33,7 +33,7 @@ router.get('/status', async (req: Request, res: Response) => {
     }
 });
 
-router.get('/holidays', async (req: Request, res: Response) => {
+router.get('/holidays', async (_req: Request, res: Response) => {
     try {
         const holidays = await getUpcomingHolidays();
         res.json(holidays);
@@ -54,7 +54,7 @@ router.get('/movers', async (req: Request, res: Response) => {
     }
 });
 
-router.get('/splits', async (req: Request, res: Response) => {
+router.get('/splits', async (_req: Request, res: Response) => {
     try {
         const splits = await getUpcomingSplits();
         res.json(splits);
@@ -68,7 +68,7 @@ router.get('/splits', async (req: Request, res: Response) => {
  * GET /api/market/analytics
  * Market health snapshot: regime, breadth, and index summary
  */
-router.get('/analytics', async (req: Request, res: Response) => {
+router.get('/analytics', async (_req: Request, res: Response) => {
     try {
         const snapshot = await getMarketHealthSnapshot();
         res.json(snapshot);
