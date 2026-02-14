@@ -7,6 +7,9 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachAPIError, getMorningBrief, type MorningBrief } from '@/lib/api/ai-coach'
 import { cn } from '@/lib/utils'
 
+const GAME_PLAN_PROMPT =
+  "Give me today's full options day-trading game plan for SPX, NDX, SPY, and QQQ with key levels, expected move, top setups, invalidation, and risk-first execution checklist."
+
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
@@ -41,6 +44,80 @@ function marketStatusTone(brief: MorningBrief | null): string {
   return 'text-white/60 border-white/20 bg-white/5'
 }
 
+function impactTone(impact: string): string {
+  const normalized = impact.toUpperCase()
+  if (normalized === 'HIGH') return 'text-red-300 border-red-500/30 bg-red-500/10'
+  if (normalized === 'MEDIUM') return 'text-amber-300 border-amber-500/30 bg-amber-500/10'
+  return 'text-sky-300 border-sky-500/30 bg-sky-500/10'
+}
+
+function parseClockTime(timeLabel: string): { hour: number; minute: number } | null {
+  const match = timeLabel.match(/(\d{1,2}):(\d{2})/)
+  if (!match) return null
+
+  let hour = Number(match[1])
+  const minute = Number(match[2])
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null
+
+  const upper = timeLabel.toUpperCase()
+  if (upper.includes('PM') && hour < 12) hour += 12
+  if (upper.includes('AM') && hour === 12) hour = 0
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+  return { hour, minute }
+}
+
+function getEtClock(now: Date = new Date()): { dateKey: string; minutes: number } {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const year = parts.find((part) => part.type === 'year')?.value || '0000'
+  const month = parts.find((part) => part.type === 'month')?.value || '01'
+  const day = parts.find((part) => part.type === 'day')?.value || '01'
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || '0')
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || '0')
+
+  return {
+    dateKey: `${year}-${month}-${day}`,
+    minutes: (Number.isFinite(hour) ? hour : 0) * 60 + (Number.isFinite(minute) ? minute : 0),
+  }
+}
+
+function formatCountdown(marketDate: string | null, timeLabel: string | null, nowTick: number): string | null {
+  if (!marketDate || !timeLabel) return null
+
+  const clock = parseClockTime(timeLabel)
+  if (!clock) return null
+
+  const et = getEtClock(new Date(nowTick))
+  if (et.dateKey !== marketDate) return null
+
+  const eventMinutes = clock.hour * 60 + clock.minute
+  const delta = eventMinutes - et.minutes
+
+  if (delta < -20) return 'Passed'
+  if (delta <= 0) return 'Now'
+
+  const hours = Math.floor(delta / 60)
+  const minutes = delta % 60
+  if (hours > 0) return `in ${hours}h ${minutes}m`
+  return `in ${minutes}m`
+}
+
+function pnlTone(pnlPct: number | null): string {
+  if (pnlPct == null) return 'text-white/55'
+  if (pnlPct <= -20) return 'text-red-300'
+  if (pnlPct >= 20) return 'text-emerald-300'
+  return 'text-amber-300'
+}
+
 export function MarketBriefCard() {
   const { session } = useMemberAuth()
   const token = session?.access_token
@@ -49,6 +126,7 @@ export function MarketBriefCard() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
 
   const loadBrief = useCallback(async (force = false) => {
     if (!token) return
@@ -80,13 +158,24 @@ export function MarketBriefCard() {
     void loadBrief(false)
   }, [loadBrief, token])
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowTick(Date.now()), 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
+
   const economicEvents = useMemo(() => {
+    const marketDate = asString(brief?.marketDate) || null
     return (brief?.economicEvents || []).slice(0, 3).map((event) => ({
       event: asString((event as Record<string, unknown>).event) || 'Unnamed event',
       time: asString((event as Record<string, unknown>).time) || 'TBD',
       impact: asString((event as Record<string, unknown>).impact) || 'MEDIUM',
+      countdown: formatCountdown(
+        marketDate,
+        asString((event as Record<string, unknown>).time),
+        nowTick,
+      ),
     }))
-  }, [brief?.economicEvents])
+  }, [brief?.economicEvents, brief?.marketDate, nowTick])
 
   const earnings = useMemo(() => {
     return (brief?.earningsToday || []).slice(0, 4).map((event) => ({
@@ -95,6 +184,23 @@ export function MarketBriefCard() {
       expectedMove: formatExpectedMove(asNumber((event as Record<string, unknown>).expectedMove)),
     }))
   }, [brief?.earningsToday])
+
+  const openRisks = useMemo(() => {
+    return (brief?.openPositionStatus || []).slice(0, 3).map((position) => ({
+      symbol: asString((position as Record<string, unknown>).symbol) || 'N/A',
+      pnlPct: asNumber((position as Record<string, unknown>).currentPnlPct),
+      dte: asNumber((position as Record<string, unknown>).daysToExpiry),
+      recommendation: asString((position as Record<string, unknown>).recommendation) || 'Review risk.',
+    }))
+  }, [brief?.openPositionStatus])
+
+  const gamePlanHref = useMemo(() => {
+    const params = new URLSearchParams({
+      prompt: GAME_PLAN_PROMPT,
+      source: 'dashboard_market_brief',
+    })
+    return `/members/ai-coach?${params.toString()}`
+  }, [])
 
   return (
     <div className="glass-card-heavy rounded-2xl p-4 lg:p-6 border-champagne/[0.08] h-full flex flex-col">
@@ -154,7 +260,15 @@ export function MarketBriefCard() {
                   <div key={`${item.time}-${item.event}`} className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-white/80 truncate">{item.event}</span>
-                      <span className="text-[10px] text-white/55 font-mono">{item.time}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-white/55 font-mono">{item.time}</span>
+                        {item.countdown && (
+                          <span className="text-[10px] text-emerald-300">{item.countdown}</span>
+                        )}
+                        <span className={cn('text-[9px] rounded-full border px-1.5 py-0.5 uppercase', impactTone(item.impact))}>
+                          {item.impact}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -180,10 +294,38 @@ export function MarketBriefCard() {
               </div>
             )}
           </div>
+
+          <div className="space-y-2">
+            <div className="text-[11px] uppercase tracking-wide text-white/55">Open Position Risk</div>
+            {openRisks.length === 0 ? (
+              <p className="text-xs text-white/45">No open positions in brief context.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {openRisks.map((item, index) => (
+                  <div key={`${item.symbol}-${index}`} className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-semibold text-white">{item.symbol}</span>
+                      <span className={cn('text-[10px] font-medium', pnlTone(item.pnlPct))}>
+                        {item.pnlPct == null ? 'P&L n/a' : `${item.pnlPct.toFixed(1)}%`}
+                        {item.dte != null && Number.isFinite(item.dte) ? ` • ${Math.max(0, Math.round(item.dte))} DTE` : ''}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-white/45 mt-1 line-clamp-2">{item.recommendation}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="mt-4">
+      <div className="mt-4 flex items-center gap-4">
+        <Link
+          href={gamePlanHref}
+          className="inline-flex items-center text-xs text-champagne hover:text-amber-200 transition-colors"
+        >
+          Build Today&apos;s Game Plan
+        </Link>
         <Link
           href="/members/ai-coach?view=brief"
           className="inline-flex items-center text-xs text-emerald-300 hover:text-emerald-200 transition-colors"

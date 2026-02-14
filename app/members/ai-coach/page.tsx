@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels'
 import {
   BrainCircuit,
@@ -97,11 +98,14 @@ function getEasternPlaceholderBucket(now: Date = new Date()): keyof typeof CHAT_
 }
 
 export default function AICoachPage() {
+  const searchParams = useSearchParams()
   const chat = useAICoachChat()
+  const { sendMessage, isSending } = chat
   const [mobileView, setMobileView] = useState<'chat' | 'center'>('chat')
   const [isChatCollapsed, setIsChatCollapsed] = useState(false)
   const chatPanelRef = useRef<ImperativePanelHandle | null>(null)
   const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const seededPromptRef = useRef<string | null>(null)
 
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
@@ -141,6 +145,16 @@ export default function AICoachPage() {
     if (dx < 0) setMobileView('center')
     if (dx > 0) setMobileView('chat')
   }, [])
+
+  useEffect(() => {
+    const seededPrompt = searchParams.get('prompt')?.trim() || ''
+    if (!seededPrompt) return
+    if (seededPromptRef.current === seededPrompt) return
+    if (isSending) return
+
+    seededPromptRef.current = seededPrompt
+    sendMessage(seededPrompt)
+  }, [isSending, searchParams, sendMessage])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
