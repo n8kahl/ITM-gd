@@ -23,6 +23,8 @@ interface ChartLevelLabelsProps {
   levels: ChartLevel[]
   currentPrice: number
   onLevelClick?: (level: ChartLevel) => void
+  onLevelHover?: (level: ChartLevel) => void
+  onLevelHoverEnd?: () => void
 }
 
 const STRENGTH_CLASSES: Record<NonNullable<ChartLevel['strength']>, string> = {
@@ -72,7 +74,13 @@ export function sortLevelsByDistance(levels: ChartLevel[], currentPrice: number,
     .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
 }
 
-export function ChartLevelLabels({ levels, currentPrice, onLevelClick }: ChartLevelLabelsProps) {
+export function ChartLevelLabels({
+  levels,
+  currentPrice,
+  onLevelClick,
+  onLevelHover,
+  onLevelHoverEnd,
+}: ChartLevelLabelsProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const sorted = sortLevelsByDistance(levels, currentPrice, 12)
 
@@ -113,6 +121,8 @@ export function ChartLevelLabels({ levels, currentPrice, onLevelClick }: ChartLe
               key={`${level.type || level.name || 'level'}-${level.price}`}
               type="button"
               onClick={() => onLevelClick?.(level)}
+              onMouseEnter={() => onLevelHover?.(level)}
+              onMouseLeave={() => onLevelHoverEnd?.()}
               className={cn(
                 'w-full rounded border p-2 text-left transition-colors hover:border-emerald-400/50',
                 STRENGTH_CLASSES[strength],

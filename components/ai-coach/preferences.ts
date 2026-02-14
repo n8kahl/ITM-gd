@@ -14,7 +14,27 @@ export interface AICoachPreferences {
   defaultShowGex: boolean
   defaultShowVolAnalytics: boolean
   defaultIndicators: IndicatorConfig
+  lastActiveView?: PersistentCenterView
+  lastChartSymbol?: string
+  lastChartTimeframe?: ChartTimeframe
 }
+
+export type PersistentCenterView =
+  | 'welcome'
+  | 'chart'
+  | 'options'
+  | 'position'
+  | 'screenshot'
+  | 'journal'
+  | 'alerts'
+  | 'brief'
+  | 'scanner'
+  | 'tracked'
+  | 'leaps'
+  | 'earnings'
+  | 'macro'
+  | 'watchlist'
+  | 'preferences'
 
 export const AI_COACH_PREFERENCES_STORAGE_KEY = 'ai-coach-preferences-v2'
 
@@ -28,6 +48,9 @@ export const DEFAULT_AI_COACH_PREFERENCES: AICoachPreferences = {
   defaultShowGex: true,
   defaultShowVolAnalytics: true,
   defaultIndicators: DEFAULT_INDICATOR_CONFIG,
+  lastActiveView: undefined,
+  lastChartSymbol: undefined,
+  lastChartTimeframe: undefined,
 }
 
 function toChartTimeframe(value: unknown): ChartTimeframe {
@@ -35,6 +58,14 @@ function toChartTimeframe(value: unknown): ChartTimeframe {
     return value
   }
   return DEFAULT_AI_COACH_PREFERENCES.defaultChartTimeframe
+}
+
+function toOptionalChartTimeframe(value: unknown): ChartTimeframe | undefined {
+  if (value === undefined || value === null) return undefined
+  if (value === '1m' || value === '5m' || value === '15m' || value === '1h' || value === '4h' || value === '1D') {
+    return value
+  }
+  return undefined
 }
 
 function toOrbMinutes(value: unknown): 5 | 15 | 30 {
@@ -50,6 +81,36 @@ function toStrikeRange(value: unknown): 5 | 10 | 15 | 20 | 30 {
 function toBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') return value
   return fallback
+}
+
+function toPersistentCenterView(value: unknown): PersistentCenterView | undefined {
+  if (
+    value === 'welcome'
+    || value === 'chart'
+    || value === 'options'
+    || value === 'position'
+    || value === 'screenshot'
+    || value === 'journal'
+    || value === 'alerts'
+    || value === 'brief'
+    || value === 'scanner'
+    || value === 'tracked'
+    || value === 'leaps'
+    || value === 'earnings'
+    || value === 'macro'
+    || value === 'watchlist'
+    || value === 'preferences'
+  ) {
+    return value
+  }
+  return undefined
+}
+
+function toSymbol(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().toUpperCase()
+  if (!normalized || normalized.length > 12) return undefined
+  return normalized
 }
 
 function toRiskPct(value: unknown): number {
@@ -90,6 +151,9 @@ export function normalizeAICoachPreferences(value: unknown): AICoachPreferences 
     defaultShowGex: toBoolean(raw.defaultShowGex, DEFAULT_AI_COACH_PREFERENCES.defaultShowGex),
     defaultShowVolAnalytics: toBoolean(raw.defaultShowVolAnalytics, DEFAULT_AI_COACH_PREFERENCES.defaultShowVolAnalytics),
     defaultIndicators: toIndicators(raw.defaultIndicators),
+    lastActiveView: toPersistentCenterView(raw.lastActiveView),
+    lastChartSymbol: toSymbol(raw.lastChartSymbol),
+    lastChartTimeframe: toOptionalChartTimeframe(raw.lastChartTimeframe),
   }
 }
 
@@ -116,4 +180,3 @@ export function saveAICoachPreferences(preferences: AICoachPreferences): void {
     // Ignore storage write errors (private mode/quota).
   }
 }
-

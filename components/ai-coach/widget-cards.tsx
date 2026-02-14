@@ -18,6 +18,7 @@ import {
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { clearHoverTarget, emitHoverTarget } from '@/hooks/use-hover-coordination'
 import { GEXChart } from './gex-chart'
 import { WidgetActionBar } from './widget-action-bar'
 import { WidgetContextMenu } from './widget-context-menu'
@@ -153,6 +154,15 @@ function handleCardKeyDown(event: KeyboardEvent<HTMLElement>, onActivate: () => 
   if (shouldIgnoreCardActivation(event.target)) return
   event.preventDefault()
   onActivate()
+}
+
+function emitChatLevelHover(value: string, price?: number) {
+  emitHoverTarget({
+    type: 'level',
+    value,
+    price,
+    sourcePanel: 'chat',
+  })
 }
 
 type ScannerOpportunityLike = {
@@ -431,6 +441,8 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
               <button
                 type="button"
                 onClick={() => chartAction(symbol, level.price, '5m', level.name).action()}
+                onMouseEnter={() => emitChatLevelHover(level.name, level.price)}
+                onMouseLeave={clearHoverTarget}
                 className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
               >
                 <span className="text-red-400">{level.name}</span>
@@ -448,6 +460,8 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
               <button
                 type="button"
                 onClick={() => chartAction(symbol, level.price, '5m', level.name).action()}
+                onMouseEnter={() => emitChatLevelHover(level.name, level.price)}
+                onMouseLeave={clearHoverTarget}
                 className="w-full flex justify-between rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer text-left"
               >
                 <span className="text-emerald-400">{level.name}</span>
@@ -1158,7 +1172,12 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
                 copyAction(`${symbol} GEX ${level.type} ${level.strike}`),
               ]}
             >
-              <button type="button" className="w-full flex items-center justify-between rounded bg-white/5 px-2 py-1 hover:bg-white/10 cursor-pointer text-left">
+              <button
+                type="button"
+                onMouseEnter={() => emitChatLevelHover(`GEX ${level.type}`, level.strike)}
+                onMouseLeave={clearHoverTarget}
+                className="w-full flex items-center justify-between rounded bg-white/5 px-2 py-1 hover:bg-white/10 cursor-pointer text-left"
+              >
                 <span className={cn(
                   'capitalize',
                   level.type === 'support' ? 'text-emerald-300' :
@@ -1333,7 +1352,12 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
                   copyAction(`${symbol} ${level.name} ${level.price.toFixed(2)}`),
                 ])}
               >
-                <button type="button" className="w-full text-left font-mono text-white/70 rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer">
+                <button
+                  type="button"
+                  onMouseEnter={() => emitChatLevelHover(level.name, level.price)}
+                  onMouseLeave={clearHoverTarget}
+                  className="w-full text-left font-mono text-white/70 rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer"
+                >
                   {level.name}: {level.price.toFixed(2)}
                 </button>
               </WidgetContextMenu>
@@ -1351,7 +1375,12 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
                   copyAction(`${symbol} ${level.name} ${level.price.toFixed(2)}`),
                 ])}
               >
-                <button type="button" className="w-full text-left font-mono text-white/70 rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer">
+                <button
+                  type="button"
+                  onMouseEnter={() => emitChatLevelHover(level.name, level.price)}
+                  onMouseLeave={clearHoverTarget}
+                  className="w-full text-left font-mono text-white/70 rounded px-1 py-0.5 hover:bg-white/10 cursor-pointer"
+                >
                   {level.name}: {level.price.toFixed(2)}
                 </button>
               </WidgetContextMenu>

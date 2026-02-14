@@ -52,6 +52,8 @@ import { WorkflowBreadcrumb } from './workflow-breadcrumb'
 import { PreferencesPanel } from './preferences-panel'
 import { ViewTransition } from './view-transition'
 import { ChartSkeleton } from './skeleton-loaders'
+import { DesktopContextStrip } from './desktop-context-strip'
+import { clearHoverTarget, emitHoverTarget } from '@/hooks/use-hover-coordination'
 import {
   alertAction,
   chartAction,
@@ -232,6 +234,21 @@ const TAB_GROUP_LABELS: Record<'analyze' | 'portfolio' | 'monitor' | 'research',
   research: 'Research',
 }
 
+const ROUTABLE_VIEWS = new Set<CenterView>([
+  'chart',
+  'options',
+  'position',
+  'journal',
+  'alerts',
+  'brief',
+  'scanner',
+  'tracked',
+  'leaps',
+  'earnings',
+  'macro',
+  'watchlist',
+])
+
 // Level annotation colors by type
 const LEVEL_COLORS: Record<string, string> = {
   PDH: '#ef4444',
@@ -318,29 +335,42 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     clearWorkflowPath,
   } = useAICoachWorkflow()
 
-  const [activeView, setActiveView] = useState<CenterView>('welcome')
+  const [activeView, setActiveView] = useState<CenterView>('chart')
   const hasAppliedRouteViewRef = useRef(false)
   const [isToolsSheetOpen, setIsToolsSheetOpen] = useState(false)
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false)
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false)
+  const [pendingInitialChartLoad, setPendingInitialChartLoad] = useState<{
+    symbol: string
+    timeframe: ChartTimeframe
+  } | null>(null)
   const tabRailRef = useRef<HTMLDivElement | null>(null)
   const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
   const [canScrollTabRight, setCanScrollTabRight] = useState(false)
   const isSheetMode = Boolean(forcedView)
 
-  // Check onboarding status after mount (localStorage not available during SSR)
   useEffect(() => {
-    if (!hasCompletedOnboarding()) {
-      setActiveView('onboarding')
-    }
+    const handleResize = () => setIsDesktopViewport(window.innerWidth >= 1024)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
     if (hasAppliedRouteViewRef.current) return
 
-    const requestedView = searchParams.get('view')
-    if (requestedView === 'brief') {
-      setActiveView('brief')
-      setCenterView('brief')
+    const requestedView = searchParams.get('view')?.toLowerCase() ?? null
+    const requestedPanel = searchParams.get('panel')?.toLowerCase() ?? null
+
+    const nextView = ROUTABLE_VIEWS.has(requestedView as CenterView)
+      ? requestedView as CenterView
+      : requestedPanel === 'earnings'
+        ? 'earnings'
+        : null
+
+    if (nextView) {
+      setActiveView(nextView)
+      setCenterView(nextView as Parameters<typeof setCenterView>[0])
     }
 
     hasAppliedRouteViewRef.current = true
@@ -355,6 +385,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   const [chartIndicatorConfig, setChartIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [isLoadingChart, setIsLoadingChart] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+  const [highlightedLevel, setHighlightedLevel] = useState<{ value: string; price?: number } | null>(null)
   const [pendingChartSyncSymbol, setPendingChartSyncSymbol] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<AICoachPreferences>(DEFAULT_AI_COACH_PREFERENCES)
 
@@ -367,15 +398,52 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     }
     if (activeCenterView && activeCenterView !== activeView) {
       setActiveView(activeCenterView as CenterView)
+      window.requestAnimationFrame(() => {
+        const tabElement = document.getElementById(`ai-coach-tab-${activeCenterView}`)
+        tabElement?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+      })
     }
   }, [activeCenterView, activeView, forcedView, setCenterView])
 
   useEffect(() => {
     const loaded = loadAICoachPreferences()
+    const restoredSymbol = loaded.lastChartSymbol || 'SPX'
+    const restoredTimeframe = loaded.lastChartTimeframe || loaded.defaultChartTimeframe
+    const restoredView = loaded.lastActiveView
     setPreferences(loaded)
-    setChartTimeframe(loaded.defaultChartTimeframe)
+    setChartSymbol(restoredSymbol)
+    setChartTimeframe(restoredTimeframe)
     setChartIndicatorConfig(loaded.defaultIndicators)
-  }, [])
+
+    if (forcedView) {
+      setActiveView(forcedView)
+      return
+    }
+
+    if (!hasCompletedOnboarding()) {
+      setActiveView('onboarding')
+      return
+    }
+
+    if (restoredView && restoredView !== 'welcome') {
+      setActiveView(restoredView as CenterView)
+      setCenterView(restoredView as Parameters<typeof setCenterView>[0])
+    } else {
+      setActiveView('chart')
+      setCenterView('chart')
+    }
+
+    const requestedView = searchParams.get('view')
+    if (requestedView === 'brief') {
+      setActiveView('brief')
+      setCenterView('brief')
+    }
+
+    setPendingInitialChartLoad({
+      symbol: restoredSymbol,
+      timeframe: restoredTimeframe,
+    })
+  }, [forcedView, searchParams, setCenterView])
 
   useEffect(() => {
     saveAICoachPreferences(preferences)
@@ -428,6 +496,32 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       setIsLoadingChart(false)
     }
   }, [session?.access_token])
+
+  useEffect(() => {
+    if (!pendingInitialChartLoad) return
+    if (!session?.access_token) return
+    void fetchChartData(pendingInitialChartLoad.symbol, pendingInitialChartLoad.timeframe)
+    setPendingInitialChartLoad(null)
+  }, [fetchChartData, pendingInitialChartLoad, session?.access_token])
+
+  useEffect(() => {
+    if (activeView === 'onboarding') return
+    setPreferences((prev) => {
+      if (
+        prev.lastActiveView === activeView
+        && prev.lastChartSymbol === chartSymbol
+        && prev.lastChartTimeframe === chartTimeframe
+      ) {
+        return prev
+      }
+      return {
+        ...prev,
+        lastActiveView: activeView,
+        lastChartSymbol: chartSymbol,
+        lastChartTimeframe: chartTimeframe,
+      }
+    })
+  }, [activeView, chartSymbol, chartTimeframe])
 
   // Build level annotations from chart request
   const buildLevelAnnotations = useCallback((request: ChartRequest): LevelAnnotation[] => {
@@ -641,6 +735,35 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     return () => window.removeEventListener('ai-coach-show-chart', handleChartEvent)
   }, [buildLevelAnnotations, buildGEXAnnotations, fetchChartData, setCenterView, setSymbol])
 
+  useEffect(() => {
+    const handleHover = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        type?: string
+        value?: string
+        price?: number
+        sourcePanel?: 'chat' | 'center'
+      }>).detail
+      if (detail?.sourcePanel !== 'chat') return
+      if (detail?.type !== 'level' || !detail?.value) return
+      setHighlightedLevel({
+        value: detail.value,
+        price: typeof detail.price === 'number' ? detail.price : undefined,
+      })
+    }
+
+    const handleClear = () => {
+      setHighlightedLevel(null)
+    }
+
+    window.addEventListener('ai-coach-hover-coordinate', handleHover)
+    window.addEventListener('ai-coach-hover-clear', handleClear)
+
+    return () => {
+      window.removeEventListener('ai-coach-hover-coordinate', handleHover)
+      window.removeEventListener('ai-coach-hover-clear', handleClear)
+    }
+  }, [])
+
   const handleSymbolChange = useCallback((symbol: string) => {
     setChartSymbol(symbol)
     setSymbol(symbol)
@@ -742,6 +865,13 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
   return (
     <div className="h-full flex flex-col relative">
+      {!isSheetMode && activeView !== 'onboarding' && (
+        <DesktopContextStrip
+          accessToken={session?.access_token}
+          onSendPrompt={onSendPrompt}
+        />
+      )}
+
       {activeView !== 'onboarding' && (
         <WorkflowBreadcrumb
           path={workflowPath}
@@ -801,7 +931,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               onScroll={updateTabRailScrollState}
               className="overflow-x-auto scrollbar-hide px-2"
             >
-            <div className="flex items-center gap-1 min-w-max" role="tablist" aria-label="AI Coach tools">
+            <div className="flex items-center gap-1 min-w-max pt-3" role="tablist" aria-label="AI Coach tools">
               {TABS.map((tab, index) => {
                 const Icon = tab.icon
                 const previousGroup = index > 0 ? TABS[index - 1].group : null
@@ -809,14 +939,14 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
                 return (
                   <div key={tab.view} className="group/segment relative flex items-center">
                     {previousGroup === null && (
-                      <span className="pointer-events-none absolute -top-2 left-2 text-[9px] uppercase tracking-[0.1em] text-white/20 opacity-0 transition-opacity group-hover/segment:opacity-100 group-focus-within/segment:opacity-100">
+                      <span className="pointer-events-none absolute -top-2 left-2 text-[9px] uppercase tracking-[0.1em] text-white/30">
                         {TAB_GROUP_LABELS[tab.group]}
                       </span>
                     )}
                     {showDivider && (
                       <>
                         <div className="w-px h-5 bg-white/10 mx-1.5" aria-hidden />
-                        <span className="pointer-events-none absolute -top-2 left-4 text-[9px] uppercase tracking-[0.1em] text-white/20 opacity-0 transition-opacity group-hover/segment:opacity-100 group-focus-within/segment:opacity-100">
+                        <span className="pointer-events-none absolute -top-2 left-4 text-[9px] uppercase tracking-[0.1em] text-white/30">
                           {TAB_GROUP_LABELS[tab.group]}
                         </span>
                       </>
@@ -872,9 +1002,18 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
         <ViewTransition viewKey={activeView}>
           {activeView === 'onboarding' && (
             <Onboarding
-              onComplete={() => setActiveView('welcome')}
-              onSkip={() => setActiveView('welcome')}
-              onTryFeature={(feature) => setActiveView(feature as CenterView)}
+              onComplete={() => {
+                setActiveView('chart')
+                setCenterView('chart')
+              }}
+              onSkip={() => {
+                setActiveView('chart')
+                setCenterView('chart')
+              }}
+              onTryFeature={(feature) => {
+                setActiveView(feature as CenterView)
+                setCenterView(feature as Parameters<typeof setCenterView>[0])
+              }}
             />
           )}
 
@@ -925,6 +1064,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
                 setCenterView('macro')
               }}
               onShowPreferences={() => setIsPreferencesOpen(true)}
+              hideContextData={!isSheetMode && isDesktopViewport}
             />
           )}
 
@@ -940,6 +1080,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               pendingSyncSymbol={pendingChartSyncSymbol}
               isLoading={isLoadingChart}
               error={chartError}
+              highlightedLevel={highlightedLevel}
               onSymbolChange={handleSymbolChange}
               onTimeframeChange={handleTimeframeChange}
               onIndicatorsChange={setChartIndicatorConfig}
@@ -1199,6 +1340,7 @@ function ChartView({
   pendingSyncSymbol,
   isLoading,
   error,
+  highlightedLevel,
   onSymbolChange,
   onTimeframeChange,
   onIndicatorsChange,
@@ -1216,6 +1358,7 @@ function ChartView({
   pendingSyncSymbol: string | null
   isLoading: boolean
   error: string | null
+  highlightedLevel: { value: string; price?: number } | null
   onSymbolChange: (s: string) => void
   onTimeframeChange: (t: ChartTimeframe) => void
   onIndicatorsChange: (next: IndicatorConfig) => void
@@ -1228,6 +1371,25 @@ function ChartView({
     if (hoveredPrice == null || !Number.isFinite(hoveredPrice)) return null
     return Number(hoveredPrice.toFixed(2))
   }, [hoveredPrice])
+
+  const emphasizedLevels = useMemo(() => {
+    if (!highlightedLevel) return levels
+    const highlightText = highlightedLevel.value.trim().toLowerCase()
+    return levels.map((level) => {
+      const label = String(level.label || '').toLowerCase()
+      const priceMatched = typeof highlightedLevel.price === 'number'
+        ? Math.abs(level.price - highlightedLevel.price) < 0.15
+        : false
+      const labelMatched = highlightText.length > 0 && (label.includes(highlightText) || highlightText.includes(label))
+      if (!priceMatched && !labelMatched) return level
+
+      return {
+        ...level,
+        lineWidth: Math.max(level.lineWidth ?? 1, 3),
+        color: '#34d399',
+      }
+    })
+  }, [highlightedLevel, levels])
 
   const chartContextActions = useMemo<WidgetAction[]>(() => {
     const actions: WidgetAction[] = [
@@ -1308,7 +1470,7 @@ function ChartView({
             <div className="relative h-full">
               <TradingChart
                 bars={bars}
-                levels={levels}
+                levels={emphasizedLevels}
                 providerIndicators={providerIndicators || undefined}
                 indicators={indicators}
                 openingRangeMinutes={openingRangeMinutes}
@@ -1318,8 +1480,17 @@ function ChartView({
                 onHoverPrice={setHoveredPrice}
               />
               <ChartLevelLabels
-                levels={levels}
+                levels={emphasizedLevels}
                 currentPrice={roundedHoverPrice ?? bars[bars.length - 1]?.close ?? 0}
+                onLevelHover={(level) => {
+                  emitHoverTarget({
+                    type: 'level',
+                    value: level.displayLabel || level.label || level.name || level.type || 'Level',
+                    price: level.price,
+                    sourcePanel: 'center',
+                  })
+                }}
+                onLevelHoverEnd={clearHoverTarget}
               />
               <div className="pointer-events-none absolute right-3 top-3 rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-white/55 backdrop-blur">
                 Right-click chart for actions{roundedHoverPrice != null ? ` @ ${roundedHoverPrice.toFixed(2)}` : ''}
@@ -1352,6 +1523,7 @@ function WelcomeView({
   onShowEarnings,
   onShowMacro,
   onShowPreferences,
+  hideContextData = false,
 }: {
   accessToken?: string
   displayName?: string
@@ -1368,6 +1540,7 @@ function WelcomeView({
   onShowEarnings: () => void
   onShowMacro: () => void
   onShowPreferences: () => void
+  hideContextData?: boolean
 }) {
   const [clockTick, setClockTick] = useState(0)
   const [spxTicker, setSpxTicker] = useState<{
@@ -1491,23 +1664,23 @@ function WelcomeView({
   }, [accessToken])
 
   useEffect(() => {
-    if (!accessToken) return
+    if (!accessToken || hideContextData) return
     void loadSPXTicker()
     const interval = setInterval(() => {
       void loadSPXTicker()
     }, 60_000)
 
     return () => clearInterval(interval)
-  }, [accessToken, loadSPXTicker])
+  }, [accessToken, hideContextData, loadSPXTicker])
 
   useEffect(() => {
-    if (!accessToken) return
+    if (!accessToken || hideContextData) return
     void loadNextSetup()
     const interval = setInterval(() => {
       void loadNextSetup()
     }, 120_000)
     return () => clearInterval(interval)
-  }, [accessToken, loadNextSetup])
+  }, [accessToken, hideContextData, loadNextSetup])
 
   const quickAccessCards: Array<{
     label: string
@@ -1570,7 +1743,8 @@ function WelcomeView({
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        {!hideContextData && (
+          <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -1677,7 +1851,8 @@ function WelcomeView({
               )}
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">

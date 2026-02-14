@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { User, BrainCircuit, Wrench, Search, Activity, PenSquare } from 'lucide-react'
@@ -27,11 +27,35 @@ interface ChatMessageProps {
 export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSendPrompt, onExpandChart }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const { session } = useMemberAuth()
+  const [isHighlighted, setIsHighlighted] = useState(false)
 
   const widgets = useMemo(() => {
     if (isUser || !message.functionCalls) return []
     return extractWidgets(message.functionCalls)
   }, [isUser, message.functionCalls])
+
+  useEffect(() => {
+    const handleHover = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        type?: string
+        value?: string
+        sourcePanel?: 'chat' | 'center'
+      }>).detail
+      if (detail?.sourcePanel !== 'center' || detail?.type !== 'level' || !detail?.value) return
+      if (isUser || !message.content) return
+      const target = detail.value.toLowerCase()
+      setIsHighlighted(message.content.toLowerCase().includes(target))
+    }
+    const handleClear = () => setIsHighlighted(false)
+
+    window.addEventListener('ai-coach-hover-coordinate', handleHover)
+    window.addEventListener('ai-coach-hover-clear', handleClear)
+
+    return () => {
+      window.removeEventListener('ai-coach-hover-coordinate', handleHover)
+      window.removeEventListener('ai-coach-hover-clear', handleClear)
+    }
+  }, [isUser, message.content])
 
   return (
     <motion.div
@@ -61,13 +85,18 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
         {/* Message content */}
         <div className="flex flex-col gap-1.5 min-w-0">
           {/* Bubble */}
-          <div className={cn(
-            'rounded-2xl px-4 py-3',
-            isUser
-              ? 'bg-gradient-to-br from-slate-700/60 to-slate-800/60 border border-slate-600/30 rounded-tr-md'
-              : 'bg-transparent border-none px-0 py-0 rounded-tl-md',
-            message.isOptimistic && 'opacity-60'
-          )}>
+          <div
+            className={cn(
+              !isUser && isHighlighted && 'rounded-xl ring-1 ring-emerald-500/35 bg-emerald-500/5 px-3 py-2',
+            )}
+          >
+            <div className={cn(
+              'rounded-2xl px-4 py-3',
+              isUser
+                ? 'bg-gradient-to-br from-slate-700/60 to-slate-800/60 border border-slate-600/30 rounded-tr-md'
+                : 'bg-transparent border-none px-0 py-0 rounded-tl-md',
+              message.isOptimistic && 'opacity-60'
+            )}>
             {/* Streaming status */}
             {message.isStreaming && message.streamStatus && !message.content && (
               <div className="flex items-center gap-2 text-xs text-emerald-400/70">
@@ -94,6 +123,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
             ) : !message.isStreaming ? (
               <div className="text-sm text-white/30 italic">No response</div>
             ) : null}
+            </div>
           </div>
 
           {/* Inline widgets from function calls */}

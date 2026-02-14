@@ -15,7 +15,6 @@ import {
   AlertCircle,
   X,
   PanelLeftClose,
-  PanelLeftOpen,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -25,11 +24,13 @@ import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-ima
 import { CenterPanel, type ChartRequest, type CenterView } from '@/components/ai-coach/center-panel'
 import { MobileToolSheet } from '@/components/ai-coach/mobile-tool-sheet'
 import { MobileQuickAccessBar } from '@/components/ai-coach/mobile-quick-access-bar'
+import { MiniChatOverlay } from '@/components/ai-coach/mini-chat-overlay'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
 import { analyzeScreenshot as apiAnalyzeScreenshot, getChartData } from '@/lib/api/ai-coach'
 import { useMobileToolSheet, type MobileToolView } from '@/hooks/use-mobile-tool-sheet'
+import { usePanelAttentionPulse } from '@/hooks/use-panel-attention-pulse'
 import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
@@ -108,6 +109,7 @@ export default function AICoachPage() {
   const [isChatCollapsed, setIsChatCollapsed] = useState(false)
   const chatPanelRef = useRef<ImperativePanelHandle | null>(null)
   const seededPromptRef = useRef<string | null>(null)
+  const pulse = usePanelAttentionPulse()
 
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
@@ -254,19 +256,36 @@ export default function AICoachPage() {
 
                 {/* Center Panel (60%) */}
                 <Panel defaultSize={60} minSize={35}>
-                  <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
+                  <div
+                    className={cn(
+                      'relative h-full transition-all duration-300',
+                      pulse.isPulsing && 'ring-1 ring-emerald-500/40 rounded-lg',
+                    )}
+                  >
+                    <AnimatePresence>
+                      {pulse.isPulsing && pulse.pulseLabel && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          className="absolute top-2 right-3 z-30 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-[10px] text-emerald-300"
+                        >
+                          {pulse.pulseLabel}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
+                  </div>
                 </Panel>
               </PanelGroup>
 
               {isChatCollapsed && (
-                <button
-                  onClick={toggleChatPanelCollapse}
-                  className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/20 transition-colors"
-                  title="Expand chat panel (Ctrl/Cmd+B)"
-                >
-                  <PanelLeftOpen className="w-3.5 h-3.5" />
-                  Chat
-                </button>
+                <MiniChatOverlay
+                  messages={chat.messages}
+                  isSending={chat.isSending}
+                  onSendMessage={chat.sendMessage}
+                  onExpand={toggleChatPanelCollapse}
+                />
               )}
             </div>
 
