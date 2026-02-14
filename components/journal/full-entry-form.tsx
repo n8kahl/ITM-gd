@@ -242,6 +242,23 @@ export function FullEntryForm({ values, symbolError, disabled = false, onChange 
               onChange('screenshot_url', url)
               onChange('screenshot_storage_path', path)
             }}
+            onApplyExtractedPosition={(position) => {
+              onChange('symbol', position.symbol)
+              onChange('contract_type', position.type === 'stock' ? 'stock' : position.type)
+              onChange('position_size', String(Math.abs(position.quantity || 1)))
+              if (position.quantity < 0) {
+                onChange('direction', 'short')
+              }
+              if (position.entryPrice > 0) {
+                onChange('entry_price', String(position.entryPrice))
+              }
+              if (typeof position.strike === 'number') {
+                onChange('strike_price', String(position.strike))
+              }
+              if (typeof position.expiry === 'string' && position.expiry.length >= 10) {
+                onChange('expiration_date', position.expiry.slice(0, 10))
+              }
+            }}
             onRemove={() => {
               onChange('screenshot_url', '')
               onChange('screenshot_storage_path', '')

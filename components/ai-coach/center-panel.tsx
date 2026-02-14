@@ -1171,10 +1171,35 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
           )}
 
           {activeView === 'screenshot' && (
-            <ScreenshotUpload onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }} />
+            <ScreenshotUpload
+              onPositionsConfirmed={(positions) => {
+                if (positions.length > 0) {
+                  setActiveView('tracked')
+                  setCenterView('tracked')
+                }
+              }}
+              onOpenView={(view) => {
+                if (view === 'tracked') {
+                  setActiveView('tracked')
+                  setCenterView('tracked')
+                  return
+                }
+                if (view === 'journal') {
+                  setActiveView('journal')
+                  setCenterView('journal')
+                  return
+                }
+                if (view === 'position') {
+                  setActiveView('position')
+                  setCenterView('position')
+                }
+              }}
+              onSendPrompt={onSendPrompt}
+              onClose={() => {
+                setActiveView('welcome')
+                setCenterView(null)
+              }}
+            />
           )}
 
           {activeView === 'leaps' && (

@@ -8,7 +8,6 @@ import {
   Check,
   AlertTriangle,
   X,
-  Edit3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -16,6 +15,7 @@ import {
   analyzeScreenshot as apiAnalyzeScreenshot,
   AICoachAPIError,
   type ExtractedPosition,
+  type ScreenshotActionId,
   type ScreenshotAnalysisResponse,
 } from '@/lib/api/ai-coach'
 
@@ -25,6 +25,8 @@ import {
 
 interface ScreenshotUploadProps {
   onPositionsConfirmed?: (positions: ExtractedPosition[]) => void
+  onSendPrompt?: (prompt: string) => void
+  onOpenView?: (view: 'tracked' | 'journal' | 'position') => void
   onClose: () => void
 }
 
@@ -34,7 +36,12 @@ type UploadStep = 'upload' | 'analyzing' | 'review' | 'error'
 // COMPONENT
 // ============================================
 
-export function ScreenshotUpload({ onPositionsConfirmed, onClose }: ScreenshotUploadProps) {
+export function ScreenshotUpload({
+  onPositionsConfirmed,
+  onSendPrompt,
+  onOpenView,
+  onClose,
+}: ScreenshotUploadProps) {
   const { session } = useMemberAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -107,6 +114,71 @@ export function ScreenshotUpload({ onPositionsConfirmed, onClose }: ScreenshotUp
   const removePosition = (index: number) => {
     setEditablePositions(prev => prev.filter((_, i) => i !== index))
   }
+
+  const compactPositionSummary = useCallback((positions: ExtractedPosition[]) => {
+    return positions
+      .slice(0, 5)
+      .map((position) => {
+        const strike = position.strike ? ` ${position.strike}` : ''
+        const expiry = position.expiry ? ` ${position.expiry}` : ''
+        return `${position.symbol} ${position.type}${strike}${expiry} x${position.quantity}`
+      })
+      .join(', ')
+  }, [])
+
+  const runSuggestedAction = useCallback((actionId: ScreenshotActionId) => {
+    const validPositions = editablePositions.filter((p) => p.entryPrice > 0 && p.symbol)
+    const summary = compactPositionSummary(validPositions)
+
+    switch (actionId) {
+      case 'add_to_monitor': {
+        if (validPositions.length > 0) {
+          onPositionsConfirmed?.(validPositions)
+        }
+        onOpenView?.('tracked')
+        onClose()
+        return
+      }
+      case 'log_trade': {
+        onOpenView?.('journal')
+        onSendPrompt?.(
+          summary
+            ? `Help me log these screenshot positions into my journal with clean fields: ${summary}`
+            : 'Help me log this screenshot into my journal with the right trade fields.',
+        )
+        onClose()
+        return
+      }
+      case 'analyze_next_steps': {
+        onOpenView?.('position')
+        onSendPrompt?.(
+          summary
+            ? `Analyze next steps for these extracted positions and suggest risk-managed actions: ${summary}`
+            : 'Analyze next steps from this screenshot and suggest risk-managed actions.',
+        )
+        onClose()
+        return
+      }
+      case 'create_setup': {
+        onSendPrompt?.('Create a structured setup from this screenshot with entry, stop, target, and invalidation.')
+        onClose()
+        return
+      }
+      case 'set_alert': {
+        onSendPrompt?.('Suggest practical alerts based on this screenshot, including trigger prices and why they matter.')
+        onClose()
+        return
+      }
+      case 'review_journal_context': {
+        onOpenView?.('journal')
+        onSendPrompt?.('Compare this screenshot context against my journal patterns and call out repeat behaviors.')
+        onClose()
+        return
+      }
+      default:
+        return
+    }
+  }, [compactPositionSummary, editablePositions, onClose, onOpenView, onPositionsConfirmed, onSendPrompt])
 
   return (
     <div className="h-full flex flex-col">
@@ -189,6 +261,7 @@ export function ScreenshotUpload({ onPositionsConfirmed, onClose }: ScreenshotUp
                 {analysis.broker && (
                   <p className="text-xs text-white/40">Detected: {analysis.broker}</p>
                 )}
+                <p className="text-xs text-white/40 capitalize">Intent: {analysis.intent.replace('_', ' ')}</p>
               </div>
               <button
                 onClick={() => { setStep('upload'); setPreview(null); setAnalysis(null); }}
@@ -207,6 +280,26 @@ export function ScreenshotUpload({ onPositionsConfirmed, onClose }: ScreenshotUp
                     {w}
                   </p>
                 ))}
+              </div>
+            )}
+
+            {/* Suggested actions */}
+            {analysis.suggestedActions.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-white/50">What should I do next?</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {analysis.suggestedActions.map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => runSuggestedAction(action.id)}
+                      className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-left transition-colors hover:bg-emerald-500/15"
+                    >
+                      <p className="text-xs font-medium text-emerald-300">{action.label}</p>
+                      <p className="mt-0.5 text-[11px] text-white/50">{action.description}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 

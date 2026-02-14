@@ -13,6 +13,17 @@
 
 ---
 
+## ✅ 2026-02-14 Delivery Update: Upload Intelligence
+
+- Added screenshot intent + suggested action contract to screenshot analyzer.
+- Added one-tap post-upload actions in AI Coach chat and center screenshot tool.
+- Added CSV upload handling in AI Coach chat with structured analysis prompting.
+- Added Trade Journal screenshot post-upload intelligence with form prefill support.
+- Added implementation and QA documentation:
+  - `docs/ai-coach/UPLOAD_INTELLIGENCE_ROLLOUT_2026-02-14.md`
+
+---
+
 ## ❌ Outstanding Items
 
 ### 🔴 **ITEM 1: Fibonacci Chart Integration**

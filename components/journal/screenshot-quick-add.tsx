@@ -6,6 +6,7 @@ import { ImagePlus, Loader2, X } from 'lucide-react'
 import Image from 'next/image'
 import { uploadScreenshot, type UploadProgress } from '@/lib/uploads/supabaseStorage'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
+import { analyzeScreenshot, type ScreenshotAnalysisResponse } from '@/lib/api/ai-coach'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 interface ScreenshotQuickAddProps {
@@ -37,6 +38,9 @@ function ScreenshotQuickAddDialog({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState<ScreenshotAnalysisResponse | null>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   useFocusTrap({
     active: !uploading,
@@ -53,6 +57,42 @@ function ScreenshotQuickAddDialog({
     }
   }, [])
 
+  const openAICoach = useCallback((prompt: string) => {
+    if (typeof window === 'undefined') return
+    const query = encodeURIComponent(prompt)
+    window.open(`/members/ai-coach?prompt=${query}`, '_blank', 'noopener,noreferrer')
+  }, [])
+
+  const runScreenshotAnalysis = useCallback(async (selectedFile: File) => {
+    setAnalysis(null)
+    setAnalysisError(null)
+    setAnalyzing(true)
+    try {
+      const supabase = createBrowserSupabase()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setAnalysisError('Screenshot attached. Sign in again to run AI extraction.')
+        return
+      }
+
+      const base64 = await fileToBase64(selectedFile)
+      const result = await analyzeScreenshot(base64, selectedFile.type, session.access_token)
+      setAnalysis(result)
+
+      const top = result.positions[0]
+      if (top?.symbol && !symbol.trim()) {
+        setSymbol(top.symbol)
+      }
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : 'Failed to analyze screenshot')
+    } finally {
+      setAnalyzing(false)
+    }
+  }, [symbol])
+
   const handleFileSelect = useCallback((selectedFile: File) => {
     if (!selectedFile.type.startsWith('image/')) {
       setError('Please select an image file')
@@ -61,6 +101,8 @@ function ScreenshotQuickAddDialog({
 
     setFile(selectedFile)
     setError(null)
+    setAnalysis(null)
+    setAnalysisError(null)
 
     // Create preview
     const reader = new FileReader()
@@ -68,7 +110,8 @@ function ScreenshotQuickAddDialog({
       setPreviewUrl(e.target?.result as string)
     }
     reader.readAsDataURL(selectedFile)
-  }, [])
+    void runScreenshotAnalysis(selectedFile)
+  }, [runScreenshotAnalysis])
 
   const handlePasteFromClipboard = useCallback(async () => {
     try {
@@ -109,7 +152,8 @@ function ScreenshotQuickAddDialog({
       return
     }
 
-    const normalizedSymbol = symbol.trim().toUpperCase()
+    const fallbackSymbol = analysis?.positions?.[0]?.symbol || ''
+    const normalizedSymbol = symbol.trim().toUpperCase() || fallbackSymbol
     if (!normalizedSymbol) {
       setError('Please enter a symbol before creating the entry')
       return
@@ -181,7 +225,7 @@ function ScreenshotQuickAddDialog({
       setError(err instanceof Error ? err.message : 'Save failed')
       setUploading(false)
     }
-  }, [file, symbol, notes, onEntryCreated])
+  }, [analysis?.positions, file, symbol, notes, onEntryCreated])
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
@@ -270,6 +314,8 @@ function ScreenshotQuickAddDialog({
                   onClick={() => {
                     setFile(null)
                     setPreviewUrl(null)
+                    setAnalysis(null)
+                    setAnalysisError(null)
                   }}
                   className="absolute right-2 top-2 rounded-md bg-black/80 p-1.5 text-red-300 hover:bg-black"
                   aria-label="Remove screenshot"
@@ -280,6 +326,48 @@ function ScreenshotQuickAddDialog({
             </div>
 
             <div className="space-y-3">
+              {analyzing && (
+                <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Analyzing screenshot for positions and next-step actions...
+                </div>
+              )}
+
+              {analysis && (
+                <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-3">
+                  <p className="text-xs text-white/70">
+                    Found <span className="text-emerald-300">{analysis.positionCount}</span> position{analysis.positionCount === 1 ? '' : 's'}
+                    {' '}({analysis.intent.replace('_', ' ')})
+                  </p>
+
+                  {analysis.positions[0] && (
+                    <button
+                      type="button"
+                      onClick={() => setSymbol(analysis.positions[0]?.symbol || symbol)}
+                      className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/15"
+                    >
+                      Use Detected Symbol ({analysis.positions[0].symbol})
+                    </button>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.suggestedActions.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        onClick={() => openAICoach(`I uploaded a screenshot. ${action.label}: ${action.description}`)}
+                        className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/80 hover:border-emerald-500/30 hover:text-emerald-200"
+                        title={action.description}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analysisError && <p className="text-xs text-amber-300">{analysisError}</p>}
+
               <div>
                 <label className="mb-1 block text-xs text-muted-foreground">Symbol (required)</label>
                 <input
@@ -337,4 +425,17 @@ function ScreenshotQuickAddDialog({
       </div>
     </div>
   )
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }

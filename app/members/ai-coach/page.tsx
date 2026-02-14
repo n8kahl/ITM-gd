@@ -28,7 +28,13 @@ import { MiniChatOverlay } from '@/components/ai-coach/mini-chat-overlay'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
-import { analyzeScreenshot as apiAnalyzeScreenshot, getChartData } from '@/lib/api/ai-coach'
+import {
+  analyzeScreenshot as apiAnalyzeScreenshot,
+  getChartData,
+  type ExtractedPosition,
+  type ScreenshotActionId,
+  type ScreenshotSuggestedAction,
+} from '@/lib/api/ai-coach'
 import { useMobileToolSheet, type MobileToolView } from '@/hooks/use-mobile-tool-sheet'
 import { usePanelAttentionPulse } from '@/hooks/use-panel-attention-pulse'
 import { Button } from '@/components/ui/button'
@@ -358,6 +364,17 @@ interface ChatAreaProps {
   onTogglePanelCollapse?: () => void
 }
 
+interface StagedCsvUpload {
+  fileName: string
+  content: string
+}
+
+interface ScreenshotActionState {
+  intent: string
+  positions: ExtractedPosition[]
+  actions: ScreenshotSuggestedAction[]
+}
+
 function ChatArea({
   messages, sessions, currentSessionId, isSending, isLoadingSessions,
   isLoadingMessages, error, rateLimitInfo, onSendMessage, onNewSession,
@@ -370,6 +387,8 @@ function ChatArea({
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [placeholderBucket, setPlaceholderBucket] = useState<keyof typeof CHAT_PLACEHOLDERS>(() => getEasternPlaceholderBucket())
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
+  const [stagedCsv, setStagedCsv] = useState<StagedCsvUpload | null>(null)
+  const [screenshotActions, setScreenshotActions] = useState<ScreenshotActionState | null>(null)
   const [spxHeaderTicker, setSpxHeaderTicker] = useState<{
     price: number | null
     change: number | null
@@ -527,11 +546,14 @@ function ChatArea({
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
     const text = inputValue.trim()
-    if ((!text && !stagedImage) || isBusy) return
+    if ((!text && !stagedImage && !stagedCsv) || isBusy) return
 
     if (stagedImage) {
       // Send image for analysis through the chat
       void handleImageAnalysis(text)
+    } else if (stagedCsv) {
+      // Send CSV for analysis through chat
+      void handleCsvAnalysis(text)
     } else {
       onSendMessage(text)
     }
@@ -559,6 +581,11 @@ function ChatArea({
 
     try {
       const analysis = await apiAnalyzeScreenshot(staged.base64, staged.mimeType, session.access_token)
+      setScreenshotActions({
+        intent: analysis.intent,
+        positions: analysis.positions,
+        actions: analysis.suggestedActions,
+      })
 
       const extracted = analysis.positions.map((position, index) => {
         const strike = position.strike ? ` ${position.strike}` : ''
@@ -580,14 +607,44 @@ function ChatArea({
         : 'I could not reliably extract any positions from this screenshot.'
 
       onAppendAssistantMessage(
-        `${summary}${accountValue}${warnings}\n\nIf you want, I can now run a risk analysis on these extracted positions.`
+        `${summary}${accountValue}${warnings}\n\nIntent detected: ${analysis.intent.replace('_', ' ')}.\nUse the action buttons below the input to choose your next step instantly.`
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to analyze screenshot.'
       onAppendAssistantMessage(`Screenshot analysis failed: ${message}`)
+      setScreenshotActions(null)
     } finally {
       setIsAnalyzingImage(false)
     }
+  }
+
+  const handleCsvAnalysis = async (userMessage: string) => {
+    if (!stagedCsv) return
+
+    const staged = stagedCsv
+    const lines = staged.content.split(/\r?\n/).filter((line) => line.trim().length > 0)
+    const previewLines = lines.slice(0, 30)
+    const csvPreview = previewLines.join('\n').slice(0, 3200)
+    const rowCount = Math.max(lines.length - 1, 0)
+    const promptPrefix = userMessage || `Analyze this uploaded CSV file (${staged.fileName}).`
+
+    const prompt = [
+      promptPrefix,
+      '',
+      `Uploaded CSV: ${staged.fileName}`,
+      `Estimated rows: ${rowCount}`,
+      '',
+      'CSV preview:',
+      '```csv',
+      csvPreview,
+      '```',
+      '',
+      'Determine whether these should be logged as trades, monitored as open positions, or analyzed for next steps. Then provide concise action recommendations.',
+    ].join('\n')
+
+    setStagedCsv(null)
+    setScreenshotActions(null)
+    onSendMessage(prompt)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -599,19 +656,43 @@ function ChatArea({
 
   const handleImageReady = useCallback((base64: string, mimeType: string) => {
     const preview = `data:${mimeType};base64,${base64}`
+    setStagedCsv(null)
+    setScreenshotActions(null)
     setStagedImage({ base64, mimeType, preview })
+  }, [])
+
+  const handleCsvReady = useCallback((csvText: string, fileName: string) => {
+    setStagedImage(null)
+    setScreenshotActions(null)
+    setStagedCsv({ fileName, content: csvText })
   }, [])
 
   const handleFileDrop = useCallback((file: File) => {
     if (isBusy) return
     const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
-    if (!allowed.includes(file.type) || file.size > 10 * 1024 * 1024) return
+    const isCsv = file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')
+    if ((!allowed.includes(file.type) && !isCsv) || file.size > 10 * 1024 * 1024) return
+
+    if (isCsv) {
+      const csvReader = new FileReader()
+      csvReader.onload = (ev) => {
+        const csvText = typeof ev.target?.result === 'string' ? ev.target.result : ''
+        if (!csvText.trim()) return
+        setStagedImage(null)
+        setScreenshotActions(null)
+        setStagedCsv({ fileName: file.name, content: csvText })
+      }
+      csvReader.readAsText(file)
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string
       if (!dataUrl) return
       const base64 = dataUrl.split(',')[1]
+      setStagedCsv(null)
+      setScreenshotActions(null)
       setStagedImage({ base64, mimeType: file.type, preview: dataUrl })
     }
     reader.readAsDataURL(file)
@@ -633,6 +714,73 @@ function ChatArea({
     e.preventDefault()
     handleFileDrop(file)
   }, [handleFileDrop, isBusy])
+
+  const compactPositionSummary = useCallback((positions: ExtractedPosition[]) => {
+    return positions
+      .slice(0, 5)
+      .map((position) => {
+        const strike = position.strike ? ` ${position.strike}` : ''
+        const expiry = position.expiry ? ` ${position.expiry}` : ''
+        return `${position.symbol} ${position.type}${strike}${expiry} x${position.quantity}`
+      })
+      .join(', ')
+  }, [])
+
+  const openWorkflowView = useCallback((view: 'tracked' | 'journal' | 'position') => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai-coach-widget-view', {
+        detail: { view, label: 'Screenshot next step' },
+      }))
+    }
+
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      onOpenSheet?.(view)
+    }
+  }, [onOpenSheet])
+
+  const handleScreenshotAction = useCallback((actionId: ScreenshotActionId) => {
+    if (!screenshotActions) return
+    const summary = compactPositionSummary(screenshotActions.positions)
+
+    switch (actionId) {
+      case 'add_to_monitor':
+        openWorkflowView('tracked')
+        onSendMessage(
+          summary
+            ? `Add these positions to monitoring and give me risk checkpoints: ${summary}`
+            : 'Add the extracted screenshot positions to monitoring and give me risk checkpoints.',
+        )
+        break
+      case 'log_trade':
+        openWorkflowView('journal')
+        onSendMessage(
+          summary
+            ? `Help me log these screenshot trades in my journal with clean fields: ${summary}`
+            : 'Help me convert this screenshot into a clean journal entry.',
+        )
+        break
+      case 'analyze_next_steps':
+        openWorkflowView('position')
+        onSendMessage(
+          summary
+            ? `Analyze next steps for these positions with clear risk-managed actions: ${summary}`
+            : 'Analyze next steps from this screenshot with clear risk-managed actions.',
+        )
+        break
+      case 'create_setup':
+        onSendMessage('Create a structured setup from this screenshot with entry, stop, target, and invalidation.')
+        break
+      case 'set_alert':
+        onSendMessage('Create practical alert levels from this screenshot and explain each trigger.')
+        break
+      case 'review_journal_context':
+        openWorkflowView('journal')
+        onSendMessage('Compare this screenshot against my recent journal history and highlight repeated patterns.')
+        break
+    }
+
+    setScreenshotActions(null)
+  }, [compactPositionSummary, onSendMessage, openWorkflowView, screenshotActions])
 
   return (
     <div className="flex h-full bg-[#0A0A0B]" ref={chatContainerRef}>
@@ -840,10 +988,36 @@ function ChatArea({
           {/* Image preview strip */}
           <ChatImageUpload
             onImageReady={handleImageReady}
-            onClear={() => setStagedImage(null)}
+            onCsvReady={handleCsvReady}
+            onClear={() => {
+              setStagedImage(null)
+              setStagedCsv(null)
+            }}
             isSending={isBusy}
             stagedPreview={stagedImage?.preview || null}
+            stagedCsvName={stagedCsv?.fileName || null}
           />
+
+          {screenshotActions && screenshotActions.actions.length > 0 && (
+            <div className="mb-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-2.5">
+              <p className="text-[11px] uppercase tracking-wide text-emerald-200/75">
+                Screenshot intent: {screenshotActions.intent.replace('_', ' ')}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {screenshotActions.actions.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => handleScreenshotAction(action.id)}
+                    className="rounded-full border border-emerald-500/35 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-100 transition-colors hover:bg-emerald-500/25"
+                    title={action.description}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {onOpenSheet && (
             <MobileQuickAccessBar
@@ -871,7 +1045,7 @@ function ChatArea({
             />
             <Button
               type="submit"
-              disabled={(!inputValue.trim() && !stagedImage) || isBusy}
+              disabled={(!inputValue.trim() && !stagedImage && !stagedCsv) || isBusy}
               aria-label={isBusy ? 'Sending message' : 'Send message'}
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-3 rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed h-[44px]"
             >

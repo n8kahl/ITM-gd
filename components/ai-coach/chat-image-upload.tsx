@@ -1,19 +1,23 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { ImagePlus, X, Upload, Loader2 } from 'lucide-react'
+import { FileText, ImagePlus, X, Upload, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
 interface ChatImageUploadProps {
   /** Called with the base64 data and MIME type when the user confirms the image */
   onImageReady: (base64: string, mimeType: string) => void
+  /** Called with raw CSV text when a CSV file is uploaded */
+  onCsvReady: (csvText: string, fileName: string) => void
   /** Called when user clears the pending image */
   onClear: () => void
   /** Whether the image is currently being sent/analyzed */
   isSending: boolean
   /** Currently staged image (base64 data URL for preview) */
   stagedPreview: string | null
+  /** Currently staged CSV file name (when a CSV is queued) */
+  stagedCsvName: string | null
 }
 
 /**
@@ -22,11 +26,29 @@ interface ChatImageUploadProps {
  * - Click-to-upload button in the input bar
  * - Thumbnail preview before sending
  */
-export function ChatImageUpload({ onImageReady, onClear, isSending, stagedPreview }: ChatImageUploadProps) {
+export function ChatImageUpload({
+  onImageReady,
+  onCsvReady,
+  onClear,
+  isSending,
+  stagedPreview,
+  stagedCsvName,
+}: ChatImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileSelect = useCallback((file: File) => {
     if (!file) return
+
+    if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const csvText = typeof ev.target?.result === 'string' ? ev.target.result : ''
+        if (!csvText.trim()) return
+        onCsvReady(csvText, file.name)
+      }
+      reader.readAsText(file)
+      return
+    }
 
     // Validate type
     const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
@@ -45,7 +67,7 @@ export function ChatImageUpload({ onImageReady, onClear, isSending, stagedPrevie
       onImageReady(base64, file.type)
     }
     reader.readAsDataURL(file)
-  }, [onImageReady])
+  }, [onCsvReady, onImageReady])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -60,7 +82,7 @@ export function ChatImageUpload({ onImageReady, onClear, isSending, stagedPrevie
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,.csv,text/csv"
         onChange={handleInputChange}
         className="hidden"
       />
@@ -69,32 +91,38 @@ export function ChatImageUpload({ onImageReady, onClear, isSending, stagedPrevie
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        disabled={isSending || !!stagedPreview}
+        disabled={isSending || !!stagedPreview || !!stagedCsvName}
         className={cn(
           'p-2 rounded-lg transition-all',
-          stagedPreview
+          stagedPreview || stagedCsvName
             ? 'text-emerald-400 bg-emerald-500/10'
             : 'text-white/30 hover:text-white/60 hover:bg-white/5',
-          (isSending || stagedPreview) && 'opacity-50 cursor-not-allowed'
+          (isSending || stagedPreview || stagedCsvName) && 'opacity-50 cursor-not-allowed'
         )}
-        title="Upload screenshot"
+        title="Upload screenshot or CSV"
       >
         <ImagePlus className="w-5 h-5" />
       </button>
 
       {/* Thumbnail preview strip (shown above input when image is staged) */}
-      {stagedPreview && (
+      {(stagedPreview || stagedCsvName) && (
         <div className="absolute -top-16 left-3 right-3 flex items-center gap-3 p-2 rounded-lg bg-black/40 border border-white/10 backdrop-blur-md">
-          <div className="relative w-10 h-10 rounded-md overflow-hidden border border-white/10 shrink-0">
-            <Image
-              src={stagedPreview}
-              alt="Upload preview"
-              fill
-              className="object-cover"
-            />
-          </div>
+          {stagedPreview ? (
+            <div className="relative w-10 h-10 rounded-md overflow-hidden border border-white/10 shrink-0">
+              <Image
+                src={stagedPreview}
+                alt="Upload preview"
+                fill
+                className="object-cover"
+              />
+            </div>
+          ) : (
+            <div className="flex w-10 h-10 items-center justify-center rounded-md border border-white/10 bg-white/5 shrink-0">
+              <FileText className="w-4 h-4 text-emerald-300" />
+            </div>
+          )}
           <span className="text-xs text-white/50 truncate flex-1">
-            Screenshot ready to send
+            {stagedPreview ? 'Screenshot ready to send' : `${stagedCsvName} ready to send`}
           </span>
           {isSending ? (
             <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
@@ -157,7 +185,8 @@ export function ChatDropOverlay({
       setIsDragOver(false)
 
       const file = e.dataTransfer?.files?.[0]
-      if (file && file.type.startsWith('image/')) {
+      const isCsv = file?.type === 'text/csv' || file?.name.toLowerCase().endsWith('.csv')
+      if (file && (file.type.startsWith('image/') || isCsv)) {
         onFileDrop(file)
       }
     }
@@ -181,8 +210,8 @@ export function ChatDropOverlay({
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm border-2 border-dashed border-emerald-500/50 rounded-xl pointer-events-none">
       <div className="text-center">
         <Upload className="w-10 h-10 text-emerald-400 mx-auto mb-3 animate-pulse" />
-        <p className="text-sm font-medium text-white">Drop screenshot here</p>
-        <p className="text-xs text-white/40 mt-1">PNG, JPEG, WebP up to 10MB</p>
+        <p className="text-sm font-medium text-white">Drop screenshot or CSV</p>
+        <p className="text-xs text-white/40 mt-1">PNG, JPEG, WebP, GIF, or CSV up to 10MB</p>
       </div>
     </div>
   )

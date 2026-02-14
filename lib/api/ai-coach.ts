@@ -1173,11 +1173,35 @@ export interface ExtractedPosition {
   confidence: number
 }
 
+export type ScreenshotIntent =
+  | 'single_position'
+  | 'portfolio'
+  | 'options_chain'
+  | 'pnl_card'
+  | 'chart'
+  | 'unknown'
+
+export type ScreenshotActionId =
+  | 'add_to_monitor'
+  | 'log_trade'
+  | 'analyze_next_steps'
+  | 'create_setup'
+  | 'set_alert'
+  | 'review_journal_context'
+
+export interface ScreenshotSuggestedAction {
+  id: ScreenshotActionId
+  label: string
+  description: string
+}
+
 export interface ScreenshotAnalysisResponse {
   positions: ExtractedPosition[]
   positionCount: number
   broker?: string
   accountValue?: number
+  intent: ScreenshotIntent
+  suggestedActions: ScreenshotSuggestedAction[]
   warnings: string[]
 }
 

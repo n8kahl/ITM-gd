@@ -56,3 +56,10 @@
 * **Required Env Vars:** `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_COMPANY_ID`
 * **Handled Events:** `membership.went_valid`, `membership.went_invalid`, `payment.succeeded`, `setup_intent.succeeded`
 
+
+## Update: 2026-02-14 Upload Intelligence Rollout
+- AI Coach screenshot analysis now returns structured intent and suggested action IDs.
+- AI Coach chat now supports screenshot and CSV staging with post-upload actionable chips.
+- AI Coach center screenshot flow now surfaces one-tap next-step actions.
+- Trade Journal screenshot flows now auto-analyze uploads and support top-position form prefill.
+- Implementation details: `docs/ai-coach/UPLOAD_INTELLIGENCE_ROLLOUT_2026-02-14.md`.
