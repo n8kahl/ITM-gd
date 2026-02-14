@@ -1,13 +1,11 @@
-
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { getMarketMovers } from '../marketMovers';
 import { massiveClient } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 
 // Mock dependencies
-vi.mock('../../config/massive');
-vi.mock('../../config/redis');
-vi.mock('../../lib/logger');
+jest.mock('../../config/massive');
+jest.mock('../../config/redis');
+jest.mock('../../lib/logger');
 
 describe('Market Movers Service', () => {
     const mockSnapshot = {
@@ -20,9 +18,9 @@ describe('Market Movers Service', () => {
     };
 
     beforeEach(() => {
-        vi.clearAllMocks();
-        (cacheGet as Mock).mockResolvedValue(null);
-        (massiveClient.get as Mock).mockResolvedValue(mockSnapshot);
+        jest.clearAllMocks();
+        (cacheGet as jest.Mock).mockResolvedValue(null);
+        (massiveClient.get as jest.Mock).mockResolvedValue(mockSnapshot);
     });
 
     it('should fetch gainers and losers', async () => {
@@ -37,7 +35,7 @@ describe('Market Movers Service', () => {
 
     it('should return cached movers if available', async () => {
         const cachedMovers = { gainers: [], losers: [] };
-        (cacheGet as Mock).mockResolvedValue(cachedMovers);
+        (cacheGet as jest.Mock).mockResolvedValue(cachedMovers);
 
         const result = await getMarketMovers(5);
 
@@ -46,7 +44,7 @@ describe('Market Movers Service', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-        (massiveClient.get as Mock).mockRejectedValue(new Error('API Error'));
+        (massiveClient.get as jest.Mock).mockRejectedValue(new Error('API Error'));
 
         const result = await getMarketMovers(5);
 

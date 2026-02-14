@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 import { chatLimiter } from '../rateLimiter';
@@ -12,7 +13,7 @@ jest.mock('../../lib/logger', () => ({
   },
 }));
 
-describe('Rate Limiter Middleware', () => {
+describeWithSockets('Rate Limiter Middleware', () => {
   it('should allow requests within the limit', async () => {
     const app = express();
     app.use(chatLimiter);

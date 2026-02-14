@@ -1,10 +1,8 @@
+import './instrument';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 import { initSentry, flushSentry, Sentry } from './config/sentry';
 import { logger } from './lib/logger';

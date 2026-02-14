@@ -6,7 +6,6 @@ import { Loader2, Pencil, Share2, Star, Trash2, X } from 'lucide-react'
 import type { AITradeAnalysis, JournalEntry } from '@/lib/types/journal'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { AIGradeDisplay } from '@/components/journal/ai-grade-display'
-import { DeleteConfirmationModal } from '@/components/journal/delete-confirmation-modal'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { ShareTradeSheet } from '@/components/social/share-trade-sheet'
 
@@ -44,12 +43,10 @@ export function EntryDetailSheet({
   disableActions = false,
 }: EntryDetailSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const [confirmEntryId, setConfirmEntryId] = useState<string | null>(null)
   const [grading, setGrading] = useState(false)
   const [localEntry, setLocalEntry] = useState<JournalEntry | null>(entry)
   const [shareOpen, setShareOpen] = useState(false)
   const [alreadyShared, setAlreadyShared] = useState(false)
-  const confirmOpen = Boolean(entry?.id && confirmEntryId === entry.id)
 
   useEffect(() => {
     setLocalEntry(entry)
@@ -95,7 +92,7 @@ export function EntryDetailSheet({
   }, [entry])
 
   useFocusTrap({
-    active: Boolean(entry) && !confirmOpen,
+    active: Boolean(entry),
     containerRef: panelRef,
     onEscape: onClose,
   })
@@ -117,7 +114,6 @@ export function EntryDetailSheet({
     setGrading(true)
 
     try {
-      const supabase = createBrowserSupabase()
       const response = await fetch('/api/members/journal/grade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,17 +127,13 @@ export function EntryDetailSheet({
       }
 
       const result = await response.json()
-      const aiAnalysis = result?.data?.[0]?.ai_analysis as AITradeAnalysis | undefined
+      const aiAnalysis = (
+        result?.data?.[0]?.grade
+        ?? result?.data?.[0]?.ai_analysis
+      ) as AITradeAnalysis | undefined
 
       if (aiAnalysis) {
-        // Update local entry with AI analysis
         setLocalEntry((prev) => (prev ? { ...prev, ai_analysis: aiAnalysis } : null))
-
-        // Update in database
-        await supabase
-          .from('journal_entries')
-          .update({ ai_analysis: aiAnalysis })
-          .eq('id', entry.id)
       }
     } catch (error) {
       console.error('Grade trade failed:', error)
@@ -245,7 +237,10 @@ export function EntryDetailSheet({
           </button>
           <button
             type="button"
-            onClick={() => setConfirmEntryId(entry.id)}
+            onClick={() => {
+              onDelete(entry.id)
+              onClose()
+            }}
             disabled={disableActions}
             className="inline-flex h-10 items-center gap-2 rounded-md border border-red-500/40 px-4 text-sm text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -261,22 +256,6 @@ export function EntryDetailSheet({
           open={shareOpen}
           onOpenChange={setShareOpen}
           onShared={() => setAlreadyShared(true)}
-        />
-      )}
-
-      {confirmOpen && (
-        <DeleteConfirmationModal
-          entry={{
-            symbol: displayEntry.symbol,
-            trade_date: displayEntry.trade_date,
-            pnl: displayEntry.pnl,
-          }}
-          onConfirm={() => {
-            onDelete(entry.id)
-            setConfirmEntryId(null)
-            onClose()
-          }}
-          onCancel={() => setConfirmEntryId(null)}
         />
       )}
     </div>,

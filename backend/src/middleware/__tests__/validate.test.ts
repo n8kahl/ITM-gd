@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 import { z } from 'zod';
@@ -27,7 +28,7 @@ app.get('/test-query', validateQuery(testQuerySchema), (_req, res) => {
   res.json({ success: true, query: _req.query });
 });
 
-describe('Validation Middleware', () => {
+describeWithSockets('Validation Middleware', () => {
   describe('validateBody', () => {
     it('should pass valid body through', async () => {
       const res = await request(app)

@@ -1,13 +1,11 @@
-
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { getRealTimePrice } from '../realTimePrice';
 import { getLastTrade, getLastQuote } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 
 // Mock dependencies
-vi.mock('../../config/massive');
-vi.mock('../../config/redis');
-vi.mock('../../lib/logger');
+jest.mock('../../config/massive');
+jest.mock('../../config/redis');
+jest.mock('../../lib/logger');
 
 describe('RealTimePrice Service', () => {
     const mockTrade = {
@@ -18,13 +16,13 @@ describe('RealTimePrice Service', () => {
     };
 
     beforeEach(() => {
-        vi.clearAllMocks();
-        (cacheGet as Mock).mockResolvedValue(null);
+        jest.clearAllMocks();
+        (cacheGet as jest.Mock).mockResolvedValue(null);
     });
 
     it('should return cached price if available', async () => {
         const cachedPrice = { symbol: 'AAPL', price: 155.00 };
-        (cacheGet as Mock).mockResolvedValue(cachedPrice);
+        (cacheGet as jest.Mock).mockResolvedValue(cachedPrice);
 
         const result = await getRealTimePrice('AAPL');
 
@@ -33,8 +31,8 @@ describe('RealTimePrice Service', () => {
     });
 
     it('should fetch from API and return aggregated data', async () => {
-        (getLastTrade as Mock).mockResolvedValue(mockTrade);
-        (getLastQuote as Mock).mockResolvedValue(mockQuote);
+        (getLastTrade as jest.Mock).mockResolvedValue(mockTrade);
+        (getLastQuote as jest.Mock).mockResolvedValue(mockQuote);
 
         const result = await getRealTimePrice('AAPL');
 
@@ -47,8 +45,8 @@ describe('RealTimePrice Service', () => {
     });
 
     it('should handle missing trade but present quote', async () => {
-        (getLastTrade as Mock).mockRejectedValue(new Error('No trade'));
-        (getLastQuote as Mock).mockResolvedValue(mockQuote);
+        (getLastTrade as jest.Mock).mockRejectedValue(new Error('No trade'));
+        (getLastQuote as jest.Mock).mockResolvedValue(mockQuote);
 
         const result = await getRealTimePrice('AAPL');
 
@@ -57,8 +55,8 @@ describe('RealTimePrice Service', () => {
     });
 
     it('should throw if both unavailable', async () => {
-        (getLastTrade as Mock).mockRejectedValue(new Error('No trade'));
-        (getLastQuote as Mock).mockRejectedValue(new Error('No quote'));
+        (getLastTrade as jest.Mock).mockRejectedValue(new Error('No trade'));
+        (getLastQuote as jest.Mock).mockRejectedValue(new Error('No quote'));
 
         await expect(getRealTimePrice('AAPL')).rejects.toThrow('Real-time data unavailable');
     });

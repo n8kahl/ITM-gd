@@ -1,4 +1,6 @@
 import { BrowserContext, Page } from '@playwright/test'
+import fs from 'fs'
+import path from 'path'
 
 /**
  * Mock Supabase session data for testing
@@ -81,9 +83,10 @@ export const mockDiscordProfile = {
 function getSupabaseStorageKeys(): string[] {
   const keys = new Set<string>([
     'sb-localhost-auth-token',
+    'sb-127.0.0.1-auth-token',
   ])
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || readSupabaseUrlFromEnvFile()
   if (supabaseUrl) {
     try {
       const hostname = new URL(supabaseUrl).hostname
@@ -97,6 +100,25 @@ function getSupabaseStorageKeys(): string[] {
   }
 
   return Array.from(keys)
+}
+
+function readSupabaseUrlFromEnvFile(): string | null {
+  const candidates = ['.env.local', '.env']
+
+  for (const fileName of candidates) {
+    const fullPath = path.resolve(process.cwd(), fileName)
+    if (!fs.existsSync(fullPath)) continue
+
+    const content = fs.readFileSync(fullPath, 'utf-8')
+    const match = content.match(/^NEXT_PUBLIC_SUPABASE_URL=(.+)$/m)
+    if (!match) continue
+
+    const raw = match[1].trim()
+    const unquoted = raw.replace(/^['"]|['"]$/g, '')
+    if (unquoted.length > 0) return unquoted
+  }
+
+  return null
 }
 
 /**

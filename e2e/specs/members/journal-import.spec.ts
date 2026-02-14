@@ -6,6 +6,8 @@ import {
   setupMemberShellMocks,
 } from './journal-test-helpers'
 
+const JOURNAL_URL = '/members/journal?e2eBypassAuth=1'
+
 function csvFile(name: string, content: string) {
   return {
     name,
@@ -15,7 +17,7 @@ function csvFile(name: string, content: string) {
 }
 
 async function openImportWizard(page: Page) {
-  await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+  await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Import' }).click()
   await page.getByRole('button', { name: 'Continue' }).click()
 }

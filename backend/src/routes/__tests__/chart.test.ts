@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 
@@ -38,7 +39,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/chart', chartRouter);
 
-describe('Chart Routes', () => {
+describeWithSockets('Chart Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCacheGet.mockResolvedValue(null);

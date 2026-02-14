@@ -51,11 +51,20 @@ export class CircuitBreaker {
       logger.info(`Circuit ${this.options.name} transitioning to HALF_OPEN`);
     }
 
+    let timeout: NodeJS.Timeout | null = null;
     try {
-      // Race between the actual call and a timeout
+      // Race between the actual call and a timeout.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new CircuitBreakerError(
+            `${this.options.name} call timed out after ${this.options.timeoutMs}ms`
+          ));
+        }, this.options.timeoutMs);
+      });
+
       const result = await Promise.race([
         fn(),
-        this.createTimeout(),
+        timeoutPromise,
       ]) as T;
 
       // Success: reset failures
@@ -64,17 +73,9 @@ export class CircuitBreaker {
     } catch (error) {
       this.onFailure(error as Error);
       throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
-  }
-
-  private createTimeout(): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new CircuitBreakerError(
-          `${this.options.name} call timed out after ${this.options.timeoutMs}ms`
-        ));
-      }, this.options.timeoutMs);
-    });
   }
 
   private onSuccess(): void {

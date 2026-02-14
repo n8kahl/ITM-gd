@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import http from 'http';
 import express from 'express';
 import WebSocket from 'ws';
@@ -129,7 +130,7 @@ function connectForClose(
   });
 }
 
-describe('websocket auth + authorization integration', () => {
+describeWithSockets('websocket auth + authorization integration', () => {
   let server: http.Server | null = null;
   let wsBaseUrl = '';
   let wsClient: WebSocket | null = null;

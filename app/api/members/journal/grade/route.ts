@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
       .map((row) => toGradeCandidate(row as Record<string, unknown>))
       .filter((row): row is GradeCandidate => Boolean(row))
 
-    const gradedResults: Array<{ entryId: string, grade: AITradeAnalysis }> = []
+    const gradedResults: Array<{ entryId: string, grade: AITradeAnalysis, ai_analysis: AITradeAnalysis }> = []
 
     for (const entry of candidates) {
       const aiResult = await requestAIAnalysis(entry)
@@ -214,7 +214,11 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      gradedResults.push({ entryId: entry.id, grade: parsed.data })
+      gradedResults.push({
+        entryId: entry.id,
+        grade: parsed.data,
+        ai_analysis: parsed.data,
+      })
     }
 
     return successResponse(gradedResults)

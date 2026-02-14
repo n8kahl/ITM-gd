@@ -6,6 +6,8 @@ import {
   setupMemberShellMocks,
 } from './journal-test-helpers'
 
+const JOURNAL_URL = '/members/journal?e2eBypassAuth=1'
+
 test('redirects unauthenticated users to login', async ({ page }) => {
   test.setTimeout(60_000)
 
@@ -26,7 +28,7 @@ test.describe('Trade Journal V2', () => {
   test('shows empty state when no entries exist', async ({ page }) => {
     await setupJournalCrudMocks(page, [])
 
-    await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
     await expect(page.getByText('No journal entries found. Add your first trade to get started.')).toBeVisible()
@@ -35,7 +37,7 @@ test.describe('Trade Journal V2', () => {
   test('creates entry via quick form', async ({ page }) => {
     const state = await setupJournalCrudMocks(page, [])
 
-    await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await page.getByRole('button', { name: 'New Entry' }).click()
     await page.locator('input[placeholder="AAPL"]').fill('tsla')
@@ -54,7 +56,7 @@ test.describe('Trade Journal V2', () => {
   test('creates entry via full form with all fields', async ({ page }) => {
     const state = await setupJournalCrudMocks(page, [])
 
-    await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await page.getByRole('button', { name: 'New Entry' }).click()
     await page.getByRole('button', { name: 'Full Form' }).click()
@@ -66,9 +68,10 @@ test.describe('Trade Journal V2', () => {
     await page.locator('label', { hasText: 'Entry Price' }).locator('..').locator('input').fill('12.5')
     await page.locator('label', { hasText: 'Exit Price' }).locator('..').locator('input').fill('14.2')
     await page.locator('label', { hasText: 'Position Size' }).locator('..').locator('input').fill('2')
+    await page.locator('summary').filter({ hasText: /^Risk Management$/ }).click()
     await page.locator('label', { hasText: 'Strategy' }).locator('..').locator('input').fill('Breakout Retest')
 
-    const notesSummary = page.locator('summary').filter({ hasText: /^Notes$/ })
+    const notesSummary = page.locator('summary').filter({ hasText: /^Notes & Lessons$/ })
     await notesSummary.scrollIntoViewIfNeeded()
     await notesSummary.click()
 
@@ -96,7 +99,7 @@ test.describe('Trade Journal V2', () => {
       }),
     ])
 
-    await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await page.getByLabel('View').selectOption('cards')
     await page.getByRole('button', { name: 'Edit' }).first().click()
@@ -119,7 +122,7 @@ test.describe('Trade Journal V2', () => {
       }),
     ])
 
-    await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await page.getByLabel('View').selectOption('cards')
     await page.getByRole('button', { name: 'Delete' }).first().click()
@@ -140,7 +143,7 @@ test.describe('Trade Journal V2', () => {
       }),
     ])
 
-    await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await page.getByLabel('View').selectOption('cards')
     await page.getByRole('button', { name: 'Delete' }).first().click()

@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 
@@ -26,7 +27,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/symbols', symbolsRouter);
 
-describe('Symbols Routes', () => {
+describeWithSockets('Symbols Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCacheGet.mockResolvedValue(null);

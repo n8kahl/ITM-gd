@@ -343,7 +343,7 @@ export async function GET(request: NextRequest) {
 
     const rMultipleDistribution = Array.from(rDistributionMap.entries())
       .map(([bucket, count]) => ({ bucket, count }))
-      .sort((a, b) => a.bucket.localeCompare(b.bucket))
+      .sort((a, b) => Number(a.bucket) - Number(b.bucket))
 
     const response: AdvancedAnalyticsResponse = {
       period,

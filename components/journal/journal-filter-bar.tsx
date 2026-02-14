@@ -30,6 +30,10 @@ export function JournalFilterBar({ filters, onChange, availableTags }: JournalFi
     updateField('isWinner', value)
   }, [updateField])
 
+  const handleIsOpenChange = useCallback((value: JournalFilters['isOpen']) => {
+    updateField('isOpen', value)
+  }, [updateField])
+
   const handleSortByChange = useCallback((value: JournalFilters['sortBy']) => {
     updateField('sortBy', value)
   }, [updateField])
@@ -131,6 +135,17 @@ export function JournalFilterBar({ filters, onChange, availableTags }: JournalFi
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        <select
+          value={filters.isOpen}
+          onChange={(event) => handleIsOpenChange(event.target.value as JournalFilters['isOpen'])}
+          className="h-10 rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+          aria-label="Open/closed"
+        >
+          <option value="all">All statuses</option>
+          <option value="true">Open</option>
+          <option value="false">Closed</option>
+        </select>
+
         <select
           value={filters.sortBy}
           onChange={(event) => handleSortByChange(event.target.value as JournalFilters['sortBy'])}

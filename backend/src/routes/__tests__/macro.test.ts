@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 
@@ -20,7 +21,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/macro', macroRouter);
 
-describe('Macro Routes', () => {
+describeWithSockets('Macro Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });

@@ -1,13 +1,11 @@
-
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { getUpcomingSplits } from '../stockSplits';
 import { massiveClient } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 
 // Mock dependencies
-vi.mock('../../config/massive');
-vi.mock('../../config/redis');
-vi.mock('../../lib/logger');
+jest.mock('../../config/massive');
+jest.mock('../../config/redis');
+jest.mock('../../lib/logger');
 
 describe('Stock Splits Service', () => {
     const mockSplitsResponse = {
@@ -25,9 +23,9 @@ describe('Stock Splits Service', () => {
     };
 
     beforeEach(() => {
-        vi.clearAllMocks();
-        (cacheGet as Mock).mockResolvedValue(null);
-        (massiveClient.get as Mock).mockResolvedValue(mockSplitsResponse);
+        jest.clearAllMocks();
+        (cacheGet as jest.Mock).mockResolvedValue(null);
+        (massiveClient.get as jest.Mock).mockResolvedValue(mockSplitsResponse);
     });
 
     it('should fetch upcoming splits from API', async () => {
@@ -42,7 +40,7 @@ describe('Stock Splits Service', () => {
 
     it('should return cached splits if available', async () => {
         const cachedSplits = [{ ticker: 'TSLA', ratio: 3 }];
-        (cacheGet as Mock).mockResolvedValue(cachedSplits);
+        (cacheGet as jest.Mock).mockResolvedValue(cachedSplits);
 
         const splits = await getUpcomingSplits();
 
@@ -51,7 +49,7 @@ describe('Stock Splits Service', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-        (massiveClient.get as Mock).mockRejectedValue(new Error('API Error'));
+        (massiveClient.get as jest.Mock).mockRejectedValue(new Error('API Error'));
 
         const splits = await getUpcomingSplits();
 

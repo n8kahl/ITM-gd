@@ -41,6 +41,7 @@ const noopSentry: SentryLike = {
 };
 
 let resolvedSentry: SentryLike | null = null;
+let sentryInitialized = false;
 
 function resolveSentryModule(): SentryLike {
   if (resolvedSentry) return resolvedSentry;
@@ -85,7 +86,40 @@ export function initSentry(app: Application): void {
   if (!dsn) return;
 
   const sentry = resolveSentryModule();
-  sentry.init({
+  if (!sentryInitialized) {
+    sentry.init({
+      dsn,
+      environment: process.env.NODE_ENV || 'development',
+      release: `titm-backend@${process.env.npm_package_version || '1.0.0'}`,
+      tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+      ignoreErrors: [
+        'CORS: Origin',
+        'Rate limit exceeded',
+        'Request timeout',
+      ],
+      beforeSend(event: any) {
+        if (event.request?.headers) {
+          delete event.request.headers.authorization;
+          delete event.request.headers.cookie;
+        }
+        return event;
+      },
+    });
+    sentryInitialized = true;
+  }
+
+  sentry.setupExpressErrorHandler(app);
+}
+
+/**
+ * Initialize Sentry without binding Express middleware.
+ * Use this during process bootstrap before importing express modules.
+ */
+export function initSentryBootstrap(): void {
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn || sentryInitialized) return;
+
+  resolveSentryModule().init({
     dsn,
     environment: process.env.NODE_ENV || 'development',
     release: `titm-backend@${process.env.npm_package_version || '1.0.0'}`,
@@ -103,8 +137,7 @@ export function initSentry(app: Application): void {
       return event;
     },
   });
-
-  sentry.setupExpressErrorHandler(app);
+  sentryInitialized = true;
 }
 
 /**

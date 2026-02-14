@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 import type { Response } from 'express';
@@ -53,7 +54,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/chat', chatRouter);
 
-describe('Chat Routes', () => {
+describeWithSockets('Chat Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSendChatMessage.mockResolvedValue({

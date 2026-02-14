@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 
@@ -83,7 +84,7 @@ app.use(express.json());
 app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
 
-describe('Options Routes', () => {
+describeWithSockets('Options Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     MockLivePositionTracker.mockImplementation(() => ({

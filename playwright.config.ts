@@ -25,7 +25,7 @@ const webServers: NonNullable<ReturnType<typeof defineConfig>['webServer']> = [
     // Bind explicitly to loopback; some sandboxed environments deny listening on 0.0.0.0.
     command: `E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} NEXT_PUBLIC_AI_COACH_API_URL=${e2eBackendUrl} node_modules/.bin/next dev --hostname 127.0.0.1 --port 3000`,
     url: 'http://127.0.0.1:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === 'false' ? false : !process.env.CI,
     timeout: 120000,
   },
 ]
@@ -36,7 +36,7 @@ if (shouldStartLocalBackendServer()) {
     command: `PORT=${backendPort} E2E_BYPASS_AUTH=true E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} npm run dev`,
     cwd: 'backend',
     url: e2eBackendUrl,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === 'false' ? false : !process.env.CI,
     timeout: 120000,
   })
 }

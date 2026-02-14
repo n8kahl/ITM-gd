@@ -1,13 +1,11 @@
-
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { getUpcomingHolidays, isHolidayOrEarlyClose } from '../marketHolidays';
 import { massiveClient } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 
 // Mock dependencies
-vi.mock('../../config/massive');
-vi.mock('../../config/redis');
-vi.mock('../../lib/logger');
+jest.mock('../../config/massive');
+jest.mock('../../config/redis');
+jest.mock('../../lib/logger');
 
 describe('Market Holidays Service', () => {
     const mockHolidaysResponse = {
@@ -29,9 +27,9 @@ describe('Market Holidays Service', () => {
     };
 
     beforeEach(() => {
-        vi.clearAllMocks();
-        (cacheGet as Mock).mockResolvedValue(null);
-        (massiveClient.get as Mock).mockResolvedValue(mockHolidaysResponse);
+        jest.clearAllMocks();
+        (cacheGet as jest.Mock).mockResolvedValue(null);
+        (massiveClient.get as jest.Mock).mockResolvedValue(mockHolidaysResponse);
     });
 
     describe('getUpcomingHolidays', () => {
@@ -46,7 +44,7 @@ describe('Market Holidays Service', () => {
 
         it('should return cached holidays if available', async () => {
             const cachedHolidays = [{ name: 'Cached Holiday', date: '2025-12-25' }];
-            (cacheGet as Mock).mockResolvedValue(cachedHolidays);
+            (cacheGet as jest.Mock).mockResolvedValue(cachedHolidays);
 
             const holidays = await getUpcomingHolidays();
 
@@ -55,7 +53,7 @@ describe('Market Holidays Service', () => {
         });
 
         it('should handle API errors gracefully', async () => {
-            (massiveClient.get as Mock).mockRejectedValue(new Error('API Error'));
+            (massiveClient.get as jest.Mock).mockRejectedValue(new Error('API Error'));
 
             const holidays = await getUpcomingHolidays();
 
@@ -63,7 +61,7 @@ describe('Market Holidays Service', () => {
         });
 
         it('should deduplicate holidays by date', async () => {
-            (massiveClient.get as Mock).mockResolvedValue({
+            (massiveClient.get as jest.Mock).mockResolvedValue({
                 data: [
                     { exchange: 'NYSE', name: 'Xmas', date: '2025-12-25', status: 'closed' },
                     { exchange: 'NASDAQ', name: 'Christmas', date: '2025-12-25', status: 'closed' }

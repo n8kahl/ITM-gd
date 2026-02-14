@@ -122,6 +122,9 @@ describe('optionsChainFetcher', () => {
   });
 
   it('falls back to Black-Scholes greeks when provider greeks are missing but IV exists', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-02-10T15:00:00.000Z'));
+
     mockGetOptionsContracts.mockResolvedValue([
       {
         ticker: 'O:SPY260213C00500000',

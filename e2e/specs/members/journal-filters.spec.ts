@@ -6,6 +6,8 @@ import {
   setupMemberShellMocks,
 } from './journal-test-helpers'
 
+const JOURNAL_URL = '/members/journal?e2eBypassAuth=1'
+
 const FILTER_FIXTURE = [
   createMockEntry({
     id: 'entry-1',
@@ -35,7 +37,7 @@ const FILTER_FIXTURE = [
 
 async function openWithFixtures(page: Page) {
   await setupJournalCrudMocks(page, FILTER_FIXTURE)
-  await page.goto('/members/journal', { waitUntil: 'domcontentloaded' })
+  await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
 }
 

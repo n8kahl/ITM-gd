@@ -138,8 +138,11 @@ export default function JournalPage() {
       }
 
       const sanitized = sanitizeJournalEntries(payload.data)
+      const resolvedTotal = typeof payload.meta?.total === 'number'
+        ? payload.meta.total
+        : (typeof payload.total === 'number' ? payload.total : sanitized.length)
       setEntries(sanitized)
-      setTotal(typeof payload.meta?.total === 'number' ? payload.meta.total : sanitized.length)
+      setTotal(resolvedTotal)
       writeCachedJournalEntries(sanitized)
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'Failed to load journal entries'

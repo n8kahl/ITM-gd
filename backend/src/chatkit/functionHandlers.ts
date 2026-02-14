@@ -49,12 +49,17 @@ interface FunctionCallContext {
  * Execute a function with a timeout. Prevents hung external API calls.
  */
 async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return Promise.race([
-    fn(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
-    ),
-  ]);
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 const FUNCTION_TIMEOUT_MS = 10000; // 10 second timeout per function call

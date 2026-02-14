@@ -1,3 +1,4 @@
+import { describeWithSockets } from '../../testUtils/socketDescribe';
 import request from 'supertest';
 import express from 'express';
 
@@ -53,7 +54,7 @@ const mockTestOpenAIConnection = testOpenAIConnection as jest.MockedFunction<typ
 const app = express();
 app.use('/health', healthRouter);
 
-describe('Health Routes', () => {
+describeWithSockets('Health Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockTestDatabaseConnection.mockResolvedValue(true);

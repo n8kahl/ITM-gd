@@ -164,6 +164,15 @@ export async function updateEntry(input: unknown): Promise<ActionResult<JournalE
       payload.is_open = false
     }
 
+    const mergedValidation = journalEntryCreateSchema.safeParse({
+      ...existing,
+      ...payload,
+    })
+
+    if (!mergedValidation.success) {
+      return { success: false, error: 'Invalid journal entry payload' }
+    }
+
     const { data, error } = await supabase
       .from('journal_entries')
       .update(payload)

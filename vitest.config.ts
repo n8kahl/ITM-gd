@@ -6,7 +6,16 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
-    include: ['lib/**/__tests__/**/*.test.ts', 'lib/validation/**/__tests__/**/*.test.ts', 'backend/**/__tests__/**/*.test.ts'],
+    include: [
+      'lib/**/__tests__/**/*.test.ts',
+      'lib/validation/**/__tests__/**/*.test.ts',
+      'components/**/__tests__/**/*.test.ts',
+    ],
+    exclude: [
+      'backend/**',
+      'e2e/**',
+      'node_modules/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

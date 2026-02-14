@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test'
+import { authenticateAsMember, mockSupabaseSession } from '../../helpers/member-auth'
 
 export const E2E_USER_ID = '00000000-0000-4000-8000-000000000001'
 
@@ -167,9 +168,31 @@ export function createMockEntry(partial: Partial<MockJournalEntry>): MockJournal
 }
 
 export async function enableMemberBypass(page: Page): Promise<void> {
-  await page.setExtraHTTPHeaders({
-    'x-e2e-bypass-auth': '1',
-  })
+  await authenticateAsMember(page, { bypassMiddleware: true })
+  await page.evaluate((session) => {
+    const keys = ['sb-localhost-auth-token', 'sb-127.0.0.1-auth-token']
+    keys.forEach((key) => {
+      localStorage.setItem(key, JSON.stringify(session))
+    })
+    localStorage.setItem('supabase.auth.token', JSON.stringify({
+      currentSession: session,
+      expiresAt: session.expires_at,
+    }))
+  }, mockSupabaseSession)
+  await page.context().addCookies([
+    {
+      name: 'e2e_bypass_auth',
+      value: '1',
+      domain: '127.0.0.1',
+      path: '/',
+    },
+    {
+      name: 'e2e_bypass_auth',
+      value: '1',
+      domain: 'localhost',
+      path: '/',
+    },
+  ])
 }
 
 export async function setupMemberShellMocks(page: Page): Promise<void> {

@@ -53,6 +53,11 @@ function toDateKey(value: string): string {
   return parsed.toISOString().split('T')[0]
 }
 
+function numberBucket(value: number | null, precision = 4): string {
+  if (value == null || !Number.isFinite(value)) return 'na'
+  return value.toFixed(precision)
+}
+
 function normalizeImportedRow(row: Record<string, unknown>, broker: string) {
   const symbolRaw = getTextValue(row, ['symbol', 'Symbol', 'Ticker', 'underlying']) ?? ''
   const symbol = sanitizeString(symbolRaw.toUpperCase(), 16)
@@ -191,11 +196,18 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      const priceBucket = normalized.entryPrice == null
-        ? 'na'
-        : String(Math.round(normalized.entryPrice / Math.max(Math.abs(normalized.entryPrice) * 0.01, 0.01)))
-
-      const dedupeKey = `${user.id}:${normalized.symbol}:${toDateKey(normalized.tradeDate)}:${priceBucket}`
+      const dedupeKey = [
+        user.id,
+        normalized.symbol,
+        toDateKey(normalized.tradeDate),
+        normalized.direction,
+        normalized.contractType,
+        numberBucket(normalized.entryPrice),
+        numberBucket(normalized.exitPrice),
+        numberBucket(normalized.positionSize),
+        numberBucket(normalized.strikePrice),
+        normalized.expirationDate ?? 'na',
+      ].join(':')
       const id = buildDeterministicUuid(dedupeKey)
 
       const computedPnl = normalized.pnl ?? calculatePnl(
