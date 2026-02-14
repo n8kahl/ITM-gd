@@ -1,16 +1,25 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
-function resolveBackendBaseUrl(): string {
+function resolveBackendBaseUrl(request: Request): string {
   const configured =
     process.env.AI_COACH_API_URL ||
     process.env.NEXT_PUBLIC_AI_COACH_API_URL ||
     'http://localhost:3001';
 
-  // Local dev should default to local backend even if production URL is present in .env.local.
+  const host = (() => {
+    try {
+      return new URL(request.url).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+
+  // Local host should default to local backend even if production URL is present in env.
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true';
   if (
-    process.env.NODE_ENV !== 'production' &&
+    isLocalHost &&
     preferLocalInDev &&
     /railway\.app/i.test(configured)
   ) {
@@ -23,7 +32,7 @@ function resolveBackendBaseUrl(): string {
 export async function proxyMarketGet(request: Request, endpoint: string) {
   try {
     const url = new URL(request.url);
-    const backendBase = resolveBackendBaseUrl().replace(/\/+$/, '');
+    const backendBase = resolveBackendBaseUrl(request).replace(/\/+$/, '');
     const upstream = `${backendBase}/api/market/${endpoint}${url.search}`;
 
     let authHeader: string | undefined;

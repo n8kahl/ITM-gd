@@ -121,10 +121,14 @@ function resolveRealtimeBackendUrl(): URL | null {
     normalized = `https://${normalized}`
   }
 
-  // Keep local websocket/data paths local in development unless explicitly forced remote.
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1'].includes(window.location.hostname.toLowerCase())
+
+  // Keep local websocket/data paths local on localhost unless explicitly forced remote.
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true'
   if (
-    process.env.NODE_ENV !== 'production' &&
+    isLocalHost &&
     preferLocalInDev &&
     /railway\.app/i.test(normalized)
   ) {

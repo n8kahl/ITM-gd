@@ -10,7 +10,7 @@ export default function AcademyOnboardingPage() {
       {/* Branding */}
       <div className="text-center mb-8">
         <div className="relative w-10 h-10 mx-auto mb-3">
-          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="40px" className="object-contain" />
         </div>
         <h1 className="text-2xl font-semibold text-white">
           TITM Academy

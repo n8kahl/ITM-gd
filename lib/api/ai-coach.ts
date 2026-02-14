@@ -19,10 +19,14 @@ function resolveApiBase(): string {
     resolved = `https://${resolved}`
   }
 
-  // Local dev should default to local backend even if production URL is set in .env.local.
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1'].includes(window.location.hostname.toLowerCase())
+
+  // Local host should default to local backend even if production URL is set in .env.local.
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true'
   if (
-    process.env.NODE_ENV !== 'production' &&
+    isLocalHost &&
     preferLocalInDev &&
     /railway\.app/i.test(resolved)
   ) {

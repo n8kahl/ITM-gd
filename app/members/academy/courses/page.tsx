@@ -59,7 +59,7 @@ export default function CoursesPage() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-              <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+              <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="48px" className="object-contain" />
             </div>
             <p className="text-sm text-white/40">Loading courses...</p>
           </div>

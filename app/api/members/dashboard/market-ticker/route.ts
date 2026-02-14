@@ -4,12 +4,20 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
-function resolveBackendBaseUrl(): string {
+function resolveBackendBaseUrl(request: Request): string {
   const configured = process.env.NEXT_PUBLIC_AI_COACH_API_URL || 'http://localhost:3001';
+  const host = (() => {
+    try {
+      return new URL(request.url).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1';
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true';
 
   if (
-    process.env.NODE_ENV !== 'production' &&
+    isLocalHost &&
     preferLocalInDev &&
     /railway\.app/i.test(configured)
   ) {
@@ -33,7 +41,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const apiUrl = resolveBackendBaseUrl();
+    const apiUrl = resolveBackendBaseUrl(request);
 
     // Call backend
     const response = await fetch(`${apiUrl}/api/market/indices`, {
