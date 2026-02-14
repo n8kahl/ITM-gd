@@ -62,10 +62,10 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const headersList = await headers()
-  const nonce = headersList.get('x-nonce') || ''
+  const nonce = headersList.get('x-nonce') || undefined
 
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" data-scroll-behavior="smooth">
       <head>
         <StructuredData nonce={nonce} />
       </head>

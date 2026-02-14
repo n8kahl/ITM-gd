@@ -7,6 +7,7 @@ interface StructuredDataProps {
 }
 
 export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.app", nonce }: StructuredDataProps) {
+  const scriptNonce = nonce?.trim() || undefined;
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -64,21 +65,21 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     <>
       <script
         type="application/ld+json"
-        nonce={nonce}
+        nonce={scriptNonce}
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(productSchema),
         }}
       />
       <script
         type="application/ld+json"
-        nonce={nonce}
+        nonce={scriptNonce}
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(organizationSchema),
         }}
       />
       <script
         type="application/ld+json"
-        nonce={nonce}
+        nonce={scriptNonce}
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(websiteSchema),
         }}

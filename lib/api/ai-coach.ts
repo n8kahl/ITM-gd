@@ -6,11 +6,30 @@
  */
 
 function resolveApiBase(): string {
-  const url = process.env.NEXT_PUBLIC_AI_COACH_API_URL
-  if (!url) return 'http://localhost:3001'
-  // Ensure the URL has a protocol so fetch() treats it as absolute
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  return `https://${url}`
+  const configured = (
+    process.env.NEXT_PUBLIC_AI_COACH_API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    ''
+  ).trim()
+
+  let resolved = configured || 'http://localhost:3001'
+
+  // Ensure the URL has a protocol so fetch() treats it as absolute.
+  if (!resolved.startsWith('http://') && !resolved.startsWith('https://')) {
+    resolved = `https://${resolved}`
+  }
+
+  // Local dev should default to local backend even if production URL is set in .env.local.
+  const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true'
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    preferLocalInDev &&
+    /railway\.app/i.test(resolved)
+  ) {
+    return 'http://localhost:3001'
+  }
+
+  return resolved.replace(/\/+$/, '')
 }
 
 export const API_BASE = resolveApiBase()
@@ -94,6 +113,25 @@ export interface ChartDataResponse {
   timestamp: string
   cached: boolean
   providerIndicators?: ChartProviderIndicators
+}
+
+export type FibonacciTimeframe = 'daily' | '1h' | '15m' | '5m'
+
+export interface FibonacciLevelsResponse {
+  symbol: string
+  timeframe: FibonacciTimeframe
+  direction: 'retracement' | 'extension'
+  levels: {
+    level_0: number
+    level_236: number
+    level_382: number
+    level_500: number
+    level_618: number
+    level_786: number
+    level_100: number
+  }
+  currentPrice: number
+  calculatedAt: string
 }
 
 export type SymbolSearchType = 'index' | 'etf' | 'stock'
@@ -675,6 +713,44 @@ export async function getChartData(
     { headers: {} },
     token,
     signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get Fibonacci retracement levels for a symbol.
+ */
+export async function getFibonacciLevels(
+  symbol: string,
+  timeframe: FibonacciTimeframe,
+  token: string,
+  lookback: number = 20,
+  signal?: AbortSignal,
+): Promise<FibonacciLevelsResponse> {
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/fibonacci`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        symbol,
+        timeframe,
+        lookback,
+      }),
+    },
+    token,
+    signal,
   )
 
   if (!response.ok) {
@@ -2341,7 +2417,7 @@ export async function deleteTrackedSetupsBulk(
 // ============================================
 
 export interface StreamEvent {
-  type: 'session' | 'status' | 'token' | 'done' | 'error'
+  type: 'session' | 'status' | 'token' | 'function_result' | 'done' | 'error'
   data: unknown
 }
 

@@ -15,7 +15,7 @@ export function MobileTopBar() {
       {/* Logo */}
       <Link href="/members" className="absolute left-1/2 -translate-x-1/2">
         <div className="relative w-6 h-6">
-          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="24px" className="object-contain" />
         </div>
       </Link>
 

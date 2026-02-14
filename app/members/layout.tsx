@@ -70,7 +70,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center">
         <div className="text-center">
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="48px" className="object-contain" />
           </div>
           <p className="text-muted-foreground text-sm">Loading your dashboard...</p>
         </div>
@@ -84,7 +84,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center">
         <div className="text-center">
           <div className="relative w-12 h-12 mx-auto mb-4 animate-pulse">
-            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="48px" className="object-contain" />
           </div>
           <p className="text-muted-foreground text-sm">Redirecting to login...</p>
         </div>

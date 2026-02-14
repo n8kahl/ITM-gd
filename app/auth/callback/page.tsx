@@ -47,12 +47,12 @@ function AuthCallbackContent() {
       let stored: string | null = null
       try {
         stored = window.sessionStorage.getItem('post_auth_redirect')
-      } catch {}
+      } catch { }
 
       if (!stored) {
         try {
           stored = window.localStorage.getItem('post_auth_redirect')
-        } catch {}
+        } catch { }
       }
 
       if (stored) {
@@ -60,14 +60,12 @@ function AuthCallbackContent() {
         apiUrl.searchParams.set('redirect', safe)
         try {
           window.sessionStorage.removeItem('post_auth_redirect')
-        } catch {}
+        } catch { }
         try {
           window.localStorage.removeItem('post_auth_redirect')
-        } catch {}
+        } catch { }
       }
     }
-
-    console.log('Forwarding OAuth callback to server-side handler:', apiUrl.pathname)
 
     // Immediate redirect to server-side handler
     // Server will exchange code, sync roles, refresh session, and redirect appropriately
@@ -79,7 +77,7 @@ function AuthCallbackContent() {
       <div className="max-w-md w-full text-center">
         {/* Logo */}
         <div className="relative w-16 h-16 mx-auto mb-6">
-          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="64px" className="object-contain" />
         </div>
 
         {/* Processing State */}
@@ -103,7 +101,7 @@ export default function AuthCallbackPage() {
       <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
           <div className="relative w-16 h-16 mx-auto mb-6">
-            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+            <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="64px" className="object-contain" />
           </div>
           <div className="relative w-20 h-20 mx-auto mb-6">
             <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />

@@ -1,81 +1,60 @@
-import { NextResponse } from 'next/server'
+
+import { NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
+
+function resolveBackendBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_AI_COACH_API_URL || 'http://localhost:3001';
+  const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true';
+
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    preferLocalInDev &&
+    /railway\.app/i.test(configured)
+  ) {
+    return 'http://localhost:3001';
+  }
+
+  return configured.replace(/\/+$/, '');
+}
 
 /**
  * GET /api/members/dashboard/market-ticker
- * Returns live market data for SPX/NDX.
- * In production this calls Massive.com REST API.
- * Returns cached/mock data as fallback when API is unavailable.
+ * Proxies request to backend /api/market/indices endpoint.
+ * This ensures the Next.js app never calls Massive.com directly.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Try fetching from Massive.com API
-    const apiKey = process.env.MASSIVE_API_KEY
-    if (apiKey) {
-      try {
-        const [spxRes, ndxRes] = await Promise.all([
-          fetch(`https://api.massive.com/v2/aggs/ticker/I:SPX/prev?apiKey=${apiKey}`, {
-            next: { revalidate: 15 },
-          }),
-          fetch(`https://api.massive.com/v2/aggs/ticker/I:NDX/prev?apiKey=${apiKey}`, {
-            next: { revalidate: 15 },
-          }),
-        ])
+    const supabase = await createServerSupabaseClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
-        if (spxRes.ok && ndxRes.ok) {
-          const [spxData, ndxData] = await Promise.all([spxRes.json(), ndxRes.json()])
-
-          const spxResult = spxData.results?.[0]
-          const ndxResult = ndxData.results?.[0]
-
-          const quotes = []
-
-          if (spxResult) {
-            quotes.push({
-              symbol: 'SPX',
-              price: spxResult.c,
-              change: spxResult.c - spxResult.o,
-              changePercent: ((spxResult.c - spxResult.o) / spxResult.o) * 100,
-            })
-          }
-
-          if (ndxResult) {
-            quotes.push({
-              symbol: 'NDX',
-              price: ndxResult.c,
-              change: ndxResult.c - ndxResult.o,
-              changePercent: ((ndxResult.c - ndxResult.o) / ndxResult.o) * 100,
-            })
-          }
-
-          return NextResponse.json({
-            success: true,
-            data: {
-              quotes,
-              metrics: {
-                vwap: spxResult?.vw || null,
-              },
-              source: 'massive',
-            },
-          })
-        }
-      } catch {
-        // Fall through to fallback
-      }
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fallback: return empty data — never show fake prices
-    return NextResponse.json({
-      success: true,
-      data: {
-        quotes: [],
-        metrics: {},
-        source: 'unavailable',
+    const apiUrl = resolveBackendBaseUrl();
+
+    // Call backend
+    const response = await fetch(`${apiUrl}/api/market/indices`, {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
       },
-    })
-  } catch {
+      next: { revalidate: 15 }, // Cache for 15s
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend responded with ${response.status}`);
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+
+  } catch (error: any) {
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL', message: 'Failed to fetch market data' } },
       { status: 500 }
-    )
+    );
   }
 }
