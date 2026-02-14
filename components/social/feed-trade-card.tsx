@@ -22,6 +22,7 @@ export function FeedTradeCard({ displayData, className }: FeedTradeCardProps) {
     contract_type,
     entry_price,
     exit_price,
+    image_url,
   } = displayData
 
   const isPositive = is_winner === true || (pnl !== null && pnl > 0)
@@ -110,6 +111,18 @@ export function FeedTradeCard({ displayData, className }: FeedTradeCardProps) {
           </span>
         )}
       </div>
+
+      {image_url && (
+        <div className="overflow-hidden rounded-lg border border-white/10 bg-black/30">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={image_url}
+            alt={`${symbol} shared trade card`}
+            className="h-auto w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      )}
 
       {/* Entry / Exit Prices */}
       {(entry_price !== null || exit_price !== null) && (

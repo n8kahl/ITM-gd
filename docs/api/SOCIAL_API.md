@@ -80,6 +80,12 @@ Request fields:
 - `visibility` (`public|members|private`)
 - `share_to_discord` (boolean)
 
+Response data includes:
+- `feed_item`
+- `trade_card`
+- `image_url`
+- `discord_share` (`attempted`, `delivered`, optional `reason`)
+
 ## Webhook Endpoint
 
 ### `POST /api/webhooks/whop`

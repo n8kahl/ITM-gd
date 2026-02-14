@@ -27,11 +27,13 @@ export async function GET(request: NextRequest) {
     supabase
       .from('social_feed_items')
       .select('*', { count: 'exact', head: true })
-      .eq('item_type', 'trade_card'),
+      .eq('item_type', 'trade_card')
+      .in('visibility', ['public', 'members']),
     supabase
       .from('social_feed_items')
       .select('*', { count: 'exact', head: true })
-      .eq('item_type', 'achievement'),
+      .eq('item_type', 'achievement')
+      .in('visibility', ['public', 'members']),
   ])
 
   if (memberCountResult.error || sharedTradesResult.error || achievementsResult.error) {

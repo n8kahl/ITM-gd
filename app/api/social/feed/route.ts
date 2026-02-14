@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getSocialUserMetaMap } from '@/lib/social/membership'
 import type { FeedResponse, SocialFeedItem } from '@/lib/types/social'
 import { createFeedItemSchema, feedQuerySchema } from '@/lib/validation/social'
+import { buildFeedVisibilityFilter } from '@/lib/social/feed-query'
 
 interface FeedQueryResult {
   items: SocialFeedItem[]
@@ -37,6 +38,7 @@ function toPnlSortValue(item: SocialFeedItem): number {
 
 async function fetchFeedRows(
   request: NextRequest,
+  currentUserId: string,
 ): Promise<FeedQueryResult | Response> {
   const supabase = await createServerSupabaseClient()
   const searchParams = new URL(request.url).searchParams
@@ -51,7 +53,7 @@ async function fetchFeedRows(
   let baseQuery = supabase
     .from('social_feed_items')
     .select('*', { count: 'exact' })
-    .in('visibility', ['public', 'members'])
+    .or(buildFeedVisibilityFilter(currentUserId))
 
   if (type !== 'all') {
     baseQuery = baseQuery.eq('item_type', type)
@@ -141,7 +143,7 @@ export async function GET(request: NextRequest) {
     return errorResponse('Unauthorized', 401)
   }
 
-  const feedResult = await fetchFeedRows(request)
+  const feedResult = await fetchFeedRows(request, user.id)
   if (feedResult instanceof Response) {
     return feedResult
   }

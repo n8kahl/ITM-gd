@@ -153,4 +153,49 @@ test.describe('Trade Journal V2', () => {
 
     await expect(page.getByRole('heading', { name: 'AMD' })).toBeVisible()
   })
+
+  test('shares a closed trade from entry detail sheet', async ({ page }) => {
+    await setupJournalCrudMocks(page, [
+      createMockEntry({
+        id: 'entry-share-1',
+        symbol: 'SPY',
+        is_open: false,
+        pnl: 125.5,
+        pnl_percentage: 2.4,
+      }),
+    ])
+
+    let shareRequestCount = 0
+    await page.route('**/api/social/share-trade', async (route) => {
+      shareRequestCount += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            feed_item: { id: 'feed-share-1' },
+            trade_card: { id: 'trade-card-share-1' },
+            image_url: 'https://example.com/trade-card.png',
+            discord_share: {
+              attempted: false,
+              delivered: false,
+              reason: 'Discord sharing not requested',
+            },
+          },
+        }),
+      })
+    })
+
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
+
+    await page.getByLabel('Open SPY trade details').click()
+    await page.getByRole('button', { name: 'Share' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Share Trade' })).toBeVisible()
+    await page.getByRole('button', { name: 'Share Trade' }).click()
+
+    await expect(page.getByText('Trade shared successfully!')).toBeVisible()
+    await expect.poll(() => shareRequestCount, { timeout: 10_000 }).toBe(1)
+  })
 })

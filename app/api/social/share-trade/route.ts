@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { errorResponse, successResponse } from '@/lib/api/response'
 import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit'
 import {
@@ -63,6 +63,107 @@ async function cleanupUploadedTradeCard(uploadPath: string): Promise<void> {
     await admin.storage.from('trade-cards').remove([uploadPath])
   } catch (cleanupError) {
     console.error('Failed to clean up uploaded trade card image:', cleanupError)
+  }
+}
+
+interface DiscordShareStatus {
+  attempted: boolean
+  delivered: boolean
+  reason?: string
+}
+
+async function resolveDiscordWebhookUrl(supabase: SupabaseClient): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['trade_share_discord_webhook_url', 'discord_webhook_url'])
+
+  if (error || !data) {
+    return null
+  }
+
+  const byKey = new Map(data.map((row) => [row.key, row.value]))
+  const preferred = byKey.get('trade_share_discord_webhook_url')
+  if (typeof preferred === 'string' && preferred.trim().length > 0) {
+    return preferred.trim()
+  }
+
+  const fallback = byKey.get('discord_webhook_url')
+  if (typeof fallback === 'string' && fallback.trim().length > 0) {
+    return fallback.trim()
+  }
+
+  return null
+}
+
+async function sendTradeShareToDiscord(params: {
+  supabase: SupabaseClient
+  symbol: string
+  direction: 'LONG' | 'SHORT'
+  contractType: 'Stock' | 'Call' | 'Put'
+  pnl: string
+  pnlPercentage: string
+  template: string
+  format: string
+  visibility: 'public' | 'members' | 'private'
+  memberName: string
+  imageUrl: string
+}): Promise<DiscordShareStatus> {
+  const webhookUrl = await resolveDiscordWebhookUrl(params.supabase)
+  if (!webhookUrl) {
+    return {
+      attempted: false,
+      delivered: false,
+      reason: 'Discord webhook not configured',
+    }
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: 'New Trade Share',
+            description: `${params.memberName} shared a ${params.symbol} ${params.direction} trade.`,
+            color: params.pnl.startsWith('+') ? 5763719 : 15548997,
+            fields: [
+              { name: 'P&L', value: params.pnl, inline: true },
+              { name: 'P&L %', value: params.pnlPercentage || 'N/A', inline: true },
+              { name: 'Contract', value: params.contractType, inline: true },
+              { name: 'Template', value: params.template, inline: true },
+              { name: 'Format', value: params.format, inline: true },
+              { name: 'Visibility', value: params.visibility, inline: true },
+            ],
+            image: {
+              url: params.imageUrl,
+            },
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '')
+      return {
+        attempted: true,
+        delivered: false,
+        reason: bodyText || `Discord webhook returned ${response.status}`,
+      }
+    }
+
+    return {
+      attempted: true,
+      delivered: true,
+    }
+  } catch (error) {
+    return {
+      attempted: true,
+      delivered: false,
+      reason: error instanceof Error ? error.message : 'Discord webhook request failed',
+    }
   }
 }
 
@@ -144,6 +245,10 @@ export async function POST(request: NextRequest) {
     const direction = toDirectionLabel(journalEntry.direction)
     const contractType = toContractTypeLabel(journalEntry.contract_type)
     const pnlPercentageValue = toNumber(journalEntry.pnl_percentage)
+    const memberName =
+      currentUserMeta?.display_name
+      || currentUserMeta?.discord_username
+      || 'ITM Member'
     const tradeDate = new Date(journalEntry.trade_date || journalEntry.created_at).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -186,7 +291,7 @@ export async function POST(request: NextRequest) {
         exitPrice: formatUsd(toNumber(journalEntry.exit_price)),
         strategy: journalEntry.strategy,
         aiGrade,
-        memberName: currentUserMeta?.display_name || currentUserMeta?.discord_username || 'ITM Member',
+        memberName,
         memberTier: currentUserMeta?.membership_tier || 'core',
         tradeDate,
         holdDuration: formatHoldDuration(toNumber(journalEntry.hold_duration_min)),
@@ -226,6 +331,11 @@ export async function POST(request: NextRequest) {
 
     if (tradeCardError || !tradeCard) {
       await cleanupUploadedTradeCard(uploadPath)
+
+      if (tradeCardError?.code === '23505') {
+        return errorResponse('This trade has already been shared', 409)
+      }
+
       return errorResponse(tradeCardError?.message ?? 'Failed to create shared trade card', 500)
     }
 
@@ -254,10 +364,31 @@ export async function POST(request: NextRequest) {
       return errorResponse(feedItemError?.message ?? 'Failed to create social feed item', 500)
     }
 
+    const discordShareStatus = shareToDiscord
+      ? await sendTradeShareToDiscord({
+          supabase,
+          symbol: journalEntry.symbol,
+          direction,
+          contractType,
+          pnl: formatPnl(pnlValue),
+          pnlPercentage: formatPnlPercentage(pnlPercentageValue),
+          template,
+          format,
+          visibility,
+          memberName,
+          imageUrl,
+        })
+      : {
+          attempted: false,
+          delivered: false,
+          reason: 'Discord sharing not requested',
+        }
+
     return successResponse({
       feed_item: feedItem,
       trade_card: tradeCard,
       image_url: imageUrl,
+      discord_share: discordShareStatus,
     })
   } catch (error) {
     return errorResponse(

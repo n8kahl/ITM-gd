@@ -22,6 +22,7 @@ It includes:
 - Type filters: all, trades, achievements, milestones, highlights
 - Sorting: latest, most liked, top P&L
 - Featured-only toggle
+- Visibility behavior: all users see `public` + `members`, and each user also sees their own `private` items.
 
 ### Feed APIs
 - `GET /api/social/feed`
@@ -36,6 +37,7 @@ It includes:
 - Successful share creates:
   - `shared_trade_cards` row
   - `social_feed_items` row
+- If `share_to_discord` is enabled and webhook config exists, the share is also posted to Discord.
 
 ## Leaderboards
 - Served by `GET /api/social/leaderboard`.
