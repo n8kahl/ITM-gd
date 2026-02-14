@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
+type MarketEndpoint = 'indices' | 'status' | 'movers' | 'splits' | 'analytics' | 'holidays';
+
 function resolveBackendBaseUrl(request: Request): string {
   const configured =
     process.env.AI_COACH_API_URL ||
@@ -29,7 +31,43 @@ function resolveBackendBaseUrl(request: Request): string {
   return configured.replace(/\/+$/, '');
 }
 
-export async function proxyMarketGet(request: Request, endpoint: string) {
+function getMarketFallback(endpoint: MarketEndpoint) {
+  const timestamp = new Date().toISOString();
+
+  switch (endpoint) {
+    case 'indices':
+      return { quotes: [], metrics: { vwap: null }, source: 'fallback' };
+    case 'status':
+      return {
+        status: 'closed',
+        session: 'none',
+        message: 'Market data temporarily unavailable',
+        nextOpen: 'Check data provider status',
+      };
+    case 'movers':
+      return { gainers: [], losers: [] };
+    case 'splits':
+      return [];
+    case 'analytics':
+      return {
+        timestamp,
+        status: { isOpen: false, session: 'none', message: 'Market analytics temporarily unavailable' },
+        indices: [],
+        regime: {
+          label: 'Neutral',
+          description: 'Live analytics unavailable; using safe neutral fallback.',
+          signals: ['Data provider unavailable'],
+        },
+        breadth: { advancers: 0, decliners: 0, ratio: 0, label: 'Unavailable' },
+      };
+    case 'holidays':
+      return [];
+    default:
+      return { error: 'Market data unavailable' };
+  }
+}
+
+export async function proxyMarketGet(request: Request, endpoint: MarketEndpoint) {
   try {
     const url = new URL(request.url);
     const backendBase = resolveBackendBaseUrl(request).replace(/\/+$/, '');
@@ -54,6 +92,15 @@ export async function proxyMarketGet(request: Request, endpoint: string) {
       cache: 'no-store',
     });
 
+    if (!response.ok) {
+      return NextResponse.json(getMarketFallback(endpoint), {
+        status: 200,
+        headers: {
+          'X-Market-Fallback': `upstream_${response.status}`,
+        },
+      });
+    }
+
     const payload = await response.text();
     return new NextResponse(payload, {
       status: response.status,
@@ -62,9 +109,11 @@ export async function proxyMarketGet(request: Request, endpoint: string) {
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to proxy market request', message: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return NextResponse.json(getMarketFallback(endpoint), {
+      status: 200,
+      headers: {
+        'X-Market-Fallback': 'proxy_error',
+      },
+    });
   }
 }

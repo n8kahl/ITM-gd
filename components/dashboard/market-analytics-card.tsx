@@ -44,9 +44,9 @@ function BreadthBar({ advancers, decliners }: { advancers: number; decliners: nu
 }
 
 export function MarketAnalyticsCard() {
-    const { analytics, isLoading } = useMarketAnalytics()
+    const { analytics, isLoading, isError } = useMarketAnalytics()
 
-    if (isLoading || !analytics) {
+    if (isLoading) {
         return (
             <Card className="glass-card border-none shadow-none h-full">
                 <CardHeader className="pb-2">
@@ -65,7 +65,25 @@ export function MarketAnalyticsCard() {
         )
     }
 
-    const { regime, breadth, indices } = analytics
+    if (isError || !analytics || !analytics.regime || !analytics.breadth || !Array.isArray(analytics.indices)) {
+        return (
+            <Card className="glass-card border-none shadow-none h-full">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-medium flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-blue-500" />
+                        Market Analytics
+                    </CardTitle>
+                    <CardDescription>Market analytics are temporarily unavailable.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-sm text-muted-foreground">Retrying in the background.</div>
+                </CardContent>
+            </Card>
+        )
+    }
+
+    const { regime, breadth } = analytics
+    const indices = Array.isArray(analytics.indices) ? analytics.indices : []
 
     return (
         <Card className="glass-card border-none shadow-none h-full">

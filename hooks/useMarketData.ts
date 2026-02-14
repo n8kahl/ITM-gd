@@ -1,7 +1,20 @@
 
 import useSWR from 'swr';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+    const res = await fetch(url);
+    if (!res.ok) {
+        let detail = '';
+        try {
+            const body = await res.json();
+            if (body && typeof body.message === 'string') detail = body.message;
+        } catch {
+            // no-op
+        }
+        throw new Error(`Market request failed (${res.status})${detail ? `: ${detail}` : ''}`);
+    }
+    return res.json();
+};
 
 export interface MarketIndex {
     symbol: string;
@@ -129,8 +142,17 @@ export function useMarketAnalytics() {
         refreshInterval: 30000, // Poll every 30s
     });
 
+    const isValidAnalytics =
+        !!data &&
+        typeof data === 'object' &&
+        !!data.regime &&
+        typeof data.regime.label === 'string' &&
+        !!data.breadth &&
+        typeof data.breadth.label === 'string' &&
+        Array.isArray(data.indices);
+
     return {
-        analytics: data,
+        analytics: isValidAnalytics ? data : undefined,
         isLoading,
         isError: error,
     };
