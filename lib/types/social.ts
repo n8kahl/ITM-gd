@@ -163,6 +163,7 @@ export interface SocialFeedItem {
     membership_tier: string | null
   }
   user_has_liked?: boolean
+  is_owner?: boolean
 }
 
 export interface FeedFilters {

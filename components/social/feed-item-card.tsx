@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import type {
   SocialFeedItem,
   TradeCardDisplayData,
@@ -15,11 +16,13 @@ import { FeedAchievementCard } from '@/components/social/feed-achievement-card'
 import { FeedMilestoneCard } from '@/components/social/feed-milestone-card'
 import { FeedHighlightCard } from '@/components/social/feed-highlight-card'
 import { LikeButton } from '@/components/social/like-button'
-import { Pin, Star } from 'lucide-react'
+import { Loader2, Pin, Star, Trash2 } from 'lucide-react'
 import Image from 'next/image'
+import { useState } from 'react'
 
 interface FeedItemCardProps {
   item: SocialFeedItem
+  onDeleteItem?: (itemId: string) => Promise<{ success: boolean; error?: string }>
   className?: string
 }
 
@@ -63,13 +66,31 @@ function resolveDiscordAvatarUrl(
   return null
 }
 
-export function FeedItemCard({ item, className }: FeedItemCardProps) {
+export function FeedItemCard({ item, onDeleteItem, className }: FeedItemCardProps) {
   const { author, item_type, display_data, created_at, is_pinned, is_featured } = item
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const displayName =
     author?.display_name || author?.discord_username || 'Anonymous Trader'
   const avatarUrl = resolveDiscordAvatarUrl(author?.discord_avatar, author?.discord_user_id)
   const memberTier = author?.membership_tier || null
+  const canDelete = item.is_owner === true && item_type === 'trade_card' && typeof onDeleteItem === 'function'
+
+  const handleDelete = async () => {
+    if (!onDeleteItem || !canDelete || isDeleting) return
+
+    const confirmed = window.confirm('Remove this trade card from your feed?')
+    if (!confirmed) return
+
+    setDeleteError(null)
+    setIsDeleting(true)
+    const result = await onDeleteItem(item.id)
+    if (!result.success) {
+      setDeleteError(result.error ?? 'Failed to remove trade card')
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <Card
@@ -128,6 +149,22 @@ export function FeedItemCard({ item, className }: FeedItemCardProps) {
             {is_featured && (
               <Star className="h-3.5 w-3.5 fill-emerald-400 text-emerald-400" />
             )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px] text-white/45 hover:bg-red-500/10 hover:text-red-300"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-1 h-3 w-3" />
+                )}
+                Remove
+              </Button>
+            )}
           </div>
         </div>
 
@@ -155,6 +192,10 @@ export function FeedItemCard({ item, className }: FeedItemCardProps) {
             initialCount={item.likes_count}
           />
         </div>
+
+        {deleteError && (
+          <p className="text-xs text-red-400">{deleteError}</p>
+        )}
       </CardContent>
     </Card>
   )

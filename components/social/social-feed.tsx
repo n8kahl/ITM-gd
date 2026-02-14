@@ -69,6 +69,30 @@ export function SocialFeed({ filters, className }: SocialFeedProps) {
     [filters]
   )
 
+  const deleteFeedItem = useCallback(async (itemId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/social/feed/${itemId}`, {
+        method: 'DELETE',
+      })
+
+      const json = await response.json().catch(() => null)
+      if (!response.ok || !json?.success) {
+        return {
+          success: false,
+          error: json?.error || 'Failed to delete feed item',
+        }
+      }
+
+      setItems((prev) => prev.filter((item) => item.id !== itemId))
+      return { success: true }
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to delete feed item',
+      }
+    }
+  }, [])
+
   // Reset and fetch on filter change
   useEffect(() => {
     setItems([])
@@ -161,7 +185,7 @@ export function SocialFeed({ filters, className }: SocialFeedProps) {
   return (
     <div data-testid="social-feed" className={cn('space-y-4', className)}>
       {items.map((item) => (
-        <FeedItemCard key={item.id} item={item} />
+        <FeedItemCard key={item.id} item={item} onDeleteItem={deleteFeedItem} />
       ))}
 
       {/* Load More / Sentinel */}

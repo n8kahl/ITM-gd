@@ -184,6 +184,7 @@ export async function GET(request: NextRequest) {
         membership_tier: authorMeta?.membership_tier ?? null,
       },
       user_has_liked: likedFeedItemIds.has(item.id),
+      is_owner: item.user_id === user.id,
     }
   })
 
