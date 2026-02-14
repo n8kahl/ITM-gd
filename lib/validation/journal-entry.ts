@@ -92,7 +92,7 @@ export const journalEntryUpdateSchema = journalEntryBaseSchema
   .extend({ id: z.string().uuid() })
 
 export const importTradeRowSchema = z.object({
-  symbol: z.string().min(1).max(32),
+  symbol: z.string().min(1).max(64).optional(),
   trade_date: z.string().optional(),
   entry_date: z.string().optional(),
   date: z.string().optional(),
@@ -110,7 +110,24 @@ export const importTradeRowSchema = z.object({
   strategy: z.string().optional(),
   strike_price: z.union([z.number(), z.string()]).optional(),
   expiration_date: z.string().optional(),
-}).passthrough()
+}).passthrough().superRefine((row, ctx) => {
+  const symbolCandidates = [
+    row.symbol,
+    row.Symbol,
+    row.Ticker,
+    row.underlying,
+    row.Name,
+    row.name,
+  ]
+  const hasSymbolSignal = symbolCandidates.some((value) => typeof value === 'string' && value.trim().length > 0)
+  if (!hasSymbolSignal) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Missing symbol field (symbol/Symbol/Ticker/Name)',
+      path: ['symbol'],
+    })
+  }
+})
 
 export const importBrokerSchema = z.enum([
   'interactive_brokers',

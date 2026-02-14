@@ -5,42 +5,7 @@ import { errorResponse, successResponse } from '@/lib/api/response'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { importRequestSchema, sanitizeString } from '@/lib/validation/journal-entry'
 import { sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
-import { parseNumericInput } from '@/lib/journal/number-parsing'
-
-function toNumber(value: unknown): number | null {
-  const parsed = parseNumericInput(value)
-  return parsed.valid ? parsed.value : null
-}
-
-function toDateString(value: string | undefined): string {
-  if (!value) return new Date().toISOString()
-  const parsed = Date.parse(value)
-  if (Number.isNaN(parsed)) return new Date().toISOString()
-  return new Date(parsed).toISOString()
-}
-
-function normalizeDirection(value: string | undefined): 'long' | 'short' {
-  const normalized = (value ?? '').trim().toLowerCase()
-  if (['sell', 's', 'short', 'put'].includes(normalized)) return 'short'
-  return 'long'
-}
-
-function normalizeContractType(value: string | undefined): 'stock' | 'call' | 'put' {
-  const normalized = (value ?? '').trim().toLowerCase()
-  if (normalized.includes('put')) return 'put'
-  if (normalized.includes('call')) return 'call'
-  return 'stock'
-}
-
-function getTextValue(row: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = row[key]
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim()
-    }
-  }
-  return undefined
-}
+import { normalizeImportedRow } from '@/lib/journal/import-normalization'
 
 function buildDeterministicUuid(key: string): string {
   const hex = createHash('sha256').update(key).digest('hex')
@@ -56,81 +21,6 @@ function toDateKey(value: string): string {
 function numberBucket(value: number | null, precision = 4): string {
   if (value == null || !Number.isFinite(value)) return 'na'
   return value.toFixed(precision)
-}
-
-function normalizeImportedRow(row: Record<string, unknown>, broker: string) {
-  const symbolRaw = getTextValue(row, ['symbol', 'Symbol', 'Ticker', 'underlying']) ?? ''
-  const symbol = sanitizeString(symbolRaw.toUpperCase(), 16)
-
-  const tradeDate = toDateString(
-    getTextValue(row, ['trade_date', 'entry_date', 'Date', 'Trade Date', 'Transaction Date', 'date']),
-  )
-
-  const direction = normalizeDirection(
-    getTextValue(row, ['direction', 'Direction', 'side', 'Side', 'action', 'Action', 'type', 'Type']),
-  )
-
-  const contractType = normalizeContractType(
-    getTextValue(row, ['contract_type', 'Contract Type', 'position_type', 'instrument_type', 'Type']),
-  )
-
-  const entryPrice = toNumber(
-    row.entry_price
-    ?? row.entryPrice
-    ?? row['Entry Price']
-    ?? row['Avg Price']
-    ?? row.price
-    ?? row.Price,
-  )
-
-  const exitPrice = toNumber(
-    row.exit_price
-    ?? row.exitPrice
-    ?? row['Exit Price']
-    ?? row['Sell Price']
-    ?? row['Close Price']
-    ?? row.close,
-  )
-
-  const positionSize = toNumber(
-    row.position_size
-    ?? row.positionSize
-    ?? row.quantity
-    ?? row.Quantity
-    ?? row.Qty,
-  ) ?? 1
-
-  const pnl = toNumber(row.pnl ?? row['P/L'] ?? row['Realized P/L'])
-  const pnlPercentage = toNumber(row.pnl_percentage ?? row['P/L %'] ?? row.pnlPct)
-
-  const strikePrice = toNumber(row.strike_price ?? row.Strike)
-  const expirationDateRaw = getTextValue(row, ['expiration_date', 'Expiration', 'Expiry'])
-  const expirationDate = expirationDateRaw
-    ? toDateKey(toDateString(expirationDateRaw))
-    : null
-
-  const strategyRaw = getTextValue(row, ['strategy', 'Strategy', 'Tag'])
-  const strategy = strategyRaw ? sanitizeString(strategyRaw, 120) : null
-
-  const brokerLower = broker.toLowerCase()
-  const contractTypeFromBroker = brokerLower === 'interactive_brokers'
-    ? normalizeContractType(getTextValue(row, ['Asset Class', 'Type']))
-    : contractType
-
-  return {
-    symbol,
-    tradeDate,
-    direction,
-    contractType: contractTypeFromBroker,
-    entryPrice,
-    exitPrice,
-    positionSize,
-    pnl,
-    pnlPercentage,
-    strikePrice,
-    expirationDate,
-    strategy,
-  }
 }
 
 function calculatePnl(
