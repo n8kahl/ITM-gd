@@ -1,5 +1,5 @@
-const STATIC_CACHE_NAME = 'tradeitm-static-v4'
-const RUNTIME_CACHE_NAME = 'tradeitm-runtime-v4'
+const STATIC_CACHE_NAME = 'tradeitm-static-v5'
+const RUNTIME_CACHE_NAME = 'tradeitm-runtime-v5'
 const API_CACHE_NAME = 'tradeitm-api-v2'
 const JOURNAL_MUTATION_DB_NAME = 'tradeitm-offline-journal'
 const JOURNAL_MUTATION_STORE_NAME = 'mutations'
@@ -14,7 +14,7 @@ const STATIC_ASSETS = [
   '/apple-touch-icon.png',
 ]
 
-const CACHED_FILE_PATTERN = /\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf)$/
+const CACHED_FILE_PATTERN = /\.(?:png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf)$/
 const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429])
 
 function buildOfflineQueueId() {
@@ -261,6 +261,13 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (request.method !== 'GET') return
+
+  // Never cache Next.js build assets in SW.
+  // Mixing old/new chunks across deploys can crash hydration/runtime.
+  if (requestUrl.pathname.startsWith('/_next/')) {
+    event.respondWith(fetch(request))
+    return
+  }
 
   if (requestUrl.pathname.startsWith('/api/')) {
     event.respondWith(networkFirst(request, API_CACHE_NAME))
