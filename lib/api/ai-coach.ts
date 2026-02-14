@@ -361,6 +361,10 @@ export interface EarningsCalendarEvent {
   date: string
   time: 'BMO' | 'AMC' | 'DURING'
   confirmed: boolean
+  name?: string | null
+  epsEstimate?: number | null
+  revenueEstimate?: number | null
+  source?: 'massive_reference' | 'alpha_vantage' | 'tmx_corporate_events'
 }
 
 export interface EarningsCalendarResponse {

@@ -28,6 +28,9 @@ interface IntentSpec {
   preferredChartTimeframe?: ChartTimeframe;
   requiresBullBear?: boolean;
   requiresPriceNumbers?: boolean;
+  requiresDisclaimer?: boolean;
+  requiresScenarioProbabilities?: boolean;
+  requiresLiquidityWatchouts?: boolean;
 }
 
 const STOPWORDS = new Set([
@@ -50,6 +53,9 @@ const INTENT_SPECS: IntentSpec[] = [
     preferredChartTimeframe: '15m',
     requiresBullBear: true,
     requiresPriceNumbers: true,
+    requiresDisclaimer: true,
+    requiresScenarioProbabilities: true,
+    requiresLiquidityWatchouts: true,
   },
   {
     id: 'setup_help',
@@ -60,6 +66,9 @@ const INTENT_SPECS: IntentSpec[] = [
     preferredChartTimeframe: '15m',
     requiresBullBear: true,
     requiresPriceNumbers: true,
+    requiresDisclaimer: true,
+    requiresScenarioProbabilities: true,
+    requiresLiquidityWatchouts: true,
   },
   {
     id: 'key_levels',
@@ -102,6 +111,9 @@ const INTENT_SPECS: IntentSpec[] = [
     requiredFunctions: ['get_zero_dte_analysis'],
     recommendedFunctions: ['show_chart'],
     requiresPriceNumbers: true,
+    requiresDisclaimer: true,
+    requiresScenarioProbabilities: true,
+    requiresLiquidityWatchouts: true,
   },
   {
     id: 'iv_analysis',
@@ -117,6 +129,9 @@ const INTENT_SPECS: IntentSpec[] = [
     recommendedFunctions: ['get_current_price', 'show_chart'],
     requiresBullBear: true,
     requiresPriceNumbers: true,
+    requiresDisclaimer: true,
+    requiresScenarioProbabilities: true,
+    requiresLiquidityWatchouts: true,
   },
   {
     id: 'scan_opportunities',
@@ -125,6 +140,9 @@ const INTENT_SPECS: IntentSpec[] = [
     recommendedFunctions: ['show_chart'],
     requiresBullBear: true,
     requiresPriceNumbers: true,
+    requiresDisclaimer: true,
+    requiresScenarioProbabilities: true,
+    requiresLiquidityWatchouts: true,
   },
   {
     id: 'earnings_calendar',
@@ -138,6 +156,9 @@ const INTENT_SPECS: IntentSpec[] = [
     recommendedFunctions: ['get_iv_analysis', 'get_options_chain'],
     requiresBullBear: true,
     requiresPriceNumbers: true,
+    requiresDisclaimer: true,
+    requiresScenarioProbabilities: true,
+    requiresLiquidityWatchouts: true,
   },
   {
     id: 'macro_context',
@@ -189,6 +210,21 @@ function hasBullAndBear(text: string): boolean {
   const hasBull = /\bbull(?:ish)?\b/i.test(text);
   const hasBear = /\bbear(?:ish)?\b/i.test(text);
   return hasBull && hasBear;
+}
+
+function hasFinancialAdviceDisclaimer(text: string): boolean {
+  return /(not financial advice|educational purposes|for informational purposes)/i.test(text);
+}
+
+function hasScenarioProbabilityStructure(text: string): boolean {
+  const hasScenarioWords = /(scenario|case)\b/i.test(text);
+  const hasProbabilityWords = /(probability|odds|chance|likely|likelihood|base case)/i.test(text);
+  const hasPercentages = /\b\d{1,3}\s?%/.test(text);
+  return hasScenarioWords && hasProbabilityWords && hasPercentages;
+}
+
+function hasLiquidityWatchouts(text: string): boolean {
+  return /(liquidity|slippage|wide spread|bid-ask|bid\/ask|depth|volume dries up|thin market)/i.test(text);
 }
 
 function isSetAlertCreationPrompt(message: string): boolean {
@@ -275,6 +311,9 @@ export interface IntentRoutingPlan {
   preferredChartTimeframe: ChartTimeframe;
   requiresBullBear: boolean;
   requiresPriceNumbers: boolean;
+  requiresDisclaimer: boolean;
+  requiresScenarioProbabilities: boolean;
+  requiresLiquidityWatchouts: boolean;
 }
 
 export interface ContractViolationAudit {
@@ -402,6 +441,9 @@ export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
   const preferredChartTimeframe = selectedSpecs.find((spec) => spec.preferredChartTimeframe)?.preferredChartTimeframe || '1D';
   const requiresBullBear = selectedSpecs.some((spec) => spec.requiresBullBear === true);
   const requiresPriceNumbers = selectedSpecs.some((spec) => spec.requiresPriceNumbers === true);
+  const requiresDisclaimer = selectedSpecs.some((spec) => spec.requiresDisclaimer === true);
+  const requiresScenarioProbabilities = selectedSpecs.some((spec) => spec.requiresScenarioProbabilities === true);
+  const requiresLiquidityWatchouts = selectedSpecs.some((spec) => spec.requiresLiquidityWatchouts === true);
   const primarySymbol = selectPrimarySymbol(symbols, intents, loweredMessage);
 
   return {
@@ -414,6 +456,9 @@ export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
     preferredChartTimeframe,
     requiresBullBear,
     requiresPriceNumbers,
+    requiresDisclaimer,
+    requiresScenarioProbabilities,
+    requiresLiquidityWatchouts,
   };
 }
 
@@ -447,6 +492,13 @@ export function buildIntentRoutingDirective(plan: IntentRoutingPlan): string | n
     multiSymbolInstruction,
     plan.requiresBullBear ? '- Response must include both bull and bear scenarios with explicit invalidation.' : '- Bull/bear dual-scenario language is optional.',
     plan.requiresPriceNumbers ? '- Response must include explicit numeric prices/levels.' : '- Numeric price levels are optional unless data is requested.',
+    plan.requiresDisclaimer ? '- Include a clear "not financial advice" style disclaimer.' : '- Financial-advice disclaimer is optional.',
+    plan.requiresScenarioProbabilities
+      ? '- Include a scenario matrix with explicit probabilities (e.g., bull/base/bear with percentages).'
+      : '- Scenario probabilities are optional.',
+    plan.requiresLiquidityWatchouts
+      ? '- Include liquidity watchouts (bid/ask spread, slippage, thin liquidity windows).'
+      : '- Liquidity watchouts are optional.',
   ].join('\n');
 }
 
@@ -483,6 +535,18 @@ export function evaluateResponseContract(
     warnings.push('missing_numeric_prices');
   }
 
+  if (plan.requiresDisclaimer && !hasFinancialAdviceDisclaimer(content)) {
+    blockingViolations.push('missing_financial_disclaimer');
+  }
+
+  if (plan.requiresScenarioProbabilities && !hasScenarioProbabilityStructure(content)) {
+    blockingViolations.push('missing_scenario_probabilities');
+  }
+
+  if (plan.requiresLiquidityWatchouts && !hasLiquidityWatchouts(content)) {
+    blockingViolations.push('missing_liquidity_watchouts');
+  }
+
   if (!content || content.trim().length < 10) {
     blockingViolations.push('empty_or_too_short_response');
   }
@@ -509,6 +573,29 @@ export function evaluateResponseContract(
     blockingViolations,
     warnings,
   };
+}
+
+export function shouldAttemptContractRewrite(audit: ContractViolationAudit): boolean {
+  if (audit.blockingViolations.length > 0) return true;
+  return audit.warnings.some((warning) => warning === 'missing_bull_bear_duality');
+}
+
+export function buildContractRepairDirective(plan: IntentRoutingPlan): string {
+  const checklist: string[] = [];
+
+  if (plan.requiresDisclaimer) checklist.push('Start with: "This is not financial advice; this is educational market analysis."');
+  if (plan.requiresScenarioProbabilities) checklist.push('Provide a bull/base/bear scenario matrix with explicit percentages that sum to 100%.');
+  if (plan.requiresBullBear) checklist.push('Include both bull and bear paths with explicit invalidation levels.');
+  if (plan.requiresPriceNumbers) checklist.push('Include concrete numeric levels and triggers.');
+  if (plan.requiresLiquidityWatchouts) checklist.push('Include liquidity risks: bid/ask spread, slippage risk, and thin-liquidity windows.');
+
+  return [
+    'REPAIR RESPONSE CONTRACT (internal):',
+    '- Rewrite the previous answer for structure and clarity.',
+    '- Keep facts consistent with called tool data; do not invent tool outputs.',
+    '- Keep concise but complete.',
+    ...checklist.map((item) => `- ${item}`),
+  ].join('\n');
 }
 
 function toSafeNumber(value: unknown): number | null {

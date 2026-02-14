@@ -42,6 +42,9 @@ export interface MassiveLastQuote {
 
 const MASSIVE_BASE_URL = 'https://api.massive.com';
 
+let benzingaAvailabilityCached: boolean | null = null;
+let benzingaAvailabilityCheckPromise: Promise<boolean> | null = null;
+
 // Create Axios instance for Massive.com API
 // Lazy initialization: access token is checked in interceptor
 export const massiveClient: AxiosInstance = axios.create({
@@ -96,6 +99,84 @@ massiveClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export interface MassiveEarnings {
+  ticker: string;
+  name: string;
+  date: string; // YYYY-MM-DD
+  time_of_day: string; // "bmo" | "amc" (case-insensitive)
+  eps_estimate?: number;
+  eps_actual?: number;
+  eps_surprise?: number;
+  eps_surprise_pct?: number;
+  revenue_estimate?: number;
+  revenue_actual?: number;
+  revenue_surprise?: number;
+}
+
+interface MassiveEarningsResponse {
+  results?: MassiveEarnings[];
+}
+
+export async function checkBenzingaAvailability(): Promise<boolean> {
+  if (benzingaAvailabilityCached !== null) return benzingaAvailabilityCached;
+  if (benzingaAvailabilityCheckPromise) return benzingaAvailabilityCheckPromise;
+
+  benzingaAvailabilityCheckPromise = (async () => {
+    try {
+      await massiveClient.get('/v1/reference/earnings', { params: { ticker: 'AAPL', limit: 1 } });
+      benzingaAvailabilityCached = true;
+      logger.info('Benzinga endpoints available on Massive.com plan');
+      return true;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 403) {
+        benzingaAvailabilityCached = false;
+        logger.info('Benzinga endpoints not available on current Massive.com plan');
+        return false;
+      }
+      throw error;
+    } finally {
+      benzingaAvailabilityCheckPromise = null;
+    }
+  })();
+
+  return benzingaAvailabilityCheckPromise;
+}
+
+export async function getEarnings(
+  ticker?: string,
+  options?: {
+    dateGte?: string;
+    dateLte?: string;
+    limit?: number;
+    order?: 'asc' | 'desc';
+  }
+): Promise<MassiveEarnings[]> {
+  const benzingaAvailable = await checkBenzingaAvailability();
+  if (!benzingaAvailable) {
+    return [];
+  }
+
+  const params: Record<string, unknown> = {};
+
+  if (ticker) {
+    // Earnings is equity-first; indices (I:) are not valid. Normalize to non-index ticker.
+    const cleaned = formatMassiveTicker(ticker).toUpperCase().replace(/^I:/, '');
+    params.ticker = cleaned;
+  }
+
+  if (options?.dateGte) params['date.gte'] = options.dateGte;
+  if (options?.dateLte) params['date.lte'] = options.dateLte;
+  if (options?.order) params.order = options.order;
+  if (typeof options?.limit === 'number' && Number.isFinite(options.limit)) {
+    params.limit = Math.min(Math.max(Math.floor(options.limit), 1), 1000);
+  }
+
+  const response = await massiveClient.get<MassiveEarningsResponse>('/v1/reference/earnings', { params });
+  const results = response.data?.results;
+  return Array.isArray(results) ? results : [];
+}
 
 // Types for API responses
 export interface MassiveAggregate {

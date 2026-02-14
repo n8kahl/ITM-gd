@@ -8,10 +8,12 @@ import { openaiCircuit } from '../lib/circuitBreaker';
 import { buildSystemPromptForUser } from './promptContext';
 import { sanitizeUserMessage } from '../lib/sanitize-input';
 import {
+  buildContractRepairDirective,
   buildBudgetFallbackMessage,
   buildIntentRoutingDirective,
   buildIntentRoutingPlan,
   evaluateResponseContract,
+  shouldAttemptContractRewrite,
 } from './intentRouter';
 import { backfillRequiredFunctionCalls } from './requiredBackfill';
 
@@ -128,6 +130,46 @@ async function createChatCompletion(messages: ChatCompletionMessageParam[]) {
   }
 
   throw new Error('Unexpected OpenAI retry state');
+}
+
+async function createRewriteCompletion(messages: ChatCompletionMessageParam[]) {
+  for (let attempt = 0; attempt <= MAX_OPENAI_RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      return await openaiCircuit.execute(() => openaiClient.chat.completions.create({
+        model: CHAT_MODEL,
+        messages,
+        max_tokens: Math.min(MAX_TOKENS, 900),
+        temperature: 0.2,
+      }));
+    } catch (error: unknown) {
+      const shouldRetry = isRateLimitError(error) && attempt < MAX_OPENAI_RATE_LIMIT_RETRIES;
+      if (!shouldRetry) throw error;
+
+      const delayMs = getRetryDelayMs(error, attempt);
+      logger.warn('OpenAI rate limit hit, retrying rewrite completion', {
+        attempt: attempt + 1,
+        maxRetries: MAX_OPENAI_RATE_LIMIT_RETRIES,
+        delayMs,
+      });
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error('Unexpected OpenAI rewrite retry state');
+}
+
+function buildRepairFunctionContext(functionCalls: Array<{ function: string; arguments: Record<string, unknown>; result: unknown }>): string {
+  if (functionCalls.length === 0) return 'No function calls were executed.';
+
+  return functionCalls
+    .slice(-6)
+    .map((call, idx) => {
+      const args = JSON.stringify(call.arguments ?? {});
+      const rawResult = JSON.stringify(call.result ?? null);
+      const compactResult = rawResult.length > 1200 ? `${rawResult.slice(0, 1200)}...[truncated]` : rawResult;
+      return `${idx + 1}. ${call.function} args=${args} result=${compactResult}`;
+    })
+    .join('\n');
 }
 
 /**
@@ -278,12 +320,44 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
     // Extract final response
     const defaultFinalContent = assistantMessage.content || 'I apologize, but I was unable to generate a response.';
-    const finalContent = budgetExceeded
+    let finalContent = budgetExceeded
       ? (functionCalls.length > 0
         ? buildBudgetFallbackMessage(routingPlan, functionCalls)
         : TOKEN_BUDGET_EXCEEDED_MESSAGE)
       : defaultFinalContent;
-    const contractAudit = evaluateResponseContract(routingPlan, functionCalls, finalContent);
+    let contractAudit = evaluateResponseContract(routingPlan, functionCalls, finalContent);
+
+    if (!budgetExceeded && shouldAttemptContractRewrite(contractAudit)) {
+      try {
+        const repairDirective = buildContractRepairDirective(routingPlan);
+        const repairContext = buildRepairFunctionContext(functionCalls);
+        const rewriteMessages: ChatCompletionMessageParam[] = [
+          { role: 'system', content: hardenedSystemPrompt },
+          ...(routingDirective ? [{ role: 'system', content: routingDirective } as ChatCompletionMessageParam] : []),
+          { role: 'system', content: repairDirective },
+          {
+            role: 'user',
+            content: [
+              `Original user request:\n${sanitizedMessage}`,
+              `Tool context:\n${repairContext}`,
+              `Draft response to improve:\n${finalContent}`,
+            ].join('\n\n'),
+          },
+        ];
+
+        const rewrite = await createRewriteCompletion(rewriteMessages);
+        const rewrittenContent = rewrite.choices[0]?.message?.content?.trim();
+        if (rewrittenContent) {
+          finalContent = rewrittenContent;
+          cumulativeTokens += rewrite.usage?.total_tokens || 0;
+          contractAudit = evaluateResponseContract(routingPlan, functionCalls, finalContent);
+        }
+      } catch (error: unknown) {
+        logger.warn('Contract rewrite failed; returning original response', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     if (functionCallLimitReached) {
       logger.warn(`Function call limit reached for request`, {
