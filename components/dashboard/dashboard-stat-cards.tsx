@@ -8,10 +8,12 @@ import {
   Flame,
   GraduationCap,
   BarChart3,
+  type LucideIcon,
 } from 'lucide-react'
-import { StatCard } from '@/components/ui/stat-card'
 import { SpotlightCard } from '@/components/ui/spotlight-card'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton-loader'
 
 interface DashboardStats {
   win_rate: number
@@ -65,7 +67,13 @@ export function DashboardStatCards() {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="rounded-xl h-[100px] bg-white/[0.02] border border-white/[0.06] animate-pulse" />
+          <SpotlightCard key={i} className="rounded-xl">
+            <div className="glass-card-heavy rounded-xl p-4 h-[112px] border-white/10">
+              <Skeleton className="h-3 w-20 mb-3" />
+              <Skeleton className="h-8 w-24 mb-2" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </SpotlightCard>
         ))}
       </div>
     )
@@ -115,7 +123,7 @@ export function DashboardStatCards() {
     {
       key: 'streak',
       label: 'Current Streak',
-      value: `${streak} ${streakType === 'win' ? 'W' : 'L'}${streak >= 3 && streakType === 'win' ? ' \uD83D\uDD25' : ''}`,
+      value: `${streak} ${streakType === 'win' ? 'W' : 'L'}`,
       icon: Flame,
       accent: (
         streakType === 'win' && streak >= 5
@@ -149,17 +157,65 @@ export function DashboardStatCards() {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
       {cards.map((card) => (
-        <SpotlightCard key={card.key}>
-          <StatCard
+        <SpotlightCard key={card.key} className="rounded-xl border-white/10">
+          <DashboardStatCard
             label={card.label}
             value={card.value}
             icon={card.icon}
             accent={card.accent}
             trend={card.trend}
-            className="bg-transparent border-0 hover:border-0 hover:-translate-y-0"
           />
         </SpotlightCard>
       ))}
+    </div>
+  )
+}
+
+function DashboardStatCard({
+  label,
+  value,
+  trend,
+  icon: Icon,
+  accent,
+}: {
+  label: string
+  value: string
+  trend?: {
+    value: string
+    direction: StatCardTrendDirection
+  }
+  icon: LucideIcon
+  accent: StatCardAccent
+}) {
+  const iconColorClass = accent === 'emerald' || accent === 'red' ? 'text-emerald-500' : 'text-champagne'
+
+  return (
+    <div className="glass-card-heavy rounded-xl p-4 h-full border-white/[0.08]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-sans">
+            {label}
+          </p>
+          <p className="mt-2 text-3xl font-serif text-ivory leading-none">
+            {value}
+          </p>
+          {trend && (
+            <p className={cn(
+              'mt-2 text-[11px] font-sans tracking-[0.04em]',
+              trend.direction === 'up'
+                ? 'text-emerald-400'
+                : trend.direction === 'down'
+                  ? 'text-red-400'
+                  : 'text-muted-foreground'
+            )}>
+              {trend.value}
+            </p>
+          )}
+        </div>
+        <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2">
+          <Icon strokeWidth={1.5} className={cn('w-4 h-4', iconColorClass)} />
+        </div>
+      </div>
     </div>
   )
 }

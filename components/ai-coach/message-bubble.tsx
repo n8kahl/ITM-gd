@@ -43,8 +43,8 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
           <div className={cn(
             'rounded-2xl px-4 py-2.5',
             isUser
-              ? 'bg-gradient-to-br from-[rgba(243,229,171,0.2)] to-[rgba(243,229,171,0.1)] border border-[rgba(243,229,171,0.3)] text-white'
-              : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 text-white/90',
+              ? 'bg-white/5 border border-white/10 text-white rounded-br-sm'
+              : 'glass-card-heavy border border-emerald-500/20 text-emerald-50/90 rounded-bl-sm',
             message.isOptimistic && 'opacity-70'
           )}>
             {/* Streaming status indicator */}
@@ -56,14 +56,14 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
             )}
             {/* Render message content with basic formatting */}
             {message.content ? (
-              <div className="text-sm leading-relaxed whitespace-pre-wrap">
+              <div className="text-sm leading-[1.75] whitespace-pre-wrap">
                 <FormattedContent content={message.content} />
                 {message.isStreaming && (
                   <span className="inline-block w-1.5 h-4 bg-emerald-400/60 ml-0.5 animate-pulse" />
                 )}
               </div>
             ) : !message.isStreaming ? (
-              <div className="text-sm leading-relaxed whitespace-pre-wrap text-white/40">
+              <div className="text-sm leading-[1.75] whitespace-pre-wrap text-white/40">
                 No response
               </div>
             ) : null}

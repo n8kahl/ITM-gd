@@ -96,8 +96,8 @@ export function MemberSidebar() {
   return (
     <aside className={cn(
       'hidden lg:flex w-[280px] flex-col fixed inset-y-0 left-0 z-40 overflow-hidden',
-      'bg-[#0A0A0B]/88 backdrop-blur-2xl',
-      'border-r border-transparent',
+      'bg-[#0A0A0B]/60 backdrop-blur-xl',
+      'border-r border-white/5',
     )}>
       <div
         aria-hidden
@@ -168,9 +168,9 @@ export function MemberSidebar() {
               key={tab.tab_id}
               href={href}
               className={cn(
-                'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group overflow-hidden',
+                'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-500 ease-out group overflow-hidden',
                 isActive
-                  ? 'text-ivory font-medium'
+                  ? 'text-ivory'
                   : 'text-muted-foreground hover:text-ivory hover:bg-white/[0.03]'
               )}
             >
@@ -178,17 +178,20 @@ export function MemberSidebar() {
               {isActive && (
                 <motion.div
                   layoutId="sidebar-glow"
-                  className="absolute inset-0 rounded-lg bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-                  transition={{ type: 'spring', stiffness: 280, damping: 26 }}
+                  className="pointer-events-none absolute inset-y-0 left-0 right-0 rounded-lg bg-emerald-500/10 border-l-2 border-emerald-500 shadow-[0_0_20px_-5px_rgba(16,185,129,0.15)]"
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
                 />
               )}
 
-              <Icon className={cn(
+              <Icon
+                strokeWidth={1.5}
+                className={cn(
                 'relative z-[1] w-[18px] h-[18px] flex-shrink-0 transition-colors',
                 isActive ? 'text-emerald-400' : 'text-muted-foreground group-hover:text-ivory/60'
-              )} />
+              )}
+              />
 
-              <span className="relative z-[1] flex-1 truncate">{tab.label}</span>
+              <span className="relative z-[1] flex-1 truncate font-sans font-normal tracking-[0.08em]">{tab.label}</span>
 
               {tab.badge_text && (
                 <span className={cn(
@@ -211,7 +214,7 @@ export function MemberSidebar() {
       {!isExecutive && profile?.membership_tier && (
         <div className="mx-3 mb-3 p-3 rounded-xl glass-card border-champagne/15">
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-champagne" />
+            <Sparkles strokeWidth={1.5} className="w-4 h-4 text-champagne" />
             <span className="text-xs font-medium text-champagne">
               Upgrade to {profile.membership_tier === 'core' ? 'Pro' : 'Executive'}
             </span>
@@ -234,7 +237,7 @@ export function MemberSidebar() {
           onClick={signOut}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
         >
-          <LogOut className="w-[18px] h-[18px]" />
+          <LogOut strokeWidth={1.5} className="w-[18px] h-[18px]" />
           <span>Sign Out</span>
         </button>
       </div>

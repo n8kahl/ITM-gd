@@ -9,14 +9,14 @@ import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 interface SkeletonProps {
   className?: string
   variant?: 'default' | 'circular' | 'rounded' | 'screen'
-  animation?: 'shimmer' | 'pulse' | 'none'
+  animation?: 'subtle' | 'shimmer' | 'pulse' | 'none'
   style?: CSSProperties
 }
 
 export function Skeleton({
   className,
   variant = 'default',
-  animation = 'shimmer',
+  animation = 'subtle',
   style,
 }: SkeletonProps) {
   // Full Screen Loading State - "White Glove" Experience
@@ -54,7 +54,8 @@ export function Skeleton({
         variant === 'circular' && 'rounded-full',
         variant === 'rounded' && 'rounded-lg',
         variant === 'default' && 'rounded',
-        animation === 'pulse' && 'animate-pulse',
+        animation === 'subtle' && 'animate-pulse-subtle',
+        animation === 'pulse' && 'animate-pulse-subtle',
         animation === 'shimmer' && 'shimmer',
         className
       )}

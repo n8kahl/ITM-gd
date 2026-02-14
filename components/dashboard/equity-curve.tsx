@@ -6,7 +6,6 @@ import {
   Area,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
@@ -46,8 +45,8 @@ function CustomTooltip({ active, payload, label }: any) {
   const isPositive = value >= 0
 
   return (
-    <div className="glass-card-heavy px-3 py-2 rounded-lg text-xs">
-      <p className="text-muted-foreground mb-1">{label}</p>
+    <div className="glass-card-heavy rounded-xl border border-white/10 px-3 py-2 text-xs shadow-[0_14px_40px_rgba(0,0,0,0.4)]">
+      <p className="text-muted-foreground mb-1 uppercase tracking-[0.12em] text-[10px]">{label}</p>
       <p className={cn(
         'font-mono font-semibold tabular-nums',
         isPositive ? 'text-emerald-400' : 'text-red-400'
@@ -161,15 +160,10 @@ export function EquityCurve() {
             <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={isPositive ? '#10B981' : '#EF4444'} stopOpacity={0.15} />
-                  <stop offset="100%" stopColor={isPositive ? '#10B981' : '#EF4444'} stopOpacity={0} />
+                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.04)"
-                vertical={false}
-              />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -185,11 +179,11 @@ export function EquityCurve() {
                 width={50}
               />
               <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 4" />
+              <ReferenceLine y={0} stroke="rgba(255,255,255,0.05)" strokeDasharray="4 4" />
               <Area
                 type="monotone"
                 dataKey="cumulative_pnl"
-                stroke="#F3E5AB"
+                stroke="#10B981"
                 strokeWidth={2}
                 fill="url(#equityGradient)"
                 animationDuration={800}

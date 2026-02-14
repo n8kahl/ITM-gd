@@ -93,10 +93,9 @@ export function MemberBottomNav() {
   }, [])
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden">
+    <div className="fixed bottom-6 left-4 right-4 z-40 lg:hidden">
       <nav
-        className="glass-panel-premium border-t border-white/[0.06] px-2 pt-2 pb-safe"
-        style={{ backdropFilter: 'blur(20px) saturate(180%)' }}
+        className="glass-card-heavy rounded-2xl border border-white/10 shadow-2xl px-2 pt-2 pb-safe"
       >
         <div className="flex items-end justify-around gap-1">
           {tabs.map((tab) => {
@@ -137,7 +136,7 @@ export function MemberBottomNav() {
                     active ? 'bg-emerald-500/20 text-emerald-300' : 'text-muted-foreground',
                   )}
                 >
-                  <Icon className={cn('w-5 h-5 transition-all', active && 'fill-current')} />
+                  <Icon strokeWidth={1.5} className={cn('w-5 h-5 transition-all', active && 'fill-current')} />
                 </motion.span>
 
                 <span className={cn(
@@ -169,7 +168,7 @@ export function MemberBottomNav() {
                 'inline-flex items-center justify-center rounded-lg p-1.5 transition-colors',
                 moreOpen ? 'bg-emerald-500/20 text-emerald-300' : 'text-muted-foreground',
               )}>
-                <Ellipsis className="w-5 h-5" />
+                <Ellipsis strokeWidth={1.5} className="w-5 h-5" />
               </span>
               <span className={cn(
                 'text-[10px] mt-0.5 leading-none transition-colors',
@@ -196,7 +195,7 @@ export function MemberBottomNav() {
                     }}
                     className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06]"
                   >
-                    <Users className="w-4 h-4 text-emerald-300" />
+                    <Users strokeWidth={1.5} className="w-4 h-4 text-emerald-300" />
                     Social
                   </Link>
 
@@ -208,7 +207,7 @@ export function MemberBottomNav() {
                     }}
                     className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06]"
                   >
-                    <UserCircle className="w-4 h-4 text-emerald-300" />
+                    <UserCircle strokeWidth={1.5} className="w-4 h-4 text-emerald-300" />
                     Profile
                   </Link>
 
@@ -220,7 +219,7 @@ export function MemberBottomNav() {
                     }}
                     className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-ivory/85 hover:bg-white/[0.06]"
                   >
-                    <Settings className="w-4 h-4 text-emerald-300" />
+                    <Settings strokeWidth={1.5} className="w-4 h-4 text-emerald-300" />
                     Settings
                   </Link>
 

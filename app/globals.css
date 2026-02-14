@@ -211,6 +211,7 @@
   body {
     @apply bg-background text-foreground;
     background-color: #0A0A0B;
+    font-family: var(--font-inter), 'Inter', 'Geist', system-ui, sans-serif;
     min-height: 100vh;
     position: relative;
   }
@@ -297,9 +298,20 @@
   }
 
   /* Body text with Inter - Light and spacious */
-  p, span, a, li, td, th, label, input, textarea, button {
+  p, span, a, li, label, input, textarea, button {
     font-family: var(--font-inter), 'Inter', 'Geist', system-ui, sans-serif;
     letter-spacing: 0.01em;
+  }
+
+  /* Data hierarchy - Geist Mono for terminal precision */
+  .font-mono,
+  table th,
+  table td,
+  .font-mono-numbers,
+  .price-display {
+    font-family: var(--font-geist-mono), 'Geist Mono', 'Fira Code', monospace;
+    font-feature-settings: 'tnum' 1, 'zero' 1;
+    letter-spacing: -0.01em;
   }
 
   p {
@@ -850,7 +862,7 @@
 @layer utilities {
   /* Selection styling - Emerald Elite */
   ::selection {
-    background: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.2);
     color: #fff;
   }
 
@@ -1003,10 +1015,12 @@
 
   @keyframes pulse-subtle {
     0%, 100% {
-      box-shadow: 0 0 30px rgba(232, 228, 217, 0.08);
+      opacity: 0.52;
+      filter: brightness(0.96);
     }
     50% {
-      box-shadow: 0 0 50px rgba(232, 228, 217, 0.15);
+      opacity: 0.9;
+      filter: brightness(1.06);
     }
   }
 

@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Send,
-  Loader2,
   Plus,
   MessageSquare,
   Trash2,
@@ -18,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { MessageBubble } from './message-bubble'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
+import { Skeleton } from '@/components/ui/skeleton-loader'
 
 // ============================================
 // TYPES
@@ -105,7 +105,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex h-full">
+    <div className="glass-card-heavy rounded-2xl border border-white/10 overflow-hidden flex h-full">
       {/* Sessions Sidebar (collapsible) */}
       <AnimatePresence>
         {showSessions && (
@@ -131,8 +131,13 @@ export function ChatPanel({
 
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {isLoadingSessions ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
+                <div className="space-y-2 py-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
+                      <Skeleton className="h-3 w-24 mb-2" />
+                      <Skeleton className="h-2 w-12" />
+                    </div>
+                  ))}
                 </div>
               ) : sessions.length === 0 ? (
                 <p className="text-xs text-white/40 text-center py-4">
@@ -236,8 +241,19 @@ export function ChatPanel({
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {isLoadingMessages ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+            <div className="space-y-3">
+              <div className="flex justify-start">
+                <div className="w-full max-w-[72%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.03] p-3 space-y-2">
+                  <Skeleton className="h-3 w-[90%]" />
+                  <Skeleton className="h-3 w-[70%]" />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <div className="w-full max-w-[60%] rounded-2xl rounded-br-sm border border-white/10 bg-white/[0.03] p-3 space-y-2">
+                  <Skeleton className="h-3 w-[85%]" />
+                  <Skeleton className="h-3 w-[55%]" />
+                </div>
+              </div>
             </div>
           ) : messages.length === 0 ? (
             <EmptyState />
@@ -250,8 +266,8 @@ export function ChatPanel({
               {/* Thinking indicator */}
               {isSending && (
                 <div className="flex items-center gap-2 text-white/40 text-sm">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-subtle" />
                   </div>
                   <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-4 py-2.5">
                     <div className="flex items-center gap-1.5">
@@ -272,7 +288,7 @@ export function ChatPanel({
         </div>
 
         {/* Input Area */}
-        <div className="p-3 border-t border-white/5 bg-[#0F0F10]/40">
+        <div className="p-3 border-t border-white/5 bg-[#0A0A0B]/45">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <input
               ref={inputRef}
@@ -283,15 +299,19 @@ export function ChatPanel({
               placeholder={isSending ? 'Waiting for response...' : 'Ask about levels, markets, options...'}
               disabled={isSending}
               maxLength={2000}
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/50 transition-colors disabled:opacity-50"
+              className="flex-1 bg-[#0A0A0B]/50 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-champagne/30 focus:border-champagne/30 transition-all duration-500 disabled:opacity-50"
             />
             <Button
               type="submit"
               disabled={!inputValue.trim() || isSending}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed h-auto"
+              className="btn-premium bg-gradient-to-r from-emerald-700 to-emerald-500 hover:from-emerald-600 hover:to-emerald-400 px-4 py-2.5 rounded-xl h-auto hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {isSending ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse-subtle" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse-subtle" style={{ animationDelay: '160ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/70 animate-pulse-subtle" style={{ animationDelay: '320ms' }} />
+                </span>
               ) : (
                 <Send className="w-5 h-5" />
               )}

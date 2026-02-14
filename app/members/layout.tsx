@@ -138,7 +138,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <div className={cn(
-        'min-h-screen relative overflow-hidden',
+        'min-h-screen relative overflow-hidden pb-safe lg:pb-0',
         'lg:pl-[280px]', // offset for sidebar
       )}>
         <div
