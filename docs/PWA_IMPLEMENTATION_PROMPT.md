@@ -1,6 +1,6 @@
-# Claude Code Prompt: PWA Spec-Driven Implementation
+# Claude Code / Codex Prompt: PWA Spec-Driven Implementation
 
-> **Usage:** Copy this entire prompt into a Claude Code session (or Codex task) with the TradeITM repo checked out. It implements `docs/PWA_SPEC.md` using gated phases with test verification between each phase.
+> **Usage:** Feed this entire prompt as the task instruction for a Claude Code session or Codex autonomous run with the TradeITM repo checked out. It implements `docs/PWA_SPEC.md` using gated phases with build + test verification between each phase.
 
 ---
 
@@ -8,180 +8,273 @@
 
 You are implementing a production-grade PWA for the TradeITM Next.js application. You MUST follow spec-driven development — every feature you build traces back to `docs/PWA_SPEC.md`. You MUST NOT deviate from the spec, improvise features, or skip phases.
 
-Read `CLAUDE.md` and `docs/PWA_SPEC.md` before writing any code. These are your source of truth.
+**Before writing ANY code**, read these files in order:
+1. `CLAUDE.md` — project coding conventions, design system, forbidden patterns
+2. `docs/PWA_SPEC.md` — the authoritative PWA specification (1430 lines, 13 sections)
+3. `lib/pwa-utils.ts` — existing standalone/iOS detection utilities (reuse, don't duplicate)
+4. `components/pwa/service-worker-register.tsx` — already complete SW lifecycle manager
+5. `public/sw.js` — existing service worker (354 lines) with journal sync, push, caching
 
 ### Development Methodology: Gated Phases
 
-This implementation is divided into 7 sequential phases. Each phase has:
+This implementation is divided into 8 sequential phases. Each phase has:
 
 1. **Implementation** — Write the code specified in the phase
 2. **Unit/Integration Tests** — Write tests that verify the code works
-3. **Gate Check** — Run the test suite. ALL tests must pass before proceeding
-4. **Documentation** — Update inline JSDoc and the phase's section of `docs/PWA_CHANGELOG.md`
+3. **Gate Check** — Run the test suite and build. ALL must pass before proceeding
+4. **Documentation** — Update inline JSDoc and append to `docs/PWA_CHANGELOG.md`
 
 **CRITICAL RULES:**
-- Never start Phase N+1 until Phase N's gate check passes
-- If a gate check fails, fix the failing tests before proceeding — do not skip or delete tests
-- Run `pnpm test:unit` after every phase. Run `pnpm test:e2e:mobile` after Phases 3, 5, and 7
-- Run `pnpm build` after every phase to catch type errors
-- Commit after each phase passes its gate: `git commit -m "feat(pwa): phase N — <description>"`
-- Every new file must have a JSDoc header comment explaining its purpose and which spec section it implements
+- Never start Phase N+1 until Phase N's gate check passes with zero failures
+- If a gate check fails, fix the issue — do not skip, delete, or `.skip` tests
+- Run `pnpm build` after every phase to catch type errors early
+- Run `pnpm test:unit` after every phase
+- Run `pnpm test:e2e:mobile` after Phases 3, 4, 6, and 8
+- Commit after each successful gate: `git commit -m "feat(pwa): phase N — <description>"`
+- Every new file MUST have a JSDoc header comment: purpose, spec section reference, author
+- When modifying existing files, read the FULL file first — never edit blind
 
-### Project Context
+### Accurate Project State (as of Feb 2026)
 
 ```
 Stack:           Next.js 16 (App Router), TypeScript, Tailwind CSS 4, Supabase
-Package Manager: pnpm 10
+Package Manager: pnpm 10.29.1 (set via corepack)
 Node:            22+
-Test Runner:     Vitest (unit), Playwright (e2e)
+Test Runner:     Vitest (unit — lib/__tests__/**), Playwright (e2e — e2e/specs/**)
 Linter:          ESLint
-Build:           next build --webpack
+Build:           pnpm build (next build --webpack)
 CI:              GitHub Actions (.github/workflows/e2e-tests.yml)
-Design System:   "Emerald Standard" — dark mode only, #10B981 primary, #0A0A0B background
-CSS Variables:   var(--emerald-elite), var(--champagne), glass-card-heavy
-Imports:         @/ alias (tsconfig paths: "@/*" → "./*")
-Icons:           Lucide React only
-Images:          next/image only
+Design System:   "Emerald Standard" — dark mode ONLY
+  Primary:       #10B981 (var(--emerald-elite))
+  Background:    #0A0A0B (onyx)
+  Accent:        #F5EDCC (var(--champagne)) — NOT #D4AF37 (forbidden)
+  Cards:         glass-card-heavy utility class
+Imports:         @/ alias (tsconfig: "@/*" → "./*")
+Icons:           Lucide React ONLY
+Images:          next/image ONLY
 Fonts:           Playfair Display (headings), Inter (body), Geist Mono (data)
 ```
 
-**Existing files you'll modify** (read these first):
-- `public/manifest.json` — current partial manifest
-- `public/sw.js` — hand-rolled service worker (~290 lines) with offline journal sync
-- `components/pwa/service-worker-register.tsx` — already rewritten with update detection
-- `app/layout.tsx` — root layout
-- `app/members/layout.tsx` — members area layout
-- `app/globals.css` — design system (~1067 lines)
-- `components/members/mobile-top-bar.tsx` — sticky mobile header
-- `components/members/mobile-bottom-nav.tsx` — bottom tab bar with haptics
-- `hooks/use-is-mobile.ts` — breakpoint-based mobile detection
-- `middleware.ts` — CSP nonce, auth, route gating
-- `playwright.config.ts` — existing projects: chromium, mobile, mobile-members
+### What Already Exists (do NOT reimplement)
 
-**Existing files to reference** (read but don't modify):
-- `contexts/MemberAuthContext.tsx` — membership tier from Discord roles
-- `lib/motion-primitives.ts` — existing animation constants
-- `lib/sounds.ts` — audio utilities
-- `lib/web-push-service.ts` — already implemented server-side push delivery
-- `lib/types/notifications.ts` — already implemented notification types
-- `app/api/admin/notifications/route.ts` — already implemented admin push API
-- `components/admin/notification-user-search.tsx` — already implemented
+These are already complete and production-ready. Read them for context but do not modify:
 
-**Already completed** (do NOT reimplement):
-- Push notification admin panel (`app/admin/notifications/page.tsx`)
-- Web push service (`lib/web-push-service.ts`)
-- Notification types (`lib/types/notifications.ts`)
-- Admin notification API routes (`app/api/admin/notifications/`)
-- Service worker SKIP_WAITING handler (already in `sw.js`)
-- Service worker registration with update detection (already rewritten)
-- `notification_broadcasts` DB table (already migrated)
-- `push_subscriptions` DB table (already migrated)
+| File | What it does | Status |
+|------|-------------|--------|
+| `components/pwa/service-worker-register.tsx` | Full SW lifecycle: update detection, Sonner toast, 60s idle auto-reload, SKIP_WAITING, controllerchange guard | ✅ Complete (105 lines) |
+| `lib/web-push-service.ts` | Server-side VAPID push delivery with batch processing, tier targeting, subscription cleanup | ✅ Complete (269 lines) |
+| `lib/types/notifications.ts` | TypeScript interfaces for push notifications, broadcasts, targeting | ✅ Complete (95 lines) |
+| `app/api/admin/notifications/route.ts` | GET (list history) + POST (create & send broadcast) admin API | ✅ Complete (204 lines) |
+| `app/api/admin/notifications/search-users/route.ts` | User search for individual push targeting | ✅ Complete |
+| `app/admin/notifications/page.tsx` | Admin notification compose + history UI | ✅ Complete |
+| `components/admin/notification-user-search.tsx` | Debounced Discord user picker for notifications | ✅ Complete |
+| `lib/pwa-utils.ts` | `isStandaloneMode()`, `isIOS()`, `isIOSStandalone()` — SSR-safe detection | ✅ Complete (38 lines) |
+| `push_subscriptions` DB table | Supabase table with RLS | ✅ Migrated |
+| `notification_broadcasts` DB table | Supabase table with RLS, indexes | ✅ Migrated |
+
+### What Exists But Needs Changes
+
+| File | Current state | What's missing |
+|------|--------------|----------------|
+| `public/manifest.json` | Partial: 4 icons (16, 32, 192 combo, 180), no `id`, no `display_override`, `start_url: "/"`, `"purpose": "any maskable"` (invalid combo on single icon) | Full rewrite per Spec §3 |
+| `public/sw.js` | Solid: 354 lines, journal sync, push, cache-first/network-first strategies, SKIP_WAITING handler | Missing: `SW_VERSION`, `offline.html` fallback, expanded `STATIC_ASSETS`, periodic sync |
+| `app/layout.tsx` | Has: manifest link, appleWebApp meta via Next.js API, ServiceWorkerRegister mounted | Missing: `viewport-fit=cover`, `theme-color` meta, `format-detection`, `msapplication-*`, iOS splash links |
+| `app/globals.css` | Has: `pb-safe`, `.scrollbar-hide`, mobile blur reductions, reduced-motion support (1182 lines) | Missing: `@media (display-mode: standalone)` rules, `.safe-top/bottom/left/right`, `.pb-nav`, touch target sizing, nav user-select |
+| `app/members/layout.tsx` | Has: auth guards, animated route transitions, MobileTopBar, MemberBottomNav, uses `pb-safe lg:pb-0` on content wrapper, `pb-28` on `<main>` | Missing: `pb-nav` dynamic padding, `will-change` on motion container, InstallPrompt mount, NetworkStatusProvider |
+| `components/members/mobile-top-bar.tsx` | Has: sticky header, logo, avatar (46 lines) | Missing: `safe-area-inset-top`, network indicator, back button for sub-pages |
+| `components/members/mobile-bottom-nav.tsx` | Has: 4 tabs + More, haptic feedback, spring animations, `fixed bottom-6 left-4 right-4`, pb-safe (236 lines) | Missing: badge prop/rendering, keyboard detection to hide nav, safe-area-aware bottom positioning |
+| `hooks/use-focus-trap.ts` | Has: Tab/Shift+Tab focus wrapping, Escape key handling | Missing: body scroll lock — modals/sheets can scroll content behind them |
+| `components/ui/dialog.tsx` | Radix Dialog with portal to body, fixed overlay | Missing: body scroll lock on open |
+| `components/journal/trade-entry-sheet.tsx` | Portal-based sheet with focus trap | Missing: body scroll lock, scroll position restoration on close |
+| `components/journal/entry-detail-sheet.tsx` | Portal-based detail view sheet | Missing: body scroll lock, scroll position restoration on close |
+| `app/members/studio/page.tsx` | Desktop-only page, shows mobile warning | Missing: redirect to `/members` on mobile PWA so user doesn't get stuck |
+| `playwright.config.ts` | Has: chromium, mobile (iPhone 13), mobile-members (Pixel 7), ai-coach projects, `serviceWorkers: 'block'` | Missing: PWA test project with SW allowed |
+| `package.json` | Has: `web-push`, `framer-motion`, full test scripts | Missing: `sharp` devDep, `generate:pwa-*` scripts |
+
+### What Does NOT Exist (contrary to original prompt)
+
+**`middleware.ts` does NOT exist in this project.** The original spec references it for Permissions-Policy headers. Instead, configure security headers via `next.config.ts` `headers()` or a new middleware file if needed. Do not assume it exists — verify with `ls` before attempting to modify.
+
+**`public/icons/` directory does NOT exist.** No icon assets have been generated yet.
+
+**`public/offline.html` does NOT exist.** No offline fallback page exists.
+
+**`public/screenshots/` and `public/splash/` directories do NOT exist.**
 
 ---
 
 ## Phase 1: Installability Foundation (Spec §3, §4, §5)
 
 ### Goal
-Make the app pass 100% of Lighthouse PWA checks on mobile.
+Make the app pass 100% of Lighthouse PWA audit checks on mobile.
+
+### Pre-flight
+```bash
+# Verify current state before making changes
+ls public/manifest.json public/sw.js public/hero-logo.png
+cat public/manifest.json
+head -20 public/sw.js
+```
 
 ### Tasks
 
 **1.1 — Icon Asset Pipeline** (Spec §4)
 ```
-Create: scripts/generate-pwa-icons.ts
-Create: public/icons/ directory with all 14 icon files
+Install:  pnpm add -D sharp @types/sharp
+Create:   scripts/generate-pwa-icons.ts
+Create:   public/icons/ (14 icon files)
+Add:      package.json script "generate:pwa-icons": "tsx scripts/generate-pwa-icons.ts"
 ```
-- Install `sharp` as a devDependency: `pnpm add -D sharp @types/sharp`
-- Write `scripts/generate-pwa-icons.ts` that reads `public/hero-logo.png` (773KB source)
-- Generate all sizes from the table in Spec §4: 72, 96, 128, 144, 152, 192, 384, 512 (purpose: any)
-- Generate maskable variants at 192 and 512 — logo centered in 80% safe zone, `#0A0A0B` background fill
-- Generate monochrome at 192 — white silhouette on transparent
-- Generate 3 shortcut icons at 96x96 — render the Lucide icon name (BookOpen, Bot, LayoutDashboard) as white on `#047857` rounded-rect background. Use `@resvg/resvg-js` or SVG-to-PNG for this.
-- Add script to package.json: `"generate:pwa-icons": "tsx scripts/generate-pwa-icons.ts"`
-- Run the script to generate all icons
+- Read `public/hero-logo.png` (773KB) as source image
+- Generate all sizes: 72, 96, 128, 144, 152, 192, 384, 512 (purpose: `any`)
+- Generate maskable variants at 192 and 512: logo centered in 80% safe zone, `#0A0A0B` background fill padding
+- Generate monochrome at 192: white silhouette on transparent background
+- Generate 3 shortcut icons at 96x96: Lucide icon (BookOpen, Bot, LayoutDashboard) as white on `#047857` rounded-rect. Use SVG string → sharp composite approach
+- Run the script: `pnpm generate:pwa-icons`
+- Verify all 14 files exist in `public/icons/`
 
 **1.2 — Manifest Overhaul** (Spec §3)
 ```
-Modify: public/manifest.json — complete rewrite
+Modify: public/manifest.json — COMPLETE REWRITE
 ```
-- Replace the entire file with the manifest from Spec §3 verbatim
-- Verify all icon `src` paths point to files that exist in `public/icons/`
+- Replace the entire file with the manifest JSON from Spec §3 (lines 79-232)
+- This adds: `id`, `display_override`, `start_url: "/members?utm_source=pwa"`, full icon array with separated purposes, `screenshots`, `shortcuts`, `share_target`, `protocol_handlers`
+- Verify every icon `src` path in the manifest matches a real file in `public/icons/`
 
 **1.3 — Root Layout Meta Tags** (Spec §7A)
 ```
 Modify: app/layout.tsx
 ```
-- Add/update viewport meta: `width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover`
-- Add `<meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)" />`
-- Verify existing apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style, apple-mobile-web-app-title are present
-- Add `<meta name="format-detection" content="telephone=no" />`
-- Add `<meta name="msapplication-TileColor" content="#0A0A0B" />`
-- Add `<meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />`
-- Use Next.js metadata API where possible, fall back to `<head>` for non-standard tags
+Read the file first. The current metadata export uses Next.js Metadata API. Add/update:
+- Add `viewport` export: `{ width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false, viewportFit: 'cover' }` — use Next.js `export const viewport` API
+- Add `themeColor` in viewport or metadata: `[{ media: '(prefers-color-scheme: dark)', color: '#0A0A0B' }]`
+- Add to `other` metadata: `{ 'format-detection': 'telephone=no', 'msapplication-TileColor': '#0A0A0B', 'msapplication-TileImage': '/icons/icon-144x144.png' }`
+- Keep all existing metadata (appleWebApp, icons, openGraph, twitter)
+- Update icon references to include the new 512px icon
 
 **1.4 — Standalone CSS** (Spec §7B)
 ```
-Modify: app/globals.css
+Modify: app/globals.css — APPEND new section
 ```
-- Add the entire "PWA STANDALONE MODE ADJUSTMENTS" CSS block from Spec §7B
-- Includes: `@media (display-mode: standalone)` rules, `.safe-top`, `.safe-bottom`, `.safe-left`, `.safe-right`, `.pb-nav`, nav user-select prevention, `.scroll-native`, `.scrollbar-mobile-hide`, touch target sizing `@media (pointer: coarse)`
-- Do NOT duplicate existing `pb-safe` — keep both, they serve different purposes
+Read the file first (1182 lines). Append the PWA standalone CSS block from Spec §7B at the end:
+- `@media all and (display-mode: standalone)` body rules (padding-top safe-area, overscroll-behavior)
+- `.safe-top`, `.safe-bottom`, `.safe-left`, `.safe-right` utilities
+- `.pb-nav` = `calc(env(safe-area-inset-bottom) + 4.5rem)`
+- `nav, .nav-item` user-select/touch-callout prevention
+- `.scroll-native` with `-webkit-overflow-scrolling: touch`
+- `@media (pointer: coarse)` touch target minimum 44x44px
+- Do NOT modify existing `.pb-safe` or `.scrollbar-hide` — they serve different purposes
 
 **1.5 — Offline Fallback Page** (Spec §5A)
 ```
 Create: public/offline.html
 ```
-- Self-contained HTML (no external deps, all CSS inline, logo as inline SVG or base64)
-- `#0A0A0B` background, centered TradeITM logo, "You're offline" message
-- "Your queued trades will sync when you reconnect" reassurance
-- Retry button: `onclick="location.reload()"`
-- Style with Emerald Standard colors (emerald accent, champagne/ivory text)
-- Embed Inter font subset (regular weight only, Latin chars) as base64 woff2
+- Self-contained HTML — NO external CSS/JS/font files
+- Inline all styles in `<style>` tag
+- Logo as inline SVG (trace from hero-logo.png) or base64 data URI
+- Background: `#0A0A0B`
+- "You're offline" heading in champagne (`#F5EDCC`)
+- "Your queued trades will sync when you reconnect" body text in ivory (`#F5F5F0`)
+- Retry button styled with emerald (`#10B981`) background: `onclick="location.reload()"`
+- Embed a minimal Inter font subset as base64 woff2, OR use system font stack as fallback
+- Keep file under 15KB total
 
 **1.6 — Service Worker Upgrades** (Spec §5A, §5C, §5D, §5E)
 ```
 Modify: public/sw.js
 ```
-- Add `SW_VERSION = '5.0.0'` constant at top
-- Add `/offline.html` to `STATIC_ASSETS` array
-- Expand `STATIC_ASSETS` with the full list from Spec §5C
-- Update navigation fetch handler to fall back to `/offline.html` per Spec §5A code block
-- Add periodic background sync handler for `dashboard-refresh` per Spec §5D
-- Log version on activate: `console.log('[SW] Activated version ${SW_VERSION}')`
+Read the full file first (354 lines). Apply these targeted changes:
+
+1. Add `const SW_VERSION = '5.0.0'` as the FIRST line
+2. Expand `STATIC_ASSETS` array (currently 6 items) to include:
+   ```javascript
+   const STATIC_ASSETS = [
+     '/',
+     '/members',
+     '/members/journal',
+     '/members/ai-coach',
+     '/members/academy/courses',
+     '/offline.html',
+     '/manifest.json',
+     '/favicon.png',
+     '/hero-logo.png',
+     '/apple-touch-icon.png',
+     '/icons/icon-192x192.png',
+     '/icons/icon-512x512.png',
+   ]
+   ```
+3. Update the navigation fetch handler — find the existing `request.mode === 'navigate'` block and update its catch to fall back to `caches.match('/offline.html')`:
+   ```javascript
+   .catch(() => caches.match(request)
+     .then((cached) => cached || caches.match('/offline.html'))
+   )
+   ```
+4. Add periodic sync handler before the existing message listener:
+   ```javascript
+   self.addEventListener('periodicsync', (event) => {
+     if (event.tag === 'dashboard-refresh') {
+       event.waitUntil(
+         fetch('/api/members/dashboard')
+           .then(response => {
+             if (response.ok) {
+               return caches.open(API_CACHE_NAME)
+                 .then(cache => cache.put('/api/members/dashboard', response))
+             }
+           })
+           .catch(() => {/* silent fail */})
+       )
+     }
+   })
+   ```
+5. Add version logging in the activate handler: `console.log('[SW] Activated version ${SW_VERSION}')`
 
 ### Phase 1 Gate Check
 
 ```bash
-# 1. Build must succeed with no type errors
+# 1. Icons generated
+ls -la public/icons/ | wc -l  # Should be 14+ files
+
+# 2. Manifest valid
+node -e "
+const m = JSON.parse(require('fs').readFileSync('public/manifest.json','utf8'));
+const checks = [
+  ['id', !!m.id],
+  ['display_override', Array.isArray(m.display_override)],
+  ['512px icon', m.icons.some(i => i.sizes === '512x512')],
+  ['maskable icon', m.icons.some(i => i.purpose === 'maskable')],
+  ['screenshots', m.screenshots?.length >= 1],
+  ['shortcuts', m.shortcuts?.length >= 3],
+  ['share_target', !!m.share_target],
+];
+const fails = checks.filter(([,v]) => !v);
+if (fails.length) { console.error('FAIL:', fails.map(([n]) => n)); process.exit(1); }
+console.log('Manifest OK');
+"
+
+# 3. Offline page exists
+test -f public/offline.html && echo "offline.html OK" || echo "FAIL: offline.html missing"
+
+# 4. Build succeeds
 pnpm build
-
-# 2. All generated icons must exist
-ls -la public/icons/
-
-# 3. Manifest must be valid JSON
-node -e "JSON.parse(require('fs').readFileSync('public/manifest.json','utf8')); console.log('manifest OK')"
-
-# 4. Offline page must exist and be valid HTML
-test -f public/offline.html && echo "offline.html OK"
 
 # 5. Unit tests pass
 pnpm test:unit
-
-# 6. Write and run a Phase 1 verification test
-# Create: __tests__/pwa/phase1-installability.test.ts
 ```
 
 **Phase 1 Test File:** `lib/__tests__/pwa/phase1-installability.test.ts`
-```typescript
-// Test: manifest.json is valid and has required fields (id, name, start_url, display, icons with 512px, screenshots)
-// Test: All icon files referenced in manifest exist on disk (fs.existsSync)
-// Test: offline.html exists and contains required elements (logo, retry button, offline message)
-// Test: sw.js contains SW_VERSION, SKIP_WAITING handler, offline.html in STATIC_ASSETS
-// Test: manifest has at least one maskable icon at 512px
-// Test: manifest has at least one screenshot with form_factor "narrow"
-// Test: manifest has shortcuts array with 3+ entries
-// Test: manifest has share_target defined
-```
+
+Write a Vitest test file that verifies:
+- `manifest.json` is valid JSON with required fields: `id`, `name`, `start_url`, `display`, `display_override`
+- Manifest has at least one icon at 512x512
+- Manifest has at least one icon with `purpose: "maskable"`
+- Manifest has no icon with `purpose: "any maskable"` (the invalid combo)
+- Manifest has `screenshots` array with at least 1 narrow entry
+- Manifest has `shortcuts` array with 3+ entries
+- Manifest has `share_target` object
+- All icon `src` paths in manifest resolve to existing files (`fs.existsSync('public' + icon.src)`)
+- `offline.html` exists and contains "offline" text and a retry mechanism
+- `sw.js` contains `SW_VERSION` string
+- `sw.js` contains `offline.html` in its STATIC_ASSETS
 
 **Commit:** `git commit -m "feat(pwa): phase 1 — installability foundation (icons, manifest, offline, SW upgrades)"`
 
@@ -198,56 +291,68 @@ Build the branded install prompt with animation on Android and instruction overl
 ```
 Create: hooks/use-is-standalone.ts
 ```
-- Check `window.matchMedia('(display-mode: standalone)').matches`
-- Check `(navigator as any).standalone` (iOS Safari)
-- Check URL params for `utm_source=pwa` (from manifest start_url)
-- Return `boolean`
-- SSR-safe: return `false` during SSR
+- Import and wrap the existing `lib/pwa-utils.ts` functions as a React hook
+- Uses `isStandaloneMode()` from `@/lib/pwa-utils` + adds `matchMedia` listener for live updates
+- Also checks URL params for `utm_source=pwa` (from manifest start_url)
+- Returns `boolean`
+- SSR-safe: returns `false` during SSR
+- DO NOT duplicate the detection logic — import from `lib/pwa-utils.ts`
 
 **2.2 — PWA Install Hook** (Spec §6D)
 ```
 Create: hooks/use-pwa-install.ts
 ```
-- Capture `beforeinstallprompt` event in a ref
+- Capture `beforeinstallprompt` event, store in ref
 - Track state: `{ isInstallable, isStandalone, promptOutcome, showPrompt() }`
-- `showPrompt()` calls `event.prompt()` and tracks the outcome
-- Listen for `appinstalled` event
-- Write install events to Supabase `conversion_events` table (event_type: 'pwa_install') — use `fetch('/api/analytics/event', ...)`
-- Persist dismissal in `localStorage` key `tradeitm-a2hs-dismissed` with timestamp
-- Suppression logic: don't show for 14 days after dismiss, never after install
+- `showPrompt()` calls `deferredPrompt.prompt()` and reads `userChoice`
+- Listen for `appinstalled` event → mark as installed
+- Write install analytics via `fetch('/api/analytics/event', { method: 'POST', body: JSON.stringify({ event_type: 'pwa_install' }) })` — if the endpoint doesn't exist, create a simple one or log to console
+- Persist in `localStorage`:
+  - `tradeitm-a2hs-dismissed`: timestamp — suppress for 14 days
+  - `tradeitm-a2hs-installed`: boolean — suppress permanently
+- Uses `useIsStandalone()` hook for standalone detection
 
 **2.3 — Install Prompt Bottom Sheet** (Spec §6A)
 ```
 Create: components/pwa/install-prompt.tsx
 ```
-- Client component using framer-motion
-- Bottom sheet visual per the ASCII diagram in Spec §6A
-- Animation sequence per Spec §6A: backdrop fade → sheet spring up → logo bounce → text stagger → CTA pulse
-- Uses `use-pwa-install` hook for state and prompt trigger
-- Show condition: user on `/members` route for 30s OR 3+ page visits in session, AND not dismissed, AND not standalone
-- CTA button: `btn-premium btn-luxury` classes
-- Container: `glass-card-heavy rounded-t-2xl`
-- Feature list: "Works offline", "Push notifications", "Instant launch" with checkmarks
-- "Maybe Later" text button dismisses with 14-day suppression
-- Logo uses `next/image` with `src="/logo.png"`
+- `'use client'` component using `framer-motion` (already in deps)
+- Bottom sheet layout per ASCII diagram in Spec §6A
+- Animation sequence:
+  1. Backdrop: `bg-black/60` fade in 300ms
+  2. Sheet: `y: "100%"` → `y: 0` with spring `{ stiffness: 300, damping: 30 }`
+  3. Logo: scale 0.5 → 1.0 with bounce, 150ms delay
+  4. Text elements: fade + slide up, staggered 50ms each
+  5. CTA button: pulse glow after 500ms delay
+  6. Dismiss: slide down + fade out, 200ms
+- Display condition: (on `/members` for 30s OR 3+ page visits) AND not dismissed AND not standalone AND installable
+- CTA uses `glass-card-heavy rounded-t-2xl` container
+- Feature bullets: "Works offline", "Push notifications", "Instant launch"
+- Logo: `<Image src="/logo.png" .../>` (next/image)
+- "Maybe Later" text button → dismiss with 14-day suppression
+- "Add to Home Screen" button → calls `showPrompt()` from hook
 
 **2.4 — iOS Install Guide** (Spec §6B)
 ```
 Create: components/pwa/ios-install-guide.tsx
 ```
-- Detect iOS: check userAgent for iPhone/iPad AND not standalone
+- Detect iOS using `isIOS()` from `@/lib/pwa-utils`
+- Show only when: iOS AND not standalone AND not dismissed
 - Bottom sheet with 3-step instructions per Spec §6B
-- Bouncing arrow animation pointing to Safari share button: `{ y: [0, -8, 0] }` repeat infinite
-- Different arrow position for iPhone (bottom center) vs iPad (top right)
-- "Got it" dismiss button
-- Same suppression logic via localStorage
+- Animated bouncing arrow (framer-motion `{ y: [0, -8, 0] }` repeat: Infinity) pointing to Safari share button
+- iPhone: arrow at bottom center. iPad: arrow at top right
+- "Got it" dismiss button with same localStorage suppression
 
 **2.5 — Mount Install Components**
 ```
 Modify: app/members/layout.tsx
 ```
-- Import and render `<InstallPrompt />` inside the members layout (after the main content)
-- Only renders on client, only on mobile (use existing `useIsMobile` hook)
+Read the full file first (174 lines). Add after `<MemberBottomNav />`:
+```tsx
+<InstallPrompt />
+```
+Import at top: `import { InstallPrompt } from '@/components/pwa/install-prompt'`
+The component handles its own mobile detection and show/hide logic internally.
 
 ### Phase 2 Gate Check
 
@@ -257,15 +362,14 @@ pnpm test:unit
 ```
 
 **Phase 2 Test File:** `lib/__tests__/pwa/phase2-install-prompt.test.ts`
-```typescript
-// Test: useIsStandalone returns false in non-standalone env
-// Test: usePwaInstall initial state has isInstallable: false, isStandalone: false
-// Test: localStorage suppression logic — dismissed < 14 days ago = suppressed
-// Test: localStorage suppression logic — dismissed > 14 days ago = not suppressed
-// Test: localStorage suppression logic — installed = always suppressed
-// Test: InstallPrompt component renders nothing when not installable (snapshot)
-// Test: iOSInstallGuide component renders nothing on non-iOS (snapshot)
-```
+
+Write tests that verify:
+- `useIsStandalone` returns `false` in JSDOM (non-standalone)
+- `usePwaInstall` initial state: `isInstallable: false`, `isStandalone: false`
+- localStorage dismissal logic: dismissed within 14 days → returns suppressed
+- localStorage dismissal logic: dismissed > 14 days ago → not suppressed
+- localStorage installed flag → always suppressed
+- Install prompt component renders null when `isInstallable` is false
 
 **Commit:** `git commit -m "feat(pwa): phase 2 — A2HS install prompt with iOS guide"`
 
@@ -274,56 +378,117 @@ pnpm test:unit
 ## Phase 3: Mobile Navigation Polish (Spec §7)
 
 ### Goal
-Every navigation element is safe-area aware, keyboard-friendly, and works in standalone mode.
+Every navigation element handles safe areas, keyboards, and standalone mode correctly.
 
 ### Tasks
 
 **3.1 — Mobile Top Bar Updates** (Spec §7C)
 ```
-Modify: components/members/mobile-top-bar.tsx
+Modify: components/members/mobile-top-bar.tsx (currently 46 lines)
 ```
-- Add `pt-[env(safe-area-inset-top)]` to the header element
-- Change fixed `h-14` to `min-h-[3.5rem]` so it grows with safe area
-- Add network status dot: small circle next to logo — green (`bg-emerald-400`) when online, amber (`bg-amber-400`) when offline. Use `navigator.onLine` + event listeners.
-- Add back button: when on a sub-page deeper than 2 segments (e.g., `/members/academy/courses/[slug]`), show `<ChevronLeft>` in the left slot that calls `router.back()`
+Read full file first. Changes:
+- Add `pt-[env(safe-area-inset-top)]` to the header element class
+- Change `h-14` to `min-h-[3.5rem]` so it grows with safe area
+- Add network status dot: small `<span>` with `w-2 h-2 rounded-full` next to logo — `bg-emerald-400` when `navigator.onLine`, `bg-amber-400` when offline. Add `online`/`offline` event listeners in a `useEffect`.
+- Add back button: use `usePathname()` to check segment depth. When `pathname.split('/').length > 3` (deeper than `/members/something`), show `<ChevronLeft>` icon button in the left slot that calls `router.back()`. Import `ChevronLeft` from `lucide-react`, `usePathname` and `useRouter` from `next/navigation`.
 
 **3.2 — Mobile Bottom Nav Updates** (Spec §7D)
 ```
-Modify: components/members/mobile-bottom-nav.tsx
+Modify: components/members/mobile-bottom-nav.tsx (currently 236 lines)
 ```
-- Add `badge` prop to NavTab interface: `badge?: number`
-- Render badge dot per Spec §7D code block (red circle, 9+ truncation)
-- Add keyboard detection: use `window.visualViewport` resize to detect keyboard open (height diff > 150px), hide bottom nav when keyboard is open
-- Verify `pb-safe` handles iPhone 15/16 Pro home indicator
+Read full file first. Changes:
+- Add `badge?: number` to the tab type/interface
+- Add badge rendering: when `badge > 0`, show absolute-positioned red dot:
+  ```tsx
+  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+    {badge > 9 ? '9+' : badge}
+  </span>
+  ```
+- Add keyboard detection hook: `window.visualViewport` resize listener, set `keyboardOpen` when height diff > 150px. Return `null` when keyboard is open to hide bottom nav entirely.
 
 **3.3 — Members Layout Updates** (Spec §7E)
 ```
-Modify: app/members/layout.tsx
+Modify: app/members/layout.tsx (currently 174 lines)
 ```
-- Replace static `pb-28` with `pb-nav lg:pb-8` (uses new CSS utility from Phase 1)
-- Add `will-change: transform, opacity` to the Framer Motion animated container for smoother mobile transitions
+Read full file. Changes:
+- Line 153: Change `pb-28` to `pb-nav` in the `<main>` className (keep `lg:pb-8`)
+- Add `style={{ willChange: 'transform, opacity' }}` to the `<motion.div>` at line 155 for smoother mobile transitions
 
 **3.4 — Swipe Navigation** (Spec §7F)
 ```
 Create: hooks/use-swipe-navigation.ts
 ```
-- Detect right-swipe from left 20px edge zone
-- Threshold: 80px horizontal swipe
+- Detects right-swipe from left 20px edge zone via touch events
+- Threshold: 80px horizontal before triggering
 - Calls `router.back()` on successful swipe
-- Visual feedback: subtle emerald gradient from left edge during swipe (CSS pseudo-element or overlay div)
-- Only active in standalone mode on mobile
-- Use touch events: `touchstart`, `touchmove`, `touchend`
+- Visual: optional emerald gradient overlay div from left edge during active swipe
+- Only active when `isStandaloneMode()` returns true AND `useIsMobile()` returns true
+- Import `isStandaloneMode` from `@/lib/pwa-utils`
+- Attach to `document` in a `useEffect`, clean up on unmount
 
 **3.5 — Pull-to-Refresh** (Spec §7E.2)
 ```
 Create: components/pwa/pull-to-refresh.tsx
 ```
-- Custom pull-to-refresh component (not browser default)
-- Touch event based: detect pull-down when scrollTop === 0
-- Custom indicator: pulsing emerald logo (reuse existing skeleton-loader pattern)
-- Calls `router.refresh()` on release past threshold (60px)
-- Only active in standalone mode on mobile
-- Prevent double-trigger with debounce
+- Client component wrapping children
+- Touch-based: detects pull-down when `scrollTop === 0`
+- Custom indicator: pulsing emerald circle (not browser default)
+- Triggers `router.refresh()` on release past 60px threshold
+- Only renders in standalone mode on mobile (`isStandaloneMode()` + `useIsMobile()`)
+- Debounce to prevent double-trigger
+- Mount in `app/members/layout.tsx` wrapping the `<main>` content
+
+**3.6 — Toast System Mobile Positioning**
+```
+Modify: components/ui/app-toaster.tsx
+```
+Read the file first. The Sonner `<Toaster>` is currently positioned at `top-right` which is hidden under the mobile top bar. Changes:
+- Change `position` to `bottom-center` on mobile, keep `top-right` on desktop. Use the `position` prop dynamically or set `position="bottom-center"` with `className="lg:!top-4 lg:!right-4 lg:!bottom-auto lg:!left-auto"` override
+- Add `style={{ bottom: 'max(5rem, calc(env(safe-area-inset-bottom) + 5rem))' }}` so toasts appear above the bottom nav
+- Set `visibleToasts={3}` to prevent toast stacking overflow
+- Set error toast duration to `7000` (default 4000 is too fast for error messages)
+- Toasts are barely used in the app — search for existing `toast(` calls to audit. Key places that NEED toast feedback but don't have it:
+  - Journal trade save success → add `toast.success('Trade saved')`
+  - Journal trade save error → add `toast.error('Failed to save trade')`
+  - Profile settings save → add `toast.success('Settings updated')`
+  - AI Coach error responses → add `toast.error('Something went wrong')`
+
+Note: Adding toast calls to these locations is part of this task. Read each file before modifying.
+
+**3.7 — Touch Target Minimum Sizing**
+```
+Modify: components/members/mobile-bottom-nav.tsx
+Modify: app/globals.css
+```
+Read files first. Several interactive elements are below the WCAG 44x44px minimum:
+- Bottom nav tab buttons: currently use `py-1.5 px-2.5` (~36px height). Change to `py-3 px-3` to ensure ≥44px tap height
+- More menu items: currently `px-2.5 py-2` (~32px height). Change to `px-3 py-2.5` for ≥44px height
+- In `globals.css`, verify the `@media (pointer: coarse)` touch target rules from Phase 1 Task 1.4 include:
+  ```css
+  @media (pointer: coarse) {
+    button, a, [role="button"], input, select, textarea {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+  ```
+
+**3.8 — Animation Performance Optimization**
+```
+Modify: components/members/mobile-bottom-nav.tsx
+Modify: app/members/layout.tsx
+Modify: app/members/ai-coach/page.tsx (if applicable)
+```
+Read each file first. The current animations create performance issues on mobile:
+- Bottom nav uses `framer-motion` spring animations on every tab switch. Add `@media (prefers-reduced-motion: reduce)` handling: wrap the motion values in a check using `useReducedMotion()` from framer-motion, falling back to instant transitions
+- In `members/layout.tsx`, the route transition `contentVariants` already handles `prefersReducedMotion` (good). However, the `filter: 'blur(4px)'` in desktop variants and `filter: 'blur(2px)'` in mobile variants are GPU-expensive on low-end devices. Consider removing blur from mobile variants entirely — use opacity + translateX only:
+  ```tsx
+  // Mobile variants (isMobile = true): remove blur, keep slide
+  initial: { opacity: 0.85, x: 28, scale: 1 },
+  animate: { opacity: 1, x: 0, scale: 1 },
+  exit: { opacity: 0, x: -18, scale: 1 },
+  ```
+- In AI Coach, search for any infinitely looping animations (e.g., `EmptyState` pulsing animation). If found, ensure they use `will-change: transform` and have a `prefers-reduced-motion` fallback that stops the loop
 
 ### Phase 3 Gate Check
 
@@ -334,161 +499,229 @@ pnpm test:e2e:mobile
 ```
 
 **Phase 3 Test File:** `lib/__tests__/pwa/phase3-mobile-nav.test.ts`
-```typescript
-// Test: useSwipeNavigation only activates in standalone mode
-// Test: useSwipeNavigation requires 80px threshold
-// Test: useSwipeNavigation only triggers from left 20px edge
-// Test: PullToRefresh component renders nothing on desktop
-// Test: Keyboard detection logic — heightDiff > 150 = keyboard open
-```
 
-**Phase 3 E2E Test File:** `e2e/specs/pwa/mobile-nav.spec.ts`
-```typescript
-// Viewport: iPhone 15 (390x844)
-// Test: Bottom nav renders all tab items
-// Test: Active tab indicator shows on current route
-// Test: Navigation between all primary tabs works
-// Test: No horizontal overflow on dashboard page
-// Test: No horizontal overflow on journal page
-// Test: No horizontal overflow on AI coach page
-// Test: Cards stack vertically at 320px viewport
-```
+Write tests:
+- `useSwipeNavigation` is no-op when standalone mode is false (mock `isStandaloneMode` to return false)
+- Swipe threshold validation: swipe < 80px should not trigger
+- Keyboard detection: height diff > 150 → keyboardOpen = true
+- Keyboard detection: height diff < 150 → keyboardOpen = false
+- Bottom nav tab buttons have minimum 44px logical height (measure rendered padding)
+- More menu items have minimum 44px logical height
 
-**Commit:** `git commit -m "feat(pwa): phase 3 — mobile nav polish (safe area, keyboard, swipe, pull-to-refresh)"`
+**Phase 3 E2E Test:** `e2e/specs/pwa/mobile-nav.spec.ts`
+
+Viewport: 390x844 (iPhone 15):
+- Bottom nav renders all visible tab items
+- Active tab indicator shows on current route
+- Tab navigation works between primary tabs
+- No horizontal overflow on `/members` page
+- No horizontal overflow on `/members/journal` page
+
+**Commit:** `git commit -m "feat(pwa): phase 3 — mobile nav polish (safe area, keyboard, swipe, pull-to-refresh, toast, touch targets, animation perf)"`
 
 ---
 
-## Phase 4: Native Features (Spec §8)
+## Phase 4: Scroll Containment & Native-Feel Layout (Spec §7, §11)
 
 ### Goal
-Integrate platform APIs: haptics, badges, share, wake lock, push subscription management.
+Eliminate all scroll-through, rubber-band, and layout-overlap issues so the PWA feels like a native app — not a website in a wrapper.
+
+### Context (Critical)
+The app currently has these scroll/layout problems in standalone PWA mode:
+- **Body scrolls behind modals/sheets.** All overlay components (`TradeEntrySheet`, `EntryDetailSheet`, AI Coach `MobileToolSheet`, Radix `Dialog`) portal to `document.body` but never lock body scroll. Users can scroll the page behind every overlay.
+- **No overscroll containment.** iOS rubber-band bounce at top/bottom of page triggers pull-to-refresh or reveals the URL bar in minimal-ui. Scroll can chain from inner containers to the body.
+- **Bottom nav positioning fragility.** Uses `fixed bottom-6` with flat `pb-safe`, but on newer notched iPhones the margin and safe-area can conflict.
+- **No scroll position restoration.** When user opens a sheet → content behind scrolls → sheet closes → scroll position is lost.
+- **Studio page traps mobile PWA users.** `/members/studio` shows a desktop-only warning but has no way to navigate back in standalone mode (no browser back button).
 
 ### Tasks
 
-**4.1 — Haptics Utility** (Spec §8B)
+**4.1 — Body Scroll Lock Utility**
 ```
-Create: lib/haptics.ts
+Create: lib/use-scroll-lock.ts
 ```
-- Export `haptics` object with: `light`, `medium`, `heavy`, `success`, `error`, `selection` patterns
-- Each calls `navigator.vibrate?.()` with the patterns from Spec §8B
-- Apply across the app:
-  - `haptics.medium` → CTA buttons, form submissions
-  - `haptics.success` → Journal entry saved, sync complete toasts
-  - `haptics.error` → Form validation failures, network errors
-  - `haptics.selection` → Dropdown selections
-  - (Leave existing `haptics.light` in bottom nav as-is)
+- Custom hook: `useScrollLock(isLocked: boolean)`
+- When locked:
+  - Save `document.body.style.overflow` and `document.body.style.position` and `window.scrollY`
+  - Set `document.body.style.overflow = 'hidden'`
+  - Set `document.body.style.position = 'fixed'` (prevents iOS Safari scroll-through)
+  - Set `document.body.style.top = `-${scrollY}px`` (maintains visual position)
+  - Set `document.body.style.width = '100%'` (prevents layout shift from scrollbar removal)
+- When unlocked:
+  - Restore all saved values
+  - Call `window.scrollTo(0, savedScrollY)` to restore scroll position
+- Handle edge case: multiple overlays open simultaneously (use a ref counter)
 
-**4.2 — Badge API** (Spec §8C)
+**4.2 — Apply Scroll Lock to All Overlays**
 ```
-Create: lib/badge.ts
+Modify: hooks/use-focus-trap.ts
+Modify: components/ui/dialog.tsx
+Modify: components/journal/trade-entry-sheet.tsx
+Modify: components/journal/entry-detail-sheet.tsx
 ```
-- `setAppBadge(count: number)` — uses `navigator.setAppBadge` / `navigator.clearAppBadge`
-- Feature detection: no-op when API unavailable
-- Integrate: set badge on push notification receipt (in `sw.js`), clear on app focus
+Read each file fully before modifying. For each:
+- Import `useScrollLock` from `@/lib/use-scroll-lock`
+- Call `useScrollLock(isOpen)` where `isOpen` is the overlay's open state
+- For `use-focus-trap.ts`: add scroll lock as part of the trap activation/deactivation
+- For Radix Dialog: apply in `DialogContent` via a wrapper `useEffect` keyed on the open state
+- For journal sheets: apply where the portal is conditionally rendered
 
-**4.3 — Share Button** (Spec §8D)
-```
-Create: components/pwa/share-button.tsx
-```
-- Uses `navigator.share()` when available
-- Fallback: copy to clipboard with toast confirmation
-- Props: `title`, `text`, `url`
-- Styled as an icon button with `Share2` Lucide icon
-- Add to journal entry view and AI Coach insights
+Also find and modify the AI Coach `MobileToolSheet`:
+- Search: `grep -r "MobileToolSheet" app/members/ai-coach/`
+- Read the component, add `useScrollLock(isSheetOpen)`
 
-**4.4 — Wake Lock** (Spec §8E)
+**4.3 — Overscroll Containment CSS**
 ```
-Modify: AI Coach page component
+Modify: app/globals.css
 ```
-- Add `navigator.wakeLock.request('screen')` when AI Coach conversation is active
-- Re-acquire on `visibilitychange` (iOS releases on tab switch)
-- Release on unmount
-- Feature detection: no-op when API unavailable
+Add these rules to the standalone mode section (created in Phase 1):
+```css
+/* Prevent ALL overscroll effects in standalone PWA */
+@media all and (display-mode: standalone) {
+  html {
+    overflow: hidden;
+    height: 100%;
+  }
 
-**4.5 — Push Notification Client** (Spec §8A)
-```
-Create: lib/push-notifications.ts
-```
-- `subscribeToPush()`: request permission, subscribe via `pushManager.subscribe()` with VAPID key from `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, save subscription to `/api/push/subscribe`
-- `unsubscribeFromPush()`: remove subscription from browser and Supabase
-- `isPushSupported()`: feature detection
-- `isPushGranted()`: check `Notification.permission`
+  body {
+    overflow-y: auto;
+    height: 100%;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+  }
+}
 
+/* Scroll containment for nested scrollable areas */
+.scroll-contain {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Chat containers, modal content, scrollable panels */
+[data-scroll-container] {
+  overscroll-behavior: contain;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 ```
-Create: components/pwa/notification-settings.tsx
+
+**4.4 — Fix Bottom Nav Safe Area Positioning**
 ```
-- Toggle switch UI for enabling/disabling push notifications
-- Shows current permission state
-- Handles the permission request flow
-- Add to `/members/profile` page
+Modify: components/members/mobile-bottom-nav.tsx
+```
+Read full file first. Change the bottom positioning from `fixed bottom-6` to use CSS `max()` for safe-area-aware positioning:
+```tsx
+// Change the container className from:
+//   fixed bottom-6 left-4 right-4
+// To:
+//   fixed left-4 right-4
+// And add inline style:
+style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}
+```
+This ensures the nav sits above the home indicator on notched iPhones while maintaining the 24px offset on non-notched devices.
+
+**4.5 — Apply Scroll Containment to Key Containers**
+```
+Modify: AI Coach chat messages container
+Modify: Academy course list / lesson content
+Modify: Journal entries list
+```
+For each scrollable content area, add `data-scroll-container` attribute or `scroll-contain` class to prevent scroll chaining to the body. Find these by searching for `overflow-y-auto` or `overflow-y-scroll` classes:
+```bash
+grep -rn "overflow-y-auto\|overflow-y-scroll\|overflow-auto" components/ app/members/ --include="*.tsx"
+```
+
+**4.6 — Studio Page Mobile Redirect**
+```
+Modify: app/members/studio/page.tsx
+```
+Read the file first. Currently shows a "desktop only" message on mobile. In standalone PWA mode, users have no browser back button. Add:
+```tsx
+// At the top of the component:
+const router = useRouter()
+const isMobile = useIsMobile()
+
+useEffect(() => {
+  if (isMobile) {
+    router.replace('/members')
+  }
+}, [isMobile, router])
+```
+This redirects mobile PWA users to the dashboard instead of stranding them.
+
+**4.7 — Members Layout Scroll Structure**
+```
+Modify: app/members/layout.tsx
+```
+Read the file first. The current structure allows the entire page to scroll as one unit. For PWA, the layout should use a contained scroll approach:
+- The outer wrapper should be `h-[100dvh]` (dynamic viewport height) in standalone mode
+- The main content area should be the only scrollable region
+- Add `overscroll-behavior: contain` to the main scroll area
+
+Update the content wrapper div:
+```tsx
+<div className={cn(
+  'min-h-screen relative overflow-hidden pb-safe lg:pb-0',
+  'lg:pl-[280px]',
+  // In standalone mode, use fixed height with contained scroll
+  'standalone:h-[100dvh] standalone:min-h-0',
+)}>
+```
+And add a CSS utility for standalone detection:
+```css
+@media all and (display-mode: standalone) {
+  .standalone\:h-\[100dvh\] { height: 100dvh; }
+  .standalone\:min-h-0 { min-height: 0; }
+}
+```
+The `<main>` element becomes the scroll container with `overflow-y: auto overscroll-behavior-y: contain`.
+
+**4.8 — Safe Area Double-Padding Fix**
+```
+Modify: app/members/layout.tsx
+Modify: components/members/mobile-bottom-nav.tsx
+```
+Read both files first. There is currently a double-padding issue:
+- The content wrapper div has `pb-safe lg:pb-0` AND `<main>` has `pb-28 lg:pb-8`
+- The bottom nav also accounts for safe area via its own positioning
+- This creates excessive bottom whitespace on notched iPhones
+
+Fix: Remove `pb-safe` from the content wrapper div. The `pb-28` on `<main>` (which becomes `pb-nav` in Phase 3 Task 3.3) is the single source of truth for bottom padding. The bottom nav's own safe-area-aware positioning (from Task 4.4) handles its own inset. There should be only ONE layer of safe-area compensation, not two.
+
+**4.9 — AI Coach Height Calculation Fix**
+```
+Modify: app/members/ai-coach/page.tsx
+```
+Read the file first. The mobile chat container uses `h-[calc(100dvh-10.5rem)]` which doesn't account for the bottom nav height correctly. The `10.5rem` is a hardcoded guess. Fix:
+- Replace with `h-[calc(100dvh-var(--mobile-chrome))]` where `--mobile-chrome` is a CSS custom property set in the layout or globals:
+  ```css
+  :root {
+    --mobile-chrome: calc(3.5rem + env(safe-area-inset-top) + 4.5rem + env(safe-area-inset-bottom));
+    /* top bar height + safe-area-top + bottom nav height + safe-area-bottom */
+  }
+  ```
+- Or use the simpler approach: wrap the AI Coach content area in a flex container that fills the remaining space: `flex-1 min-h-0 overflow-y-auto` inside a `flex flex-col h-[100dvh]` parent
+- Ensure the chat input area at the bottom doesn't overlap with the bottom nav
+- Test: the chat messages should fill exactly the visible space between top bar and bottom nav
+
+**4.10 — Entry Detail Sheet Safe-Area Height**
+```
+Modify: components/journal/entry-detail-sheet.tsx
+```
+Read the file first. The sheet uses `h-[92vh]` which doesn't account for safe areas on notched devices. The sheet content can be obscured by the home indicator.
+- Change `h-[92vh]` to `h-[calc(100dvh-env(safe-area-inset-top)-2rem)]` to use dynamic viewport height minus the top safe area and a small top margin
+- Ensure the sheet's internal scroll container has `overscroll-behavior: contain` (from Task 4.5)
+
+**4.11 — Textarea Keyboard Interaction**
+```
+Modify: app/members/ai-coach/page.tsx (chat input)
+Modify: components/journal/trade-entry-sheet.tsx (notes textarea)
+```
+Read each file. When the mobile keyboard opens, `textarea` elements with `max-height` constraints can cause layout jumps:
+- For the AI Coach chat input: verify `max-h-[120px]` works correctly with the keyboard. If the keyboard pushes the input up, the max-height may need adjustment. Use `window.visualViewport.height` to dynamically compute available space
+- For journal trade notes: ensure the textarea doesn't resize/jump when focused. Add `resize-none` class if not present, and wrap in a container with stable height
 
 ### Phase 4 Gate Check
-
-```bash
-pnpm build
-pnpm test:unit
-```
-
-**Phase 4 Test File:** `lib/__tests__/pwa/phase4-native-features.test.ts`
-```typescript
-// Test: haptics.light calls navigator.vibrate with 10
-// Test: haptics.success calls navigator.vibrate with [10, 50, 20]
-// Test: haptics gracefully no-ops when navigator.vibrate is undefined
-// Test: setAppBadge calls navigator.setAppBadge when available
-// Test: setAppBadge is no-op when API unavailable
-// Test: isPushSupported returns false when PushManager missing
-// Test: ShareButton renders share icon
-// Test: ShareButton falls back to clipboard when navigator.share unavailable
-```
-
-**Commit:** `git commit -m "feat(pwa): phase 4 — native features (haptics, badge, share, wake lock, push client)"`
-
----
-
-## Phase 5: Offline & Connectivity (Spec §9)
-
-### Goal
-Users know when they're offline, see cached data gracefully, and trust their changes will sync.
-
-### Tasks
-
-**5.1 — Network Status Context** (Spec §9A)
-```
-Create: contexts/NetworkStatusContext.tsx
-```
-- Client context provider
-- State: `{ isOnline: boolean, wasOffline: boolean, effectiveType: string | null }`
-- Uses `navigator.onLine` + `online`/`offline` events
-- Reads `navigator.connection?.effectiveType` where available
-- Exposes via `useNetworkStatus()` hook
-
-**5.2 — Offline Banner** (Spec §9B)
-```
-Create: components/pwa/offline-banner.tsx
-```
-- Fixed banner below mobile top bar when offline
-- Amber background: "You're offline — changes will sync when you reconnect"
-- When back online: brief emerald success banner "Back online — syncing..." auto-dismisses after 3s
-- Animate in/out with framer-motion slide
-- Uses `useNetworkStatus()` context
-
-**5.3 — Mount Network Provider**
-```
-Modify: app/layout.tsx or app/members/layout.tsx
-```
-- Wrap members content with `<NetworkStatusProvider>`
-- Render `<OfflineBanner />` inside the members layout, between top bar and main content
-
-**5.4 — Journal Sync Indicator** (Spec §9D)
-```
-Modify: Journal page or journal components
-```
-- Read IndexedDB journal mutation queue count
-- Display: "N changes pending sync" (amber dot) when mutations queued
-- Display: "Syncing..." (emerald pulse) when actively syncing
-- Display: "All changes saved" (emerald check) — auto-dismiss 2s
-
-### Phase 5 Gate Check
 
 ```bash
 pnpm build
@@ -496,250 +729,632 @@ pnpm test:unit
 pnpm test:e2e:mobile
 ```
 
-**Phase 5 Test File:** `lib/__tests__/pwa/phase5-offline.test.ts`
-```typescript
-// Test: NetworkStatusContext defaults to isOnline: true
-// Test: NetworkStatusContext updates on offline event
-// Test: NetworkStatusContext sets wasOffline flag after recovery
-// Test: OfflineBanner renders when isOnline is false
-// Test: OfflineBanner shows recovery message briefly after reconnect
-// Test: OfflineBanner renders nothing when online and not recently recovered
-```
+**Phase 4 Test File:** `lib/__tests__/pwa/phase4-scroll-containment.test.ts`
 
-**Phase 5 E2E Test File:** `e2e/specs/pwa/offline.spec.ts`
-```typescript
-// Test: Offline fallback page loads when network is disconnected during navigation
-// Test: Dashboard shows cached content when offline
-// Test: Offline banner appears when network drops
-// Test: Offline banner disappears when network returns
-```
+Write tests:
+- `useScrollLock(true)` sets `document.body.style.overflow` to `'hidden'`
+- `useScrollLock(false)` restores `document.body.style.overflow` to original value
+- `useScrollLock` restores scroll position on unlock
+- Multiple simultaneous locks don't interfere (ref counter)
 
-**Commit:** `git commit -m "feat(pwa): phase 5 — offline UX (network context, banner, sync indicators)"`
+**Phase 4 E2E Test:** `e2e/specs/pwa/scroll-containment.spec.ts`
+
+Viewport: 390x844:
+- Open journal trade entry sheet → body should not scroll behind it
+- Open AI Coach tool sheet → body should not scroll behind it
+- Scroll to bottom of dashboard → no rubber-band past content
+- Navigate to `/members/studio` on mobile → redirects to `/members`
+- AI Coach chat area fills space between top bar and bottom nav without overlap
+- Entry detail sheet content is not obscured by device home indicator
+
+**Commit:** `git commit -m "feat(pwa): phase 4 — scroll containment & native-feel layout (scroll lock, overscroll, safe areas, height fixes)"`
 
 ---
 
-## Phase 6: iOS Hardening (Spec §11)
+## Phase 5: Native Features (Spec §8)
 
 ### Goal
-iOS standalone mode works without quirks — splash screens, keyboard handling, navigation.
+Integrate platform APIs: haptics, badges, share, wake lock, push subscription UI.
 
 ### Tasks
 
-**6.1 — iOS Splash Screen Generation** (Spec §4)
+**5.1 — Haptics Utility** (Spec §8B)
 ```
-Create: scripts/generate-pwa-splashes.ts
-Create: public/splash/ directory
+Create: lib/haptics.ts
 ```
-- Generate splash screens for all 16 device resolutions in Spec §4 table
-- Each splash: `#0A0A0B` background, centered TradeITM logo at ~25% viewport width, subtle emerald radial gradient glow beneath
-- Use sharp for image composition
-- Add script: `"generate:pwa-splashes": "tsx scripts/generate-pwa-splashes.ts"`
+```typescript
+export const haptics = {
+  light: () => navigator.vibrate?.(10),
+  medium: () => navigator.vibrate?.(25),
+  heavy: () => navigator.vibrate?.(50),
+  success: () => navigator.vibrate?.([10, 50, 20]),
+  error: () => navigator.vibrate?.([50, 30, 50]),
+  selection: () => navigator.vibrate?.(5),
+}
+```
+Then apply across the app (read each file before modifying):
+- Form submission buttons → `haptics.medium`
+- Journal entry save success → `haptics.success`
+- Form validation errors → `haptics.error`
+- Dropdown/picker selections → `haptics.selection`
+- Leave existing `navigator.vibrate(10)` in bottom nav as-is (it's already `haptics.light`)
 
-**6.2 — Splash Screen Meta Tags**
+**5.2 — Badge API** (Spec §8C)
 ```
-Modify: app/layout.tsx
+Create: lib/badge.ts
 ```
-- Add `<link rel="apple-touch-startup-image">` tags for each device resolution
-- Use `media` queries per the format in Spec §4
+- `setAppBadge(count)` — feature-detect `navigator.setAppBadge`/`clearAppBadge`
+- No-op when unavailable
+- In `sw.js` push handler: call `setAppBadge` after showing notification
+- On app focus (in service-worker-register or layout): call `clearAppBadge`
 
-**6.3 — iOS Keyboard Handling** (Spec §11B)
+**5.3 — Share Button** (Spec §8D)
 ```
-Create: hooks/use-ios-keyboard-fix.ts
+Create: components/pwa/share-button.tsx
 ```
-- When in standalone + iOS: listen for input focus events
-- After 300ms delay (keyboard animation), scroll focused element into view with `scrollIntoView({ behavior: 'smooth', block: 'center' })`
-- Apply to AI Coach chat input and Journal entry form
+- Uses `navigator.share({ title, text, url })` when available
+- Fallback: `navigator.clipboard.writeText(url)` with Sonner toast "Link copied"
+- Props: `{ title: string, text: string, url: string, className?: string }`
+- Renders `Share2` icon from lucide-react
+- Integrate into journal entry detail view and AI Coach insight cards (read those files first to find appropriate mount points)
 
-**6.4 — iOS Session Persistence** (Spec §11E)
+**5.4 — Wake Lock** (Spec §8E)
 ```
-Verify/Modify: contexts/MemberAuthContext.tsx (if needed)
+Modify: AI Coach page component (find with: grep -r "ai-coach" app/members/)
 ```
-- Ensure auth state check happens immediately on app reopen
-- If session is expired, redirect to login
-- Show pulsing logo loader during rehydration (already exists — verify it triggers)
+Read the file first. Add a `useEffect` that:
+- Requests `navigator.wakeLock.request('screen')` when component mounts
+- Re-acquires on `visibilitychange` event (iOS releases on tab switch)
+- Releases on unmount
+- Feature-detect: wrap in `if ('wakeLock' in navigator)` check
 
-**6.5 — Permissions-Policy Header** (Spec §13)
+**5.5 — Push Notification Client** (Spec §8A)
 ```
-Modify: middleware.ts
+Create: lib/push-notifications.ts
 ```
-- Add `Permissions-Policy` header for push notification permissions
-- Ensure CSP allows service worker registration
+- `subscribeToPush()`: request `Notification.permission`, call `pushManager.subscribe()` with VAPID public key from `process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY`, POST subscription to `/api/push/subscribe`
+- `unsubscribeFromPush()`: call `subscription.unsubscribe()`, DELETE from Supabase
+- `isPushSupported()`: check `'PushManager' in window && 'serviceWorker' in navigator`
+- `isPushGranted()`: check `Notification.permission === 'granted'`
+
+```
+Create: components/pwa/notification-settings.tsx
+```
+- Toggle switch for push notifications (use Radix Switch from existing shadcn components)
+- Shows permission state: "Enabled", "Disabled", "Blocked by browser"
+- Handles full permission flow: request → subscribe → save
+- Mount on the `/members/profile` page (find and read the profile page first)
+
+```
+Create: app/api/push/subscribe/route.ts
+```
+- POST: save subscription to `push_subscriptions` table (user_id from session, endpoint + keys from body)
+- DELETE: remove subscription by endpoint
+
+### Phase 5 Gate Check
+
+```bash
+pnpm build
+pnpm test:unit
+```
+
+**Phase 5 Test File:** `lib/__tests__/pwa/phase5-native-features.test.ts`
+
+Write tests:
+- `haptics.light` calls `navigator.vibrate` with `10`
+- `haptics.success` calls `navigator.vibrate` with `[10, 50, 20]`
+- `haptics` functions are no-op when `navigator.vibrate` is undefined
+- `setAppBadge(5)` calls `navigator.setAppBadge(5)` when available
+- `setAppBadge(0)` calls `navigator.clearAppBadge()` when available
+- `setAppBadge` is no-op when Badge API unavailable
+- `isPushSupported()` returns false when `PushManager` missing from window
+
+**Commit:** `git commit -m "feat(pwa): phase 5 — native features (haptics, badge, share, wake lock, push client)"`
+
+---
+
+## Phase 6: Offline & Connectivity (Spec §9)
+
+### Goal
+Users know when they're offline, see cached data, and trust their changes will sync.
+
+### Tasks
+
+**6.1 — Network Status Context** (Spec §9A)
+```
+Create: contexts/NetworkStatusContext.tsx
+```
+- `'use client'` context provider
+- State: `{ isOnline: boolean, wasOffline: boolean, effectiveType: string | null }`
+- Uses `navigator.onLine` + `online`/`offline` window events
+- Reads `(navigator as any).connection?.effectiveType` where available
+- Exports `NetworkStatusProvider` and `useNetworkStatus()` hook
+- SSR-safe: defaults to `isOnline: true`
+
+**6.2 — Offline Banner** (Spec §9B)
+```
+Create: components/pwa/offline-banner.tsx
+```
+- Fixed banner positioned below mobile top bar
+- Offline: amber background (`bg-amber-900/90 backdrop-blur`), text: "You're offline — changes will sync when you reconnect"
+- Recovery: emerald background (`bg-emerald-900/90`), text: "Back online — syncing..." — auto-dismiss after 3s
+- Animate in/out with framer-motion `slideY`
+- Consumes `useNetworkStatus()` context
+
+**6.3 — Mount Network Provider & Banner**
+```
+Modify: app/members/layout.tsx
+```
+- Import `NetworkStatusProvider` from `@/contexts/NetworkStatusContext`
+- Wrap the entire return of `MembersLayoutContent` with `<NetworkStatusProvider>`
+- Import and render `<OfflineBanner />` after `<MobileTopBar />` and before the main content div
+
+**6.4 — Journal Sync Indicator** (Spec §9D)
+```
+Create: components/pwa/journal-sync-indicator.tsx
+```
+- Reads IndexedDB journal mutation store (`tradeitm-offline-journal` / `mutations`) for queue count
+- States: "N changes pending sync" (amber), "Syncing..." (emerald pulse), "All changes saved" (emerald check, auto-dismiss 2s)
+- Mount on the journal page (find with `ls app/members/journal/`)
+
+**6.5 — Error Boundaries for Key Routes**
+```
+Create: app/members/journal/error.tsx
+Create: app/members/academy/courses/[slug]/error.tsx
+Create: app/members/academy/learn/[id]/error.tsx
+Create: app/members/profile/error.tsx
+Create: app/members/ai-coach/error.tsx
+```
+Next.js App Router uses `error.tsx` files as route-level error boundaries. Most member routes currently have no error boundary — an unhandled error crashes the entire page with no recovery path (especially bad in PWA standalone mode where the user can't refresh via browser UI).
+
+Each error boundary should:
+- Be a `'use client'` component with `{ error, reset }` props
+- Display an Emerald Standard-styled error card: `glass-card-heavy` container, `AlertCircle` icon (lucide-react), error message, "Try Again" button calling `reset()`, "Go Home" link to `/members`
+- Log the error: `console.error('[Route] Error:', error)`
+- Match the dark background: `bg-[#0A0A0B]`
+- Example structure:
+  ```tsx
+  'use client'
+  import { AlertCircle, RefreshCw, Home } from 'lucide-react'
+  import Link from 'next/link'
+
+  export default function Error({ error, reset }: { error: Error; reset: () => void }) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="glass-card-heavy p-6 max-w-md text-center space-y-4">
+          <AlertCircle className="w-10 h-10 text-red-400 mx-auto" />
+          <h2 className="text-lg font-semibold text-ivory">Something went wrong</h2>
+          <p className="text-sm text-muted-foreground">{error.message || 'An unexpected error occurred'}</p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={reset} className="...emerald button styles...">
+              <RefreshCw className="w-4 h-4 mr-2" /> Try Again
+            </button>
+            <Link href="/members" className="...ghost button styles...">
+              <Home className="w-4 h-4 mr-2" /> Dashboard
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  ```
+
+**6.6 — Loading State Timeouts**
+```
+Modify: app/members/journal/loading.tsx (if exists, else create)
+Modify: app/members/ai-coach/loading.tsx (if exists)
+Modify: app/members/academy/courses/loading.tsx (if exists)
+```
+Check if `loading.tsx` files exist for the main routes (`ls app/members/*/loading.tsx`). For any that exist:
+- Add an 8-second timeout after which the skeleton loader transitions to a subtle "Taking longer than expected..." message with a retry link
+- Use `useState` + `useEffect` with `setTimeout(8000)` to track the timeout
+- Don't remove the skeleton — overlay the message on top
+- For routes that don't have loading files, this is lower priority — the error boundaries from 6.5 will catch failures
 
 ### Phase 6 Gate Check
 
 ```bash
 pnpm build
 pnpm test:unit
+pnpm test:e2e:mobile
 ```
 
-**Phase 6 Test File:** `lib/__tests__/pwa/phase6-ios.test.ts`
-```typescript
-// Test: All splash screen files exist on disk (loop over expected filenames)
-// Test: useIosKeyboardFix is no-op on non-iOS
-// Test: Splash meta tags reference valid files
-```
+**Phase 6 Test File:** `lib/__tests__/pwa/phase6-offline.test.ts`
 
-**Commit:** `git commit -m "feat(pwa): phase 6 — iOS hardening (splashes, keyboard, session persistence)"`
+Write tests:
+- `NetworkStatusContext` defaults to `isOnline: true`
+- Dispatching `offline` event sets `isOnline: false`
+- Dispatching `online` event after offline sets `wasOffline: true`
+- `OfflineBanner` renders offline message when `isOnline: false`
+- `OfflineBanner` renders nothing when online and `wasOffline: false`
+
+**Phase 6 E2E Test:** `e2e/specs/pwa/offline.spec.ts`
+
+- Navigate to `/members`, then `page.context().setOffline(true)` → verify offline banner appears
+- Set back online → verify banner disappears
+- While offline, navigate to uncached route → verify offline fallback page loads
+- Error boundary: navigate to a route, inject JS error → verify error boundary renders with "Try Again" button
+- Error boundary "Try Again" button calls `reset()` and re-renders the route
+
+**Commit:** `git commit -m "feat(pwa): phase 6 — offline UX (network context, banner, sync indicators, error boundaries, loading timeouts)"`
 
 ---
 
-## Phase 7: Testing, Verification & CI (Spec §10, §12)
+## Phase 7: iOS Hardening (Spec §11)
+
+### Goal
+iOS standalone mode works without quirks — splash screens, keyboard, navigation.
+
+### Tasks
+
+**7.1 — iOS Splash Screen Generation** (Spec §4)
+```
+Create: scripts/generate-pwa-splashes.ts
+Create: public/splash/ directory (~16 files)
+Add:    package.json script "generate:pwa-splashes": "tsx scripts/generate-pwa-splashes.ts"
+```
+- Generate splash screens for all 16 device resolutions listed in Spec §4 table
+- Each: `#0A0A0B` background, centered TradeITM logo at ~25% viewport width
+- Subtle emerald glow: `radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 60%)` — composite with sharp
+- Run: `pnpm generate:pwa-splashes`
+
+**7.2 — Splash Screen Meta Tags**
+```
+Modify: app/layout.tsx
+```
+- Add `<link rel="apple-touch-startup-image">` tags in the `<head>` for each device resolution
+- Use `media` attribute queries per the format in Spec §4 (e.g., `(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)`)
+- Since this is a Server Component, add the links directly in the `<head>` JSX
+
+**7.3 — iOS Keyboard Handling** (Spec §11B)
+```
+Create: hooks/use-ios-keyboard-fix.ts
+```
+- When `isIOSStandalone()` returns true (import from `@/lib/pwa-utils`):
+- Listen for `focus` events on `input, textarea` elements
+- After 300ms delay, call `element.scrollIntoView({ behavior: 'smooth', block: 'center' })`
+- Apply by importing in AI Coach chat component and Journal entry form
+
+**7.4 — iOS Session Persistence** (Spec §11E)
+```
+Verify: contexts/MemberAuthContext.tsx
+```
+- Read the file. Verify that on mount, auth state is checked immediately
+- Verify expired sessions redirect to `/login`
+- Verify the pulsing logo loader displays during rehydration
+- If any of these are missing, add them. If all present, document as verified in PWA_CHANGELOG.md
+
+**7.5 — Security Headers**
+```
+Check: Does next.config.ts or next.config.js have a headers() function?
+```
+- If yes, add `Permissions-Policy: push=(self)` to the headers
+- If no, create one or add the header via the appropriate config mechanism
+- Also verify CSP (from `x-nonce` in layout) allows `worker-src 'self'` for service worker
+
+### Phase 7 Gate Check
+
+```bash
+pnpm build
+pnpm test:unit
+```
+
+**Phase 7 Test File:** `lib/__tests__/pwa/phase7-ios.test.ts`
+
+Write tests:
+- All expected splash screen files exist on disk
+- `useIosKeyboardFix` is no-op when `isIOSStandalone()` returns false (mock the import)
+- Layout.tsx contains `apple-touch-startup-image` link tags (read file with fs and check string)
+
+**Commit:** `git commit -m "feat(pwa): phase 7 — iOS hardening (splashes, keyboard, session persistence)"`
+
+---
+
+## Phase 8: Testing, Verification & CI (Spec §10, §12)
 
 ### Goal
 Full test coverage, Lighthouse CI, performance verification. The final quality gate.
 
 ### Tasks
 
-**7.1 — Comprehensive E2E Tests** (Spec §12A)
+**8.1 — Comprehensive PWA E2E Test** (Spec §12A)
 ```
 Create: e2e/specs/pwa/pwa-installability.spec.ts
+```
+- Service worker registers (check `navigator.serviceWorker.controller`)
+- Manifest accessible at `/manifest.json` (status 200, valid JSON)
+- All icon URLs in manifest return 200
+- Theme color meta matches manifest `theme_color`
+- Start URL loads successfully
+
+**8.2 — Mobile Layout Verification** (Spec §12A)
+```
 Create: e2e/specs/pwa/mobile-layouts.spec.ts
 ```
-
-`pwa-installability.spec.ts`:
-- Service worker registers successfully
-- Manifest is accessible and returns 200
-- All icon URLs in manifest return 200
-- Start URL loads and caches
-- Theme color meta tag matches manifest theme_color
-- Offline fallback page loads when disconnected
-
-`mobile-layouts.spec.ts` — Test at 320px, 375px, 390px, 430px:
-- Dashboard: no horizontal overflow
-- Journal: entries stack correctly
-- AI Coach: chat bubbles fit viewport
+Test at viewports 320px, 375px, 390px, 430px:
+- Dashboard: `scrollWidth <= clientWidth` (no horizontal overflow)
+- Journal: entries stack vertically
+- AI Coach: chat bubbles within viewport
 - Academy: course cards stack on mobile
-- Profile: form fields are full width
-- All modals fit within viewport
+- All touch targets ≥ 44px height
 
-**7.2 — Add Playwright PWA Project**
+**8.3 — Add Playwright PWA Projects**
 ```
 Modify: playwright.config.ts
 ```
-- Add a `pwa` project with iPhone 15 viewport (393x852)
-- Add a `pwa-android` project with Pixel 7 viewport
-- Both should NOT block service workers (remove `serviceWorkers: 'block'` for these projects)
+Read first. Add two new projects:
+- `pwa-ios`: iPhone 15 viewport (393x852), do NOT include `serviceWorkers: 'block'`
+- `pwa-android`: Pixel 7 viewport, do NOT include `serviceWorkers: 'block'`
+- Point test directory to `e2e/specs/pwa/**`
+- Add script to package.json: `"test:e2e:pwa": "playwright test --project=pwa-ios --project=pwa-android"`
 
-**7.3 — Screenshot Generation** (Spec §4)
+**8.4 — Screenshot Generation** (Spec §4)
 ```
 Create: scripts/generate-pwa-screenshots.ts
+Add:    package.json script "generate:pwa-screenshots": "tsx scripts/generate-pwa-screenshots.ts"
 ```
-- Use Playwright to take actual screenshots of the running app
+- Use Playwright to capture running app screenshots
 - Dashboard wide (1280x720), Dashboard narrow (390x844), Journal narrow, AI Coach narrow
 - Save to `public/screenshots/`
-- Add script: `"generate:pwa-screenshots": "tsx scripts/generate-pwa-screenshots.ts"`
+- Note: this requires a running dev server, so document the usage in the script header
 
-**7.4 — Lighthouse CI** (Spec §12C)
+**8.5 — Lighthouse CI** (Spec §12C)
 ```
 Create: .github/workflows/lighthouse.yml
 ```
-- Runs on PR against mobile emulation
-- Uses `treosh/lighthouse-ci-action` or `lhci`
-- Fail thresholds: PWA = 100%, Performance >= 85, Accessibility >= 95, Best Practices >= 95
-- Upload results as PR comment
+- Trigger: pull_request
+- Build the app, start preview server
+- Run Lighthouse via `treosh/lighthouse-ci-action@v11` or `lhci`
+- Fail thresholds: PWA ≥ 100%, Performance ≥ 85, Accessibility ≥ 95, Best Practices ≥ 95
+- Upload HTML report as artifact
 
-**7.5 — Performance Audit**
-- Run `pnpm build` and check bundle sizes against Spec §10 budget
-- Initial JS < 150KB gzip, route chunks < 50KB avg, CSS < 30KB, SW < 15KB
-- If over budget, identify and split large chunks
+**8.6 — Performance Audit**
+- Run `pnpm build` and inspect `.next/` output sizes
+- Check against Spec §10 budget: Initial JS < 150KB gzip, route chunks < 50KB avg, CSS < 30KB
+- If over budget, add `next/dynamic` imports or code-split large components
+- Document findings in PWA_CHANGELOG.md
 
-**7.6 — PWA Changelog**
+**8.7 — Accessibility Audit & Fixes**
+```
+Audit all new and modified components
+```
+Run through all PWA components and modified files for accessibility:
+- **Focus rings**: Ensure all interactive elements (buttons, links, tabs) have visible focus rings. Search for `focus:` and `focus-visible:` in new components. Add `focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0A0B]` where missing
+- **ARIA labels**: All icon-only buttons must have `aria-label`. Check:
+  - Top bar back button (Phase 3) → `aria-label="Go back"`
+  - Network status dot → `aria-label="Network status: online"` / `"Network status: offline"`
+  - Bottom nav tab buttons → already have labels (verify)
+  - Pull-to-refresh indicator → `aria-hidden="true"` (decorative)
+  - Install prompt dismiss → `aria-label="Dismiss install prompt"`
+- **Color contrast**: Verify all text meets WCAG AA (4.5:1 for normal text, 3:1 for large text). Key risk areas: `text-muted-foreground` on `#0A0A0B` background
+- **Reduced motion**: Verify all new framer-motion animations have `prefers-reduced-motion` handling. The install prompt, pull-to-refresh, and offline banner must respect `useReducedMotion()`
+
+**8.8 — Image Optimization Audit**
+```
+Search and fix across codebase
+```
+Run:
+```bash
+grep -rn "unoptimized" components/ app/ --include="*.tsx"
+grep -rn '<img ' components/ app/ --include="*.tsx"
+```
+- Remove `unoptimized` prop from any Discord avatar `<Image>` components — Next.js image optimization should handle remote images. Verify `next.config.ts` has `images.remotePatterns` for `cdn.discordapp.com`
+- Replace any raw `<img>` tags with `next/image` `<Image>` component
+- For large images (hero, course thumbnails), ensure `placeholder="blur"` or `placeholder="empty"` with a loading skeleton
+- For avatar images, ensure `sizes` prop is set correctly (e.g., `sizes="40px"` for 40px avatars) to prevent oversized downloads
+
+**8.9 — Form Input Mode & Autocomplete Audit**
+```
+Search and fix across member pages
+```
+Run:
+```bash
+grep -rn 'type="number"\|type="text"\|<input\|<textarea' app/members/ components/journal/ components/members/ --include="*.tsx"
+```
+- All numeric inputs (price, quantity, percentage fields) should have `inputMode="decimal"` for proper mobile keyboard. Search journal trade entry form, any settings forms
+- All email fields should have `inputMode="email"` and `autoComplete="email"`
+- All name fields should have `autoComplete="name"` or `autoComplete="given-name"`
+- All password fields should have `autoComplete="current-password"` or `autoComplete="new-password"`
+- Textarea elements in forms should have `resize-none` class unless intentionally resizable
+
+**8.10 — PWA Changelog**
 ```
 Create: docs/PWA_CHANGELOG.md
 ```
-- Document every change made across all 7 phases
-- Format: Phase number, files created, files modified, tests added
-- Include before/after Lighthouse scores if available
+- Document all changes across Phases 1-8 (10 tasks in this phase)
+- Format per phase: files created, files modified, tests added, key decisions
+- Include final Lighthouse scores
+- Include UX production hardening summary: toast fixes, touch targets, scroll lock, error boundaries, accessibility
 
-### Phase 7 Gate Check (Final)
+### Phase 8 Gate Check (FINAL)
 
 ```bash
-# Full test suite
+# Complete test suite
 pnpm test:unit
 pnpm test:e2e
 pnpm build
 
-# Verify all PWA files exist
+# Asset verification
 node -e "
 const fs = require('fs');
-const manifest = JSON.parse(fs.readFileSync('public/manifest.json','utf8'));
-const missing = manifest.icons.filter(i => !fs.existsSync('public' + i.src));
-if (missing.length) { console.error('Missing icons:', missing); process.exit(1); }
-manifest.screenshots.filter(s => !fs.existsSync('public' + s.src)).length &&
-  console.warn('Missing screenshots (generate after deployment)');
-console.log('All manifest assets verified');
+const m = JSON.parse(fs.readFileSync('public/manifest.json','utf8'));
+const missing = m.icons.filter(i => !fs.existsSync('public' + i.src));
+if (missing.length) { console.error('Missing icons:', missing.map(i => i.src)); process.exit(1); }
+console.log('All ' + m.icons.length + ' manifest icons verified');
+fs.existsSync('public/offline.html') || (console.error('Missing offline.html'), process.exit(1));
+console.log('Offline page verified');
 "
 ```
 
-**Commit:** `git commit -m "feat(pwa): phase 7 — testing, CI, verification, changelog"`
+**Phase 8 Audit Verification:**
+```bash
+# Accessibility: no icon-only buttons without aria-label
+grep -rn '<button' components/ app/ --include="*.tsx" | grep -v 'aria-label' | grep -i 'icon\|lucide'
+
+# Images: no unoptimized or raw img tags
+grep -rn 'unoptimized' components/ app/ --include="*.tsx"
+grep -rn '<img ' components/ app/ --include="*.tsx"
+
+# Form inputs: verify inputMode on number fields
+grep -rn 'type="number"' components/ app/ --include="*.tsx" | grep -v 'inputMode'
+
+# Touch targets: verify coarse pointer rules exist
+grep -n 'pointer: coarse' app/globals.css
+```
+
+**Commit:** `git commit -m "feat(pwa): phase 8 — testing, CI, verification, audits, changelog"`
 
 ---
 
 ## Post-Implementation Checklist
 
-After all 7 phases pass their gates:
+After all 8 phases pass their gates, verify:
 
-- [ ] All unit tests pass: `pnpm test:unit`
-- [ ] All e2e tests pass: `pnpm test:e2e`
-- [ ] Build succeeds: `pnpm build`
-- [ ] No TypeScript errors
-- [ ] No ESLint errors: `pnpm lint`
-- [ ] Every new file has JSDoc header referencing spec section
-- [ ] `docs/PWA_CHANGELOG.md` is complete
-- [ ] Lighthouse PWA score is 100% (run locally with `npx lighthouse http://localhost:3000/members --view`)
-- [ ] All commits follow convention: `feat(pwa): phase N — description`
-- [ ] No `#D4AF37` (old gold) anywhere in new code
+- [ ] `pnpm test:unit` — all pass
+- [ ] `pnpm test:e2e` — all pass
+- [ ] `pnpm build` — zero errors
+- [ ] `pnpm lint` — zero errors (run `pnpm lint` if configured, or `npx eslint . --ext .ts,.tsx`)
+- [ ] Every new file has JSDoc header with spec section reference
+- [ ] `docs/PWA_CHANGELOG.md` documents all changes
+- [ ] No `#D4AF37` (old gold) in any new code — search: `grep -r "D4AF37" components/ lib/ hooks/ contexts/ app/`
 - [ ] All new components use `glass-card-heavy`, `var(--emerald-elite)`, `var(--champagne)` where appropriate
-- [ ] All images use `next/image`
-- [ ] All icons use Lucide React
-- [ ] All imports use `@/` alias
-
-## File Summary
-
-### New Files (25 total)
-| File | Phase | Spec Section |
-|------|-------|-------------|
-| `scripts/generate-pwa-icons.ts` | 1 | §4 |
-| `public/icons/*` (14 files) | 1 | §4 |
-| `public/offline.html` | 1 | §5A |
-| `hooks/use-is-standalone.ts` | 2 | §11A |
-| `hooks/use-pwa-install.ts` | 2 | §6D |
-| `components/pwa/install-prompt.tsx` | 2 | §6A |
-| `components/pwa/ios-install-guide.tsx` | 2 | §6B |
-| `hooks/use-swipe-navigation.ts` | 3 | §7F |
-| `components/pwa/pull-to-refresh.tsx` | 3 | §7E |
-| `lib/haptics.ts` | 4 | §8B |
-| `lib/badge.ts` | 4 | §8C |
-| `components/pwa/share-button.tsx` | 4 | §8D |
-| `lib/push-notifications.ts` | 4 | §8A |
-| `components/pwa/notification-settings.tsx` | 4 | §8A |
-| `contexts/NetworkStatusContext.tsx` | 5 | §9A |
-| `components/pwa/offline-banner.tsx` | 5 | §9B |
-| `scripts/generate-pwa-splashes.ts` | 6 | §4 |
-| `public/splash/*` (~16 files) | 6 | §4 |
-| `hooks/use-ios-keyboard-fix.ts` | 6 | §11B |
-| `e2e/specs/pwa/pwa-installability.spec.ts` | 7 | §12A |
-| `e2e/specs/pwa/mobile-nav.spec.ts` | 3,7 | §12A |
-| `e2e/specs/pwa/mobile-layouts.spec.ts` | 7 | §12A |
-| `e2e/specs/pwa/offline.spec.ts` | 5,7 | §12A |
-| `scripts/generate-pwa-screenshots.ts` | 7 | §4 |
-| `.github/workflows/lighthouse.yml` | 7 | §12C |
-| `docs/PWA_CHANGELOG.md` | 7 | — |
-
-### Modified Files (10 total)
-| File | Phases | Changes |
-|------|--------|---------|
-| `public/manifest.json` | 1 | Complete rewrite |
-| `public/sw.js` | 1 | Version, offline fallback, expanded precache, periodic sync |
-| `app/layout.tsx` | 1, 6 | Meta tags, iOS splash links |
-| `app/globals.css` | 1 | Standalone mode CSS, safe-area utilities |
-| `app/members/layout.tsx` | 2, 3, 5 | Install prompt, dynamic padding, network provider |
-| `components/members/mobile-top-bar.tsx` | 3 | Safe area, network dot, back button |
-| `components/members/mobile-bottom-nav.tsx` | 3 | Badges, keyboard detection |
-| `middleware.ts` | 6 | Permissions-Policy header |
-| `playwright.config.ts` | 7 | PWA test projects |
-| `package.json` | 1 | Scripts, sharp devDependency |
+- [ ] All images use `next/image` (no raw `<img>` tags)
+- [ ] All icons use `lucide-react` (no other icon libraries)
+- [ ] All imports use `@/` alias (no relative `../../` paths)
+- [ ] No body scroll-through on any modal/sheet (test by opening journal trade entry sheet and trying to scroll)
+- [ ] No rubber-band overscroll on body in standalone mode
+- [ ] All interactive elements have visible focus rings (`focus-visible:ring-2`)
+- [ ] All icon-only buttons have `aria-label`
+- [ ] All numeric inputs have `inputMode="decimal"`
+- [ ] Toasts appear above bottom nav on mobile (not hidden behind top bar)
+- [ ] Error boundaries catch crashes gracefully on all member routes
+- [ ] All touch targets are ≥ 44px on coarse pointer devices
+- [ ] No `unoptimized` prop on any `<Image>` component (except SVGs)
+- [ ] No raw `<img>` tags — all images use `next/image`
+- [ ] All 8 commits follow `feat(pwa): phase N — description` convention
+- [ ] Run Lighthouse locally: `npx lighthouse http://localhost:3000/members --preset=desktop --view` and verify PWA score = 100%
 
 ---
 
-*This prompt implements `docs/PWA_SPEC.md` v1.0 using gated spec-driven development. Do not improvise beyond the spec.*
+## Complete File Manifest
+
+### New Files to Create (35 + 7 unit test files)
+
+| # | File | Phase | Spec § |
+|---|------|-------|--------|
+| 1 | `scripts/generate-pwa-icons.ts` | 1 | §4 |
+| 2 | `public/icons/*` (14 icon files) | 1 | §4 |
+| 3 | `public/offline.html` | 1 | §5A |
+| 4 | `hooks/use-is-standalone.ts` | 2 | §11A |
+| 5 | `hooks/use-pwa-install.ts` | 2 | §6D |
+| 6 | `components/pwa/install-prompt.tsx` | 2 | §6A |
+| 7 | `components/pwa/ios-install-guide.tsx` | 2 | §6B |
+| 8 | `hooks/use-swipe-navigation.ts` | 3 | §7F |
+| 9 | `components/pwa/pull-to-refresh.tsx` | 3 | §7E |
+| 10 | `lib/use-scroll-lock.ts` | 4 | §7/§11 |
+| 11 | `lib/haptics.ts` | 5 | §8B |
+| 12 | `lib/badge.ts` | 5 | §8C |
+| 13 | `components/pwa/share-button.tsx` | 5 | §8D |
+| 14 | `lib/push-notifications.ts` | 5 | §8A |
+| 15 | `components/pwa/notification-settings.tsx` | 5 | §8A |
+| 16 | `app/api/push/subscribe/route.ts` | 5 | §8A |
+| 17 | `contexts/NetworkStatusContext.tsx` | 6 | §9A |
+| 18 | `components/pwa/offline-banner.tsx` | 6 | §9B |
+| 19 | `components/pwa/journal-sync-indicator.tsx` | 6 | §9D |
+| 20 | `app/members/journal/error.tsx` | 6 | — |
+| 21 | `app/members/academy/courses/[slug]/error.tsx` | 6 | — |
+| 22 | `app/members/academy/learn/[id]/error.tsx` | 6 | — |
+| 23 | `app/members/profile/error.tsx` | 6 | — |
+| 24 | `app/members/ai-coach/error.tsx` | 6 | — |
+| 25 | `scripts/generate-pwa-splashes.ts` | 7 | §4 |
+| 26 | `public/splash/*` (~16 splash files) | 7 | §4 |
+| 27 | `hooks/use-ios-keyboard-fix.ts` | 7 | §11B |
+| 28 | `e2e/specs/pwa/pwa-installability.spec.ts` | 8 | §12A |
+| 29 | `e2e/specs/pwa/mobile-nav.spec.ts` | 3 | §12A |
+| 30 | `e2e/specs/pwa/mobile-layouts.spec.ts` | 8 | §12A |
+| 31 | `e2e/specs/pwa/offline.spec.ts` | 6 | §12A |
+| 32 | `e2e/specs/pwa/scroll-containment.spec.ts` | 4 | §12A |
+| 33 | `scripts/generate-pwa-screenshots.ts` | 8 | §4 |
+| 34 | `.github/workflows/lighthouse.yml` | 8 | §12C |
+| 35 | `docs/PWA_CHANGELOG.md` | 8 | — |
+| 36 | `lib/__tests__/pwa/phase1-installability.test.ts` | 1 | §12 |
+| 37 | `lib/__tests__/pwa/phase2-install-prompt.test.ts` | 2 | §12 |
+| 38 | `lib/__tests__/pwa/phase3-mobile-nav.test.ts` | 3 | §12 |
+| 39 | `lib/__tests__/pwa/phase4-scroll-containment.test.ts` | 4 | §12 |
+| 40 | `lib/__tests__/pwa/phase5-native-features.test.ts` | 5 | §12 |
+| 41 | `lib/__tests__/pwa/phase6-offline.test.ts` | 6 | §12 |
+| 42 | `lib/__tests__/pwa/phase7-ios.test.ts` | 7 | §12 |
+
+### Existing Files to Modify (19)
+
+| # | File | Phases | Key Changes |
+|---|------|--------|-------------|
+| 1 | `public/manifest.json` | 1 | Complete rewrite — add id, display_override, full icons, screenshots, shortcuts, share_target |
+| 2 | `public/sw.js` | 1, 5 | Add SW_VERSION, offline fallback, expanded precache, periodic sync, badge on push |
+| 3 | `app/layout.tsx` | 1, 7 | viewport export, theme-color, format-detection, msapplication meta, iOS splash links |
+| 4 | `app/globals.css` | 1, 4 | Standalone mode CSS, safe-area utils, touch targets, overscroll containment, scroll-contain, `--mobile-chrome` custom property |
+| 5 | `app/members/layout.tsx` | 2, 3, 4, 6 | InstallPrompt, pb-nav, will-change, contained scroll in standalone, NetworkStatusProvider, remove double pb-safe |
+| 6 | `components/members/mobile-top-bar.tsx` | 3 | safe-area-inset-top, network dot, back button |
+| 7 | `components/members/mobile-bottom-nav.tsx` | 3, 4 | Badge rendering, keyboard detection, safe-area-aware bottom, touch target sizing |
+| 8 | `hooks/use-focus-trap.ts` | 4 | Add body scroll lock via useScrollLock |
+| 9 | `components/ui/dialog.tsx` | 4 | Add body scroll lock to DialogContent |
+| 10 | `components/ui/app-toaster.tsx` | 3 | Mobile repositioning, safe-area offset, max visible count, error duration |
+| 11 | `components/journal/trade-entry-sheet.tsx` | 4 | Add body scroll lock + scroll position restore, textarea resize-none |
+| 12 | `components/journal/entry-detail-sheet.tsx` | 4 | Add body scroll lock + scroll position restore, safe-area-aware height |
+| 13 | `app/members/ai-coach/page.tsx` | 3, 4, 5 | Scroll containment, wake lock, height calculation fix, animation perf, reduced-motion |
+| 14 | `app/members/studio/page.tsx` | 4 | Mobile redirect to /members (prevent PWA dead-end) |
+| 15 | `playwright.config.ts` | 8 | Add pwa-ios and pwa-android projects |
+| 16 | `package.json` | 1, 8 | sharp devDep, generate:pwa-* scripts, test:e2e:pwa script |
+| 17 | Journal/profile/AI Coach pages | 3 | Add toast feedback for success/error actions |
+| 18 | Various form components | 8 | inputMode, autoComplete attributes |
+| 19 | Discord avatar components | 8 | Remove `unoptimized`, add proper `sizes` |
+
+### Files NOT Modified (reference only)
+
+| File | Why |
+|------|-----|
+| `components/pwa/service-worker-register.tsx` | Already complete — 105 lines, full lifecycle |
+| `lib/web-push-service.ts` | Already complete — 269 lines, VAPID + batch delivery |
+| `lib/types/notifications.ts` | Already complete — 95 lines, all interfaces |
+| `lib/pwa-utils.ts` | Already complete — 38 lines, import from here don't duplicate |
+| `app/api/admin/notifications/route.ts` | Already complete — 204 lines |
+| `components/academy/academy-sub-nav.tsx` | Already works — sticky sub-nav with horizontal scroll, correct z-index stacking |
+
+---
+
+## Navigation Map (Reference for All Phases)
+
+Codex should understand the full route tree to ensure every path has working navigation in standalone mode:
+
+```
+/members (Dashboard — home, bottom nav tab 1)
+├── /members/journal (bottom nav tab 2)
+│   └── /members/journal/analytics (sub-page — needs back button)
+├── /members/ai-coach (bottom nav tab 3)
+├── /members/academy (Academy home)
+│   ├── /members/academy/courses (bottom nav tab 4 "Library")
+│   │   └── /members/academy/courses/[slug] (sub-page — needs back button)
+│   ├── /members/academy/learn/[id] (sub-page — needs back button)
+│   ├── /members/academy/continue (academy sub-nav)
+│   ├── /members/academy/review (academy sub-nav)
+│   ├── /members/academy/saved (academy sub-nav)
+│   └── /members/academy/onboarding (sub-page)
+├── /members/profile (More menu)
+├── /members/social (More menu)
+└── /members/studio (desktop only — redirect mobile to /members)
+```
+
+**Sub-navigation layers:**
+1. **Bottom nav** — 4 primary tabs + More menu (Dashboard, Journal, AI Coach, Library, More)
+2. **Academy sub-nav** — horizontal scrollable tabs within `/members/academy/*` routes (Home, Explore, Continue, Review, Saved)
+3. **Top bar back button** — appears on any route deeper than `/members/{section}` (e.g., `/members/academy/courses/[slug]`)
+
+**Overlay components that need scroll lock:**
+- Journal: `TradeEntrySheet`, `EntryDetailSheet`, `ScreenshotQuickAdd`, delete confirmation modal
+- AI Coach: `MobileToolSheet` (full-screen slide-up)
+- Radix Dialog (used across app)
+- Any future modals/sheets
+
+---
+
+*This prompt implements `docs/PWA_SPEC.md` v1.0 via gated spec-driven development with 8 phases (56 tasks total). Every feature traces to a spec section. Phase 4 (scroll containment) ensures the app feels native, not like a website wrapper. Phases 3, 4, 6, and 8 include UX production hardening: toast positioning, touch targets, animation performance, error boundaries, accessibility, image optimization, and form input modes. Do not improvise beyond the spec. Do not skip gate checks.*

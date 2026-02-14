@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TITM AI Coach — Mobile Interaction Audit v2</title>
+<style>
+  :root {
+    --bg: #0A0A0B;
+    --surface: #111113;
+    --surface2: #1a1a1d;
+    --border: rgba(255,255,255,0.08);
+    --emerald: #10B981;
+    --emerald-dim: rgba(16,185,129,0.15);
+    --champagne: #F3E5AB;
+    --champagne-dim: rgba(243,229,171,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,0.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.12);
+    --purple: #a855f7;
+    --purple-dim: rgba(168,85,247,0.12);
+    --text: rgba(255,255,255,0.87);
+    --text-dim: rgba(255,255,255,0.45);
+    --text-muted: rgba(255,255,255,0.30);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; max-width:1100px; margin:0 auto; padding:32px 24px 80px; }
+  h1 { font-size:28px; font-weight:700; margin-bottom:8px; }
+  h2 { font-size:20px; font-weight:600; margin-top:48px; margin-bottom:16px; color:var(--emerald); }
+  h3 { font-size:16px; font-weight:600; margin-top:28px; margin-bottom:10px; }
+  h4 { font-size:14px; font-weight:600; margin-top:20px; margin-bottom:8px; }
+  p { margin-bottom:12px; font-size:14px; color:var(--text-dim); }
+  code { font-family:'SF Mono','Fira Code',monospace; font-size:12px; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:4px; color:var(--emerald); }
+  .badge { display:inline-block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; padding:3px 8px; border-radius:6px; }
+  .badge-critical { background:var(--red-dim); color:var(--red); border:1px solid rgba(239,68,68,0.25); }
+  .badge-high { background:var(--amber-dim); color:var(--amber); border:1px solid rgba(245,158,11,0.25); }
+  .badge-medium { background:var(--blue-dim); color:var(--blue); border:1px solid rgba(59,130,246,0.25); }
+  .badge-low { background:var(--purple-dim); color:var(--purple); border:1px solid rgba(168,85,247,0.25); }
+  .badge-good { background:var(--emerald-dim); color:var(--emerald); border:1px solid rgba(16,185,129,0.25); }
+  .header-meta { font-size:12px; color:var(--text-muted); margin-bottom:32px; }
+  .header-meta span { color:var(--champagne); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .finding { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:20px; border-left:3px solid var(--amber); }
+  .finding.critical { border-left-color:var(--red); }
+  .finding.high { border-left-color:var(--amber); }
+  .finding.medium { border-left-color:var(--blue); }
+  .finding.low { border-left-color:var(--purple); }
+  .finding.good { border-left-color:var(--emerald); }
+  .finding-id { font-size:11px; font-weight:700; color:var(--text-muted); letter-spacing:0.08em; margin-bottom:4px; }
+  .finding-title { font-size:15px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .file-ref { font-size:11px; color:var(--emerald); opacity:0.7; font-family:monospace; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin:16px 0; }
+  th { text-align:left; padding:10px 12px; background:var(--surface2); color:var(--text-dim); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid var(--border); }
+  td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-dim); vertical-align:top; }
+  tr:hover td { background:rgba(255,255,255,0.02); }
+  .toc { margin:24px 0 40px; }
+  .toc a { display:block; padding:6px 0; font-size:13px; color:var(--text-dim); text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.04); }
+  .toc a:hover { color:var(--emerald); }
+  .toc a span { color:var(--text-muted); margin-right:8px; font-family:monospace; font-size:11px; }
+  .severity-legend { display:flex; gap:12px; flex-wrap:wrap; margin:12px 0 24px; }
+  .proposal-box { background:var(--surface); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:20px; margin:16px 0; border-left:3px solid var(--emerald); }
+  .proposal-box h4 { color:var(--emerald); margin-top:0; }
+  .flow-diagram { display:flex; flex-direction:column; gap:4px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px; margin:16px 0; }
+  .flow-step { display:flex; align-items:center; gap:12px; padding:8px 12px; border-radius:8px; font-size:13px; }
+  .flow-step .step-num { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+  .flow-arrow { text-align:center; color:var(--text-muted); font-size:16px; padding:0 0 0 6px; }
+  .phone-frame { width:375px; border:2px solid var(--border); border-radius:32px; overflow:hidden; background:var(--bg); position:relative; }
+  .phone-notch { width:120px; height:24px; background:#000; border-radius:0 0 16px 16px; margin:0 auto; position:relative; z-index:2; }
+  .phone-screen { padding:0; min-height:640px; display:flex; flex-direction:column; }
+  .comparison { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0; }
+  @media (max-width:800px) { .comparison { grid-template-columns:1fr; } }
+  .comparison > div { position:relative; }
+  .comparison-label { position:absolute; top:8px; left:8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; padding:3px 8px; border-radius:4px; z-index:1; }
+  .comparison-label.before { background:var(--red-dim); color:var(--red); }
+  .comparison-label.after { background:var(--emerald-dim); color:var(--emerald); }
+  .path-map { padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px; margin:16px 0; overflow-x:auto; }
+  .path-row { display:flex; align-items:center; gap:6px; padding:6px 0; font-size:12px; flex-wrap:nowrap; min-width:max-content; }
+  .path-node { padding:4px 10px; border-radius:6px; background:var(--surface2); border:1px solid var(--border); white-space:nowrap; font-weight:500; }
+  .path-node.active { background:var(--emerald-dim); border-color:rgba(16,185,129,0.3); color:var(--emerald); }
+  .path-node.dead { background:var(--red-dim); border-color:rgba(239,68,68,0.3); color:var(--red); }
+  .path-node.confusing { background:var(--amber-dim); border-color:rgba(245,158,11,0.3); color:var(--amber); }
+  .path-arrow { color:var(--text-muted); font-size:14px; }
+  .toggle-bar { display:flex; gap:4px; padding:4px; margin:8px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid var(--border); }
+  .toggle-btn { flex:1; text-align:center; font-size:12px; font-weight:500; padding:8px; border-radius:6px; color:var(--text-dim); display:flex; align-items:center; justify-content:center; gap:6px; }
+  .toggle-btn.active { background:var(--emerald-dim); color:var(--emerald); border:1px solid rgba(16,185,129,0.3); }
+  .input-bar { margin-top:auto; padding:10px 16px; border-top:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+  .input-field { flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--text-muted); }
+  .send-btn { width:36px; height:36px; border-radius:12px; background:var(--emerald); display:flex; align-items:center; justify-content:center; }
+  .bottom-nav-mock { display:flex; justify-content:space-around; padding:8px 0 20px; border-top:1px solid var(--border); background:var(--bg); }
+  .nav-item { display:flex; flex-direction:column; align-items:center; gap:2px; font-size:9px; color:var(--text-muted); padding:4px 12px; }
+  .nav-item.active { color:var(--emerald); }
+  .nav-dot { width:4px; height:4px; border-radius:50%; background:currentColor; }
+  .callout { padding:16px; border-radius:12px; margin:16px 0; font-size:13px; }
+  .callout-red { background:var(--red-dim); border:1px solid rgba(239,68,68,0.25); }
+  .callout-amber { background:var(--amber-dim); border:1px solid rgba(245,158,11,0.25); }
+  .callout-emerald { background:var(--emerald-dim); border:1px solid rgba(16,185,129,0.25); }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.3);} }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- HEADER -->
+<!-- ============================================================ -->
+<h1>AI Coach Mobile Interaction Audit <span style="color:var(--champagne);">v2</span></h1>
+<p class="header-meta">
+  <span>TITM Member Area</span> &mdash; Full Architectural Reevaluation &mdash; February 2026<br>
+  Prepared for Nate &bull; Auditor: Sr. UX Designer / Web Developer
+</p>
+
+<div class="callout callout-red">
+  <strong style="color:var(--red);">Core Problem Statement:</strong>
+  <p style="color:var(--text);margin:8px 0 0;">The AI Coach on mobile is actually <strong>three separate apps duct-taped together</strong>: (1) a chat interface, (2) a full-featured trading dashboard with 14 views, and (3) a swipe/toggle mechanism connecting them. Each was designed for desktop. On mobile, the result is a confusing maze where the same features are reachable from 3+ different entry points, critical actions happen silently in the background, and users have no sense of where they are or how to get back.</p>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#s1"><span>01</span> The Confusion Map &mdash; Every Path a User Can Take</a>
+  <a href="#s2"><span>02</span> The Three Layers Problem</a>
+  <a href="#s3"><span>03</span> Full Findings (15 Issues)</a>
+  <a href="#s4"><span>04</span> What "Luxurious" Looks Like &mdash; Design Philosophy</a>
+  <a href="#s5"><span>05</span> The Unified Mobile Proposal &mdash; Before &amp; After</a>
+  <a href="#s6"><span>06</span> Revised Implementation Phases</a>
+</div>
+
+<div class="severity-legend">
+  <span class="badge badge-critical">Critical</span>
+  <span class="badge badge-high">High</span>
+  <span class="badge badge-medium">Medium</span>
+  <span class="badge badge-low">Low</span>
+  <span class="badge badge-good">Working Well</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 01: CONFUSION MAP -->
+<!-- ============================================================ -->
+<h2 id="s1">01 &mdash; The Confusion Map: Every Path a User Can Take</h2>
+
+<h3>Layer 1: The Page-Level Toggle</h3>
+<div class="path-map">
+  <div class="path-row">
+    <div class="path-node active">Chat View</div>
+    <div class="path-arrow">&harr;</div>
+    <div class="path-node">Chart View <span style="font-size:10px;color:var(--amber);">(actually "CenterPanel" with 14+ views)</span></div>
+  </div>
+  <p style="margin:8px 0 0;font-size:11px;color:var(--text-muted);">Controlled by: <code>mobileView</code> state in page.tsx. Toggle bar + swipe gesture. Only 2 states.</p>
+</div>
+
+<h3>Layer 2: Inside CenterPanel &mdash; The 16 Possible States</h3>
+<div class="path-map">
+  <div class="path-row">
+    <div class="path-node confusing">Welcome (default)</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Chart</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Options</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Positions</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Scanner</div>
+  </div>
+  <div class="path-row" style="margin-top:4px;">
+    <div class="path-node">Journal</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Tracked Setups</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Alerts</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Watchlist</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Daily Brief</div>
+  </div>
+  <div class="path-row" style="margin-top:4px;">
+    <div class="path-node">LEAPS</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Earnings</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Macro</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Onboarding</div>
+    <div class="path-arrow">&rarr;</div>
+    <div class="path-node">Preferences</div>
+  </div>
+  <div class="path-row" style="margin-top:4px;">
+    <div class="path-node dead">Screenshot Upload</div>
+  </div>
+  <p style="margin:8px 0 0;font-size:11px;color:var(--text-muted);">Controlled by: <code>activeView</code> state in center-panel.tsx. 16 possible states. The toggle bar just says "Chart" for all of them.</p>
+</div>
+
+<h3>Layer 3: How Users Reach the Same View from Multiple Paths</h3>
+<p>This is where the confusion compounds. The same destination is reachable from wildly different starting points:</p>
+
+<table>
+  <tr><th>Destination</th><th>Path 1</th><th>Path 2</th><th>Path 3</th><th>Path 4</th></tr>
+  <tr>
+    <td style="color:var(--text);font-weight:600;">Chart View</td>
+    <td>Chat prompt &rarr; AI generates chart &rarr; auto-loads silently</td>
+    <td>Welcome &rarr; "Live Chart" quick access card</td>
+    <td>Tools sheet &rarr; "Chart" button</td>
+    <td>Widget card &rarr; "Show on Chart" button</td>
+  </tr>
+  <tr>
+    <td style="color:var(--text);font-weight:600;">Options View</td>
+    <td>Chat prompt &rarr; AI generates options chain</td>
+    <td>Welcome &rarr; "Options" quick access card</td>
+    <td>Tools sheet &rarr; "Options" button</td>
+    <td>Widget card &rarr; "View Options" button</td>
+  </tr>
+  <tr>
+    <td style="color:var(--text);font-weight:600;">Morning Brief</td>
+    <td>Chat prompt "Morning Brief"</td>
+    <td>Welcome &rarr; "Morning Brief" prompt card (uses <code>__NAVIGATE_BRIEF__</code> flag)</td>
+    <td>Tools sheet &rarr; "Daily Brief" button</td>
+    <td>Welcome &rarr; "Daily Brief" quick access card</td>
+  </tr>
+  <tr>
+    <td style="color:var(--text);font-weight:600;">Scanner</td>
+    <td>Chat prompt &rarr; "Best Setup Now"</td>
+    <td>Welcome &rarr; "Scanner" quick access card</td>
+    <td>Tools sheet &rarr; "Scanner" button</td>
+    <td>Welcome &rarr; "Best Setup Now" prompt card</td>
+  </tr>
+  <tr>
+    <td style="color:var(--text);font-weight:600;">Settings</td>
+    <td>Tab rail &rarr; Settings button</td>
+    <td>Welcome &rarr; "More Tools" &rarr; Settings</td>
+    <td>&mdash;</td>
+    <td>&mdash;</td>
+  </tr>
+</table>
+
+<div class="callout callout-amber">
+  <strong style="color:var(--amber);">The Result:</strong>
+  <p style="color:var(--text);margin:8px 0 0;">A user taps "Chart" in the toggle bar and might see: the Welcome dashboard, a chart with levels, an empty chart, the Options chain, the Morning Brief, the Macro panel, or any of 14 other views. The toggle label never changes. There's no breadcrumb, no back button, and no "you are here" indicator. It's a one-word label ("Chart") covering a 16-state machine.</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 02: THREE LAYERS PROBLEM -->
+<!-- ============================================================ -->
+<h2 id="s2">02 &mdash; The Three Layers Problem</h2>
+
+<div class="card">
+  <h4 style="color:var(--red);margin-top:0;">Problem: Three Competing Navigation Systems on One Screen</h4>
+  <table>
+    <tr><th>Layer</th><th>What It Is</th><th>Designed For</th><th>Mobile Problem</th></tr>
+    <tr>
+      <td style="color:var(--text);font-weight:600;">Toggle Bar</td>
+      <td>"Chat" / "Chart" segmented control</td>
+      <td>Binary desktop split panel</td>
+      <td>Implies 2 views but covers 16 states. Label never updates.</td>
+    </tr>
+    <tr>
+      <td style="color:var(--text);font-weight:600;">Tab Rail</td>
+      <td>12-tab horizontal scrolling rail + Home + Settings</td>
+      <td>Desktop CenterPanel navigation (always visible)</td>
+      <td>Hidden on mobile when Welcome is active. When visible, requires horizontal scroll to see all 12 tabs on 375px screen. Scroll buttons are desktop-only (<code>hidden lg:flex</code>).</td>
+    </tr>
+    <tr>
+      <td style="color:var(--text);font-weight:600;">Tools Sheet</td>
+      <td>Full-screen bottom sheet with 13 buttons (Home + 12 tabs)</td>
+      <td>Mobile-only fallback for tab rail</td>
+      <td>Duplicates the tab rail exactly. Requires a floating FAB button to open. Hidden behind an extra tap. No indication of which tool is active.</td>
+    </tr>
+  </table>
+</div>
+
+<h3>The Redundancy Grid</h3>
+<p>Every tool is accessible from <strong>at least 3 places</strong> simultaneously:</p>
+<table>
+  <tr><th>Tool</th><th>Welcome Card</th><th>Tab Rail</th><th>Tools Sheet</th><th>Chat Prompt</th><th>Widget Action</th></tr>
+  <tr><td>Chart</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td></tr>
+  <tr><td>Options</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td></tr>
+  <tr><td>Scanner</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td>No</td></tr>
+  <tr><td>Daily Brief</td><td style="color:var(--emerald);">Yes (x2!)</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td>No</td></tr>
+  <tr><td>Journal</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td>No</td><td>No</td></tr>
+  <tr><td>Alerts</td><td>More Tools</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td>No</td><td style="color:var(--emerald);">Yes</td></tr>
+  <tr><td>Watchlist</td><td>No</td><td style="color:var(--emerald);">Yes</td><td style="color:var(--emerald);">Yes</td><td>No</td><td>No</td></tr>
+  <tr><td>Settings</td><td>More Tools</td><td style="color:var(--emerald);">Yes</td><td>No</td><td>No</td><td>No</td></tr>
+</table>
+<p>Daily Brief has <strong>five</strong> entry points on mobile: a prompt card, a quick access card, the tab rail, the tools sheet, and typing "morning brief" in chat. This isn't flexibility &mdash; it's cognitive overload.</p>
+
+<!-- ============================================================ -->
+<!-- SECTION 03: FULL FINDINGS -->
+<!-- ============================================================ -->
+<h2 id="s3">03 &mdash; Full Findings</h2>
+
+<h3>Architecture-Level Issues</h3>
+
+<div class="finding critical">
+  <div class="finding-id">F1 &mdash; <span class="badge badge-critical">Critical</span></div>
+  <div class="finding-title">The "Chart" Tab Is a Lie</div>
+  <p>The mobile toggle says "Chat" and "Chart". But "Chart" doesn't show a chart &mdash; it shows whichever of 16 CenterPanel views was last active. First-time users who tap "Chart" see a Welcome dashboard with prompts, SPX ticker, quick access cards, and a "More Tools" section. Zero charts. The mental model is completely wrong: users expect <code>toggle("Chart") → see candlestick chart</code>, but get <code>toggle("Chart") → see mini-homepage with 12+ buttons</code>.</p>
+  <p class="file-ref">page.tsx:188-212 (toggle), center-panel.tsx:316 (default: 'welcome')</p>
+</div>
+
+<div class="finding critical">
+  <div class="finding-id">F2 &mdash; <span class="badge badge-critical">Critical</span></div>
+  <div class="finding-title">Chart Updates Are Invisible — No Auto-Switch, No Badge, No Toast</div>
+  <p>When the AI generates a chart response (the primary use case), <code>chartRequest</code> updates the CenterPanel in the background but <code>mobileView</code> stays on <code>'chat'</code>. No notification dot, no banner, no auto-switch. The user reads "Here are your SPX levels..." but has no idea the chart is ready. They must independently discover and tap "Chart" to see it.</p>
+  <p class="file-ref">page.tsx:101 (mobileView never changes), center-panel.tsx:533-547 (chart loads silently)</p>
+</div>
+
+<div class="finding critical">
+  <div class="finding-id">F3 &mdash; <span class="badge badge-critical">Critical</span></div>
+  <div class="finding-title">All Widget Actions Are Dead on Mobile</div>
+  <p>Every widget action button &mdash; "Show on Chart", "View Options", "Set Alert", "Analyze", "Open View" &mdash; dispatches a <code>CustomEvent</code> consumed by CenterPanel, but never toggles <code>mobileView</code>. Result: user taps an interactive button and nothing visible happens. 5 out of 7 widget action types are completely non-functional on mobile.</p>
+  <p class="file-ref">widget-actions.ts:25-174, page.tsx has no listeners for these events</p>
+</div>
+
+<div class="finding critical">
+  <div class="finding-id">F4 &mdash; <span class="badge badge-critical">Critical</span></div>
+  <div class="finding-title">Welcome View Is a Second Dashboard Inside a Dashboard</div>
+  <p>Users navigate to AI Coach from the member sidebar/bottom nav. They see Chat. They tap "Chart" expecting tools. Instead they see another dashboard with: market status badge, SPX live ticker, "Next Best Setup" card, 4 prompt cards, 8 quick-access cards, 4 hidden secondary tools, and a "More Tools" toggle. This is an entire homepage nested inside a tab. On mobile, it creates the feeling of being "two levels deep" with no way to orient.</p>
+  <p>Worse: the Welcome view's prompt cards call <code>onSendPrompt()</code> which forces <code>mobileView</code> back to <code>'chat'</code> (line 108). So tapping a prompt on the "Chart" tab boomerangs you to Chat with no context of what just happened.</p>
+  <p class="file-ref">center-panel.tsx:1265-1744 (welcome view), page.tsx:106-109 (handleSendPrompt forces chat)</p>
+</div>
+
+<h3>Navigation & Wayfinding Issues</h3>
+
+<div class="finding high">
+  <div class="finding-id">F5 &mdash; <span class="badge badge-high">High</span></div>
+  <div class="finding-title">Tab Rail Is Invisible on Mobile Welcome, Visible Everywhere Else</div>
+  <p>When <code>activeView === 'welcome'</code>, the tab rail is hidden. But once you navigate to Chart, Options, or any tool, the tab rail appears &mdash; a horizontal scrollable strip of 12+ tabs. The transition from "no navigation" to "a toolbar of 12 icons" is jarring. Users don't expect navigation to appear/disappear based on which sub-view they're in.</p>
+  <p class="file-ref">center-panel.tsx:681-796 (tab rail, conditional on activeView !== 'welcome')</p>
+</div>
+
+<div class="finding high">
+  <div class="finding-id">F6 &mdash; <span class="badge badge-high">High</span></div>
+  <div class="finding-title">Tools Sheet Duplicates Tab Rail Exactly &mdash; With Different UX</div>
+  <p>The mobile Tools sheet (floating FAB &rarr; bottom sheet with 13 buttons in a 3-column grid) contains the exact same 12 tools as the tab rail, plus Home. It's a second navigation surface for the same content. On desktop, only the tab rail exists. On mobile, both exist simultaneously. The Tools sheet is visually different (grid vs horizontal scroll), uses different interaction patterns (sheet vs rail), but navigates to identical destinations.</p>
+  <p class="file-ref">center-panel.tsx:1000-1078 (tools sheet), center-panel.tsx:681-796 (tab rail)</p>
+</div>
+
+<div class="finding high">
+  <div class="finding-id">F7 &mdash; <span class="badge badge-high">High</span></div>
+  <div class="finding-title">No "You Are Here" Indicator on Mobile</div>
+  <p>On desktop, the tab rail shows an emerald underline on the active tab. On mobile, when the tab rail is visible, it works the same way. But: (a) the tab rail is off-screen when in the Welcome view, (b) the page-level toggle always says "Chart" regardless of which of the 14 views is showing, and (c) the tools sheet highlights the active tool but closes immediately after selection, so the user can't reference it as a persistent indicator.</p>
+</div>
+
+<div class="finding high">
+  <div class="finding-id">F8 &mdash; <span class="badge badge-high">High</span></div>
+  <div class="finding-title">View Unmounting Destroys Chat Scroll &amp; Chart Zoom State</div>
+  <p>The mobile toggle uses conditional rendering: <code>{mobileView === 'chat' ? &lt;ChatArea/&gt; : &lt;CenterPanel/&gt;}</code>. Switching unmounts the inactive view entirely. Chat scroll position, chart pan/zoom, and all internal component state is destroyed every toggle. Users who are reading an AI response, switch to chart, and switch back must re-scroll through all messages.</p>
+  <p class="file-ref">page.tsx:281-301 (ternary conditional render)</p>
+</div>
+
+<h3>Interaction & Gesture Issues</h3>
+
+<div class="finding medium">
+  <div class="finding-id">F9 &mdash; <span class="badge badge-medium">Medium</span></div>
+  <div class="finding-title">Swipe Gesture Conflicts with Chart Panning</div>
+  <p>The 70px horizontal swipe threshold on the parent container competes with the chart's own <code>horzTouchDrag: true</code>. Users trying to pan the chart timeline accidentally switch back to Chat. The 60px vertical deadzone is too tight for natural thumb arcs.</p>
+  <p class="file-ref">page.tsx:127-143 (swipe handler)</p>
+</div>
+
+<div class="finding medium">
+  <div class="finding-id">F10 &mdash; <span class="badge badge-medium">Medium</span></div>
+  <div class="finding-title">Follow-Up Chips Confuse "Show Chart" (Send Prompt) vs Widget "Show on Chart" (View Switch)</div>
+  <p>The follow-up chip "Show Chart" sends a new chat prompt asking AI to display a chart. The widget button "Show on Chart" dispatches a view event to the CenterPanel. Same visual treatment, same-sounding label, completely different behavior. Neither actually switches the mobile view.</p>
+  <p class="file-ref">follow-up-chips.tsx:77-86, widget-actions.ts:30-53</p>
+</div>
+
+<div class="finding medium">
+  <div class="finding-id">F11 &mdash; <span class="badge badge-medium">Medium</span></div>
+  <div class="finding-title">No Transition Animation Between Chat &amp; CenterPanel</div>
+  <p>View switching is an instant unmount/mount with no spatial animation. Compare to Bloomberg, Robinhood, or TradingView mobile which all use slide transitions to maintain spatial awareness.</p>
+  <p class="file-ref">page.tsx:281-301 (no AnimatePresence)</p>
+</div>
+
+<div class="finding medium">
+  <div class="finding-id">F12 &mdash; <span class="badge badge-medium">Medium</span></div>
+  <div class="finding-title">Sessions Sidebar Covers Chat on Narrow Phones</div>
+  <p>The sessions drawer animates to 240px width. On 375px phones, only 135px remains for chat. On 320px phones, it overflows. Should be a full-screen overlay on mobile.</p>
+  <p class="file-ref">page.tsx:613-671 (240px hardcoded width)</p>
+</div>
+
+<div class="finding low">
+  <div class="finding-id">F13 &mdash; <span class="badge badge-low">Low</span></div>
+  <div class="finding-title">Chat Header Overflows on Narrow Viewports</div>
+  <p>The ChatArea header packs sessions toggle + icon + title + SPX ticker + hints + New button. On 320-375px screens, elements wrap to a second line.</p>
+  <p class="file-ref">page.tsx:680-743</p>
+</div>
+
+<h3>What's Working Well</h3>
+
+<div class="finding good">
+  <div class="finding-id"><span class="badge badge-good">Excellent</span></div>
+  <div class="finding-title">Streaming Status Feedback</div>
+  <p>The <code>TypingIndicator</code> with contextual phases ("Thinking...", "Fetching data...", "Analyzing...", "Writing...") is best-in-class. The new <code>function_result</code> event type adds "Updated: get_key_levels" status. Users always know what the AI is doing.</p>
+</div>
+
+<div class="finding good">
+  <div class="finding-id"><span class="badge badge-good">Excellent</span></div>
+  <div class="finding-title">Chart Request Pipeline &amp; Level Annotations</div>
+  <p>The 4-tier <code>extractChartRequest()</code> priority system, level annotation building, GEX overlay, and retry logic are technically excellent. The chart itself with candlesticks, RSI, MACD sub-panes, and interactive level labels is production-quality.</p>
+</div>
+
+<div class="finding good">
+  <div class="finding-id"><span class="badge badge-good">Excellent</span></div>
+  <div class="finding-title">Context-Aware Follow-Up Chips &amp; Widget Cards</div>
+  <p>The intelligent chip generation (symbol extraction, function call detection, 3-chip max dedup) and rich widget cards (key levels table, GEX profile, scan results) are genuinely differentiated.</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 04: DESIGN PHILOSOPHY -->
+<!-- ============================================================ -->
+<h2 id="s4">04 &mdash; What "Luxurious" Looks Like</h2>
+
+<div class="card" style="border-left:3px solid var(--champagne);">
+  <h4 style="color:var(--champagne);margin-top:0;">Design Principle: The AI Is the Navigation</h4>
+  <p style="color:var(--text);margin:0;">In a truly luxurious AI-first mobile experience, the user should never have to manually hunt for a tool. The chat IS the command center. When you tell the AI "show me the chart", the chart appears. When you say "scan for setups", the scanner appears. When you say "morning brief", the brief appears. The user's intent &mdash; expressed through conversation &mdash; drives the entire interface. Manual tool-switching is the escape hatch, not the primary interaction.</p>
+</div>
+
+<h3>The Principle: One Surface, AI-Driven</h3>
+<p>Right now there are three competing navigation systems because the CenterPanel was designed as a standalone desktop dashboard. On mobile, it should be <strong>invisible infrastructure</strong> &mdash; views that surface automatically based on conversation context. The mobile user should think: "I talk to the AI, it shows me things." Not: "I talk to the AI, then I switch tabs, then I find the right tool in a grid, then I see something."</p>
+
+<h3>What the Best-in-Class Trading Apps Do</h3>
+<table>
+  <tr><th>App</th><th>Mobile Pattern</th><th>Lesson for TITM</th></tr>
+  <tr><td style="color:var(--text);font-weight:600;">Bloomberg Terminal</td><td>Single command bar. Type a command, the relevant view appears. No tab-switching.</td><td>The chat input IS the command bar. Views should auto-surface.</td></tr>
+  <tr><td style="color:var(--text);font-weight:600;">Robinhood</td><td>Flat hierarchy. Stock page shows chart, options, news in a single scroll. No hidden layers.</td><td>Avoid nested dashboards. One scroll, one context.</td></tr>
+  <tr><td style="color:var(--text);font-weight:600;">TradingView Mobile</td><td>Bottom tab bar for major sections. Chart fills the screen. Settings are a gear icon, not a hidden panel.</td><td>If you must have tool-switching, use a visible bottom bar &mdash; not a floating FAB + sheet.</td></tr>
+  <tr><td style="color:var(--text);font-weight:600;">ChatGPT Mobile</td><td>Full-screen chat. Canvas/artifacts appear inline or as tappable cards. No separate "view" tab.</td><td>Rich outputs belong inline in the chat stream, not in a parallel universe.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECTION 05: THE PROPOSAL -->
+<!-- ============================================================ -->
+<h2 id="s5">05 &mdash; The Unified Mobile Proposal</h2>
+
+<div class="callout callout-emerald">
+  <strong style="color:var(--emerald);">The Core Idea: Chat is the Only Screen. Everything Else Floats Into It.</strong>
+  <p style="color:var(--text);margin:8px 0 0;">On mobile, eliminate the binary Chat/Chart toggle entirely. The chat is always visible. When the AI generates a chart, it appears as an expandable inline card in the chat. When the user wants a full-screen tool, it slides up as a sheet over chat &mdash; not a separate "tab". The user is always grounded in the conversation, and tools come to them.</p>
+</div>
+
+<div class="comparison">
+  <!-- BEFORE -->
+  <div>
+    <div class="comparison-label before">Current: Two-Tab Binary</div>
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div style="height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);">
+          <div style="width:28px;height:28px;"></div>
+          <div style="width:20px;height:20px;background:var(--emerald-dim);border-radius:4px;"></div>
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);"></div>
+        </div>
+        <div class="toggle-bar">
+          <div class="toggle-btn active">Chat</div>
+          <div class="toggle-btn">Chart</div>
+        </div>
+        <!-- Chat content -->
+        <div style="flex:1;padding:16px;overflow:hidden;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:flex-end;">
+            <div style="padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);font-size:11px;color:var(--text-dim);max-width:70%;">SPX Game Plan</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--emerald-dim);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--emerald);">AI</div>
+            <div style="font-size:11px;color:var(--text-dim);max-width:80%;">
+              SPX is trading at 5,867. Key levels: PDH 5,892, PDL 5,841, Pivot 5,867. GEX flip at 5,855...<br><br>
+              <span style="color:var(--text-muted);font-style:italic;font-size:10px;">Chart loaded with 6 levels.</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin:8px 0 0 36px;">
+            <div style="font-size:10px;padding:4px 10px;border-radius:99px;background:var(--emerald-dim);color:var(--emerald);border:1px solid rgba(16,185,129,0.3);">Show Chart</div>
+            <div style="font-size:10px;padding:4px 10px;border-radius:99px;background:var(--emerald-dim);color:var(--emerald);border:1px solid rgba(16,185,129,0.3);">SPX vs SPY</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin:0 16px;padding:8px;background:var(--red-dim);border-radius:8px;font-size:10px;color:var(--red);">
+          Chart is loaded in "Chart" tab. User has no idea.
+          <br>Must manually tap "Chart" to see it.
+          <br>Then sees Welcome dashboard, not chart.
+        </div>
+        <div class="input-bar">
+          <div class="input-field">How is SPX holding up?</div>
+          <div class="send-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item"><div class="nav-dot"></div>Dash</div>
+          <div class="nav-item"><div class="nav-dot"></div>Journal</div>
+          <div class="nav-item active"><div class="nav-dot"></div>AI Coach</div>
+          <div class="nav-item"><div class="nav-dot"></div>Library</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AFTER -->
+  <div>
+    <div class="comparison-label after">Proposed: Chat-First with Inline Surfaces</div>
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div style="height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);">
+          <div style="width:28px;height:28px;"></div>
+          <div style="width:20px;height:20px;background:var(--emerald-dim);border-radius:4px;"></div>
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);"></div>
+        </div>
+        <!-- NO toggle bar. Chat is the only surface. -->
+        <div style="height:36px;display:flex;align-items:center;padding:0 16px;gap:8px;border-bottom:1px solid var(--border);">
+          <div style="width:16px;height:16px;border-radius:50%;background:var(--emerald-dim);display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--emerald);">AI</div>
+          <span style="font-size:12px;font-weight:600;color:var(--text);">AI Coach</span>
+          <span style="margin-left:auto;font-size:10px;padding:2px 8px;border-radius:4px;background:var(--emerald-dim);color:var(--emerald);border:1px solid rgba(16,185,129,0.2);">SPX 5,867 <span style="color:#22c55e;">+0.4%</span></span>
+        </div>
+        <!-- Chat with INLINE chart -->
+        <div style="flex:1;padding:12px 16px;overflow:hidden;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:flex-end;">
+            <div style="padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);font-size:11px;color:var(--text-dim);max-width:70%;">SPX Game Plan</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--emerald-dim);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--emerald);">AI</div>
+            <div style="font-size:11px;color:var(--text-dim);max-width:85%;">
+              SPX at 5,867. Key levels mapped. GEX flip at 5,855. Bullish above pivot.
+            </div>
+          </div>
+          <!-- INLINE CHART CARD - tappable to expand fullscreen -->
+          <div style="margin:8px 0 8px 36px;border-radius:12px;border:1px solid rgba(16,185,129,0.2);overflow:hidden;background:var(--surface2);">
+            <div style="height:140px;background:linear-gradient(135deg,#0a1f15,#0a0f0d);display:flex;align-items:center;justify-content:center;position:relative;">
+              <!-- Mini chart visualization -->
+              <svg width="280" height="100" viewBox="0 0 280 100" style="opacity:0.6;">
+                <path d="M10,70 L40,55 L70,60 L100,35 L130,40 L160,25 L190,30 L220,20 L250,35 L270,28" stroke="#10B981" stroke-width="2" fill="none"/>
+                <line x1="10" y1="45" x2="270" y2="45" stroke="#ef4444" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+                <line x1="10" y1="65" x2="270" y2="65" stroke="#10B981" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+              </svg>
+              <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;">
+                <span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(239,68,68,0.2);color:#ef4444;">PDH 5,892</span>
+                <span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.2);color:#10B981;">PDL 5,841</span>
+              </div>
+              <div style="position:absolute;top:8px;left:8px;font-size:10px;font-weight:600;color:var(--emerald);">SPX 5m &bull; 6 levels</div>
+            </div>
+            <div style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);">
+              <span style="font-size:10px;color:var(--text-muted);">Tap for full chart</span>
+              <span style="font-size:10px;color:var(--emerald);">Expand &rarr;</span>
+            </div>
+          </div>
+          <!-- Follow-up chips -->
+          <div style="display:flex;gap:6px;margin:4px 0 0 36px;">
+            <div style="font-size:10px;padding:4px 10px;border-radius:99px;background:var(--emerald-dim);color:var(--emerald);border:1px solid rgba(16,185,129,0.3);">SPX vs SPY</div>
+            <div style="font-size:10px;padding:4px 10px;border-radius:99px;background:var(--emerald-dim);color:var(--emerald);border:1px solid rgba(16,185,129,0.3);">Set Alerts</div>
+          </div>
+        </div>
+        <!-- Slim tools bar replacing FAB -->
+        <div style="display:flex;gap:4px;padding:6px 12px;border-top:1px solid var(--border);overflow-x:auto;">
+          <div style="font-size:9px;padding:4px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;">Brief</div>
+          <div style="font-size:9px;padding:4px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;">Scanner</div>
+          <div style="font-size:9px;padding:4px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;">Options</div>
+          <div style="font-size:9px;padding:4px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;">Alerts</div>
+          <div style="font-size:9px;padding:4px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;">More</div>
+        </div>
+        <div class="input-bar" style="padding:8px 16px;">
+          <div class="input-field" style="padding:8px 14px;">What&rsquo;s the best setup right now?</div>
+          <div class="send-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item"><div class="nav-dot"></div>Dash</div>
+          <div class="nav-item"><div class="nav-dot"></div>Journal</div>
+          <div class="nav-item active"><div class="nav-dot"></div>AI Coach</div>
+          <div class="nav-item"><div class="nav-dot"></div>Library</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>The Five Design Moves</h3>
+
+<div class="proposal-box">
+  <h4>Move 1: Kill the Binary Toggle. Chat Is Always Visible.</h4>
+  <p>Remove the "Chat" / "Chart" segmented control entirely. The chat stream is the permanent, grounding surface on mobile. Everything else appears within it or floats over it. This eliminates the 16-state confusion because the user is never "somewhere else" &mdash; they're always in their conversation.</p>
+  <p style="color:var(--text-muted);font-size:12px;">Impact: Eliminates F1, F2, F4, F7, F8, F11. Single biggest UX improvement possible.</p>
+</div>
+
+<div class="proposal-box">
+  <h4>Move 2: Inline Chart Cards in the Chat Stream</h4>
+  <p>When the AI generates chart data, render an inline <strong>chart preview card</strong> directly in the message flow. The card shows: a mini candlestick visualization (lightweight-charts at 140px height), the symbol + timeframe, level count, and key support/resistance badges. Tapping the card expands it to a <strong>full-screen chart sheet</strong> that slides up over the chat (not a tab switch). Swiping down or tapping "X" dismisses the sheet back to chat. The user never loses their conversation context.</p>
+  <p>This is the ChatGPT Canvas / Artifacts pattern adapted for trading. The chart is a rich artifact of the conversation, not a separate destination.</p>
+  <p style="color:var(--text-muted);font-size:12px;">Impact: Eliminates F2 (chart invisible), F3 (widget actions dead), F10 (chip confusion). The chart appears exactly where the user is looking.</p>
+</div>
+
+<div class="proposal-box">
+  <h4>Move 3: Full-Screen Sheets for Deep Tools (Not Tabs)</h4>
+  <p>When a user wants a dedicated tool &mdash; Options Chain, Scanner, Positions, Journal, etc. &mdash; it opens as a <strong>full-screen sheet</strong> that slides up from the bottom with a drag handle. The chat remains underneath. Swiping down or tapping "Back to Chat" dismisses the sheet. This replaces the CenterPanel's 14-view state machine with simple modal sheets, each independent and stateless relative to each other.</p>
+  <p>This pattern is proven in Robinhood (stock detail sheets), Apple Stocks (chart detail), and iOS Maps (place detail). It preserves the feeling that chat is "home" and tools are temporary overlays.</p>
+  <p style="color:var(--text-muted);font-size:12px;">Impact: Eliminates F5 (tab rail appearing/disappearing), F6 (tools sheet duplication), F9 (swipe conflicts).</p>
+</div>
+
+<div class="proposal-box">
+  <h4>Move 4: Slim Quick-Access Bar Above Input (Not a FAB + Sheet)</h4>
+  <p>Replace the floating Tools FAB + full-screen sheet with a slim, scrollable chip bar between the chat messages and the input field. This bar shows 5-6 contextual quick-access tools as small pills: "Brief", "Scanner", "Options", "Alerts", "More...". Tapping any pill opens the corresponding full-screen sheet. The "More..." pill expands to the full tool grid.</p>
+  <p>This is always visible (no hidden state), always contextual, and takes up minimal vertical space (~32px). It replaces three redundant navigation surfaces (Welcome quick-access cards, Tab rail, Tools sheet) with one persistent, minimal bar.</p>
+  <p style="color:var(--text-muted);font-size:12px;">Impact: Eliminates the Welcome dashboard entirely on mobile. All tools accessible from one consistent location.</p>
+</div>
+
+<div class="proposal-box">
+  <h4>Move 5: AI-Driven Auto-Surface for Widget Actions</h4>
+  <p>When a widget action fires ("Show on Chart", "View Options", "Set Alert"), the corresponding view auto-opens as a full-screen sheet. No manual navigation required. The user taps a button and immediately sees the result. This is the "luxury" touch &mdash; the interface anticipates what the user wants and delivers it without friction.</p>
+  <p>Additionally, when the AI's response contains function calls for chart data, options chains, or scan results, the corresponding inline cards should render automatically in the chat. The user shouldn't need to know that these are separate "views" &mdash; they're just rich content in the conversation.</p>
+  <p style="color:var(--text-muted);font-size:12px;">Impact: Eliminates F3 (dead widget buttons). Every interactive element in chat immediately produces a visible result.</p>
+</div>
+
+<h3>What Happens to the Welcome View?</h3>
+
+<div class="card">
+  <p style="color:var(--text);margin:0;">The Welcome view's content is <strong>distributed, not destroyed</strong>:</p>
+  <table>
+    <tr><th>Welcome Element</th><th>New Location</th></tr>
+    <tr><td>Market status badge + SPX ticker</td><td>Compact header bar above chat (always visible)</td></tr>
+    <tr><td>Greeting + "What are you trading?"</td><td>Chat empty state (already exists in ChatArea)</td></tr>
+    <tr><td>4 prompt cards (SPX Game Plan, etc.)</td><td>Chat empty state quick prompts (already exists)</td></tr>
+    <tr><td>8 quick-access cards</td><td>Slim tool bar above input</td></tr>
+    <tr><td>"Next Best Setup" auto-refresh</td><td>Can surface as an auto-message in chat when AI Coach loads, or as a pinned card above the tool bar</td></tr>
+    <tr><td>"More Tools" secondary section</td><td>"More..." pill in the tool bar expands to full grid</td></tr>
+    <tr><td>Preferences/Settings</td><td>Gear icon in the chat header</td></tr>
+  </table>
+  <p style="color:var(--text-dim);margin:12px 0 0;">On <strong>desktop</strong>, the CenterPanel continues to work exactly as it does today &mdash; split panel with the full Welcome view, tab rail, and all 14 views. This proposal only changes the mobile experience.</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 06: REVISED PHASES -->
+<!-- ============================================================ -->
+<h2 id="s6">06 &mdash; Revised Implementation Phases</h2>
+
+<h3>Decision Point: Incremental vs. Architectural</h3>
+
+<div class="card" style="border-left:3px solid var(--champagne);">
+  <h4 style="color:var(--champagne);margin-top:0;">Two Paths Forward</h4>
+  <table>
+    <tr><th style="width:20%">Approach</th><th>What It Does</th><th>Effort</th><th>Result</th></tr>
+    <tr>
+      <td style="color:var(--text);font-weight:600;">Path A: Patch</td>
+      <td>Keep binary toggle. Add notification dot, widget bridges, display toggle, swipe fixes. (The current Codex spec.)</td>
+      <td>~10 hours</td>
+      <td>Functional but still two-tab binary with 16-state confusion. Welcome view still exists. Tools sheet still duplicates tab rail.</td>
+    </tr>
+    <tr>
+      <td style="color:var(--emerald);font-weight:600;">Path B: Rearchitect</td>
+      <td>Eliminate toggle. Chat-first with inline charts, full-screen tool sheets, slim tool bar. True mobile-native experience.</td>
+      <td>~20-25 hours</td>
+      <td>Luxurious, intuitive, single-surface experience. Every interaction is one tap. No hidden states. No confusion.</td>
+    </tr>
+  </table>
+</div>
+
+<h3>Path B: The Luxury Rearchitecture (Recommended)</h3>
+
+<div class="flow-diagram">
+  <div class="flow-step" style="background:var(--red-dim);">
+    <div class="step-num" style="background:var(--red);color:#fff;">1</div>
+    <div>
+      <strong style="color:var(--text)">Phase 1: Chat-Only Mobile Surface (P0)</strong><br>
+      <span style="font-size:12px;color:var(--text-dim);">
+        &bull; Remove binary toggle on mobile<br>
+        &bull; Mount ChatArea as the permanent mobile view<br>
+        &bull; CenterPanel remains mounted (hidden) for state continuity<br>
+        &bull; Add compact market ticker to chat header<br>
+        &bull; ~4-5 hours
+      </span>
+    </div>
+  </div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step" style="background:var(--amber-dim);">
+    <div class="step-num" style="background:var(--amber);color:#000;">2</div>
+    <div>
+      <strong style="color:var(--text)">Phase 2: Inline Chart Cards (P0)</strong><br>
+      <span style="font-size:12px;color:var(--text-dim);">
+        &bull; Build <code>ChartPreviewCard</code> component (mini-chart + levels + metadata)<br>
+        &bull; Render inline in chat when <code>chartRequest</code> fires<br>
+        &bull; Tap to expand &rarr; full-screen chart sheet with drag-to-dismiss<br>
+        &bull; Bridge all widget chart actions to open the sheet<br>
+        &bull; ~6-8 hours
+      </span>
+    </div>
+  </div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step" style="background:var(--blue-dim);">
+    <div class="step-num" style="background:var(--blue);color:#fff;">3</div>
+    <div>
+      <strong style="color:var(--text)">Phase 3: Full-Screen Tool Sheets (P1)</strong><br>
+      <span style="font-size:12px;color:var(--text-dim);">
+        &bull; Build <code>ToolSheet</code> wrapper (slide-up, drag handle, dismiss)<br>
+        &bull; Wrap each CenterPanel view (Options, Scanner, Positions, etc.) in ToolSheet<br>
+        &bull; Bridge all widget actions to open the correct sheet<br>
+        &bull; Add slim tool bar above input with scrollable pills<br>
+        &bull; ~5-6 hours
+      </span>
+    </div>
+  </div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step" style="background:var(--emerald-dim);">
+    <div class="step-num" style="background:var(--emerald);color:#000;">4</div>
+    <div>
+      <strong style="color:var(--text)">Phase 4: Polish &amp; Cleanup (P2)</strong><br>
+      <span style="font-size:12px;color:var(--text-dim);">
+        &bull; Remove Welcome view on mobile (distribute content per table above)<br>
+        &bull; Remove Tools sheet and floating FAB on mobile<br>
+        &bull; Hide tab rail on mobile (sheets handle all navigation)<br>
+        &bull; Sessions drawer as full-screen overlay<br>
+        &bull; Chat header simplification<br>
+        &bull; ~4-5 hours
+      </span>
+    </div>
+  </div>
+</div>
+
+<h3>Path A: The Incremental Patch (Faster, Less Transformative)</h3>
+<p>If Path B is too large for this cycle, Path A from the existing Codex spec still delivers meaningful improvement. The key changes remain: widget event bridge, chart notification dot, display toggle for state preservation, swipe gesture fixes, and dynamic tab labels. See <code>docs/NAVIGATION_AND_AI_COACH_MOBILE_CODEX_SPEC.md</code> Phases 1-3 for exact implementation.</p>
+
+<div class="card" style="border-left:3px solid var(--champagne);margin-top:32px;">
+  <h4 style="color:var(--champagne);margin-top:0;">Bottom Line</h4>
+  <p style="color:var(--text);margin:0;font-size:14px;">
+    The core issue isn't a broken toggle or a missing notification dot. It's that the AI Coach tries to be a <strong>full trading terminal on mobile</strong> when it should be an <strong>AI conversation that produces rich outputs</strong>. The chat is the product. Charts, options chains, scanners &mdash; these are artifacts of the conversation, not parallel destinations. Path B embraces this by making chat the only surface and floating everything else into it. Path A patches the existing architecture to make it functional. Both are detailed in the Codex spec. The choice is: <em>functional</em> vs. <em>luxurious</em>.
+  </p>
+</div>
+
+</body>
+</html>
