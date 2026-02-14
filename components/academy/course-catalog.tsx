@@ -3,21 +3,22 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { Search, SlidersHorizontal, X, Rows3, Grid3X3 } from 'lucide-react'
+import { Bot, SlidersHorizontal, Rows3, Grid3X3, Send } from 'lucide-react'
 import { CourseCard, type CourseCardData } from '@/components/academy/course-card'
 
 interface CourseCatalogProps {
   courses: CourseCardData[]
   paths?: string[]
   className?: string
+  onAskTutor?: (prompt: string) => void
 }
 
 const DIFFICULTY_OPTIONS = ['all', 'beginner', 'intermediate', 'advanced'] as const
 const STATUS_OPTIONS = ['all', 'not_started', 'in_progress', 'completed'] as const
 const DURATION_OPTIONS = ['all', 'micro', 'full'] as const
 
-export function CourseCatalog({ courses, paths = [], className }: CourseCatalogProps) {
-  const [search, setSearch] = useState('')
+export function CourseCatalog({ courses, paths = [], className, onAskTutor }: CourseCatalogProps) {
+  const [tutorPrompt, setTutorPrompt] = useState('')
   const [selectedPath, setSelectedPath] = useState<string>('all')
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
@@ -32,12 +33,6 @@ export function CourseCatalog({ courses, paths = [], className }: CourseCatalogP
 
   const filteredCourses = useMemo(() => {
     return courses.filter((course) => {
-      const matchesSearch =
-        !search ||
-        course.title.toLowerCase().includes(search.toLowerCase()) ||
-        course.description.toLowerCase().includes(search.toLowerCase()) ||
-        (course.skills || []).some((skill) => skill.toLowerCase().includes(search.toLowerCase()))
-
       const matchesPath =
         selectedPath === 'all' || course.path === selectedPath
 
@@ -58,47 +53,61 @@ export function CourseCatalog({ courses, paths = [], className }: CourseCatalogP
         (selectedDuration === 'micro' && isMicro) ||
         (selectedDuration === 'full' && !isMicro)
 
-      return matchesSearch && matchesPath && matchesDifficulty && matchesStatus && matchesDuration
+      return matchesPath && matchesDifficulty && matchesStatus && matchesDuration
     })
-  }, [courses, search, selectedPath, selectedDifficulty, selectedStatus, selectedDuration])
+  }, [courses, selectedPath, selectedDifficulty, selectedStatus, selectedDuration])
 
   const hasActiveFilters =
     selectedPath !== 'all' ||
     selectedDifficulty !== 'all' ||
     selectedStatus !== 'all' ||
-    selectedDuration !== 'all' ||
-    search !== ''
+    selectedDuration !== 'all'
+
+  const handleAskTutor = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const trimmed = tutorPrompt.trim()
+    if (!trimmed || !onAskTutor) return
+
+    onAskTutor(trimmed)
+    setTutorPrompt('')
+  }
 
   return (
     <div className={cn('space-y-6', className)}>
-      {/* Search and filter bar */}
+      {/* Tutor prompt and filter bar */}
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          {/* AI Tutor prompt */}
+          <form className="flex-1 relative" onSubmit={handleAskTutor}>
+            <Bot className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-300/70" />
             <input
               type="text"
-              placeholder="Search courses..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Ask AI Tutor about any lesson or setup..."
+              value={tutorPrompt}
+              onChange={(e) => setTutorPrompt(e.target.value)}
+              disabled={!onAskTutor}
               className={cn(
-                'w-full pl-9 pr-4 py-2.5 rounded-lg text-sm text-white',
+                'w-full pl-9 pr-10 py-2.5 rounded-lg text-sm text-white',
                 'bg-white/5 border border-white/10',
                 'placeholder:text-white/30',
                 'focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20',
                 'transition-colors'
               )}
             />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+            <button
+              type="submit"
+              disabled={!tutorPrompt.trim() || !onAskTutor}
+              className={cn(
+                'absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md flex items-center justify-center',
+                tutorPrompt.trim() && onAskTutor
+                  ? 'text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10'
+                  : 'text-white/20'
+              )}
+              aria-label="Ask AI Tutor"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </form>
 
           {/* Filter toggle */}
           <div className="flex items-center gap-2">
@@ -244,7 +253,6 @@ export function CourseCatalog({ courses, paths = [], className }: CourseCatalogP
         {hasActiveFilters && (
           <button
             onClick={() => {
-              setSearch('')
               setSelectedPath('all')
               setSelectedDifficulty('all')
               setSelectedStatus('all')
@@ -288,7 +296,6 @@ export function CourseCatalog({ courses, paths = [], className }: CourseCatalogP
           <p className="text-white/40 text-sm">No courses match your filters.</p>
           <button
             onClick={() => {
-              setSearch('')
               setSelectedPath('all')
               setSelectedDifficulty('all')
               setSelectedStatus('all')

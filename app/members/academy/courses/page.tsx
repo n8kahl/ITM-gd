@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { GraduationCap, Sparkles } from 'lucide-react'
 import { CourseCatalog } from '@/components/academy/course-catalog'
+import { AiTutorPanel } from '@/components/academy/ai-tutor-panel'
 import type { CourseCardData } from '@/components/academy/course-card'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
@@ -15,8 +16,17 @@ import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 interface CatalogResponse {
   success: boolean
   data?: {
-  courses: CourseCardData[]
-  paths: string[]
+    courses: CourseCardData[]
+    paths: string[]
+  }
+}
+
+interface CourseDetailResponse {
+  success: boolean
+  data?: {
+    title: string
+    lessons: Array<{ id: string }>
+    resumeLessonId: string | null
   }
 }
 
@@ -28,6 +38,13 @@ export default function CoursesPage() {
   const [courses, setCourses] = useState<CourseCardData[]>([])
   const [paths, setPaths] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [tutorLessonId, setTutorLessonId] = useState<string | null>(null)
+  const [tutorLessonTitle, setTutorLessonTitle] = useState('Training Library')
+  const [isTutorOpen, setIsTutorOpen] = useState(false)
+  const [pendingTutorPrompt, setPendingTutorPrompt] = useState<{
+    id: number
+    text: string
+  } | null>(null)
 
   useEffect(() => {
     async function fetchCourses() {
@@ -42,6 +59,27 @@ export default function CoursesPage() {
 
         setCourses(payload.data.courses)
         setPaths(payload.data.paths)
+
+        const defaultCourse =
+          payload.data.courses.find((course) => course.completedLessons > 0 && course.completedLessons < course.totalLessons) ||
+          payload.data.courses[0]
+
+        if (!defaultCourse) return
+
+        setTutorLessonTitle(defaultCourse.title)
+        const detailRes = await fetch(`/api/academy/courses/${encodeURIComponent(defaultCourse.slug)}`)
+        if (!detailRes.ok) throw new Error('Failed to fetch course detail for tutor context')
+
+        const detailPayload: CourseDetailResponse = await detailRes.json()
+        if (!detailPayload.success || !detailPayload.data) {
+          throw new Error('Invalid course detail payload for tutor context')
+        }
+
+        const anchorLessonId = detailPayload.data.resumeLessonId || detailPayload.data.lessons[0]?.id || null
+        if (!anchorLessonId) return
+
+        setTutorLessonId(anchorLessonId)
+        setTutorLessonTitle(detailPayload.data.title || defaultCourse.title)
       } catch (error) {
         console.error('Error fetching courses:', error)
       } finally {
@@ -51,6 +89,15 @@ export default function CoursesPage() {
 
     fetchCourses()
   }, [])
+
+  const handleAskTutor = (prompt: string) => {
+    if (!tutorLessonId) return
+    setIsTutorOpen(true)
+    setPendingTutorPrompt({
+      id: Date.now(),
+      text: prompt,
+    })
+  }
 
   if (isLoading) {
     return (
@@ -119,8 +166,23 @@ export default function CoursesPage() {
         </div>
       ) : (
         <>
-          {/* Catalog with filters */}
-          <CourseCatalog courses={courses} paths={paths} />
+          {/* Catalog with tutor prompt and filters */}
+          <CourseCatalog
+            courses={courses}
+            paths={paths}
+            onAskTutor={tutorLessonId ? handleAskTutor : undefined}
+          />
+          {tutorLessonId && (
+            <AiTutorPanel
+              lessonId={tutorLessonId}
+              lessonTitle={tutorLessonTitle}
+              isOpen={isTutorOpen}
+              onOpenChange={setIsTutorOpen}
+              desktopSide="left"
+              showFloatingTrigger={false}
+              pendingPrompt={pendingTutorPrompt}
+            />
+          )}
         </>
       )}
     </div>

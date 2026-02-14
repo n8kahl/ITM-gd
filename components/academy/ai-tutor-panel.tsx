@@ -25,6 +25,15 @@ interface AiTutorPanelProps {
   lessonTitle: string
   suggestedPrompts?: string[]
   className?: string
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  desktopSide?: 'left' | 'right'
+  showFloatingTrigger?: boolean
+  pendingPrompt?: {
+    id: number | string
+    text: string
+    autoSend?: boolean
+  } | null
 }
 
 export function AiTutorPanel({
@@ -32,15 +41,32 @@ export function AiTutorPanel({
   lessonTitle,
   suggestedPrompts,
   className,
+  isOpen: controlledIsOpen,
+  onOpenChange,
+  desktopSide = 'right',
+  showFloatingTrigger = true,
+  pendingPrompt = null,
 }: AiTutorPanelProps) {
   const [isMounted, setIsMounted] = useState(false)
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const processedPromptIdRef = useRef<number | string | null>(null)
+  const isControlled = typeof controlledIsOpen === 'boolean'
+  const isOpen = isControlled ? Boolean(controlledIsOpen) : internalIsOpen
+  const isLeftDesktopPanel = desktopSide === 'left'
+  const panelEnterX = isLeftDesktopPanel ? '-100%' : '100%'
+
+  const setOpen = useCallback((nextOpen: boolean) => {
+    if (!isControlled) {
+      setInternalIsOpen(nextOpen)
+    }
+    onOpenChange?.(nextOpen)
+  }, [isControlled, onOpenChange])
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -58,8 +84,8 @@ export function AiTutorPanel({
     }
   }, [isOpen])
 
-  const sendMessage = useCallback(async () => {
-    const trimmed = input.trim()
+  const sendMessageText = useCallback(async (rawInput: string) => {
+    const trimmed = rawInput.trim()
     if (!trimmed || isLoading) return
 
     const userMessage: Message = {
@@ -120,7 +146,29 @@ export function AiTutorPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, lessonId, sessionId])
+  }, [isLoading, lessonId, sessionId])
+
+  const sendMessage = useCallback(async () => {
+    await sendMessageText(input)
+  }, [input, sendMessageText])
+
+  useEffect(() => {
+    if (!pendingPrompt) return
+    if (processedPromptIdRef.current === pendingPrompt.id) return
+    processedPromptIdRef.current = pendingPrompt.id
+
+    const promptText = pendingPrompt.text.trim()
+    setOpen(true)
+
+    if (!promptText) return
+    if (pendingPrompt.autoSend ?? true) {
+      void sendMessageText(promptText)
+      return
+    }
+
+    setInput(promptText)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }, [pendingPrompt, sendMessageText, setOpen])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -142,22 +190,24 @@ export function AiTutorPanel({
   return createPortal(
     <>
       {/* Floating trigger button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={cn(
-          'fixed z-40',
-          'bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 lg:bottom-6 lg:right-6',
-          'w-12 h-12 rounded-full',
-          'bg-emerald-500 hover:bg-emerald-600 text-white',
-          'shadow-lg shadow-emerald-500/25',
-          'flex items-center justify-center',
-          'transition-all duration-200',
-          isOpen && 'hidden'
-        )}
-        aria-label="Open AI Tutor"
-      >
-        <MessageCircle className="w-5 h-5" />
-      </button>
+      {showFloatingTrigger && (
+        <button
+          onClick={() => setOpen(true)}
+          className={cn(
+            'fixed z-40',
+            'bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 lg:bottom-6 lg:right-6',
+            'w-12 h-12 rounded-full',
+            'bg-emerald-500 hover:bg-emerald-600 text-white',
+            'shadow-lg shadow-emerald-500/25',
+            'flex items-center justify-center',
+            'transition-all duration-200',
+            isOpen && 'hidden'
+          )}
+          aria-label="Open AI Tutor"
+        >
+          <MessageCircle className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Panel overlay (mobile) */}
       <AnimatePresence>
@@ -167,7 +217,7 @@ export function AiTutorPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/60 lg:bg-transparent lg:pointer-events-none"
-            onClick={() => setIsOpen(false)}
+            onClick={() => setOpen(false)}
           />
         )}
       </AnimatePresence>
@@ -176,19 +226,22 @@ export function AiTutorPanel({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ x: '100%', opacity: 0 }}
+            initial={{ x: panelEnterX, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: '100%', opacity: 0 }}
+            exit={{ x: panelEnterX, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
             className={cn(
               'fixed z-50',
               // Mobile: bottom sheet style
               'bottom-0 left-0 right-0 h-[min(82dvh,760px)]',
-              // Desktop: right sidebar
-              'lg:top-6 lg:right-6 lg:left-auto lg:bottom-6 lg:h-auto lg:max-h-[calc(100dvh-3rem)] lg:w-[380px]',
+              // Desktop: side panel
+              isLeftDesktopPanel
+                ? 'lg:top-6 lg:left-6 lg:right-auto lg:bottom-6 lg:h-auto lg:max-h-[calc(100dvh-3rem)] lg:w-[380px]'
+                : 'lg:top-6 lg:right-6 lg:left-auto lg:bottom-6 lg:h-auto lg:max-h-[calc(100dvh-3rem)] lg:w-[380px]',
               'flex flex-col',
-              'bg-[#0A0A0B] border-l border-t lg:border-t-0 border-white/10',
+              'bg-[#0A0A0B] border-t border-white/10 lg:border-t-0',
+              isLeftDesktopPanel ? 'lg:border-r' : 'lg:border-l',
               'rounded-t-2xl lg:rounded-2xl',
               className
             )}
@@ -207,7 +260,7 @@ export function AiTutorPanel({
                 </div>
               </div>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => setOpen(false)}
                 className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white/60 transition-colors"
               >
                 <X className="w-4 h-4" />
