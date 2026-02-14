@@ -113,14 +113,16 @@ export function FeedTradeCard({ displayData, className }: FeedTradeCardProps) {
       </div>
 
       {image_url && (
-        <div className="overflow-hidden rounded-lg border border-white/10 bg-black/30">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={image_url}
-            alt={`${symbol} shared trade card`}
-            className="h-auto w-full object-cover"
-            loading="lazy"
-          />
+        <div className="overflow-hidden rounded-lg border border-white/10 bg-black/30 p-2 sm:p-3">
+          <div className="flex items-center justify-center rounded-md border border-white/5 bg-black/40">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image_url}
+              alt={`${symbol} shared trade card`}
+              className="h-auto max-h-[320px] w-auto max-w-full object-contain sm:max-h-[420px]"
+              loading="lazy"
+            />
+          </div>
         </div>
       )}
 
