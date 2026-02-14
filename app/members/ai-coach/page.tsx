@@ -216,7 +216,7 @@ export default function AICoachPage() {
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
       <AICoachWorkflowProvider onSendPrompt={handleSendPrompt}>
         {/* Full-height container — fills available space inside member layout */}
-        <div className="flex flex-col h-[calc(100dvh-10.5rem)] lg:h-[calc(100dvh-3.5rem)]">
+        <div className="flex flex-col h-[calc(100dvh-var(--members-topbar-h)-var(--members-bottomnav-h))] lg:h-[calc(100dvh-3.5rem)]">
           {/* Main Content — full remaining height */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {/* Desktop: Resizable Split Panels */}

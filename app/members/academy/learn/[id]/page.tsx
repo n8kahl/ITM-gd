@@ -449,7 +449,7 @@ export default function LessonPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 lg:shrink-0">
         <div className="flex min-w-0 items-center gap-2 text-xs text-white/45">
           <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
-            Training Library
+            Academy
           </Link>
           <span>/</span>
           <Link

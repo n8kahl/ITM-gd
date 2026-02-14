@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { type CSSProperties, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -12,6 +12,7 @@ import { MobileTopBar } from '@/components/members/mobile-top-bar'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 import { useIsMobile } from '@/hooks/use-is-mobile'
+import { getMemberSectionPath } from '@/lib/member-navigation'
 
 // ============================================
 // LAYOUT WRAPPER WITH PROVIDER
@@ -36,6 +37,7 @@ export default function MembersLayout({
 function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const previousSectionPathRef = useRef<string | null>(null)
   const isMobile = useIsMobile(1024)
   const prefersReducedMotion = useReducedMotion()
 
@@ -59,9 +61,13 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, isAuthenticated, isNotMember, router])
 
-  // Custom route transitions can bypass the default scroll reset.
+  // Preserve scroll within a feature area; reset only when moving across main sections.
   useEffect(() => {
-    window.scrollTo(0, 0)
+    const currentSectionPath = getMemberSectionPath(pathname)
+    if (previousSectionPathRef.current && previousSectionPathRef.current !== currentSectionPath) {
+      window.scrollTo(0, 0)
+    }
+    previousSectionPathRef.current = currentSectionPath
   }, [pathname])
 
   // Loading state — pulsing logo
@@ -129,7 +135,14 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     : { type: 'tween' as const, duration: 0.2, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0B]">
+    <div
+      className="min-h-screen bg-[#0A0A0B]"
+      style={{
+        ['--members-topbar-h' as string]: '3.5rem',
+        ['--members-bottomnav-h' as string]: '7rem',
+        ['--members-subnav-h' as string]: '3.25rem',
+      } as CSSProperties}
+    >
       {/* Desktop Sidebar */}
       <MemberSidebar />
 
@@ -150,7 +163,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
           }}
         />
 
-        <main className="px-4 py-4 lg:px-8 lg:py-6 pb-28 lg:pb-8">
+        <main className="px-4 py-4 lg:px-8 lg:py-6 pb-[var(--members-bottomnav-h)] lg:pb-8">
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}

@@ -39,7 +39,7 @@ export default function CoursesPage() {
   const [paths, setPaths] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [tutorLessonId, setTutorLessonId] = useState<string | null>(null)
-  const [tutorLessonTitle, setTutorLessonTitle] = useState('Training Library')
+  const [tutorLessonTitle, setTutorLessonTitle] = useState('Academy')
   const [isTutorOpen, setIsTutorOpen] = useState(false)
   const [pendingTutorPrompt, setPendingTutorPrompt] = useState<{
     id: number
@@ -131,7 +131,7 @@ export default function CoursesPage() {
       <div className="rounded-2xl border border-white/10 bg-[#0A0A0B]/60 backdrop-blur-xl p-5">
         <div className="flex items-center gap-2 mb-2">
           <GraduationCap className="w-5 h-5 text-emerald-400" />
-          <h1 className="text-xl font-semibold text-white">Training Library</h1>
+          <h1 className="text-xl font-semibold text-white">Academy Courses</h1>
           <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
             <Sparkles className="w-3 h-3" />
             Competency Based

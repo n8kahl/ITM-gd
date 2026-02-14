@@ -1,9 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import Link from 'next/link'
-import { BarChart3, ImagePlus, Plus, Upload } from 'lucide-react'
-import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { ImagePlus, Plus, Upload } from 'lucide-react'
+import { PageHeader } from '@/components/members/page-header'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
 import { JournalTableView } from '@/components/journal/journal-table-view'
@@ -16,6 +15,7 @@ import { readCachedJournalEntries, writeCachedJournalEntries } from '@/lib/journ
 import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_JOURNAL_FILTERS } from '@/lib/types/journal'
+import { JournalSubNav } from '@/components/journal/journal-sub-nav'
 
 type FilterAction =
   | { type: 'replace', value: JournalFilters }
@@ -275,64 +275,54 @@ export default function JournalPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-ivory">Trade Journal</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Manual-first journaling with clean analytics and import workflows.</p>
-          <Breadcrumb
-            className="mt-2"
-            items={[
-              { label: 'Dashboard', href: '/members' },
-              { label: 'Journal' },
-            ]}
-          />
-        </div>
+      <PageHeader
+        title="Trade Journal"
+        subtitle="Manual-first journaling with clean analytics and import workflows."
+        breadcrumbs={[
+          { label: 'Dashboard', href: '/members' },
+          { label: 'Journal' },
+        ]}
+        actions={(
+          <>
+            <button
+              type="button"
+              onClick={() => setShowImportWizard((prev) => !prev)}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5"
+            >
+              <Upload className="h-4 w-4" />
+              Import
+            </button>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/members/journal/analytics"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5"
-          >
-            <BarChart3 className="h-4 w-4" />
-            Analytics
-          </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setShowImportWizard(false)
+                setScreenshotQuickAddOpen(true)
+              }}
+              disabled={disableActions}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ImagePlus className="h-4 w-4" />
+              Screenshot
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowImportWizard((prev) => !prev)}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5"
-          >
-            <Upload className="h-4 w-4" />
-            Import
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditEntry(null)
+                setSheetOpen(true)
+              }}
+              disabled={disableActions}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Plus className="h-4 w-4" />
+              New Entry
+            </button>
+          </>
+        )}
+      />
 
-          <button
-            type="button"
-            onClick={() => {
-              setShowImportWizard(false)
-              setScreenshotQuickAddOpen(true)
-            }}
-            disabled={disableActions}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <ImagePlus className="h-4 w-4" />
-            Screenshot
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setEditEntry(null)
-              setSheetOpen(true)
-            }}
-            disabled={disableActions}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Plus className="h-4 w-4" />
-            New Entry
-          </button>
-        </div>
-      </div>
+      <JournalSubNav />
 
       {!isOnline ? (
         <div className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">

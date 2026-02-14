@@ -14,6 +14,9 @@
   --font-inter: ui-sans-serif;
   --font-playfair: ui-serif;
   --font-geist-mono: ui-monospace;
+  --members-topbar-h: 3.5rem;
+  --members-bottomnav-h: 7rem;
+  --members-subnav-h: 3.25rem;
 
   --background: #0A0A0B;
   --foreground: #F5F5F0;

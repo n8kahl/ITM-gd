@@ -171,7 +171,7 @@ export default function CourseDetailPage() {
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
         <Link href="/members/academy/courses" className="hover:text-white/70 transition-colors">
-          Training Library
+          Academy
         </Link>
         <span>/</span>
         <span className="text-white/70">{course.title}</span>

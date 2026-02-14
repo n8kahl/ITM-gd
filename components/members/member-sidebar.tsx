@@ -5,55 +5,18 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import {
-  LayoutDashboard,
-  BookOpen,
-  Bot,
-  GraduationCap,
-  Palette,
-  Users,
-  UserCircle,
   LogOut,
   Sparkles,
-  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth, type TabConfig } from '@/contexts/MemberAuthContext'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
-import { isLibraryPath } from '@/lib/navigation-utils'
-
-// ============================================
-// ICON MAP (tab_id -> Lucide icon)
-// ============================================
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  dashboard: LayoutDashboard,
-  journal: BookOpen,
-  'ai-coach': Bot,
-  library: GraduationCap,
-  social: Users,
-  studio: Palette,
-  profile: UserCircle,
-}
-
-function getIconForTab(tab: TabConfig): LucideIcon {
-  return ICON_MAP[tab.tab_id] || LayoutDashboard
-}
-
-function getTabHref(tab: TabConfig): string {
-  const rawHref = tab.path.startsWith('/') ? tab.path : `/members/${tab.path}`
-  if (tab.tab_id === 'library' && rawHref === '/members/library') {
-    return '/members/academy/courses'
-  }
-  return rawHref
-}
-
-function isTabActive(pathname: string, tab: TabConfig, href: string): boolean {
-  if (tab.tab_id === 'library') {
-    return pathname === href || pathname.startsWith(`${href}/`) || isLibraryPath(pathname)
-  }
-
-  return pathname === href || (href !== '/members' && pathname.startsWith(href))
-}
+import {
+  getMemberTabHref,
+  getMemberTabIcon,
+  isMemberTabActive,
+  resolveMemberTabLabel,
+} from '@/lib/member-navigation'
 
 // ============================================
 // TIER BADGE
@@ -159,9 +122,10 @@ export function MemberSidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 pt-4 pb-2 space-y-0.5 overflow-y-auto">
         {visibleTabs.map((tab) => {
-          const Icon = getIconForTab(tab)
-          const href = getTabHref(tab)
-          const isActive = isTabActive(pathname, tab, href)
+          const Icon = getMemberTabIcon(tab)
+          const href = getMemberTabHref(tab)
+          const isActive = isMemberTabActive(pathname, tab)
+          const tabLabel = resolveMemberTabLabel(tab)
 
           return (
             <Link
@@ -191,7 +155,7 @@ export function MemberSidebar() {
               )}
               />
 
-              <span className="relative z-[1] flex-1 truncate font-sans font-normal tracking-[0.08em]">{tab.label}</span>
+              <span className="relative z-[1] flex-1 truncate font-sans font-normal tracking-[0.08em]">{tabLabel}</span>
 
               {tab.badge_text && (
                 <span className={cn(
