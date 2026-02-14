@@ -5,11 +5,11 @@ import { errorResponse, successResponse } from '@/lib/api/response'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { importRequestSchema, sanitizeString } from '@/lib/validation/journal-entry'
 import { sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
+import { parseNumericInput } from '@/lib/journal/number-parsing'
 
 function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  const parsed = parseNumericInput(value)
+  return parsed.valid ? parsed.value : null
 }
 
 function toDateString(value: string | undefined): string {

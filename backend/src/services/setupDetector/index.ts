@@ -54,6 +54,7 @@ export const SETUP_DETECTOR_POLL_INTERVAL_OPEN = 15_000;
 export const SETUP_DETECTOR_POLL_INTERVAL_EXTENDED = 60_000;
 export const SETUP_DETECTOR_POLL_INTERVAL_CLOSED = 300_000;
 export const SETUP_DETECTOR_COOLDOWN_MS = 5 * 60 * 1000;
+const SETUP_DETECTOR_OPEN_SETUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 registerWorker(WORKER_NAME);
 
 function sanitizeSymbols(input: unknown): string[] {
@@ -417,6 +418,11 @@ export class SetupDetectorService {
           continue;
         }
 
+        const hasPending = await this.hasPendingTrackedSetup(userId, symbol);
+        if (hasPending) {
+          continue;
+        }
+
         const hasRecent = await this.hasRecentTrackedSetup(userId, symbol);
         if (hasRecent) {
           continue;
@@ -441,6 +447,33 @@ export class SetupDetectorService {
         });
       }
     }
+  }
+
+  private async hasPendingTrackedSetup(userId: string, symbol: string): Promise<boolean> {
+    const cutoffIso = new Date(
+      this.deps.now().getTime() - SETUP_DETECTOR_OPEN_SETUP_WINDOW_MS,
+    ).toISOString();
+
+    const { data, error } = await this.deps.supabase
+      .from('ai_coach_tracked_setups')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('symbol', symbol)
+      .in('status', ['active', 'triggered'])
+      .gte('tracked_at', cutoffIso)
+      .limit(1);
+
+    if (error) {
+      logger.warn('Setup detector pending setup check failed', {
+        userId,
+        symbol,
+        error: error.message,
+      });
+      // Fail-safe to avoid notification spam when uncertain.
+      return true;
+    }
+
+    return Array.isArray(data) && data.length > 0;
   }
 
   private async hasRecentTrackedSetup(userId: string, symbol: string): Promise<boolean> {

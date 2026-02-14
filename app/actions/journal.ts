@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { journalEntryCreateSchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
 import { sanitizeJournalEntry, sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
+import { parseNumericInput } from '@/lib/journal/number-parsing'
 import type { JournalDirection, JournalEntry } from '@/lib/types/journal'
 
 interface ActionResult<T> {
@@ -18,9 +19,8 @@ const deleteEntrySchema = z.object({
 })
 
 function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  const parsed = parseNumericInput(value)
+  return parsed.valid ? parsed.value : null
 }
 
 function round(value: number, decimals = 2): number {

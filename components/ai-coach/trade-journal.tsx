@@ -32,6 +32,7 @@ import {
 } from '@/lib/api/ai-coach'
 import { JournalInsights } from './journal-insights'
 import { runWithRetry } from './retry'
+import { parseNumericInput } from '@/lib/journal/number-parsing'
 
 // ============================================
 // TYPES
@@ -458,15 +459,36 @@ function TradeForm({
     setIsSubmitting(true)
     setFormError(null)
 
+    const parsedEntryPrice = parseNumericInput(entryPrice)
+    if (!parsedEntryPrice.valid || parsedEntryPrice.value == null || parsedEntryPrice.value <= 0) {
+      setFormError('Entry price must be a valid number greater than 0')
+      setIsSubmitting(false)
+      return
+    }
+
+    const parsedExitPrice = parseNumericInput(exitPrice)
+    if (!parsedExitPrice.valid) {
+      setFormError('Exit price must be a valid number')
+      setIsSubmitting(false)
+      return
+    }
+
+    const parsedQuantity = parseNumericInput(quantity)
+    if (!parsedQuantity.valid || parsedQuantity.value == null || parsedQuantity.value <= 0) {
+      setFormError('Quantity must be a valid number greater than 0')
+      setIsSubmitting(false)
+      return
+    }
+
     const trade: TradeCreateInput = {
       symbol: symbol.toUpperCase(),
       position_type: positionType,
       strategy: strategy || undefined,
       entry_date: entryDate,
-      entry_price: parseFloat(entryPrice),
+      entry_price: parsedEntryPrice.value,
       exit_date: exitDate || undefined,
-      exit_price: exitPrice ? parseFloat(exitPrice) : undefined,
-      quantity: parseInt(quantity) || 1,
+      exit_price: parsedExitPrice.value ?? undefined,
+      quantity: Math.max(1, Math.round(parsedQuantity.value)),
       exit_reason: exitReason || undefined,
       lessons_learned: lessonsLearned || undefined,
     }

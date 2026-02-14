@@ -4,6 +4,7 @@ import { errorResponse, successResponse } from '@/lib/api/response'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { contractTypeSchema, directionSchema, journalEntryCreateSchema, journalEntryUpdateSchema } from '@/lib/validation/journal-entry'
 import { sanitizeJournalEntries, sanitizeJournalEntry, sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
+import { parseNumericInput } from '@/lib/journal/number-parsing'
 
 const listQuerySchema = z.object({
   startDate: z.string().datetime().optional(),
@@ -27,9 +28,8 @@ const deleteQuerySchema = z.object({
 })
 
 function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  const parsed = parseNumericInput(value)
+  return parsed.valid ? parsed.value : null
 }
 
 function toDateKey(value: string): string {
@@ -164,8 +164,14 @@ export async function GET(request: NextRequest) {
       offset: searchParams.get('offset') ?? undefined,
     })
 
-    const startDate = parsedQuery.startDate ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-    const endDate = parsedQuery.endDate ?? new Date().toISOString()
+    const now = new Date()
+    const defaultStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    defaultStartDate.setUTCHours(0, 0, 0, 0)
+    const defaultEndDate = new Date(now)
+    defaultEndDate.setUTCHours(23, 59, 59, 999)
+
+    const startDate = parsedQuery.startDate ?? defaultStartDate.toISOString()
+    const endDate = parsedQuery.endDate ?? defaultEndDate.toISOString()
     const tags = parsedQuery.tags
       ? parsedQuery.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
       : []

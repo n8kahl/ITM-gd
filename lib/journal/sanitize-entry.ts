@@ -7,6 +7,7 @@ import {
   moodSchema,
   sanitizeString,
 } from '@/lib/validation/journal-entry'
+import { parseNumericInput } from '@/lib/journal/number-parsing'
 
 const marketContextSnapshotSchema: z.ZodType<MarketContextSnapshot> = z.object({
   entryContext: z.object({
@@ -86,9 +87,8 @@ function asString(value: unknown, maxLength: number): string | null {
 }
 
 function asNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  const parsed = parseNumericInput(value)
+  return parsed.valid ? parsed.value : null
 }
 
 function asBoolean(value: unknown): boolean | null {

@@ -28,6 +28,7 @@ interface MockSupabaseOptions {
   watchlistRows?: Array<{ user_id: string; symbols: string[]; is_default: boolean; updated_at: string }>;
   dedupeRows?: Array<Record<string, unknown>>;
   detectedInsertRow?: Record<string, unknown> | null;
+  pendingRows?: Array<Record<string, unknown>>;
   cooldownRows?: Array<Record<string, unknown>>;
   trackedInsertRow?: Record<string, unknown> | null;
 }
@@ -54,6 +55,7 @@ function createMockSupabase(options?: MockSupabaseOptions): MockSupabase {
     trade_suggestion: { entry: 6012.5, stopLoss: 6004, target: 6024 },
   };
 
+  const pendingRows = options?.pendingRows ?? [];
   const cooldownRows = options?.cooldownRows ?? [];
   const trackedInsertRow = options?.trackedInsertRow ?? { id: 'tracked-1' };
 
@@ -72,9 +74,12 @@ function createMockSupabase(options?: MockSupabaseOptions): MockSupabase {
   const detectedInsertSelect = jest.fn().mockReturnValue({ single: detectedSingle });
   const detectedInsert = jest.fn().mockReturnValue({ select: detectedInsertSelect });
 
-  const trackedLimit = jest.fn().mockResolvedValue({ data: cooldownRows, error: null });
+  const trackedLimit = jest.fn()
+    .mockResolvedValueOnce({ data: pendingRows, error: null })
+    .mockResolvedValue({ data: cooldownRows, error: null });
   const trackedGte = jest.fn().mockReturnValue({ limit: trackedLimit });
-  const trackedEq2 = jest.fn().mockReturnValue({ gte: trackedGte });
+  const trackedIn = jest.fn().mockReturnValue({ gte: trackedGte });
+  const trackedEq2 = jest.fn().mockReturnValue({ gte: trackedGte, in: trackedIn, limit: trackedLimit });
   const trackedEq1 = jest.fn().mockReturnValue({ eq: trackedEq2 });
   const trackedSelect = jest.fn().mockReturnValue({ eq: trackedEq1 });
 
@@ -197,6 +202,28 @@ describe('SetupDetectorService', () => {
     await service.runCycleOnce();
 
     expect(mockSupabase.detectedInsert).not.toHaveBeenCalled();
+    expect(mockSupabase.trackedInsert).not.toHaveBeenCalled();
+    expect(publishSetupDetected).not.toHaveBeenCalled();
+  });
+
+  it('does not create new tracked setup when a pending setup already exists for the symbol', async () => {
+    const mockSupabase = createMockSupabase({
+      pendingRows: [{ id: 'tracked-existing' }],
+    });
+    const publishSetupDetected = jest.fn();
+    const detectSetupsForSymbol = jest.fn().mockResolvedValue([signal]);
+
+    const service = new SetupDetectorService({
+      supabase: mockSupabase as any,
+      now: () => baseNow,
+      getMarketStatus: () => ({ status: 'open' } as any),
+      detectSetupsForSymbol,
+      publishSetupDetected,
+    });
+
+    await service.runCycleOnce();
+
+    expect(mockSupabase.detectedInsert).toHaveBeenCalled();
     expect(mockSupabase.trackedInsert).not.toHaveBeenCalled();
     expect(publishSetupDetected).not.toHaveBeenCalled();
   });

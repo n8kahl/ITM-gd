@@ -7,6 +7,7 @@ import type { JournalEntry } from '@/lib/types/journal'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { QuickEntryForm } from '@/components/journal/quick-entry-form'
 import { FullEntryForm } from '@/components/journal/full-entry-form'
+import { parseNumericInput } from '@/lib/journal/number-parsing'
 
 interface TradeEntrySheetProps {
   open: boolean
@@ -92,10 +93,12 @@ const EMPTY_VALUES: EntryFormValues = {
   screenshot_storage_path: '',
 }
 
-function toOptionalNumber(value: string): number | null {
-  if (!value.trim()) return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+function toTradeDateIso(dateInput: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return `${dateInput}T00:00:00.000Z`
+  }
+
+  return new Date().toISOString()
 }
 
 function getInitialValues(editEntry?: JournalEntry | null): EntryFormValues {
@@ -201,52 +204,60 @@ export function TradeEntrySheet({
     setSaving(true)
     setSaveError(null)
 
-    const payload: Record<string, unknown> = {
-      symbol: values.symbol.trim().toUpperCase(),
-      direction: values.direction,
-      contract_type: values.contract_type,
-      trade_date: new Date(`${values.trade_date}T12:00:00.000Z`).toISOString(),
-      entry_price: toOptionalNumber(values.entry_price),
-      exit_price: toOptionalNumber(values.exit_price),
-      position_size: toOptionalNumber(values.position_size),
-      pnl: toOptionalNumber(values.pnl),
-      pnl_percentage: toOptionalNumber(values.pnl_percentage),
-      is_open: values.is_open,
-      stop_loss: toOptionalNumber(values.stop_loss),
-      initial_target: toOptionalNumber(values.initial_target),
-      strategy: values.strategy,
-      strike_price: toOptionalNumber(values.strike_price),
-      expiration_date: values.expiration_date || null,
-      dte_at_entry: toOptionalNumber(values.dte_at_entry),
-      iv_at_entry: toOptionalNumber(values.iv_at_entry),
-      delta_at_entry: toOptionalNumber(values.delta_at_entry),
-      theta_at_entry: toOptionalNumber(values.theta_at_entry),
-      gamma_at_entry: toOptionalNumber(values.gamma_at_entry),
-      vega_at_entry: toOptionalNumber(values.vega_at_entry),
-      underlying_at_entry: toOptionalNumber(values.underlying_at_entry),
-      underlying_at_exit: toOptionalNumber(values.underlying_at_exit),
-      mood_before: values.mood_before || null,
-      mood_after: values.mood_after || null,
-      discipline_score: toOptionalNumber(values.discipline_score),
-      followed_plan: values.followed_plan === '' ? null : values.followed_plan === 'yes',
-      deviation_notes: values.deviation_notes,
-      setup_notes: values.setup_notes,
-      execution_notes: values.execution_notes,
-      lessons_learned: values.lessons_learned,
-      tags: values.tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-      rating: toOptionalNumber(values.rating),
-      screenshot_url: values.screenshot_url || null,
-      screenshot_storage_path: values.screenshot_storage_path || null,
-    }
-
-    if (editEntry) {
-      payload.id = editEntry.id
-    }
-
     try {
+      const parseField = (label: string, value: string): number | null => {
+        const parsed = parseNumericInput(value)
+        if (!parsed.valid) {
+          throw new Error(`${label} must be a valid number`)
+        }
+        return parsed.value
+      }
+
+      const payload: Record<string, unknown> = {
+        symbol: values.symbol.trim().toUpperCase(),
+        direction: values.direction,
+        contract_type: values.contract_type,
+        trade_date: toTradeDateIso(values.trade_date),
+        entry_price: parseField('Entry price', values.entry_price),
+        exit_price: parseField('Exit price', values.exit_price),
+        position_size: parseField('Position size', values.position_size),
+        pnl: parseField('P&L', values.pnl),
+        pnl_percentage: parseField('P&L %', values.pnl_percentage),
+        is_open: values.is_open,
+        stop_loss: parseField('Stop loss', values.stop_loss),
+        initial_target: parseField('Initial target', values.initial_target),
+        strategy: values.strategy,
+        strike_price: parseField('Strike price', values.strike_price),
+        expiration_date: values.expiration_date || null,
+        dte_at_entry: parseField('DTE at entry', values.dte_at_entry),
+        iv_at_entry: parseField('IV at entry', values.iv_at_entry),
+        delta_at_entry: parseField('Delta at entry', values.delta_at_entry),
+        theta_at_entry: parseField('Theta at entry', values.theta_at_entry),
+        gamma_at_entry: parseField('Gamma at entry', values.gamma_at_entry),
+        vega_at_entry: parseField('Vega at entry', values.vega_at_entry),
+        underlying_at_entry: parseField('Underlying at entry', values.underlying_at_entry),
+        underlying_at_exit: parseField('Underlying at exit', values.underlying_at_exit),
+        mood_before: values.mood_before || null,
+        mood_after: values.mood_after || null,
+        discipline_score: parseField('Discipline score', values.discipline_score),
+        followed_plan: values.followed_plan === '' ? null : values.followed_plan === 'yes',
+        deviation_notes: values.deviation_notes,
+        setup_notes: values.setup_notes,
+        execution_notes: values.execution_notes,
+        lessons_learned: values.lessons_learned,
+        tags: values.tags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        rating: parseField('Rating', values.rating),
+        screenshot_url: values.screenshot_url || null,
+        screenshot_storage_path: values.screenshot_storage_path || null,
+      }
+
+      if (editEntry) {
+        payload.id = editEntry.id
+      }
+
       const result = await onSave(payload)
       if (!result) {
         setSaveError('Save failed. Please check your inputs and try again.')
@@ -256,7 +267,7 @@ export function TradeEntrySheet({
       onClose()
     } catch (error) {
       console.error('Trade entry save failed:', error)
-      setSaveError('Save failed. Please try again.')
+      setSaveError(error instanceof Error ? error.message : 'Save failed. Please try again.')
     } finally {
       setSaving(false)
     }
