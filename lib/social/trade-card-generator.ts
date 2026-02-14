@@ -1,4 +1,6 @@
 import { Buffer } from 'node:buffer'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 
 export type TradeCardTemplate =
   | 'dark-elite'
@@ -30,6 +32,32 @@ export const TRADE_CARD_DIMENSIONS: Record<TradeCardFormat, { width: number; hei
   landscape: { width: 1200, height: 630 },
   story: { width: 1080, height: 1920 },
   square: { width: 1080, height: 1080 },
+}
+
+let cachedFontFiles: string[] | null = null
+
+function resolveTradeCardFontFiles(): string[] {
+  if (cachedFontFiles) return cachedFontFiles
+
+  const candidates = [
+    path.join(process.cwd(), 'public', 'fonts', 'Inter-Regular.ttf'),
+    path.join(process.cwd(), 'public', 'fonts', 'Inter-Medium.ttf'),
+    path.join(process.cwd(), 'public', 'fonts', 'Inter-SemiBold.ttf'),
+    path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf'),
+    path.join(
+      process.cwd(),
+      'node_modules',
+      'next',
+      'dist',
+      'compiled',
+      '@vercel',
+      'og',
+      'noto-sans-v27-latin-regular.ttf',
+    ),
+  ]
+
+  cachedFontFiles = candidates.filter((fontPath) => existsSync(fontPath))
+  return cachedFontFiles
 }
 
 interface TemplateColors {
@@ -291,9 +319,15 @@ export async function generateTradeCardImage(
 
   const svg = buildTradeCardSvg(metadata, template, format)
   const { width } = TRADE_CARD_DIMENSIONS[format]
+  const fontFiles = resolveTradeCardFontFiles()
 
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width', value: width },
+    font: {
+      fontFiles,
+      loadSystemFonts: fontFiles.length === 0,
+      defaultFontFamily: 'Noto Sans',
+    },
   })
 
   return Buffer.from(resvg.render().asPng())
