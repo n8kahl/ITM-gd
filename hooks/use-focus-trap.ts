@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -18,6 +18,12 @@ interface UseFocusTrapOptions {
 }
 
 export function useFocusTrap({ active, containerRef, onEscape }: UseFocusTrapOptions) {
+  const onEscapeRef = useRef(onEscape)
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape
+  }, [onEscape])
+
   useEffect(() => {
     if (!active) return
     const container = containerRef.current
@@ -31,7 +37,7 @@ export function useFocusTrap({ active, containerRef, onEscape }: UseFocusTrapOpt
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onEscape?.()
+        onEscapeRef.current?.()
         return
       }
 
@@ -67,6 +73,5 @@ export function useFocusTrap({ active, containerRef, onEscape }: UseFocusTrapOpt
       document.removeEventListener('keydown', handleKeyDown)
       previousActiveElement?.focus?.()
     }
-  }, [active, containerRef, onEscape])
+  }, [active, containerRef])
 }
-
