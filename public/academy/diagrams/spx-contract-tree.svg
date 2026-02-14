@@ -1,7 +1,7 @@
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;family=Inter:wght@400;500;600&amp;display=swap');
       .title { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; fill: white; }
       .node-label { font-family: 'Inter', system-ui, sans-serif; font-size: 15px; font-weight: 600; fill: white; text-anchor: middle; }
       .node-small { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; fill: rgba(255,255,255,0.9); text-anchor: middle; }

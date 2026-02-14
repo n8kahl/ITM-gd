@@ -1,7 +1,7 @@
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;family=Inter:wght@400;500;600&amp;display=swap');
       .title { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; fill: white; }
       .label { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; font-weight: 600; fill: rgba(255,255,255,0.9); }
       .annotation { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; fill: rgba(255,255,255,0.7); }
@@ -57,11 +57,11 @@
 
   <!-- Ticker annotation -->
   <line x1="450" y1="240" x2="600" y2="200" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
-  <text x="610" y="205" class="annotation">Ticker & Direction</text>
+  <text x="610" y="205" class="annotation">Ticker &amp; Direction</text>
 
   <!-- Strike annotation -->
   <line x1="320" y1="295" x2="560" y2="280" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>
-  <text x="570" y="285" class="annotation">Strike & Expiration</text>
+  <text x="570" y="285" class="annotation">Strike &amp; Expiration</text>
 
   <!-- Entry Price annotation -->
   <line x1="450" y1="405" x2="600" y2="370" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" marker-end="url(#annotation-line)"/>

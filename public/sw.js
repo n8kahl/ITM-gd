@@ -1,4 +1,4 @@
-const STATIC_CACHE_NAME = 'tradeitm-static-v5'
+const STATIC_CACHE_NAME = 'tradeitm-static-v6'
 const RUNTIME_CACHE_NAME = 'tradeitm-runtime-v5'
 const API_CACHE_NAME = 'tradeitm-api-v2'
 const JOURNAL_MUTATION_DB_NAME = 'tradeitm-offline-journal'

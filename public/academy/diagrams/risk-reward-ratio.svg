@@ -1,7 +1,7 @@
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;family=Inter:wght@400;500;600&amp;display=swap');
       .title { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; fill: white; }
       .label { font-family: 'Inter', system-ui, sans-serif; font-size: 18px; font-weight: 500; fill: white; }
       .annotation { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; fill: rgba(255,255,255,0.7); }
@@ -45,7 +45,7 @@
   <!-- Math Box on Right -->
   <rect x="680" y="140" width="520" height="380" fill="rgba(139, 92, 246, 0.05)" stroke="#8B5CF6" stroke-width="1" rx="8"/>
 
-  <text x="940" y="185" class="label" text-anchor="middle">P&L Math: 10 Trades Simulation</text>
+  <text x="940" y="185" class="label" text-anchor="middle">P&amp;L Math: 10 Trades Simulation</text>
 
   <!-- Math details -->
   <g>
