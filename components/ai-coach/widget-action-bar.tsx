@@ -1,10 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { motion } from 'framer-motion'
-import { cn } from '@/lib/utils'
 import type { WidgetAction } from './widget-actions'
+import { type TieredActions, WidgetActionBarV2 } from './widget-action-bar-v2'
 
 interface WidgetActionBarProps {
   actions: WidgetAction[]
@@ -12,78 +9,42 @@ interface WidgetActionBarProps {
   className?: string
 }
 
-const PRESSABLE_PROPS = {
-  whileHover: { y: -1 },
-  whileTap: { scale: 0.98 },
+export function WidgetActionBar({ actions, compact = false, className }: WidgetActionBarProps) {
+  const tiered = toTieredActions(actions)
+
+  return (
+    <WidgetActionBarV2
+      actions={tiered}
+      compact={compact}
+      className={className}
+    />
+  )
 }
 
-export function WidgetActionBar({ actions, compact = false, className }: WidgetActionBarProps) {
-  const [loadingIndex, setLoadingIndex] = useState<number | null>(null)
-
-  if (actions.length === 0) return null
-
-  const runAction = async (action: WidgetAction, index: number) => {
-    try {
-      const result = action.action()
-      if (result && typeof (result as Promise<void>).then === 'function') {
-        setLoadingIndex(index)
-        await result
-      }
-    } finally {
-      setLoadingIndex((current) => (current === index ? null : current))
+export function toTieredActions(actions: WidgetAction[]): TieredActions {
+  if (actions.length <= 3) {
+    return {
+      quick: actions,
+      overflow: [],
     }
   }
 
-  return (
-    <div
-      className={cn(
-        'mt-2 rounded-lg border border-white/10 bg-black/20 px-1.5 py-1.5',
-        className,
-      )}
-    >
-      <div className="mb-1 flex items-center justify-between gap-2 px-1 text-[9px] uppercase tracking-[0.12em] text-white/35">
-        <span>Actions</span>
-        <span className="text-[8px] tracking-[0.08em] text-white/25 normal-case">Right-click rows for more</span>
-      </div>
-      <div className={cn('flex flex-wrap gap-1.5', compact && 'overflow-x-auto pb-0.5 sm:overflow-visible')}>
-        {actions.map((action, index) => {
-          const Icon = action.icon
-          const isLoading = loadingIndex === index
-          const tooltip = action.tooltip || action.label
-          const showLabel = !compact || action.variant === 'primary' || actions.length <= 3
+  const quick: WidgetAction[] = []
+  const overflow: WidgetAction[] = []
+  const primary = actions.find((action) => action.variant === 'primary')
 
-          return (
-            <motion.button
-              key={`${action.label}-${index}`}
-              type="button"
-              onClick={() => void runAction(action, index)}
-              disabled={action.disabled || isLoading}
-              title={tooltip}
-              aria-label={action.label}
-              className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2.5 py-1 text-[10px] font-medium transition-colors min-h-[34px]',
-                compact && 'px-2 py-1 min-h-[30px] text-[9px]',
-                action.variant === 'primary' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15',
-                action.variant === 'danger' && 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/15',
-                (!action.variant || action.variant === 'secondary') && 'border-white/10 bg-white/5 text-white/60 hover:text-white/75 hover:bg-white/10',
-                (action.disabled || isLoading) && 'opacity-40 cursor-not-allowed'
-              )}
-              {...PRESSABLE_PROPS}
-            >
-              {isLoading ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Icon className="w-3 h-3" />
-              )}
-              {showLabel && (
-                <span className={cn(compact && action.variant !== 'primary' && actions.length > 3 && 'hidden sm:inline')}>
-                  {action.label}
-                </span>
-              )}
-            </motion.button>
-          )
-        })}
-      </div>
-    </div>
-  )
+  if (primary) {
+    quick.push(primary)
+  }
+
+  for (const action of actions) {
+    if (primary && action === primary) continue
+    if (quick.length < 3) {
+      quick.push(action)
+      continue
+    }
+    overflow.push(action)
+  }
+
+  return { quick, overflow }
 }

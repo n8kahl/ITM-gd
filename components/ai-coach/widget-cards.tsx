@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import { clearHoverTarget, emitHoverTarget } from '@/hooks/use-hover-coordination'
 import { GEXChart } from './gex-chart'
 import { WidgetActionBar } from './widget-action-bar'
-import { WidgetContextMenu } from './widget-context-menu'
+import { WidgetRowActions } from './widget-row-actions'
 import {
   type WidgetAction,
   alertAction,
@@ -437,7 +437,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
         <div className="space-y-1">
           <p className="text-[9px] text-red-400/70 font-semibold uppercase tracking-[0.12em]">Resistance</p>
           {resistance.slice(0, 3).map((level) => (
-            <WidgetContextMenu key={level.name} actions={levelActions(level, 'resistance')}>
+            <WidgetRowActions key={level.name} actions={levelActions(level, 'resistance')}>
               <button
                 type="button"
                 onClick={() => chartAction(symbol, level.price, '5m', level.name).action()}
@@ -448,7 +448,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
                 <span className="text-red-400">{level.name}</span>
                 <span className="font-mono text-white/60">{formatPrice(level.price)}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
 
@@ -456,7 +456,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
         <div className="space-y-1">
           <p className="text-[9px] text-emerald-400/70 font-semibold uppercase tracking-[0.12em]">Support</p>
           {support.slice(0, 3).map((level) => (
-            <WidgetContextMenu key={level.name} actions={levelActions(level, 'support')}>
+            <WidgetRowActions key={level.name} actions={levelActions(level, 'support')}>
               <button
                 type="button"
                 onClick={() => chartAction(symbol, level.price, '5m', level.name).action()}
@@ -467,7 +467,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
                 <span className="text-emerald-400">{level.name}</span>
                 <span className="font-mono text-white/60">{formatPrice(level.price)}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       </div>
@@ -768,7 +768,7 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
       ) : (
         <div className="space-y-1.5">
           {alerts.slice(0, 4).map((alert, i) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={i}
               actions={[
                 chartAction(alert.symbol, alert.target, '5m', `${alert.type}`),
@@ -792,7 +792,7 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
                   {alert.status}
                 </span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -934,7 +934,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
       {calendar.length > 0 && (
         <div className="space-y-1.5">
           {calendar.slice(0, 3).map((event, i) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={`${event.event}-${event.date}-${i}`}
               actions={normalizeActions([
                 symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', `${event.event}`) : viewAction('macro', 'Open Macro'),
@@ -954,7 +954,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
                   {event.impact}
                 </span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -1020,7 +1020,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
         <div>
           <p className="text-[9px] text-emerald-400/60 font-medium uppercase mb-1">Calls</p>
           {topCalls.map((c, i) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={i}
               actions={[
                 chartAction(symbol, c.strike, '5m', `${symbol} ${c.strike}C`),
@@ -1034,13 +1034,13 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
                 <span className="font-mono text-white/70">${c.last}</span>
                 <span className="text-white/40">{c.delta}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
         <div>
           <p className="text-[9px] text-red-400/60 font-medium uppercase mb-1">Puts</p>
           {topPuts.map((p, i) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={i}
               actions={[
                 chartAction(symbol, p.strike, '5m', `${symbol} ${p.strike}P`),
@@ -1054,7 +1054,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
                 <span className="font-mono text-white/70">${p.last}</span>
                 <span className="text-white/40">{p.delta}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       </div>
@@ -1163,7 +1163,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
       {keyLevels.length > 0 && (
         <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
           {keyLevels.slice(0, 6).map((level) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={`${level.strike}-${level.type}`}
               actions={[
                 chartAction(symbol, level.strike, '5m', `GEX ${level.type}`),
@@ -1188,7 +1188,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
                 </span>
                 <span className="font-mono text-white/70">{level.strike.toLocaleString()}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -1343,7 +1343,7 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
           <div className="rounded border border-white/10 bg-white/5 p-2">
             <p className="text-red-300/80 uppercase text-[9px] mb-1">Resistance</p>
             {topResistance.map((level) => (
-              <WidgetContextMenu
+              <WidgetRowActions
                 key={`r-${level.name}`}
                 actions={normalizeActions([
                   chartAction(symbol, level.price, '15m', `${level.name}`),
@@ -1360,13 +1360,13 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
                 >
                   {level.name}: {level.price.toFixed(2)}
                 </button>
-              </WidgetContextMenu>
+              </WidgetRowActions>
             ))}
           </div>
           <div className="rounded border border-white/10 bg-white/5 p-2">
             <p className="text-emerald-300/80 uppercase text-[9px] mb-1">Support</p>
             {topSupport.map((level) => (
-              <WidgetContextMenu
+              <WidgetRowActions
                 key={`s-${level.name}`}
                 actions={normalizeActions([
                   chartAction(symbol, level.price, '15m', `${level.name}`),
@@ -1383,7 +1383,7 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
                 >
                   {level.name}: {level.price.toFixed(2)}
                 </button>
-              </WidgetContextMenu>
+              </WidgetRowActions>
             ))}
           </div>
         </div>
@@ -1466,7 +1466,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
       ) : (
         <div className="space-y-2">
           {opportunities.slice(0, 3).map((opp, i) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={i}
               actions={[
                 scannerChartAction(opp, '15m'),
@@ -1503,7 +1503,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
                   <p className="text-white/40 truncate">{opp.description}</p>
                 </div>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -1592,7 +1592,7 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
               <p className="text-[10px] uppercase tracking-wide text-white/45 mb-1">Most Active</p>
               <div className="space-y-1">
                 {topContracts.slice(0, 3).map((contract, idx) => (
-                  <WidgetContextMenu
+                  <WidgetRowActions
                     key={`${contract.type as string}-${contract.strike as number}-${idx}`}
                     actions={normalizeActions([
                       chartAction(symbol, parseNumeric(contract.strike), '5m', `0DTE ${(contract.type as string || '').toUpperCase()} ${parseNumeric(contract.strike).toFixed(0)}`),
@@ -1607,7 +1607,7 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
                       </span>
                       <span className="font-mono text-white/60">Vol {Math.round(parseNumeric(contract.volume))}</span>
                     </button>
-                  </WidgetContextMenu>
+                  </WidgetRowActions>
                 ))}
               </div>
             </div>
@@ -1696,7 +1696,7 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
       {expirations.length > 0 && (
         <div className="mt-2 pt-2 border-t border-white/10 space-y-1 text-[10px]">
           {expirations.slice(0, 3).map((row) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={String(row.date)}
               actions={normalizeActions([
                 optionsAction(symbol, currentPrice, String(row.date), 'View Expiry'),
@@ -1708,7 +1708,7 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
                 <span>{String(row.date)}</span>
                 <span className="font-mono">{parseNumeric(row.atmIV).toFixed(1)}%</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -1755,7 +1755,7 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
       {events.length > 0 && (
         <div className="space-y-1 text-[11px]">
           {events.slice(0, 5).map((event, idx) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={`${String(event.symbol)}-${String(event.date)}-${idx}`}
               actions={normalizeActions([
                 chartAction(String(event.symbol), undefined, '5m', 'Earnings Chart'),
@@ -1769,7 +1769,7 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
                 <span className="text-white/50">{String(event.date)}</span>
                 <span className="text-white/65">{String(event.time || event.timing || '')}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -1842,7 +1842,7 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
         <div className="mt-2 space-y-1 text-[10px]">
           <p className="uppercase tracking-wide text-white/45">Top Strategies</p>
           {strategies.slice(0, 2).map((strategy, idx) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={`${String(strategy.name)}-${idx}`}
               actions={normalizeActions([
                 analyzeAction({
@@ -1861,7 +1861,7 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
                 <p className="text-white/80 font-medium">{String(strategy.name || 'Strategy')}</p>
                 <p className="text-white/55 line-clamp-2">{String(strategy.description || '')}</p>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
@@ -1961,7 +1961,7 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
       {trades.length > 0 && (
         <div className="space-y-1 text-[10px] text-white/60">
           {trades.slice(0, 3).map((trade, idx) => (
-            <WidgetContextMenu
+            <WidgetRowActions
               key={`${String(trade.tradeDate)}-${idx}`}
               actions={normalizeActions([
                 symbol !== 'All Symbols' ? chartAction(symbol, undefined, '5m', 'Trade Context') : viewAction('journal', 'Open Journal'),
@@ -1974,7 +1974,7 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
                 <span>{String(trade.outcome || '')}</span>
                 <span className="font-mono">{String(trade.pnl || '—')}</span>
               </button>
-            </WidgetContextMenu>
+            </WidgetRowActions>
           ))}
         </div>
       )}
