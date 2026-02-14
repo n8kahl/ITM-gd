@@ -441,7 +441,7 @@ async function fetchBenzingaReferenceEarningsCalendar(options: CalendarFetchOpti
             const date = String((event as any).date || '').slice(0, 10);
             if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
 
-            return {
+            const entry: EarningsCalendarEvent = {
               symbol: String((event as any).ticker || symbol).toUpperCase(),
               name: typeof (event as any).name === 'string' ? (event as any).name : null,
               date,
@@ -449,8 +449,10 @@ async function fetchBenzingaReferenceEarningsCalendar(options: CalendarFetchOpti
               confirmed: true,
               epsEstimate: parseMaybeNumber((event as any).eps_estimate),
               revenueEstimate: parseMaybeNumber((event as any).revenue_estimate),
-              source: 'massive_reference' as const,
-            } satisfies EarningsCalendarEvent;
+              source: 'massive_reference',
+            };
+
+            return entry;
           })
           .filter((entry): entry is EarningsCalendarEvent => entry != null);
       }),
