@@ -846,17 +846,25 @@ async function handleCompareSymbols(args: { symbols: string[] }) {
 
   const comparisons = await Promise.all(symbols.map(async (symbol) => {
     const result = await handleGetCurrentPrice({ symbol });
-    if (result?.error) {
+    if (typeof result === 'object' && result !== null && 'error' in result) {
       return {
         symbol,
         error: result.error,
       };
     }
+
+    const high = typeof result === 'object' && result !== null && 'high' in result
+      ? result.high as number | null | undefined
+      : null;
+    const low = typeof result === 'object' && result !== null && 'low' in result
+      ? result.low as number | null | undefined
+      : null;
+
     return {
       symbol,
       price: result.price,
-      high: result.high ?? null,
-      low: result.low ?? null,
+      high: high ?? null,
+      low: low ?? null,
       timestamp: result.timestamp,
     };
   }));
