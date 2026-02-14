@@ -20,10 +20,12 @@ import {
 } from './chatService';
 import { sanitizeUserMessage } from '../lib/sanitize-input';
 import {
+  buildContractRepairDirective,
   buildBudgetFallbackMessage,
   buildIntentRoutingDirective,
   buildIntentRoutingPlan,
   evaluateResponseContract,
+  shouldAttemptContractRewrite,
 } from './intentRouter';
 import { backfillRequiredFunctionCalls } from './requiredBackfill';
 
@@ -34,6 +36,7 @@ import { backfillRequiredFunctionCalls } from './requiredBackfill';
  * Event types:
  *   status   — phase updates (thinking, calling functions, generating)
  *   token    — text deltas as they arrive from OpenAI
+ *   function_result — progressive tool execution summaries
  *   done     — final message with metadata (messageId, functionCalls, tokensUsed)
  *   error    — error occurred
  */
@@ -76,6 +79,19 @@ const MIN_RATE_LIMIT_RETRY_MS = 1200;
 
 function sendSSE(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function summarizeFunctionResult(result: unknown): string {
+  if (result == null) return 'No data returned';
+  if (typeof result === 'string') return result.slice(0, 220);
+  if (Array.isArray(result)) return `Returned ${result.length} records.`;
+  if (typeof result === 'number' || typeof result === 'boolean') return String(result);
+  if (typeof result === 'object') {
+    const keys = Object.keys(result as Record<string, unknown>);
+    if (keys.length === 0) return 'Returned an empty object.';
+    return `Returned fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}.`;
+  }
+  return 'Tool execution completed.';
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -147,6 +163,46 @@ async function createStreamingCompletion(messages: ChatCompletionMessageParam[])
   }
 
   throw new Error('Unexpected OpenAI stream retry state');
+}
+
+async function createRewriteCompletion(messages: ChatCompletionMessageParam[]) {
+  for (let attempt = 0; attempt <= MAX_OPENAI_RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      return await openaiCircuit.execute(() => openaiClient.chat.completions.create({
+        model: CHAT_MODEL,
+        messages,
+        max_tokens: Math.min(MAX_TOKENS, 900),
+        temperature: 0.2,
+      }));
+    } catch (error: unknown) {
+      const shouldRetry = isRateLimitError(error) && attempt < MAX_OPENAI_RATE_LIMIT_RETRIES;
+      if (!shouldRetry) throw error;
+
+      const delayMs = getRetryDelayMs(error, attempt);
+      logger.warn('OpenAI rate limit hit, retrying stream rewrite completion', {
+        attempt: attempt + 1,
+        maxRetries: MAX_OPENAI_RATE_LIMIT_RETRIES,
+        delayMs,
+      });
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error('Unexpected OpenAI stream rewrite retry state');
+}
+
+function buildRepairFunctionContext(functionCalls: Array<{ function: string; arguments: Record<string, unknown>; result: unknown }>): string {
+  if (functionCalls.length === 0) return 'No function calls were executed.';
+
+  return functionCalls
+    .slice(-6)
+    .map((call, idx) => {
+      const args = JSON.stringify(call.arguments ?? {});
+      const rawResult = JSON.stringify(call.result ?? null);
+      const compactResult = rawResult.length > 1200 ? `${rawResult.slice(0, 1200)}...[truncated]` : rawResult;
+      return `${idx + 1}. ${call.function} args=${args} result=${compactResult}`;
+    })
+    .join('\n');
 }
 
 async function runStreamingIteration(
@@ -301,6 +357,12 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
             result,
           });
 
+          sendSSE(res, 'function_result', {
+            function: functionName,
+            status: 'success',
+            summary: summarizeFunctionResult(result),
+          });
+
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -309,6 +371,12 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
         } catch (error: unknown) {
           const errMsg = error instanceof Error ? error.message : String(error);
           logger.error(`Function ${functionName} failed`, { error: errMsg });
+
+          sendSSE(res, 'function_result', {
+            function: functionName,
+            status: 'error',
+            summary: errMsg,
+          });
 
           messages.push({
             role: 'tool',
@@ -343,8 +411,42 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
       functionCalls,
     });
 
-    const safeFinalContent = finalContent || 'I apologize, but I was unable to generate a response.';
-    const contractAudit = evaluateResponseContract(routingPlan, functionCalls, safeFinalContent);
+    let safeFinalContent = finalContent || 'I apologize, but I was unable to generate a response.';
+    let contractAudit = evaluateResponseContract(routingPlan, functionCalls, safeFinalContent);
+
+    if (safeFinalContent && cumulativeTokens <= MAX_TOTAL_TOKENS_PER_REQUEST && shouldAttemptContractRewrite(contractAudit)) {
+      try {
+        const repairDirective = buildContractRepairDirective(routingPlan);
+        const repairContext = buildRepairFunctionContext(functionCalls);
+        const rewriteMessages: ChatCompletionMessageParam[] = [
+          { role: 'system', content: hardenedSystemPrompt },
+          ...(routingDirective ? [{ role: 'system', content: routingDirective } as ChatCompletionMessageParam] : []),
+          { role: 'system', content: repairDirective },
+          {
+            role: 'user',
+            content: [
+              `Original user request:\n${sanitizedMessage}`,
+              `Tool context:\n${repairContext}`,
+              `Draft response to improve:\n${safeFinalContent}`,
+            ].join('\n\n'),
+          },
+        ];
+
+        const rewrite = await createRewriteCompletion(rewriteMessages);
+        const rewrittenContent = rewrite.choices[0]?.message?.content?.trim();
+        if (rewrittenContent) {
+          safeFinalContent = rewrittenContent;
+          cumulativeTokens += rewrite.usage?.total_tokens || 0;
+          contractAudit = evaluateResponseContract(routingPlan, functionCalls, safeFinalContent);
+          sendSSE(res, 'status', { phase: 'thinking', resetContent: true });
+          sendSSE(res, 'token', { content: safeFinalContent });
+        }
+      } catch (error: unknown) {
+        logger.warn('Stream contract rewrite failed; returning original response', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // Save assistant message to database
     const savedMessage = await saveMessage(

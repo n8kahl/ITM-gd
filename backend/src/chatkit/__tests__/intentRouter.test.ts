@@ -26,6 +26,9 @@ describe('intentRouter', () => {
     expect(plan.intents).toContain('strategy_selection');
     expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['get_iv_analysis', 'get_options_chain']));
     expect(plan.requiresBullBear).toBe(true);
+    expect(plan.requiresDisclaimer).toBe(true);
+    expect(plan.requiresScenarioProbabilities).toBe(true);
+    expect(plan.requiresLiquidityWatchouts).toBe(true);
     expect(plan.primarySymbol).toBe('SPX');
   });
 
@@ -104,11 +107,43 @@ describe('intentRouter', () => {
     const audit = evaluateResponseContract(
       plan,
       functionCalls,
-      'Bull case above $6020.25, bear case below $5981.50. Invalidation on 15m close under $5981.50.',
+      [
+        'This is not financial advice; this is educational market analysis.',
+        'Scenario matrix: bull case 40%, base case 35%, bear case 25%.',
+        'Bull case above $6020.25, bear case below $5981.50. Invalidation on 15m close under $5981.50.',
+        'Liquidity watchouts: bid/ask can widen around open and close; account for slippage on market orders.',
+      ].join(' '),
     );
 
     expect(audit.passed).toBe(true);
     expect(audit.blockingViolations).toHaveLength(0);
+  });
+
+  it('fails contract audit when disclaimer/probabilities/liquidity watchouts are missing', () => {
+    const plan = buildIntentRoutingPlan('Help with setup on SPX: entry, stop, invalidation and show chart.');
+    const functionCalls = [
+      {
+        function: 'get_key_levels',
+        arguments: { symbol: 'SPX' },
+        result: { symbol: 'SPX' },
+      },
+      {
+        function: 'show_chart',
+        arguments: { symbol: 'SPX', timeframe: '15m' },
+        result: { symbol: 'SPX', timeframe: '15m' },
+      },
+    ];
+
+    const audit = evaluateResponseContract(
+      plan,
+      functionCalls,
+      'Bull case above $6020 and bear case below $5980 with invalidation on a 15m close.',
+    );
+
+    expect(audit.passed).toBe(false);
+    expect(audit.blockingViolations).toContain('missing_financial_disclaimer');
+    expect(audit.blockingViolations).toContain('missing_scenario_probabilities');
+    expect(audit.blockingViolations).toContain('missing_liquidity_watchouts');
   });
 
   it('builds a budget fallback summary from tool outputs', () => {
