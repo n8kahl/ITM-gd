@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 
 export function StockSplitsCalendar() {
-    const { splits, isLoading } = useUpcomingSplits()
+    const { splits, isLoading, isError } = useUpcomingSplits()
 
     return (
         <Card className="glass-card border-none shadow-none h-full">
@@ -53,7 +53,9 @@ export function StockSplitsCalendar() {
                                     </div>
                                 ))
                             ) : (
-                                <div className="py-8 text-center text-sm text-muted-foreground">No upcoming splits found</div>
+                                <div className="py-8 text-center text-sm text-muted-foreground">
+                                  {isError ? 'Stock split feed unavailable' : 'No upcoming splits found'}
+                                </div>
                             )
                         )}
                     </div>

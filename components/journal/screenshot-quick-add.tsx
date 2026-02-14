@@ -109,6 +109,12 @@ function ScreenshotQuickAddDialog({
       return
     }
 
+    const normalizedSymbol = symbol.trim().toUpperCase()
+    if (!normalizedSymbol) {
+      setError('Please enter a symbol before creating the entry')
+      return
+    }
+
     setUploading(true)
     setError(null)
     setUploadProgress(0)
@@ -149,7 +155,7 @@ function ScreenshotQuickAddDialog({
         .from('journal_entries')
         .insert({
           user_id: user.id,
-          symbol: symbol.trim().toUpperCase() || 'PENDING',
+          symbol: normalizedSymbol,
           trade_date: new Date().toISOString(),
           direction: 'long',
           contract_type: 'stock',
@@ -275,7 +281,7 @@ function ScreenshotQuickAddDialog({
 
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Symbol (optional)</label>
+                <label className="mb-1 block text-xs text-muted-foreground">Symbol (required)</label>
                 <input
                   type="text"
                   value={symbol}

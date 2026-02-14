@@ -53,7 +53,7 @@ function MarketMoverRow({ ticker, price, change, changePercent, type }: MarketMo
 }
 
 export function MarketMoversCard() {
-    const { gainers, losers, isLoading } = useMarketMovers(5)
+    const { gainers, losers, isLoading, isError } = useMarketMovers(5)
 
     return (
         <Card className="glass-card border-none shadow-none h-full">
@@ -95,7 +95,9 @@ export function MarketMoversCard() {
                                         />
                                     ))
                                 ) : (
-                                    <div className="py-8 text-center text-sm text-muted-foreground">No data available</div>
+                                    <div className="py-8 text-center text-sm text-muted-foreground">
+                                      {isError ? 'Market movers unavailable' : 'No data available'}
+                                    </div>
                                 )
                             )}
                         </TabsContent>
@@ -120,7 +122,9 @@ export function MarketMoversCard() {
                                         />
                                     ))
                                 ) : (
-                                    <div className="py-8 text-center text-sm text-muted-foreground">No data available</div>
+                                    <div className="py-8 text-center text-sm text-muted-foreground">
+                                      {isError ? 'Market movers unavailable' : 'No data available'}
+                                    </div>
                                 )
                             )}
                         </TabsContent>

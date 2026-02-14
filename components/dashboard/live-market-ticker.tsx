@@ -50,15 +50,18 @@ function getIVRankColor(ivRank: number): string {
 // ============================================
 
 export function LiveMarketTicker() {
-  const { indices, metrics, source, isLoading } = useMarketIndices();
-  const { status: marketStatusData } = useMarketStatus();
+  const { indices, metrics, source, isLoading, isError: isIndicesError } = useMarketIndices();
+  const { status: marketStatusData, isError: isStatusError } = useMarketStatus();
+  const marketFeedUnavailable = Boolean(isIndicesError || isStatusError)
 
   // Derived state
   const isLive = source === 'massive';
   const currentStatus = marketStatusData?.status || 'closed';
   const currentSession = marketStatusData?.session || 'closed';
 
-  const statusDotColor = isLive
+  const statusDotColor = marketFeedUnavailable
+    ? 'bg-red-400'
+    : isLive
     ? 'bg-emerald-400'
     : 'bg-amber-400';
 
@@ -69,7 +72,7 @@ export function LiveMarketTicker() {
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className={cn('w-1.5 h-1.5 rounded-full', statusDotColor, currentStatus === 'open' && isLive && 'animate-pulse')} />
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-            {getMarketStatusLabel(currentStatus, currentSession)}
+            {marketFeedUnavailable ? 'Data Unavailable' : getMarketStatusLabel(currentStatus, currentSession)}
           </span>
         </div>
 
@@ -82,6 +85,8 @@ export function LiveMarketTicker() {
             <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
             <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
           </div>
+        ) : marketFeedUnavailable && indices.length === 0 ? (
+          <div className="text-xs text-muted-foreground">Live market feed unavailable</div>
         ) : (
           indices.map(quote => {
             const isUp = quote.change >= 0

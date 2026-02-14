@@ -13,8 +13,10 @@ const listQuerySchema = z.object({
   contractType: contractTypeSchema.optional(),
   isWinner: z.enum(['true', 'false']).optional(),
   isOpen: z.enum(['true', 'false']).optional(),
+  hasAi: z.enum(['true', 'false']).optional(),
+  includeDrafts: z.enum(['true', 'false']).optional(),
   tags: z.string().optional(),
-  sortBy: z.enum(['trade_date', 'pnl', 'symbol']).default('trade_date'),
+  sortBy: z.enum(['trade_date', 'created_at', 'pnl', 'symbol']).default('trade_date'),
   sortDir: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
@@ -153,9 +155,11 @@ export async function GET(request: NextRequest) {
       contractType: searchParams.get('contractType') ?? undefined,
       isWinner: searchParams.get('isWinner') ?? undefined,
       isOpen: searchParams.get('isOpen') ?? undefined,
+      hasAi: searchParams.get('hasAi') ?? searchParams.get('has_ai') ?? undefined,
+      includeDrafts: searchParams.get('includeDrafts') ?? searchParams.get('include_drafts') ?? undefined,
       tags: searchParams.get('tags') ?? undefined,
-      sortBy: searchParams.get('sortBy') ?? undefined,
-      sortDir: searchParams.get('sortDir') ?? undefined,
+      sortBy: searchParams.get('sortBy') ?? searchParams.get('sort') ?? undefined,
+      sortDir: searchParams.get('sortDir') ?? searchParams.get('order') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
       offset: searchParams.get('offset') ?? undefined,
     })
@@ -172,6 +176,11 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .gte('trade_date', startDate)
       .lte('trade_date', endDate)
+
+    if (parsedQuery.includeDrafts !== 'true') {
+      query = query.eq('is_draft', false)
+      query = query.neq('symbol', 'PENDING')
+    }
 
     if (parsedQuery.symbol) {
       query = query.ilike('symbol', `%${parsedQuery.symbol.toUpperCase()}%`)
@@ -191,6 +200,12 @@ export async function GET(request: NextRequest) {
 
     if (parsedQuery.isOpen) {
       query = query.eq('is_open', parsedQuery.isOpen === 'true')
+    }
+
+    if (parsedQuery.hasAi) {
+      query = parsedQuery.hasAi === 'true'
+        ? query.not('ai_analysis', 'is', null)
+        : query.is('ai_analysis', null)
     }
 
     if (tags.length > 0) {

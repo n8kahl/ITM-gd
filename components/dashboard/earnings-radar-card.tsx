@@ -39,7 +39,7 @@ export function EarningsRadarCard() {
     else setIsLoading(true)
 
     try {
-      const data = await getEarningsCalendar(token, undefined, 14)
+      const data = await getEarningsCalendar(token, undefined, 30)
       setEvents(Array.isArray(data.events) ? data.events : [])
     } catch (err) {
       const message = err instanceof AICoachAPIError
@@ -160,7 +160,7 @@ export function EarningsRadarCard() {
 
         <div className="mt-4">
           <Link
-            href="/members/ai-coach"
+            href="/members/ai-coach?view=earnings"
             className="text-xs text-amber-300 hover:text-amber-200 transition-colors"
           >
             Open Earnings Intelligence →
@@ -170,4 +170,3 @@ export function EarningsRadarCard() {
     </div>
   )
 }
-

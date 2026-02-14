@@ -13,6 +13,14 @@ const fetcher = async (key: MarketKey) => {
             Authorization: `Bearer ${token}`,
         },
     });
+    const fallbackHeader = res.headers.get('X-Market-Fallback');
+    if (fallbackHeader) {
+        const body = await res.json().catch(() => null);
+        const detail = typeof body?.message === 'string'
+            ? body.message
+            : (typeof body?.error === 'string' ? body.error : '');
+        throw new Error(`Market data unavailable (${fallbackHeader})${detail ? `: ${detail}` : ''}`);
+    }
     if (!res.ok) {
         let detail = '';
         try {

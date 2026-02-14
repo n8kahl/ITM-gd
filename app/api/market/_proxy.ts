@@ -100,9 +100,11 @@ export async function proxyMarketGet(request: Request, endpoint: MarketEndpoint)
 
     if (!response.ok) {
       return NextResponse.json(getMarketFallback(endpoint), {
-        status: 200,
+        status: response.status >= 500 ? 503 : response.status,
         headers: {
           'X-Market-Fallback': `upstream_${response.status}`,
+          'X-Market-Upstream-Status': String(response.status),
+          'Retry-After': '30',
         },
       });
     }
@@ -116,9 +118,10 @@ export async function proxyMarketGet(request: Request, endpoint: MarketEndpoint)
     });
   } catch (error) {
     return NextResponse.json(getMarketFallback(endpoint), {
-      status: 200,
+      status: 502,
       headers: {
         'X-Market-Fallback': 'proxy_error',
+        'Retry-After': '30',
       },
     });
   }

@@ -2,6 +2,7 @@ import { supabase } from '../../config/database';
 import { getMarketStatus } from '../marketHours';
 import { calculateLevels, type LevelsResponse } from '../levels';
 import { getMacroContext } from '../macro/macroContext';
+import { getEarningsCalendar } from '../earnings';
 import { logger } from '../../lib/logger';
 
 const DEFAULT_WATCHLIST_SYMBOLS = ['SPX', 'NDX', 'SPY', 'QQQ'];
@@ -60,8 +61,8 @@ export interface MorningBrief {
   }>;
   earningsToday: Array<{
     symbol: string;
-    time: 'BMO' | 'AMC';
-    expectedMove: number;
+    time: 'BMO' | 'AMC' | 'DURING';
+    expectedMove: number | null;
     ivRank: number | null;
     consensus: string;
     relevance: string;
@@ -366,7 +367,7 @@ export class MorningBriefService {
       tradingImplication: event.relevance,
     }));
 
-    const earningsToday = macro.earningsSeason.upcomingEvents
+    const fallbackEarnings = macro.earningsSeason.upcomingEvents
       .filter((event) => symbols.includes(event.symbol))
       .map((event) => ({
         symbol: event.symbol,
@@ -376,6 +377,31 @@ export class MorningBriefService {
         consensus: event.beatEstimate === null ? 'No consensus yet' : event.beatEstimate ? 'Beat expected' : 'Miss risk',
         relevance: `${event.company} earnings can impact index volatility.`,
       }));
+
+    let earningsToday: MorningBrief['earningsToday'] = [];
+    try {
+      const liveEarnings = await getEarningsCalendar(symbols, 30);
+      earningsToday = liveEarnings.slice(0, 8).map((event) => ({
+        symbol: event.symbol,
+        time: event.time,
+        expectedMove: null,
+        ivRank: null,
+        consensus: event.epsEstimate != null
+          ? `EPS est ${event.epsEstimate.toFixed(2)}`
+          : 'Estimate pending',
+        relevance: event.name
+          ? `${event.name} earnings event in watch window.`
+          : `${event.symbol} earnings event in watch window.`,
+      }));
+    } catch (error: any) {
+      logger.warn('Morning brief earnings calendar unavailable; using fallback context', {
+        error: error?.message || String(error),
+      });
+    }
+
+    if (earningsToday.length === 0) {
+      earningsToday = fallbackEarnings;
+    }
 
     const marketLabel = marketStatus.status.replace('-', ' ');
     const aiSummary = `Market is ${marketLabel}. Monitoring ${symbols.join(', ')} with ${keyLevelsToday.length} symbols mapped for levels and ${openPositionStatus.length} open positions requiring risk review.`;
