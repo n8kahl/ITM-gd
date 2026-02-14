@@ -6,9 +6,19 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext';
 
 type MarketKey = [url: string, token: string];
 
+const DIRECT_MARKET_API_BASE = (process.env.NEXT_PUBLIC_AI_COACH_API_URL || '').replace(/\/+$/, '');
+
+function resolveMarketUrl(url: string): string {
+    if (DIRECT_MARKET_API_BASE && url.startsWith('/api/market/')) {
+        return `${DIRECT_MARKET_API_BASE}${url}`;
+    }
+    return url;
+}
+
 const fetcher = async (key: MarketKey) => {
     const [url, token] = key;
-    const res = await fetch(url, {
+    const targetUrl = resolveMarketUrl(url);
+    const res = await fetch(targetUrl, {
         headers: {
             Authorization: `Bearer ${token}`,
         },
