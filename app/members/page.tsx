@@ -10,6 +10,7 @@ import { QuickActions } from '@/components/dashboard/quick-actions'
 import { RecentTrades } from '@/components/dashboard/recent-trades'
 import { AIInsights } from '@/components/dashboard/ai-insights'
 import { CalendarHeatmap } from '@/components/dashboard/calendar-heatmap'
+import { MarketBriefCard } from '@/components/dashboard/market-brief-card'
 import { MarketAnalyticsCard } from '@/components/dashboard/market-analytics-card'
 import { MarketMoversCard } from '@/components/dashboard/market-movers-card'
 import { StockSplitsCalendar } from '@/components/dashboard/stock-splits-calendar'
@@ -90,11 +91,12 @@ export default function MemberDashboard() {
 
       <motion.section
         role="region"
-        aria-label="AI insights and calendar"
+        aria-label="Market brief, AI insights and calendar"
         variants={FADE_UP_VARIANT}
         transition={LUXURY_SPRING}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <MarketBriefCard />
           <AIInsights />
           <CalendarHeatmap />
         </div>

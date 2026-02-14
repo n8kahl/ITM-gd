@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import dynamic from 'next/dynamic'
+import { useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelAnnotation } from './trading-chart'
 import { OptionsChain } from './options-chain'
@@ -302,6 +303,7 @@ function getWelcomeGreeting(displayName?: string, now: Date = new Date()): strin
 // ============================================
 
 export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
+  const searchParams = useSearchParams()
   const { session } = useMemberAuth()
   const {
     activeCenterView,
@@ -314,6 +316,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   } = useAICoachWorkflow()
 
   const [activeView, setActiveView] = useState<CenterView>('welcome')
+  const hasAppliedRouteViewRef = useRef(false)
   const [isToolsSheetOpen, setIsToolsSheetOpen] = useState(false)
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false)
   const tabRailRef = useRef<HTMLDivElement | null>(null)
@@ -326,6 +329,18 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
       setActiveView('onboarding')
     }
   }, [])
+
+  useEffect(() => {
+    if (hasAppliedRouteViewRef.current) return
+
+    const requestedView = searchParams.get('view')
+    if (requestedView === 'brief') {
+      setActiveView('brief')
+      setCenterView('brief')
+    }
+
+    hasAppliedRouteViewRef.current = true
+  }, [searchParams, setCenterView])
 
   // Chart state
   const [chartSymbol, setChartSymbol] = useState('SPX')
