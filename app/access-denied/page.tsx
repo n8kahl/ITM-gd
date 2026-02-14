@@ -11,7 +11,7 @@ export default function AccessDeniedPage() {
     <div className="min-h-screen bg-[#0f0f10] flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center">
         <div className="relative w-14 h-14 mx-auto mb-6">
-          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill className="object-contain" />
+          <Image src={BRAND_LOGO_SRC} alt={BRAND_NAME} fill sizes="56px" className="object-contain" />
         </div>
 
         <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
@@ -35,4 +35,3 @@ export default function AccessDeniedPage() {
     </div>
   )
 }
-

@@ -7,7 +7,10 @@ interface StructuredDataProps {
 }
 
 export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.app", nonce }: StructuredDataProps) {
-  const scriptNonce = nonce?.trim() || undefined;
+  // In development, middleware/header timing can cause nonce hydration drift.
+  const scriptNonce = process.env.NODE_ENV === 'production'
+    ? (nonce?.trim() || undefined)
+    : undefined;
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
