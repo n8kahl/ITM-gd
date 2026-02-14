@@ -63,3 +63,10 @@
 - AI Coach center screenshot flow now surfaces one-tap next-step actions.
 - Trade Journal screenshot flows now auto-analyze uploads and support top-position form prefill.
 - Implementation details: `docs/ai-coach/UPLOAD_INTELLIGENCE_ROLLOUT_2026-02-14.md`.
+
+## Update: 2026-02-14 Screenshot UX & Monitoring Fixes
+- Screenshot-based `add_to_monitor` now persists extracted positions into tracked setups and opens the tracked view.
+- AI Coach screenshot uploads no longer inject raw `data:image/...` payloads into chat content.
+- Chat bubbles now force wrap for long tokens/URLs to prevent layout overflow.
+- AI Coach upload button now allows replacing a staged screenshot/CSV before send (only disabled while sending).
+- Journal header `Screenshot` action now closes import mode before launching quick screenshot entry, and quick-add modal overlay z-index is elevated for reliable visibility.

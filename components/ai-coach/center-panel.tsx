@@ -86,7 +86,12 @@ import {
   type ChartBar,
   type ChartProviderIndicators,
   type ScanOpportunity,
+  type ExtractedPosition,
 } from '@/lib/api/ai-coach'
+import {
+  syncExtractedPositionsToMonitor,
+  toPositionInputFromExtracted,
+} from '@/lib/ai-coach/screenshot-monitoring'
 
 // ============================================
 // TYPES
@@ -331,6 +336,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     workflowPath,
     setCenterView,
     setSymbol,
+    trackPosition,
     goToWorkflowStep,
     clearWorkflowPath,
   } = useAICoachWorkflow()
@@ -838,6 +844,24 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     }
   }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView])
 
+  const handleScreenshotPositionsConfirmed = useCallback((positions: ExtractedPosition[]) => {
+    if (positions.length === 0) return
+
+    const entryDate = new Date().toISOString().slice(0, 10)
+    for (const position of positions) {
+      trackPosition(toPositionInputFromExtracted(position, entryDate))
+    }
+
+    if (session?.access_token) {
+      void syncExtractedPositionsToMonitor(positions, session.access_token).catch((error) => {
+        console.error('Failed to sync screenshot positions to tracked setups:', error)
+      })
+    }
+
+    setActiveView('tracked')
+    setCenterView('tracked')
+  }, [session?.access_token, setCenterView, trackPosition])
+
   const handleTabKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') {
       return
@@ -1172,12 +1196,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
           {activeView === 'screenshot' && (
             <ScreenshotUpload
-              onPositionsConfirmed={(positions) => {
-                if (positions.length > 0) {
-                  setActiveView('tracked')
-                  setCenterView('tracked')
-                }
-              }}
+              onPositionsConfirmed={handleScreenshotPositionsConfirmed}
               onOpenView={(view) => {
                 if (view === 'tracked') {
                   setActiveView('tracked')

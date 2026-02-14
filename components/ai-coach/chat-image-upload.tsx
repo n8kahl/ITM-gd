@@ -91,13 +91,13 @@ export function ChatImageUpload({
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        disabled={isSending || !!stagedPreview || !!stagedCsvName}
+        disabled={isSending}
         className={cn(
           'p-2 rounded-lg transition-all',
           stagedPreview || stagedCsvName
             ? 'text-emerald-400 bg-emerald-500/10'
             : 'text-white/30 hover:text-white/60 hover:bg-white/5',
-          (isSending || stagedPreview || stagedCsvName) && 'opacity-50 cursor-not-allowed'
+          isSending && 'opacity-50 cursor-not-allowed'
         )}
         title="Upload screenshot or CSV"
       >

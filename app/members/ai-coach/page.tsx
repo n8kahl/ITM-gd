@@ -35,6 +35,7 @@ import {
   type ScreenshotActionId,
   type ScreenshotSuggestedAction,
 } from '@/lib/api/ai-coach'
+import { syncExtractedPositionsToMonitor } from '@/lib/ai-coach/screenshot-monitoring'
 import { useMobileToolSheet, type MobileToolView } from '@/hooks/use-mobile-tool-sheet'
 import { usePanelAttentionPulse } from '@/hooks/use-panel-attention-pulse'
 import { Button } from '@/components/ui/button'
@@ -569,7 +570,7 @@ function ChatArea({
 
     const staged = stagedImage
     const msg = userMessage || 'Analyze this screenshot'
-    onAppendUserMessage(`${msg}\n\n![Uploaded screenshot](${staged.preview})`)
+    onAppendUserMessage(`${msg}\n\n[Uploaded screenshot attached]`)
     setStagedImage(null)
     setIsAnalyzingImage(true)
 
@@ -738,6 +739,34 @@ function ChatArea({
     }
   }, [onOpenSheet])
 
+  const addPositionsToMonitor = useCallback(async (positions: ExtractedPosition[]) => {
+    if (positions.length === 0) {
+      onAppendAssistantMessage('I did not detect any positions to add. Upload a clearer screenshot and try again.')
+      return
+    }
+
+    if (!session?.access_token) {
+      onAppendAssistantMessage('I detected positions, but I could not save them because your session expired. Refresh and try again.')
+      return
+    }
+
+    try {
+      const result = await syncExtractedPositionsToMonitor(positions, session.access_token)
+      const segments: string[] = []
+      if (result.added > 0) segments.push(`Added ${result.added} position${result.added === 1 ? '' : 's'} to monitoring.`)
+      if (result.duplicate > 0) segments.push(`${result.duplicate} already existed.`)
+      if (result.failed > 0) segments.push(`${result.failed} failed to save.`)
+      onAppendAssistantMessage(
+        segments.length > 0
+          ? `${segments.join(' ')} Opened Tracked Setups so you can manage them now.`
+          : 'No positions were added to monitoring.',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      onAppendAssistantMessage(`I could not add these positions to monitoring: ${message}`)
+    }
+  }, [onAppendAssistantMessage, session?.access_token])
+
   const handleScreenshotAction = useCallback((actionId: ScreenshotActionId) => {
     if (!screenshotActions) return
     const summary = compactPositionSummary(screenshotActions.positions)
@@ -745,11 +774,7 @@ function ChatArea({
     switch (actionId) {
       case 'add_to_monitor':
         openWorkflowView('tracked')
-        onSendMessage(
-          summary
-            ? `Add these positions to monitoring and give me risk checkpoints: ${summary}`
-            : 'Add the extracted screenshot positions to monitoring and give me risk checkpoints.',
-        )
+        void addPositionsToMonitor(screenshotActions.positions)
         break
       case 'log_trade':
         openWorkflowView('journal')
@@ -780,7 +805,7 @@ function ChatArea({
     }
 
     setScreenshotActions(null)
-  }, [compactPositionSummary, onSendMessage, openWorkflowView, screenshotActions])
+  }, [addPositionsToMonitor, compactPositionSummary, onSendMessage, openWorkflowView, screenshotActions])
 
   return (
     <div className="flex h-full bg-[#0A0A0B]" ref={chatContainerRef}>

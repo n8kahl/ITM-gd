@@ -108,11 +108,11 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
             {/* Content */}
             {message.content ? (
               <div className={cn(
-                'text-sm leading-relaxed',
+                'text-sm leading-relaxed break-words [overflow-wrap:anywhere]',
                 isUser ? 'text-white' : 'text-white/90'
               )}>
                 {isUser ? (
-                  <span className="whitespace-pre-wrap">{sanitizeContent(message.content)}</span>
+                  <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{sanitizeContent(message.content)}</span>
                 ) : (
                   <MarkdownRenderer content={message.content} />
                 )}
@@ -221,22 +221,23 @@ function MarkdownRenderer({ content }: { content: string }) {
   const sanitized = sanitizeContent(content)
 
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
+    <div className="break-words [overflow-wrap:anywhere]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
         // Headings
         h1: ({ children }) => <h3 className="text-base font-semibold text-white mt-3 mb-1.5">{children}</h3>,
         h2: ({ children }) => <h4 className="text-sm font-semibold text-white mt-2.5 mb-1">{children}</h4>,
         h3: ({ children }) => <h5 className="text-sm font-medium text-white mt-2 mb-1">{children}</h5>,
         // Paragraph
-        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+        p: ({ children }) => <p className="mb-2 last:mb-0 break-words [overflow-wrap:anywhere]">{children}</p>,
         // Bold & italic
         strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
         em: ({ children }) => <em className="text-white/80 italic">{children}</em>,
         // Lists
         ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-0.5 ml-1">{children}</ul>,
         ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-0.5 ml-1">{children}</ol>,
-        li: ({ children }) => <li className="text-white/80">{children}</li>,
+        li: ({ children }) => <li className="text-white/80 break-words [overflow-wrap:anywhere]">{children}</li>,
         // Inline code — monospace
         code: ({ className, children, ...props }) => {
           const isCodeBlock = className?.includes('language-')
@@ -288,10 +289,11 @@ function MarkdownRenderer({ content }: { content: string }) {
         img: ({ alt }) => alt ? (
           <span className="text-xs text-white/40 italic">{alt}</span>
         ) : null,
-      }}
-    >
-      {sanitized}
-    </ReactMarkdown>
+        }}
+      >
+        {sanitized}
+      </ReactMarkdown>
+    </div>
   )
 }
 

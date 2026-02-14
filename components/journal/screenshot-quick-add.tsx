@@ -228,7 +228,7 @@ function ScreenshotQuickAddDialog({
   }, [analysis?.positions, file, symbol, notes, onEntryCreated])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
       <div className="absolute inset-0" onClick={!uploading ? onClose : undefined} />
 
       <div
