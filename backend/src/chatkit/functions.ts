@@ -89,6 +89,114 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_ticker_news',
+      description: 'Get the latest company-specific headlines and catalysts for a symbol.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Ticker symbol (e.g., AAPL, NVDA, SPY)',
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of headlines to return (default: 5)',
+            default: 5,
+          },
+        },
+        required: ['symbol'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_company_profile',
+      description: 'Get company fundamentals/profile including sector, market cap, employees, and description.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Ticker symbol (e.g., AAPL, MSFT, TSLA)',
+          },
+        },
+        required: ['symbol'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_market_breadth',
+      description: 'Get market breadth stats (advancers/decliners, highs/lows) for the US market.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_dividend_info',
+      description: 'Get dividend schedule and assignment-risk context for a symbol.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Ticker symbol (e.g., AAPL, XOM, T)',
+          },
+        },
+        required: ['symbol'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_unusual_activity',
+      description: 'Get unusual options activity summary for a symbol using volume/open-interest signals.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Ticker symbol (e.g., AAPL, NVDA, TSLA)',
+          },
+          minRatio: {
+            type: 'number',
+            description: 'Minimum volume/open-interest ratio threshold (default: 2)',
+            default: 2,
+          },
+        },
+        required: ['symbol'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'compare_symbols',
+      description: 'Compare multiple symbols across current price, daily change, and quick risk context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbols: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of symbols to compare (2-6 symbols)',
+          },
+        },
+        required: ['symbols'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_options_chain',
       description: 'Get options chain with calls and puts for a symbol. Returns strikes, prices, Greeks (delta, gamma, theta, vega), IV, and volume for options near current price.',
       parameters: {

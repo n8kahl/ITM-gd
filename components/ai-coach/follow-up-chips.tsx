@@ -136,7 +136,7 @@ export function FollowUpChips({
   if (chips.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-2 mt-2">
+    <div className="flex flex-wrap gap-2 mt-2" role="group" aria-label="Suggested follow-ups">
       {chips.map((chip) => (
         <button
           key={chip.label}

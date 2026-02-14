@@ -25,6 +25,7 @@ export interface ChatMessage {
   content: string
   timestamp: string
   functionCalls?: ChatMessageResponse['functionCalls']
+  chartRequest?: ChartRequest | null
   isOptimistic?: boolean
   isStreaming?: boolean
   streamStatus?: string
@@ -506,6 +507,7 @@ export function useAICoachChat() {
       }
 
       const confirmedUserMessage: ChatMessage = { ...userMessage, isOptimistic: false }
+      const newChartRequest = extractChartRequest(doneData?.functionCalls)
 
       const assistantMessage: ChatMessage = {
         id: doneData?.messageId || streamingMsgId,
@@ -513,10 +515,9 @@ export function useAICoachChat() {
         content: streamContent,
         timestamp: new Date().toISOString(),
         functionCalls: doneData?.functionCalls,
+        chartRequest: newChartRequest,
         isStreaming: false,
       }
-
-      const newChartRequest = extractChartRequest(doneData?.functionCalls)
 
       setState(prev => ({
         ...prev,
@@ -600,7 +601,16 @@ export function useAICoachChat() {
       const result = await apiGetSessionMessages(sessionId, token)
       const loadedMessages: ChatMessage[] = result.messages
         .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .map(msg => ({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content, timestamp: msg.timestamp, functionCalls: msg.functionCalls }))
+        .map(msg => ({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp,
+          functionCalls: msg.functionCalls,
+          chartRequest: msg.role === 'assistant'
+            ? extractChartRequest(msg.functionCalls as ChatMessageResponse['functionCalls'])
+            : null,
+        }))
       setState(prev => ({ ...prev, messages: loadedMessages, isLoadingMessages: false }))
     } catch (error) {
       const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to load messages'

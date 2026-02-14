@@ -8,20 +8,25 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { sanitizeContent } from '@/lib/sanitize'
 import { type ChatMessage } from '@/hooks/use-ai-coach-chat'
+import type { ChartRequest } from '@/components/ai-coach/center-panel'
+import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { WidgetCard, extractWidgets } from './widget-cards'
 import { FollowUpChips } from './follow-up-chips'
+import { InlineMiniChart } from './inline-mini-chart'
 
 interface ChatMessageProps {
   message: ChatMessage
   onSendPrompt?: (prompt: string) => void
+  onExpandChart?: (chartRequest: ChartRequest) => void
 }
 
 /**
  * Modern chat message component with proper bubbles, markdown rendering,
  * and inline generative UI widgets.
  */
-export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSendPrompt }: ChatMessageProps) {
+export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSendPrompt, onExpandChart }: ChatMessageProps) {
   const isUser = message.role === 'user'
+  const { session } = useMemberAuth()
 
   const widgets = useMemo(() => {
     if (isUser || !message.functionCalls) return []
@@ -98,6 +103,14 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
                 <WidgetCard key={i} widget={widget} />
               ))}
             </div>
+          )}
+
+          {!isUser && message.chartRequest && (
+            <InlineMiniChart
+              chartRequest={message.chartRequest}
+              accessToken={session?.access_token}
+              onExpand={() => onExpandChart?.(message.chartRequest!)}
+            />
           )}
 
           {!isUser && !message.isStreaming && message.content && onSendPrompt && (

@@ -55,6 +55,12 @@ export type WidgetType =
   | 'earnings_analysis'
   | 'journal_insights'
   | 'trade_history'
+  | 'ticker_news'
+  | 'company_profile'
+  | 'market_breadth'
+  | 'dividend_info'
+  | 'unusual_activity'
+  | 'compare_symbols'
 
 export interface WidgetData {
   type: WidgetType
@@ -313,6 +319,24 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
       break
     case 'trade_history':
       content = <TradeHistoryCard data={widget.data} />
+      break
+    case 'ticker_news':
+      content = <TickerNewsCard data={widget.data} />
+      break
+    case 'company_profile':
+      content = <CompanyProfileCard data={widget.data} />
+      break
+    case 'market_breadth':
+      content = <MarketBreadthCard data={widget.data} />
+      break
+    case 'dividend_info':
+      content = <DividendInfoCard data={widget.data} />
+      break
+    case 'unusual_activity':
+      content = <UnusualActivityCard data={widget.data} />
+      break
+    case 'compare_symbols':
+      content = <CompareSymbolsCard data={widget.data} />
       break
     default:
       return null
@@ -1931,6 +1955,185 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
   )
 }
 
+function TickerNewsCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = String(data.symbol || 'SYMBOL')
+  const headlines = Array.isArray(data.headlines) ? data.headlines as Array<Record<string, unknown>> : []
+  return (
+    <div className={premiumCardClass('border-sky-500/15 max-w-sm')}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Globe className="w-3.5 h-3.5 text-sky-300" />
+          <span className="text-xs font-medium text-white">{symbol} News</span>
+        </div>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('info'))}>
+          {headlines.length} headlines
+        </span>
+      </div>
+      <div className="space-y-1.5 text-[11px] text-white/70">
+        {headlines.slice(0, 3).map((item, index) => (
+          <a
+            key={`${String(item.id || index)}`}
+            href={String(item.url || '#')}
+            target="_blank"
+            rel="noreferrer"
+            className="block rounded border border-white/10 bg-black/20 px-2 py-1.5 hover:bg-white/10"
+          >
+            <p className="line-clamp-2 text-white/85">{String(item.title || 'Untitled')}</p>
+            <p className="text-[10px] text-white/45">
+              {String(item.source || 'Unknown source')} • {formatTime(item.publishedUtc)}
+            </p>
+          </a>
+        ))}
+      </div>
+      <WidgetActionBar actions={normalizeActions([
+        chatAction(`Summarize the latest catalysts for ${symbol} and explain likely market reaction.`),
+        chartAction(symbol),
+      ])} compact />
+    </div>
+  )
+}
+
+function CompanyProfileCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = String(data.symbol || 'SYMBOL')
+  const name = String(data.name || 'Company')
+  return (
+    <div className={premiumCardClass('border-emerald-500/15 max-w-sm')}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Search className="w-3.5 h-3.5 text-emerald-300" />
+          <span className="text-xs font-medium text-white">{symbol} Profile</span>
+        </div>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('neutral'))}>
+          {String(data.exchange || 'N/A')}
+        </span>
+      </div>
+      <p className="text-[11px] text-white mb-1">{name}</p>
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Market Cap</p>
+          <p className="font-mono text-white">{formatPrice(data.marketCap, 0)}</p>
+        </div>
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Employees</p>
+          <p className="font-mono text-white">{parseNullableNumeric(data.employees)?.toLocaleString() || '—'}</p>
+        </div>
+      </div>
+      <p className="mt-2 text-[10px] text-white/55 line-clamp-3">{String(data.description || '')}</p>
+    </div>
+  )
+}
+
+function MarketBreadthCard({ data }: { data: Record<string, unknown> }) {
+  const assessment = String(data.assessment || 'mixed')
+  const tone: 'success' | 'danger' | 'warning' = assessment === 'strong'
+    ? 'success'
+    : assessment === 'weak'
+      ? 'danger'
+      : 'warning'
+  return (
+    <div className={premiumCardClass('border-amber-500/15 max-w-sm')}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <BarChart2 className="w-3.5 h-3.5 text-amber-300" />
+          <span className="text-xs font-medium text-white">Market Breadth</span>
+        </div>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium capitalize', pillClass(tone))}>
+          {assessment}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-[11px]">
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Adv</p>
+          <p className="font-mono text-emerald-300">{String(data.advancers || 0)}</p>
+        </div>
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">Dec</p>
+          <p className="font-mono text-red-300">{String(data.decliners || 0)}</p>
+        </div>
+        <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+          <p className="text-white/45">A/D</p>
+          <p className="font-mono text-white">{String(data.advanceDeclineRatio || '—')}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DividendInfoCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = String(data.symbol || 'SYMBOL')
+  const records = Array.isArray(data.dividendHistory) ? data.dividendHistory as Array<Record<string, unknown>> : []
+  return (
+    <div className={premiumCardClass('border-champagne/20 max-w-sm')}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <DollarSign className="w-3.5 h-3.5 text-champagne" />
+          <span className="text-xs font-medium text-white">{symbol} Dividend</span>
+        </div>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('warning'))}>
+          {data.hasDividend ? `${String(data.yieldPct || '—')}%` : 'No dividend'}
+        </span>
+      </div>
+      <div className="space-y-1 text-[11px] text-white/65">
+        {records.slice(0, 3).map((record, index) => (
+          <div key={`${String(record.exDate || index)}`} className="flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1">
+            <span>{String(record.exDate || 'N/A')}</span>
+            <span className="font-mono">{formatPrice(record.amount, 2)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[10px] text-white/50">{String(data.assignmentRiskNote || '')}</p>
+    </div>
+  )
+}
+
+function UnusualActivityCard({ data }: { data: Record<string, unknown> }) {
+  const symbol = String(data.symbol || 'SYMBOL')
+  const contracts = Array.isArray(data.unusualContracts) ? data.unusualContracts as Array<Record<string, unknown>> : []
+  return (
+    <div className={premiumCardClass('border-fuchsia-500/20 max-w-sm')}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Workflow className="w-3.5 h-3.5 text-fuchsia-300" />
+          <span className="text-xs font-medium text-white">{symbol} Unusual Flow</span>
+        </div>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('info'))}>
+          {contracts.length} signals
+        </span>
+      </div>
+      <div className="space-y-1 text-[10px] text-white/65">
+        {contracts.slice(0, 4).map((contract, index) => (
+          <div key={`${String(contract.strike || index)}-${index}`} className="grid grid-cols-4 gap-1 rounded border border-white/10 bg-black/20 px-2 py-1">
+            <span>{String(contract.side || '')}</span>
+            <span className="font-mono">{String(contract.strike || '')}</span>
+            <span className="font-mono">V:{String(contract.volume || 0)}</span>
+            <span className="font-mono">R:{String(contract.ratio || 0)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CompareSymbolsCard({ data }: { data: Record<string, unknown> }) {
+  const rows = Array.isArray(data.comparisons) ? data.comparisons as Array<Record<string, unknown>> : []
+  return (
+    <div className={premiumCardClass('border-indigo-500/20 max-w-sm')}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <Activity className="w-3.5 h-3.5 text-indigo-300" />
+        <span className="text-xs font-medium text-white">Symbol Comparison</span>
+      </div>
+      <div className="space-y-1 text-[11px]">
+        {rows.slice(0, 6).map((row, index) => (
+          <div key={`${String(row.symbol || index)}`} className="flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1.5">
+            <span className="text-white/75">{String(row.symbol || '')}</span>
+            <span className="font-mono text-white">{formatPrice(row.price, 2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ============================================
 // UTILITY: Parse widget data from function calls
 // ============================================
@@ -2060,6 +2263,36 @@ export function extractWidgets(functionCalls?: Array<{
       case 'get_trade_history': {
         if (result.error) break
         widgets.push({ type: 'trade_history', data: result })
+        break
+      }
+      case 'get_ticker_news': {
+        if (result.error) break
+        widgets.push({ type: 'ticker_news', data: result })
+        break
+      }
+      case 'get_company_profile': {
+        if (result.error) break
+        widgets.push({ type: 'company_profile', data: result })
+        break
+      }
+      case 'get_market_breadth': {
+        if (result.error) break
+        widgets.push({ type: 'market_breadth', data: result })
+        break
+      }
+      case 'get_dividend_info': {
+        if (result.error) break
+        widgets.push({ type: 'dividend_info', data: result })
+        break
+      }
+      case 'get_unusual_activity': {
+        if (result.error) break
+        widgets.push({ type: 'unusual_activity', data: result })
+        break
+      }
+      case 'compare_symbols': {
+        if (result.error) break
+        widgets.push({ type: 'compare_symbols', data: result })
         break
       }
     }

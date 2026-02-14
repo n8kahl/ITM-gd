@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useMemberAuth, type TabConfig } from '@/contexts/MemberAuthContext'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
+import { isLibraryPath } from '@/lib/navigation-utils'
 
 // ============================================
 // ICON MAP (tab_id -> Lucide icon)
@@ -44,10 +45,6 @@ function getTabHref(tab: TabConfig): string {
     return '/members/academy/courses'
   }
   return rawHref
-}
-
-function isLibraryPath(pathname: string): boolean {
-  return pathname === '/members/library' || pathname.startsWith('/members/academy')
 }
 
 function isTabActive(pathname: string, tab: TabConfig, href: string): boolean {

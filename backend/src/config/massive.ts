@@ -40,6 +40,60 @@ export interface MassiveLastQuote {
   c: number[];      // Condition codes
 }
 
+export interface MassiveNewsArticle {
+  id: string;
+  title: string;
+  author?: string;
+  published_utc: string;
+  article_url: string;
+  image_url?: string;
+  description?: string;
+  keywords?: string[];
+  publisher: {
+    name: string;
+    homepage_url?: string;
+    logo_url?: string;
+  };
+  tickers?: string[];
+}
+
+export interface MassiveTickerDetails {
+  ticker: string;
+  name?: string;
+  market?: string;
+  locale?: string;
+  primary_exchange?: string;
+  type?: string;
+  active?: boolean;
+  market_cap?: number;
+  weighted_shares_outstanding?: number;
+  list_date?: string;
+  currency_name?: string;
+  description?: string;
+  homepage_url?: string;
+  total_employees?: number;
+}
+
+export interface MassiveDividendRecord {
+  ticker: string;
+  ex_dividend_date: string;
+  pay_date?: string;
+  record_date?: string;
+  declaration_date?: string;
+  cash_amount?: number;
+  frequency?: number;
+  dividend_type?: string;
+}
+
+export interface MassiveGroupedDailyResult {
+  T: string;
+  c: number;
+  o: number;
+  h: number;
+  l: number;
+  v: number;
+}
+
 const MASSIVE_BASE_URL = 'https://api.massive.com';
 
 let benzingaAvailabilityCached: boolean | null = null;
@@ -245,6 +299,72 @@ export async function getLastQuote(ticker: string): Promise<MassiveLastQuote> {
   const formattedTicker = formatMassiveTicker(ticker);
   const response = await massiveClient.get(`/v2/last/nbbo/${formattedTicker}`);
   return response.data.results;
+}
+
+/**
+ * Get recent news for a ticker.
+ * Endpoint: GET /v2/reference/news?ticker={ticker}
+ */
+export async function getTickerNews(ticker: string, limit = 10): Promise<MassiveNewsArticle[]> {
+  const formattedTicker = formatMassiveTicker(ticker).replace(/^I:/, '');
+  const response = await massiveClient.get('/v2/reference/news', {
+    params: {
+      ticker: formattedTicker,
+      limit: Math.min(Math.max(Math.floor(limit), 1), 50),
+      order: 'desc',
+      sort: 'published_utc',
+    },
+  });
+  return Array.isArray(response.data?.results) ? response.data.results : [];
+}
+
+/**
+ * Get ticker/company details.
+ * Endpoint: GET /v3/reference/tickers/{ticker}
+ */
+export async function getTickerDetails(ticker: string): Promise<MassiveTickerDetails | null> {
+  const formattedTicker = formatMassiveTicker(ticker).replace(/^I:/, '');
+  const response = await massiveClient.get(`/v3/reference/tickers/${formattedTicker}`);
+  return (response.data?.results || null) as MassiveTickerDetails | null;
+}
+
+/**
+ * Get dividend records for a ticker.
+ * Endpoint: GET /v3/reference/dividends
+ */
+export async function getDividends(ticker: string, limit = 10): Promise<MassiveDividendRecord[]> {
+  const formattedTicker = formatMassiveTicker(ticker).replace(/^I:/, '');
+  const response = await massiveClient.get('/v3/reference/dividends', {
+    params: {
+      ticker: formattedTicker,
+      order: 'desc',
+      sort: 'ex_dividend_date',
+      limit: Math.min(Math.max(Math.floor(limit), 1), 100),
+    },
+  });
+  return Array.isArray(response.data?.results) ? response.data.results : [];
+}
+
+/**
+ * Get market status from Massive endpoint.
+ * Endpoint: GET /v1/marketstatus/now
+ */
+export async function getMarketStatusLive(): Promise<Record<string, unknown>> {
+  const response = await massiveClient.get('/v1/marketstatus/now');
+  return (response.data || {}) as Record<string, unknown>;
+}
+
+/**
+ * Get grouped daily bars for breadth calculations.
+ * Endpoint: GET /v2/aggs/grouped/locale/us/market/stocks/{date}
+ */
+export async function getGroupedDaily(date: string): Promise<MassiveGroupedDailyResult[]> {
+  const response = await massiveClient.get(`/v2/aggs/grouped/locale/us/market/stocks/${date}`, {
+    params: {
+      adjusted: true,
+    },
+  });
+  return Array.isArray(response.data?.results) ? response.data.results : [];
 }
 
 // Get daily aggregates for a date range (used for PDH, pivots, ATR)

@@ -39,9 +39,14 @@ function buildBackfillArgs(functionName: string, plan: IntentRoutingPlan): Recor
     case 'get_earnings_analysis':
     case 'get_gamma_exposure':
     case 'get_zero_dte_analysis':
+    case 'get_ticker_news':
+    case 'get_company_profile':
+    case 'get_dividend_info':
+    case 'get_unusual_activity':
       if (!symbol) return null;
       return { symbol };
     case 'get_market_status':
+    case 'get_market_breadth':
       return {};
     default:
       return null;
@@ -58,6 +63,11 @@ const BACKFILL_ALLOWED_FUNCTIONS = new Set([
   'get_earnings_analysis',
   'get_gamma_exposure',
   'get_zero_dte_analysis',
+  'get_ticker_news',
+  'get_company_profile',
+  'get_market_breadth',
+  'get_dividend_info',
+  'get_unusual_activity',
 ]);
 
 export async function backfillRequiredFunctionCalls({

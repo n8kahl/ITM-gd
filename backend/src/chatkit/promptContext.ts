@@ -3,6 +3,8 @@ import { logger } from '../lib/logger';
 import { getSystemPrompt } from './systemPrompt';
 import { getMarketStatus } from '../services/marketHours';
 import { getMarketIndicesSnapshot } from '../services/marketIndices';
+import { massiveClient, getTickerNews } from '../config/massive';
+import { getEarningsCalendar } from '../services/earnings';
 
 interface PromptProfile {
   tier?: string;
@@ -21,6 +23,17 @@ const TIER_CANONICAL_MAP: Record<string, string> = {
   premium: 'premium',
   elite: 'premium',
 };
+
+export type SessionPhase =
+  | 'pre-market'
+  | 'opening-drive'
+  | 'mid-morning'
+  | 'midday'
+  | 'afternoon'
+  | 'power-hour'
+  | 'moc-imbalance'
+  | 'after-hours'
+  | 'closed';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === 'object') return value as Record<string, unknown>;
@@ -53,6 +66,163 @@ function extractExperienceLevel(preferences: unknown): string | undefined {
     ?? record.trader_experience;
 
   return normalizeExperienceLevel(candidate);
+}
+
+function toETParts(now: Date = new Date()): { hour: number; minute: number } {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value || '0');
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value || '0');
+  return { hour, minute };
+}
+
+export function getSessionContext(): { time: string; phase: SessionPhase; phaseNote: string } {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const etTime = formatter.format(now);
+  const { hour, minute } = toETParts(now);
+  const totalMin = hour * 60 + minute;
+
+  let phase: SessionPhase = 'closed';
+  let phaseNote = 'Markets closed.';
+
+  if (totalMin >= 240 && totalMin < 570) {
+    phase = 'pre-market';
+    phaseNote = 'Pre-market session. Thin liquidity and wider spreads.';
+  } else if (totalMin >= 570 && totalMin < 600) {
+    phase = 'opening-drive';
+    phaseNote = 'Opening drive. Volatility and gap resolution are elevated.';
+  } else if (totalMin >= 600 && totalMin < 690) {
+    phase = 'mid-morning';
+    phaseNote = 'Mid-morning. Watch continuation versus reversal behavior.';
+  } else if (totalMin >= 690 && totalMin < 810) {
+    phase = 'midday';
+    phaseNote = 'Midday chop zone. Mean-reversion risk is higher.';
+  } else if (totalMin >= 810 && totalMin < 900) {
+    phase = 'afternoon';
+    phaseNote = 'Afternoon session. Institutional flow starts building.';
+  } else if (totalMin >= 900 && totalMin < 945) {
+    phase = 'power-hour';
+    phaseNote = 'Power hour. Volume and directional intent can increase.';
+  } else if (totalMin >= 945 && totalMin < 960) {
+    phase = 'moc-imbalance';
+    phaseNote = 'MOC window. Closing-order imbalances can move price quickly.';
+  } else if (totalMin >= 960 && totalMin < 1200) {
+    phase = 'after-hours';
+    phaseNote = 'After-hours session. Liquidity is thin and moves can be noisy.';
+  }
+
+  return { time: etTime, phase, phaseNote };
+}
+
+function formatAggLine(
+  response: any,
+  symbol: string,
+  opts?: { asPercent?: boolean; omitDollar?: boolean },
+): string | null {
+  const row = response?.data?.results?.[0];
+  if (!row) return null;
+  const close = Number(row.c);
+  const open = Number(row.o);
+  if (!Number.isFinite(close) || !Number.isFinite(open) || open === 0) return null;
+  const change = close - open;
+  const pct = ((change / open) * 100).toFixed(2);
+  const sign = change >= 0 ? '+' : '';
+  const priceDisplay = opts?.omitDollar ? close.toFixed(2) : `$${close.toFixed(2)}`;
+  return `${symbol}: ${priceDisplay} (${sign}${pct}%)`;
+}
+
+export async function loadMarketContext(): Promise<string> {
+  try {
+    const [spxRes, ndxRes, vixRes, dxyRes, tnxRes] = await Promise.all([
+      massiveClient.get('/v2/aggs/ticker/I:SPX/prev').catch(() => null),
+      massiveClient.get('/v2/aggs/ticker/I:NDX/prev').catch(() => null),
+      massiveClient.get('/v2/aggs/ticker/I:VIX/prev').catch(() => null),
+      massiveClient.get('/v2/aggs/ticker/I:DXY/prev').catch(() => null),
+      massiveClient.get('/v2/aggs/ticker/I:TNX/prev').catch(() => null),
+    ]);
+
+    const session = getSessionContext();
+    const lines = [
+      `Current time: ${session.time} ET (${session.phase})`,
+      session.phaseNote,
+      '',
+      [
+        formatAggLine(spxRes, 'SPX'),
+        formatAggLine(ndxRes, 'NDX'),
+        formatAggLine(vixRes, 'VIX'),
+        formatAggLine(dxyRes, 'DXY', { omitDollar: true }),
+        formatAggLine(tnxRes, '10Y', { omitDollar: true }),
+      ].filter(Boolean).join(' | '),
+    ];
+
+    return lines.join('\n');
+  } catch (_error) {
+    return 'Market context temporarily unavailable.';
+  }
+}
+
+function normalizeSymbols(symbols: string[]): string[] {
+  return [...new Set(
+    symbols
+      .map((symbol) => String(symbol || '').trim().toUpperCase())
+      .map((symbol) => symbol.replace(/^\$/, ''))
+      .map((symbol) => symbol.replace(/^I:/, ''))
+      .filter((symbol) => /^[A-Z0-9._:-]{1,10}$/.test(symbol)),
+  )];
+}
+
+export async function getEarningsProximityWarnings(symbols: string[]): Promise<string | null> {
+  const normalized = normalizeSymbols(symbols).slice(0, 10);
+  if (normalized.length === 0) return null;
+
+  try {
+    const events = await getEarningsCalendar(normalized, 5);
+    if (!events.length) return null;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const warnings = events.map((event) => {
+      const daysText = event.date === today
+        ? 'TODAY'
+        : `in ${Math.max(1, Math.ceil((new Date(event.date).getTime() - Date.now()) / 86400000))} days`;
+      return `⚠ ${event.symbol} reports earnings ${daysText} (${event.time}). Factor IV crush risk into options analysis.`;
+    });
+
+    return warnings.join('\n');
+  } catch (error) {
+    logger.warn('Failed to build earnings proximity warnings', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+export async function getNewsDigest(symbols: string[]): Promise<string | null> {
+  const normalized = normalizeSymbols(symbols);
+  if (normalized.length === 0) return null;
+
+  try {
+    const primarySymbol = normalized[0];
+    const articles = await getTickerNews(primarySymbol, 3);
+    if (articles.length === 0) return null;
+
+    const lines = articles.map((article) => (
+      `- "${article.title}" (${article.publisher?.name || 'Unknown'}, ${new Date(article.published_utc).toLocaleDateString()})`
+    ));
+    return `Recent ${primarySymbol} headlines:\n${lines.join('\n')}`;
+  } catch {
+    return null;
+  }
 }
 
 async function loadPromptProfile(userId: string): Promise<PromptProfile> {
@@ -90,22 +260,24 @@ async function loadPromptProfile(userId: string): Promise<PromptProfile> {
 
 export async function buildSystemPromptForUser(
   userId: string,
-  options?: { isMobile?: boolean },
+  options?: { isMobile?: boolean; recentSymbols?: string[] },
 ): Promise<string> {
-  // Parallel fetch: Profile + Market Data (Indices only, Status is sync)
-  const [profile, indicesResponse] = await Promise.all([
+  const marketStatus = getMarketStatus();
+  const symbols = options?.recentSymbols || [];
+
+  const [profile, indicesResponse, marketContextText, earningsWarnings, newsDigest] = await Promise.all([
     loadPromptProfile(userId),
-    getMarketIndicesSnapshot().catch(err => {
+    getMarketIndicesSnapshot().catch((err) => {
       logger.warn('Failed to fetch indices for prompt context', { error: err });
       return null;
-    })
+    }),
+    loadMarketContext(),
+    getEarningsProximityWarnings(symbols),
+    getNewsDigest(symbols),
   ]);
 
-  const marketStatus = getMarketStatus();
-
-  // Parse indices from response array
-  const spxQuote = indicesResponse?.quotes?.find(q => q.symbol === 'SPX');
-  const ndxQuote = indicesResponse?.quotes?.find(q => q.symbol === 'NDX');
+  const spxQuote = indicesResponse?.quotes?.find((quote) => quote.symbol === 'SPX');
+  const ndxQuote = indicesResponse?.quotes?.find((quote) => quote.symbol === 'NDX');
 
   return getSystemPrompt({
     tier: profile.tier,
@@ -113,15 +285,22 @@ export async function buildSystemPromptForUser(
     isMobile: options?.isMobile === true,
     marketContext: {
       isMarketOpen: marketStatus.status === 'open',
-      marketStatus: marketStatus.status === 'open' ? 'Open' :
-        marketStatus.status === 'pre-market' ? 'Pre-market' :
-          marketStatus.status === 'after-hours' ? 'After-hours' : 'Closed',
+      marketStatus: marketStatus.status === 'open'
+        ? 'Open'
+        : marketStatus.status === 'pre-market'
+          ? 'Pre-market'
+          : marketStatus.status === 'after-hours'
+            ? 'After-hours'
+            : 'Closed',
       indices: {
         spx: spxQuote?.price,
         ndx: ndxQuote?.price,
         spxChange: spxQuote?.changePercent,
         ndxChange: ndxQuote?.changePercent,
-      }
-    }
+      },
+    },
+    marketContextText,
+    earningsWarnings,
+    newsDigest,
   });
 }

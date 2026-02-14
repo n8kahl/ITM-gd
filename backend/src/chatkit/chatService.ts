@@ -61,6 +61,26 @@ interface ChatResponse {
   responseTime: number;
 }
 
+function extractSymbolsFromHistory(history: ChatMessage[], latestMessage: string): string[] {
+  const combined = [
+    ...history.slice(-5).map((message) => message.content || ''),
+    latestMessage,
+  ].join(' ');
+
+  const matches = combined.match(/\b\$?[A-Za-z]{1,6}\b/g) || [];
+  const stopwords = new Set([
+    'THE', 'AND', 'FOR', 'WITH', 'THIS', 'THAT', 'YOUR', 'WHAT', 'WHEN', 'HOW', 'MARKET', 'PRICE',
+    'LEVEL', 'LEVELS', 'PLAN', 'SETUP', 'RISK', 'OPEN', 'CLOSE', 'TODAY', 'WEEK', 'MONTH',
+  ]);
+
+  const normalized = matches
+    .map((raw) => raw.replace(/^\$/, '').toUpperCase())
+    .filter((symbol) => symbol.length >= 1 && symbol.length <= 6)
+    .filter((symbol) => !stopwords.has(symbol));
+
+  return [...new Set(normalized)].slice(0, 10);
+}
+
 /**
  * Run a chat completion through the OpenAI circuit breaker.
  * Retries/timeouts are configured at the OpenAI client level.
@@ -196,8 +216,10 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     logger.info('History loaded', { messageCount: history.length });
 
     // Build messages array
+    const recentSymbols = extractSymbolsFromHistory(history, sanitizedMessage);
     const systemPrompt = await buildSystemPromptForUser(userId, {
       isMobile: context?.isMobile,
+      recentSymbols,
     });
     const hardenedSystemPrompt = `${systemPrompt}\n\n${PROMPT_INJECTION_GUARDRAIL}`;
     const messages: ChatCompletionMessageParam[] = [

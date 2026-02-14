@@ -17,7 +17,12 @@ export type CoachIntentId =
   | 'macro_context'
   | 'journal_insights'
   | 'trade_history'
-  | 'alerts';
+  | 'alerts'
+  | 'ticker_news'
+  | 'company_profile'
+  | 'market_breadth'
+  | 'dividend_info'
+  | 'unusual_activity';
 
 interface IntentSpec {
   id: CoachIntentId;
@@ -181,6 +186,35 @@ const INTENT_SPECS: IntentSpec[] = [
     requiredFunctions: ['set_alert'],
     recommendedFunctions: ['get_alerts'],
   },
+  {
+    id: 'ticker_news',
+    phrases: ['news', 'headline', 'why is it up', 'why is it down', 'what happened', 'catalyst', 'announcement'],
+    requiredFunctions: ['get_ticker_news'],
+    recommendedFunctions: ['get_current_price'],
+  },
+  {
+    id: 'company_profile',
+    phrases: ['what does', 'what is', 'company info', 'about the company', 'sector', 'market cap', 'fundamentals'],
+    requiredFunctions: ['get_company_profile'],
+  },
+  {
+    id: 'market_breadth',
+    phrases: ['market breadth', 'advance decline', 'new highs', 'new lows', 'broad market', 'breadth', 'how many stocks'],
+    requiredFunctions: ['get_market_breadth'],
+    recommendedFunctions: ['get_market_status'],
+  },
+  {
+    id: 'dividend_info',
+    phrases: ['dividend', 'ex-date', 'ex date', 'yield', 'early assignment', 'dividend risk'],
+    requiredFunctions: ['get_dividend_info'],
+    recommendedFunctions: ['get_current_price'],
+  },
+  {
+    id: 'unusual_activity',
+    phrases: ['unusual activity', 'unusual options', 'smart money', 'big volume', 'institutional', 'dark pool', 'options flow'],
+    requiredFunctions: ['get_unusual_activity'],
+    recommendedFunctions: ['get_options_chain'],
+  },
 ];
 
 const SYMBOL_SPECIFIC_FUNCTIONS = new Set([
@@ -192,6 +226,10 @@ const SYMBOL_SPECIFIC_FUNCTIONS = new Set([
   'get_iv_analysis',
   'get_earnings_analysis',
   'show_chart',
+  'get_ticker_news',
+  'get_company_profile',
+  'get_dividend_info',
+  'get_unusual_activity',
 ]);
 
 function dedupe(values: string[]): string[] {

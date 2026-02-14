@@ -143,7 +143,7 @@ export interface ChartRequest {
   }
 }
 
-type CenterView =
+export type CenterView =
   | 'onboarding'
   | 'welcome'
   | 'chart'
@@ -164,6 +164,9 @@ type CenterView =
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
   chartRequest?: ChartRequest | null
+  forcedView?: CenterView
+  sheetParams?: Record<string, unknown>
+  sheetSymbol?: string | null
 }
 
 // ============================================
@@ -302,7 +305,7 @@ function getWelcomeGreeting(displayName?: string, now: Date = new Date()): strin
 // COMPONENT
 // ============================================
 
-export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
+export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParams, sheetSymbol }: CenterPanelProps) {
   const searchParams = useSearchParams()
   const { session } = useMemberAuth()
   const {
@@ -322,6 +325,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const tabRailRef = useRef<HTMLDivElement | null>(null)
   const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
   const [canScrollTabRight, setCanScrollTabRight] = useState(false)
+  const isSheetMode = Boolean(forcedView)
 
   // Check onboarding status after mount (localStorage not available during SSR)
   useEffect(() => {
@@ -355,6 +359,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
   const [preferences, setPreferences] = useState<AICoachPreferences>(DEFAULT_AI_COACH_PREFERENCES)
 
   useEffect(() => {
+    if (forcedView) return
     if (activeCenterView === 'preferences') {
       setIsPreferencesOpen(true)
       setCenterView(null)
@@ -363,7 +368,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     if (activeCenterView && activeCenterView !== activeView) {
       setActiveView(activeCenterView as CenterView)
     }
-  }, [activeCenterView, activeView, setCenterView])
+  }, [activeCenterView, activeView, forcedView, setCenterView])
 
   useEffect(() => {
     const loaded = loadAICoachPreferences()
@@ -546,6 +551,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
 
   // Handle chart request from AI
   useEffect(() => {
+    if (forcedView) return
     if (!chartRequest) return
 
     setActiveView('chart')
@@ -559,7 +565,58 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
     setChartLevels([...levelAnnotations, ...gexAnnotations])
 
     fetchChartData(chartRequest.symbol, chartRequest.timeframe)
-  }, [chartRequest, fetchChartData, buildLevelAnnotations, buildGEXAnnotations, setCenterView, setSymbol])
+  }, [buildGEXAnnotations, buildLevelAnnotations, chartRequest, fetchChartData, forcedView, setCenterView, setSymbol])
+
+  useEffect(() => {
+    if (!forcedView) return
+
+    if (forcedView !== activeView) {
+      setActiveView(forcedView)
+      setCenterView(forcedView as Parameters<typeof setCenterView>[0])
+    }
+
+    setIsToolsSheetOpen(false)
+
+    if (forcedView !== 'chart') return
+
+    const maybeTimeframe = typeof sheetParams?.timeframe === 'string'
+      ? sheetParams.timeframe
+      : null
+    const requestedTimeframe = maybeTimeframe && ['1m', '5m', '15m', '1h', '4h', '1D'].includes(maybeTimeframe)
+      ? (maybeTimeframe as ChartTimeframe)
+      : null
+    const requestedSymbol = sheetSymbol
+      || (typeof sheetParams?.symbol === 'string' ? sheetParams.symbol : null)
+
+    const nextSymbol = requestedSymbol || chartSymbol
+    const nextTimeframe = requestedTimeframe || chartTimeframe
+    const symbolChanged = nextSymbol !== chartSymbol
+    const timeframeChanged = nextTimeframe !== chartTimeframe
+    const viewChanged = forcedView !== activeView
+
+    if (symbolChanged) {
+      setChartSymbol(nextSymbol)
+      setSymbol(nextSymbol)
+    }
+
+    if (timeframeChanged) {
+      setChartTimeframe(nextTimeframe)
+    }
+
+    if (symbolChanged || timeframeChanged || viewChanged) {
+      fetchChartData(nextSymbol, nextTimeframe)
+    }
+  }, [
+    activeView,
+    chartSymbol,
+    chartTimeframe,
+    fetchChartData,
+    forcedView,
+    setCenterView,
+    setSymbol,
+    sheetParams,
+    sheetSymbol,
+  ])
 
   useEffect(() => {
     const handleChartEvent = (event: Event) => {
@@ -694,7 +751,7 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
       )}
 
       {/* Tab bar — shown for non-welcome/non-onboarding views */}
-      {activeView !== 'welcome' && activeView !== 'onboarding' && (
+      {activeView !== 'welcome' && activeView !== 'onboarding' && !isSheetMode && (
         <div className="border-b border-white/5 flex items-center">
           <motion.button
             onClick={() => {
@@ -1012,15 +1069,17 @@ export function CenterPanel({ onSendPrompt, chartRequest }: CenterPanelProps) {
         </ViewTransition>
       </div>
 
-      <motion.button
-        onClick={() => setIsToolsSheetOpen(true)}
-        className="lg:hidden absolute right-4 bottom-4 z-20 inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-3 py-2 text-xs text-emerald-200 shadow-[0_8px_30px_rgba(16,185,129,0.25)] hover:bg-emerald-500/30 transition-colors"
-        aria-label="Open tools menu"
-        {...PRESSABLE_PROPS}
-      >
-        <Grid3X3 className="w-3.5 h-3.5" />
-        Tools
-      </motion.button>
+      {!isSheetMode && (
+        <motion.button
+          onClick={() => setIsToolsSheetOpen(true)}
+          className="lg:hidden absolute right-4 bottom-4 z-20 inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-3 py-2 text-xs text-emerald-200 shadow-[0_8px_30px_rgba(16,185,129,0.25)] hover:bg-emerald-500/30 transition-colors"
+          aria-label="Open tools menu"
+          {...PRESSABLE_PROPS}
+        >
+          <Grid3X3 className="w-3.5 h-3.5" />
+          Tools
+        </motion.button>
+      )}
 
       <AnimatePresence>
         {isToolsSheetOpen && (

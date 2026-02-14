@@ -6,7 +6,6 @@ import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from
 import {
   BrainCircuit,
   MessageSquare,
-  CandlestickChart,
   Send,
   Loader2,
   Plus,
@@ -23,11 +22,14 @@ import { cn } from '@/lib/utils'
 import { useAICoachChat } from '@/hooks/use-ai-coach-chat'
 import { ChatMessageBubble, TypingIndicator } from '@/components/ai-coach/chat-message'
 import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-image-upload'
-import { CenterPanel } from '@/components/ai-coach/center-panel'
+import { CenterPanel, type ChartRequest, type CenterView } from '@/components/ai-coach/center-panel'
+import { MobileToolSheet } from '@/components/ai-coach/mobile-tool-sheet'
+import { MobileQuickAccessBar } from '@/components/ai-coach/mobile-quick-access-bar'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
 import { analyzeScreenshot as apiAnalyzeScreenshot, getChartData } from '@/lib/api/ai-coach'
+import { useMobileToolSheet, type MobileToolView } from '@/hooks/use-mobile-tool-sheet'
 import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
@@ -100,17 +102,43 @@ function getEasternPlaceholderBucket(now: Date = new Date()): keyof typeof CHAT_
 export default function AICoachPage() {
   const searchParams = useSearchParams()
   const chat = useAICoachChat()
+  const mobileSheet = useMobileToolSheet()
+  const { activeSheet, openSheet, closeSheet, sheetSymbol, sheetParams } = mobileSheet
   const { sendMessage, isSending } = chat
-  const [mobileView, setMobileView] = useState<'chat' | 'center'>('chat')
   const [isChatCollapsed, setIsChatCollapsed] = useState(false)
   const chatPanelRef = useRef<ImperativePanelHandle | null>(null)
-  const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null)
   const seededPromptRef = useRef<string | null>(null)
 
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
-    setMobileView('chat')
-  }, [chat])
+    closeSheet()
+  }, [chat, closeSheet])
+
+  const handleExpandChart = useCallback((request: ChartRequest) => {
+    if (typeof window === 'undefined') return
+
+    window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+      detail: request,
+    }))
+
+    if (window.innerWidth < 1024) {
+      openSheet('chart', request.symbol, {
+        symbol: request.symbol,
+        timeframe: request.timeframe,
+      })
+    }
+  }, [openSheet])
+
+  const handleOpenMobileSheet = useCallback((view: MobileToolView) => {
+    if (view === 'chart') {
+      const symbol = chat.chartRequest?.symbol || 'SPX'
+      const timeframe = chat.chartRequest?.timeframe || '5m'
+      openSheet('chart', symbol, { symbol, timeframe })
+      return
+    }
+
+    openSheet(view)
+  }, [chat.chartRequest?.symbol, chat.chartRequest?.timeframe, openSheet])
 
   const requestFocusInput = useCallback(() => {
     window.dispatchEvent(new CustomEvent('ai-coach-focus-input'))
@@ -127,24 +155,6 @@ export default function AICoachPage() {
       setIsChatCollapsed(true)
     }
   }, [isChatCollapsed, requestFocusInput])
-
-  const handleMobileTouchStart = useCallback((event: React.TouchEvent) => {
-    const touch = event.changedTouches[0]
-    mobileTouchStartRef.current = { x: touch.clientX, y: touch.clientY }
-  }, [])
-
-  const handleMobileTouchEnd = useCallback((event: React.TouchEvent) => {
-    const start = mobileTouchStartRef.current
-    if (!start) return
-    const touch = event.changedTouches[0]
-    const dx = touch.clientX - start.x
-    const dy = touch.clientY - start.y
-    mobileTouchStartRef.current = null
-
-    if (Math.abs(dy) > 60 || Math.abs(dx) < 70) return
-    if (dx < 0) setMobileView('center')
-    if (dx > 0) setMobileView('chat')
-  }, [])
 
   useEffect(() => {
     const seededPrompt = searchParams.get('prompt')?.trim() || ''
@@ -165,7 +175,7 @@ export default function AICoachPage() {
       if (key === 'k') {
         event.preventDefault()
         if (window.innerWidth < 1024) {
-          setMobileView('chat')
+          closeSheet()
         } else if (isChatCollapsed) {
           chatPanelRef.current?.expand()
           setIsChatCollapsed(false)
@@ -183,7 +193,7 @@ export default function AICoachPage() {
       if (event.key === '/') {
         event.preventDefault()
         if (window.innerWidth < 1024) {
-          setMobileView('chat')
+          closeSheet()
         }
         window.dispatchEvent(new CustomEvent('ai-coach-toggle-sessions'))
       }
@@ -191,41 +201,13 @@ export default function AICoachPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isChatCollapsed, requestFocusInput, toggleChatPanelCollapse])
+  }, [closeSheet, isChatCollapsed, requestFocusInput, toggleChatPanelCollapse])
 
   return (
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
       <AICoachWorkflowProvider onSendPrompt={handleSendPrompt}>
         {/* Full-height container — fills available space inside member layout */}
         <div className="flex flex-col h-[calc(100dvh-10.5rem)] lg:h-[calc(100dvh-3.5rem)]">
-          {/* Mobile View Toggle */}
-          <div className="flex gap-1 p-1 mx-4 mt-2 rounded-lg bg-white/5 border border-white/10 lg:hidden">
-            <button
-              onClick={() => setMobileView('chat')}
-              className={cn(
-                'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
-                mobileView === 'chat'
-                  ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                  : 'text-white/60 hover:text-white border border-transparent'
-              )}
-            >
-              <MessageSquare className="w-4 h-4" />
-              Chat
-            </button>
-            <button
-              onClick={() => setMobileView('center')}
-              className={cn(
-                'flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all',
-                mobileView === 'center'
-                  ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                  : 'text-white/60 hover:text-white border border-transparent'
-              )}
-            >
-              <CandlestickChart className="w-4 h-4" />
-              Chart
-            </button>
-          </div>
-
           {/* Main Content — full remaining height */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {/* Desktop: Resizable Split Panels */}
@@ -258,6 +240,8 @@ export default function AICoachPage() {
                     onClearError={chat.clearError}
                     onAppendUserMessage={chat.appendUserMessage}
                     onAppendAssistantMessage={chat.appendAssistantMessage}
+                    onExpandChart={handleExpandChart}
+                    onOpenSheet={handleOpenMobileSheet}
                     onTogglePanelCollapse={toggleChatPanelCollapse}
                   />
                 </Panel>
@@ -286,33 +270,42 @@ export default function AICoachPage() {
               )}
             </div>
 
-            {/* Mobile: Toggled View */}
-            <div
-              className="lg:hidden h-full"
-              onTouchStart={handleMobileTouchStart}
-              onTouchEnd={handleMobileTouchEnd}
-            >
-              {mobileView === 'chat' ? (
-                <ChatArea
-                  messages={chat.messages}
-                  sessions={chat.sessions}
-                  currentSessionId={chat.currentSessionId}
-                  isSending={chat.isSending}
-                  isLoadingSessions={chat.isLoadingSessions}
-                  isLoadingMessages={chat.isLoadingMessages}
-                  error={chat.error}
-                  rateLimitInfo={chat.rateLimitInfo}
-                  onSendMessage={chat.sendMessage}
-                  onNewSession={chat.newSession}
-                  onSelectSession={chat.selectSession}
-                  onDeleteSession={chat.deleteSession}
-                  onClearError={chat.clearError}
+            {/* Mobile: Chat-first view with full-screen tool sheets */}
+            <div className="lg:hidden h-full relative">
+              <ChatArea
+                messages={chat.messages}
+                sessions={chat.sessions}
+                currentSessionId={chat.currentSessionId}
+                isSending={chat.isSending}
+                isLoadingSessions={chat.isLoadingSessions}
+                isLoadingMessages={chat.isLoadingMessages}
+                error={chat.error}
+                rateLimitInfo={chat.rateLimitInfo}
+                onSendMessage={chat.sendMessage}
+                onNewSession={chat.newSession}
+                onSelectSession={chat.selectSession}
+                onDeleteSession={chat.deleteSession}
+                onClearError={chat.clearError}
                   onAppendUserMessage={chat.appendUserMessage}
                   onAppendAssistantMessage={chat.appendAssistantMessage}
+                  onExpandChart={handleExpandChart}
+                  onOpenSheet={handleOpenMobileSheet}
                 />
-              ) : (
-                <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
-              )}
+
+              <MobileToolSheet
+                activeSheet={activeSheet}
+                onClose={closeSheet}
+              >
+                {activeSheet && (
+                  <CenterPanel
+                    onSendPrompt={handleSendPrompt}
+                    chartRequest={chat.chartRequest}
+                    forcedView={activeSheet as CenterView}
+                    sheetSymbol={sheetSymbol}
+                    sheetParams={sheetParams}
+                  />
+                )}
+              </MobileToolSheet>
             </div>
           </div>
         </div>
@@ -341,13 +334,15 @@ interface ChatAreaProps {
   onClearError: () => void
   onAppendUserMessage: (content: string) => void
   onAppendAssistantMessage: (content: string) => void
+  onExpandChart?: (chartRequest: ChartRequest) => void
+  onOpenSheet?: (view: MobileToolView) => void
   onTogglePanelCollapse?: () => void
 }
 
 function ChatArea({
   messages, sessions, currentSessionId, isSending, isLoadingSessions,
   isLoadingMessages, error, rateLimitInfo, onSendMessage, onNewSession,
-  onSelectSession, onDeleteSession, onClearError, onAppendUserMessage, onAppendAssistantMessage, onTogglePanelCollapse,
+  onSelectSession, onDeleteSession, onClearError, onAppendUserMessage, onAppendAssistantMessage, onExpandChart, onOpenSheet, onTogglePanelCollapse,
 }: ChatAreaProps) {
   const { session } = useMemberAuth()
   const [inputValue, setInputValue] = useState('')
@@ -508,6 +503,7 @@ function ChatArea({
     : usageRatio >= 0.8
       ? 'bg-amber-400'
       : 'bg-emerald-400'
+  const hasActiveChart = messages.some((message) => Boolean(message.chartRequest))
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -810,7 +806,7 @@ function ChatArea({
           ) : (
             <>
               {messages.map((msg) => (
-                <ChatMessageBubble key={msg.id} message={msg} onSendPrompt={onSendMessage} />
+                <ChatMessageBubble key={msg.id} message={msg} onSendPrompt={onSendMessage} onExpandChart={onExpandChart} />
               ))}
               {isSending && !messages.some(m => m.isStreaming) && (
                 <TypingIndicator streamStatus={isAnalyzingImage ? 'Analyzing screenshot...' : streamStatus} />
@@ -829,6 +825,13 @@ function ChatArea({
             isSending={isBusy}
             stagedPreview={stagedImage?.preview || null}
           />
+
+          {onOpenSheet && (
+            <MobileQuickAccessBar
+              onOpenSheet={onOpenSheet}
+              hasActiveChart={hasActiveChart}
+            />
+          )}
 
           <form onSubmit={handleSubmit} className="flex items-end gap-2">
             <textarea
@@ -871,6 +874,15 @@ function ChatArea({
 // ============================================
 
 function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }) {
+  const bucket = getEasternPlaceholderBucket()
+  const contextLine = bucket === 'pre_market'
+    ? 'Pre-market prep mode'
+    : bucket === 'session'
+      ? 'Markets are open'
+      : bucket === 'after_hours'
+        ? 'After-hours review'
+        : 'Markets are closed'
+
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center max-w-sm">
@@ -886,6 +898,7 @@ function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }
           />
           <BrainCircuit className="w-7 h-7 text-emerald-500" />
         </motion.div>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-400/60 mb-2">{contextLine}</p>
         <h3 className="text-base font-medium text-white mb-2">
           What are you trading today?
         </h3>

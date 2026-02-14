@@ -71,6 +71,12 @@ When the user asks for help with a setup (scanner idea, tracked setup, or manual
 - **get_current_price(symbol)** — Real-time price
 - **get_options_chain(symbol)** — Options Greeks, IV, strikes
 - **get_market_status()** — Market hours
+- **get_ticker_news(symbol, limit)** — Latest headlines and catalysts
+- **get_company_profile(symbol)** — Company fundamentals and profile
+- **get_market_breadth()** — Advancers/decliners breadth snapshot
+- **get_dividend_info(symbol)** — Dividend schedule and assignment-risk context
+- **get_unusual_activity(symbol, minRatio)** — Unusual options-flow signals
+- **compare_symbols(symbols)** — Multi-symbol comparison snapshot
 - **show_chart(symbol, timeframe)** — Chart in center panel
 - **analyze_position(position)** — P&L, Greeks, risk
 - **scan_opportunities(symbols)** — Trade setups
@@ -124,6 +130,9 @@ export function getSystemPrompt(userContext?: {
   tier?: string;
   experienceLevel?: string;
   isMobile?: boolean;
+  marketContextText?: string;
+  earningsWarnings?: string | null;
+  newsDigest?: string | null;
   marketContext?: {
     isMarketOpen: boolean;
     marketStatus: string; // 'Open', 'Closed', 'Pre-market', 'After-hours'
@@ -159,9 +168,29 @@ export function getSystemPrompt(userContext?: {
   }
 
   // ADD MARKET CONTEXT
+  if (userContext?.marketContextText || userContext?.marketContext || userContext?.earningsWarnings || userContext?.newsDigest) {
+    prompt += '\n\n## CURRENT MARKET CONTEXT (auto-populated)';
+
+    if (userContext?.marketContextText) {
+      prompt += `\n${userContext.marketContextText}`;
+    }
+
+    if (userContext?.earningsWarnings) {
+      prompt += `\n\n${userContext.earningsWarnings}`;
+    }
+
+    if (userContext?.newsDigest) {
+      prompt += `\n\n${userContext.newsDigest}`;
+    }
+
+    prompt += '\n\nWhen this context includes earnings warnings, proactively mention IV crush risk and suggest checking get_earnings_analysis() before recommending long options positions.';
+    prompt += '\nWhen session phase is power-hour or moc-imbalance, note elevated volume risk.';
+    prompt += '\nWhen VIX > 25, note elevated fear. When VIX < 15, note complacency.';
+  }
+
   if (userContext?.marketContext) {
     const { isMarketOpen, marketStatus, indices } = userContext.marketContext;
-    prompt += `\n\n## CURRENT MARKET CONTEXT\n- **Status**: ${marketStatus} (${isMarketOpen ? 'Live' : 'Closed'})`;
+    prompt += `\n- **Status**: ${marketStatus} (${isMarketOpen ? 'Live' : 'Closed'})`;
 
     if (indices) {
       if (indices.spx) prompt += `\n- **SPX**: ${indices.spx.toFixed(2)} ${indices.spxChange ? `(${indices.spxChange >= 0 ? '+' : ''}${indices.spxChange.toFixed(2)}%)` : ''}`;

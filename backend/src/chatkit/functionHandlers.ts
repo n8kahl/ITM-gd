@@ -29,6 +29,14 @@ import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackSchol
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
 import { isValidSymbol, normalizeSymbol, POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 import { hasRequiredTierForUser } from '../middleware/requireTier';
+import {
+  getDividends,
+  getGroupedDaily,
+  getLastTrade,
+  getMarketStatusLive,
+  getTickerDetails,
+  getTickerNews,
+} from '../config/massive';
 // Note: Circuit breaker wraps OpenAI calls in chatService.ts; handlers use withTimeout for external APIs
 
 /**
@@ -144,6 +152,24 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_market_status':
       return await handleGetMarketStatus(typedArgs);
+
+    case 'get_ticker_news':
+      return await handleGetTickerNews(typedArgs);
+
+    case 'get_company_profile':
+      return await handleGetCompanyProfile(typedArgs);
+
+    case 'get_market_breadth':
+      return await handleGetMarketBreadth(typedArgs);
+
+    case 'get_dividend_info':
+      return await handleGetDividendInfo(typedArgs);
+
+    case 'get_unusual_activity':
+      return await handleGetUnusualActivity(typedArgs);
+
+    case 'compare_symbols':
+      return await handleCompareSymbols(typedArgs);
 
     case 'get_options_chain':
       return await handleGetOptionsChain(typedArgs);
@@ -320,6 +346,34 @@ async function handleGetCurrentPrice(args: { symbol: string }) {
   }
 
   try {
+    const liveTrade = await withTimeout(
+      () => getLastTrade(validSymbol),
+      FUNCTION_TIMEOUT_MS,
+      'get_current_price.last_trade',
+    ).catch(() => null);
+
+    if (liveTrade && Number.isFinite(liveTrade.p)) {
+      const rawTs = Number(liveTrade.t);
+      const timestampMs = rawTs > 1_000_000_000_000
+        ? (rawTs > 9_999_999_999_999 ? Math.floor(rawTs / 1_000_000) : rawTs)
+        : rawTs * 1000;
+      const asOf = new Date(timestampMs).toISOString();
+
+      return withFreshness({
+        symbol: validSymbol,
+        price: liveTrade.p,
+        timestamp: asOf,
+        tradeSize: liveTrade.s,
+        source: 'last_trade',
+        isDelayed: false,
+      }, {
+        asOf,
+        source: 'last_trade',
+        delayed: false,
+        staleAfterSeconds: 30,
+      });
+    }
+
     // Fetch intraday data
     const intradayData = await withTimeout(
       () => fetchIntradayData(validSymbol),
@@ -467,7 +521,358 @@ async function handleGetFibonacciLevels(args: {
  * Uses DST-aware market hours and holiday calendar
  */
 async function handleGetMarketStatus(_args: any) {
+  try {
+    const live = await withTimeout(
+      () => getMarketStatusLive(),
+      FUNCTION_TIMEOUT_MS,
+      'get_market_status.live',
+    );
+
+    if (live && typeof live === 'object') {
+      const market = String((live as { market?: unknown }).market || '').toLowerCase();
+      const earlyHours = String((live as { earlyHours?: unknown }).earlyHours || '').toLowerCase();
+      const afterHours = String((live as { afterHours?: unknown }).afterHours || '').toLowerCase();
+
+      let status: 'open' | 'pre-market' | 'after-hours' | 'closed' = 'closed';
+      if (market === 'open') status = 'open';
+      else if (earlyHours === 'true') status = 'pre-market';
+      else if (afterHours === 'true') status = 'after-hours';
+
+      return withFreshness({
+        status,
+        session: status === 'open' ? 'regular' : status === 'closed' ? 'none' : 'extended',
+        message: status === 'open'
+          ? 'Market is open for regular trading'
+          : status === 'pre-market'
+            ? 'Pre-market session is active'
+            : status === 'after-hours'
+              ? 'After-hours session is active'
+              : 'Markets are closed',
+        source: 'massive_market_status',
+        raw: live,
+      }, {
+        asOf: new Date().toISOString(),
+        source: 'market_status_live',
+        delayed: false,
+        staleAfterSeconds: 60,
+      });
+    }
+  } catch (_error) {
+    // Fall through to local market-hours service.
+  }
+
   return getMarketStatusService();
+}
+
+/**
+ * Handler: get_ticker_news
+ */
+async function handleGetTickerNews(args: { symbol: string; limit?: number }) {
+  const validSymbol = toValidSymbol(args.symbol);
+  if (!validSymbol) return invalidSymbolError();
+
+  const limit = typeof args.limit === 'number' && Number.isFinite(args.limit)
+    ? Math.min(Math.max(Math.floor(args.limit), 1), 20)
+    : 5;
+
+  try {
+    const articles = await withTimeout(
+      () => getTickerNews(validSymbol, limit),
+      FUNCTION_TIMEOUT_MS,
+      'get_ticker_news',
+    );
+
+    const headlines = articles.map((article) => ({
+      id: article.id,
+      title: article.title,
+      source: article.publisher?.name || 'Unknown',
+      url: article.article_url,
+      publishedUtc: article.published_utc,
+      description: article.description || null,
+    }));
+
+    return withFreshness({
+      symbol: validSymbol,
+      count: headlines.length,
+      headlines,
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'ticker_news',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch ticker news',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_company_profile
+ */
+async function handleGetCompanyProfile(args: { symbol: string }) {
+  const validSymbol = toValidSymbol(args.symbol);
+  if (!validSymbol) return invalidSymbolError();
+
+  try {
+    const details = await withTimeout(
+      () => getTickerDetails(validSymbol),
+      FUNCTION_TIMEOUT_MS,
+      'get_company_profile',
+    );
+
+    if (!details) {
+      return {
+        error: 'No company profile found',
+        message: `No profile available for ${validSymbol}`,
+      };
+    }
+
+    return withFreshness({
+      symbol: validSymbol,
+      name: details.name || null,
+      market: details.market || null,
+      type: details.type || null,
+      active: details.active ?? null,
+      exchange: details.primary_exchange || null,
+      marketCap: details.market_cap ?? null,
+      employees: details.total_employees ?? null,
+      description: details.description || null,
+      website: details.homepage_url || null,
+      listDate: details.list_date || null,
+      currency: details.currency_name || null,
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'company_profile',
+      delayed: false,
+      staleAfterSeconds: 24 * 60 * 60,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch company profile',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_market_breadth
+ */
+async function handleGetMarketBreadth(_args: Record<string, unknown>) {
+  const date = new Date().toISOString().slice(0, 10);
+  try {
+    const grouped = await withTimeout(
+      () => getGroupedDaily(date),
+      FUNCTION_TIMEOUT_MS,
+      'get_market_breadth',
+    );
+
+    if (!grouped.length) {
+      return {
+        error: 'No breadth data available',
+        message: 'Grouped daily market breadth data is unavailable for the current date.',
+      };
+    }
+
+    let advancers = 0;
+    let decliners = 0;
+    let unchanged = 0;
+    let highVolumeNames = 0;
+
+    for (const row of grouped) {
+      if (row.c > row.o) advancers += 1;
+      else if (row.c < row.o) decliners += 1;
+      else unchanged += 1;
+      if (Number.isFinite(row.v) && row.v >= 1_000_000) highVolumeNames += 1;
+    }
+
+    const total = advancers + decliners + unchanged;
+    const ratio = decliners > 0 ? advancers / decliners : advancers;
+    const assessment = ratio >= 1.4
+      ? 'strong'
+      : ratio <= 0.7
+        ? 'weak'
+        : 'mixed';
+
+    return withFreshness({
+      date,
+      totalSymbols: total,
+      advancers,
+      decliners,
+      unchanged,
+      advanceDeclineRatio: Number(ratio.toFixed(2)),
+      highVolumeNames,
+      assessment,
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'market_breadth',
+      delayed: true,
+      staleAfterSeconds: 300,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch market breadth',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_dividend_info
+ */
+async function handleGetDividendInfo(args: { symbol: string }) {
+  const validSymbol = toValidSymbol(args.symbol);
+  if (!validSymbol) return invalidSymbolError();
+
+  try {
+    const [dividends, liveTrade] = await Promise.all([
+      withTimeout(() => getDividends(validSymbol, 10), FUNCTION_TIMEOUT_MS, 'get_dividend_info'),
+      withTimeout(() => getLastTrade(validSymbol), FUNCTION_TIMEOUT_MS, 'get_dividend_info.price').catch(() => null),
+    ]);
+
+    const currentPrice = liveTrade?.p ?? null;
+    const recent = dividends.slice(0, 5).map((record) => ({
+      exDate: record.ex_dividend_date,
+      payDate: record.pay_date || null,
+      amount: record.cash_amount ?? null,
+      frequency: record.frequency ?? null,
+      type: record.dividend_type || null,
+    }));
+
+    const annualizedDividend = recent
+      .map((row) => (typeof row.amount === 'number' ? row.amount : 0))
+      .slice(0, 4)
+      .reduce((sum, value) => sum + value, 0);
+    const yieldPct = (currentPrice && annualizedDividend > 0)
+      ? Number(((annualizedDividend / currentPrice) * 100).toFixed(2))
+      : null;
+
+    return withFreshness({
+      symbol: validSymbol,
+      hasDividend: dividends.length > 0,
+      currentPrice,
+      annualizedDividend: annualizedDividend || null,
+      yieldPct,
+      dividendHistory: recent,
+      assignmentRiskNote: dividends.length > 0
+        ? 'Early assignment risk can rise around ex-dividend date for short calls.'
+        : 'No recent dividend records found.',
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'dividends',
+      delayed: false,
+      staleAfterSeconds: 24 * 60 * 60,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch dividend info',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: get_unusual_activity
+ */
+async function handleGetUnusualActivity(args: { symbol: string; minRatio?: number }) {
+  const validSymbol = toValidSymbol(args.symbol);
+  if (!validSymbol) return invalidSymbolError();
+
+  const minRatio = typeof args.minRatio === 'number' && Number.isFinite(args.minRatio)
+    ? Math.max(args.minRatio, 1)
+    : 2;
+
+  try {
+    const chain = await withTimeout(
+      () => fetchOptionsChain(validSymbol, undefined, 20),
+      FUNCTION_TIMEOUT_MS,
+      'get_unusual_activity',
+    );
+
+    const contracts = [...chain.options.calls, ...chain.options.puts]
+      .map((contract) => {
+        const openInterest = Number(contract.openInterest || 0);
+        const volume = Number(contract.volume || 0);
+        const ratio = openInterest > 0 ? volume / openInterest : 0;
+        return {
+          strike: contract.strike,
+          type: contract.intrinsicValue >= 0 ? 'option' : 'option',
+          side: contract.delta != null && contract.delta < 0 ? 'put' : 'call',
+          volume,
+          openInterest,
+          ratio: Number(ratio.toFixed(2)),
+          impliedVolatility: contract.impliedVolatility,
+        };
+      })
+      .filter((contract) => contract.volume >= 50 && contract.ratio >= minRatio)
+      .sort((a, b) => (b.ratio * b.volume) - (a.ratio * a.volume))
+      .slice(0, 20);
+
+    return withFreshness({
+      symbol: validSymbol,
+      minRatio,
+      count: contracts.length,
+      unusualContracts: contracts,
+      summary: contracts.length > 0
+        ? `Detected ${contracts.length} unusual contracts above ${minRatio}x volume/OI ratio.`
+        : 'No unusual options activity met the threshold.',
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'unusual_activity',
+      delayed: false,
+      staleAfterSeconds: 300,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch unusual activity',
+      message: error.message,
+    };
+  }
+}
+
+/**
+ * Handler: compare_symbols
+ */
+async function handleCompareSymbols(args: { symbols: string[] }) {
+  const symbols = sanitizeSymbols(Array.isArray(args.symbols) ? args.symbols : [], 6);
+  if (symbols.length < 2) {
+    return {
+      error: 'Invalid symbol list',
+      message: 'Please provide at least 2 symbols to compare.',
+    };
+  }
+
+  const comparisons = await Promise.all(symbols.map(async (symbol) => {
+    const result = await handleGetCurrentPrice({ symbol });
+    if (result?.error) {
+      return {
+        symbol,
+        error: result.error,
+      };
+    }
+    return {
+      symbol,
+      price: result.price,
+      high: result.high ?? null,
+      low: result.low ?? null,
+      timestamp: result.timestamp,
+    };
+  }));
+
+  const validRows = comparisons.filter((row) => !('error' in row));
+  return withFreshness({
+    symbols,
+    comparisons,
+    successful: validRows.length,
+    failed: comparisons.length - validRows.length,
+  }, {
+    asOf: new Date().toISOString(),
+    source: 'compare_symbols',
+    delayed: false,
+    staleAfterSeconds: 60,
+  });
 }
 
 /**

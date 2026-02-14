@@ -16,6 +16,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isLibraryPath } from '@/lib/navigation-utils'
+import { useMemberAuth, type TabConfig } from '@/contexts/MemberAuthContext'
 
 interface NavTab {
   id: string
@@ -31,8 +33,21 @@ const PRIMARY_TABS: NavTab[] = [
   { id: 'library', label: 'Library', href: '/members/academy/courses', icon: GraduationCap },
 ]
 
-function isLibraryPath(pathname: string): boolean {
-  return pathname === '/members/library' || pathname.startsWith('/members/academy')
+const ICON_MAP: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  journal: BookOpen,
+  'ai-coach': Bot,
+  library: GraduationCap,
+  social: Users,
+  profile: UserCircle,
+}
+
+function getTabHref(tab: TabConfig): string {
+  const rawHref = tab.path.startsWith('/') ? tab.path : `/members/${tab.path}`
+  if (tab.tab_id === 'library' && rawHref === '/members/library') {
+    return '/members/academy/courses'
+  }
+  return rawHref
 }
 
 function isActivePath(pathname: string, tab: NavTab): boolean {
@@ -53,8 +68,18 @@ function triggerHaptic() {
 
 export function MemberBottomNav() {
   const pathname = usePathname()
+  const { getMobileTabs } = useMemberAuth()
   const [moreOpen, setMoreOpen] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
+  const dynamicTabs = getMobileTabs?.() ?? []
+  const tabs: NavTab[] = dynamicTabs.length > 0
+    ? dynamicTabs.map((tab) => ({
+        id: tab.tab_id,
+        label: tab.label,
+        href: getTabHref(tab),
+        icon: ICON_MAP[tab.tab_id] ?? LayoutDashboard,
+      }))
+    : PRIMARY_TABS
 
   useEffect(() => {
     const handleClickAway = (event: MouseEvent) => {
@@ -74,7 +99,7 @@ export function MemberBottomNav() {
         style={{ backdropFilter: 'blur(20px) saturate(180%)' }}
       >
         <div className="flex items-end justify-around gap-1">
-          {PRIMARY_TABS.map((tab) => {
+          {tabs.map((tab) => {
             const Icon = tab.icon
             const active = isActivePath(pathname, tab)
             return (
@@ -188,7 +213,7 @@ export function MemberBottomNav() {
                   </Link>
 
                   <Link
-                    href="/members/profile?view=settings"
+                    href="/members/profile"
                     onClick={() => {
                       triggerHaptic()
                       setMoreOpen(false)
