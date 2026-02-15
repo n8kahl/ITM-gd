@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { authenticateAsMember } from '../../helpers/member-auth'
 
 /**
  * AI Coach E2E Tests — Center Panel Views
@@ -13,18 +14,53 @@ import { test, expect, type Page } from '@playwright/test'
  */
 
 const AI_COACH_URL = '/members/ai-coach'
+const ONBOARDING_KEY = 'ai-coach-onboarding-complete'
+const PREFERENCES_KEY = 'ai-coach-preferences-v2'
 const WELCOME_VIEW_HEADING = /Ready to execute the session plan\?/i
 
-// Helper to bypass auth for testing — uses a mock session cookie
+async function prepareMemberSession(page: Page, options?: { onboardingComplete?: boolean }) {
+  await page.addInitScript(({ onboardingKey, preferencesKey, onboardingComplete }) => {
+    localStorage.removeItem(preferencesKey)
+    if (onboardingComplete) {
+      localStorage.setItem(onboardingKey, 'true')
+    } else {
+      localStorage.removeItem(onboardingKey)
+    }
+  }, {
+    onboardingKey: ONBOARDING_KEY,
+    preferencesKey: PREFERENCES_KEY,
+    onboardingComplete: options?.onboardingComplete ?? false,
+  })
+
+  await authenticateAsMember(page)
+}
+
 async function navigateAsAuthenticatedUser(page: Page) {
-  // Navigate to the AI Coach page
-  // If redirected to login, this test suite requires a test user setup
   await page.goto(AI_COACH_URL)
   await page.waitForLoadState('networkidle')
 }
 
 async function waitForWelcomeView(page: Page) {
   await expect(page.getByRole('heading', { name: WELCOME_VIEW_HEADING })).toBeVisible({ timeout: 10000 })
+}
+
+async function waitForChartView(page: Page) {
+  await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: /Chart$/i })).toBeVisible({ timeout: 10000 })
+}
+
+async function openWelcomeView(page: Page) {
+  const welcomeHeading = page.getByRole('heading', { name: WELCOME_VIEW_HEADING })
+  if (await welcomeHeading.count() > 0 && await welcomeHeading.first().isVisible()) {
+    return
+  }
+
+  const homeButton = page.getByRole('button', { name: 'Go to home view' })
+  if (await homeButton.count() > 0) {
+    await homeButton.first().click()
+  }
+
+  await waitForWelcomeView(page)
 }
 
 test.describe('AI Coach — Page Load', () => {
@@ -34,6 +70,7 @@ test.describe('AI Coach — Page Load', () => {
   })
 
   test('should display the AI Coach header', async ({ page }) => {
+    await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
     // The page should have AI Coach branding
     await expect(page.locator('main h3:visible', { hasText: 'AI Coach' }).first()).toBeVisible({ timeout: 10000 })
@@ -42,10 +79,7 @@ test.describe('AI Coach — Page Load', () => {
 
 test.describe('AI Coach — Onboarding Flow', () => {
   test.beforeEach(async ({ page }) => {
-    // Clear onboarding state
-    await page.addInitScript(() => {
-      localStorage.removeItem('ai-coach-onboarding-complete')
-    })
+    await prepareMemberSession(page, { onboardingComplete: false })
   })
 
   test('should show onboarding on first visit', async ({ page }) => {
@@ -78,8 +112,8 @@ test.describe('AI Coach — Onboarding Flow', () => {
     const getStartedButton = page.locator('button:has-text("Get Started")')
     await getStartedButton.click()
 
-    // Should now show the welcome view
-    await waitForWelcomeView(page)
+    // Current flow exits onboarding into Chart view.
+    await waitForChartView(page)
   })
 
   test('should skip onboarding', async ({ page }) => {
@@ -89,32 +123,25 @@ test.describe('AI Coach — Onboarding Flow', () => {
     const skipButton = page.locator('text=Skip tour')
     await skipButton.click()
 
-    // Should show the welcome/home view
-    await waitForWelcomeView(page)
+    // Current flow exits onboarding into Chart view.
+    await waitForChartView(page)
   })
 
   test('should not show onboarding after completion', async ({ page }) => {
-    // Set onboarding as complete
-    await page.addInitScript(() => {
-      localStorage.setItem('ai-coach-onboarding-complete', 'true')
-    })
-
+    await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
 
-    // Should show welcome view directly
-    await waitForWelcomeView(page)
+    // Completed onboarding restores to chart by default.
+    await waitForChartView(page)
     await expect(page.getByRole('heading', { name: 'Welcome to AI Coach' })).not.toBeVisible()
   })
 })
 
 test.describe('AI Coach — Center Panel Views', () => {
   test.beforeEach(async ({ page }) => {
-    // Skip onboarding
-    await page.addInitScript(() => {
-      localStorage.setItem('ai-coach-onboarding-complete', 'true')
-    })
+    await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
-    await waitForWelcomeView(page)
+    await openWelcomeView(page)
   })
 
   test('should display quick access cards on welcome view', async ({ page }) => {
@@ -179,9 +206,7 @@ test.describe('AI Coach — Center Panel Views', () => {
 
 test.describe('AI Coach — Chat Panel', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('ai-coach-onboarding-complete', 'true')
-    })
+    await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
   })
 
@@ -202,11 +227,9 @@ test.describe('AI Coach — Chat Panel', () => {
 
 test.describe('AI Coach — Example Prompts', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('ai-coach-onboarding-complete', 'true')
-    })
+    await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
-    await waitForWelcomeView(page)
+    await openWelcomeView(page)
   })
 
   test('should display example prompt cards', async ({ page }) => {
@@ -220,9 +243,7 @@ test.describe('AI Coach — Example Prompts', () => {
 test.describe('AI Coach — Responsive Layout', () => {
   test('should show mobile toggle on small screens', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
-    await page.addInitScript(() => {
-      localStorage.setItem('ai-coach-onboarding-complete', 'true')
-    })
+    await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
 
     // On mobile, there should be a toggle between chat and panel views

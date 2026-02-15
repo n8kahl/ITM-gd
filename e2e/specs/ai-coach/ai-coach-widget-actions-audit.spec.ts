@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Route } from '@playwright/test'
+import { test, expect, type Locator, type Page, type Route } from '@playwright/test'
 import { authenticateAsMember } from '../../helpers/member-auth'
 
 const AI_COACH_URL = '/members/ai-coach'
@@ -8,6 +8,26 @@ const CORS_HEADERS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   'access-control-allow-headers': 'Authorization,Content-Type,x-e2e-bypass-auth',
+}
+
+async function clickCardAction(
+  page: Page,
+  card: Locator,
+  actionName: RegExp,
+) {
+  const directAction = card.getByRole('button', { name: actionName }).first()
+  if (await directAction.count() > 0 && await directAction.isVisible()) {
+    await directAction.click()
+    return
+  }
+
+  const overflowButton = card.getByRole('button', { name: /More actions/i }).first()
+  if (await overflowButton.count() === 0) {
+    throw new Error(`Action ${actionName} not found in card and overflow menu is unavailable`)
+  }
+
+  await overflowButton.click()
+  await page.getByRole('button', { name: actionName }).first().click()
 }
 
 async function fulfillJson(route: Route, body: unknown, status: number = 200) {
@@ -329,7 +349,7 @@ test.describe('AI Coach - widget action center audit', () => {
     await positionCard.getByRole('button', { name: /^Analyze$/i }).first().click()
     await expect(page.getByRole('tab', { name: 'Positions' })).toHaveAttribute('aria-selected', 'true')
 
-    await keyLevelsCard.getByRole('button', { name: /^Ask AI$/i }).first().click()
+    await clickCardAction(page, keyLevelsCard, /^Ask AI$/i)
     await expect(
       page.getByText('Follow-up audit response: SPX key levels summarized.').first(),
     ).toBeVisible()
