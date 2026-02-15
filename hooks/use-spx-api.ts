@@ -1,9 +1,11 @@
 'use client'
 
 import useSWR, { type SWRConfiguration } from 'swr'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 type SPXKey = [url: string, token: string]
+const browserSupabase = createBrowserSupabase()
 
 function trimMessage(input: string, max = 240): string {
   const normalized = input.replace(/\s+/g, ' ').trim()
@@ -45,13 +47,37 @@ function parseSPXErrorMessage(status: number, contentType: string, rawBody: stri
 
 const fetcher = async <T>(key: SPXKey): Promise<T> => {
   const [url, token] = key
-  const response = await fetch(url, {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1'
+  if (!isLocalHost && token.startsWith('e2e:')) {
+    throw new Error('Invalid test session token detected. Please sign out and sign in again.')
+  }
+
+  const requestWithToken = (accessToken: string) => fetch(url, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     cache: 'no-store',
   })
+
+  let activeToken = token
+  let response = await requestWithToken(activeToken)
+
+  if (response.status === 401) {
+    try {
+      const {
+        data: { session },
+      } = await browserSupabase.auth.getSession()
+      const refreshedToken = session?.access_token
+      if (refreshedToken && refreshedToken !== activeToken) {
+        activeToken = refreshedToken
+        response = await requestWithToken(activeToken)
+      }
+    } catch {
+      // Keep original 401 response path below.
+    }
+  }
 
   if (!response.ok) {
     const text = await response.text()
@@ -71,11 +97,11 @@ export function useSPXQuery<T>(
   endpoint: string,
   config?: SWRConfiguration<T, Error>,
 ) {
-  const { session } = useMemberAuth()
+  const { session, isLoading: authLoading } = useMemberAuth()
   const token = session?.access_token
 
   const { data, error, isLoading, mutate } = useSWR<T, Error>(
-    token ? [endpoint, token] : null,
+    !authLoading && token ? [endpoint, token] : null,
     fetcher,
     {
       revalidateOnFocus: true,
@@ -96,15 +122,39 @@ export function useSPXQuery<T>(
 }
 
 export async function postSPX<T>(endpoint: string, token: string, body: Record<string, unknown>): Promise<T> {
-  const response = await fetch(endpoint, {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1'
+  if (!isLocalHost && token.startsWith('e2e:')) {
+    throw new Error('Invalid test session token detected. Please sign out and sign in again.')
+  }
+
+  const requestWithToken = (accessToken: string) => fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
     cache: 'no-store',
   })
+
+  let activeToken = token
+  let response = await requestWithToken(activeToken)
+
+  if (response.status === 401) {
+    try {
+      const {
+        data: { session },
+      } = await browserSupabase.auth.getSession()
+      const refreshedToken = session?.access_token
+      if (refreshedToken && refreshedToken !== activeToken) {
+        activeToken = refreshedToken
+        response = await requestWithToken(activeToken)
+      }
+    } catch {
+      // Keep original 401 path below.
+    }
+  }
 
   if (!response.ok) {
     const text = await response.text()

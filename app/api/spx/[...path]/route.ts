@@ -194,6 +194,21 @@ function getTimeoutMs(method: string, segments: string[]): number {
   return DEFAULT_PROXY_TIMEOUT_MS
 }
 
+function dedupeAuthHeaders(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const value of values) {
+    if (!value) continue
+    const normalized = value.trim()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push(normalized)
+  }
+
+  return out
+}
+
 async function fetchUpstream(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -223,41 +238,36 @@ async function proxy(
     const upstreamPath = `/api/spx/${segments.join('/')}${url.search}`
     const timeoutMs = getTimeoutMs(request.method, segments)
 
-    let authHeader: string | undefined
+    let incomingAuthHeader: string | undefined
+    let sessionAuthHeader: string | undefined
     const incomingAuth = request.headers.get('authorization') || request.headers.get('Authorization')
 
     if (incomingAuth && /^bearer\s+/i.test(incomingAuth)) {
-      authHeader = incomingAuth
+      incomingAuthHeader = incomingAuth
     }
 
-    if (!authHeader) {
-      try {
-        const supabase = await createServerSupabaseClient()
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
+    try {
+      const supabase = await createServerSupabaseClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-        if (session?.access_token) {
-          authHeader = `Bearer ${session.access_token}`
-        }
-      } catch {
-        // Keep undefined and let backend return auth errors.
+      if (session?.access_token) {
+        sessionAuthHeader = `Bearer ${session.access_token}`
       }
+    } catch {
+      // Keep undefined and let backend return auth errors.
+    }
+
+    const authHeaders = dedupeAuthHeaders([sessionAuthHeader, incomingAuthHeader])
+    if (authHeaders.length === 0) {
+      // Allow unauthenticated pass-through so upstream returns explicit auth errors.
+      authHeaders.push('')
     }
 
     const requestBody = request.method !== 'GET' && request.method !== 'HEAD'
       ? await request.text()
       : undefined
-
-    const init: RequestInit = {
-      method: request.method,
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
-        'Content-Type': request.headers.get('content-type') || 'application/json',
-      },
-      cache: 'no-store',
-      ...(requestBody !== undefined ? { body: requestBody } : {}),
-    }
 
     let lastResponse: Response | null = null
     let lastUpstreamBase = ''
@@ -266,48 +276,90 @@ async function proxy(
       const upstream = `${backendBase}${upstreamPath}`
       lastUpstreamBase = backendBase
 
-      try {
-        const response = await fetchUpstream(upstream, init, timeoutMs)
-        lastResponse = response
+      for (let authIndex = 0; authIndex < authHeaders.length; authIndex += 1) {
+        const authHeader = authHeaders[authIndex]
+        const hasMoreAuthCandidates = authIndex < authHeaders.length - 1
 
-        if (response.ok) {
-          if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
-            return new NextResponse(response.body, {
+        const init: RequestInit = {
+          method: request.method,
+          headers: {
+            ...(authHeader ? { Authorization: authHeader } : {}),
+            'Content-Type': request.headers.get('content-type') || 'application/json',
+          },
+          cache: 'no-store',
+          ...(requestBody !== undefined ? { body: requestBody } : {}),
+        }
+
+        try {
+          const response = await fetchUpstream(upstream, init, timeoutMs)
+          lastResponse = response
+
+          if (response.ok) {
+            if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+              return new NextResponse(response.body, {
+                status: response.status,
+                headers: {
+                  'Content-Type': 'text/event-stream',
+                  'Cache-Control': 'no-cache',
+                  Connection: 'keep-alive',
+                  'X-SPX-Proxy': 'next-app',
+                  'X-SPX-Upstream': backendBase,
+                },
+              })
+            }
+
+            const payload = await response.text()
+            return new NextResponse(payload, {
               status: response.status,
               headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
+                'Content-Type': response.headers.get('content-type') || 'application/json',
                 'X-SPX-Proxy': 'next-app',
                 'X-SPX-Upstream': backendBase,
               },
             })
           }
 
+          // Retry same upstream with alternate auth when first token is stale.
+          if (response.status === 401 && hasMoreAuthCandidates) {
+            continue
+          }
+
+          // Retry against the next backend candidate if this upstream is unhealthy.
+          const isRetryableStatus = response.status >= 500
+          const hasMoreBackends = backendBase !== backendBases[backendBases.length - 1]
+          if (isRetryableStatus && hasMoreBackends) {
+            break
+          }
+
+          const contentType = response.headers.get('content-type') || ''
           const payload = await response.text()
-          return new NextResponse(payload, {
-            status: response.status,
-            headers: {
-              'Content-Type': response.headers.get('content-type') || 'application/json',
-              'X-SPX-Proxy': 'next-app',
-              'X-SPX-Upstream': backendBase,
-            },
-          })
-        }
+          const fallback = request.method === 'GET' ? spxFallbackPayload(segments) : null
+          const shouldFallback = response.status >= 500
 
-        // Retry against the next candidate if this upstream is unhealthy.
-        const isRetryableStatus = response.status >= 500
-        const hasMoreCandidates = backendBase !== backendBases[backendBases.length - 1]
-        if (isRetryableStatus && hasMoreCandidates) {
-          continue
-        }
+          if (contentType.includes('application/json')) {
+            if (fallback && shouldFallback) {
+              return NextResponse.json(fallback, {
+                status: 200,
+                headers: {
+                  'X-SPX-Proxy': 'next-app',
+                  'X-SPX-Fallback': `upstream_${response.status}`,
+                  'X-SPX-Upstream-Status': String(response.status),
+                  'X-SPX-Upstream': backendBase,
+                },
+              })
+            }
 
-        const contentType = response.headers.get('content-type') || ''
-        const payload = await response.text()
-        const fallback = request.method === 'GET' ? spxFallbackPayload(segments) : null
-        const shouldFallback = response.status >= 500
+            return new NextResponse(payload, {
+              status: response.status,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-SPX-Proxy': 'next-app',
+                'X-SPX-Upstream-Status': String(response.status),
+                'X-SPX-Upstream': backendBase,
+              },
+            })
+          }
 
-        if (contentType.includes('application/json')) {
           if (fallback && shouldFallback) {
             return NextResponse.json(fallback, {
               status: 200,
@@ -320,45 +372,26 @@ async function proxy(
             })
           }
 
-          return new NextResponse(payload, {
-            status: response.status,
-            headers: {
-              'Content-Type': 'application/json',
-              'X-SPX-Proxy': 'next-app',
-              'X-SPX-Upstream-Status': String(response.status),
-              'X-SPX-Upstream': backendBase,
+          return NextResponse.json(
+            {
+              error: 'Upstream error',
+              message: `SPX backend responded with status ${response.status}`,
             },
-          })
+            {
+              status: response.status,
+              headers: {
+                'X-SPX-Proxy': 'next-app',
+                'X-SPX-Upstream-Status': String(response.status),
+                'X-SPX-Upstream': backendBase,
+              },
+            },
+          )
+        } catch {
+          // Try next auth candidate; if none left, loop advances to next backend.
+          if (hasMoreAuthCandidates) {
+            continue
+          }
         }
-
-        if (fallback && shouldFallback) {
-          return NextResponse.json(fallback, {
-            status: 200,
-            headers: {
-              'X-SPX-Proxy': 'next-app',
-              'X-SPX-Fallback': `upstream_${response.status}`,
-              'X-SPX-Upstream-Status': String(response.status),
-              'X-SPX-Upstream': backendBase,
-            },
-          })
-        }
-
-        return NextResponse.json(
-          {
-            error: 'Upstream error',
-            message: `SPX backend responded with status ${response.status}`,
-          },
-          {
-            status: response.status,
-            headers: {
-              'X-SPX-Proxy': 'next-app',
-              'X-SPX-Upstream-Status': String(response.status),
-              'X-SPX-Upstream': backendBase,
-            },
-          },
-        )
-      } catch {
-        // Try next backend candidate.
       }
     }
 
