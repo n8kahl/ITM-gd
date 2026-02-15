@@ -29,13 +29,14 @@ function resolveBackendBaseUrl(request: Request): string {
 }
 
 type HandlerContext = {
-  params: {
+  params: Promise<{
     path: string[]
-  }
+  }>
 }
 
 async function proxy(request: Request, ctx: HandlerContext): Promise<Response> {
-  const segments = Array.isArray(ctx.params.path) ? ctx.params.path : []
+  const { path } = await ctx.params
+  const segments = Array.isArray(path) ? path : []
   if (segments.length === 0) {
     return NextResponse.json({ error: 'Not found', message: 'Missing SPX endpoint path' }, { status: 404 })
   }
