@@ -5,6 +5,13 @@ import { cn } from '@/lib/utils'
 import type { ChartTimeframe } from '@/lib/api/ai-coach'
 import { SymbolSearch } from './symbol-search'
 import type { IndicatorConfig } from './chart-indicators'
+import {
+  DEFAULT_LEVEL_VISIBILITY,
+  LEVEL_GROUP_LABELS,
+  LEVEL_GROUP_ORDER,
+  type LevelGroupId,
+  type LevelVisibilityConfig,
+} from './chart-level-groups'
 
 // ============================================
 // TYPES
@@ -17,6 +24,9 @@ interface ChartToolbarProps {
   onTimeframeChange: (timeframe: ChartTimeframe) => void
   indicators: IndicatorConfig
   onIndicatorsChange: (next: IndicatorConfig) => void
+  levelVisibility: LevelVisibilityConfig
+  onLevelVisibilityChange: (next: LevelVisibilityConfig) => void
+  levelCounts: Record<LevelGroupId, number>
   isLoading?: boolean
 }
 
@@ -40,9 +50,13 @@ export function ChartToolbar({
   onTimeframeChange,
   indicators,
   onIndicatorsChange,
+  levelVisibility,
+  onLevelVisibilityChange,
+  levelCounts,
   isLoading,
 }: ChartToolbarProps) {
   const [showIndicatorPanel, setShowIndicatorPanel] = useState(false)
+  const [showLevelPanel, setShowLevelPanel] = useState(false)
 
   const toggleIndicator = (key: keyof IndicatorConfig) => {
     onIndicatorsChange({
@@ -50,6 +64,26 @@ export function ChartToolbar({
       [key]: !indicators[key],
     })
   }
+
+  const toggleLevelGroup = (group: LevelGroupId) => {
+    onLevelVisibilityChange({
+      ...levelVisibility,
+      [group]: !levelVisibility[group],
+    })
+  }
+
+  const setAllLevelGroups = (enabled: boolean) => {
+    const next = LEVEL_GROUP_ORDER.reduce((acc, group) => {
+      acc[group] = enabled
+      return acc
+    }, {} as LevelVisibilityConfig)
+    onLevelVisibilityChange(next)
+  }
+
+  const disabledLevelCount = LEVEL_GROUP_ORDER.reduce((sum, group) => {
+    if (levelVisibility[group]) return sum
+    return sum + levelCounts[group]
+  }, 0)
 
   return (
     <div className="relative flex items-center gap-3 px-4 py-2 border-b border-white/5">
@@ -88,7 +122,10 @@ export function ChartToolbar({
 
       <button
         type="button"
-        onClick={() => setShowIndicatorPanel((prev) => !prev)}
+        onClick={() => {
+          setShowIndicatorPanel((prev) => !prev)
+          setShowLevelPanel(false)
+        }}
         className={cn(
           'px-2 py-1 text-xs rounded transition-all',
           showIndicatorPanel
@@ -97,6 +134,24 @@ export function ChartToolbar({
         )}
       >
         Indicators
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowLevelPanel((prev) => !prev)
+          setShowIndicatorPanel(false)
+        }}
+        className={cn(
+          'px-2 py-1 text-xs rounded transition-all',
+          showLevelPanel
+            ? 'bg-emerald-500/15 text-emerald-500'
+            : disabledLevelCount > 0
+              ? 'text-amber-300 hover:text-amber-200'
+              : 'text-white/30 hover:text-white/50',
+        )}
+      >
+        Levels
       </button>
 
       {/* Loading indicator */}
@@ -130,6 +185,57 @@ export function ChartToolbar({
                 )}
               >
                 {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showLevelPanel && (
+        <div className="absolute left-4 top-full z-30 mt-2 w-72 rounded-xl border border-white/10 bg-[#0a0f0d] p-3 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[11px] font-medium text-white/70">Level Visibility</p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setAllLevelGroups(true)}
+                className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60 hover:text-white/85"
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllLevelGroups(false)}
+                className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60 hover:text-white/85"
+              >
+                None
+              </button>
+              <button
+                type="button"
+                onClick={() => onLevelVisibilityChange(DEFAULT_LEVEL_VISIBILITY)}
+                className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60 hover:text-white/85"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {LEVEL_GROUP_ORDER.map((group) => (
+              <button
+                key={group}
+                type="button"
+                onClick={() => toggleLevelGroup(group)}
+                className={cn(
+                  'rounded border px-2 py-1 text-left',
+                  levelVisibility[group]
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border-white/10 bg-white/5 text-white/45 hover:text-white/70',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span>{LEVEL_GROUP_LABELS[group]}</span>
+                  <span className="text-[10px] text-white/45">{levelCounts[group]}</span>
+                </div>
               </button>
             ))}
           </div>

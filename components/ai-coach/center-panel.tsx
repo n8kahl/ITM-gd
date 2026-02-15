@@ -62,6 +62,11 @@ import {
   type WidgetAction,
 } from './widget-actions'
 import { ChartLevelLabels } from './chart-level-labels'
+import {
+  countLevelsByGroup,
+  filterLevelsByVisibility,
+  type LevelVisibilityConfig,
+} from './chart-level-groups'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then(mod => ({ default: mod.TradingChart })),
@@ -275,6 +280,8 @@ const LEVEL_COLORS: Record<string, string> = {
   GEX_RESISTANCE: '#f97316',
   GEX_MAGNET: '#a855f7',
 }
+
+const PIVOT_LEVEL_KEY_REGEX = /\b(PDH|PDL|PDC|PWH|PWL|PWC|PIVOT|R1|R2|R3|S1|S2|S3|PP)\b/
 
 type WelcomeMarketStatus = {
   label: 'Pre-Market' | 'Open' | 'After Hours' | 'Closed'
@@ -536,6 +543,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     if (request.levels?.resistance) {
       for (const level of request.levels.resistance) {
         const label = level.displayLabel || level.name || level.type || 'Resistance'
+        const levelKey = (level.name || level.type || '').toUpperCase()
+        const group = PIVOT_LEVEL_KEY_REGEX.test(levelKey) ? 'pivot' : 'supportResistance'
         annotations.push({
           price: level.price,
           label,
@@ -550,6 +559,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
           lastTest: level.lastTest,
           holdRate: level.holdRate,
           displayContext: level.displayContext,
+          group,
         })
       }
     }
@@ -557,6 +567,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     if (request.levels?.support) {
       for (const level of request.levels.support) {
         const label = level.displayLabel || level.name || level.type || 'Support'
+        const levelKey = (level.name || level.type || '').toUpperCase()
+        const group = PIVOT_LEVEL_KEY_REGEX.test(levelKey) ? 'pivot' : 'supportResistance'
         annotations.push({
           price: level.price,
           label,
@@ -571,6 +583,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
           lastTest: level.lastTest,
           holdRate: level.holdRate,
           displayContext: level.displayContext,
+          group,
         })
       }
     }
@@ -583,6 +596,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
           color: fibLevel.isMajor ? '#a78bfa' : '#8b5cf6',
           lineWidth: fibLevel.isMajor ? 2 : 1,
           lineStyle: 'solid',
+          group: 'fib',
         })
       }
     }
@@ -594,6 +608,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
         color: LEVEL_COLORS.VWAP,
         lineWidth: 2,
         lineStyle: 'solid',
+        group: 'vwap',
       })
     }
 
@@ -619,6 +634,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
         color: LEVEL_COLORS.GEX_FLIP,
         lineWidth: 3,
         lineStyle: 'dashed',
+        group: 'gex',
       })
     }
 
@@ -629,6 +645,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
         color: LEVEL_COLORS.GEX_MAX,
         lineWidth: 3,
         lineStyle: 'solid',
+        group: 'gex',
       })
     }
 
@@ -643,6 +660,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
           : LEVEL_COLORS.GEX_MAGNET,
         lineWidth: level.type === 'magnet' ? 2 : 1,
         lineStyle: level.type === 'magnet' ? 'solid' : 'dotted',
+        group: 'gex',
       })
     }
 
@@ -1108,6 +1126,13 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               onSymbolChange={handleSymbolChange}
               onTimeframeChange={handleTimeframeChange}
               onIndicatorsChange={setChartIndicatorConfig}
+              levelVisibility={preferences.defaultLevelVisibility}
+              onLevelVisibilityChange={(next) => {
+                setPreferences((prev) => ({
+                  ...prev,
+                  defaultLevelVisibility: next,
+                }))
+              }}
               onRetry={() => fetchChartData(chartSymbol, chartTimeframe)}
               onAcceptSync={handleSyncChartSymbol}
               onDismissSync={() => setPendingChartSyncSymbol(null)}
@@ -1388,6 +1413,8 @@ function ChartView({
   onSymbolChange,
   onTimeframeChange,
   onIndicatorsChange,
+  levelVisibility,
+  onLevelVisibilityChange,
   onRetry,
   onAcceptSync,
   onDismissSync,
@@ -1406,6 +1433,8 @@ function ChartView({
   onSymbolChange: (s: string) => void
   onTimeframeChange: (t: ChartTimeframe) => void
   onIndicatorsChange: (next: IndicatorConfig) => void
+  levelVisibility: LevelVisibilityConfig
+  onLevelVisibilityChange: (next: LevelVisibilityConfig) => void
   onRetry: () => void
   onAcceptSync: () => void
   onDismissSync: () => void
@@ -1434,6 +1463,13 @@ function ChartView({
       }
     })
   }, [highlightedLevel, levels])
+
+  const filteredLevels = useMemo(
+    () => filterLevelsByVisibility(emphasizedLevels, levelVisibility),
+    [emphasizedLevels, levelVisibility],
+  )
+
+  const levelCounts = useMemo(() => countLevelsByGroup(levels), [levels])
 
   const chartContextActions = useMemo<WidgetAction[]>(() => {
     const actions: WidgetAction[] = [
@@ -1481,7 +1517,7 @@ function ChartView({
             <h2 className="text-sm font-medium text-white">{symbol} Chart</h2>
             {levels.length > 0 && (
               <span className="text-[10px] text-white/30 px-1.5 py-0.5 rounded bg-white/5">
-                {levels.length} levels
+                {filteredLevels.length}/{levels.length} levels
               </span>
             )}
           </div>
@@ -1493,6 +1529,9 @@ function ChartView({
           onTimeframeChange={onTimeframeChange}
           indicators={indicators}
           onIndicatorsChange={onIndicatorsChange}
+          levelVisibility={levelVisibility}
+          onLevelVisibilityChange={onLevelVisibilityChange}
+          levelCounts={levelCounts}
           isLoading={isLoading}
         />
       </div>
@@ -1514,7 +1553,7 @@ function ChartView({
             <div className="relative h-full">
               <TradingChart
                 bars={bars}
-                levels={emphasizedLevels}
+                levels={filteredLevels}
                 providerIndicators={providerIndicators || undefined}
                 indicators={indicators}
                 openingRangeMinutes={openingRangeMinutes}
@@ -1524,7 +1563,7 @@ function ChartView({
                 onHoverPrice={setHoveredPrice}
               />
               <ChartLevelLabels
-                levels={emphasizedLevels}
+                levels={filteredLevels}
                 currentPrice={roundedHoverPrice ?? bars[bars.length - 1]?.close ?? 0}
                 onLevelHover={(level) => {
                   emitHoverTarget({
@@ -1538,6 +1577,7 @@ function ChartView({
               />
               <div className="pointer-events-none absolute right-3 top-3 rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-white/55 backdrop-blur">
                 Right-click chart for actions{roundedHoverPrice != null ? ` @ ${roundedHoverPrice.toFixed(2)}` : ''}
+                {filteredLevels.length !== levels.length ? ` • ${levels.length - filteredLevels.length} hidden by filters` : ''}
               </div>
             </div>
           </WidgetContextMenu>

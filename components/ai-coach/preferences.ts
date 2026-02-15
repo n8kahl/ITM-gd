@@ -3,6 +3,10 @@
 import type { ChartTimeframe } from '@/lib/api/ai-coach'
 import type { IndicatorConfig } from './chart-indicators'
 import { DEFAULT_INDICATOR_CONFIG } from './chart-indicators'
+import {
+  DEFAULT_LEVEL_VISIBILITY,
+  type LevelVisibilityConfig,
+} from './chart-level-groups'
 
 export interface AICoachPreferences {
   riskPerTradePct: number
@@ -14,6 +18,7 @@ export interface AICoachPreferences {
   defaultShowGex: boolean
   defaultShowVolAnalytics: boolean
   defaultIndicators: IndicatorConfig
+  defaultLevelVisibility: LevelVisibilityConfig
   lastActiveView?: PersistentCenterView
   lastChartSymbol?: string
   lastChartTimeframe?: ChartTimeframe
@@ -48,6 +53,7 @@ export const DEFAULT_AI_COACH_PREFERENCES: AICoachPreferences = {
   defaultShowGex: true,
   defaultShowVolAnalytics: true,
   defaultIndicators: DEFAULT_INDICATOR_CONFIG,
+  defaultLevelVisibility: DEFAULT_LEVEL_VISIBILITY,
   lastActiveView: undefined,
   lastChartSymbol: undefined,
   lastChartTimeframe: undefined,
@@ -135,6 +141,23 @@ function toIndicators(value: unknown): IndicatorConfig {
   }
 }
 
+function toLevelVisibility(value: unknown): LevelVisibilityConfig {
+  const defaults = DEFAULT_AI_COACH_PREFERENCES.defaultLevelVisibility
+  if (!value || typeof value !== 'object') return defaults
+
+  const maybe = value as Partial<LevelVisibilityConfig>
+  return {
+    fib: toBoolean(maybe.fib, defaults.fib),
+    pivot: toBoolean(maybe.pivot, defaults.pivot),
+    supportResistance: toBoolean(maybe.supportResistance, defaults.supportResistance),
+    vwap: toBoolean(maybe.vwap, defaults.vwap),
+    gex: toBoolean(maybe.gex, defaults.gex),
+    openingRange: toBoolean(maybe.openingRange, defaults.openingRange),
+    position: toBoolean(maybe.position, defaults.position),
+    other: toBoolean(maybe.other, defaults.other),
+  }
+}
+
 export function normalizeAICoachPreferences(value: unknown): AICoachPreferences {
   if (!value || typeof value !== 'object') {
     return DEFAULT_AI_COACH_PREFERENCES
@@ -151,6 +174,7 @@ export function normalizeAICoachPreferences(value: unknown): AICoachPreferences 
     defaultShowGex: toBoolean(raw.defaultShowGex, DEFAULT_AI_COACH_PREFERENCES.defaultShowGex),
     defaultShowVolAnalytics: toBoolean(raw.defaultShowVolAnalytics, DEFAULT_AI_COACH_PREFERENCES.defaultShowVolAnalytics),
     defaultIndicators: toIndicators(raw.defaultIndicators),
+    defaultLevelVisibility: toLevelVisibility(raw.defaultLevelVisibility),
     lastActiveView: toPersistentCenterView(raw.lastActiveView),
     lastChartSymbol: toSymbol(raw.lastChartSymbol),
     lastChartTimeframe: toOptionalChartTimeframe(raw.lastChartTimeframe),

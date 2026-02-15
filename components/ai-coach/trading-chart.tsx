@@ -26,6 +26,7 @@ import {
   DEFAULT_INDICATOR_CONFIG,
   type IndicatorConfig,
 } from './chart-indicators'
+import type { LevelGroupId } from './chart-level-groups'
 
 // ============================================
 // TYPES
@@ -45,6 +46,7 @@ export interface LevelAnnotation {
   lastTest?: string | null
   holdRate?: number | null
   displayContext?: string
+  group?: LevelGroupId
 }
 
 interface TradingChartProps {
@@ -884,6 +886,7 @@ export function TradingChart({
           color: CHART_COLORS.openingRange,
           lineWidth: 1,
           lineStyle: 'dotted',
+          group: 'openingRange',
         })
         derivedLevels.push({
           price: openingRange.low,
@@ -891,6 +894,7 @@ export function TradingChart({
           color: CHART_COLORS.openingRange,
           lineWidth: 1,
           lineStyle: 'dotted',
+          group: 'openingRange',
         })
       }
     }
@@ -903,6 +907,7 @@ export function TradingChart({
         color: CHART_COLORS.entry,
         lineWidth: 2,
         lineStyle: 'solid',
+        group: 'position',
       })
 
       if (typeof position.stop === 'number') {
@@ -912,6 +917,7 @@ export function TradingChart({
           color: CHART_COLORS.stop,
           lineWidth: 1,
           lineStyle: 'dashed',
+          group: 'position',
         })
       }
 
@@ -922,6 +928,7 @@ export function TradingChart({
           color: CHART_COLORS.target,
           lineWidth: 1,
           lineStyle: 'dashed',
+          group: 'position',
         })
       }
     }
