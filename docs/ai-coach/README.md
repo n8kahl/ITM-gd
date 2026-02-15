@@ -12,6 +12,7 @@ This documentation covers every aspect of the AI Coach product, from initial con
 - **[MASTER_SPEC.md](./MASTER_SPEC.md)** - 🎯 START HERE: Complete product overview, vision, metrics
 - **[IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md)** - Detailed phase-by-phase implementation plan (48-52 weeks)
 - **[COST_ANALYSIS.md](./COST_ANALYSIS.md)** - Financial projections, pricing strategy, unit economics
+- **[CHART_LEVEL_VISIBILITY_ROLLOUT_2026-02-15.md](./CHART_LEVEL_VISIBILITY_ROLLOUT_2026-02-15.md)** - Chart level-type toggles, persistence, and QA results
 
 ### UI/UX Design
 - **[CENTER_COLUMN_DESIGN.md](./ui-ux/CENTER_COLUMN_DESIGN.md)** - ⭐ Critical: Primary data visualization canvas (10 component types)

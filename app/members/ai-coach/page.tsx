@@ -126,16 +126,18 @@ export default function AICoachPage() {
   const handleExpandChart = useCallback((request: ChartRequest) => {
     if (typeof window === 'undefined') return
 
-    window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
-      detail: request,
-    }))
-
     if (window.innerWidth < 1024) {
       openSheet('chart', request.symbol, {
         symbol: request.symbol,
         timeframe: request.timeframe,
+        chartRequest: request,
       })
+      return
     }
+
+    window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {
+      detail: request,
+    }))
   }, [openSheet])
 
   const handleOpenMobileSheet = useCallback((view: MobileToolView) => {

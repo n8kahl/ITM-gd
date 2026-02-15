@@ -16,6 +16,33 @@ describe('resolveMobileSheetFromWidgetEvent', () => {
     })
   })
 
+  it('preserves full chart request payload for chart events', () => {
+    const result = resolveMobileSheetFromWidgetEvent('ai-coach-widget-chart', {
+      symbol: 'TSLA',
+      timeframe: '1D',
+      chartRequest: {
+        symbol: 'TSLA',
+        timeframe: '1D',
+        levels: {
+          resistance: [{ name: 'Fib 100%', price: 452.43 }],
+          support: [{ name: 'Fib 38.2%', price: 412.32 }],
+        },
+      },
+    })
+
+    expect(result).toMatchObject({
+      view: 'chart',
+      symbol: 'TSLA',
+      params: {
+        timeframe: '1D',
+        chartRequest: {
+          symbol: 'TSLA',
+          timeframe: '1D',
+        },
+      },
+    })
+  })
+
   it('maps options events to options sheet payload', () => {
     const result = resolveMobileSheetFromWidgetEvent('ai-coach-widget-options', {
       symbol: 'AAPL',

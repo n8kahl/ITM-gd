@@ -155,6 +155,24 @@ export interface ChartRequest {
   }
 }
 
+const SUPPORTED_CHART_TIMEFRAMES = new Set<ChartTimeframe>(['1m', '5m', '15m', '1h', '4h', '1D'])
+
+function toSheetChartRequest(value: unknown): ChartRequest | null {
+  if (!value || typeof value !== 'object') return null
+  const maybe = value as Partial<ChartRequest>
+  if (typeof maybe.symbol !== 'string') return null
+  if (typeof maybe.timeframe !== 'string' || !SUPPORTED_CHART_TIMEFRAMES.has(maybe.timeframe as ChartTimeframe)) {
+    return null
+  }
+
+  return {
+    symbol: maybe.symbol,
+    timeframe: maybe.timeframe as ChartTimeframe,
+    levels: maybe.levels,
+    gexProfile: maybe.gexProfile,
+  }
+}
+
 export type CenterView =
   | 'onboarding'
   | 'welcome'
@@ -697,20 +715,30 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
     if (forcedView !== 'chart') return
 
+    const sheetChartRequest = toSheetChartRequest(sheetParams?.chartRequest)
     const maybeTimeframe = typeof sheetParams?.timeframe === 'string'
       ? sheetParams.timeframe
       : null
-    const requestedTimeframe = maybeTimeframe && ['1m', '5m', '15m', '1h', '4h', '1D'].includes(maybeTimeframe)
+    const requestedTimeframe = maybeTimeframe && SUPPORTED_CHART_TIMEFRAMES.has(maybeTimeframe as ChartTimeframe)
       ? (maybeTimeframe as ChartTimeframe)
       : null
-    const requestedSymbol = sheetSymbol
+    const requestedSymbol = sheetChartRequest?.symbol
+      || sheetSymbol
       || (typeof sheetParams?.symbol === 'string' ? sheetParams.symbol : null)
 
     const nextSymbol = requestedSymbol || chartSymbol
-    const nextTimeframe = requestedTimeframe || chartTimeframe
+    const nextTimeframe = sheetChartRequest?.timeframe || requestedTimeframe || chartTimeframe
     const symbolChanged = nextSymbol !== chartSymbol
     const timeframeChanged = nextTimeframe !== chartTimeframe
     const viewChanged = forcedView !== activeView
+
+    if (sheetChartRequest) {
+      const levelAnnotations = buildLevelAnnotations(sheetChartRequest)
+      const gexAnnotations = buildGEXAnnotations(sheetChartRequest)
+      setChartLevels([...levelAnnotations, ...gexAnnotations])
+    } else if (symbolChanged || timeframeChanged) {
+      setChartLevels([])
+    }
 
     if (symbolChanged) {
       setChartSymbol(nextSymbol)
@@ -726,6 +754,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     }
   }, [
     activeView,
+    buildGEXAnnotations,
+    buildLevelAnnotations,
     chartSymbol,
     chartTimeframe,
     fetchChartData,

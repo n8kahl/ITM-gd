@@ -8,6 +8,8 @@
 ## 🎯 Overview
 
 **Total Items:** 3 (from spec audit) + space for additions
+**Completed:** 2 / 3
+**Remaining:** 1 / 3
 **Estimated Time:** 4-6 hours
 **Priority:** Complete before production deployment
 
@@ -24,11 +26,23 @@
 
 ---
 
-## ❌ Outstanding Items
+## ✅ 2026-02-15 Delivery Update: Chart Level Visibility
+
+- Added chart level grouping and visibility filtering by type.
+- Added `Levels` toolbar panel with per-group toggles and quick actions (`All`, `None`, `Reset`).
+- Added persistence for default level visibility in AI Coach preferences.
+- Fixed mobile chart expansion so inline chat chart/widget level overlays are preserved in the full-screen sheet.
+- Added test coverage for level grouping/filtering behavior.
+- Added implementation and QA documentation:
+  - `docs/ai-coach/CHART_LEVEL_VISIBILITY_ROLLOUT_2026-02-15.md`
+
+---
+
+## ⚠️ Remaining Outstanding Items
 
 ### 🔴 **ITEM 1: Fibonacci Chart Integration**
 **Priority:** HIGH
-**Status:** ❌ NOT STARTED
+**Status:** ✅ COMPLETE (2026-02-15)
 **Estimated Time:** 2-3 hours
 **Spec Reference:** Section 1.5
 
@@ -207,7 +221,7 @@ useEffect(() => {
 
 ### 🟡 **ITEM 2: Chart Labels Integration**
 **Priority:** MEDIUM
-**Status:** ❌ NOT STARTED
+**Status:** ✅ COMPLETE (2026-02-15)
 **Estimated Time:** 1-2 hours
 **Spec Reference:** Section 2.3
 

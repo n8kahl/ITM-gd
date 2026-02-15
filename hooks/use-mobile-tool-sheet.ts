@@ -24,6 +24,8 @@ interface MobileToolSheetState {
   sheetParams: Record<string, unknown>
 }
 
+const SUPPORTED_CHART_TIMEFRAMES = new Set(['1m', '5m', '15m', '1h', '4h', '1D'])
+
 export interface MobileSheetBridgeResult {
   view: MobileToolView
   symbol: string | null
@@ -45,13 +47,31 @@ export function resolveMobileSheetFromWidgetEvent(
   detail: Record<string, unknown> | null | undefined,
 ): MobileSheetBridgeResult | null {
   if (eventName === 'ai-coach-widget-chart') {
+    const timeframe = typeof detail?.timeframe === 'string' && SUPPORTED_CHART_TIMEFRAMES.has(detail.timeframe)
+      ? detail.timeframe
+      : '5m'
+    const symbol = typeof detail?.symbol === 'string' ? detail.symbol : null
+    const chartRequest = detail?.chartRequest
+
     return {
       view: 'chart',
-      symbol: typeof detail?.symbol === 'string' ? detail.symbol : null,
+      symbol,
       params: {
         level: detail?.level,
-        timeframe: detail?.timeframe,
+        timeframe,
         label: detail?.label,
+        ...(chartRequest && typeof chartRequest === 'object'
+          ? { chartRequest }
+          : symbol
+            ? {
+                chartRequest: {
+                  symbol,
+                  timeframe,
+                  levels: detail?.levels,
+                  gexProfile: detail?.gexProfile,
+                },
+              }
+            : {}),
       },
     }
   }
@@ -161,11 +181,36 @@ export function useMobileToolSheet() {
       if (mapped) openSheet(mapped.view, mapped.symbol ?? undefined, mapped.params)
     }
 
+    const handleShowChart = (event: Event) => {
+      if (!isMobile()) return
+      const detail = (event as CustomEvent<Record<string, unknown> | null | undefined>).detail
+      if (!detail || typeof detail !== 'object') return
+
+      const symbol = typeof detail.symbol === 'string' ? detail.symbol : null
+      if (!symbol) return
+
+      const timeframe = typeof detail.timeframe === 'string' && SUPPORTED_CHART_TIMEFRAMES.has(detail.timeframe)
+        ? detail.timeframe
+        : '5m'
+
+      openSheet('chart', symbol, {
+        symbol,
+        timeframe,
+        chartRequest: {
+          symbol,
+          timeframe,
+          levels: detail.levels,
+          gexProfile: detail.gexProfile,
+        },
+      })
+    }
+
     window.addEventListener('ai-coach-widget-chart', handleChart)
     window.addEventListener('ai-coach-widget-options', handleOptions)
     window.addEventListener('ai-coach-widget-alert', handleAlert)
     window.addEventListener('ai-coach-widget-analyze', handleAnalyze)
     window.addEventListener('ai-coach-widget-view', handleView)
+    window.addEventListener('ai-coach-show-chart', handleShowChart)
 
     return () => {
       window.removeEventListener('ai-coach-widget-chart', handleChart)
@@ -173,6 +218,7 @@ export function useMobileToolSheet() {
       window.removeEventListener('ai-coach-widget-alert', handleAlert)
       window.removeEventListener('ai-coach-widget-analyze', handleAnalyze)
       window.removeEventListener('ai-coach-widget-view', handleView)
+      window.removeEventListener('ai-coach-show-chart', handleShowChart)
     }
   }, [openSheet])
 
