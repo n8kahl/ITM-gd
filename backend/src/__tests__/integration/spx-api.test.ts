@@ -1,6 +1,5 @@
 import request from 'supertest';
 import express from 'express';
-import http from 'http';
 
 jest.mock('../../lib/logger', () => ({
   logger: {
@@ -65,6 +64,10 @@ jest.mock('../../services/spx/aiCoach', () => ({
   generateCoachStream: jest.fn(),
 }));
 
+jest.mock('../../services/spx', () => ({
+  getSPXSnapshot: jest.fn(),
+}));
+
 jest.mock('../../config/database', () => ({
   supabase: {
     from: jest.fn(() => ({
@@ -90,6 +93,7 @@ import { getPredictionState } from '../../services/spx/aiPredictor';
 import { getBasisState } from '../../services/spx/crossReference';
 import { getContractRecommendation } from '../../services/spx/contractSelector';
 import { getCoachState } from '../../services/spx/aiCoach';
+import { getSPXSnapshot } from '../../services/spx';
 
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
@@ -102,36 +106,13 @@ const mockGetPredictionState = getPredictionState as jest.MockedFunction<typeof 
 const mockGetBasisState = getBasisState as jest.MockedFunction<typeof getBasisState>;
 const mockGetContractRecommendation = getContractRecommendation as jest.MockedFunction<typeof getContractRecommendation>;
 const mockGetCoachState = getCoachState as jest.MockedFunction<typeof getCoachState>;
+const mockGetSPXSnapshot = getSPXSnapshot as jest.MockedFunction<typeof getSPXSnapshot>;
 
 const app = express();
 app.use(express.json());
 app.use('/api/spx', spxRouter);
-let server: http.Server;
-let baseUrl = '';
 
 describe('SPX API integration schema', () => {
-  beforeAll(async () => {
-    server = await new Promise<http.Server>((resolve) => {
-      const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
-    });
-
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Failed to bind SPX API integration test server');
-    }
-
-    baseUrl = `http://127.0.0.1:${address.port}`;
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -260,50 +241,135 @@ describe('SPX API integration schema', () => {
       reasoning: 'test',
     });
     mockGetCoachState.mockResolvedValue({ messages: [], generatedAt: '2026-02-15T15:00:00.000Z' });
+    mockGetSPXSnapshot.mockResolvedValue({
+      levels: [],
+      clusters: [],
+      fibLevels: [],
+      gex: {
+        spx: {
+          symbol: 'SPX',
+          spotPrice: 6032,
+          netGex: 2000,
+          flipPoint: 6025,
+          callWall: 6050,
+          putWall: 6000,
+          zeroGamma: 6025,
+          gexByStrike: [],
+          keyLevels: [],
+          expirationBreakdown: {},
+          timestamp: '2026-02-15T15:00:00.000Z',
+        },
+        spy: {
+          symbol: 'SPY',
+          spotPrice: 603,
+          netGex: 1000,
+          flipPoint: 602,
+          callWall: 604,
+          putWall: 600,
+          zeroGamma: 602,
+          gexByStrike: [],
+          keyLevels: [],
+          expirationBreakdown: {},
+          timestamp: '2026-02-15T15:00:00.000Z',
+        },
+        combined: {
+          symbol: 'COMBINED',
+          spotPrice: 6032,
+          netGex: 3000,
+          flipPoint: 6024,
+          callWall: 6050,
+          putWall: 6000,
+          zeroGamma: 6024,
+          gexByStrike: [],
+          keyLevels: [],
+          expirationBreakdown: {},
+          timestamp: '2026-02-15T15:00:00.000Z',
+        },
+      },
+      basis: {
+        current: 1.9,
+        trend: 'stable',
+        leading: 'neutral',
+        ema5: 1.8,
+        ema20: 1.7,
+        zscore: 0.4,
+        spxPrice: 6032,
+        spyPrice: 603,
+        timestamp: '2026-02-15T15:00:00.000Z',
+      },
+      setups: [],
+      regime: {
+        regime: 'ranging',
+        direction: 'neutral',
+        probability: 60,
+        magnitude: 'small',
+        confidence: 70,
+        timestamp: '2026-02-15T15:00:00.000Z',
+      },
+      prediction: {
+        regime: 'ranging',
+        direction: { bullish: 34, bearish: 33, neutral: 33 },
+        magnitude: { small: 50, medium: 40, large: 10 },
+        timingWindow: { description: 'test', actionable: true },
+        nextTarget: {
+          upside: { price: 6042, zone: 'projected' },
+          downside: { price: 6020, zone: 'projected' },
+        },
+        probabilityCone: [],
+        confidence: 70,
+      },
+      flow: [],
+      coachMessages: [],
+      generatedAt: '2026-02-15T15:00:00.000Z',
+    });
   });
 
   it('returns expected schemas for SPX endpoints', async () => {
-    const levels = await request(baseUrl).get('/api/spx/levels');
+    const snapshot = await request(app).get('/api/spx/snapshot');
+    expect(snapshot.status).toBe(200);
+    expect(snapshot.body).toEqual(expect.objectContaining({ levels: expect.any(Array), generatedAt: expect.any(String) }));
+
+    const levels = await request(app).get('/api/spx/levels');
     expect(levels.status).toBe(200);
     expect(levels.body).toEqual(expect.objectContaining({ levels: expect.any(Array), generatedAt: expect.any(String) }));
 
-    const clusters = await request(baseUrl).get('/api/spx/clusters');
+    const clusters = await request(app).get('/api/spx/clusters');
     expect(clusters.status).toBe(200);
     expect(clusters.body).toEqual(expect.objectContaining({ zones: expect.any(Array), generatedAt: expect.any(String) }));
 
-    const gex = await request(baseUrl).get('/api/spx/gex');
+    const gex = await request(app).get('/api/spx/gex');
     expect(gex.status).toBe(200);
     expect(gex.body).toEqual(expect.objectContaining({ spx: expect.any(Object), spy: expect.any(Object), combined: expect.any(Object) }));
 
-    const setups = await request(baseUrl).get('/api/spx/setups');
+    const setups = await request(app).get('/api/spx/setups');
     expect(setups.status).toBe(200);
     expect(setups.body).toEqual(expect.objectContaining({ setups: expect.any(Array), count: expect.any(Number) }));
 
-    const setup = await request(baseUrl).get('/api/spx/setups/setup-1');
+    const setup = await request(app).get('/api/spx/setups/setup-1');
     expect(setup.status).toBe(200);
     expect(setup.body).toEqual(expect.objectContaining({ id: 'setup-1', entryZone: expect.any(Object) }));
 
-    const fibonacci = await request(baseUrl).get('/api/spx/fibonacci');
+    const fibonacci = await request(app).get('/api/spx/fibonacci');
     expect(fibonacci.status).toBe(200);
     expect(fibonacci.body).toEqual(expect.objectContaining({ levels: expect.any(Array), count: expect.any(Number) }));
 
-    const flow = await request(baseUrl).get('/api/spx/flow');
+    const flow = await request(app).get('/api/spx/flow');
     expect(flow.status).toBe(200);
     expect(flow.body).toEqual(expect.objectContaining({ events: expect.any(Array), count: expect.any(Number) }));
 
-    const regime = await request(baseUrl).get('/api/spx/regime');
+    const regime = await request(app).get('/api/spx/regime');
     expect(regime.status).toBe(200);
     expect(regime.body).toEqual(expect.objectContaining({ regime: expect.any(String), prediction: expect.any(Object) }));
 
-    const basis = await request(baseUrl).get('/api/spx/basis');
+    const basis = await request(app).get('/api/spx/basis');
     expect(basis.status).toBe(200);
     expect(basis.body).toEqual(expect.objectContaining({ current: expect.any(Number), trend: expect.any(String) }));
 
-    const contract = await request(baseUrl).get('/api/spx/contract-select?setupId=setup-1');
+    const contract = await request(app).get('/api/spx/contract-select?setupId=setup-1');
     expect(contract.status).toBe(200);
     expect(contract.body).toEqual(expect.objectContaining({ strike: expect.any(Number), expiry: expect.any(String) }));
 
-    const coach = await request(baseUrl).get('/api/spx/coach/state');
+    const coach = await request(app).get('/api/spx/coach/state');
     expect(coach.status).toBe(200);
     expect(coach.body).toEqual(expect.objectContaining({ messages: expect.any(Array), generatedAt: expect.any(String) }));
   });

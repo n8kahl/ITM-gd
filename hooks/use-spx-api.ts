@@ -45,6 +45,45 @@ function parseSPXErrorMessage(status: number, contentType: string, rawBody: stri
   return `SPX request failed (${status})`
 }
 
+function hasMeaningfulSPXData(payload: Record<string, unknown>): boolean {
+  const arrayKeys = ['levels', 'zones', 'events', 'setups', 'messages', 'snapshots', 'clusters', 'fibLevels', 'flow', 'coachMessages']
+  for (const key of arrayKeys) {
+    const value = payload[key]
+    if (Array.isArray(value) && value.length > 0) {
+      return true
+    }
+  }
+
+  const numericKeys = ['current', 'spxPrice', 'spyPrice', 'spotPrice', 'flipPoint', 'callWall', 'putWall', 'probability']
+  for (const key of numericKeys) {
+    const value = payload[key]
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) {
+      return true
+    }
+  }
+
+  const nestedProfiles = ['spx', 'spy', 'combined']
+  for (const key of nestedProfiles) {
+    const profile = payload[key]
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) continue
+    const profileRecord = profile as Record<string, unknown>
+    if (
+      (typeof profileRecord.spotPrice === 'number' && profileRecord.spotPrice > 0)
+      || (Array.isArray(profileRecord.gexByStrike) && profileRecord.gexByStrike.length > 0)
+      || (Array.isArray(profileRecord.keyLevels) && profileRecord.keyLevels.length > 0)
+    ) {
+      return true
+    }
+  }
+
+  const contract = payload.contract
+  if (contract && typeof contract === 'object' && !Array.isArray(contract)) {
+    return true
+  }
+
+  return false
+}
+
 const fetcher = async <T>(key: SPXKey): Promise<T> => {
   const [url, token] = key
   const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
@@ -86,7 +125,7 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
   }
 
   const payload = await response.json() as Record<string, unknown>
-  if (payload && payload.degraded === true) {
+  if (payload && payload.degraded === true && !hasMeaningfulSPXData(payload)) {
     throw new Error('SPX service is running in degraded mode. Live data temporarily unavailable.')
   }
 

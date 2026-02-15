@@ -345,6 +345,27 @@ const basisResponse = {
   timestamp: nowIso,
 }
 
+const snapshotResponse = {
+  levels: levelsResponse.levels,
+  clusters: clustersResponse.zones,
+  fibLevels: fibonacciResponse.levels,
+  gex: gexProfile,
+  basis: basisResponse,
+  setups: mockSetups,
+  regime: {
+    regime: regimeResponse.regime,
+    direction: regimeResponse.direction,
+    probability: regimeResponse.probability,
+    magnitude: regimeResponse.magnitude,
+    confidence: regimeResponse.confidence,
+    timestamp: regimeResponse.timestamp,
+  },
+  prediction: regimeResponse.prediction,
+  flow: flowResponse.events,
+  coachMessages: coachState.messages,
+  generatedAt: nowIso,
+}
+
 function delay(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve()
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -420,6 +441,11 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
 
     if (endpoint === 'levels') {
       await fulfillJson(route, levelsResponse)
+      return
+    }
+
+    if (endpoint === 'snapshot') {
+      await fulfillJson(route, snapshotResponse)
       return
     }
 

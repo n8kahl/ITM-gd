@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 
 const DEFAULT_LOCAL_BACKEND = 'http://localhost:3001'
 const DEFAULT_REMOTE_BACKEND = 'https://itm-gd-production.up.railway.app'
-const DEFAULT_PROXY_TIMEOUT_MS = 4000
+const DEFAULT_PROXY_TIMEOUT_MS = 12000
 const COACH_STREAM_TIMEOUT_MS = 15000
 
 function normalizeHost(hostname: string): string {
@@ -74,111 +74,6 @@ function resolveBackendBaseUrls(request: Request): string[] {
   }
 
   return filtered.length > 0 ? filtered : [DEFAULT_LOCAL_BACKEND]
-}
-
-function nowIso(): string {
-  return new Date().toISOString()
-}
-
-function emptyGexProfile(symbol: 'SPX' | 'SPY' | 'COMBINED') {
-  return {
-    symbol,
-    spotPrice: 0,
-    netGex: 0,
-    flipPoint: 0,
-    callWall: 0,
-    putWall: 0,
-    zeroGamma: 0,
-    gexByStrike: [] as Array<{ strike: number; gex: number }>,
-    keyLevels: [] as Array<{ strike: number; gex: number; type: 'call_wall' | 'put_wall' | 'high_oi' }>,
-    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
-    timestamp: nowIso(),
-  }
-}
-
-function spxFallbackPayload(segments: string[]): unknown | null {
-  const route = segments.join('/')
-  const timestamp = nowIso()
-
-  switch (route) {
-    case 'levels':
-      return { levels: [], generatedAt: timestamp, degraded: true }
-    case 'clusters':
-      return { zones: [], generatedAt: timestamp, degraded: true }
-    case 'gex':
-      return {
-        spx: emptyGexProfile('SPX'),
-        spy: emptyGexProfile('SPY'),
-        combined: emptyGexProfile('COMBINED'),
-        degraded: true,
-      }
-    case 'gex/history':
-      return { symbol: 'SPX', snapshots: [], count: 0, degraded: true }
-    case 'setups':
-      return { setups: [], count: 0, generatedAt: timestamp, degraded: true }
-    case 'fibonacci':
-      return { levels: [], count: 0, generatedAt: timestamp, degraded: true }
-    case 'flow':
-      return { events: [], count: 0, generatedAt: timestamp, degraded: true }
-    case 'basis':
-      return {
-        current: 0,
-        trend: 'stable',
-        leading: 'neutral',
-        ema5: 0,
-        ema20: 0,
-        zscore: 0,
-        spxPrice: 0,
-        spyPrice: 0,
-        timestamp,
-        degraded: true,
-      }
-    case 'regime':
-      return {
-        regime: 'ranging',
-        direction: 'neutral',
-        probability: 0,
-        magnitude: 'small',
-        confidence: 0,
-        timestamp,
-        prediction: {
-          regime: 'ranging',
-          direction: { bullish: 0, bearish: 0, neutral: 100 },
-          magnitude: { small: 100, medium: 0, large: 0 },
-          timingWindow: { description: 'SPX backend temporarily unavailable.', actionable: false },
-          nextTarget: {
-            upside: { price: 0, zone: 'unavailable' },
-            downside: { price: 0, zone: 'unavailable' },
-          },
-          probabilityCone: [] as Array<{
-            minutesForward: number
-            high: number
-            low: number
-            center: number
-            confidence: number
-          }>,
-          confidence: 0,
-        },
-        degraded: true,
-      }
-    case 'coach/state':
-      return { messages: [], generatedAt: timestamp, degraded: true }
-    case 'contract-select':
-      return {
-        contract: null,
-        confidence: 0,
-        rationale: 'SPX backend temporarily unavailable.',
-        riskProfile: {
-          maxRisk: 0,
-          rewardTarget: 0,
-          stopLoss: 0,
-        },
-        generatedAt: timestamp,
-        degraded: true,
-      }
-    default:
-      return null
-  }
 }
 
 function getTimeoutMs(method: string, segments: string[]): number {
@@ -309,10 +204,11 @@ async function proxy(
             }
 
             const payload = await response.text()
+            const contentType = response.headers.get('content-type') || 'application/json'
             return new NextResponse(payload, {
               status: response.status,
               headers: {
-                'Content-Type': response.headers.get('content-type') || 'application/json',
+                'Content-Type': contentType,
                 'X-SPX-Proxy': 'next-app',
                 'X-SPX-Upstream': backendBase,
               },
@@ -333,39 +229,13 @@ async function proxy(
 
           const contentType = response.headers.get('content-type') || ''
           const payload = await response.text()
-          const fallback = request.method === 'GET' ? spxFallbackPayload(segments) : null
-          const shouldFallback = response.status >= 500
 
           if (contentType.includes('application/json')) {
-            if (fallback && shouldFallback) {
-              return NextResponse.json(fallback, {
-                status: 200,
-                headers: {
-                  'X-SPX-Proxy': 'next-app',
-                  'X-SPX-Fallback': `upstream_${response.status}`,
-                  'X-SPX-Upstream-Status': String(response.status),
-                  'X-SPX-Upstream': backendBase,
-                },
-              })
-            }
-
             return new NextResponse(payload, {
               status: response.status,
               headers: {
                 'Content-Type': 'application/json',
                 'X-SPX-Proxy': 'next-app',
-                'X-SPX-Upstream-Status': String(response.status),
-                'X-SPX-Upstream': backendBase,
-              },
-            })
-          }
-
-          if (fallback && shouldFallback) {
-            return NextResponse.json(fallback, {
-              status: 200,
-              headers: {
-                'X-SPX-Proxy': 'next-app',
-                'X-SPX-Fallback': `upstream_${response.status}`,
                 'X-SPX-Upstream-Status': String(response.status),
                 'X-SPX-Upstream': backendBase,
               },
@@ -395,19 +265,6 @@ async function proxy(
       }
     }
 
-    const fallback = request.method === 'GET' ? spxFallbackPayload(segments) : null
-    if (fallback) {
-      return NextResponse.json(fallback, {
-        status: 200,
-        headers: {
-          'X-SPX-Proxy': 'next-app',
-          'X-SPX-Fallback': 'proxy_error',
-          ...(lastResponse ? { 'X-SPX-Upstream-Status': String(lastResponse.status) } : {}),
-          ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
-        },
-      })
-    }
-
     return NextResponse.json(
       {
         error: 'Proxy error',
@@ -423,17 +280,6 @@ async function proxy(
       },
     )
   } catch {
-    const fallback = request.method === 'GET' ? spxFallbackPayload(segments) : null
-    if (fallback) {
-      return NextResponse.json(fallback, {
-        status: 200,
-        headers: {
-          'X-SPX-Proxy': 'next-app',
-          'X-SPX-Fallback': 'proxy_error',
-        },
-      })
-    }
-
     return NextResponse.json(
       {
         error: 'Proxy error',

@@ -80,7 +80,11 @@ app.use(morgan('dev'));
 
 // Request timeout middleware
 app.use((req: Request, res: Response, next: any) => {
-  const timeout = req.path.startsWith('/api/chat') ? 60000 : 30000;
+  const timeout = req.path.startsWith('/api/chat')
+    ? 60000
+    : (req.path.startsWith('/api/brief') || req.path.startsWith('/api/market'))
+      ? 45000
+      : 30000;
   res.setTimeout(timeout, () => {
     if (!res.headersSent) {
       res.status(408).json({ error: 'Request timeout', message: 'The request took too long to process. Please try again.' });

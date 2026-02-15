@@ -6,6 +6,8 @@ import { getEarningsCalendar } from '../earnings';
 import { logger } from '../../lib/logger';
 
 const DEFAULT_WATCHLIST_SYMBOLS = ['SPX', 'NDX', 'SPY', 'QQQ'];
+const MORNING_BRIEF_LEVEL_TIMEOUT_MS = 8000;
+const MORNING_BRIEF_EARNINGS_TIMEOUT_MS = 6000;
 
 export interface MorningBriefKeyLevels {
   symbol: string;
@@ -222,7 +224,7 @@ export class MorningBriefService {
 
   private async getKeyLevelsForWatchlist(watchlist: string[]): Promise<MorningBriefKeyLevels[]> {
     const results = await Promise.allSettled(
-      watchlist.map(async (symbol) => withTimeout(calculateLevels(symbol, 'intraday'), 12000, `levels:${symbol}`))
+      watchlist.map(async (symbol) => withTimeout(calculateLevels(symbol, 'intraday'), MORNING_BRIEF_LEVEL_TIMEOUT_MS, `levels:${symbol}`))
     );
 
     const keyLevels: MorningBriefKeyLevels[] = [];
@@ -380,7 +382,11 @@ export class MorningBriefService {
 
     let earningsToday: MorningBrief['earningsToday'] = [];
     try {
-      const liveEarnings = await getEarningsCalendar(symbols, 30);
+      const liveEarnings = await withTimeout(
+        getEarningsCalendar(symbols, 30),
+        MORNING_BRIEF_EARNINGS_TIMEOUT_MS,
+        'earnings_calendar',
+      );
       earningsToday = liveEarnings.slice(0, 8).map((event) => ({
         symbol: event.symbol,
         time: event.time,

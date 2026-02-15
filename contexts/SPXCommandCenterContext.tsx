@@ -2,15 +2,9 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { useSPXBasis } from '@/hooks/use-spx-basis'
-import { useSPXCoach } from '@/hooks/use-spx-coach'
-import { useSPXFibonacci } from '@/hooks/use-spx-fibonacci'
-import { useSPXFlow } from '@/hooks/use-spx-flow'
-import { useSPXGEX } from '@/hooks/use-spx-gex'
-import { useSPXLevels } from '@/hooks/use-spx-levels'
-import { useSPXRegime } from '@/hooks/use-spx-regime'
-import { useSPXSetups } from '@/hooks/use-spx-setups'
+import { postSPX } from '@/hooks/use-spx-api'
 import { usePriceStream } from '@/hooks/use-price-stream'
+import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
 import type {
   BasisState,
   ClusterZone,
@@ -79,28 +73,30 @@ const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null
 
 export function SPXCommandCenterProvider({ children }: { children: React.ReactNode }) {
   const { session } = useMemberAuth()
-  const levels = useSPXLevels()
-  const gex = useSPXGEX()
-  const setups = useSPXSetups()
-  const regime = useSPXRegime()
-  const flow = useSPXFlow()
-  const fib = useSPXFibonacci()
-  const basis = useSPXBasis()
-  const coach = useSPXCoach()
+  const {
+    snapshot: snapshotData,
+    isLoading,
+    error: snapshotError,
+    mutate: mutateSnapshot,
+  } = useSPXSnapshot()
+  const accessToken = session?.access_token || null
 
-  const stream = usePriceStream(['SPX', 'SPY'])
+  const stream = usePriceStream(['SPX', 'SPY'], true, accessToken)
   const [selectedSetupId, setSelectedSetupId] = useState<string | null>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('5m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
 
-  const selectedSetup = useMemo(() => {
-    if (!selectedSetupId) return setups.setups[0] || null
-    return setups.setups.find((setup) => setup.id === selectedSetupId) || setups.setups[0] || null
-  }, [selectedSetupId, setups.setups])
+  const activeSetups = useMemo(() => snapshotData?.setups || [], [snapshotData?.setups])
+  const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
 
-  const spxPrice = stream.prices.get('SPX')?.price ?? basis.basis?.spxPrice ?? 0
-  const spyPrice = stream.prices.get('SPY')?.price ?? basis.basis?.spyPrice ?? 0
+  const selectedSetup = useMemo(() => {
+    if (!selectedSetupId) return activeSetups[0] || null
+    return activeSetups.find((setup) => setup.id === selectedSetupId) || activeSetups[0] || null
+  }, [activeSetups, selectedSetupId])
+
+  const spxPrice = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
+  const spyPrice = stream.prices.get('SPY')?.price ?? snapshotData?.basis?.spyPrice ?? 0
 
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
     if (!selectedSetup) return []
@@ -135,10 +131,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [selectedSetup])
 
   const filteredLevels = useMemo(() => {
-    return levels.levels
+    return allLevels
       .filter((level) => visibleLevelCategories.has(level.category))
       .filter((level) => (showSPYDerived ? true : level.category !== 'spy_derived'))
-  }, [levels.levels, showSPYDerived, visibleLevelCategories])
+  }, [allLevels, showSPYDerived, visibleLevelCategories])
 
   const toggleLevelCategory = useCallback((category: LevelCategory) => {
     setVisibleLevelCategories((prev) => {
@@ -169,13 +165,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [])
 
   const requestContractRecommendation = useCallback(async (setupId: string) => {
-    if (!session?.access_token) {
+    if (!accessToken) {
       return null
     }
 
     const response = await fetch(`/api/spx/contract-select?setupId=${encodeURIComponent(setupId)}`, {
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -186,66 +182,70 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
 
     return response.json() as Promise<ContractRecommendation>
-  }, [session])
+  }, [accessToken])
 
-  const isLoading = (
-    levels.isLoading
-    || gex.isLoading
-    || setups.isLoading
-    || regime.isLoading
-    || fib.isLoading
-    || basis.isLoading
-    || coach.isLoading
-    || flow.isLoading
-  )
+  const sendCoachMessage = useCallback(async (prompt: string, setupId?: string | null) => {
+    if (!accessToken) {
+      throw new Error('Missing session token for SPX coach request')
+    }
 
-  const error = levels.error || gex.error || setups.error || regime.error || fib.error || basis.error || coach.error || flow.error || null
+    const message = await postSPX<CoachMessage>('/api/spx/coach/message', accessToken, {
+      prompt,
+      setupId: setupId || undefined,
+    })
+
+    await mutateSnapshot((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        coachMessages: [message, ...prev.coachMessages],
+        generatedAt: new Date().toISOString(),
+      }
+    }, false)
+
+    return message
+  }, [accessToken, mutateSnapshot])
+
+  const error = snapshotError || null
 
   const value = useMemo<SPXCommandCenterState>(() => ({
     spxPrice,
     spyPrice,
-    basis: basis.basis,
-    regime: regime.regime?.regime || null,
-    prediction: regime.prediction,
+    basis: snapshotData?.basis || null,
+    regime: snapshotData?.regime?.regime || null,
+    prediction: snapshotData?.prediction || null,
     levels: filteredLevels,
-    clusterZones: levels.clusterZones,
-    fibLevels: fib.fibLevels,
-    gexProfile: gex.gex,
-    activeSetups: setups.setups,
-    coachMessages: coach.messages,
+    clusterZones: snapshotData?.clusters || [],
+    fibLevels: snapshotData?.fibLevels || [],
+    gexProfile: snapshotData?.gex || null,
+    activeSetups,
+    coachMessages: snapshotData?.coachMessages || [],
     selectedSetup,
     selectedTimeframe,
     visibleLevelCategories,
     showSPYDerived,
     chartAnnotations,
-    flowEvents: flow.events,
+    flowEvents: snapshotData?.flow || [],
     isLoading,
     error,
     selectSetup,
     toggleLevelCategory,
     toggleSPYDerived,
     requestContractRecommendation,
-    sendCoachMessage: coach.sendMessage,
+    sendCoachMessage,
   }), [
-    basis.basis,
+    activeSetups,
     chartAnnotations,
-    coach.messages,
-    coach.sendMessage,
     error,
-    fib.fibLevels,
     filteredLevels,
-    flow.events,
-    gex.gex,
     isLoading,
-    levels.clusterZones,
-    regime.prediction,
-    regime.regime?.regime,
     requestContractRecommendation,
     selectSetup,
+    sendCoachMessage,
     selectedSetup,
     selectedTimeframe,
-    setups.setups,
     showSPYDerived,
+    snapshotData,
     spxPrice,
     spyPrice,
     toggleLevelCategory,

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
-import { authenticateToken, checkQueryLimit } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 import { requireTier } from '../middleware/requireTier';
 import { getPredictionState } from '../services/spx/aiPredictor';
 import { generateCoachStream, getCoachState } from '../services/spx/aiCoach';
@@ -10,6 +10,7 @@ import { getBasisState } from '../services/spx/crossReference';
 import { getFibLevels } from '../services/spx/fibEngine';
 import { getFlowEvents } from '../services/spx/flowEngine';
 import { computeUnifiedGEXLandscape } from '../services/spx/gexEngine';
+import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { classifyCurrentRegime } from '../services/spx/regimeClassifier';
 import { detectActiveSetups, getSetupById } from '../services/spx/setupDetector';
@@ -20,7 +21,23 @@ function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
 }
 
-router.use(authenticateToken, requireTier('pro'), checkQueryLimit);
+router.use(authenticateToken, requireTier('pro'));
+
+router.get('/snapshot', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await getSPXSnapshot({ forceRefresh: parseBoolean(req.query.forceRefresh) });
+    return res.json(snapshot);
+  } catch (error) {
+    logger.error('SPX snapshot endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX command center snapshot.',
+      retryAfter: 10,
+    });
+  }
+});
 
 router.get('/levels', async (req: Request, res: Response) => {
   try {

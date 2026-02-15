@@ -38,6 +38,18 @@
 
 ---
 
+## ✅ 2026-02-15 Delivery Update: SPX Command Center Rollback + Rebuild
+
+- Consolidated SPX command center data flow onto a single backend snapshot contract (`/api/spx/snapshot`).
+- Removed SPX proxy degraded/stale `200` fallback behavior so real upstream errors are surfaced.
+- Fixed SPX realtime stream auth wiring in provider (`usePriceStream` now receives the session token).
+- Removed SPX query-limit middleware pressure from high-frequency SPX endpoints.
+- Added snapshot coverage in backend integration tests and Playwright SPX mocks.
+- Added implementation and edge-impact documentation:
+  - `docs/ai-coach/SPX_COMMAND_CENTER_ROLLBACK_REBUILD_2026-02-15.md`
+
+---
+
 ## ⚠️ Remaining Outstanding Items
 
 ### 🔴 **ITEM 1: Fibonacci Chart Integration**
