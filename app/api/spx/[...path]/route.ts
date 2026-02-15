@@ -58,7 +58,7 @@ function resolveBackendBaseUrls(request: Request): string[] {
 
   const defaults = isLocalHost && preferLocalInDev
     ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
-    : [DEFAULT_REMOTE_BACKEND, DEFAULT_LOCAL_BACKEND]
+    : [DEFAULT_REMOTE_BACKEND]
 
   const candidates = toBackendCandidates([...envCandidates, ...defaults])
 
@@ -66,6 +66,10 @@ function resolveBackendBaseUrls(request: Request): string[] {
 
   for (const candidate of candidates) {
     const candidateHost = parseHostname(candidate)
+    if (!isLocalHost && (candidateHost === 'localhost' || candidateHost === '127.0.0.1')) {
+      // Never try localhost fallback from remote environments.
+      continue
+    }
     if (candidateHost && normalizedHost && normalizeHost(candidateHost) === normalizedHost) {
       // Prevent recursive proxying when server env points back to this same host.
       continue
@@ -73,7 +77,13 @@ function resolveBackendBaseUrls(request: Request): string[] {
     filtered.push(candidate)
   }
 
-  return filtered.length > 0 ? filtered : [DEFAULT_LOCAL_BACKEND]
+  if (filtered.length > 0) {
+    return filtered
+  }
+
+  return isLocalHost && preferLocalInDev
+    ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
+    : [DEFAULT_REMOTE_BACKEND]
 }
 
 function getTimeoutMs(method: string, segments: string[]): number {
@@ -265,6 +275,22 @@ async function proxy(
       }
     }
 
+    if (lastResponse) {
+      const upstreamStatus = lastResponse.status
+      const payload = await lastResponse.text()
+      const contentType = lastResponse.headers.get('content-type') || 'application/json'
+
+      return new NextResponse(payload, {
+        status: upstreamStatus,
+        headers: {
+          'Content-Type': contentType,
+          'X-SPX-Proxy': 'next-app',
+          'X-SPX-Upstream-Status': String(upstreamStatus),
+          ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
+        },
+      })
+    }
+
     return NextResponse.json(
       {
         error: 'Proxy error',
@@ -274,7 +300,6 @@ async function proxy(
         status: 502,
         headers: {
           'X-SPX-Proxy': 'next-app',
-          ...(lastResponse ? { 'X-SPX-Upstream-Status': String(lastResponse.status) } : {}),
           ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
         },
       },

@@ -64,9 +64,15 @@ let nextConsumerId = 1
 let ws: WebSocket | null = null
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let wsReconnectAttempt = 0
+let wsConsecutiveConnectFailures = 0
+let wsRetryPausedUntil = 0
 let activeStreamToken: string | null = null
 let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
+const WS_CLOSE_UNAUTHORIZED = 4401
+const WS_CLOSE_FORBIDDEN = 4403
+const WS_FAILURE_THRESHOLD = 6
+const WS_RETRY_PAUSE_MS = 60_000
 
 const sharedState: PriceStreamState = {
   prices: new Map(),
@@ -205,6 +211,7 @@ function clearReconnectTimer(): void {
 
 function scheduleReconnect(): void {
   if (!shouldMaintainConnection()) return
+  if (Date.now() < wsRetryPausedUntil) return
   clearReconnectTimer()
   const delay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
   wsReconnectAttempt += 1
@@ -339,9 +346,18 @@ function ensureSocketConnection(): void {
     return
   }
 
+  if (Date.now() < wsRetryPausedUntil) {
+    sharedState.error = 'Live stream temporarily unavailable'
+    notifyConsumers()
+    return
+  }
+
   // Token changed between sessions; force reconnect with fresh auth.
   if (activeStreamToken && activeStreamToken !== token) {
     disconnectSocket()
+    wsReconnectAttempt = 0
+    wsConsecutiveConnectFailures = 0
+    wsRetryPausedUntil = 0
   }
   activeStreamToken = token
 
@@ -353,10 +369,14 @@ function ensureSocketConnection(): void {
 
   const wsUrl = buildWebSocketUrl(token)
   const socket = new WebSocket(wsUrl)
+  let socketOpened = false
   ws = socket
 
   socket.onopen = () => {
+    socketOpened = true
     wsReconnectAttempt = 0
+    wsConsecutiveConnectFailures = 0
+    wsRetryPausedUntil = 0
     sharedState.isConnected = true
     sharedState.error = null
     notifyConsumers()
@@ -384,13 +404,33 @@ function ensureSocketConnection(): void {
     notifyConsumers()
   }
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     if (ws === socket) {
       ws = null
     }
     sharedState.isConnected = false
     subscribedSymbols = new Set()
     subscribedChannels = new Set()
+
+    if (event.code === WS_CLOSE_UNAUTHORIZED || event.code === WS_CLOSE_FORBIDDEN) {
+      sharedState.error = event.reason || 'Authentication required for live stream'
+      notifyConsumers()
+      return
+    }
+
+    wsConsecutiveConnectFailures = socketOpened ? 0 : wsConsecutiveConnectFailures + 1
+    if (wsConsecutiveConnectFailures >= WS_FAILURE_THRESHOLD) {
+      wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
+      sharedState.error = 'Live stream unavailable. Retrying shortly.'
+      notifyConsumers()
+      clearReconnectTimer()
+      wsReconnectTimer = setTimeout(() => {
+        wsReconnectTimer = null
+        ensureSocketConnection()
+      }, WS_RETRY_PAUSE_MS)
+      return
+    }
+
     notifyConsumers()
     scheduleReconnect()
   }
