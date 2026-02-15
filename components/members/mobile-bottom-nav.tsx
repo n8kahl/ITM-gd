@@ -59,8 +59,9 @@ function triggerHaptic() {
 export function MemberBottomNav() {
   const pathname = usePathname()
   const { getMobileTabs } = useMemberAuth()
-  const [moreOpen, setMoreOpen] = useState(false)
+  const [moreOpenPath, setMoreOpenPath] = useState<string | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
+  const moreOpen = moreOpenPath === pathname
 
   const dynamicTabs = getMobileTabs?.() ?? []
   const mappedDynamicTabs: NavTab[] = dynamicTabs.map((tab) => ({
@@ -81,7 +82,7 @@ export function MemberBottomNav() {
     const handleClickAway = (event: MouseEvent) => {
       if (!moreMenuRef.current) return
       if (moreMenuRef.current.contains(event.target as Node)) return
-      setMoreOpen(false)
+      setMoreOpenPath(null)
     }
 
     document.addEventListener('mousedown', handleClickAway)
@@ -101,7 +102,7 @@ export function MemberBottomNav() {
                 href={tab.href}
                 onClick={() => {
                   triggerHaptic()
-                  setMoreOpen(false)
+                  setMoreOpenPath(null)
                 }}
                 className="relative flex-1 max-w-[84px] flex flex-col items-center justify-center py-1.5"
                 aria-current={active ? 'page' : undefined}
@@ -151,7 +152,7 @@ export function MemberBottomNav() {
                 type="button"
                 onClick={() => {
                   triggerHaptic()
-                  setMoreOpen((prev) => !prev)
+                  setMoreOpenPath((prev) => (prev === pathname ? null : pathname))
                 }}
                 className={cn(
                   'relative flex flex-col items-center justify-center w-full',
@@ -197,7 +198,7 @@ export function MemberBottomNav() {
                           href={item.href}
                           onClick={() => {
                             triggerHaptic()
-                            setMoreOpen(false)
+                            setMoreOpenPath(null)
                           }}
                           className={cn(
                             'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-white/[0.06]',

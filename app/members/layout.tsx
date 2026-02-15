@@ -3,7 +3,7 @@
 import { type CSSProperties, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -110,29 +110,26 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const contentVariants = prefersReducedMotion
+  const enterMotion = prefersReducedMotion
     ? {
         initial: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'none' },
         animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'none' },
-        exit: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'none' },
       }
     : isMobile
       ? {
-          initial: { opacity: 0.85, x: 28, y: 0, scale: 1, filter: 'blur(2px)' },
+          initial: { opacity: 0.92, x: 16, y: 0, scale: 1, filter: 'blur(1.5px)' },
           animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' },
-          exit: { opacity: 0, x: -18, y: 0, scale: 1 },
         }
       : {
-          initial: { opacity: 0, x: 0, y: 10, scale: 0.99, filter: 'blur(4px)' },
+          initial: { opacity: 0.94, x: 0, y: 8, scale: 0.995, filter: 'blur(2.5px)' },
           animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' },
-          exit: { opacity: 0, x: 0, y: -6, scale: 1 },
         }
 
-  // Tween with fixed duration — spring + blur on exit caused AnimatePresence
-  // mode="wait" to stall indefinitely, blocking incoming page navigation.
+  // Production reliability: avoid exit/wait orchestration for page shells.
+  // Enter-only motion preserves polish without ever blocking route completion.
   const transition = prefersReducedMotion
     ? { duration: 0 }
-    : { type: 'tween' as const, duration: 0.2, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] }
+    : { type: 'tween' as const, duration: 0.16, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] }
 
   return (
     <div
@@ -164,18 +161,14 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
         />
 
         <main className="px-4 py-4 lg:px-8 lg:py-6 pb-[var(--members-bottomnav-h)] lg:pb-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              variants={contentVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={transition}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+          <motion.div
+            key={pathname}
+            initial={enterMotion.initial}
+            animate={enterMotion.animate}
+            transition={transition}
+          >
+            {children}
+          </motion.div>
         </main>
       </div>
 
