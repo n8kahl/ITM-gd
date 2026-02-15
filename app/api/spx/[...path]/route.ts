@@ -9,23 +9,20 @@ const DEFAULT_REMOTE_BACKEND = 'https://itm-gd-production.up.railway.app'
 const DEFAULT_PROXY_TIMEOUT_MS = 12000
 const COACH_STREAM_TIMEOUT_MS = 15000
 
-function normalizeHost(hostname: string): string {
-  return hostname.toLowerCase().replace(/^www\./, '')
+interface UrlInfo {
+  host: string
+  hostname: string
 }
 
-function getRequestHost(request: Request): string {
+function parseUrlInfo(value: string): UrlInfo | null {
   try {
-    return new URL(request.url).hostname.toLowerCase()
+    const url = new URL(value)
+    return {
+      host: url.host.toLowerCase(),
+      hostname: url.hostname.toLowerCase(),
+    }
   } catch {
-    return ''
-  }
-}
-
-function parseHostname(candidate: string): string {
-  try {
-    return new URL(candidate).hostname.toLowerCase()
-  } catch {
-    return ''
+    return null
   }
 }
 
@@ -45,9 +42,10 @@ function toBackendCandidates(values: Array<string | undefined>): string[] {
 }
 
 function resolveBackendBaseUrls(request: Request): string[] {
-  const host = getRequestHost(request)
-  const normalizedHost = normalizeHost(host)
-  const isLocalHost = host === 'localhost' || host === '127.0.0.1'
+  const requestInfo = parseUrlInfo(request.url)
+  const requestHost = requestInfo?.host || ''
+  const requestHostname = requestInfo?.hostname || ''
+  const isLocalHost = requestHostname === 'localhost' || requestHostname === '127.0.0.1'
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true'
 
   const envCandidates = toBackendCandidates([
@@ -65,13 +63,16 @@ function resolveBackendBaseUrls(request: Request): string[] {
   const filtered: string[] = []
 
   for (const candidate of candidates) {
-    const candidateHost = parseHostname(candidate)
-    if (!isLocalHost && (candidateHost === 'localhost' || candidateHost === '127.0.0.1')) {
+    const candidateInfo = parseUrlInfo(candidate)
+    const candidateHost = candidateInfo?.host || ''
+    const candidateHostname = candidateInfo?.hostname || ''
+
+    if (!isLocalHost && (candidateHostname === 'localhost' || candidateHostname === '127.0.0.1')) {
       // Never try localhost fallback from remote environments.
       continue
     }
-    if (candidateHost && normalizedHost && normalizeHost(candidateHost) === normalizedHost) {
-      // Prevent recursive proxying when server env points back to this same host.
+    if (candidateHost && requestHost && candidateHost === requestHost) {
+      // Prevent recursive proxying only when candidate points to this same origin (host:port).
       continue
     }
     filtered.push(candidate)
