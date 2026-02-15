@@ -5,6 +5,44 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 type SPXKey = [url: string, token: string]
 
+function trimMessage(input: string, max = 240): string {
+  const normalized = input.replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.length > max ? `${normalized.slice(0, max)}…` : normalized
+}
+
+function parseSPXErrorMessage(status: number, contentType: string, rawBody: string): string {
+  const body = rawBody || ''
+
+  if (contentType.includes('application/json')) {
+    try {
+      const parsed = JSON.parse(body) as { message?: unknown; error?: unknown }
+      const message = typeof parsed.message === 'string'
+        ? parsed.message
+        : typeof parsed.error === 'string'
+          ? parsed.error
+          : ''
+
+      if (message) {
+        return trimMessage(message)
+      }
+    } catch {
+      // Fall through to generic handling.
+    }
+  }
+
+  if (/<!doctype html/i.test(body) || /<html/i.test(body)) {
+    return `SPX service unavailable (${status}).`
+  }
+
+  const plain = trimMessage(body)
+  if (plain) {
+    return plain
+  }
+
+  return `SPX request failed (${status})`
+}
+
 const fetcher = async <T>(key: SPXKey): Promise<T> => {
   const [url, token] = key
   const response = await fetch(url, {
@@ -17,7 +55,8 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || `SPX request failed (${response.status})`)
+    const contentType = response.headers.get('content-type') || ''
+    throw new Error(parseSPXErrorMessage(response.status, contentType, text))
   }
 
   return response.json() as Promise<T>
@@ -36,6 +75,8 @@ export function useSPXQuery<T>(
     {
       revalidateOnFocus: true,
       dedupingInterval: 1500,
+      errorRetryCount: 1,
+      errorRetryInterval: 5000,
       ...(config || {}),
     },
   )
@@ -62,7 +103,8 @@ export async function postSPX<T>(endpoint: string, token: string, body: Record<s
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || `SPX POST failed (${response.status})`)
+    const contentType = response.headers.get('content-type') || ''
+    throw new Error(parseSPXErrorMessage(response.status, contentType, text))
   }
 
   const contentType = response.headers.get('content-type') || ''
