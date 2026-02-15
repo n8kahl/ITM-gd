@@ -15,7 +15,8 @@ import {
 
 const WORKER_NAME = 'spx_data_loop_worker';
 const OPEN_INTERVAL_MS = 60_000;
-const OFF_HOURS_INTERVAL_MS = 300_000;
+const PRE_MARKET_INTERVAL_MS = 300_000;
+const CLOSED_CHECK_INTERVAL_MS = 900_000;
 const INITIAL_DELAY_MS = 20_000;
 
 registerWorker(WORKER_NAME);
@@ -23,11 +24,18 @@ registerWorker(WORKER_NAME);
 let timer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 
-function currentIntervalMs(): number {
+function currentIntervalMs(): number | null {
   const marketStatus = getMarketStatus();
-  return marketStatus.status === 'open' || marketStatus.status === 'pre-market'
-    ? OPEN_INTERVAL_MS
-    : OFF_HOURS_INTERVAL_MS;
+  if (marketStatus.status === 'open') {
+    return OPEN_INTERVAL_MS;
+  }
+
+  if (marketStatus.status === 'pre-market') {
+    return PRE_MARKET_INTERVAL_MS;
+  }
+
+  // Disabled after close; only wake periodically to detect next pre-market window.
+  return null;
 }
 
 async function persistLevels(levels: SPXLevel[]): Promise<void> {
@@ -201,6 +209,13 @@ async function persistGex(snapshot: Awaited<ReturnType<typeof getSPXSnapshot>>['
 async function runCycle(): Promise<void> {
   if (!isRunning) return;
 
+  const interval = currentIntervalMs();
+  if (interval === null) {
+    markWorkerNextRun(WORKER_NAME, CLOSED_CHECK_INTERVAL_MS);
+    timer = setTimeout(runCycle, CLOSED_CHECK_INTERVAL_MS);
+    return;
+  }
+
   const cycleStartedAt = markWorkerCycleStarted(WORKER_NAME);
   try {
     const snapshot = await getSPXSnapshot({ forceRefresh: true });
@@ -226,7 +241,6 @@ async function runCycle(): Promise<void> {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
-    const interval = currentIntervalMs();
     markWorkerNextRun(WORKER_NAME, interval);
     timer = setTimeout(runCycle, interval);
   }

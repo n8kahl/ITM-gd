@@ -1,4 +1,5 @@
 import { cacheGet, cacheSet } from '../../config/redis';
+import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { getContractRecommendation } from './contractSelector';
 import { getPredictionState } from './aiPredictor';
@@ -77,6 +78,79 @@ function createRiskMessage(setups: Setup[]): CoachMessage {
   };
 }
 
+function createInTradeMessage(setup: Setup): CoachMessage {
+  const entry = round((setup.entryZone.low + setup.entryZone.high) / 2, 2);
+  const setupRange = Math.max(0.25, Math.abs(setup.entryZone.high - setup.entryZone.low));
+  const maxAdverse = round(setupRange * 1.2, 2);
+
+  return {
+    id: uuid('coach_in_trade'),
+    type: 'in_trade',
+    priority: setup.status === 'triggered' ? 'setup' : 'guidance',
+    setupId: setup.id,
+    content: `In-trade plan: defend stop ${setup.stop.toFixed(2)}, trim into ${setup.target1.price.toFixed(2)}, and trail risk once price holds above entry ${entry.toFixed(2)}.`,
+    structuredData: {
+      setupId: setup.id,
+      status: setup.status,
+      entry,
+      stop: setup.stop,
+      target1: setup.target1.price,
+      target2: setup.target2.price,
+      maxAdverseExcursion: maxAdverse,
+    },
+    timestamp: nowIso(),
+  };
+}
+
+function createPostTradeMessage(setup: Setup): CoachMessage {
+  const outcome = setup.status === 'invalidated'
+    ? 'Loss containment respected.'
+    : setup.status === 'expired'
+      ? 'Trade objective resolved.'
+      : 'Trade still active.';
+
+  return {
+    id: uuid('coach_post_trade'),
+    type: 'post_trade',
+    priority: 'behavioral',
+    setupId: setup.id,
+    content: `Post-trade review: ${outcome} Capture chart notes, execution quality, and any variance from the original risk plan before entering the next trade.`,
+    structuredData: {
+      setupId: setup.id,
+      status: setup.status,
+      reminder: 'Document execution and emotional state before re-entry.',
+    },
+    timestamp: nowIso(),
+  };
+}
+
+async function persistCoachingMessage(userId: string | undefined, message: CoachMessage): Promise<void> {
+  if (!userId) return;
+
+  const { error } = await supabase
+    .from('spx_ai_coaching_log')
+    .insert({
+      user_id: userId,
+      setup_id: message.setupId,
+      message_type: message.type,
+      message_text: message.content,
+      confidence_score: typeof message.structuredData?.confluenceScore === 'number'
+        ? message.structuredData.confluenceScore
+        : null,
+      context_snapshot: message.structuredData,
+      session_date: new Date().toISOString().slice(0, 10),
+      created_at: message.timestamp,
+    });
+
+  if (error) {
+    logger.warn('Failed to persist SPX coaching message', {
+      userId,
+      messageType: message.type,
+      error: error.message,
+    });
+  }
+}
+
 export async function getCoachState(options?: { forceRefresh?: boolean }): Promise<{
   messages: CoachMessage[];
   generatedAt: string;
@@ -142,23 +216,65 @@ export async function generateCoachResponse(input: {
   prompt?: string;
   setupId?: string;
   forceRefresh?: boolean;
+  userId?: string;
 }): Promise<CoachMessage> {
+  const stream = await generateCoachStream(input);
+  return stream[0];
+}
+
+export async function generateCoachStream(input: {
+  prompt?: string;
+  setupId?: string;
+  forceRefresh?: boolean;
+  userId?: string;
+}): Promise<CoachMessage[]> {
   const state = await getCoachState({ forceRefresh: input.forceRefresh });
-  const setupMessage = state.messages.find((message) => message.type === 'pre_trade');
+  const setupMessage = state.messages.find((message) => message.type === 'pre_trade') || state.messages[0];
+  const regimeMessage = state.messages.find((message) => message.type === 'behavioral') || state.messages[0];
+  const riskMessage = state.messages.find((message) => message.type === 'alert') || state.messages[0];
+
+  const activeSetups = await detectActiveSetups({ forceRefresh: input.forceRefresh });
+  const targetedSetup = input.setupId
+    ? activeSetups.find((setup) => setup.id === input.setupId) || activeSetups[0] || null
+    : activeSetups[0] || null;
+
+  const messages: CoachMessage[] = [];
 
   if (!input.prompt || input.prompt.trim().length === 0) {
-    return setupMessage || state.messages[0];
+    if (setupMessage) messages.push(setupMessage);
+    if (targetedSetup) messages.push(createInTradeMessage(targetedSetup));
+    if (regimeMessage) messages.push(regimeMessage);
+    if (riskMessage) messages.push(riskMessage);
+  } else {
+    const lower = input.prompt.toLowerCase();
+
+    if (lower.includes('regime') || lower.includes('probability')) {
+      if (regimeMessage) messages.push(regimeMessage);
+      if (targetedSetup) messages.push(createInTradeMessage(targetedSetup));
+    } else if (lower.includes('risk') || lower.includes('stop') || lower.includes('loss')) {
+      if (riskMessage) messages.push(riskMessage);
+      if (targetedSetup) messages.push(createPostTradeMessage(targetedSetup));
+    } else if (lower.includes('in trade') || lower.includes('manage') || lower.includes('entry')) {
+      if (targetedSetup) messages.push(createInTradeMessage(targetedSetup));
+      if (riskMessage) messages.push(riskMessage);
+    } else if (lower.includes('review') || lower.includes('journal') || lower.includes('post')) {
+      if (targetedSetup) messages.push(createPostTradeMessage(targetedSetup));
+      if (regimeMessage) messages.push(regimeMessage);
+    } else {
+      if (setupMessage) messages.push(setupMessage);
+      if (targetedSetup) messages.push(createInTradeMessage(targetedSetup));
+      if (regimeMessage) messages.push(regimeMessage);
+    }
   }
 
-  const lower = input.prompt.toLowerCase();
+  const deduped = messages.filter((message, index) => (
+    messages.findIndex((candidate) => candidate.id === message.id) === index
+  ));
+  const finalMessages = deduped.length > 0 ? deduped.slice(0, 4) : [state.messages[0]];
 
-  if (lower.includes('regime') || lower.includes('probability')) {
-    return state.messages.find((message) => message.type === 'behavioral') || state.messages[0];
+  if (input.userId) {
+    await Promise.all(finalMessages.map((message) => persistCoachingMessage(input.userId, message)));
   }
 
-  if (lower.includes('risk') || lower.includes('stop') || lower.includes('loss')) {
-    return state.messages.find((message) => message.type === 'alert') || state.messages[0];
-  }
-
-  return setupMessage || state.messages[0];
+  return finalMessages;
 }

@@ -4,7 +4,7 @@ import { logger } from '../lib/logger';
 import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { requireTier } from '../middleware/requireTier';
 import { getPredictionState } from '../services/spx/aiPredictor';
-import { generateCoachResponse, getCoachState } from '../services/spx/aiCoach';
+import { generateCoachStream, getCoachState } from '../services/spx/aiCoach';
 import { getContractRecommendation } from '../services/spx/contractSelector';
 import { getBasisState } from '../services/spx/crossReference';
 import { getFibLevels } from '../services/spx/fibEngine';
@@ -283,17 +283,22 @@ router.post('/coach/message', async (req: Request, res: Response) => {
     const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
     const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
     const forceRefresh = parseBoolean(req.body?.forceRefresh);
+    const userId = req.user?.id;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
 
-    const message = await generateCoachResponse({ prompt, setupId, forceRefresh });
+    const messages = await generateCoachStream({ prompt, setupId, forceRefresh, userId });
 
-    res.write(`event: coach_message\n`);
-    res.write(`data: ${JSON.stringify(message)}\n\n`);
+    for (const message of messages) {
+      res.write(`event: coach_message\n`);
+      res.write(`data: ${JSON.stringify(message)}\n\n`);
+    }
+
     res.write('event: done\n');
-    res.write('data: {}\n\n');
+    res.write(`data: ${JSON.stringify({ count: messages.length })}\n\n`);
     res.end();
     return;
   } catch (error) {

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
@@ -74,12 +74,6 @@ function resolveBackendBaseUrls(request: Request): string[] {
   }
 
   return filtered.length > 0 ? filtered : [DEFAULT_LOCAL_BACKEND]
-}
-
-type HandlerContext = {
-  params: Promise<{
-    path: string[]
-  }>
 }
 
 function nowIso(): string {
@@ -210,8 +204,11 @@ async function fetchUpstream(url: string, init: RequestInit, timeoutMs: number):
   }
 }
 
-async function proxy(request: Request, ctx: HandlerContext): Promise<Response> {
-  const { path } = await ctx.params
+async function proxy(
+  request: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
+): Promise<Response> {
+  const path = (await ctx.params)?.path ?? []
   const segments = Array.isArray(path) ? path : []
   if (segments.length === 0) {
     return NextResponse.json(
@@ -418,10 +415,10 @@ async function proxy(request: Request, ctx: HandlerContext): Promise<Response> {
   }
 }
 
-export async function GET(request: Request, ctx: HandlerContext) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return proxy(request, ctx)
 }
 
-export async function POST(request: Request, ctx: HandlerContext) {
+export async function POST(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return proxy(request, ctx)
 }

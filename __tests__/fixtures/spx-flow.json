@@ -1,0 +1,8 @@
+{
+  "events": [
+    { "id": "flow_001", "type": "sweep", "symbol": "SPX", "strike": 6050, "expiry": "2026-03-20", "size": 1840, "direction": "bullish", "premium": 12900800, "timestamp": "2026-02-15T14:31:00.000Z" },
+    { "id": "flow_002", "type": "block", "symbol": "SPX", "strike": 6000, "expiry": "2026-03-20", "size": 1520, "direction": "bearish", "premium": 7752000, "timestamp": "2026-02-15T14:33:00.000Z" },
+    { "id": "flow_003", "type": "sweep", "symbol": "SPY", "strike": 605, "expiry": "2026-03-20", "size": 6100, "direction": "bullish", "premium": 6893000, "timestamp": "2026-02-15T14:35:00.000Z" },
+    { "id": "flow_004", "type": "block", "symbol": "SPY", "strike": 600, "expiry": "2026-03-20", "size": 5440, "direction": "bearish", "premium": 5657600, "timestamp": "2026-02-15T14:38:00.000Z" }
+  ]
+}

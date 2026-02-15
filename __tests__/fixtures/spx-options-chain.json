@@ -1,0 +1,21 @@
+{
+  "symbol": "SPX",
+  "currentPrice": 6032.25,
+  "expirations": ["2026-03-20", "2026-03-27", "2026-04-17"],
+  "options": {
+    "calls": [
+      { "strike": 5980, "expiry": "2026-03-20", "type": "call", "last": 72.4, "bid": 71.9, "ask": 72.8, "volume": 1490, "openInterest": 12104, "impliedVolatility": 0.224, "delta": 0.63, "gamma": 0.0121, "theta": -18.4, "vega": 31.2 },
+      { "strike": 6000, "expiry": "2026-03-20", "type": "call", "last": 61.6, "bid": 61.1, "ask": 62.0, "volume": 2120, "openInterest": 16320, "impliedVolatility": 0.227, "delta": 0.56, "gamma": 0.0129, "theta": -19.8, "vega": 32.4 },
+      { "strike": 6025, "expiry": "2026-03-20", "type": "call", "last": 49.1, "bid": 48.7, "ask": 49.5, "volume": 2988, "openInterest": 22040, "impliedVolatility": 0.231, "delta": 0.48, "gamma": 0.0134, "theta": -20.5, "vega": 33.0 },
+      { "strike": 6050, "expiry": "2026-03-20", "type": "call", "last": 38.9, "bid": 38.4, "ask": 39.3, "volume": 1845, "openInterest": 17880, "impliedVolatility": 0.236, "delta": 0.41, "gamma": 0.0130, "theta": -19.3, "vega": 32.1 },
+      { "strike": 6100, "expiry": "2026-03-27", "type": "call", "last": 27.2, "bid": 26.8, "ask": 27.6, "volume": 1324, "openInterest": 14230, "impliedVolatility": 0.241, "delta": 0.33, "gamma": 0.0118, "theta": -17.2, "vega": 30.4 }
+    ],
+    "puts": [
+      { "strike": 5980, "expiry": "2026-03-20", "type": "put", "last": 19.7, "bid": 19.3, "ask": 20.1, "volume": 1660, "openInterest": 13370, "impliedVolatility": 0.238, "delta": -0.30, "gamma": 0.0109, "theta": -15.1, "vega": 28.2 },
+      { "strike": 6000, "expiry": "2026-03-20", "type": "put", "last": 24.8, "bid": 24.3, "ask": 25.2, "volume": 2022, "openInterest": 18990, "impliedVolatility": 0.241, "delta": -0.36, "gamma": 0.0118, "theta": -16.3, "vega": 29.7 },
+      { "strike": 6025, "expiry": "2026-03-20", "type": "put", "last": 31.9, "bid": 31.5, "ask": 32.3, "volume": 2488, "openInterest": 23210, "impliedVolatility": 0.246, "delta": -0.43, "gamma": 0.0123, "theta": -17.8, "vega": 30.9 },
+      { "strike": 6050, "expiry": "2026-03-20", "type": "put", "last": 40.2, "bid": 39.8, "ask": 40.7, "volume": 2215, "openInterest": 21400, "impliedVolatility": 0.251, "delta": -0.50, "gamma": 0.0127, "theta": -18.5, "vega": 31.8 },
+      { "strike": 6100, "expiry": "2026-03-27", "type": "put", "last": 56.4, "bid": 55.9, "ask": 56.9, "volume": 1444, "openInterest": 16910, "impliedVolatility": 0.257, "delta": -0.60, "gamma": 0.0114, "theta": -16.2, "vega": 30.1 }
+    ]
+  }
+}

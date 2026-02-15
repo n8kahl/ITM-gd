@@ -1,0 +1,19 @@
+{
+  "symbol": "SPY",
+  "currentPrice": 603.25,
+  "expirations": ["2026-03-20", "2026-03-27", "2026-04-17"],
+  "options": {
+    "calls": [
+      { "strike": 595, "expiry": "2026-03-20", "type": "call", "last": 16.7, "bid": 16.5, "ask": 16.9, "volume": 4120, "openInterest": 52140, "impliedVolatility": 0.196, "delta": 0.62, "gamma": 0.0231, "theta": -6.1, "vega": 12.4 },
+      { "strike": 600, "expiry": "2026-03-20", "type": "call", "last": 14.1, "bid": 13.9, "ask": 14.3, "volume": 5988, "openInterest": 73310, "impliedVolatility": 0.201, "delta": 0.54, "gamma": 0.0254, "theta": -6.8, "vega": 13.5 },
+      { "strike": 605, "expiry": "2026-03-20", "type": "call", "last": 11.3, "bid": 11.1, "ask": 11.5, "volume": 7022, "openInterest": 81220, "impliedVolatility": 0.207, "delta": 0.46, "gamma": 0.0259, "theta": -7.0, "vega": 13.8 },
+      { "strike": 610, "expiry": "2026-03-20", "type": "call", "last": 8.9, "bid": 8.8, "ask": 9.1, "volume": 4831, "openInterest": 60900, "impliedVolatility": 0.212, "delta": 0.39, "gamma": 0.0248, "theta": -6.7, "vega": 13.2 }
+    ],
+    "puts": [
+      { "strike": 595, "expiry": "2026-03-20", "type": "put", "last": 8.1, "bid": 8.0, "ask": 8.3, "volume": 4210, "openInterest": 54400, "impliedVolatility": 0.213, "delta": -0.31, "gamma": 0.0216, "theta": -5.5, "vega": 11.9 },
+      { "strike": 600, "expiry": "2026-03-20", "type": "put", "last": 10.4, "bid": 10.3, "ask": 10.6, "volume": 6360, "openInterest": 72990, "impliedVolatility": 0.218, "delta": -0.38, "gamma": 0.0235, "theta": -6.0, "vega": 12.6 },
+      { "strike": 605, "expiry": "2026-03-20", "type": "put", "last": 13.1, "bid": 12.9, "ask": 13.3, "volume": 6899, "openInterest": 80110, "impliedVolatility": 0.223, "delta": -0.45, "gamma": 0.0241, "theta": -6.2, "vega": 12.9 },
+      { "strike": 610, "expiry": "2026-03-20", "type": "put", "last": 16.2, "bid": 16.0, "ask": 16.4, "volume": 5312, "openInterest": 67020, "impliedVolatility": 0.228, "delta": -0.53, "gamma": 0.0233, "theta": -6.0, "vega": 12.5 }
+    ]
+  }
+}

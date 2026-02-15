@@ -120,6 +120,69 @@ function pickCandidateZones(zones: ClusterZone[], currentPrice: number): Cluster
     .map((item) => item.zone);
 }
 
+function isPriceInsideEntry(setup: Pick<Setup, 'entryZone'>, price: number): boolean {
+  return price >= setup.entryZone.low && price <= setup.entryZone.high;
+}
+
+function isStopBreached(setup: Pick<Setup, 'direction' | 'stop'>, price: number): boolean {
+  return setup.direction === 'bullish'
+    ? price <= setup.stop
+    : price >= setup.stop;
+}
+
+function isTarget2Reached(setup: Pick<Setup, 'direction' | 'target2'>, price: number): boolean {
+  return setup.direction === 'bullish'
+    ? price >= setup.target2.price
+    : price <= setup.target2.price;
+}
+
+function resolveLifecycleStatus(input: {
+  computedStatus: Setup['status'];
+  currentPrice: number;
+  fallbackDistance: number;
+  setup: Pick<Setup, 'direction' | 'entryZone' | 'stop' | 'target2'>;
+  previous: Setup | null;
+}): Setup['status'] {
+  const previous = input.previous;
+  let status: Setup['status'] = input.computedStatus;
+
+  const wasTriggered = previous?.status === 'triggered';
+  const isTriggeredNow = status === 'triggered';
+
+  if (wasTriggered && previous) {
+    if (isStopBreached(previous, input.currentPrice)) {
+      return 'invalidated';
+    }
+
+    if (isTarget2Reached(previous, input.currentPrice)) {
+      return 'expired';
+    }
+  }
+
+  // Once triggered, keep setup in triggered state until explicit resolution.
+  if (wasTriggered && !isTriggeredNow) {
+    status = 'triggered';
+  }
+
+  if ((wasTriggered || isTriggeredNow) && isStopBreached(input.setup, input.currentPrice)) {
+    return 'invalidated';
+  }
+
+  if ((wasTriggered || isTriggeredNow) && isTarget2Reached(input.setup, input.currentPrice)) {
+    return 'expired';
+  }
+
+  if (status === 'forming' || status === 'ready') {
+    const zoneMid = (input.setup.entryZone.low + input.setup.entryZone.high) / 2;
+    const staleDistance = Math.max(18, input.fallbackDistance * 2.5);
+    if (Math.abs(input.currentPrice - zoneMid) > staleDistance) {
+      return 'expired';
+    }
+  }
+
+  return status;
+}
+
 export async function detectActiveSetups(options?: { forceRefresh?: boolean }): Promise<Setup[]> {
   const forceRefresh = options?.forceRefresh === true;
 
@@ -129,6 +192,11 @@ export async function detectActiveSetups(options?: { forceRefresh?: boolean }): 
       return cached;
     }
   }
+
+  const previousSetups = await cacheGet<Setup[]>(SETUPS_CACHE_KEY);
+  const previousById = new Map<string, Setup>(
+    (previousSetups || []).map((setup) => [setup.id, setup]),
+  );
 
   const [levels, gex, fibLevels, regimeState] = await Promise.all([
     getMergedLevels({ forceRefresh }),
@@ -171,23 +239,47 @@ export async function detectActiveSetups(options?: { forceRefresh?: boolean }): 
       ? round(zone.priceLow - (zone.type === 'fortress' ? 2.5 : 1.5), 2)
       : round(zone.priceHigh + (zone.type === 'fortress' ? 2.5 : 1.5), 2);
 
-    let status: Setup['status'] = confluence.score >= 3 ? 'ready' : 'forming';
-    if (currentPrice >= entryLow && currentPrice <= entryHigh) {
-      status = 'triggered';
+    let computedStatus: Setup['status'] = confluence.score >= 3 ? 'ready' : 'forming';
+    if (isPriceInsideEntry({ entryZone: { low: entryLow, high: entryHigh } }, currentPrice)) {
+      computedStatus = 'triggered';
     }
 
     const setupIdSeed = [
       sessionDate,
       setupType,
-      direction,
       round(zone.priceLow, 2),
       round(zone.priceHigh, 2),
       round(zone.clusterScore, 2),
       idx + 1,
     ].join('|');
+    const setupId = stableId('spx_setup', setupIdSeed);
+    const previous = previousById.get(setupId) || null;
+
+    const status = resolveLifecycleStatus({
+      computedStatus,
+      currentPrice,
+      fallbackDistance,
+      setup: {
+        direction,
+        entryZone: { low: entryLow, high: entryHigh },
+        stop,
+        target2: { price: target2, label: 'Target 2' },
+      },
+      previous,
+    });
+
+    let triggeredAt: string | null = previous?.triggeredAt || null;
+    if (status === 'triggered' && !triggeredAt) {
+      triggeredAt = nowIso();
+    }
+    if (status !== 'triggered' && status !== 'invalidated' && status !== 'expired') {
+      triggeredAt = null;
+    }
+
+    const createdAt = previous?.createdAt || nowIso();
 
     return {
-      id: stableId('spx_setup', setupIdSeed),
+      id: setupId,
       type: setupType,
       direction,
       entryZone: { low: entryLow, high: entryHigh },
@@ -201,10 +293,22 @@ export async function detectActiveSetups(options?: { forceRefresh?: boolean }): 
       status,
       probability: WIN_RATE_BY_SCORE[confluence.score] || 32,
       recommendedContract: null,
-      createdAt: nowIso(),
-      triggeredAt: status === 'triggered' ? nowIso() : null,
+      createdAt,
+      triggeredAt,
     };
   });
+
+  // Preserve recently active setups that dropped from the candidate list as expired.
+  const setupIds = new Set(setups.map((setup) => setup.id));
+  for (const previous of previousSetups || []) {
+    if (setupIds.has(previous.id)) continue;
+    if (previous.status === 'expired' || previous.status === 'invalidated') continue;
+
+    setups.push({
+      ...previous,
+      status: 'expired',
+    });
+  }
 
   await cacheSet(SETUPS_CACHE_KEY, setups, SETUPS_CACHE_TTL_SECONDS);
 
