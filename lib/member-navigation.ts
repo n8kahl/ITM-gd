@@ -4,6 +4,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Palette,
+  Target,
   type LucideIcon,
   UserCircle,
   Users,
@@ -20,6 +21,7 @@ type MemberTabLike = {
 const TAB_ID_ICON_MAP: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   journal: BookOpen,
+  'spx-command-center': Target,
   'ai-coach': Bot,
   library: GraduationCap,
   social: Users,
@@ -91,6 +93,7 @@ export function getMemberFallbackTitle(pathname: string): string {
   if (pathname === '/members') return 'Dashboard'
   if (pathname.startsWith('/members/academy') || pathname.startsWith('/members/library')) return 'Academy'
   if (pathname.startsWith('/members/journal')) return 'Journal'
+  if (pathname.startsWith('/members/spx-command-center')) return 'SPX Command Center'
   if (pathname.startsWith('/members/ai-coach')) return 'AI Coach'
   if (pathname.startsWith('/members/social')) return 'Social'
   if (pathname.startsWith('/members/studio')) return 'Studio'

@@ -28,12 +28,14 @@ import trackedSetupsRouter from './routes/trackedSetups';
 import symbolsRouter from './routes/symbols';
 import earningsRouter from './routes/earnings';
 import fibonacciRouter from './routes/fibonacci';
+import spxRouter from './routes/spx';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
+import { startSPXDataLoop, stopSPXDataLoop } from './workers/spxDataLoop';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
 import { initializeMarketHolidays } from './services/marketHours';
@@ -121,6 +123,7 @@ app.use('/api/tracked-setups', trackedSetupsRouter);
 app.use('/api/symbols', symbolsRouter);
 app.use('/api/earnings', earningsRouter);
 app.use('/api/fibonacci', fibonacciRouter);
+app.use('/api/spx', spxRouter);
 // Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
 app.get('/api/journal/trades', authenticateToken, (_req: Request, res: Response) => {
   res.status(410).json({
@@ -145,7 +148,7 @@ app.get('/', (_req: Request, res: Response) => {
       chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
       leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
-      scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today',
+      scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today', spx: '/api/spx/*',
       trackedSetups: '/api/tracked-setups', symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices',
       fibonacci: '/api/fibonacci',
     }
@@ -199,6 +202,7 @@ async function start() {
     startSessionCleanupWorker();
     startSetupDetectorService();
     startWorkerHealthAlertWorker();
+    startSPXDataLoop();
 
     // Initialize market holidays (async, but don't block server start completely)
     initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
@@ -224,6 +228,7 @@ async function gracefulShutdown(signal: string) {
     stopSessionCleanupWorker();
     stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
+    stopSPXDataLoop();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();

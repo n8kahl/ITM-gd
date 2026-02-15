@@ -142,7 +142,7 @@ function createE2EBypassAuthState(): MemberAuthState {
       description: 'Playwright E2E bypass permission',
       granted_by_role: 'role-pro',
     }],
-    allowedTabs: ['dashboard', 'ai-coach', 'journal', 'library', 'social', 'profile'],
+    allowedTabs: ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'profile'],
     tabConfigs: [],
     isLoading: false,
     isAuthenticated: true,
@@ -305,9 +305,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
     switch (tier) {
       case 'executive':
-        return ['dashboard', 'ai-coach', 'journal', 'library', 'social', 'studio', 'profile']
+        return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'studio', 'profile']
       case 'pro':
-        return ['dashboard', 'ai-coach', 'journal', 'library', 'social', 'profile']
+        return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'profile']
       case 'core':
         return ['dashboard', 'journal', 'social', 'profile']
       default:
@@ -786,7 +786,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // 2. Legacy permission names: 'access_trading_journal', etc.
   const hasPermission = useCallback((permissionName: string): boolean => {
     // Check if it's a tab ID (Simple RBAC)
-    const tabIds = ['dashboard', 'journal', 'library', 'social', 'profile', 'ai-coach']
+    const tabIds = ['dashboard', 'journal', 'spx-command-center', 'library', 'social', 'profile', 'ai-coach']
     if (tabIds.includes(permissionName)) {
       return state.allowedTabs.includes(permissionName)
     }
@@ -794,6 +794,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     // Map permission names to tab IDs for nav items
     const permissionToTab: Record<string, string> = {
       'access_ai_coach': 'ai-coach',
+      'access_spx_command_center': 'spx-command-center',
     }
     if (permissionToTab[permissionName]) {
       return state.allowedTabs.includes(permissionToTab[permissionName])
