@@ -36,6 +36,7 @@ function buildCSP(nonce: string): string {
     'https://*.up.railway.app',
     'wss://*.up.railway.app',
     'https://*.ingest.sentry.io',
+    'https://*.ingest.us.sentry.io',
   ]
 
   // Local AI Coach backend for development and E2E.
