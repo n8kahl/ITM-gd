@@ -138,7 +138,9 @@ function normalizeOptionsUnderlyingTicker(underlyingTicker: string): string {
 }
 
 function toOptionsSnapshotUnderlyingTicker(underlyingTicker: string): string {
-  return formatMassiveTicker(normalizeOptionsUnderlyingTicker(underlyingTicker));
+  // Options snapshot endpoints expect the plain underlying symbol (e.g. SPX),
+  // not index-prefixed tickers like I:SPX.
+  return normalizeOptionsUnderlyingTicker(underlyingTicker);
 }
 
 
@@ -681,6 +683,7 @@ export async function getOptionsSnapshot(
 ): Promise<OptionsSnapshot[]> {
   try {
     const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
+    const encodedUnderlying = encodeURIComponent(snapshotUnderlyingTicker);
     const MAX_PAGES = 20;
     const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
       if (!results) return [];
@@ -688,8 +691,8 @@ export async function getOptionsSnapshot(
     };
 
     const url = optionTicker
-      ? `/v3/snapshot/options/${snapshotUnderlyingTicker}/${optionTicker}`
-      : `/v3/snapshot/options/${snapshotUnderlyingTicker}`;
+      ? `/v3/snapshot/options/${encodedUnderlying}/${encodeURIComponent(optionTicker)}`
+      : `/v3/snapshot/options/${encodedUnderlying}`;
 
     const response = await massiveClient.get<OptionsSnapshotResponse>(url, optionTicker ? undefined : {
       params: {

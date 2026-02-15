@@ -59,7 +59,12 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
     throw new Error(parseSPXErrorMessage(response.status, contentType, text))
   }
 
-  return response.json() as Promise<T>
+  const payload = await response.json() as Record<string, unknown>
+  if (payload && payload.degraded === true) {
+    throw new Error('SPX service is running in degraded mode. Live data temporarily unavailable.')
+  }
+
+  return payload as T
 }
 
 export function useSPXQuery<T>(

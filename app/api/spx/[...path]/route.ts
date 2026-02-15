@@ -305,9 +305,10 @@ async function proxy(
         const contentType = response.headers.get('content-type') || ''
         const payload = await response.text()
         const fallback = request.method === 'GET' ? spxFallbackPayload(segments) : null
+        const shouldFallback = response.status >= 500
 
         if (contentType.includes('application/json')) {
-          if (fallback) {
+          if (fallback && shouldFallback) {
             return NextResponse.json(fallback, {
               status: 200,
               headers: {
@@ -330,7 +331,7 @@ async function proxy(
           })
         }
 
-        if (fallback) {
+        if (fallback && shouldFallback) {
           return NextResponse.json(fallback, {
             status: 200,
             headers: {
