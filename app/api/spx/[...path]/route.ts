@@ -3,29 +3,56 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-function resolveBackendBaseUrl(request: Request): string {
-  const configured = (
-    process.env.AI_COACH_API_URL ||
-    process.env.NEXT_PUBLIC_AI_COACH_API_URL ||
-    'http://localhost:3001'
-  ).replace(/\/+$/, '')
+function normalizeHost(hostname: string): string {
+  return hostname.toLowerCase().replace(/^www\./, '')
+}
 
-  const host = (() => {
-    try {
-      return new URL(request.url).hostname.toLowerCase()
-    } catch {
-      return ''
-    }
-  })()
+function getRequestHost(request: Request): string {
+  try {
+    return new URL(request.url).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+function parseHostname(candidate: string): string {
+  try {
+    return new URL(candidate).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+function resolveBackendBaseUrl(request: Request): string {
+  const candidates = [
+    process.env.AI_COACH_API_URL,
+    process.env.NEXT_PUBLIC_AI_COACH_API_URL,
+    'http://localhost:3001',
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.replace(/\/+$/, ''))
+
+  const host = getRequestHost(request)
+  const normalizedHost = normalizeHost(host)
 
   const isLocalHost = host === 'localhost' || host === '127.0.0.1'
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true'
 
-  if (isLocalHost && preferLocalInDev && /railway\.app/i.test(configured)) {
-    return 'http://localhost:3001'
+  for (const candidate of candidates) {
+    const candidateHost = parseHostname(candidate)
+    if (candidateHost && normalizedHost && normalizeHost(candidateHost) === normalizedHost) {
+      // Prevent recursive proxying when server env points back to this same host.
+      continue
+    }
+
+    if (isLocalHost && preferLocalInDev && /railway\.app/i.test(candidate)) {
+      return 'http://localhost:3001'
+    }
+
+    return candidate
   }
 
-  return configured
+  return 'http://localhost:3001'
 }
 
 type HandlerContext = {
@@ -84,19 +111,24 @@ async function proxy(request: Request, ctx: HandlerContext): Promise<Response> {
     const response = await fetch(upstream, init)
 
     if (!response.ok) {
+      const contentType = response.headers.get('content-type') || ''
       const payload = await response.text()
-      return new NextResponse(
-        payload ||
-          JSON.stringify({
-            error: 'Upstream error',
-            message: `SPX backend responded with status ${response.status}`,
-          }),
-        {
+
+      if (contentType.includes('application/json')) {
+        return new NextResponse(payload, {
           status: response.status,
           headers: {
-            'Content-Type': response.headers.get('content-type') || 'application/json',
+            'Content-Type': 'application/json',
           },
+        })
+      }
+
+      return NextResponse.json(
+        {
+          error: 'Upstream error',
+          message: `SPX backend responded with status ${response.status}`,
         },
+        { status: response.status },
       )
     }
 
