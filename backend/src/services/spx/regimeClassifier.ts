@@ -3,11 +3,17 @@ import { getMinuteAggregates } from '../../config/massive';
 import { logger } from '../../lib/logger';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
-import type { RegimeState } from './types';
+import type { ClusterZone, RegimeState, SPXLevel, UnifiedGEXLandscape } from './types';
 import { classifyRegimeFromSignals, nowIso, round } from './utils';
 
 const REGIME_CACHE_KEY = 'spx_command_center:regime';
-const REGIME_CACHE_TTL_SECONDS = 5;
+const REGIME_CACHE_TTL_SECONDS = 15;
+let regimeInFlight: Promise<RegimeState> | null = null;
+type LevelData = {
+  levels: SPXLevel[];
+  clusters: ClusterZone[];
+  generatedAt: string;
+};
 
 function getDateKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -74,10 +80,23 @@ function computeDirectionProbability(input: {
   };
 }
 
-export async function classifyCurrentRegime(options?: { forceRefresh?: boolean }): Promise<RegimeState> {
+export async function classifyCurrentRegime(options?: {
+  forceRefresh?: boolean;
+  gexLandscape?: UnifiedGEXLandscape;
+  levelData?: LevelData;
+  volumeTrend?: 'rising' | 'flat' | 'falling';
+}): Promise<RegimeState> {
+  const gexLandscape = options?.gexLandscape;
+  const levelData = options?.levelData;
+  const providedVolumeTrend = options?.volumeTrend;
   const forceRefresh = options?.forceRefresh === true;
+  const hasPrecomputedDependencies = Boolean(gexLandscape || levelData || providedVolumeTrend);
+  if (!forceRefresh && regimeInFlight) {
+    return regimeInFlight;
+  }
 
-  if (!forceRefresh) {
+  const run = async (): Promise<RegimeState> => {
+  if (!forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<RegimeState>(REGIME_CACHE_KEY);
     if (cached) {
       return cached;
@@ -85,9 +104,15 @@ export async function classifyCurrentRegime(options?: { forceRefresh?: boolean }
   }
 
   const [gex, levels, volumeTrend] = await Promise.all([
-    computeUnifiedGEXLandscape({ forceRefresh }),
-    getMergedLevels({ forceRefresh }),
-    getVolumeTrend(),
+    gexLandscape
+      ? Promise.resolve(gexLandscape)
+      : computeUnifiedGEXLandscape({ forceRefresh }),
+    levelData
+      ? Promise.resolve(levelData)
+      : getMergedLevels({ forceRefresh }),
+    providedVolumeTrend
+      ? Promise.resolve(providedVolumeTrend)
+      : getVolumeTrend(),
   ]);
 
   const spot = gex.spx.spotPrice;
@@ -140,4 +165,16 @@ export async function classifyCurrentRegime(options?: { forceRefresh?: boolean }
   });
 
   return state;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  regimeInFlight = run();
+  try {
+    return await regimeInFlight;
+  } finally {
+    regimeInFlight = null;
+  }
 }

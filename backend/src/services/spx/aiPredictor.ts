@@ -3,16 +3,36 @@ import { logger } from '../../lib/logger';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { classifyCurrentRegime } from './regimeClassifier';
-import type { PredictionState } from './types';
+import type { ClusterZone, PredictionState, RegimeState, SPXLevel, UnifiedGEXLandscape } from './types';
 import { normalizeProbabilities, nowIso, round } from './utils';
 
 const PREDICTION_CACHE_KEY = 'spx_command_center:prediction';
-const PREDICTION_CACHE_TTL_SECONDS = 5;
+const PREDICTION_CACHE_TTL_SECONDS = 15;
+let predictionInFlight: Promise<PredictionState> | null = null;
+type LevelData = {
+  levels: SPXLevel[];
+  clusters: ClusterZone[];
+  generatedAt: string;
+};
 
-export async function getPredictionState(options?: { forceRefresh?: boolean }): Promise<PredictionState> {
+export async function getPredictionState(options?: {
+  forceRefresh?: boolean;
+  regimeState?: RegimeState;
+  levelData?: LevelData;
+  gexLandscape?: UnifiedGEXLandscape;
+}): Promise<PredictionState> {
+  const regimeState = options?.regimeState;
+  const levelData = options?.levelData;
+  const gexLandscape = options?.gexLandscape;
   const forceRefresh = options?.forceRefresh === true;
+  const hasPrecomputedDependencies = Boolean(regimeState || levelData || gexLandscape);
 
-  if (!forceRefresh) {
+  if (!forceRefresh && predictionInFlight) {
+    return predictionInFlight;
+  }
+
+  const run = async (): Promise<PredictionState> => {
+  if (!forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<PredictionState>(PREDICTION_CACHE_KEY);
     if (cached) {
       return cached;
@@ -20,9 +40,15 @@ export async function getPredictionState(options?: { forceRefresh?: boolean }): 
   }
 
   const [regime, levels, gex] = await Promise.all([
-    classifyCurrentRegime({ forceRefresh }),
-    getMergedLevels({ forceRefresh }),
-    computeUnifiedGEXLandscape({ forceRefresh }),
+    regimeState
+      ? Promise.resolve(regimeState)
+      : classifyCurrentRegime({ forceRefresh }),
+    levelData
+      ? Promise.resolve(levelData)
+      : getMergedLevels({ forceRefresh }),
+    gexLandscape
+      ? Promise.resolve(gexLandscape)
+      : computeUnifiedGEXLandscape({ forceRefresh }),
   ]);
 
   const spot = gex.spx.spotPrice;
@@ -123,4 +149,16 @@ export async function getPredictionState(options?: { forceRefresh?: boolean }): 
   });
 
   return prediction;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  predictionInFlight = run();
+  try {
+    return await predictionInFlight;
+  } finally {
+    predictionInFlight = null;
+  }
 }

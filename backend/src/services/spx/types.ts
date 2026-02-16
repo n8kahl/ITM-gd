@@ -167,15 +167,17 @@ export interface SPXFlowEvent {
   timestamp: string;
 }
 
+export interface UnifiedGEXLandscape {
+  spx: GEXProfile;
+  spy: GEXProfile;
+  combined: GEXProfile;
+}
+
 export interface SPXSnapshot {
   levels: SPXLevel[];
   clusters: ClusterZone[];
   fibLevels: FibLevel[];
-  gex: {
-    spx: GEXProfile;
-    spy: GEXProfile;
-    combined: GEXProfile;
-  };
+  gex: UnifiedGEXLandscape;
   basis: BasisState;
   setups: Setup[];
   regime: RegimeState;

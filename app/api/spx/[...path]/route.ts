@@ -47,6 +47,8 @@ function resolveBackendBaseUrls(request: Request): string[] {
   const requestHostname = requestInfo?.hostname || ''
   const isLocalHost = requestHostname === 'localhost' || requestHostname === '127.0.0.1'
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true'
+  const allowRemoteFallbackInDev = process.env.ALLOW_REMOTE_SPX_FALLBACK === 'true'
+    || process.env.NEXT_PUBLIC_ALLOW_REMOTE_SPX_FALLBACK === 'true'
 
   const envCandidates = toBackendCandidates([
     process.env.SPX_BACKEND_URL,
@@ -55,7 +57,9 @@ function resolveBackendBaseUrls(request: Request): string[] {
   ])
 
   const defaults = isLocalHost && preferLocalInDev
-    ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
+    ? allowRemoteFallbackInDev
+      ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
+      : [DEFAULT_LOCAL_BACKEND]
     : [DEFAULT_REMOTE_BACKEND]
 
   const candidates = toBackendCandidates([...envCandidates, ...defaults])
@@ -83,7 +87,9 @@ function resolveBackendBaseUrls(request: Request): string[] {
   }
 
   return isLocalHost && preferLocalInDev
-    ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
+    ? allowRemoteFallbackInDev
+      ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
+      : [DEFAULT_LOCAL_BACKEND]
     : [DEFAULT_REMOTE_BACKEND]
 }
 

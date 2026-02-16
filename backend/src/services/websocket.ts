@@ -340,9 +340,11 @@ function flowAlertSignature(flow: SPXSnapshot['flow']): string {
 }
 
 function coachMessageSignature(messages: SPXSnapshot['coachMessages']): string {
-  const latest = messages[0];
-  if (!latest) return '';
-  return `${latest.id}|${latest.timestamp}`;
+  if (messages.length === 0) return '';
+  return messages
+    .slice(0, 3)
+    .map((msg) => `${msg.type}|${msg.priority}|${msg.setupId || 'none'}|${msg.content}`)
+    .join(';');
 }
 
 function diffLevels(
@@ -515,6 +517,118 @@ function sendToClient(ws: WebSocket, data: Record<string, unknown>): void {
   }
 }
 
+function sendChannelPayloadToClient(
+  ws: WebSocket,
+  channel: string,
+  type: string,
+  data: Record<string, unknown>,
+): void {
+  sendToClient(ws, {
+    type,
+    channel,
+    data,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function sendInitialSPXChannelSnapshot(
+  ws: WebSocket,
+  channels: Set<string>,
+): Promise<void> {
+  const requestedPublicChannels = Array.from(channels).filter((channel) => SPX_PUBLIC_CHANNEL_SET.has(channel));
+  if (requestedPublicChannels.length === 0) return;
+
+  const snapshot = await getSPXSnapshot({ forceRefresh: false });
+
+  if (channels.has('gex:SPX')) {
+    sendChannelPayloadToClient(ws, 'gex:SPX', 'spx_gex', {
+      netGex: snapshot.gex.spx.netGex,
+      flipPoint: snapshot.gex.spx.flipPoint,
+      callWall: snapshot.gex.spx.callWall,
+      putWall: snapshot.gex.spx.putWall,
+      topLevels: snapshot.gex.spx.keyLevels.slice(0, 5),
+    });
+  }
+
+  if (channels.has('gex:SPY')) {
+    sendChannelPayloadToClient(ws, 'gex:SPY', 'spx_gex', {
+      netGex: snapshot.gex.spy.netGex,
+      flipPoint: snapshot.gex.spy.flipPoint,
+      callWall: snapshot.gex.spy.callWall,
+      putWall: snapshot.gex.spy.putWall,
+      topLevels: snapshot.gex.spy.keyLevels.slice(0, 5),
+    });
+  }
+
+  if (channels.has('regime:update')) {
+    sendChannelPayloadToClient(ws, 'regime:update', 'spx_regime', {
+      regime: snapshot.regime.regime,
+      direction: snapshot.regime.direction,
+      probability: snapshot.regime.probability,
+      magnitude: snapshot.regime.magnitude,
+    });
+  }
+
+  if (channels.has('basis:update')) {
+    sendChannelPayloadToClient(ws, 'basis:update', 'spx_basis', {
+      basis: snapshot.basis.current,
+      trend: snapshot.basis.trend,
+      leading: snapshot.basis.leading,
+      timestamp: snapshot.basis.timestamp,
+    });
+  }
+
+  if (channels.has('levels:update')) {
+    sendChannelPayloadToClient(ws, 'levels:update', 'spx_levels', {
+      added: snapshot.levels,
+      removed: [],
+      modified: [],
+    });
+  }
+
+  if (channels.has('clusters:update')) {
+    sendChannelPayloadToClient(ws, 'clusters:update', 'spx_clusters', {
+      zones: snapshot.clusters,
+    });
+  }
+
+  if (channels.has('setups:update')) {
+    for (const setup of snapshot.setups) {
+      sendChannelPayloadToClient(ws, 'setups:update', 'spx_setup', {
+        setup,
+        action: 'created',
+      });
+    }
+  }
+
+  if (channels.has('flow:alert')) {
+    for (const event of snapshot.flow) {
+      if (event.premium < FLOW_ALERT_PREMIUM_THRESHOLD && event.size < FLOW_ALERT_SIZE_THRESHOLD) continue;
+      sendChannelPayloadToClient(ws, 'flow:alert', 'spx_flow', {
+        type: event.type,
+        symbol: event.symbol,
+        strike: event.strike,
+        expiry: event.expiry,
+        size: event.size,
+        direction: event.direction,
+        premium: event.premium,
+      });
+    }
+  }
+
+  if (channels.has('coach:message')) {
+    const latest = snapshot.coachMessages[0];
+    if (latest) {
+      sendChannelPayloadToClient(ws, 'coach:message', 'spx_coach', {
+        type: latest.type,
+        content: latest.content,
+        setupId: latest.setupId,
+        priority: latest.priority,
+      });
+    }
+  }
+}
+
 function handleClientMessage(ws: WebSocket, raw: string): void {
   const state = clients.get(ws);
   if (!state) return;
@@ -528,6 +642,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
       case 'subscribe': {
         const symbols = Array.isArray(msg.symbols) ? msg.symbols : [];
         const channels = Array.isArray(msg.channels) ? msg.channels : [];
+        const newlySubscribedChannels = new Set<string>();
 
         for (const sym of symbols) {
           if (typeof sym !== 'string') continue;
@@ -579,6 +694,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
           }
 
           state.subscriptions.add(channel);
+          newlySubscribedChannels.add(channel);
 
           const priceChannel = normalizePriceChannel(channel);
           if (priceChannel) {
@@ -601,6 +717,14 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
               }
             }
           }
+        }
+
+        if (newlySubscribedChannels.size > 0) {
+          void sendInitialSPXChannelSnapshot(ws, newlySubscribedChannels).catch((error) => {
+            logger.error('Failed to send initial SPX websocket snapshot', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
         }
         break;
       }

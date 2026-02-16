@@ -18,6 +18,10 @@ export function ContractSelector() {
         setContract(null)
         return
       }
+      if (selectedSetup.status !== 'ready' && selectedSetup.status !== 'triggered') {
+        setContract(null)
+        return
+      }
 
       setIsLoading(true)
       try {

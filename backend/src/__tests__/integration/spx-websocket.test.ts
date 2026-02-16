@@ -73,15 +73,16 @@ async function closeServer(server: http.Server): Promise<void> {
   });
 }
 
-function waitForMessage(
+function waitForMatchingMessages(
   ws: WebSocket,
-  predicate: (payload: Record<string, unknown>) => boolean,
+  predicates: Array<(payload: Record<string, unknown>) => boolean>,
   timeoutMs: number = 8000,
-): Promise<Record<string, unknown>> {
+): Promise<Array<Record<string, unknown>>> {
   return new Promise((resolve, reject) => {
+    const matches: Array<Record<string, unknown> | null> = Array.from({ length: predicates.length }, () => null);
     const timeout = setTimeout(() => {
       ws.off('message', onMessage);
-      reject(new Error('Timed out waiting for websocket message'));
+      reject(new Error('Timed out waiting for websocket messages'));
     }, timeoutMs);
 
     const onMessage = (raw: WebSocket.RawData) => {
@@ -92,10 +93,19 @@ function waitForMessage(
         return;
       }
 
-      if (!predicate(parsed)) return;
-      clearTimeout(timeout);
-      ws.off('message', onMessage);
-      resolve(parsed);
+      for (let i = 0; i < predicates.length; i += 1) {
+        if (matches[i]) continue;
+        if (predicates[i](parsed)) {
+          matches[i] = parsed;
+          break;
+        }
+      }
+
+      if (matches.every(Boolean)) {
+        clearTimeout(timeout);
+        ws.off('message', onMessage);
+        resolve(matches as Array<Record<string, unknown>>);
+      }
     };
 
     ws.on('message', onMessage);
@@ -302,22 +312,18 @@ describeWithSockets('SPX websocket integration', () => {
       channels: ['gex:SPX', 'regime:update', 'basis:update', 'flow:alert', 'coach:message'],
     }));
 
-    const gexMessage = await waitForMessage(
+    const [gexMessage, regimeMessage, basisMessage] = await waitForMatchingMessages(
       wsClient,
-      (msg) => msg.channel === 'gex:SPX' && msg.type === 'spx_gex',
+      [
+        (msg) => msg.channel === 'gex:SPX' && msg.type === 'spx_gex',
+        (msg) => msg.channel === 'regime:update' && msg.type === 'spx_regime',
+        (msg) => msg.channel === 'basis:update' && msg.type === 'spx_basis',
+      ],
+      5000,
     );
+
     expect(gexMessage.channel).toBe('gex:SPX');
-
-    const regimeMessage = await waitForMessage(
-      wsClient,
-      (msg) => msg.channel === 'regime:update' && msg.type === 'spx_regime',
-    );
     expect(regimeMessage.channel).toBe('regime:update');
-
-    const basisMessage = await waitForMessage(
-      wsClient,
-      (msg) => msg.channel === 'basis:update' && msg.type === 'spx_basis',
-    );
     expect(basisMessage.channel).toBe('basis:update');
   });
 });

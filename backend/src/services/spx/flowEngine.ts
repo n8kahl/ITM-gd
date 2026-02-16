@@ -2,11 +2,12 @@ import { cacheGet, cacheSet } from '../../config/redis';
 import { getOptionsSnapshot, type OptionsSnapshot } from '../../config/massive';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { detectActiveSetups } from './setupDetector';
-import type { SPXFlowEvent } from './types';
-import { nowIso, round, stableId, uuid } from './utils';
+import type { Setup, SPXFlowEvent, UnifiedGEXLandscape } from './types';
+import { nowIso, round, stableId } from './utils';
 
 const FLOW_CACHE_KEY = 'spx_command_center:flow';
-const FLOW_CACHE_TTL_SECONDS = 5;
+const FLOW_CACHE_TTL_SECONDS = 20;
+let flowInFlight: Promise<SPXFlowEvent[]> | null = null;
 const MIN_FLOW_VOLUME = 10;
 const MIN_FLOW_PREMIUM = 10000;
 const MAX_FLOW_EVENTS = 20;
@@ -148,8 +149,18 @@ function buildSyntheticFallback(
     const type: SPXFlowEvent['type'] = idx % 3 === 0 ? 'block' : 'sweep';
     const symbol: SPXFlowEvent['symbol'] = idx % 2 === 0 ? 'SPX' : 'SPY';
 
+    const seed = [
+      setup.id,
+      symbol,
+      strike.toFixed(2),
+      baseExpiry,
+      size,
+      setup.direction,
+      type,
+    ].join('|');
+
     return {
-      id: uuid('flow'),
+      id: stableId('spx_flow_fallback', seed),
       type,
       symbol,
       strike,
@@ -162,14 +173,16 @@ function buildSyntheticFallback(
   });
 
   if (events.length === 0) {
+    const strike = round(gex.combined.flipPoint, 0);
+    const direction: SPXFlowEvent['direction'] = gex.combined.netGex >= 0 ? 'bullish' : 'bearish';
     events.push({
-      id: uuid('flow'),
+      id: stableId('spx_flow_fallback', `default|${strike}|${baseExpiry}|${direction}`),
       type: 'block',
       symbol: 'SPX',
-      strike: round(gex.combined.flipPoint, 0),
+      strike,
       expiry: baseExpiry,
       size: 100,
-      direction: gex.combined.netGex >= 0 ? 'bullish' : 'bearish',
+      direction,
       premium: 250000,
       timestamp: nowIso(),
     });
@@ -178,32 +191,56 @@ function buildSyntheticFallback(
   return events;
 }
 
-export async function getFlowEvents(options?: { forceRefresh?: boolean }): Promise<SPXFlowEvent[]> {
+export async function getFlowEvents(options?: {
+  forceRefresh?: boolean;
+  fallbackSetups?: Setup[];
+  fallbackGex?: UnifiedGEXLandscape;
+}): Promise<SPXFlowEvent[]> {
   const forceRefresh = options?.forceRefresh === true;
+  if (!forceRefresh && flowInFlight) {
+    return flowInFlight;
+  }
 
-  if (!forceRefresh) {
-    const cached = await cacheGet<SPXFlowEvent[]>(FLOW_CACHE_KEY);
-    if (cached) {
-      return cached;
+  const run = async (): Promise<SPXFlowEvent[]> => {
+    if (!forceRefresh) {
+      const cached = await cacheGet<SPXFlowEvent[]>(FLOW_CACHE_KEY);
+      if (cached) {
+        return cached;
+      }
     }
+
+    let events: SPXFlowEvent[] = [];
+
+    try {
+      events = await fetchFlowFromSnapshots(forceRefresh);
+    } catch {
+      events = [];
+    }
+
+    if (events.length === 0) {
+      const [setups, gex] = await Promise.all([
+        options?.fallbackSetups
+          ? Promise.resolve(options.fallbackSetups)
+          : detectActiveSetups({ forceRefresh }),
+        options?.fallbackGex
+          ? Promise.resolve(options.fallbackGex)
+          : computeUnifiedGEXLandscape({ forceRefresh }),
+      ]);
+      events = buildSyntheticFallback(setups, gex);
+    }
+
+    await cacheSet(FLOW_CACHE_KEY, events, FLOW_CACHE_TTL_SECONDS);
+    return events;
+  };
+
+  if (forceRefresh) {
+    return run();
   }
 
-  let events: SPXFlowEvent[] = [];
-
+  flowInFlight = run();
   try {
-    events = await fetchFlowFromSnapshots(forceRefresh);
-  } catch {
-    events = [];
+    return await flowInFlight;
+  } finally {
+    flowInFlight = null;
   }
-
-  if (events.length === 0) {
-    const [setups, gex] = await Promise.all([
-      detectActiveSetups({ forceRefresh }),
-      computeUnifiedGEXLandscape({ forceRefresh }),
-    ]);
-    events = buildSyntheticFallback(setups, gex);
-  }
-
-  await cacheSet(FLOW_CACHE_KEY, events, FLOW_CACHE_TTL_SECONDS);
-  return events;
 }

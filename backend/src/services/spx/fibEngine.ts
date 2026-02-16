@@ -1,12 +1,13 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getDailyAggregates, getMinuteAggregates } from '../../config/massive';
 import { logger } from '../../lib/logger';
-import type { FibLevel } from './types';
+import type { BasisState, FibLevel } from './types';
 import { CLUSTER_RADIUS_POINTS, nowIso, round } from './utils';
 import { getBasisState } from './crossReference';
 
 const FIB_CACHE_KEY = 'spx_command_center:fib_levels';
 const FIB_CACHE_TTL_SECONDS = 30;
+let fibInFlight: Promise<FibLevel[]> | null = null;
 
 interface AggregateBar {
   o: number;
@@ -146,32 +147,54 @@ async function computeFibSet(symbol: 'SPX' | 'SPY'): Promise<FibLevel[]> {
   return levels;
 }
 
-export async function getFibLevels(options?: { forceRefresh?: boolean }): Promise<FibLevel[]> {
+export async function getFibLevels(options?: {
+  forceRefresh?: boolean;
+  basisState?: BasisState;
+}): Promise<FibLevel[]> {
   const forceRefresh = options?.forceRefresh === true;
-
-  if (!forceRefresh) {
-    const cached = await cacheGet<FibLevel[]>(FIB_CACHE_KEY);
-    if (cached) {
-      return cached;
-    }
+  const hasPrecomputedBasis = Boolean(options?.basisState);
+  if (!forceRefresh && fibInFlight) {
+    return fibInFlight;
   }
 
-  const [basis, spxLevels, spyLevels] = await Promise.all([
-    getBasisState({ forceRefresh }),
-    computeFibSet('SPX'),
-    computeFibSet('SPY'),
-  ]);
+  const run = async (): Promise<FibLevel[]> => {
+    if (!forceRefresh && !hasPrecomputedBasis) {
+      const cached = await cacheGet<FibLevel[]>(FIB_CACHE_KEY);
+      if (cached) {
+        return cached;
+      }
+    }
 
-  const merged = markCrossValidatedBySPY(spxLevels, spyLevels, basis.current)
-    .sort((a, b) => a.price - b.price);
+    const [basis, spxLevels, spyLevels] = await Promise.all([
+      options?.basisState
+        ? Promise.resolve(options.basisState)
+        : getBasisState({ forceRefresh }),
+      computeFibSet('SPX'),
+      computeFibSet('SPY'),
+    ]);
 
-  await cacheSet(FIB_CACHE_KEY, merged, FIB_CACHE_TTL_SECONDS);
+    const merged = markCrossValidatedBySPY(spxLevels, spyLevels, basis.current)
+      .sort((a, b) => a.price - b.price);
 
-  logger.info('SPX fibonacci levels updated', {
-    count: merged.length,
-    crossValidatedCount: merged.filter((item) => item.crossValidated).length,
-    timestamp: nowIso(),
-  });
+    await cacheSet(FIB_CACHE_KEY, merged, FIB_CACHE_TTL_SECONDS);
 
-  return merged;
+    logger.info('SPX fibonacci levels updated', {
+      count: merged.length,
+      crossValidatedCount: merged.filter((item) => item.crossValidated).length,
+      timestamp: nowIso(),
+    });
+
+    return merged;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  fibInFlight = run();
+  try {
+    return await fibInFlight;
+  } finally {
+    fibInFlight = null;
+  }
 }

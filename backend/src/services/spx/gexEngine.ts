@@ -7,6 +7,11 @@ import { nowIso, round } from './utils';
 
 const GEX_CACHE_KEY = 'spx_command_center:gex:unified';
 const GEX_CACHE_TTL_SECONDS = 15;
+let gexInFlight: Promise<{
+  spx: GEXProfile;
+  spy: GEXProfile;
+  combined: GEXProfile;
+}> | null = null;
 
 function toStrikePair(strike: number, gex: number): { strike: number; gex: number } {
   return {
@@ -205,7 +210,15 @@ export async function computeUnifiedGEXLandscape(options?: {
   combined: GEXProfile;
 }> {
   const forceRefresh = options?.forceRefresh === true;
+  if (!forceRefresh && gexInFlight) {
+    return gexInFlight;
+  }
 
+  const run = async (): Promise<{
+    spx: GEXProfile;
+    spy: GEXProfile;
+    combined: GEXProfile;
+  }> => {
   if (!forceRefresh) {
     const cached = await cacheGet<{
       spx: GEXProfile;
@@ -276,4 +289,16 @@ export async function computeUnifiedGEXLandscape(options?: {
   });
 
   return payload;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  gexInFlight = run();
+  try {
+    return await gexInFlight;
+  } finally {
+    gexInFlight = null;
+  }
 }

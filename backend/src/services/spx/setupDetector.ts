@@ -4,11 +4,26 @@ import { getFibLevels } from './fibEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { classifyCurrentRegime } from './regimeClassifier';
-import type { ClusterZone, Regime, Setup, SetupType } from './types';
+import type {
+  ClusterZone,
+  FibLevel,
+  Regime,
+  RegimeState,
+  Setup,
+  SetupType,
+  SPXLevel,
+  UnifiedGEXLandscape,
+} from './types';
 import { nowIso, round, stableId } from './utils';
 
 const SETUPS_CACHE_KEY = 'spx_command_center:setups';
 const SETUPS_CACHE_TTL_SECONDS = 10;
+let setupsInFlight: Promise<Setup[]> | null = null;
+type LevelData = {
+  levels: SPXLevel[];
+  clusters: ClusterZone[];
+  generatedAt: string;
+};
 const WIN_RATE_BY_SCORE: Record<number, number> = {
   1: 35,
   2: 45,
@@ -183,10 +198,25 @@ function resolveLifecycleStatus(input: {
   return status;
 }
 
-export async function detectActiveSetups(options?: { forceRefresh?: boolean }): Promise<Setup[]> {
+export async function detectActiveSetups(options?: {
+  forceRefresh?: boolean;
+  levelData?: LevelData;
+  gexLandscape?: UnifiedGEXLandscape;
+  fibLevels?: FibLevel[];
+  regimeState?: RegimeState;
+}): Promise<Setup[]> {
+  const levelData = options?.levelData;
+  const gexLandscape = options?.gexLandscape;
+  const fibLevelsProvided = options?.fibLevels;
+  const regimeStateProvided = options?.regimeState;
   const forceRefresh = options?.forceRefresh === true;
+  const hasPrecomputedDependencies = Boolean(levelData || gexLandscape || fibLevelsProvided || regimeStateProvided);
+  if (!forceRefresh && setupsInFlight) {
+    return setupsInFlight;
+  }
 
-  if (!forceRefresh) {
+  const run = async (): Promise<Setup[]> => {
+  if (!forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<Setup[]>(SETUPS_CACHE_KEY);
     if (cached) {
       return cached;
@@ -199,10 +229,18 @@ export async function detectActiveSetups(options?: { forceRefresh?: boolean }): 
   );
 
   const [levels, gex, fibLevels, regimeState] = await Promise.all([
-    getMergedLevels({ forceRefresh }),
-    computeUnifiedGEXLandscape({ forceRefresh }),
-    getFibLevels({ forceRefresh }),
-    classifyCurrentRegime({ forceRefresh }),
+    levelData
+      ? Promise.resolve(levelData)
+      : getMergedLevels({ forceRefresh }),
+    gexLandscape
+      ? Promise.resolve(gexLandscape)
+      : computeUnifiedGEXLandscape({ forceRefresh }),
+    fibLevelsProvided
+      ? Promise.resolve(fibLevelsProvided)
+      : getFibLevels({ forceRefresh }),
+    regimeStateProvided
+      ? Promise.resolve(regimeStateProvided)
+      : classifyCurrentRegime({ forceRefresh }),
   ]);
 
   const currentPrice = gex.spx.spotPrice;
@@ -319,6 +357,18 @@ export async function detectActiveSetups(options?: { forceRefresh?: boolean }): 
   });
 
   return setups;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  setupsInFlight = run();
+  try {
+    return await setupsInFlight;
+  } finally {
+    setupsInFlight = null;
+  }
 }
 
 export async function getSetupById(id: string, options?: { forceRefresh?: boolean }): Promise<Setup | null> {

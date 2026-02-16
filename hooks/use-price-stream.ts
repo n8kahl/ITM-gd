@@ -109,9 +109,9 @@ let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
 const WS_CLOSE_UNAUTHORIZED = 4401
 const WS_CLOSE_FORBIDDEN = 4403
-const WS_FAILURE_THRESHOLD = 6
-const WS_RETRY_PAUSE_MS = 120_000
-const WS_MIN_CONNECT_INTERVAL_MS = 5_000
+const WS_FAILURE_THRESHOLD = 3
+const WS_RETRY_PAUSE_MS = 300_000
+const WS_MIN_CONNECT_INTERVAL_MS = 15_000
 
 const sharedState: PriceStreamState = {
   prices: new Map(),
@@ -159,6 +159,7 @@ function buildSignature(values: string[]): string {
 
 function resolveRealtimeBackendUrl(): URL | null {
   const configured = (
+    process.env.NEXT_PUBLIC_SPX_BACKEND_URL ||
     process.env.NEXT_PUBLIC_AI_COACH_API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
     ''
@@ -253,12 +254,25 @@ function clearReconnectTimer(): void {
   }
 }
 
+function ensureRetryTimer(delayMs: number): void {
+  if (!shouldMaintainConnection()) return
+  if (wsReconnectTimer) return
+  const safeDelay = Math.max(0, delayMs)
+  wsReconnectTimer = setTimeout(() => {
+    wsReconnectTimer = null
+    ensureSocketConnection()
+  }, safeDelay)
+}
+
 function scheduleReconnect(): void {
   if (!shouldMaintainConnection()) return
   if (Date.now() < wsRetryPausedUntil) return
   clearReconnectTimer()
-  const delay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
-  wsNextConnectAt = Math.max(wsNextConnectAt, Date.now() + delay)
+  const now = Date.now()
+  const backoffDelay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
+  const targetConnectAt = Math.max(wsNextConnectAt, now + backoffDelay)
+  const delay = Math.max(targetConnectAt - now, 0)
+  wsNextConnectAt = targetConnectAt
   debugPriceStream('Scheduling reconnect', { delayMs: delay, attempt: wsReconnectAttempt + 1 })
   wsReconnectAttempt += 1
   wsReconnectTimer = setTimeout(() => {
@@ -409,9 +423,9 @@ function ensureSocketConnection(): void {
   }
 
   if (Date.now() < wsNextConnectAt) {
-    debugPriceStream('Connect throttled', {
-      retryAfterMs: Math.max(wsNextConnectAt - Date.now(), 0),
-    })
+    const retryAfterMs = Math.max(wsNextConnectAt - Date.now(), 0)
+    debugPriceStream('Connect throttled', { retryAfterMs })
+    ensureRetryTimer(retryAfterMs)
     return
   }
 

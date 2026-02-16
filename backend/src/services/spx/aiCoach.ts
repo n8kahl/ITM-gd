@@ -8,7 +8,11 @@ import type { CoachMessage, Setup } from './types';
 import { nowIso, round, uuid } from './utils';
 
 const COACH_CACHE_KEY = 'spx_command_center:coach_state';
-const COACH_CACHE_TTL_SECONDS = 5;
+const COACH_CACHE_TTL_SECONDS = 15;
+let coachInFlight: Promise<{
+  messages: CoachMessage[];
+  generatedAt: string;
+}> | null = null;
 
 function setupHeadline(setup: Setup): string {
   return `${setup.type.replace(/_/g, ' ')} at ${round((setup.entryZone.low + setup.entryZone.high) / 2, 2)}`;
@@ -151,13 +155,28 @@ async function persistCoachingMessage(userId: string | undefined, message: Coach
   }
 }
 
-export async function getCoachState(options?: { forceRefresh?: boolean }): Promise<{
+export async function getCoachState(options?: {
+  forceRefresh?: boolean;
+  setups?: Setup[];
+  prediction?: Awaited<ReturnType<typeof getPredictionState>>;
+}): Promise<{
   messages: CoachMessage[];
   generatedAt: string;
 }> {
+  const setupsInput = options?.setups;
+  const predictionInput = options?.prediction;
   const forceRefresh = options?.forceRefresh === true;
+  const hasPrecomputedDependencies = Boolean(setupsInput || predictionInput);
 
-  if (!forceRefresh) {
+  if (!forceRefresh && coachInFlight) {
+    return coachInFlight;
+  }
+
+  const run = async (): Promise<{
+    messages: CoachMessage[];
+    generatedAt: string;
+  }> => {
+  if (!forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<{ messages: CoachMessage[]; generatedAt: string }>(COACH_CACHE_KEY);
     if (cached) {
       return cached;
@@ -165,15 +184,19 @@ export async function getCoachState(options?: { forceRefresh?: boolean }): Promi
   }
 
   const [setups, prediction] = await Promise.all([
-    detectActiveSetups({ forceRefresh }),
-    getPredictionState({ forceRefresh }),
+    setupsInput
+      ? Promise.resolve(setupsInput)
+      : detectActiveSetups({ forceRefresh }),
+    predictionInput
+      ? Promise.resolve(predictionInput)
+      : getPredictionState({ forceRefresh }),
   ]);
 
   const readySetup = setups.find((setup) => setup.status === 'ready') || setups[0] || null;
   const messages: CoachMessage[] = [];
 
   if (readySetup) {
-    const contract = await getContractRecommendation({ setupId: readySetup.id, forceRefresh });
+    const contract = await getContractRecommendation({ setupId: readySetup.id, setup: readySetup, forceRefresh });
 
     const setupMessage = createPreTradeMessage({
       ...readySetup,
@@ -210,6 +233,18 @@ export async function getCoachState(options?: { forceRefresh?: boolean }): Promi
   });
 
   return payload;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  coachInFlight = run();
+  try {
+    return await coachInFlight;
+  } finally {
+    coachInFlight = null;
+  }
 }
 
 export async function generateCoachResponse(input: {

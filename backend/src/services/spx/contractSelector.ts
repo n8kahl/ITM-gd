@@ -7,6 +7,7 @@ import type { ContractRecommendation, Setup } from './types';
 import { round } from './utils';
 
 const CONTRACT_CACHE_TTL_SECONDS = 10;
+const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered']);
 
 function deltaTargetForSetup(setup: Setup): number {
   switch (setup.type) {
@@ -77,6 +78,7 @@ function pickBestContract(setup: Setup, contracts: OptionContract[]): OptionCont
 
 export async function getContractRecommendation(options?: {
   setupId?: string;
+  setup?: Setup | null;
   forceRefresh?: boolean;
 }): Promise<ContractRecommendation | null> {
   const setupId = options?.setupId || null;
@@ -90,11 +92,19 @@ export async function getContractRecommendation(options?: {
     }
   }
 
-  const setup = setupId
-    ? await getSetupById(setupId, { forceRefresh })
-    : (await detectActiveSetups({ forceRefresh })).find((item) => item.status === 'ready') || null;
+  const setup = options?.setup
+    || (setupId
+      ? await getSetupById(setupId, { forceRefresh })
+      : (await detectActiveSetups({ forceRefresh })).find((item) => item.status === 'ready') || null);
 
   if (!setup) {
+    return null;
+  }
+  if (!ACTIONABLE_SETUP_STATUSES.has(setup.status)) {
+    logger.info('Skipping contract recommendation for non-actionable setup', {
+      setupId: setup.id,
+      status: setup.status,
+    });
     return null;
   }
 

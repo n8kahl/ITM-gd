@@ -5,7 +5,7 @@ import type { LevelItem } from '../levels';
 import { getBasisState } from './crossReference';
 import { getFibLevels } from './fibEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
-import type { ClusterZone, LevelCategory, SPXLevel } from './types';
+import type { BasisState, ClusterZone, FibLevel, LevelCategory, SPXLevel, UnifiedGEXLandscape } from './types';
 import {
   CATEGORY_WEIGHT,
   CLUSTER_RADIUS_POINTS,
@@ -17,6 +17,11 @@ import {
 
 const LEVEL_CACHE_KEY = 'spx_command_center:levels';
 const LEVEL_CACHE_TTL_SECONDS = 30;
+let levelsInFlight: Promise<{
+  levels: SPXLevel[];
+  clusters: ClusterZone[];
+  generatedAt: string;
+}> | null = null;
 
 function toChartStyle(category: LevelCategory): SPXLevel['chartStyle'] {
   switch (category) {
@@ -303,14 +308,26 @@ export function buildClusterZones(levels: SPXLevel[]): ClusterZone[] {
 
 export async function getMergedLevels(options?: {
   forceRefresh?: boolean;
+  basisState?: BasisState;
+  gexLandscape?: UnifiedGEXLandscape;
+  fibLevels?: FibLevel[];
 }): Promise<{
   levels: SPXLevel[];
   clusters: ClusterZone[];
   generatedAt: string;
 }> {
   const forceRefresh = options?.forceRefresh === true;
+  const hasPrecomputedDependencies = Boolean(options?.basisState || options?.gexLandscape || options?.fibLevels);
+  if (!forceRefresh && levelsInFlight) {
+    return levelsInFlight;
+  }
 
-  if (!forceRefresh) {
+  const run = async (): Promise<{
+    levels: SPXLevel[];
+    clusters: ClusterZone[];
+    generatedAt: string;
+  }> => {
+  if (!forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<{ levels: SPXLevel[]; clusters: ClusterZone[]; generatedAt: string }>(LEVEL_CACHE_KEY);
     if (cached) {
       return cached;
@@ -320,9 +337,15 @@ export async function getMergedLevels(options?: {
   const [spxLegacy, spyLegacy, basis, gex, fibLevels] = await Promise.all([
     calculateLevels('SPX', 'intraday'),
     calculateLevels('SPY', 'intraday'),
-    getBasisState({ forceRefresh }),
-    computeUnifiedGEXLandscape({ forceRefresh }),
-    getFibLevels({ forceRefresh }),
+    options?.basisState
+      ? Promise.resolve(options.basisState)
+      : getBasisState({ forceRefresh }),
+    options?.gexLandscape
+      ? Promise.resolve(options.gexLandscape)
+      : computeUnifiedGEXLandscape({ forceRefresh }),
+    options?.fibLevels
+      ? Promise.resolve(options.fibLevels)
+      : getFibLevels({ forceRefresh }),
   ]);
 
   const spxLevels = collectLegacyLevels(spxLegacy).map((level) => {
@@ -358,4 +381,16 @@ export async function getMergedLevels(options?: {
   });
 
   return payload;
+  };
+
+  if (forceRefresh) {
+    return run();
+  }
+
+  levelsInFlight = run();
+  try {
+    return await levelsInFlight;
+  } finally {
+    levelsInFlight = null;
+  }
 }

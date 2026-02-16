@@ -7,6 +7,35 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 type SPXKey = [url: string, token: string]
 const browserSupabase = createBrowserSupabase()
 
+function parseSSEDataBlocks<T>(raw: string): T[] {
+  const events = raw
+    .split(/\n\n+/)
+    .map((event) => event.trim())
+    .filter(Boolean)
+
+  const parsed: T[] = []
+
+  for (const event of events) {
+    const dataLines = event
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.replace(/^data:\s*/, ''))
+
+    if (dataLines.length === 0) continue
+    const joined = dataLines.join('\n').trim()
+    if (!joined || joined === '[DONE]') continue
+
+    try {
+      parsed.push(JSON.parse(joined) as T)
+    } catch {
+      // Ignore malformed SSE data chunks and continue parsing.
+    }
+  }
+
+  return parsed
+}
+
 function trimMessage(input: string, max = 240): string {
   const normalized = input.replace(/\s+/g, ' ').trim()
   if (!normalized) return ''
@@ -204,12 +233,60 @@ export async function postSPX<T>(endpoint: string, token: string, body: Record<s
   const contentType = response.headers.get('content-type') || ''
   if (contentType.includes('text/event-stream')) {
     const raw = await response.text()
-    const match = raw.match(/data:\s*(\{.*\})/)
-    if (match && match[1]) {
-      return JSON.parse(match[1]) as T
-    }
+    const events = parseSSEDataBlocks<T>(raw)
+    if (events.length > 0) return events[0]
     throw new Error('Invalid SSE payload from coach endpoint')
   }
 
   return response.json() as Promise<T>
+}
+
+export async function postSPXStream<T>(endpoint: string, token: string, body: Record<string, unknown>): Promise<T[]> {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1'
+  if (!isLocalHost && token.startsWith('e2e:')) {
+    throw new Error('Invalid test session token detected. Please sign out and sign in again.')
+  }
+
+  const requestWithToken = (accessToken: string) => fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  })
+
+  let activeToken = token
+  let response = await requestWithToken(activeToken)
+
+  if (response.status === 401) {
+    try {
+      const {
+        data: { session },
+      } = await browserSupabase.auth.getSession()
+      const refreshedToken = session?.access_token
+      if (refreshedToken && refreshedToken !== activeToken) {
+        activeToken = refreshedToken
+        response = await requestWithToken(activeToken)
+      }
+    } catch {
+      // Keep original 401 response path below.
+    }
+  }
+
+  if (!response.ok) {
+    const text = await response.text()
+    const contentType = response.headers.get('content-type') || ''
+    throw new Error(parseSPXErrorMessage(response.status, contentType, text))
+  }
+
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('text/event-stream')) {
+    return [await response.json() as T]
+  }
+
+  const raw = await response.text()
+  return parseSSEDataBlocks<T>(raw)
 }

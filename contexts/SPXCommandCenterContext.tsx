@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { postSPX } from '@/hooks/use-spx-api'
+import { postSPXStream } from '@/hooks/use-spx-api'
 import { usePriceStream } from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
 import type {
@@ -68,6 +68,7 @@ interface SPXCommandCenterState {
 }
 
 const ALL_CATEGORIES: LevelCategory[] = ['structural', 'tactical', 'intraday', 'options', 'spy_derived', 'fibonacci']
+const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['forming', 'ready', 'triggered'])
 
 const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null)
 
@@ -87,7 +88,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
 
-  const activeSetups = useMemo(() => snapshotData?.setups || [], [snapshotData?.setups])
+  const activeSetups = useMemo(
+    () => (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status)),
+    [snapshotData?.setups],
+  )
   const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
 
   const selectedSetup = useMemo(() => {
@@ -189,21 +193,25 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       throw new Error('Missing session token for SPX coach request')
     }
 
-    const message = await postSPX<CoachMessage>('/api/spx/coach/message', accessToken, {
+    const streamMessages = await postSPXStream<CoachMessage>('/api/spx/coach/message', accessToken, {
       prompt,
       setupId: setupId || undefined,
     })
+    const nextMessages = streamMessages.filter((message) => Boolean(message?.id))
+    if (nextMessages.length === 0) {
+      throw new Error('SPX coach returned no messages')
+    }
 
     await mutateSnapshot((prev) => {
       if (!prev) return prev
       return {
         ...prev,
-        coachMessages: [message, ...prev.coachMessages],
+        coachMessages: [...nextMessages, ...prev.coachMessages],
         generatedAt: new Date().toISOString(),
       }
     }, false)
 
-    return message
+    return nextMessages[0]
   }, [accessToken, mutateSnapshot])
 
   const error = snapshotError || null
