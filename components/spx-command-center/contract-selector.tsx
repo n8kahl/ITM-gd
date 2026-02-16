@@ -10,6 +10,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
   const { selectedSetup, requestContractRecommendation } = useSPXCommandCenter()
   const [contract, setContract] = useState<ContractRecommendation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     let isCancelled = false
@@ -17,22 +18,39 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
     async function run() {
       if (!selectedSetup) {
         setContract(null)
+        setErrorMessage(null)
         return
       }
       if (readOnly) {
         setContract(null)
+        setErrorMessage(null)
         return
       }
       if (selectedSetup.status !== 'ready' && selectedSetup.status !== 'triggered') {
         setContract(null)
+        setErrorMessage(null)
+        return
+      }
+      if (selectedSetup.recommendedContract) {
+        setContract(selectedSetup.recommendedContract)
+        setErrorMessage(null)
         return
       }
 
       setIsLoading(true)
+      setErrorMessage(null)
       try {
         const rec = await requestContractRecommendation(selectedSetup.id)
         if (!isCancelled) {
           setContract(rec)
+          if (!rec) {
+            setErrorMessage('Recommendation service unavailable. Try again in a moment.')
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setContract(null)
+          setErrorMessage(error instanceof Error ? error.message : 'Recommendation request failed.')
         }
       } finally {
         if (!isCancelled) {
@@ -66,6 +84,8 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
           <p className="text-xs text-white/55">Select a setup to generate a contract recommendation.</p>
         ) : isLoading ? (
           <p className="text-xs text-white/55">Computing recommendation...</p>
+        ) : errorMessage ? (
+          <p className="text-xs text-rose-200">{errorMessage}</p>
         ) : !contract ? (
           <p className="text-xs text-white/55">No recommendation available for this setup yet.</p>
         ) : (

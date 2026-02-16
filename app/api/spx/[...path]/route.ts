@@ -8,8 +8,19 @@ const DEFAULT_LOCAL_BACKEND = 'http://localhost:3001'
 const DEFAULT_REMOTE_BACKEND = 'https://itm-gd-production.up.railway.app'
 const DEFAULT_PROXY_TIMEOUT_MS = 12000
 const SNAPSHOT_PROXY_TIMEOUT_MS = 45000
+const CONTRACT_SELECT_TIMEOUT_MS = 30000
 const HEAVY_ENDPOINT_TIMEOUT_MS = 25000
 const COACH_STREAM_TIMEOUT_MS = 15000
+const STALE_CACHE_TTL_MS = 5 * 60 * 1000
+const STALE_CACHEABLE_ENDPOINTS = new Set(['snapshot', 'contract-select'])
+
+interface StaleCacheEntry {
+  payload: string
+  contentType: string
+  capturedAt: number
+}
+
+const staleCache = new Map<string, StaleCacheEntry>()
 
 interface UrlInfo {
   host: string
@@ -114,11 +125,129 @@ function getTimeoutMs(method: string, segments: string[]): number {
     return SNAPSHOT_PROXY_TIMEOUT_MS
   }
 
+  if (method === 'GET' && endpoint === 'contract-select') {
+    return CONTRACT_SELECT_TIMEOUT_MS
+  }
+
   if (method === 'GET' && (endpoint === 'levels' || endpoint === 'clusters' || endpoint === 'gex' || endpoint === 'flow' || endpoint === 'regime')) {
     return HEAVY_ENDPOINT_TIMEOUT_MS
   }
 
   return DEFAULT_PROXY_TIMEOUT_MS
+}
+
+function getStaleCacheKey(method: string, endpoint: string, search: string): string | null {
+  if (method !== 'GET') return null
+  if (!STALE_CACHEABLE_ENDPOINTS.has(endpoint)) return null
+  return `${endpoint}${search}`
+}
+
+function putStaleCache(cacheKey: string | null, payload: string, contentType: string): void {
+  if (!cacheKey) return
+  staleCache.set(cacheKey, {
+    payload,
+    contentType,
+    capturedAt: Date.now(),
+  })
+}
+
+function getStaleCache(cacheKey: string | null): StaleCacheEntry | null {
+  if (!cacheKey) return null
+  const entry = staleCache.get(cacheKey)
+  if (!entry) return null
+  if (Date.now() - entry.capturedAt > STALE_CACHE_TTL_MS) {
+    staleCache.delete(cacheKey)
+    return null
+  }
+  return entry
+}
+
+function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?: string): NextResponse {
+  return NextResponse.json(
+    {
+      degraded: true,
+      message,
+      generatedAt: new Date().toISOString(),
+      levels: [],
+      clusters: [],
+      fibLevels: [],
+      flow: [],
+      coachMessages: [],
+      setups: [],
+      basis: {
+        current: 0,
+        trend: 'stable',
+        leading: 'neutral',
+        ema5: 0,
+        ema20: 0,
+        zscore: 0,
+      },
+      regime: {
+        regime: 'compression',
+        direction: 'neutral',
+        probability: 0,
+        magnitude: 'small',
+        confidence: 0,
+        timestamp: new Date().toISOString(),
+      },
+      prediction: {
+        regime: 'compression',
+        direction: { bullish: 0, bearish: 0, neutral: 1 },
+        magnitude: { small: 1, medium: 0, large: 0 },
+        timingWindow: { description: 'Degraded mode', actionable: false },
+        nextTarget: {
+          upside: { price: 0, zone: 'unavailable' },
+          downside: { price: 0, zone: 'unavailable' },
+        },
+        probabilityCone: [],
+        confidence: 0,
+      },
+      gex: {
+        spx: {
+          netGex: 0,
+          flipPoint: 0,
+          callWall: 0,
+          putWall: 0,
+          zeroGamma: 0,
+          gexByStrike: [],
+          keyLevels: [],
+          expirationBreakdown: {},
+          timestamp: new Date().toISOString(),
+        },
+        spy: {
+          netGex: 0,
+          flipPoint: 0,
+          callWall: 0,
+          putWall: 0,
+          zeroGamma: 0,
+          gexByStrike: [],
+          keyLevels: [],
+          expirationBreakdown: {},
+          timestamp: new Date().toISOString(),
+        },
+        combined: {
+          netGex: 0,
+          flipPoint: 0,
+          callWall: 0,
+          putWall: 0,
+          zeroGamma: 0,
+          gexByStrike: [],
+          keyLevels: [],
+          expirationBreakdown: {},
+          timestamp: new Date().toISOString(),
+        },
+      },
+    },
+    {
+      status: 200,
+      headers: {
+        'X-SPX-Proxy': 'next-app',
+        'X-SPX-Degraded': 'snapshot-fallback',
+        'X-SPX-Timeout-Ms': String(timeoutMs),
+        ...(upstream ? { 'X-SPX-Upstream': upstream } : {}),
+      },
+    },
+  )
 }
 
 function dedupeAuthHeaders(values: Array<string | undefined>): string[] {
@@ -162,8 +291,10 @@ async function proxy(
   try {
     const url = new URL(request.url)
     const backendBases = resolveBackendBaseUrls(request)
+    const endpoint = segments[0] || ''
     const upstreamPath = `/api/spx/${segments.join('/')}${url.search}`
     const timeoutMs = getTimeoutMs(request.method, segments)
+    const staleCacheKey = getStaleCacheKey(request.method, endpoint, url.search)
 
     let incomingAuthHeader: string | undefined
     let sessionAuthHeader: string | undefined
@@ -238,6 +369,7 @@ async function proxy(
 
             const payload = await response.text()
             const contentType = response.headers.get('content-type') || 'application/json'
+            putStaleCache(staleCacheKey, payload, contentType)
             return new NextResponse(payload, {
               status: response.status,
               headers: {
@@ -255,8 +387,7 @@ async function proxy(
 
           // Retry against the next backend candidate if this upstream is unhealthy.
           const isRetryableStatus = response.status >= 500
-          const hasMoreBackends = backendBase !== backendBases[backendBases.length - 1]
-          if (isRetryableStatus && hasMoreBackends) {
+          if (isRetryableStatus) {
             break
           }
 
@@ -300,6 +431,25 @@ async function proxy(
     }
 
     if (lastResponse) {
+      if (lastResponse.status >= 500) {
+        const stale = getStaleCache(staleCacheKey)
+        if (stale) {
+          return new NextResponse(stale.payload, {
+            status: 200,
+            headers: {
+              'Content-Type': stale.contentType || 'application/json',
+              'X-SPX-Proxy': 'next-app',
+              'X-SPX-Stale': 'true',
+              ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
+            },
+          })
+        }
+
+        if (request.method === 'GET' && endpoint === 'snapshot') {
+          return degradedSnapshotResponse('SPX service unavailable (degraded fallback).', timeoutMs, lastUpstreamBase)
+        }
+      }
+
       const upstreamStatus = lastResponse.status
       const payload = await lastResponse.text()
       const contentType = lastResponse.headers.get('content-type') || 'application/json'
@@ -313,6 +463,29 @@ async function proxy(
           ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
         },
       })
+    }
+
+    const stale = getStaleCache(staleCacheKey)
+    if (stale) {
+      return new NextResponse(stale.payload, {
+        status: 200,
+        headers: {
+          'Content-Type': stale.contentType || 'application/json',
+          'X-SPX-Proxy': 'next-app',
+          'X-SPX-Stale': 'true',
+          ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
+        },
+      })
+    }
+
+    if (request.method === 'GET' && endpoint === 'snapshot') {
+      return degradedSnapshotResponse(
+        lastFailureKind === 'timeout'
+          ? 'SPX snapshot timed out (degraded fallback).'
+          : 'SPX snapshot unavailable (degraded fallback).',
+        timeoutMs,
+        lastUpstreamBase,
+      )
     }
 
     return NextResponse.json(

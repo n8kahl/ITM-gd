@@ -7,9 +7,46 @@ import type { Setup } from '@/lib/types/spx-command-center'
 function statusClass(status: Setup['status']): string {
   if (status === 'ready') return 'border-emerald-400/45 bg-emerald-500/10'
   if (status === 'triggered') return 'border-emerald-400/55 bg-emerald-500/15 animate-pulse-emerald'
+  if (status === 'forming') return 'border-amber-400/35 bg-amber-500/[0.06]'
   if (status === 'invalidated') return 'border-rose-400/45 bg-rose-500/10'
   if (status === 'expired') return 'border-white/20 bg-white/[0.03] opacity-60'
   return 'border-white/15 bg-white/[0.02]'
+}
+
+function statusMeta(status: Setup['status']): { label: string; badgeClass: string; hint: string } {
+  if (status === 'triggered') {
+    return {
+      label: 'Triggered',
+      badgeClass: 'border-emerald-300/45 bg-emerald-400/20 text-emerald-100',
+      hint: 'Live setup: manage with stop discipline.',
+    }
+  }
+  if (status === 'ready') {
+    return {
+      label: 'Actionable',
+      badgeClass: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100',
+      hint: 'Valid now: entry conditions are in play.',
+    }
+  }
+  if (status === 'forming') {
+    return {
+      label: 'Watchlist',
+      badgeClass: 'border-amber-300/35 bg-amber-400/10 text-amber-100',
+      hint: 'Not valid yet: wait for confirmation.',
+    }
+  }
+  if (status === 'invalidated') {
+    return {
+      label: 'Invalidated',
+      badgeClass: 'border-rose-300/35 bg-rose-400/10 text-rose-100',
+      hint: 'No longer tradable.',
+    }
+  }
+  return {
+    label: 'Expired',
+    badgeClass: 'border-white/25 bg-white/10 text-white/70',
+    hint: 'Out of play for the current window.',
+  }
 }
 
 export function SetupCard({
@@ -25,11 +62,16 @@ export function SetupCard({
   readOnly?: boolean
   onSelect?: () => void
 }) {
+  const meta = statusMeta(setup.status)
   const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
   const distanceToEntry = Number.isFinite(currentPrice) && currentPrice > 0
     ? Math.abs(currentPrice - entryMid)
     : null
   const riskToStop = Math.abs(entryMid - setup.stop)
+  const lastUpdatedEpoch = Date.parse(setup.triggeredAt || setup.createdAt)
+  const lastUpdated = Number.isFinite(lastUpdatedEpoch)
+    ? new Date(lastUpdatedEpoch).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null
 
   return (
     <button
@@ -45,10 +87,18 @@ export function SetupCard({
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] uppercase tracking-[0.14em] text-white/65">{setup.type.replace(/_/g, ' ')}</p>
-        <span className="text-[10px] uppercase tracking-[0.12em] text-white/55">{setup.status}</span>
+        <span
+          className={cn(
+            'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]',
+            meta.badgeClass,
+          )}
+        >
+          {meta.label}
+        </span>
       </div>
 
       <p className="mt-1 text-sm font-medium text-ivory capitalize">{setup.direction} {setup.regime}</p>
+      <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-white/55">{meta.hint}</p>
 
       <div className="mt-2 flex items-center gap-1.5">
         {Array.from({ length: 5 }).map((_, idx) => (
@@ -96,6 +146,7 @@ export function SetupCard({
       <div className="mt-2 flex items-center gap-2 text-[11px] text-white/60">
         <Target className="h-3 w-3 text-emerald-300" />
         <span>Win probability {setup.probability.toFixed(0)}%</span>
+        {lastUpdated && <span className="text-white/40">Updated {lastUpdated}</span>}
       </div>
 
       {setup.confluenceSources.length > 0 && (
