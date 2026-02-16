@@ -8,6 +8,9 @@ import { round } from './utils';
 
 const CONTRACT_CACHE_TTL_SECONDS = 10;
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered']);
+const MIN_OPEN_INTEREST = 100;
+const MIN_VOLUME = 10;
+const MAX_SPREAD_PCT = 0.35;
 
 function deltaTargetForSetup(setup: Setup): number {
   switch (setup.type) {
@@ -23,8 +26,48 @@ function deltaTargetForSetup(setup: Setup): number {
   }
 }
 
+function getMid(contract: OptionContract): number {
+  return (contract.bid + contract.ask) / 2;
+}
+
+function getSpreadPct(contract: OptionContract): number {
+  const mid = getMid(contract);
+  if (!Number.isFinite(mid) || mid <= 0) return Number.POSITIVE_INFINITY;
+  return (contract.ask - contract.bid) / mid;
+}
+
+function daysToExpiry(expiry: string): number {
+  const expiryMs = Date.parse(`${expiry}T16:00:00Z`);
+  if (!Number.isFinite(expiryMs)) return 0;
+  const msLeft = expiryMs - Date.now();
+  return Math.max(0, Math.ceil(msLeft / 86400000));
+}
+
+function scoreContract(setup: Setup, contract: OptionContract): number {
+  const targetDelta = deltaTargetForSetup(setup);
+  const absDelta = Math.abs(contract.delta || 0);
+  const deltaPenalty = Math.min(1, Math.abs(absDelta - targetDelta) / 0.2) * 45;
+
+  const spreadPct = getSpreadPct(contract);
+  const spreadPenalty = Math.min(1, spreadPct / MAX_SPREAD_PCT) * 35;
+
+  const oi = Math.max(0, contract.openInterest || 0);
+  const volume = Math.max(0, contract.volume || 0);
+  const liquidityBonus = Math.min(18, Math.log10(oi + 1) * 4 + Math.log10(volume + 1) * 3);
+
+  const gamma = Math.max(0, contract.gamma || 0);
+  const gammaBonus = Math.min(10, gamma * 250);
+
+  const dte = daysToExpiry(contract.expiry);
+  const theta = Math.abs(contract.theta || 0);
+  const thetaTolerance = dte <= 1 ? 1.3 : dte <= 3 ? 1.0 : 0.8;
+  const thetaPenalty = Math.max(0, theta - thetaTolerance) * 8;
+
+  return 100 - deltaPenalty - spreadPenalty - thetaPenalty + liquidityBonus + gammaBonus;
+}
+
 function toContractRecommendation(setup: Setup, contract: OptionContract): ContractRecommendation {
-  const mid = (contract.bid + contract.ask) / 2;
+  const mid = getMid(contract);
   const entry = (setup.entryZone.low + setup.entryZone.high) / 2;
   const moveToTarget1 = Math.abs(setup.target1.price - entry);
   const moveToTarget2 = Math.abs(setup.target2.price - entry);
@@ -50,27 +93,27 @@ function toContractRecommendation(setup: Setup, contract: OptionContract): Contr
     expectedPnlAtTarget1: round((projectedTarget1 - mid) * 100, 2),
     expectedPnlAtTarget2: round((projectedTarget2 - mid) * 100, 2),
     maxLoss: round(mid * 100, 2),
-    reasoning: `Selected for ${setup.type} with delta closest to target and tight spread.`,
+    reasoning: `Selected for ${setup.type} with calibrated delta fit, executable spread, and strong liquidity.`,
   };
 }
 
 function pickBestContract(setup: Setup, contracts: OptionContract[]): OptionContract | null {
   const desiredType: OptionContract['type'] = setup.direction === 'bullish' ? 'call' : 'put';
-  const targetDelta = deltaTargetForSetup(setup);
-
-  const candidates = contracts.filter((contract) => contract.type === desiredType && contract.bid > 0 && contract.ask > contract.bid);
+  const candidates = contracts.filter((contract) => {
+    if (contract.type !== desiredType) return false;
+    if (!(contract.bid > 0 && contract.ask > contract.bid)) return false;
+    if (!Number.isFinite(contract.delta || 0) || Math.abs(contract.delta || 0) < 0.05) return false;
+    if ((contract.openInterest || 0) < MIN_OPEN_INTEREST && (contract.volume || 0) < MIN_VOLUME) return false;
+    const spreadPct = getSpreadPct(contract);
+    return Number.isFinite(spreadPct) && spreadPct <= MAX_SPREAD_PCT;
+  });
   if (candidates.length === 0) return null;
 
   return [...candidates]
     .sort((a, b) => {
-      const aDelta = Math.abs(Math.abs(a.delta || 0) - targetDelta);
-      const bDelta = Math.abs(Math.abs(b.delta || 0) - targetDelta);
-      if (aDelta !== bDelta) return aDelta - bDelta;
-
-      const aSpread = a.ask - a.bid;
-      const bSpread = b.ask - b.bid;
-      if (aSpread !== bSpread) return aSpread - bSpread;
-
+      const aScore = scoreContract(setup, a);
+      const bScore = scoreContract(setup, b);
+      if (aScore !== bScore) return bScore - aScore;
       return (b.openInterest || 0) - (a.openInterest || 0);
     })
     .at(0) || null;

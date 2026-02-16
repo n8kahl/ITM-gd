@@ -27,6 +27,12 @@ jest.mock('../../services/marketHours', () => ({
     session: 'regular',
     message: 'Market open',
   })),
+  toEasternTime: jest.fn((date: Date) => ({
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    dayOfWeek: date.getUTCDay(),
+    dateStr: date.toISOString().slice(0, 10),
+  })),
 }));
 
 jest.mock('../../lib/tokenAuth', () => {
@@ -340,18 +346,20 @@ describeWithSockets('SPX websocket integration', () => {
       wsClient!.once('error', reject);
     });
 
-    wsClient.send(JSON.stringify({
-      type: 'subscribe',
-      symbols: ['SPX'],
-    }));
-
-    const [priceMessage] = await waitForMatchingMessages(
+    const priceMessagePromise = waitForMatchingMessages(
       wsClient,
       [
         (msg) => msg.type === 'price' && msg.symbol === 'SPX',
       ],
       5000,
     );
+
+    wsClient.send(JSON.stringify({
+      type: 'subscribe',
+      symbols: ['SPX'],
+    }));
+
+    const [priceMessage] = await priceMessagePromise;
 
     expect(priceMessage.type).toBe('price');
     expect(priceMessage.symbol).toBe('SPX');

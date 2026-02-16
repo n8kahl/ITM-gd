@@ -1,8 +1,6 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getOptionsSnapshot, type OptionsSnapshot } from '../../config/massive';
-import { computeUnifiedGEXLandscape } from './gexEngine';
-import { detectActiveSetups } from './setupDetector';
-import type { Setup, SPXFlowEvent, UnifiedGEXLandscape } from './types';
+import type { SPXFlowEvent } from './types';
 import { nowIso, round, stableId } from './utils';
 
 const FLOW_CACHE_KEY = 'spx_command_center:flow';
@@ -133,68 +131,8 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
   return [];
 }
 
-function buildSyntheticFallback(
-  setups: Awaited<ReturnType<typeof detectActiveSetups>>,
-  gex: Awaited<ReturnType<typeof computeUnifiedGEXLandscape>>,
-): SPXFlowEvent[] {
-  const baseExpiry = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-
-  const events = setups.slice(0, 8).map((setup, idx) => {
-    const strike = setup.direction === 'bullish'
-      ? Math.floor(setup.entryZone.high / 5) * 5
-      : Math.ceil(setup.entryZone.low / 5) * 5;
-
-    const size = Math.max(120, Math.round((setup.confluenceScore * 180) + idx * 35));
-    const premium = round(size * ((setup.confluenceScore + 1) * 2.1), 2);
-    const type: SPXFlowEvent['type'] = idx % 3 === 0 ? 'block' : 'sweep';
-    const symbol: SPXFlowEvent['symbol'] = idx % 2 === 0 ? 'SPX' : 'SPY';
-
-    const seed = [
-      setup.id,
-      symbol,
-      strike.toFixed(2),
-      baseExpiry,
-      size,
-      setup.direction,
-      type,
-    ].join('|');
-
-    return {
-      id: stableId('spx_flow_fallback', seed),
-      type,
-      symbol,
-      strike,
-      expiry: baseExpiry,
-      size,
-      direction: setup.direction,
-      premium,
-      timestamp: nowIso(),
-    };
-  });
-
-  if (events.length === 0) {
-    const strike = round(gex.combined.flipPoint, 0);
-    const direction: SPXFlowEvent['direction'] = gex.combined.netGex >= 0 ? 'bullish' : 'bearish';
-    events.push({
-      id: stableId('spx_flow_fallback', `default|${strike}|${baseExpiry}|${direction}`),
-      type: 'block',
-      symbol: 'SPX',
-      strike,
-      expiry: baseExpiry,
-      size: 100,
-      direction,
-      premium: 250000,
-      timestamp: nowIso(),
-    });
-  }
-
-  return events;
-}
-
 export async function getFlowEvents(options?: {
   forceRefresh?: boolean;
-  fallbackSetups?: Setup[];
-  fallbackGex?: UnifiedGEXLandscape;
 }): Promise<SPXFlowEvent[]> {
   const forceRefresh = options?.forceRefresh === true;
   if (!forceRefresh && flowInFlight) {
@@ -218,15 +156,9 @@ export async function getFlowEvents(options?: {
     }
 
     if (events.length === 0) {
-      const [setups, gex] = await Promise.all([
-        options?.fallbackSetups
-          ? Promise.resolve(options.fallbackSetups)
-          : detectActiveSetups({ forceRefresh }),
-        options?.fallbackGex
-          ? Promise.resolve(options.fallbackGex)
-          : computeUnifiedGEXLandscape({ forceRefresh }),
-      ]);
-      events = buildSyntheticFallback(setups, gex);
+      // Real-only flow mode: do not inject synthetic prints into decision logic.
+      // Downstream services must treat empty flow as unavailable/neutral.
+      events = [];
     }
 
     await cacheSet(FLOW_CACHE_KEY, events, FLOW_CACHE_TTL_SECONDS);

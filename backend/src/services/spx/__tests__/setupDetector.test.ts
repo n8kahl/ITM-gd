@@ -3,6 +3,7 @@ import { getMergedLevels } from '../levelEngine';
 import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { getFibLevels } from '../fibEngine';
 import { classifyCurrentRegime } from '../regimeClassifier';
+import { getFlowEvents } from '../flowEngine';
 import { cacheGet, cacheSet } from '../../../config/redis';
 
 jest.mock('../../../lib/logger', () => ({
@@ -35,10 +36,15 @@ jest.mock('../regimeClassifier', () => ({
   classifyCurrentRegime: jest.fn(),
 }));
 
+jest.mock('../flowEngine', () => ({
+  getFlowEvents: jest.fn(),
+}));
+
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
 const mockGetFibLevels = getFibLevels as jest.MockedFunction<typeof getFibLevels>;
 const mockClassifyCurrentRegime = classifyCurrentRegime as jest.MockedFunction<typeof classifyCurrentRegime>;
+const mockGetFlowEvents = getFlowEvents as jest.MockedFunction<typeof getFlowEvents>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
 
@@ -113,6 +119,7 @@ function buildBaseMocks(currentPrice: number) {
     confidence: 71,
     timestamp: '2026-02-15T14:40:00.000Z',
   });
+  mockGetFlowEvents.mockResolvedValue([]);
 }
 
 describe('spx/setupDetector', () => {
@@ -193,6 +200,7 @@ describe('spx/setupDetector', () => {
       confidence: 70,
       timestamp: '2026-02-15T14:40:00.000Z',
     });
+    mockGetFlowEvents.mockResolvedValue([]);
     mockCacheGet.mockResolvedValueOnce([previous] as never);
 
     const setups = await detectActiveSetups({ forceRefresh: true });

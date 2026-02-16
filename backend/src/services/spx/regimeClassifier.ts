@@ -1,6 +1,7 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getMinuteAggregates } from '../../config/massive';
 import { logger } from '../../lib/logger';
+import { toEasternTime } from '../marketHours';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import type { ClusterZone, RegimeState, SPXLevel, UnifiedGEXLandscape } from './types';
@@ -16,7 +17,7 @@ type LevelData = {
 };
 
 function getDateKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toEasternTime(new Date()).dateStr;
 }
 
 async function getVolumeTrend(): Promise<'rising' | 'flat' | 'falling'> {

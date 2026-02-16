@@ -26,6 +26,12 @@ jest.mock('../marketHours', () => ({
     session: 'none',
     message: 'Market closed',
   })),
+  toEasternTime: jest.fn((date: Date) => ({
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    dayOfWeek: date.getUTCDay(),
+    dateStr: date.toISOString().slice(0, 10),
+  })),
 }));
 
 jest.mock('../../lib/tokenAuth', () => {

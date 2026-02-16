@@ -26,12 +26,14 @@ export async function getSPXSnapshot(options?: { forceRefresh?: boolean }): Prom
     const fibLevels = await getFibLevels({ forceRefresh, basisState: basis });
     const levelData = await getMergedLevels({ forceRefresh, basisState: basis, gexLandscape: gex, fibLevels });
     const regime = await classifyCurrentRegime({ forceRefresh, gexLandscape: gex, levelData });
+    const flow = await getFlowEvents({ forceRefresh });
     const setupsRaw = await detectActiveSetups({
       forceRefresh,
       levelData,
       gexLandscape: gex,
       fibLevels,
       regimeState: regime,
+      flowEvents: flow,
     });
     const prediction = await getPredictionState({
       forceRefresh,
@@ -40,10 +42,7 @@ export async function getSPXSnapshot(options?: { forceRefresh?: boolean }): Prom
       gexLandscape: gex,
     });
 
-    const [flow, coachState] = await Promise.all([
-      getFlowEvents({ forceRefresh, fallbackSetups: setupsRaw, fallbackGex: gex }),
-      getCoachState({ forceRefresh, setups: setupsRaw, prediction }),
-    ]);
+    const coachState = await getCoachState({ forceRefresh, setups: setupsRaw, prediction });
 
     const setups = await Promise.all(
       setupsRaw.map(async (setup, index) => {

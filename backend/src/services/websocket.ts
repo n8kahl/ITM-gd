@@ -39,7 +39,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { logger } from '../lib/logger';
 import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { formatMassiveTicker, isValidSymbol, normalizeSymbol } from '../lib/symbols';
-import { getMarketStatus } from './marketHours';
+import { getMarketStatus, toEasternTime } from './marketHours';
 import { AuthTokenError, extractBearerToken, verifyAuthToken } from '../lib/tokenAuth';
 import {
   subscribeSetupPushEvents,
@@ -139,18 +139,28 @@ let lastBasisBroadcastAt = 0;
 async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevClose: number; volume: number } | null> {
   try {
     const ticker = formatTicker(symbol);
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = toEasternTime(now).dateStr;
+    const weekAgo = toEasternTime(new Date(now.getTime() - 7 * 86400000)).dateStr;
 
-    const minuteData = await getMinuteAggregates(ticker, today);
+    const [minuteData, dailyData] = await Promise.all([
+      getMinuteAggregates(ticker, today),
+      getDailyAggregates(ticker, weekAgo, today),
+    ]);
+
+    const previousClose = dailyData.length >= 2
+      ? dailyData[dailyData.length - 2].c
+      : dailyData.length === 1
+        ? dailyData[0].o
+        : null;
+
     if (minuteData.length > 0) {
       const lastBar = minuteData[minuteData.length - 1];
-      const firstBar = minuteData[0];
-      return { price: lastBar.c, prevClose: firstBar.o, volume: lastBar.v };
+      const prevClose = previousClose ?? minuteData[0].o;
+      return { price: lastBar.c, prevClose: prevClose, volume: lastBar.v };
     }
 
     // Fallback to daily
-    const yesterday = new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0];
-    const dailyData = await getDailyAggregates(ticker, yesterday, today);
     if (dailyData.length >= 1) {
       const lastBar = dailyData[dailyData.length - 1];
       const prevBar = dailyData.length >= 2 ? dailyData[dailyData.length - 2] : lastBar;

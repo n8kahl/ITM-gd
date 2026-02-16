@@ -1,6 +1,6 @@
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
-import { getMarketStatus } from '../services/marketHours';
+import { getMarketStatus, toEasternTime } from '../services/marketHours';
 import { getSPXSnapshot } from '../services/spx';
 import type { ClusterZone, SPXLevel, Setup } from '../services/spx/types';
 import {
@@ -72,7 +72,7 @@ async function persistLevels(levels: SPXLevel[]): Promise<void> {
 async function persistClusters(clusters: ClusterZone[]): Promise<void> {
   if (clusters.length === 0) return;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toEasternTime(new Date()).dateStr;
 
   await supabase
     .from('spx_cluster_zones')
@@ -107,7 +107,7 @@ async function persistClusters(clusters: ClusterZone[]): Promise<void> {
 }
 
 async function persistSetups(setups: Setup[]): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toEasternTime(new Date()).dateStr;
 
   const { error: deleteError } = await supabase
     .from('spx_setups')

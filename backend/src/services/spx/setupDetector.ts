@@ -1,6 +1,8 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { logger } from '../../lib/logger';
+import { toEasternTime } from '../marketHours';
 import { getFibLevels } from './fibEngine';
+import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { classifyCurrentRegime } from './regimeClassifier';
@@ -11,6 +13,7 @@ import type {
   RegimeState,
   Setup,
   SetupType,
+  SPXFlowEvent,
   SPXLevel,
   UnifiedGEXLandscape,
 } from './types';
@@ -19,6 +22,11 @@ import { nowIso, round, stableId } from './utils';
 const SETUPS_CACHE_KEY = 'spx_command_center:setups';
 const SETUPS_CACHE_TTL_SECONDS = 10;
 let setupsInFlight: Promise<Setup[]> | null = null;
+const FLOW_CONFIRMATION_WINDOW_MS = 20 * 60 * 1000;
+const FLOW_ZONE_TOLERANCE_POINTS = 12;
+const FLOW_MIN_DIRECTIONAL_PREMIUM = 75_000;
+const FLOW_MIN_LOCAL_PREMIUM = 150_000;
+const FLOW_MIN_LOCAL_EVENTS = 2;
 type LevelData = {
   levels: SPXLevel[];
   clusters: ClusterZone[];
@@ -135,6 +143,36 @@ function pickCandidateZones(zones: ClusterZone[], currentPrice: number): Cluster
     .map((item) => item.zone);
 }
 
+function isRecentFlowEvent(event: SPXFlowEvent, nowMs: number): boolean {
+  const eventMs = Date.parse(event.timestamp);
+  if (!Number.isFinite(eventMs)) return false;
+  return nowMs - eventMs <= FLOW_CONFIRMATION_WINDOW_MS;
+}
+
+function hasFlowConfirmation(input: {
+  flowEvents: SPXFlowEvent[];
+  direction: 'bullish' | 'bearish';
+  zoneCenter: number;
+  nowMs: number;
+}): boolean {
+  const directional = input.flowEvents.filter((event) => (
+    event.direction === input.direction && isRecentFlowEvent(event, input.nowMs)
+  ));
+
+  if (directional.length === 0) return false;
+
+  const directionalPremium = directional.reduce((sum, event) => sum + event.premium, 0);
+  if (directionalPremium < FLOW_MIN_DIRECTIONAL_PREMIUM) return false;
+
+  const local = directional.filter((event) => Math.abs(event.strike - input.zoneCenter) <= FLOW_ZONE_TOLERANCE_POINTS);
+  const localPremium = local.reduce((sum, event) => sum + event.premium, 0);
+
+  return (
+    localPremium >= FLOW_MIN_LOCAL_PREMIUM
+    || (local.length >= FLOW_MIN_LOCAL_EVENTS && localPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM)
+  );
+}
+
 function isPriceInsideEntry(setup: Pick<Setup, 'entryZone'>, price: number): boolean {
   return price >= setup.entryZone.low && price <= setup.entryZone.high;
 }
@@ -204,13 +242,15 @@ export async function detectActiveSetups(options?: {
   gexLandscape?: UnifiedGEXLandscape;
   fibLevels?: FibLevel[];
   regimeState?: RegimeState;
+  flowEvents?: SPXFlowEvent[];
 }): Promise<Setup[]> {
   const levelData = options?.levelData;
   const gexLandscape = options?.gexLandscape;
   const fibLevelsProvided = options?.fibLevels;
   const regimeStateProvided = options?.regimeState;
+  const flowEventsProvided = options?.flowEvents;
   const forceRefresh = options?.forceRefresh === true;
-  const hasPrecomputedDependencies = Boolean(levelData || gexLandscape || fibLevelsProvided || regimeStateProvided);
+  const hasPrecomputedDependencies = Boolean(levelData || gexLandscape || fibLevelsProvided || regimeStateProvided || flowEventsProvided);
   if (!forceRefresh && setupsInFlight) {
     return setupsInFlight;
   }
@@ -228,7 +268,7 @@ export async function detectActiveSetups(options?: {
     (previousSetups || []).map((setup) => [setup.id, setup]),
   );
 
-  const [levels, gex, fibLevels, regimeState] = await Promise.all([
+  const [levels, gex, fibLevels, regimeState, flowEvents] = await Promise.all([
     levelData
       ? Promise.resolve(levelData)
       : getMergedLevels({ forceRefresh }),
@@ -241,20 +281,29 @@ export async function detectActiveSetups(options?: {
     regimeStateProvided
       ? Promise.resolve(regimeStateProvided)
       : classifyCurrentRegime({ forceRefresh }),
+    flowEventsProvided
+      ? Promise.resolve(flowEventsProvided)
+      : getFlowEvents({ forceRefresh }),
   ]);
 
   const currentPrice = gex.spx.spotPrice;
   const candidateZones = pickCandidateZones(levels.clusters, currentPrice);
   const setupType = setupTypeForRegime(regimeState.regime);
+  const nowMs = Date.now();
 
-  const sessionDate = new Date().toISOString().slice(0, 10);
+  const sessionDate = toEasternTime(new Date()).dateStr;
 
   const setups: Setup[] = candidateZones.map((zone, idx) => {
     const direction = setupDirection(zone, currentPrice);
     const zoneCenter = (zone.priceLow + zone.priceHigh) / 2;
 
     const fibTouch = fibLevels.some((fib) => Math.abs(fib.price - zoneCenter) <= 0.5);
-    const flowConfirmed = Math.abs(zoneCenter - currentPrice) <= 8 && zone.clusterScore >= 3;
+    const flowConfirmed = hasFlowConfirmation({
+      flowEvents,
+      direction,
+      zoneCenter,
+      nowMs,
+    });
     const regimeAligned = isRegimeAligned(setupType, regimeState.regime);
 
     const confluence = calculateConfluence({
