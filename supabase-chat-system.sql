@@ -273,9 +273,9 @@ insert into knowledge_base (category, question, answer, priority, metadata) valu
 
 • **Executive Sniper ($499/mo)** - Everything in Pro PLUS NDX real-time alerts, high-conviction LEAPS framework, and advanced risk scaling education
 
-All tiers include our 30-day action-based money-back guarantee. Most serious traders choose Executive for maximum edge.',
+All sales are final under our Refund Policy. Most serious traders choose Executive for maximum edge.',
   10,
-  '{"tags": ["pricing", "tiers", "guarantee"]}'::jsonb
+  '{"tags": ["pricing", "tiers", "billing"]}'::jsonb
 ),
 
 (
@@ -355,19 +355,17 @@ Most services sell dreams. We teach edge.',
 insert into knowledge_base (category, question, answer, priority, metadata) values
 (
   'faq',
-  'Money back guarantee? | Can I get a refund? | Risk free? | What if I don''t like it?',
-  'Yes! We offer a **30-day action-based money-back guarantee**.
+  'Refund policy? | Can I get a refund? | Billing issue? | What if I don''t like it?',
+  'All sales are final.
 
-Here''s how it works:
-- Follow our trade alerts for 30 days
-- Execute the setups we provide
-- If you don''t see value, we''ll refund you
+Trade In The Money is not obligated to issue refunds under any circumstances.
+Any exception is discretionary and does not create an entitlement or precedent.
 
-We''re confident in our edge because our members consistently hit 100%+ returns per trade.
+Trading outcomes, market losses, dissatisfaction, or change of mind are not refund grounds.
 
-*Terms and conditions apply - must demonstrate you''ve actively followed alerts.',
+For full details, see our Refund Policy.',
   9,
-  '{"tags": ["guarantee", "refund", "risk"]}'::jsonb
+  '{"tags": ["refund", "billing", "policy"]}'::jsonb
 );
 
 -- Timing/Frequency

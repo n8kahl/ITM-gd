@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
 
           <div className="glass-card-heavy rounded-2xl border border-champagne/20 p-8 md:p-12">
             <h1 className="text-3xl md:text-4xl font-bold text-gradient-champagne mb-2">Privacy Policy</h1>
-            <p className="text-muted-foreground mb-8">Last Updated: January 28, 2026</p>
+            <p className="text-muted-foreground mb-8">Last Updated: February 16, 2026</p>
 
             <div className="prose prose-invert prose-sm max-w-none space-y-6 text-smoke/80">
               <section>
@@ -46,7 +46,7 @@ export default function PrivacyPolicy() {
                 <p>We may collect the following types of information:</p>
                 <p className="mt-2"><strong className="text-ivory">Personal Information:</strong> Name, email address, and payment information when you subscribe to our services.</p>
                 <p className="mt-2"><strong className="text-ivory">Usage Data:</strong> Information about how you access and use our website, including IP address, browser type, pages visited, and time spent on pages.</p>
-                <p className="mt-2"><strong className="text-ivory">Communication Data:</strong> Information you provide when you contact us or participate in our Discord community.</p>
+                <p className="mt-2"><strong className="text-ivory">Communication Data:</strong> Information you provide when you contact us, use website chat (AI and human support), or participate in our Discord community.</p>
               </section>
 
               <section>
@@ -56,6 +56,7 @@ export default function PrivacyPolicy() {
                 <p>- Process transactions and send related information</p>
                 <p>- Send you trading signals and educational content</p>
                 <p>- Respond to your comments, questions, and requests</p>
+                <p>- Route support requests between AI and live team members</p>
                 <p>- Send promotional communications (with your consent)</p>
                 <p>- Monitor and analyze usage patterns and trends</p>
               </section>
@@ -77,7 +78,17 @@ export default function PrivacyPolicy() {
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">6. Your Rights</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">6. Billing and Refund Records</h2>
+                <p>
+                  We maintain billing and support records to resolve payment and account-access issues. Refund obligations are governed by our all-sales-final policy under our{" "}
+                  <Link href="/refund-policy" className="text-champagne hover:underline">
+                    Refund Policy
+                  </Link>.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-xl font-semibold text-ivory mb-3">7. Your Rights</h2>
                 <p>Depending on your location, you may have the right to:</p>
                 <p className="mt-2">- Access the personal information we hold about you</p>
                 <p>- Request correction of inaccurate data</p>
@@ -87,35 +98,35 @@ export default function PrivacyPolicy() {
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">7. Cookies</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">8. Cookies</h2>
                 <p>
                   We use cookies and similar tracking technologies to enhance your experience on our website. You can control cookies through your browser settings.
                 </p>
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">8. Third-Party Links</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">9. Third-Party Links</h2>
                 <p>
                   Our website may contain links to third-party websites. We are not responsible for the privacy practices of these external sites.
                 </p>
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">9. Children&apos;s Privacy</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">10. Children&apos;s Privacy</h2>
                 <p>
                   Our services are not intended for individuals under 18 years of age. We do not knowingly collect personal information from children.
                 </p>
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">10. Changes to This Policy</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">11. Changes to This Policy</h2>
                 <p>
                   We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the &quot;Last Updated&quot; date.
                 </p>
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">11. Contact Us</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">12. Contact Us</h2>
                 <p>
                   If you have questions about this Privacy Policy, please{" "}
                   <ContactLink className="text-champagne hover:underline">contact us</ContactLink>.
@@ -143,6 +154,7 @@ export default function PrivacyPolicy() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <Link href="/privacy-policy" className="text-champagne transition-colors duration-300">Privacy Policy</Link>
               <Link href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</Link>
+              <Link href="/refund-policy" className="hover:text-champagne transition-colors duration-300">Refund Policy</Link>
               <ContactLink className="hover:text-champagne transition-colors duration-300">Contact</ContactLink>
             </div>
           </div>

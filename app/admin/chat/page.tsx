@@ -61,7 +61,7 @@ const DEFAULT_CANNED_RESPONSES: CannedResponse[] = [
 • **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades
 • **Executive Sniper ($499/mo)**: Everything in Pro + NDX alerts, high-conviction LEAPS
 
-All tiers include our 30-day money-back guarantee!`
+All sales are final. Refunds are not required under our Refund Policy.`
   },
   {
     label: 'Win Rate Stats',
@@ -86,11 +86,11 @@ All tiers include our 30-day money-back guarantee!`
 Questions about which tier is right for you?`
   },
   {
-    label: 'Money-Back Guarantee',
-    shortcut: '/guarantee',
-    text: `We stand behind our service with a 30-day action-based money-back guarantee.
+    label: 'Billing & Refund Policy',
+    shortcut: '/refund',
+    text: `All sales are final. Trade In The Money is not obligated to issue refunds.
 
-If you follow our alerts and don't see results within 30 days, we'll refund your membership - no questions asked. We're confident you'll see the value from day one.`
+Any exception is discretionary and does not create an entitlement to a refund.`
   },
   {
     label: 'Executive Tier Details',
@@ -1093,7 +1093,7 @@ function ChatManagementContent() {
                   </Button>
                 </form>
                 <p className="text-xs text-platinum/40 mt-1 hidden lg:block">
-                  Shortcuts: /pricing, /stats, /join, /guarantee, /executive
+                  Shortcuts: /pricing, /stats, /join, /refund, /executive
                 </p>
               </div>
             </Card>
