@@ -1,196 +1,132 @@
-# TradeIntheMoney Homepage Chat Audit (2026-02-16)
+# TradeITM Homepage Chat Review Packet
 
-## Scope
-This audit covers the public homepage chat widget (`/`) that is a hybrid of AI responses and live human resolution.
+Prepared for client review  
+Date: February 16, 2026
 
-Audit timestamp: **2026-02-16 21:47:23 UTC**.
+## 1) What This Document Covers
 
-Data sources used:
-- Frontend widget integration: `/Users/natekahl/ITM-gd/app/page.tsx`, `/Users/natekahl/ITM-gd/components/ui/chat-widget.tsx`
-- Admin/human ops UI: `/Users/natekahl/ITM-gd/app/admin/chat/page.tsx`, `/Users/natekahl/ITM-gd/app/admin/knowledge-base/page.tsx`
-- Deployed production edge function (version 31): `handle-chat-message` (retrieved from Supabase)
-- Live Supabase tables: `chat_conversations`, `chat_messages`, `knowledge_base`, `app_settings`
+This packet explains how the homepage chat works today, what the AI is allowed to say, when chats are escalated to a human, and the exact Q&A content currently used as references.
 
----
+This version is written for non-technical review.
 
-## 1) Current Hybrid Behavior (Live)
+## 2) Simple Overview of Chat Flow
 
-### Traffic/state snapshot
-- Total conversations: **31**
-- AI-handled conversations: **19** (61.3%)
-- Human-handled conversations: **12** (38.7%)
-- Status split: **6 active**, **1 resolved**, **24 archived**
+1. A visitor asks a question in homepage chat.
+2. AI gives an answer using approved pricing, feature, proof, and policy content.
+3. If certain triggers are detected, the conversation is escalated to a human team member.
+4. Human team can also manually take over any conversation from the admin chat panel.
 
-### Message mix snapshot
-- Total messages: **160**
-- Visitor messages: **68**
-- Team messages: **67**
-- System messages: **25**
-- AI-generated messages: **60**
-- Human team messages (`sender_type='team' AND ai_generated=false`): **21**
+## 3) Current Program + Policy Rules (Approved)
 
-### Escalation state snapshot
-- Active escalated conversations (`status='active' AND escalation_reason IS NOT NULL`): **2**
-- Active conversations with pending escalation in metadata: **4**
-- Total conversations with pending escalation metadata set: **10**
+- Monthly memberships:
+  - Core Sniper: $199/month
+  - Pro Sniper: $299/month
+  - Executive Sniper: $499/month
+- Precision Cohort: $1,500 total for a fixed 90-day mentorship
+- Private 1-on-1 Mentorship: $2,500 total for a fixed 8-week mentorship
+- Refund policy language:
+  - All sales are final.
+  - Trade In The Money is not obligated to issue refunds.
+  - Any exception is discretionary and does not create a right to a refund.
 
-Top escalation reasons observed historically:
-- `Visitor requested human agent` (4)
-- `Manually claimed by admin` (3)
-- `Low AI confidence - human verification needed` (3)
-- Frustration sentiment reasons (2)
+## 4) AI Reference Q&A (What AI Pulls From)
 
----
-
-## 2) How AI Builds Answers (Production)
-
-Runtime answer assembly in deployed `handle-chat-message`:
-1. Saves visitor message.
-2. Runs sentiment analysis (`gpt-4o`).
-3. Runs escalation trigger checks.
-4. Searches KB (`search_knowledge_base`, fallback to `search_knowledge_base_fallback`, then top-priority active entries).
-5. Injects selected KB entries as `Q: ... / A: ...` context into the LLM prompt.
-6. Generates AI response (`gpt-4o`) and parses `[CONFIDENCE: HIGH/MEDIUM/LOW]`.
-7. Stores referenced KB IDs in `chat_messages.knowledge_base_refs`.
-
-Live usage evidence:
-- AI messages total: **60**
-- AI messages with KB refs: **30**
-- Average AI confidence (stored): **0.955**
-
-Most referenced KB entries:
-- `What is the difference between Core, Pro, and Execute?` (27)
-- `How much does it cost?` (26)
-- `Do you have proof?` (25)
-
----
-
-## 3) Active KB Q/A Inventory (What AI References)
-
-Below are the currently active KB entries in production (`knowledge_base.is_active=true`), shown as primary Q and core A payload.
+Below are the core knowledge-base Q&A entries the AI references when responding to visitors.
 
 ### Pricing
-1. **Q:** How much does it cost?
-   **A:** Core $199/mo, Pro $299/mo, Execute $499/mo; 30-day action-based guarantee.
-2. **Q:** What is the difference between Core, Pro, and Execute?
-   **A:** Core = foundation, Pro = adds LEAPS/swing strategy, Execute = premium/high-conviction NDX + LEAPS.
 
-### Features
-3. **Q:** How does it work?
-   **A:** Instant Discord access, 1-3 daily setups, exact entry/stop/target, real-time notifications, educational rationale.
-4. **Q:** What makes you different?
-   **A:** Execution-focused education, verified performance framing, selective serious-trader community positioning.
+Q: How much does it cost?  
+A: Core ($199/mo), Pro ($299/mo), Executive ($499/mo), plus mentorship paths: Cohort ($1,500 / 90-day) and Private 1-on-1 ($2,500 / 8-week). Includes all-sales-final refund language.
 
-### Proof
-5. **Q:** Do you have proof?
-   **A:** Cites 87% win rate over 8+ years, 100%+ target, and sample win callouts.
-6. **Q:** What do members say?
-   **A:** Testimonial-style member outcomes tied to tier framing.
+Q: What is the difference between Core, Pro, and Executive?  
+A: Core is foundational SPX-focused alerts; Pro adds LEAPS and swing structure; Executive adds advanced NDX real-time alerts and higher-conviction frameworks.
+
+### Results / Proof
+
+Q: Do you have proof?  
+A: Uses verified facts: 87% win rate over 8+ years, 100%+ target framing, and recent example wins.
+
+Q: What do members say?  
+A: Shares testimonial-style examples from the approved knowledge base.
+
+### How It Works
+
+Q: How does it work?  
+A: Join, get Discord access, receive 1-3 setups/day during market hours, with entry/stop/target and educational commentary.
+
+Q: What makes you different?  
+A: Execution-focused education, verified performance framing, and serious-trader positioning.
 
 ### FAQ
-7. **Q:** Money back guarantee?
-   **A:** 30-day action-based guarantee with follow-the-alerts condition.
-8. **Q:** How many alerts per day?
-   **A:** 1-3 setups/day during 9:30am-4pm ET; tier-specific coverage.
-9. **Q:** How much money do I need?
-   **A:** Suggests $1,000 minimum, $5,000+ ideal; risk management emphasized.
-10. **Q:** Do I need experience?
-    **A:** Beginner-friendly with education; advanced value for experienced traders.
 
-### Technical
-11. **Q:** What platform?
-    **A:** Works with any options-capable broker; TradeITM provides setup details, user executes in own broker.
+Q: How many alerts per day?  
+A: 1-3 setups/day during market hours (9:30am-4pm ET), with tier differences in instruments and depth.
 
-### Mentorship (Precision Cohort)
-12. **Q:** What is the Precision Cohort?
-    **A:** $1,500/year annual mentorship, limited to 20, positioned as transformation vs signal-following.
-13. **Q:** What are the four pillars?
-    **A:** Live strategy sessions, trade architecture, portfolio engineering, mindset mastery.
-14. **Q:** How is Precision Cohort different?
-    **A:** Monthly tiers = alerts; cohort = personalized trader development.
-15. **Q:** How do I apply for Precision Cohort?
-    **A:** Qualification questions + application process; metadata marks this as high-value and auto-escalation intent.
+Q: How much money do I need?  
+A: Guidance on minimum vs ideal account size, with risk management emphasis.
 
-### Escalation-intent KB entries
-16. **Q:** ready to join
-    **A:** `[ESCALATE] High-value lead ready to purchase.`
-17. **Q:** execute tier
-    **A:** `[ESCALATE] High-value Execute tier interest detected.`
-18. **Q:** speak to human
-    **A:** `[ESCALATE] Visitor requested human team member.`
+Q: Do I need experience?  
+A: Beginner-friendly with education; advanced value for experienced traders.
 
----
+Q: Refund policy?  
+A: All sales final, no refund obligation, discretionary exceptions only.
 
-## 4) Escalation Rules (Current Production Logic)
+### Mentorship
 
-All escalation paths are currently active in the deployed function and are **email-gated**.
+Q: What is the Precision Cohort?  
+A: Fixed 90-day mentorship, $1,500 total, limited cohort.
 
-### Trigger rules
-Escalate when any of the following is true:
-1. Sentiment model returns `frustrated` or `angry`.
-2. Explicit human-request keywords (e.g., "speak to human", "agent", "representative").
-3. High-intent purchase keywords (e.g., "ready to join", "want to buy", "$499").
-4. High-value tier keywords (currently coded as "execute" and related phrases).
-5. Mentorship/cohort intent keywords (cohort, mentorship, annual, $1,500).
-6. Frustration keywords in plain text (e.g., scam, fake, waste).
-7. Extended conversation (`>4` visitor messages in history).
-8. Billing/refund/cancel keywords.
-9. AI confidence `< 0.7` after response generation.
+Q: What is private 1-on-1 mentorship?  
+A: Fixed 8-week mentorship, $2,500 total, weekly private coaching.
 
-### Email gate behavior
-1. If visitor email is missing:
-   - Set `metadata.pending_escalation` with reason/lead score/handoff message.
-   - Ask for email in chat.
-   - Keep conversation AI-handled until email is captured.
-2. If visitor email exists (or arrives in next message):
-   - Set `ai_handled=false`.
-   - Set `escalation_reason` and `lead_score`.
-   - Clear `pending_escalation`.
-   - Add system handoff messages.
-   - Notify team via Discord webhook.
+Q: How is Cohort different from monthly tiers?  
+A: Monthly tiers focus on alerts + commentary; Cohort focuses on mentorship and trader development.
 
-### Manual human takeover
-- Admin can force takeover from `/admin/chat`:
-  - Sets `ai_handled=false`
-  - Sets `escalation_reason='Manually claimed by admin'`
+Q: How do I apply for Cohort?  
+A: Qualification questions + application process; designed for fit and commitment.
 
----
+## 5) Escalation Rules (When Human Takes Over)
 
-## 5) Important Audit Findings
+The system escalates to human support when one or more of the following is detected:
 
-1. **Production code differs from repo code**
-- Deployed `handle-chat-message` (v31) has escalation always enabled and hardcoded prompt.
-- Repo file `/Users/natekahl/ITM-gd/supabase/functions/handle-chat-message/index.ts` includes `ENABLE_AUTO_ESCALATIONS=false` and different flow.
+1. Visitor explicitly asks for a human.
+2. Purchase-intent / high-value signals (ready to buy, premium tier interest, mentorship interest).
+3. Billing/refund/cancellation concerns.
+4. Negative sentiment (frustrated/angry language).
+5. Extended back-and-forth where human support is better.
+6. Manual takeover by team member in admin panel.
 
-2. **`ai_system_prompt` setting exists but is not used by deployed function**
-- `app_settings.ai_system_prompt` is populated.
-- Deployed function currently uses a hardcoded in-function system prompt (not DB-driven).
+### Email Gate Before Full Handoff
 
-3. **Tier naming drift (`Execute` vs `Executive`)**
-- KB and deployed escalation logic still use `Execute` terminology.
-- Frontend/admin language mostly uses `Executive`.
+If escalation is needed and email is missing:
 
-4. **Pending escalation residue exists in active threads**
-- Multiple active conversations still carry `metadata.pending_escalation`.
-- This can create queue ambiguity and mixed state in admin triage.
+1. AI asks for contact email.
+2. Escalation is marked as pending.
+3. Once email is provided, handoff is completed for human follow-up.
 
-5. **KB references are only attached to ~50% of AI-generated messages**
-- 30 of 60 AI-generated messages include `knowledge_base_refs`.
-- Some AI/system outputs (handoff/email prompts) do not reference KB by design.
+## 6) Guardrails for AI Responses
 
----
+- AI should only use approved facts from system prompt + knowledge base.
+- AI must not invent win rates, performance claims, customer counts, or policy terms.
+- AI must keep Cohort and Private 1-on-1 terms separate:
+  - Cohort = 90-day
+  - 1-on-1 = 8-week
+- AI must use no-refund-obligation language when refund questions are asked.
 
-## 6) Recommended Escalation Policy (Operational)
+## 7) Client Review Checklist
 
-If you want a clean, explicit policy for your team:
-1. **Immediate human escalation**
-   - Human requested, billing/refund issue, angry/frustrated sentiment, or confidence < 0.7.
-2. **High-value fast-track**
-   - Purchase-intent, executive-tier intent, mentorship/cohort intent.
-3. **Email collection requirement**
-   - If no email, request email before handoff and mark as pending.
-4. **SLA**
-   - Active escalated threads first, then pending-email threads, then AI-only threads with lead score >= 7.
-5. **Close-loop hygiene**
-   - On manual takeover, clear stale `pending_escalation` metadata.
+Please review and mark any edits needed for:
+
+1. Tone of AI answers (more formal, more friendly, shorter, etc.).
+2. Pricing wording clarity.
+3. Mentorship positioning clarity (Cohort vs 1-on-1).
+4. Refund wording comfort level.
+5. Escalation triggers (too aggressive / too passive).
+6. Any missing questions your team receives often.
+
+## 8) Suggested Next Improvements
+
+1. Rename any legacy “Execute” wording in older knowledge-base entries to “Executive” for naming consistency.
+2. Add 10-15 more approved Q&A entries from real customer conversations.
+3. Add monthly review of escalated chats to tune AI responses and handoff timing.
 
