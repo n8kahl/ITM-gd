@@ -847,8 +847,13 @@ export function initWebSocket(server: HTTPServer): void {
   wss = new WebSocketServer({ server, path: '/ws/prices' });
 
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
+    const remoteAddress = req.socket.remoteAddress || 'unknown';
     const token = extractWsToken(req);
     if (!token) {
+      logger.warn('WebSocket rejected: missing authentication token', {
+        remoteAddress,
+        userAgent: req.headers['user-agent'],
+      });
       sendToClient(ws, { type: 'error', message: 'Missing authentication token' });
       ws.close(WS_CLOSE_UNAUTHORIZED, 'Unauthorized');
       return;
@@ -860,6 +865,11 @@ export function initWebSocket(server: HTTPServer): void {
       authenticatedUserId = user.id.toLowerCase();
     } catch (error) {
       if (error instanceof AuthTokenError) {
+        logger.warn('WebSocket authentication rejected', {
+          remoteAddress,
+          statusCode: error.statusCode,
+          reason: error.clientMessage,
+        });
         const closeCode = error.statusCode === 401
           ? WS_CLOSE_UNAUTHORIZED
           : error.statusCode === 403
@@ -884,7 +894,11 @@ export function initWebSocket(server: HTTPServer): void {
       lastActivity: Date.now(),
     });
 
-    logger.info(`WebSocket client connected (${clients.size} total)`);
+    logger.info('WebSocket client connected', {
+      clients: clients.size,
+      userId: authenticatedUserId,
+      remoteAddress,
+    });
 
     // Send initial market status
     sendToClient(ws, { type: 'status', ...getMarketStatus() });
@@ -893,9 +907,14 @@ export function initWebSocket(server: HTTPServer): void {
       handleClientMessage(ws, data.toString());
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
       clients.delete(ws);
-      logger.info(`WebSocket client disconnected (${clients.size} remaining)`);
+      logger.info('WebSocket client disconnected', {
+        clients: clients.size,
+        userId: authenticatedUserId,
+        code,
+        reason: reason.toString('utf8'),
+      });
     });
 
     ws.on('error', (error) => {

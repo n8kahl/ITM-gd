@@ -49,10 +49,46 @@ interface StreamConsumer {
 }
 
 const MARKET_STATUS_VALUES: MarketStatusUpdate['status'][] = ['open', 'pre-market', 'after-hours', 'closed']
+const PRICE_STREAM_DEBUG_STORAGE_KEY = 'titm:debug:price-stream'
 
 function normalizeMarketStatus(value: unknown): MarketStatusUpdate['status'] {
   if (typeof value !== 'string') return 'closed'
   return (MARKET_STATUS_VALUES as string[]).includes(value) ? (value as MarketStatusUpdate['status']) : 'closed'
+}
+
+function getPriceStreamDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false
+
+  if (process.env.NEXT_PUBLIC_DEBUG_PRICE_STREAM === 'true') {
+    return true
+  }
+
+  try {
+    return window.localStorage.getItem(PRICE_STREAM_DEBUG_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function redactWsUrl(raw: string): string {
+  try {
+    const url = new URL(raw)
+    if (url.searchParams.has('token')) {
+      url.searchParams.set('token', '<redacted>')
+    }
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
+function debugPriceStream(message: string, details?: Record<string, unknown>): void {
+  if (!getPriceStreamDebugEnabled()) return
+  if (details) {
+    console.info(`[price-stream] ${message}`, details)
+    return
+  }
+  console.info(`[price-stream] ${message}`)
 }
 
 // ============================================
@@ -214,6 +250,7 @@ function scheduleReconnect(): void {
   if (Date.now() < wsRetryPausedUntil) return
   clearReconnectTimer()
   const delay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
+  debugPriceStream('Scheduling reconnect', { delayMs: delay, attempt: wsReconnectAttempt + 1 })
   wsReconnectAttempt += 1
   wsReconnectTimer = setTimeout(() => {
     wsReconnectTimer = null
@@ -348,6 +385,9 @@ function ensureSocketConnection(): void {
 
   if (Date.now() < wsRetryPausedUntil) {
     sharedState.error = 'Live stream temporarily unavailable'
+    debugPriceStream('Reconnect paused', {
+      retryAfterMs: Math.max(wsRetryPausedUntil - Date.now(), 0),
+    })
     notifyConsumers()
     return
   }
@@ -368,6 +408,7 @@ function ensureSocketConnection(): void {
   }
 
   const wsUrl = buildWebSocketUrl(token)
+  debugPriceStream('Opening websocket', { wsUrl: redactWsUrl(wsUrl) })
   const socket = new WebSocket(wsUrl)
   let socketOpened = false
   ws = socket
@@ -379,6 +420,7 @@ function ensureSocketConnection(): void {
     wsRetryPausedUntil = 0
     sharedState.isConnected = true
     sharedState.error = null
+    debugPriceStream('Websocket connected')
     notifyConsumers()
 
     const desiredSymbols = getDesiredSymbols()
@@ -401,6 +443,7 @@ function ensureSocketConnection(): void {
 
   socket.onerror = () => {
     sharedState.error = 'WebSocket connection error'
+    console.warn('[price-stream] WebSocket error')
     notifyConsumers()
   }
 
@@ -414,14 +457,30 @@ function ensureSocketConnection(): void {
 
     if (event.code === WS_CLOSE_UNAUTHORIZED || event.code === WS_CLOSE_FORBIDDEN) {
       sharedState.error = event.reason || 'Authentication required for live stream'
+      console.warn('[price-stream] WebSocket auth close', {
+        code: event.code,
+        reason: event.reason || '',
+      })
       notifyConsumers()
       return
     }
 
     wsConsecutiveConnectFailures = socketOpened ? 0 : wsConsecutiveConnectFailures + 1
+    if (event.code !== 1000) {
+      console.warn('[price-stream] WebSocket closed', {
+        code: event.code,
+        reason: event.reason || '',
+        wasClean: event.wasClean,
+        opened: socketOpened,
+        consecutiveConnectFailures: wsConsecutiveConnectFailures,
+      })
+    }
     if (wsConsecutiveConnectFailures >= WS_FAILURE_THRESHOLD) {
       wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
       sharedState.error = 'Live stream unavailable. Retrying shortly.'
+      debugPriceStream('Failure threshold reached, pausing reconnects', {
+        pauseMs: WS_RETRY_PAUSE_MS,
+      })
       notifyConsumers()
       clearReconnectTimer()
       wsReconnectTimer = setTimeout(() => {
