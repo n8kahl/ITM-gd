@@ -38,6 +38,7 @@ export interface LevelAnnotation {
   color: string
   lineWidth?: number
   lineStyle?: 'solid' | 'dashed' | 'dotted'
+  axisLabelVisible?: boolean
   type?: string
   side?: 'resistance' | 'support'
   strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
@@ -944,8 +945,8 @@ export function TradingChart({
           color: level.color,
           lineWidth: (level.lineWidth || 1) as 1 | 2 | 3 | 4,
           lineStyle,
-          axisLabelVisible: true,
-          title: level.label,
+          axisLabelVisible: level.axisLabelVisible ?? true,
+          title: level.axisLabelVisible === false ? '' : level.label,
         })
         newLines.push(line)
       } catch (error) {

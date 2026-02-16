@@ -71,6 +71,7 @@ export function SPXChart() {
       color: level.chartStyle.color,
       lineStyle: toLineStyle(level.chartStyle.lineStyle),
       lineWidth: level.chartStyle.lineWidth,
+      axisLabelVisible: false,
       type: level.category,
       strength: level.strength,
       description: typeof level.metadata.description === 'string' ? level.metadata.description : level.source,
@@ -108,7 +109,7 @@ export function SPXChart() {
       })
       .sort((a, b) => a.score - b.score)
 
-    return ranked.slice(0, selectedSetup ? 14 : 10).map((item) => item.annotation)
+    return ranked.slice(0, selectedSetup ? 8 : 6).map((item) => item.annotation)
   }, [bars, levelAnnotations, selectedSetup, spxPrice])
 
   const setupAnnotations = useMemo<LevelAnnotation[]>(() => {
@@ -123,6 +124,7 @@ export function SPXChart() {
             color: 'rgba(16,185,129,0.75)',
             lineStyle: 'dashed',
             lineWidth: 1,
+            axisLabelVisible: true,
             type: annotation.type,
           },
           {
@@ -131,6 +133,7 @@ export function SPXChart() {
             color: 'rgba(16,185,129,0.75)',
             lineStyle: 'dashed',
             lineWidth: 1,
+            axisLabelVisible: true,
             type: annotation.type,
           },
         )
@@ -144,6 +147,7 @@ export function SPXChart() {
             color: annotation.type === 'stop' ? 'rgba(251,113,133,0.75)' : 'rgba(244,208,120,0.75)',
             lineStyle: 'solid',
             lineWidth: 1.5,
+            axisLabelVisible: true,
             type: annotation.type,
           })
       }
@@ -175,11 +179,19 @@ export function SPXChart() {
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-        <ClusterZoneBar zones={clusterZones.slice(0, 6)} />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        <ClusterZoneBar zones={clusterZones.slice(0, 4)} />
         <ProbabilityCone prediction={prediction} />
-        <FibOverlay levels={fibLevels.slice(0, 8)} />
       </div>
+
+      <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+        <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
+          Show Advanced Overlays
+        </summary>
+        <div className="mt-3">
+          <FibOverlay levels={fibLevels.slice(0, 8)} />
+        </div>
+      </details>
     </section>
   )
 }

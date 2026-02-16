@@ -99,8 +99,15 @@ function SPXCommandCenterContent() {
           {mobileTab === 'levels' && (
             <div className="space-y-3">
               <LevelMatrix />
-              <GEXLandscape profile={gexProfile?.combined || null} />
-              <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+              <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
+                  Show Advanced GEX Analytics
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <GEXLandscape profile={gexProfile?.combined || null} />
+                  <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+                </div>
+              </details>
             </div>
           )}
         </motion.div>
@@ -139,8 +146,15 @@ function SPXCommandCenterContent() {
                   <AICoachFeed />
                   <ContractSelector />
                   <BasisIndicator basis={basis} />
-                  <GEXLandscape profile={gexProfile?.combined || null} />
-                  <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+                  <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                    <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
+                      Show Advanced GEX Analytics
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <GEXLandscape profile={gexProfile?.combined || null} />
+                      <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+                    </div>
+                  </details>
                 </div>
               </Panel>
             </PanelGroup>
