@@ -7,6 +7,8 @@ export const runtime = 'nodejs'
 const DEFAULT_LOCAL_BACKEND = 'http://localhost:3001'
 const DEFAULT_REMOTE_BACKEND = 'https://itm-gd-production.up.railway.app'
 const DEFAULT_PROXY_TIMEOUT_MS = 12000
+const SNAPSHOT_PROXY_TIMEOUT_MS = 45000
+const HEAVY_ENDPOINT_TIMEOUT_MS = 25000
 const COACH_STREAM_TIMEOUT_MS = 15000
 
 interface UrlInfo {
@@ -97,13 +99,23 @@ function resolveBackendBaseUrls(request: Request): string[] {
 }
 
 function getTimeoutMs(method: string, segments: string[]): number {
-  if (method === 'POST' && segments[0] === 'coach' && segments[1] === 'message') {
+  const endpoint = segments[0] || ''
+
+  if (method === 'POST' && endpoint === 'coach' && segments[1] === 'message') {
     return COACH_STREAM_TIMEOUT_MS
   }
 
   const configured = Number.parseInt(process.env.SPX_PROXY_TIMEOUT_MS || '', 10)
   if (Number.isFinite(configured) && configured > 0) {
     return configured
+  }
+
+  if (method === 'GET' && endpoint === 'snapshot') {
+    return SNAPSHOT_PROXY_TIMEOUT_MS
+  }
+
+  if (method === 'GET' && (endpoint === 'levels' || endpoint === 'clusters' || endpoint === 'gex' || endpoint === 'flow' || endpoint === 'regime')) {
+    return HEAVY_ENDPOINT_TIMEOUT_MS
   }
 
   return DEFAULT_PROXY_TIMEOUT_MS
@@ -186,6 +198,7 @@ async function proxy(
 
     let lastResponse: Response | null = null
     let lastUpstreamBase = ''
+    let lastFailureKind: 'timeout' | 'network' | null = null
 
     for (const backendBase of backendBases) {
       const upstream = `${backendBase}${upstreamPath}`
@@ -276,7 +289,8 @@ async function proxy(
               },
             },
           )
-        } catch {
+        } catch (error) {
+          lastFailureKind = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network'
           // Try next auth candidate; if none left, loop advances to next backend.
           if (hasMoreAuthCandidates) {
             continue
@@ -304,12 +318,16 @@ async function proxy(
     return NextResponse.json(
       {
         error: 'Proxy error',
-        message: 'Unable to reach SPX backend endpoint',
+        message: lastFailureKind === 'timeout'
+          ? 'SPX backend request timed out'
+          : 'Unable to reach SPX backend endpoint',
       },
       {
         status: 502,
         headers: {
           'X-SPX-Proxy': 'next-app',
+          ...(lastFailureKind ? { 'X-SPX-Failure': lastFailureKind } : {}),
+          'X-SPX-Timeout-Ms': String(timeoutMs),
           ...(lastUpstreamBase ? { 'X-SPX-Upstream': lastUpstreamBase } : {}),
         },
       },
