@@ -52,9 +52,51 @@ interface SPXSnapshotResponse {
   generatedAt: string
 }
 
+const SNAPSHOT_BASE_REFRESH_MS = 5_000
+const SNAPSHOT_MAX_REFRESH_MS = 120_000
+const SNAPSHOT_TRANSIENT_ERROR_PATTERN = /(502|503|unavailable|degraded|timeout)/i
+
+let snapshotConsecutiveFailures = 0
+let snapshotCooldownUntil = 0
+
+function getSnapshotRefreshInterval(): number {
+  const now = Date.now()
+  if (snapshotCooldownUntil > now) {
+    return Math.max(snapshotCooldownUntil - now, SNAPSHOT_BASE_REFRESH_MS)
+  }
+  return SNAPSHOT_BASE_REFRESH_MS
+}
+
+function markSnapshotFailure(error: Error): void {
+  if (!SNAPSHOT_TRANSIENT_ERROR_PATTERN.test(error.message || '')) {
+    snapshotConsecutiveFailures = Math.min(snapshotConsecutiveFailures + 1, 5)
+  } else {
+    snapshotConsecutiveFailures = Math.min(snapshotConsecutiveFailures + 1, 6)
+  }
+
+  const delay = Math.min(
+    SNAPSHOT_BASE_REFRESH_MS * (2 ** Math.max(snapshotConsecutiveFailures - 1, 0)),
+    SNAPSHOT_MAX_REFRESH_MS,
+  )
+  snapshotCooldownUntil = Date.now() + delay
+}
+
+function clearSnapshotFailureState(): void {
+  snapshotConsecutiveFailures = 0
+  snapshotCooldownUntil = 0
+}
+
 export function useSPXSnapshot() {
   const query = useSPXQuery<SPXSnapshotResponse>('/api/spx/snapshot', {
-    refreshInterval: 5_000,
+    refreshInterval: () => getSnapshotRefreshInterval(),
+    revalidateOnFocus: false,
+    errorRetryCount: 0,
+    onError: (error) => {
+      markSnapshotFailure(error)
+    },
+    onSuccess: () => {
+      clearSnapshotFailureState()
+    },
   })
 
   return {
