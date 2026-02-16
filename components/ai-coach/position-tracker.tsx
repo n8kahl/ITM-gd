@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Loader2,
@@ -12,7 +12,6 @@ import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { motion } from 'framer-motion'
 import {
-  API_BASE,
   AICoachAPIError,
   getLivePositions,
   getPositionAdvice,
@@ -20,6 +19,7 @@ import {
   type PositionLiveSnapshot,
 } from '@/lib/api/ai-coach'
 import { runWithRetry } from './retry'
+import { usePriceStream } from '@/hooks/use-price-stream'
 
 interface PositionTrackerProps {
   onClose: () => void
@@ -48,22 +48,6 @@ function buildPositionPrompt(action: 'close' | 'take_profit' | 'stop', position:
   return `Set a stop plan for my ${position.symbol} ${position.type} position ${position.id}. Recommend a stop level and management rules.`
 }
 
-function toAuthenticatedWsUrl(baseHttpUrl: string, token: string): string {
-  try {
-    const parsed = new URL(baseHttpUrl)
-    const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = new URL(`${protocol}//${parsed.host}/ws/prices`)
-    wsUrl.searchParams.set('token', token)
-    return wsUrl.toString()
-  } catch {
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3001'
-    const wsUrl = new URL(`${protocol}//${host}/ws/prices`)
-    wsUrl.searchParams.set('token', token)
-    return wsUrl.toString()
-  }
-}
-
 export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps) {
   const { session } = useMemberAuth()
   const token = session?.access_token
@@ -78,8 +62,6 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
   const [retryNotice, setRetryNotice] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [flashPnl, setFlashPnl] = useState<Record<string, boolean>>({})
-
-  const wsRef = useRef<WebSocket | null>(null)
 
   const upsertPosition = useCallback((incoming: PositionLiveSnapshot) => {
     setPositions((prev) => {
@@ -188,46 +170,36 @@ export function PositionTracker({ onClose, onSendPrompt }: PositionTrackerProps)
     }
   }, [fetchAll, token])
 
-  useEffect(() => {
-    if (!userId || !token) return
+  const positionChannel = userId ? `positions:${userId}` : null
+  const handleRealtimeMessage = useCallback((message: { type?: string; channel?: string; data?: unknown }) => {
+    if (!positionChannel || message?.channel !== positionChannel) return
 
-    const channel = `positions:${userId}`
-    const ws = new WebSocket(toAuthenticatedWsUrl(API_BASE, token))
-    wsRef.current = ws
+    const payload = (typeof message.data === 'object' && message.data !== null)
+      ? message.data as Record<string, unknown>
+      : null
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', channels: [channel] }))
-    }
-
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data)
-        if (message?.channel !== channel) return
-
-        if (message?.type === 'position_update' && message?.data?.snapshot) {
-          upsertPosition(message.data.snapshot as PositionLiveSnapshot)
-          if (message?.data?.updatedAt) {
-            setLastUpdated(String(message.data.updatedAt))
-          }
-          return
-        }
-
-        if (message?.type === 'position_advice' && message?.data?.advice) {
-          updateAdvice([message.data.advice as PositionAdvice])
-        }
-      } catch {
-        // Ignore malformed socket events.
+    if (message?.type === 'position_update' && payload?.snapshot) {
+      upsertPosition(payload.snapshot as PositionLiveSnapshot)
+      if (payload.updatedAt) {
+        setLastUpdated(String(payload.updatedAt))
       }
+      return
     }
 
-    return () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'unsubscribe', channels: [channel] }))
-      }
-      wsRef.current?.close()
-      wsRef.current = null
+    if (message?.type === 'position_advice' && payload?.advice) {
+      updateAdvice([payload.advice as PositionAdvice])
     }
-  }, [token, upsertPosition, updateAdvice, userId])
+  }, [positionChannel, updateAdvice, upsertPosition])
+
+  usePriceStream(
+    [],
+    Boolean(token && positionChannel),
+    token,
+    {
+      channels: positionChannel ? [positionChannel] : [],
+      onMessage: handleRealtimeMessage,
+    },
+  )
 
   const positionsSorted = useMemo(
     () => [...positions].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)),

@@ -103,6 +103,7 @@ let wsReconnectAttempt = 0
 let wsConsecutiveConnectFailures = 0
 let wsRetryPausedUntil = 0
 let wsNextConnectAt = 0
+let wsAuthFailedToken: string | null = null
 let activeStreamToken: string | null = null
 let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
@@ -149,6 +150,11 @@ function normalizeChannels(channels: string[]): string[] {
       .filter((channel) => typeof channel === 'string' && channel.trim().length > 0)
       .map((channel) => channel.trim().toLowerCase()),
   ))
+}
+
+function buildSignature(values: string[]): string {
+  if (values.length === 0) return ''
+  return [...values].sort().join('|')
 }
 
 function resolveRealtimeBackendUrl(): URL | null {
@@ -386,6 +392,13 @@ function ensureSocketConnection(): void {
     return
   }
 
+  if (wsAuthFailedToken && wsAuthFailedToken === token) {
+    sharedState.error = 'Authentication required for live stream'
+    debugPriceStream('Reconnect blocked for unauthorized token')
+    notifyConsumers()
+    return
+  }
+
   if (Date.now() < wsRetryPausedUntil) {
     sharedState.error = 'Live stream temporarily unavailable'
     debugPriceStream('Reconnect paused', {
@@ -409,6 +422,7 @@ function ensureSocketConnection(): void {
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
     wsNextConnectAt = 0
+    wsAuthFailedToken = null
   }
   activeStreamToken = token
 
@@ -430,6 +444,7 @@ function ensureSocketConnection(): void {
     wsReconnectAttempt = 0
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
+    wsAuthFailedToken = null
     sharedState.isConnected = true
     sharedState.error = null
     debugPriceStream('Websocket connected')
@@ -473,6 +488,7 @@ function ensureSocketConnection(): void {
       sharedState.error = event.reason || 'Authentication required for live stream'
       wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
       wsNextConnectAt = wsRetryPausedUntil
+      wsAuthFailedToken = activeStreamToken
       if (getPriceStreamDebugEnabled()) {
         console.warn('[price-stream] WebSocket auth close', {
           code: event.code,
@@ -554,10 +570,25 @@ export function usePriceStream(
   token?: string | null,
   options?: UsePriceStreamOptions,
 ) {
-  const normalizedSymbols = useMemo(() => normalizeSymbols(symbols), [symbols])
-  const normalizedChannels = useMemo(() => normalizeChannels(options?.channels || []), [options?.channels])
+  // Build stable signatures from content (not array references) so inline arrays
+  // in callers do not force unnecessary unsubscribe/resubscribe churn.
+  const normalizedSymbolsSignature = buildSignature(normalizeSymbols(symbols))
+  const normalizedChannelsSignature = buildSignature(normalizeChannels(options?.channels || []))
+  const normalizedSymbols = useMemo(
+    () => (normalizedSymbolsSignature ? normalizedSymbolsSignature.split('|') : []),
+    [normalizedSymbolsSignature],
+  )
+  const normalizedChannels = useMemo(
+    () => (normalizedChannelsSignature ? normalizedChannelsSignature.split('|') : []),
+    [normalizedChannelsSignature],
+  )
   const [state, setState] = useState<PriceStreamState>(() => cloneState())
   const consumerIdRef = useRef<number | null>(null)
+  const onMessageRef = useRef<UsePriceStreamOptions['onMessage'] | undefined>(options?.onMessage)
+
+  useEffect(() => {
+    onMessageRef.current = options?.onMessage
+  }, [options?.onMessage])
 
   useEffect(() => {
     if (consumerIdRef.current == null) {
@@ -574,7 +605,7 @@ export function usePriceStream(
       token: token || null,
       symbols: new Set(normalizedSymbols),
       channels: new Set(normalizedChannels),
-      onMessage: options?.onMessage,
+      onMessage: (message) => onMessageRef.current?.(message),
       listener: setState,
     })
 
@@ -588,7 +619,7 @@ export function usePriceStream(
       reconcileStreamLifecycle(prevDesired, prevChannels)
       notifyConsumers()
     }
-  }, [enabled, token, normalizedSymbols, normalizedChannels, options?.onMessage])
+  }, [enabled, token, normalizedSymbols, normalizedChannels])
 
   const getPrice = useCallback((symbol: string): PriceUpdate | undefined => {
     return state.prices.get(symbol.toUpperCase())

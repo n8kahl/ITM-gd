@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Target,
   CandlestickChart,
@@ -33,7 +33,6 @@ import {
   type WidgetAction,
 } from './widget-actions'
 import {
-  API_BASE,
   getTrackedSetups,
   updateTrackedSetup,
   deleteTrackedSetup,
@@ -42,6 +41,7 @@ import {
   type TrackedSetup,
   type TrackedSetupStatus,
 } from '@/lib/api/ai-coach'
+import { usePriceStream } from '@/hooks/use-price-stream'
 import {
   DEFAULT_TRACKED_SETUPS_PREFERENCES,
   filterTrackedSetups,
@@ -97,22 +97,6 @@ const DIRECTION_STYLES: Record<'bullish' | 'bearish' | 'neutral', string> = {
 const PRESSABLE_PROPS = {
   whileHover: { y: -1 },
   whileTap: { scale: 0.98 },
-}
-
-function toAuthenticatedWsUrl(baseHttpUrl: string, token: string): string {
-  try {
-    const parsed = new URL(baseHttpUrl)
-    const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = new URL(`${protocol}//${parsed.host}/ws/prices`)
-    wsUrl.searchParams.set('token', token)
-    return wsUrl.toString()
-  } catch {
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3001'
-    const wsUrl = new URL(`${protocol}//${host}/ws/prices`)
-    wsUrl.searchParams.set('token', token)
-    return wsUrl.toString()
-  }
 }
 
 interface SetupTradePlan {
@@ -243,7 +227,6 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
   const [mutatingIds, setMutatingIds] = useState<Record<string, boolean>>({})
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
-  const wsRef = useRef<WebSocket | null>(null)
 
   const applyTrackedSetupUpdate = useCallback((trackedSetup: TrackedSetup) => {
     setTrackedSetups((prev) => {
@@ -323,39 +306,23 @@ export function TrackedSetupsPanel({ onClose, onSendPrompt }: TrackedSetupsPanel
     void fetchSetups()
   }, [fetchSetups])
 
-  useEffect(() => {
-    if (!userId || !token) return
-
-    const setupChannel = `setups:${userId}`
-    const ws = new WebSocket(toAuthenticatedWsUrl(API_BASE, token))
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', channels: [setupChannel] }))
+  const setupChannel = userId ? `setups:${userId}` : null
+  const handleRealtimeMessage = useCallback((message: { type?: string; channel?: string }) => {
+    if (!setupChannel || message?.channel !== setupChannel) return
+    if (message?.type === 'setup_update' || message?.type === 'setup_detected') {
+      void fetchSetups({ silent: true })
     }
+  }, [fetchSetups, setupChannel])
 
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data)
-        if (
-          (message?.type === 'setup_update' || message?.type === 'setup_detected')
-          && message?.channel === setupChannel
-        ) {
-          void fetchSetups({ silent: true })
-        }
-      } catch {
-        // Ignore malformed messages
-      }
-    }
-
-    return () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'unsubscribe', channels: [setupChannel] }))
-      }
-      wsRef.current?.close()
-      wsRef.current = null
-    }
-  }, [fetchSetups, token, userId])
+  usePriceStream(
+    [],
+    Boolean(token && setupChannel),
+    token,
+    {
+      channels: setupChannel ? [setupChannel] : [],
+      onMessage: handleRealtimeMessage,
+    },
+  )
 
   useEffect(() => {
     setSelectedIds((prev) => {
