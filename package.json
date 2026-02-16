@@ -24,6 +24,7 @@
     "test:e2e:ai-coach-audit": "playwright test e2e/specs/ai-coach/ai-coach-widget-actions-audit.spec.ts --project=ai-coach",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "academy:v3:seed": "node scripts/academy-v3/generate-seed-sql.mjs --input docs/specs/academy-content/foundations-program.seed.json --output supabase/seeds/academy_v3_foundations.sql",
     "ai-coach:staging:secrets": "scripts/ai-coach/configure-staging-gate-secrets.sh",
     "ai-coach:staging:preflight": "scripts/ai-coach/check-staging-gate-readiness.sh",
     "ai-coach:staging:run": "scripts/ai-coach/run-staging-live-gate.sh",
