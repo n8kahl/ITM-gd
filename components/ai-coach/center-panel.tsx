@@ -34,6 +34,7 @@ import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelAnnotation } from './trading-chart'
+import { usePriceStream } from '@/hooks/use-price-stream'
 import { OptionsChain } from './options-chain'
 import { PositionTracker } from './position-tracker'
 import { ScreenshotUpload } from './screenshot-upload'
@@ -97,6 +98,7 @@ import {
   syncExtractedPositionsToMonitor,
   toPositionInputFromExtracted,
 } from '@/lib/ai-coach/screenshot-monitoring'
+import { mergeRealtimePriceIntoBars } from './chart-realtime'
 
 // ============================================
 // TYPES
@@ -365,6 +367,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     goToWorkflowStep,
     clearWorkflowPath,
   } = useAICoachWorkflow()
+  const accessToken = session?.access_token || null
 
   const [activeView, setActiveView] = useState<CenterView>('chart')
   const hasAppliedRouteViewRef = useRef(false)
@@ -419,6 +422,47 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   const [highlightedLevel, setHighlightedLevel] = useState<{ value: string; price?: number } | null>(null)
   const [pendingChartSyncSymbol, setPendingChartSyncSymbol] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<AICoachPreferences>(DEFAULT_AI_COACH_PREFERENCES)
+  const chartRealtimeTickKeyRef = useRef<string | null>(null)
+  const chartRealtimeEnabled = Boolean(accessToken && activeView === 'chart')
+  const chartStream = usePriceStream([chartSymbol], chartRealtimeEnabled, accessToken)
+  const chartLivePriceUpdate = useMemo(
+    () => chartStream.prices.get(chartSymbol.toUpperCase()) || null,
+    [chartStream.prices, chartSymbol],
+  )
+
+  useEffect(() => {
+    chartRealtimeTickKeyRef.current = null
+  }, [chartSymbol, chartTimeframe])
+
+  useEffect(() => {
+    if (!chartRealtimeEnabled || !chartLivePriceUpdate) return
+
+    const tickKey = `${chartSymbol}|${chartLivePriceUpdate.timestamp}|${chartLivePriceUpdate.price}`
+    if (chartRealtimeTickKeyRef.current === tickKey) return
+    chartRealtimeTickKeyRef.current = tickKey
+
+    setChartBars((prev) => {
+      const result = mergeRealtimePriceIntoBars(
+        prev,
+        chartTimeframe,
+        chartLivePriceUpdate.price,
+        chartLivePriceUpdate.timestamp,
+      )
+      return result.bars
+    })
+
+    // Provider indicators are historical snapshots. Once realtime ticks are applied,
+    // switch to locally computed indicators so overlays stay in sync with the live candle.
+    if (chartProviderIndicators) {
+      setChartProviderIndicators(null)
+    }
+  }, [
+    chartLivePriceUpdate,
+    chartProviderIndicators,
+    chartRealtimeEnabled,
+    chartSymbol,
+    chartTimeframe,
+  ])
 
   useEffect(() => {
     if (forcedView) return
@@ -493,7 +537,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
   // Fetch chart data
   const fetchChartData = useCallback(async (symbol: string, timeframe: ChartTimeframe, retryAttempt = 0) => {
-    const token = session?.access_token
+    const token = accessToken
     if (!token) return
 
     setIsLoadingChart(true)
@@ -526,14 +570,14 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     } finally {
       setIsLoadingChart(false)
     }
-  }, [session?.access_token])
+  }, [accessToken])
 
   useEffect(() => {
     if (!pendingInitialChartLoad) return
-    if (!session?.access_token) return
+    if (!accessToken) return
     void fetchChartData(pendingInitialChartLoad.symbol, pendingInitialChartLoad.timeframe)
     setPendingInitialChartLoad(null)
-  }, [fetchChartData, pendingInitialChartLoad, session?.access_token])
+  }, [accessToken, fetchChartData, pendingInitialChartLoad])
 
   useEffect(() => {
     if (activeView === 'onboarding') return
@@ -1152,6 +1196,9 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               pendingSyncSymbol={pendingChartSyncSymbol}
               isLoading={isLoadingChart}
               error={chartError}
+              isRealtimeEnabled={chartRealtimeEnabled}
+              isRealtimeConnected={chartStream.isConnected}
+              realtimeError={chartStream.error}
               highlightedLevel={highlightedLevel}
               onSymbolChange={handleSymbolChange}
               onTimeframeChange={handleTimeframeChange}
@@ -1439,6 +1486,9 @@ function ChartView({
   pendingSyncSymbol,
   isLoading,
   error,
+  isRealtimeEnabled,
+  isRealtimeConnected,
+  realtimeError,
   highlightedLevel,
   onSymbolChange,
   onTimeframeChange,
@@ -1459,6 +1509,9 @@ function ChartView({
   pendingSyncSymbol: string | null
   isLoading: boolean
   error: string | null
+  isRealtimeEnabled: boolean
+  isRealtimeConnected: boolean
+  realtimeError: string | null
   highlightedLevel: { value: string; price?: number } | null
   onSymbolChange: (s: string) => void
   onTimeframeChange: (t: ChartTimeframe) => void
@@ -1545,6 +1598,19 @@ function ChartView({
           <div className="flex items-center gap-2">
             <CandlestickChart className="w-4 h-4 text-emerald-500" />
             <h2 className="text-sm font-medium text-white">{symbol} Chart</h2>
+            {isRealtimeEnabled && (
+              <span
+                className={cn(
+                  'text-[10px] px-1.5 py-0.5 rounded border',
+                  isRealtimeConnected
+                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                    : 'border-amber-500/30 bg-amber-500/15 text-amber-200',
+                )}
+                title={isRealtimeConnected ? 'WebSocket live updates active' : (realtimeError || 'WebSocket reconnecting')}
+              >
+                {isRealtimeConnected ? 'WS LIVE' : 'WS RETRY'}
+              </span>
+            )}
             {levels.length > 0 && (
               <span className="text-[10px] text-white/30 px-1.5 py-0.5 rounded bg-white/5">
                 {filteredLevels.length}/{levels.length} levels

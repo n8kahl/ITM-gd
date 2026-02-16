@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { CandlestickChart, Maximize2 } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils'
 import type { ChartRequest } from './center-panel'
 import type { LevelAnnotation } from './trading-chart'
 import type { ChartBar } from '@/lib/api/ai-coach'
+import { usePriceStream } from '@/hooks/use-price-stream'
+import { mergeRealtimePriceIntoBars } from './chart-realtime'
 
 const TradingChart = dynamic(
   () => import('./trading-chart').then((mod) => mod.TradingChart),
@@ -94,6 +96,12 @@ export function InlineMiniChart({ chartRequest, accessToken, onExpand, className
   const [bars, setBars] = useState<ChartBar[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const realtimeTickKeyRef = useRef<string | null>(null)
+  const stream = usePriceStream([chartRequest.symbol], Boolean(accessToken), accessToken || null)
+  const livePriceUpdate = useMemo(
+    () => stream.prices.get(chartRequest.symbol.toUpperCase()) || null,
+    [chartRequest.symbol, stream.prices],
+  )
 
   const loadChart = useCallback(async () => {
     if (!accessToken) {
@@ -118,6 +126,26 @@ export function InlineMiniChart({ chartRequest, accessToken, onExpand, className
   useEffect(() => {
     void loadChart()
   }, [loadChart])
+
+  useEffect(() => {
+    realtimeTickKeyRef.current = null
+  }, [chartRequest.symbol, chartRequest.timeframe])
+
+  useEffect(() => {
+    if (!livePriceUpdate) return
+    const tickKey = `${chartRequest.symbol}|${livePriceUpdate.timestamp}|${livePriceUpdate.price}`
+    if (realtimeTickKeyRef.current === tickKey) return
+    realtimeTickKeyRef.current = tickKey
+
+    setBars((prev) => (
+      mergeRealtimePriceIntoBars(
+        prev,
+        chartRequest.timeframe,
+        livePriceUpdate.price,
+        livePriceUpdate.timestamp,
+      ).bars
+    ))
+  }, [chartRequest.symbol, chartRequest.timeframe, livePriceUpdate])
 
   const levels = buildLevelAnnotations(chartRequest)
 
@@ -146,6 +174,18 @@ export function InlineMiniChart({ chartRequest, accessToken, onExpand, className
           <CandlestickChart className="w-3.5 h-3.5 text-emerald-400" />
           <span className="text-xs font-medium text-white">{chartRequest.symbol}</span>
           <span className="text-[10px] text-white/40">{chartRequest.timeframe}</span>
+          {accessToken && (
+            <span
+              className={cn(
+                'text-[9px] px-1 py-0.5 rounded border',
+                stream.isConnected
+                  ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                  : 'border-amber-500/30 bg-amber-500/15 text-amber-200',
+              )}
+            >
+              {stream.isConnected ? 'LIVE' : 'RETRY'}
+            </span>
+          )}
         </div>
         <Maximize2 className="w-3 h-3 text-white/30 group-hover:text-emerald-400 transition-colors" />
       </div>

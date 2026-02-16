@@ -38,9 +38,11 @@ jest.mock('../../lib/tokenAuth', () => {
 });
 
 import { getSPXSnapshot } from '../../services/spx';
+import { getMinuteAggregates } from '../../config/massive';
 import { initWebSocket, shutdownWebSocket } from '../../services/websocket';
 
 const mockGetSPXSnapshot = getSPXSnapshot as jest.MockedFunction<typeof getSPXSnapshot>;
+const mockGetMinuteAggregates = getMinuteAggregates as jest.MockedFunction<typeof getMinuteAggregates>;
 
 async function createServerWithWebSocket(): Promise<{ server: http.Server; wsBaseUrl: string }> {
   const app = express();
@@ -119,6 +121,10 @@ describeWithSockets('SPX websocket integration', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockGetMinuteAggregates.mockResolvedValue([
+      { o: 6030, c: 6031.5, v: 12000 } as any,
+      { o: 6031.5, c: 6032.25, v: 15000 } as any,
+    ]);
     mockGetSPXSnapshot.mockResolvedValue({
       levels: [
         {
@@ -325,5 +331,30 @@ describeWithSockets('SPX websocket integration', () => {
     expect(gexMessage.channel).toBe('gex:SPX');
     expect(regimeMessage.channel).toBe('regime:update');
     expect(basisMessage.channel).toBe('basis:update');
+  });
+
+  it('delivers initial symbol price snapshot immediately after subscribing to symbol', async () => {
+    wsClient = new WebSocket(`${wsBaseUrl}?token=valid-token`);
+    await new Promise<void>((resolve, reject) => {
+      wsClient!.once('open', () => resolve());
+      wsClient!.once('error', reject);
+    });
+
+    wsClient.send(JSON.stringify({
+      type: 'subscribe',
+      symbols: ['SPX'],
+    }));
+
+    const [priceMessage] = await waitForMatchingMessages(
+      wsClient,
+      [
+        (msg) => msg.type === 'price' && msg.symbol === 'SPX',
+      ],
+      5000,
+    );
+
+    expect(priceMessage.type).toBe('price');
+    expect(priceMessage.symbol).toBe('SPX');
+    expect(priceMessage.price).toBe(6032.25);
   });
 });

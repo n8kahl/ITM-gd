@@ -85,6 +85,25 @@
 - Updated:
   - `backend/src/__tests__/integration/spx-websocket.test.ts`
 
+### 5.3) Immediate symbol snapshot on websocket subscribe
+- Symbol subscriptions now receive an immediate `price` snapshot even when cache is cold.
+- Added stale-cache guard and in-flight dedup for initial symbol fetches to avoid request fan-out.
+- Updated:
+  - `backend/src/services/websocket.ts`
+  - `backend/src/__tests__/integration/spx-websocket.test.ts`
+
+### 8) AI Coach realtime chart candles via websocket
+- Added deterministic tick-to-candle projection for AI Coach chart timeframes (`1m`, `5m`, `15m`, `1h`, `4h`, `1D`).
+- Main chart now subscribes to websocket prices for the active symbol and merges ticks into the current/next candle bucket.
+- Inline mini chart previews now apply the same realtime candle merge behavior.
+- When realtime ticks are applied, provider indicator snapshots are disabled so RSI/MACD are recomputed locally and remain synchronized with live candles.
+- Added:
+  - `components/ai-coach/chart-realtime.ts`
+  - `components/ai-coach/__tests__/chart-realtime.test.ts`
+- Updated:
+  - `components/ai-coach/center-panel.tsx`
+  - `components/ai-coach/inline-mini-chart.tsx`
+
 ### 6) Safer SPX proxy behavior in local dev
 - Localhost now prefers local backend only by default.
 - Remote fallback from local dev now requires explicit opt-in:
@@ -108,6 +127,7 @@
 - Passed:
   - `pnpm -C backend exec tsc -p tsconfig.json --noEmit`
   - `pnpm exec tsc --noEmit`
+  - `pnpm exec vitest run components/ai-coach/__tests__/chart-realtime.test.ts`
   - `pnpm -C backend test -- src/__tests__/integration/spx-api.test.ts --runInBand`
   - `pnpm -C backend test -- src/__tests__/integration/spx-websocket.test.ts --runInBand`
   - `pnpm -C backend test -- src/services/__tests__/websocket.authz.test.ts --runInBand`

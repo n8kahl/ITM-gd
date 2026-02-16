@@ -111,6 +111,7 @@ const REGIME_BROADCAST_INTERVAL_MS = 30_000;
 const BASIS_BROADCAST_INTERVAL_MS = 30_000;
 const FLOW_ALERT_PREMIUM_THRESHOLD = 100_000;
 const FLOW_ALERT_SIZE_THRESHOLD = 500;
+const PRICE_CACHE_STALE_MS = 15_000;
 
 function formatTicker(symbol: string): string {
   return formatMassiveTicker(symbol);
@@ -121,6 +122,7 @@ function formatTicker(symbol: string): string {
 // ============================================
 
 const priceCache = new Map<string, { price: number; prevClose: number; volume: number; fetchedAt: number }>();
+const inFlightPriceFetch = new Map<string, Promise<{ price: number; prevClose: number; volume: number } | null>>();
 let lastSPXSnapshot: SPXSnapshot | null = null;
 let lastLevelsSignature = '';
 let lastClustersSignature = '';
@@ -158,6 +160,37 @@ async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevCl
     return null;
   } catch {
     return null;
+  }
+}
+
+async function getLatestPriceSnapshot(symbol: string): Promise<{ price: number; prevClose: number; volume: number } | null> {
+  const cached = priceCache.get(symbol);
+  if (cached && Date.now() - cached.fetchedAt <= PRICE_CACHE_STALE_MS) {
+    return {
+      price: cached.price,
+      prevClose: cached.prevClose,
+      volume: cached.volume,
+    };
+  }
+
+  const existing = inFlightPriceFetch.get(symbol);
+  if (existing) {
+    return existing;
+  }
+
+  const request = (async () => {
+    const latest = await fetchLatestPrice(symbol);
+    if (latest) {
+      priceCache.set(symbol, { ...latest, fetchedAt: Date.now() });
+    }
+    return latest;
+  })();
+
+  inFlightPriceFetch.set(symbol, request);
+  try {
+    return await request;
+  } finally {
+    inFlightPriceFetch.delete(symbol);
   }
 }
 
@@ -531,6 +564,29 @@ function sendChannelPayloadToClient(
   });
 }
 
+async function sendLatestSymbolPriceToClient(
+  ws: WebSocket,
+  symbol: string,
+  channel?: string,
+): Promise<void> {
+  const latest = await getLatestPriceSnapshot(symbol);
+  if (!latest) return;
+
+  const change = latest.price - latest.prevClose;
+  const changePct = latest.prevClose !== 0 ? (change / latest.prevClose) * 100 : 0;
+
+  sendToClient(ws, {
+    type: 'price',
+    ...(channel ? { channel } : {}),
+    symbol,
+    price: Number(latest.price.toFixed(2)),
+    change: Number(change.toFixed(2)),
+    changePct: Number(changePct.toFixed(2)),
+    volume: latest.volume,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 async function sendInitialSPXChannelSnapshot(
   ws: WebSocket,
   channels: Set<string>,
@@ -656,22 +712,12 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
             break;
           }
           state.subscriptions.add(upper);
-
-          // Send cached price immediately if available
-          const cached = priceCache.get(upper);
-          if (cached) {
-            const change = cached.price - cached.prevClose;
-            const changePct = cached.prevClose !== 0 ? (change / cached.prevClose) * 100 : 0;
-            sendToClient(ws, {
-              type: 'price',
+          void sendLatestSymbolPriceToClient(ws, upper).catch((error) => {
+            logger.warn('Failed to send initial websocket symbol price', {
               symbol: upper,
-              price: Number(cached.price.toFixed(2)),
-              change: Number(change.toFixed(2)),
-              changePct: Number(changePct.toFixed(2)),
-              volume: cached.volume,
-              timestamp: new Date().toISOString(),
+              error: error instanceof Error ? error.message : String(error),
             });
-          }
+          });
         }
 
         for (const channelCandidate of channels) {
@@ -700,21 +746,13 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
           if (priceChannel) {
             const symbol = priceChannel.split(':')[1];
             if (symbol) {
-              const cached = priceCache.get(symbol);
-              if (cached) {
-                const change = cached.price - cached.prevClose;
-                const changePct = cached.prevClose !== 0 ? (change / cached.prevClose) * 100 : 0;
-                sendToClient(ws, {
-                  type: 'price',
+              void sendLatestSymbolPriceToClient(ws, symbol, priceChannel).catch((error) => {
+                logger.warn('Failed to send initial websocket channel price', {
                   channel: priceChannel,
                   symbol,
-                  price: Number(cached.price.toFixed(2)),
-                  change: Number(change.toFixed(2)),
-                  changePct: Number(changePct.toFixed(2)),
-                  volume: cached.volume,
-                  timestamp: new Date().toISOString(),
+                  error: error instanceof Error ? error.message : String(error),
                 });
-              }
+              });
             }
           }
         }

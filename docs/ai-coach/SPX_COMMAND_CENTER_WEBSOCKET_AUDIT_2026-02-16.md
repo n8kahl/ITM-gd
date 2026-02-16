@@ -63,6 +63,25 @@
 - Implemented in:
   - `hooks/use-price-stream.ts`
 
+### D) AI Coach realtime chart websocket projection
+- Added deterministic realtime candle merge for AI Coach chart views and inline chart previews.
+- Realtime ticks are merged into the active timeframe bucket with explicit rules for:
+  - same-bucket candle update,
+  - next-bucket candle append,
+  - stale tick ignore,
+  - daily in-place update.
+- Implemented in:
+  - `components/ai-coach/chart-realtime.ts`
+  - `components/ai-coach/center-panel.tsx`
+  - `components/ai-coach/inline-mini-chart.tsx`
+  - `components/ai-coach/__tests__/chart-realtime.test.ts`
+
+### E) Immediate symbol snapshot on websocket subscribe
+- Symbol subscriptions now trigger an immediate initial `price` message, backed by stale-cache checks and in-flight fetch deduplication.
+- Implemented in:
+  - `backend/src/services/websocket.ts`
+  - `backend/src/__tests__/integration/spx-websocket.test.ts`
+
 ## Massive.com Spec Validation
 
 Validated code usage against Massive documentation:
@@ -82,6 +101,7 @@ Validated code usage against Massive documentation:
 ## Validation Status
 - `pnpm -C backend exec tsc -p tsconfig.json --noEmit` passed.
 - `pnpm exec tsc --noEmit` passed.
+- `pnpm exec vitest run components/ai-coach/__tests__/chart-realtime.test.ts` passed.
 - `pnpm -C backend test -- src/__tests__/integration/spx-api.test.ts src/__tests__/integration/spx-websocket.test.ts src/services/__tests__/websocket.authz.test.ts src/services/__tests__/websocket.test.ts --runInBand` passed.
 - `pnpm -C backend test -- src/services/spx/__tests__/gexEngine.test.ts src/services/spx/__tests__/levelEngine.test.ts src/services/spx/__tests__/setupDetector.test.ts src/services/spx/__tests__/fibEngine.test.ts src/services/spx/__tests__/aiPredictor.test.ts --runInBand` passed.
 
