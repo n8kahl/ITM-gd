@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Filter } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { InfoTip } from '@/components/ui/info-tip'
 import type { LevelCategory } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
 
@@ -22,17 +23,55 @@ export function LevelMatrix() {
     toggleLevelCategory,
     showSPYDerived,
     toggleSPYDerived,
+    spxPrice,
   } = useSPXCommandCenter()
+  const [showAll, setShowAll] = useState(false)
 
   const sorted = useMemo(() => {
     return [...levels].sort((a, b) => b.price - a.price)
   }, [levels])
 
+  const simplified = useMemo(() => {
+    if (showAll) return sorted
+    if (!Number.isFinite(spxPrice) || spxPrice <= 0) return sorted.slice(0, 14)
+
+    const nearPrice = [...sorted]
+      .sort((a, b) => {
+        const distanceA = Math.abs(a.price - spxPrice)
+        const distanceB = Math.abs(b.price - spxPrice)
+        return distanceA - distanceB
+      })
+      .slice(0, 14)
+      .sort((a, b) => b.price - a.price)
+
+    return nearPrice
+  }, [showAll, sorted, spxPrice])
+
   return (
-    <section className="glass-card-heavy rounded-2xl p-3 md:p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Level Matrix</h3>
-        <Filter className="h-4 w-4 text-white/50" />
+    <section className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.025] to-emerald-500/[0.02] p-3 md:p-4">
+      <div className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl" />
+      <div className="relative z-10 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Level Matrix</h3>
+          <InfoTip label="How to use Level Matrix">
+            Focused mode shows the closest decision levels to spot. Use Show All for complete context and backtesting.
+          </InfoTip>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAll((prev) => !prev)}
+            className={cn(
+              'rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+              showAll
+                ? 'border-champagne/45 bg-champagne/10 text-champagne'
+                : 'border-white/20 bg-white/[0.03] text-white/65',
+            )}
+          >
+            {showAll ? 'Focused' : 'Show All'}
+          </button>
+          <Filter className="h-4 w-4 text-white/50" />
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -69,7 +108,13 @@ export function LevelMatrix() {
         </button>
       </div>
 
-      <div className="mt-3 max-h-[260px] overflow-auto rounded-xl border border-white/10">
+      <p className="relative z-10 mt-2 text-[11px] text-white/50">
+        {showAll
+          ? `Showing full matrix (${sorted.length} levels).`
+          : `Showing ${simplified.length} closest levels to spot (${spxPrice > 0 ? spxPrice.toFixed(2) : '--'}).`}
+      </p>
+
+      <div className="relative z-10 mt-3 max-h-[260px] overflow-auto rounded-xl border border-white/10">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-[#0A0A0B]/90 backdrop-blur-md">
             <tr className="text-white/60">
@@ -79,7 +124,7 @@ export function LevelMatrix() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((level) => (
+            {simplified.map((level) => (
               <tr key={level.id} className="border-t border-white/5 text-white/80 hover:bg-white/[0.03]">
                 <td className="px-2 py-1.5 truncate max-w-[160px]">{level.source}</td>
                 <td className="px-2 py-1.5 uppercase text-[10px] text-white/55">{level.category.replace('_', ' ')}</td>

@@ -8,6 +8,7 @@ import { getChartData, type ChartBar } from '@/lib/api/ai-coach'
 import { ClusterZoneBar } from '@/components/spx-command-center/cluster-zone-bar'
 import { ProbabilityCone } from '@/components/spx-command-center/probability-cone'
 import { FibOverlay } from '@/components/spx-command-center/fib-overlay'
+import { InfoTip } from '@/components/ui/info-tip'
 
 function toLineStyle(style: 'solid' | 'dashed' | 'dotted' | 'dot-dash'): 'solid' | 'dashed' | 'dotted' {
   if (style === 'dot-dash') return 'dashed'
@@ -23,6 +24,7 @@ export function SPXChart() {
     clusterZones,
     fibLevels,
     prediction,
+    spxPrice,
   } = useSPXCommandCenter()
 
   const [bars, setBars] = useState<ChartBar[]>([])
@@ -79,6 +81,36 @@ export function SPXChart() {
     }))
   }, [levels])
 
+  const focusedLevelAnnotations = useMemo<LevelAnnotation[]>(() => {
+    if (levelAnnotations.length === 0) return []
+    const livePrice = bars[bars.length - 1]?.close || (spxPrice > 0 ? spxPrice : null)
+
+    const strengthWeight = (strength?: string) => {
+      if (strength === 'critical') return 1.5
+      if (strength === 'strong') return 1.35
+      if (strength === 'moderate') return 1.15
+      return 1
+    }
+
+    const typeWeight = (type?: string) => {
+      if (!type) return 1
+      if (type === 'options') return 1.2
+      if (type === 'structural') return 1.15
+      if (type === 'fibonacci') return 0.95
+      return 1
+    }
+
+    const ranked = [...levelAnnotations]
+      .map((annotation) => {
+        const distance = livePrice == null ? 0 : Math.abs(annotation.price - livePrice)
+        const score = distance / (strengthWeight(annotation.strength) * typeWeight(annotation.type))
+        return { annotation, score }
+      })
+      .sort((a, b) => a.score - b.score)
+
+    return ranked.slice(0, selectedSetup ? 14 : 10).map((item) => item.annotation)
+  }, [bars, levelAnnotations, selectedSetup, spxPrice])
+
   const setupAnnotations = useMemo<LevelAnnotation[]>(() => {
     if (!selectedSetup) return []
 
@@ -122,12 +154,23 @@ export function SPXChart() {
 
   return (
     <section className="glass-card-heavy rounded-2xl p-3 md:p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Price + Focus Levels</h3>
+          <InfoTip label="How focused chart levels work">
+            To reduce clutter, the chart shows the most decision-relevant levels near current price by default. Full level detail remains in Level Matrix.
+          </InfoTip>
+        </div>
+        <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-white/60">
+          {focusedLevelAnnotations.length}/{levelAnnotations.length} shown
+        </span>
+      </div>
       <div className="h-[440px] md:h-[540px]">
         <TradingChart
           symbol="SPX"
           timeframe="5m"
           bars={bars}
-          levels={[...levelAnnotations, ...setupAnnotations]}
+          levels={[...focusedLevelAnnotations, ...setupAnnotations]}
           isLoading={isLoading}
         />
       </div>

@@ -14,20 +14,32 @@ function statusClass(status: Setup['status']): string {
 
 export function SetupCard({
   setup,
+  currentPrice,
   selected,
+  readOnly = false,
   onSelect,
 }: {
   setup: Setup
+  currentPrice: number
   selected: boolean
-  onSelect: () => void
+  readOnly?: boolean
+  onSelect?: () => void
 }) {
+  const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
+  const distanceToEntry = Number.isFinite(currentPrice) && currentPrice > 0
+    ? Math.abs(currentPrice - entryMid)
+    : null
+  const riskToStop = Math.abs(entryMid - setup.stop)
+
   return (
     <button
       type="button"
       onClick={onSelect}
+      disabled={!onSelect}
       className={cn(
         'w-full text-left rounded-xl border p-3 transition-colors',
         statusClass(setup.status),
+        onSelect ? 'cursor-pointer hover:border-emerald-300/50' : 'cursor-default',
         selected && 'ring-1 ring-emerald-300/60',
       )}
     >
@@ -70,10 +82,32 @@ export function SetupCard({
         </div>
       </div>
 
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-white/65">
+        <div>
+          <p className="text-white/45">Dist to Entry</p>
+          <p className="font-mono text-ivory">{distanceToEntry != null ? distanceToEntry.toFixed(2) : '--'}</p>
+        </div>
+        <div>
+          <p className="text-white/45">Risk to Stop</p>
+          <p className="font-mono text-rose-200">{riskToStop.toFixed(2)}</p>
+        </div>
+      </div>
+
       <div className="mt-2 flex items-center gap-2 text-[11px] text-white/60">
         <Target className="h-3 w-3 text-emerald-300" />
         <span>Win probability {setup.probability.toFixed(0)}%</span>
       </div>
+
+      {setup.confluenceSources.length > 0 && (
+        <p className="mt-1 text-[10px] text-white/45">
+          Why now: {setup.confluenceSources.slice(0, 2).join(' + ')}
+          {setup.confluenceSources.length > 2 ? '…' : ''}
+        </p>
+      )}
+
+      {readOnly && (
+        <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-white/40">Read-only</p>
+      )}
     </button>
   )
 }

@@ -33,6 +33,9 @@ interface ChartAnnotation {
 interface SPXCommandCenterState {
   spxPrice: number
   spyPrice: number
+  snapshotGeneratedAt: string | null
+  priceStreamConnected: boolean
+  priceStreamError: string | null
   basis: BasisState | null
   regime: Regime | null
   prediction: PredictionState | null
@@ -219,6 +222,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const value = useMemo<SPXCommandCenterState>(() => ({
     spxPrice,
     spyPrice,
+    snapshotGeneratedAt: snapshotData?.generatedAt || null,
+    priceStreamConnected: stream.isConnected,
+    priceStreamError: stream.error,
     basis: snapshotData?.basis || null,
     regime: snapshotData?.regime?.regime || null,
     prediction: snapshotData?.prediction || null,
@@ -254,6 +260,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     selectedTimeframe,
     showSPYDerived,
     snapshotData,
+    stream.error,
+    stream.isConnected,
     spxPrice,
     spyPrice,
     toggleLevelCategory,

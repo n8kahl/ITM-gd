@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { BasisState } from '@/lib/types/spx-command-center'
+import { InfoTip } from '@/components/ui/info-tip'
 
 export function BasisIndicator({ basis }: { basis: BasisState | null }) {
   if (!basis) {
@@ -18,7 +19,12 @@ export function BasisIndicator({ basis }: { basis: BasisState | null }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] uppercase tracking-[0.15em] text-white/50">SPX/SPY Basis</p>
+        <div className="flex items-center gap-2">
+          <p className="text-[11px] uppercase tracking-[0.15em] text-white/50">SPX/SPY Basis</p>
+          <InfoTip label="How to read basis">
+            Basis tracks SPX vs SPY alignment. Expanding basis often signals divergence and potential volatility shifts.
+          </InfoTip>
+        </div>
         <TrendIcon className={cn(
           'h-4 w-4',
           basis.trend === 'expanding' && 'text-emerald-300',

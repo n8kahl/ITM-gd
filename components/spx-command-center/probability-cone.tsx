@@ -1,6 +1,7 @@
 'use client'
 
 import type { PredictionState } from '@/lib/types/spx-command-center'
+import { InfoTip } from '@/components/ui/info-tip'
 
 export function ProbabilityCone({ prediction }: { prediction: PredictionState | null }) {
   if (!prediction) {
@@ -14,7 +15,12 @@ export function ProbabilityCone({ prediction }: { prediction: PredictionState | 
 
   return (
     <section className="glass-card-heavy rounded-2xl p-3 md:p-4">
-      <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Probability Cone</h3>
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Probability Cone</h3>
+        <InfoTip label="How to read probability cone" panelClassName="w-64">
+          Wider bars imply larger expected movement range. Narrow bars imply compression. Use with regime confidence, not in isolation.
+        </InfoTip>
+      </div>
       <div className="mt-3 space-y-2">
         {prediction.probabilityCone.map((point) => {
           const spread = point.high - point.low

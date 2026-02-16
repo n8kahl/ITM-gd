@@ -64,6 +64,9 @@ function SPXCommandCenterContent() {
 
       {isMobile ? (
         <motion.div variants={itemVariants} className="space-y-3">
+          <div className="rounded-lg border border-champagne/25 bg-champagne/10 px-3 py-2 text-[11px] text-champagne/90">
+            Mobile mode is read-only for monitoring. Use desktop for contract execution and interactive coaching.
+          </div>
           <MobilePanelTabs active={mobileTab} onChange={setMobileTab} />
 
           {mobileTab === 'chart' && (
@@ -81,14 +84,14 @@ function SPXCommandCenterContent() {
 
           {mobileTab === 'setups' && (
             <div className="space-y-3">
-              <SetupFeed />
-              <ContractSelector />
+              <SetupFeed readOnly />
+              <ContractSelector readOnly />
             </div>
           )}
 
           {mobileTab === 'coach' && (
             <div className="space-y-3">
-              <AICoachFeed />
+              <AICoachFeed readOnly />
               <BasisIndicator basis={basis} />
             </div>
           )}

@@ -99,6 +99,7 @@ import {
   toPositionInputFromExtracted,
 } from '@/lib/ai-coach/screenshot-monitoring'
 import { mergeRealtimePriceIntoBars } from './chart-realtime'
+import { InfoTip } from '@/components/ui/info-tip'
 
 // ============================================
 // TYPES
@@ -1522,6 +1523,14 @@ function ChartView({
   onAcceptSync: () => void
   onDismissSync: () => void
 }) {
+  const formatBarFreshness = useCallback((barsInput: ChartBar[]): string => {
+    const latest = barsInput[barsInput.length - 1]
+    if (!latest?.time) return '--'
+    const ageSec = Math.max(0, Math.floor(Date.now() / 1000 - latest.time))
+    if (ageSec < 60) return `${ageSec}s`
+    return `${Math.floor(ageSec / 60)}m`
+  }, [])
+
   const [hoveredPrice, setHoveredPrice] = useState<number | null>(null)
   const roundedHoverPrice = useMemo(() => {
     if (hoveredPrice == null || !Number.isFinite(hoveredPrice)) return null
@@ -1553,6 +1562,7 @@ function ChartView({
   )
 
   const levelCounts = useMemo(() => countLevelsByGroup(levels), [levels])
+  const chartFreshness = formatBarFreshness(bars)
 
   const chartContextActions = useMemo<WidgetAction[]>(() => {
     const actions: WidgetAction[] = [
@@ -1598,6 +1608,9 @@ function ChartView({
           <div className="flex items-center gap-2">
             <CandlestickChart className="w-4 h-4 text-emerald-500" />
             <h2 className="text-sm font-medium text-white">{symbol} Chart</h2>
+            <InfoTip label="How to read AI Coach chart">
+              Focus on nearest support/resistance, active regime, and live tick alignment. Use this panel to validate entries before execution.
+            </InfoTip>
             {isRealtimeEnabled && (
               <span
                 className={cn(
@@ -1611,6 +1624,12 @@ function ChartView({
                 {isRealtimeConnected ? 'WS LIVE' : 'WS RETRY'}
               </span>
             )}
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded border border-white/15 bg-white/[0.04] text-white/60"
+              title="Time since last chart bar update"
+            >
+              BAR {chartFreshness}
+            </span>
             {levels.length > 0 && (
               <span className="text-[10px] text-white/30 px-1.5 py-0.5 rounded bg-white/5">
                 {filteredLevels.length}/{levels.length} levels
