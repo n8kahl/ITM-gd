@@ -1,0 +1,107 @@
+{
+  "program": {
+    "code": "titm-core-program",
+    "title": "TITM Trader Development Program",
+    "description": "Competency-based program for options execution, risk, and review discipline"
+  },
+  "tracks": [
+    {
+      "code": "foundations",
+      "title": "Foundations",
+      "modules": [
+        {
+          "code": "market-context-core",
+          "slug": "market-context-core",
+          "title": "Market Context Fundamentals",
+          "description": "Learn to identify session context before entering risk.",
+          "estimatedMinutes": 70,
+          "learningOutcomes": [
+            "Classify trend, range, and transition sessions",
+            "Define invalidation zones before entry",
+            "Select setups aligned to session context"
+          ],
+          "lessons": [
+            {
+              "slug": "session-framing-for-options",
+              "title": "Session Framing for Options",
+              "learningObjective": "Build a repeatable pre-trade context checklist before opening a position.",
+              "estimatedMinutes": 18,
+              "difficulty": "beginner",
+              "competenciesTargeted": ["market_context", "entry_validation"],
+              "blocks": [
+                { "blockType": "hook", "title": "Why Context Beats Conviction" },
+                { "blockType": "concept_explanation", "title": "Three Session Modes" },
+                { "blockType": "worked_example", "title": "SPX Open: Range to Trend Transition" },
+                { "blockType": "guided_practice", "title": "Tag Context From a Chart Snapshot" },
+                { "blockType": "independent_practice", "title": "Write Your 5-Point Context Plan" },
+                { "blockType": "reflection", "title": "What Invalidates Your Bias Fastest?" }
+              ]
+            },
+            {
+              "slug": "invalidations-and-levels",
+              "title": "Invalidations and Key Levels",
+              "learningObjective": "Mark invalidation and target levels that define whether a trade remains valid.",
+              "estimatedMinutes": 16,
+              "difficulty": "beginner",
+              "competenciesTargeted": ["market_context", "trade_management"],
+              "blocks": [
+                { "blockType": "hook", "title": "The Cost of Unclear Invalidations" },
+                { "blockType": "concept_explanation", "title": "Level Hierarchy and Timeframe Priority" },
+                { "blockType": "worked_example", "title": "Morning Breakdown Recovery Scenario" },
+                { "blockType": "guided_practice", "title": "Place Invalidation and First Target" },
+                { "blockType": "independent_practice", "title": "Annotate Two Alternate Scenarios" },
+                { "blockType": "reflection", "title": "How Early Should You Exit?" }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "risk-and-execution-core",
+          "slug": "risk-and-execution-core",
+          "title": "Risk and Execution Discipline",
+          "description": "Translate setup quality into size, management, and disciplined exits.",
+          "estimatedMinutes": 80,
+          "learningOutcomes": [
+            "Size positions by invalidation distance and account risk",
+            "Plan scale-out and hard-stop behavior before entry",
+            "Use post-trade reflection to reduce repeat mistakes"
+          ],
+          "lessons": [
+            {
+              "slug": "sizing-with-invalidation",
+              "title": "Position Sizing With Invalidation",
+              "learningObjective": "Compute position size from account risk and invalidation distance.",
+              "estimatedMinutes": 20,
+              "difficulty": "intermediate",
+              "competenciesTargeted": ["position_sizing", "entry_validation"],
+              "blocks": [
+                { "blockType": "hook", "title": "Why Good Setups Still Blow Up Accounts" },
+                { "blockType": "concept_explanation", "title": "Risk Budget and Size Formula" },
+                { "blockType": "worked_example", "title": "Sizing Two Contracts Across Volatility Regimes" },
+                { "blockType": "guided_practice", "title": "Size the Trade in Three Scenarios" },
+                { "blockType": "independent_practice", "title": "Build Your Personal Size Table" },
+                { "blockType": "reflection", "title": "When to Reduce Size Despite Strong Conviction" }
+              ]
+            },
+            {
+              "slug": "exit-discipline-under-pressure",
+              "title": "Exit Discipline Under Pressure",
+              "learningObjective": "Execute pre-defined exits consistently when trades move quickly.",
+              "estimatedMinutes": 19,
+              "difficulty": "intermediate",
+              "competenciesTargeted": ["exit_discipline", "review_reflection"],
+              "blocks": [
+                { "blockType": "hook", "title": "Most PnL Damage Happens After Entry" },
+                { "blockType": "concept_explanation", "title": "Three Exit Triggers You Must Define" },
+                { "blockType": "worked_example", "title": "Fast Reversal: Stick to Plan or Hope" },
+                { "blockType": "guided_practice", "title": "Choose Exits for Four Replay Segments" },
+                { "blockType": "independent_practice", "title": "Write an Exit Decision Tree" },
+                { "blockType": "reflection", "title": "Which Bias Broke Your Last Exit?" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
