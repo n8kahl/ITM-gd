@@ -102,13 +102,15 @@ let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let wsReconnectAttempt = 0
 let wsConsecutiveConnectFailures = 0
 let wsRetryPausedUntil = 0
+let wsNextConnectAt = 0
 let activeStreamToken: string | null = null
 let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
 const WS_CLOSE_UNAUTHORIZED = 4401
 const WS_CLOSE_FORBIDDEN = 4403
 const WS_FAILURE_THRESHOLD = 6
-const WS_RETRY_PAUSE_MS = 60_000
+const WS_RETRY_PAUSE_MS = 120_000
+const WS_MIN_CONNECT_INTERVAL_MS = 5_000
 
 const sharedState: PriceStreamState = {
   prices: new Map(),
@@ -250,6 +252,7 @@ function scheduleReconnect(): void {
   if (Date.now() < wsRetryPausedUntil) return
   clearReconnectTimer()
   const delay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
+  wsNextConnectAt = Math.max(wsNextConnectAt, Date.now() + delay)
   debugPriceStream('Scheduling reconnect', { delayMs: delay, attempt: wsReconnectAttempt + 1 })
   wsReconnectAttempt += 1
   wsReconnectTimer = setTimeout(() => {
@@ -392,12 +395,20 @@ function ensureSocketConnection(): void {
     return
   }
 
+  if (Date.now() < wsNextConnectAt) {
+    debugPriceStream('Connect throttled', {
+      retryAfterMs: Math.max(wsNextConnectAt - Date.now(), 0),
+    })
+    return
+  }
+
   // Token changed between sessions; force reconnect with fresh auth.
   if (activeStreamToken && activeStreamToken !== token) {
     disconnectSocket()
     wsReconnectAttempt = 0
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
+    wsNextConnectAt = 0
   }
   activeStreamToken = token
 
@@ -408,6 +419,7 @@ function ensureSocketConnection(): void {
   }
 
   const wsUrl = buildWebSocketUrl(token)
+  wsNextConnectAt = Date.now() + WS_MIN_CONNECT_INTERVAL_MS
   debugPriceStream('Opening websocket', { wsUrl: redactWsUrl(wsUrl) })
   const socket = new WebSocket(wsUrl)
   let socketOpened = false
@@ -443,7 +455,9 @@ function ensureSocketConnection(): void {
 
   socket.onerror = () => {
     sharedState.error = 'WebSocket connection error'
-    console.warn('[price-stream] WebSocket error')
+    if (getPriceStreamDebugEnabled()) {
+      console.warn('[price-stream] WebSocket error')
+    }
     notifyConsumers()
   }
 
@@ -457,16 +471,20 @@ function ensureSocketConnection(): void {
 
     if (event.code === WS_CLOSE_UNAUTHORIZED || event.code === WS_CLOSE_FORBIDDEN) {
       sharedState.error = event.reason || 'Authentication required for live stream'
-      console.warn('[price-stream] WebSocket auth close', {
-        code: event.code,
-        reason: event.reason || '',
-      })
+      wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
+      wsNextConnectAt = wsRetryPausedUntil
+      if (getPriceStreamDebugEnabled()) {
+        console.warn('[price-stream] WebSocket auth close', {
+          code: event.code,
+          reason: event.reason || '',
+        })
+      }
       notifyConsumers()
       return
     }
 
     wsConsecutiveConnectFailures = socketOpened ? 0 : wsConsecutiveConnectFailures + 1
-    if (event.code !== 1000) {
+    if (event.code !== 1000 && getPriceStreamDebugEnabled()) {
       console.warn('[price-stream] WebSocket closed', {
         code: event.code,
         reason: event.reason || '',
