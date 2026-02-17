@@ -20,13 +20,15 @@ export async function getSPXSnapshot(options?: { forceRefresh?: boolean }): Prom
   }
 
   const run = async (): Promise<SPXSnapshot> => {
-    // Build snapshot dependencies once in a deterministic order to avoid recursive fan-out.
-    const gex = await computeUnifiedGEXLandscape({ forceRefresh });
+    // Flow events are independent of GEX — fetch them concurrently.
+    const [gex, flow] = await Promise.all([
+      computeUnifiedGEXLandscape({ forceRefresh }),
+      getFlowEvents({ forceRefresh }),
+    ]);
     const basis = await getBasisState({ forceRefresh, gexLandscape: gex });
     const fibLevels = await getFibLevels({ forceRefresh, basisState: basis });
     const levelData = await getMergedLevels({ forceRefresh, basisState: basis, gexLandscape: gex, fibLevels });
     const regime = await classifyCurrentRegime({ forceRefresh, gexLandscape: gex, levelData });
-    const flow = await getFlowEvents({ forceRefresh });
     const setupsRaw = await detectActiveSetups({
       forceRefresh,
       levelData,

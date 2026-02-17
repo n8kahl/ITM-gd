@@ -1,10 +1,12 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getOptionsSnapshot, type OptionsSnapshot } from '../../config/massive';
+import { logger } from '../../lib/logger';
 import type { SPXFlowEvent } from './types';
 import { nowIso, round, stableId } from './utils';
 
 const FLOW_CACHE_KEY = 'spx_command_center:flow';
 const FLOW_CACHE_TTL_SECONDS = 20;
+const FLOW_FETCH_TIMEOUT_MS = 15000;
 let flowInFlight: Promise<SPXFlowEvent[]> | null = null;
 const MIN_FLOW_VOLUME = 10;
 const MIN_FLOW_PREMIUM = 10000;
@@ -100,9 +102,24 @@ function toFlowEvent(
 }
 
 async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEvent[]> {
+  const fetchWithTimeout = async (symbol: string): Promise<OptionsSnapshot[]> => {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Flow snapshot timeout for ${symbol}`)), FLOW_FETCH_TIMEOUT_MS),
+    );
+    try {
+      return await Promise.race([getOptionsSnapshot(symbol), timeout]);
+    } catch (error) {
+      logger.warn('Flow snapshot fetch failed or timed out', {
+        symbol,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  };
+
   const [spxSnapshots, spySnapshots] = await Promise.all([
-    getOptionsSnapshot('SPX'),
-    getOptionsSnapshot('SPY'),
+    fetchWithTimeout('SPX'),
+    fetchWithTimeout('SPY'),
   ]);
 
   const events: SPXFlowEvent[] = [];

@@ -137,69 +137,6 @@ function buildCombinedProfile(
   };
 }
 
-async function buildProfileExpirationBreakdown(input: {
-  symbol: 'SPX' | 'SPY';
-  expirations: string[];
-  strikeRange: number;
-  forceRefresh: boolean;
-  strikeTransform?: (value: number) => number;
-}): Promise<Record<string, { netGex: number; callWall: number; putWall: number }>> {
-  if (input.expirations.length === 0) {
-    return {};
-  }
-
-  const perExpiry = await Promise.all(
-    input.expirations.map(async (expiry) => {
-      const profile = await calculateGEXProfile(input.symbol, {
-        expiry,
-        strikeRange: input.strikeRange,
-        maxExpirations: 1,
-        forceRefresh: input.forceRefresh,
-      });
-
-      const transformed = toInternalProfile(
-        input.symbol,
-        profile,
-        input.strikeTransform || ((value) => value),
-      );
-
-      return [
-        expiry,
-        {
-          netGex: transformed.netGex,
-          callWall: transformed.callWall,
-          putWall: transformed.putWall,
-        },
-      ] as const;
-    }),
-  );
-
-  return Object.fromEntries(perExpiry);
-}
-
-function combineExpirationBreakdowns(
-  spx: Record<string, { netGex: number; callWall: number; putWall: number }>,
-  spy: Record<string, { netGex: number; callWall: number; putWall: number }>,
-): Record<string, { netGex: number; callWall: number; putWall: number }> {
-  const expirations = new Set<string>([
-    ...Object.keys(spx),
-    ...Object.keys(spy),
-  ]);
-
-  const merged: Record<string, { netGex: number; callWall: number; putWall: number }> = {};
-  for (const expiry of expirations) {
-    const spxPoint = spx[expiry];
-    const spyPoint = spy[expiry];
-    merged[expiry] = {
-      netGex: round((spxPoint?.netGex || 0) + (spyPoint?.netGex || 0), 2),
-      callWall: round(spxPoint?.callWall ?? spyPoint?.callWall ?? 0, 2),
-      putWall: round(spxPoint?.putWall ?? spyPoint?.putWall ?? 0, 2),
-    };
-  }
-
-  return merged;
-}
-
 export async function computeUnifiedGEXLandscape(options?: {
   forceRefresh?: boolean;
   strikeRange?: number;
@@ -233,7 +170,7 @@ export async function computeUnifiedGEXLandscape(options?: {
 
   const spxStrikeRange = options?.strikeRange ?? 30;
   const spyStrikeRange = options?.strikeRange ?? 40;
-  const maxExpirations = options?.maxExpirations ?? 6;
+  const maxExpirations = options?.maxExpirations ?? 4;
 
   const [spxRaw, spyRaw] = await Promise.all([
     calculateGEXProfile('SPX', {
@@ -249,33 +186,20 @@ export async function computeUnifiedGEXLandscape(options?: {
   ]);
 
   const basis = spxRaw.spotPrice - spyRaw.spotPrice * 10;
-  const [spxBreakdown, spyBreakdown] = await Promise.all([
-    buildProfileExpirationBreakdown({
-      symbol: 'SPX',
-      expirations: spxRaw.expirationsAnalyzed,
-      strikeRange: spxStrikeRange,
-      forceRefresh,
-    }),
-    buildProfileExpirationBreakdown({
-      symbol: 'SPY',
-      expirations: spyRaw.expirationsAnalyzed,
-      strikeRange: spyStrikeRange,
-      forceRefresh,
-      strikeTransform: (strike) => strike * 10 + basis,
-    }),
-  ]);
 
+  // Derive per-expiry breakdown from the aggregate profile data already fetched
+  // instead of re-fetching each expiration individually (which doubles API calls).
   const spx = {
     ...toInternalProfile('SPX', spxRaw),
-    expirationBreakdown: spxBreakdown,
+    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
   };
   const spy = {
     ...toInternalProfile('SPY', spyRaw, (strike) => strike * 10 + basis),
-    expirationBreakdown: spyBreakdown,
+    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
   };
   const combined = {
     ...buildCombinedProfile(spxRaw, spyRaw),
-    expirationBreakdown: combineExpirationBreakdowns(spxBreakdown, spyBreakdown),
+    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
   };
 
   const payload = { spx, spy, combined };

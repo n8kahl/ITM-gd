@@ -684,7 +684,7 @@ export async function getOptionsSnapshot(
   try {
     const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
     const encodedUnderlying = encodeURIComponent(snapshotUnderlyingTicker);
-    const MAX_PAGES = 20;
+    const MAX_PAGES = 5;
     const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
       if (!results) return [];
       return Array.isArray(results) ? results : [results];
