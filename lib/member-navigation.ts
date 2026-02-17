@@ -46,7 +46,7 @@ export function resolveMemberTabLabel(tab: Pick<MemberTabLike, 'tab_id' | 'label
 export function getMemberTabHref(tab: Pick<MemberTabLike, 'tab_id' | 'path'>): string {
   const rawHref = tab.path.startsWith('/') ? tab.path : `/members/${tab.path}`
   if (tab.tab_id === 'library' && rawHref === '/members/library') {
-    return '/members/academy/courses'
+    return '/members/academy-v3/modules'
   }
   return rawHref
 }
@@ -58,7 +58,7 @@ export function isMemberTabActive(pathname: string, tab: Pick<MemberTabLike, 'ta
       pathname === href ||
       pathname.startsWith(`${href}/`) ||
       pathname === '/members/library' ||
-      pathname.startsWith('/members/academy')
+      pathname.startsWith('/members/academy-v3')
     )
   }
 
@@ -77,8 +77,8 @@ export function getMemberTabIcon(tab: Pick<MemberTabLike, 'tab_id' | 'icon'>): L
 
 export function getMemberSectionPath(pathname: string): string {
   if (pathname === '/members') return '/members'
-  if (pathname === '/members/library' || pathname.startsWith('/members/academy')) {
-    return '/members/academy'
+  if (pathname === '/members/library' || pathname.startsWith('/members/academy-v3')) {
+    return '/members/academy-v3'
   }
 
   const segments = pathname.split('/').filter(Boolean)
@@ -91,7 +91,7 @@ export function getMemberSectionPath(pathname: string): string {
 
 export function getMemberFallbackTitle(pathname: string): string {
   if (pathname === '/members') return 'Dashboard'
-  if (pathname.startsWith('/members/academy') || pathname.startsWith('/members/library')) return 'Academy'
+  if (pathname.startsWith('/members/academy-v3') || pathname.startsWith('/members/library')) return 'Academy'
   if (pathname.startsWith('/members/journal')) return 'Journal'
   if (pathname.startsWith('/members/spx-command-center')) return 'SPX Command Center'
   if (pathname.startsWith('/members/ai-coach')) return 'AI Coach'

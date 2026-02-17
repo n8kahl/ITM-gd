@@ -1,5 +1,8 @@
 # TITM Academy 2.0 — Codex Autonomous Execution Spec
 
+> Archive note (February 17, 2026): This is a historical Academy V2 execution spec.  
+> Production academy runtime is now Academy V3 only (`/members/academy-v3/*`, `/api/academy-v3/*`).
+
 **Version:** 1.0
 **Date:** February 10, 2026
 **Scope:** Complete refactor, build, content generation, testing, documentation, and deployment

@@ -1,5 +1,8 @@
 # Training Library Layout, Design, and Navigation Audit
 
+> Archive note (February 17, 2026): This audit reflects pre-migration Academy V2 navigation.  
+> Current canonical training IA is `/members/academy-v3/*` with `/members/library` redirecting to `/members/academy-v3/modules`.
+
 Date: 2026-02-10
 Scope: Member Training Library / Academy UX flows (`/members/library`, `/members/academy/*`)
 

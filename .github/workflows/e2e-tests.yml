@@ -29,6 +29,9 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Validate Academy V3 content
+        run: pnpm academy:v3:validate-content
+
       - name: Build application
         run: pnpm build
         env:

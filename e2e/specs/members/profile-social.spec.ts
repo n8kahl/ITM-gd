@@ -307,10 +307,28 @@ async function setupProfileSocialMocks(page: Page): Promise<void> {
     }))
   })
 
-  await page.route('**/api/academy/dashboard**', async (route) => {
+  await page.route('**/api/academy-v3/mastery**', async (route) => {
     await fulfillJson(route, successBody({
-      stats: { currentXp: 1450 },
-      recentAchievements: [{ id: 'ach-1' }, { id: 'ach-2' }],
+      items: [
+        {
+          competencyId: '22222222-2222-4222-8222-111111111111',
+          competencyKey: 'risk_definition',
+          competencyTitle: 'Risk Definition',
+          currentScore: 84,
+          confidence: 0.72,
+          needsRemediation: false,
+          lastEvaluatedAt: '2026-02-10T12:00:00.000Z',
+        },
+        {
+          competencyId: '22222222-2222-4222-8222-222222222222',
+          competencyKey: 'execution_discipline',
+          competencyTitle: 'Execution Discipline',
+          currentScore: 78,
+          confidence: 0.67,
+          needsRemediation: false,
+          lastEvaluatedAt: '2026-02-10T12:00:00.000Z',
+        },
+      ],
     }))
   })
 

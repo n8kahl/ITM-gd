@@ -18,7 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { AcademyMarkdown } from '@/components/academy/academy-markdown'
+import { AcademyMarkdown } from '@/components/academy-v3/shared/academy-markdown'
 
 interface ContentGeneratorProps {
   courseId: string
