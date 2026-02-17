@@ -285,37 +285,38 @@ export async function GET(request: NextRequest) {
       manualActiveUsersQuery,
     ])
 
-    if (pageViewsResult.error) throw new Error(pageViewsResult.error.message)
-    if (clicksResult.error) throw new Error(clicksResult.error.message)
-    if (conversionsResult.error) throw new Error(conversionsResult.error.message)
-    if (subscribersRecentResult.error) throw new Error(subscribersRecentResult.error.message)
-    if (contactsRecentResult.error) throw new Error(contactsRecentResult.error.message)
-    if (pageViewsRecentResult.error) throw new Error(pageViewsRecentResult.error.message)
-    if (totalPageViewsCountResult.error) throw new Error(totalPageViewsCountResult.error.message)
-    if (totalClicksCountResult.error) throw new Error(totalClicksCountResult.error.message)
-    if (totalSubscribersCountResult.error) throw new Error(totalSubscribersCountResult.error.message)
-    if (totalContactsCountResult.error) throw new Error(totalContactsCountResult.error.message)
-    if (subscribedCountResult.error) throw new Error(subscribedCountResult.error.message)
-    if (pendingApplicationsResult.error) {
-      console.warn('cohort_applications query failed (table may not exist):', pendingApplicationsResult.error.message)
+    // Graceful degradation: warn on query failures instead of crashing.
+    // Many analytics tables (click_events, conversion_events, page_views) may
+    // not exist in every environment. Show whatever data IS available.
+    const warnIfError = (label: string, result: { error: { message: string } | null }) => {
+      if (result.error) {
+        console.warn(`Analytics query failed [${label}]:`, result.error.message)
+      }
     }
-    if (activeLearnersResult.error) {
-      console.warn('user_lesson_progress query failed (table may not exist):', activeLearnersResult.error.message)
-    }
-    if (aiCoachSessionsResult.error) throw new Error(aiCoachSessionsResult.error.message)
-    if (pricingTiersResult.error) throw new Error(pricingTiersResult.error.message)
-    if (manualTotalMembersResult.error) throw new Error(manualTotalMembersResult.error.message)
-    if (manualNewMembersResult.error) throw new Error(manualNewMembersResult.error.message)
-    if (manualJournalEntriesResult.error) throw new Error(manualJournalEntriesResult.error.message)
-    if (manualAiAnalysisResult.error) throw new Error(manualAiAnalysisResult.error.message)
-    if (manualAiCoachSessionsResult.error) throw new Error(manualAiCoachSessionsResult.error.message)
-    if (manualAiCoachMessagesResult.error) throw new Error(manualAiCoachMessagesResult.error.message)
-    if (manualSharedTradeCardsResult.error) {
-      console.warn('shared_trade_cards query failed (table may not exist):', manualSharedTradeCardsResult.error.message)
-    }
-    if (manualActiveUsersResult.error) {
-      console.warn('member_analytics_events query failed (table may not exist):', manualActiveUsersResult.error.message)
-    }
+
+    warnIfError('page_views', pageViewsResult)
+    warnIfError('click_events', clicksResult)
+    warnIfError('conversion_events', conversionsResult)
+    warnIfError('subscribers_recent', subscribersRecentResult)
+    warnIfError('contacts_recent', contactsRecentResult)
+    warnIfError('page_views_recent', pageViewsRecentResult)
+    warnIfError('total_page_views_count', totalPageViewsCountResult)
+    warnIfError('total_clicks_count', totalClicksCountResult)
+    warnIfError('total_subscribers_count', totalSubscribersCountResult)
+    warnIfError('total_contacts_count', totalContactsCountResult)
+    warnIfError('subscribed_count', subscribedCountResult)
+    warnIfError('cohort_applications', pendingApplicationsResult)
+    warnIfError('user_lesson_progress', activeLearnersResult)
+    warnIfError('ai_coach_sessions', aiCoachSessionsResult)
+    warnIfError('pricing_tiers', pricingTiersResult)
+    warnIfError('auth_users_total', manualTotalMembersResult)
+    warnIfError('auth_users_new', manualNewMembersResult)
+    warnIfError('journal_entries', manualJournalEntriesResult)
+    warnIfError('journal_ai_analysis', manualAiAnalysisResult)
+    warnIfError('ai_coach_sessions_count', manualAiCoachSessionsResult)
+    warnIfError('ai_coach_messages_count', manualAiCoachMessagesResult)
+    warnIfError('shared_trade_cards', manualSharedTradeCardsResult)
+    warnIfError('member_analytics_events', manualActiveUsersResult)
 
     const pageViewsRows = pageViewsResult.data || []
     const clickRows = clicksResult.data || []
@@ -480,7 +481,9 @@ export async function GET(request: NextRequest) {
           .in('session_id', saleSessionIds)
       : { data: [], error: null }
 
-    if (salesSubscribersError) throw new Error(salesSubscribersError.message)
+    if (salesSubscribersError) {
+      console.warn('Analytics query failed [sales_subscribers]:', salesSubscribersError.message)
+    }
 
     const subscriberBySession = new Map<string, string>()
     ;(salesSubscribersData || []).forEach((row: { session_id: string; name: string | null }) => {
@@ -534,7 +537,9 @@ export async function GET(request: NextRequest) {
           .in('id', aiCoachUserIds)
       : { data: [], error: null }
 
-    if (authUsersError) throw new Error(authUsersError.message)
+    if (authUsersError) {
+      console.warn('Analytics query failed [auth_users_coach]:', authUsersError.message)
+    }
 
     const authUserMap = new Map<string, { email: string | null; raw_user_meta_data: Record<string, unknown> | null }>()
     ;(authUsersData || []).forEach((row: {
