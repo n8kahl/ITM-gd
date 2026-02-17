@@ -1,10 +1,11 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { postSPXStream } from '@/hooks/use-spx-api'
 import { usePriceStream } from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
+import { SPX_TELEMETRY_EVENT, startSPXPerfTimer, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type {
   BasisState,
   ClusterZone,
@@ -34,6 +35,7 @@ interface SPXCommandCenterState {
   dataHealth: 'healthy' | 'degraded' | 'stale'
   dataHealthMessage: string | null
   spxPrice: number
+  spxTickTimestamp: string | null
   spyPrice: number
   snapshotGeneratedAt: string | null
   priceStreamConnected: boolean
@@ -124,6 +126,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('5m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
+  const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
+  const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
+  const hasTrackedFirstActionableRef = useRef(false)
+  const hasTrackedFirstSetupSelectRef = useRef(false)
+  const hasTrackedPageViewRef = useRef(false)
+  const lastDataHealthRef = useRef<'healthy' | 'degraded' | 'stale' | null>(null)
 
   const activeSetups = useMemo(() => {
     const filtered = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
@@ -141,6 +149,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [activeSetups, selectedSetupId])
 
   const spxPrice = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
+  const spxTickTimestamp = stream.prices.get('SPX')?.timestamp ?? null
   const spyPrice = stream.prices.get('SPY')?.price ?? snapshotData?.basis?.spyPrice ?? 0
 
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
@@ -181,7 +190,45 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       .filter((level) => (showSPYDerived ? true : level.category !== 'spy_derived'))
   }, [allLevels, showSPYDerived, visibleLevelCategories])
 
+  useEffect(() => {
+    if (hasTrackedPageViewRef.current) return
+    hasTrackedPageViewRef.current = true
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.PAGE_VIEW, {
+      route: '/members/spx-command-center',
+      hasSession: Boolean(accessToken),
+    }, { persist: true })
+    pageToFirstActionableStopperRef.current = startSPXPerfTimer('ttfa_actionable_render')
+    pageToFirstSetupSelectStopperRef.current = startSPXPerfTimer('ttfa_setup_select')
+  }, [accessToken])
+
+  useEffect(() => {
+    if (hasTrackedFirstActionableRef.current) return
+
+    const firstActionable = activeSetups.find((setup) => IMMEDIATELY_ACTIONABLE_STATUSES.has(setup.status))
+    if (!firstActionable) return
+
+    hasTrackedFirstActionableRef.current = true
+    const durationMs = pageToFirstActionableStopperRef.current?.({
+      setupId: firstActionable.id,
+      setupStatus: firstActionable.status,
+      setupDirection: firstActionable.direction,
+    }) ?? null
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.FIRST_ACTIONABLE_RENDER, {
+      setupId: firstActionable.id,
+      setupStatus: firstActionable.status,
+      setupDirection: firstActionable.direction,
+      durationMs,
+    }, { persist: true })
+  }, [activeSetups])
+
   const toggleLevelCategory = useCallback((category: LevelCategory) => {
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+      action: 'toggle_category',
+      category,
+    })
+
     setVisibleLevelCategories((prev) => {
       const next = new Set(prev)
       if (next.has(category)) {
@@ -199,10 +246,35 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [])
 
   const toggleSPYDerived = useCallback(() => {
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+      action: 'toggle_spy_overlay',
+    })
     setShowSPYDerived((prev) => !prev)
   }, [])
 
   const selectSetup = useCallback((setup: Setup | null) => {
+    if (setup) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SETUP_SELECTED, {
+        setupId: setup.id,
+        setupType: setup.type,
+        setupStatus: setup.status,
+        setupDirection: setup.direction,
+        setupProbability: setup.probability,
+      }, { persist: true })
+
+      if (!hasTrackedFirstSetupSelectRef.current) {
+        hasTrackedFirstSetupSelectRef.current = true
+        const durationMs = pageToFirstSetupSelectStopperRef.current?.({
+          setupId: setup.id,
+        }) ?? null
+
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.FIRST_SETUP_SELECT, {
+          setupId: setup.id,
+          durationMs,
+        }, { persist: true })
+      }
+    }
+
     setSelectedSetupId(setup?.id || null)
     if (setup) {
       setSelectedTimeframe('5m')
@@ -214,49 +286,129 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [])
 
   const requestContractRecommendation = useCallback(async (setupId: string) => {
+    const stopTimer = startSPXPerfTimer('contract_recommendation_latency')
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_REQUESTED, {
+      setupId,
+    }, { persist: true })
+
     if (!accessToken) {
+      const durationMs = stopTimer({ setupId, result: 'missing_token' })
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+        setupId,
+        result: 'missing_token',
+        durationMs,
+      }, { level: 'warning', persist: true })
       return null
     }
 
-    const response = await fetch(`/api/spx/contract-select?setupId=${encodeURIComponent(setupId)}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    })
+    try {
+      const response = await fetch(`/api/spx/contract-select?setupId=${encodeURIComponent(setupId)}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      })
 
-    if (!response.ok) {
+      if (!response.ok) {
+        const durationMs = stopTimer({
+          setupId,
+          result: 'http_error',
+          status: response.status,
+        })
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+          setupId,
+          result: 'http_error',
+          status: response.status,
+          durationMs,
+        }, { level: response.status >= 500 ? 'error' : 'warning', persist: true })
+        return null
+      }
+
+      const recommendation = await response.json() as ContractRecommendation
+      const durationMs = stopTimer({
+        setupId,
+        result: 'success',
+      })
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+        setupId,
+        result: 'success',
+        durationMs,
+        strike: recommendation.strike,
+        contractType: recommendation.type,
+        riskReward: recommendation.riskReward,
+      }, { persist: true })
+
+      return recommendation
+    } catch (error) {
+      const durationMs = stopTimer({
+        setupId,
+        result: 'exception',
+      })
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+        setupId,
+        result: 'exception',
+        durationMs,
+        message: error instanceof Error ? error.message : 'Unknown contract request failure',
+      }, { level: 'error', persist: true })
       return null
     }
-
-    return response.json() as Promise<ContractRecommendation>
   }, [accessToken])
 
   const sendCoachMessage = useCallback(async (prompt: string, setupId?: string | null) => {
+    const stopTimer = startSPXPerfTimer('coach_message_roundtrip')
+
     if (!accessToken) {
+      stopTimer({ setupId: setupId || null, result: 'missing_token' })
       throw new Error('Missing session token for SPX coach request')
     }
 
-    const streamMessages = await postSPXStream<CoachMessage>('/api/spx/coach/message', accessToken, {
-      prompt,
-      setupId: setupId || undefined,
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_MESSAGE_SENT, {
+      setupId: setupId || null,
+      promptLength: prompt.length,
     })
-    const nextMessages = streamMessages.filter((message) => Boolean(message?.id))
-    if (nextMessages.length === 0) {
-      throw new Error('SPX coach returned no messages')
-    }
 
-    await mutateSnapshot((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        coachMessages: [...nextMessages, ...prev.coachMessages],
-        generatedAt: new Date().toISOString(),
+    try {
+      const streamMessages = await postSPXStream<CoachMessage>('/api/spx/coach/message', accessToken, {
+        prompt,
+        setupId: setupId || undefined,
+      })
+      const nextMessages = streamMessages.filter((message) => Boolean(message?.id))
+      if (nextMessages.length === 0) {
+        stopTimer({ setupId: setupId || null, result: 'empty_response' })
+        throw new Error('SPX coach returned no messages')
       }
-    }, false)
 
-    return nextMessages[0]
+      await mutateSnapshot((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          coachMessages: [...nextMessages, ...prev.coachMessages],
+          generatedAt: new Date().toISOString(),
+        }
+      }, false)
+
+      stopTimer({
+        setupId: setupId || null,
+        result: 'success',
+        messageCount: nextMessages.length,
+      })
+
+      return nextMessages[0]
+    } catch (error) {
+      stopTimer({
+        setupId: setupId || null,
+        result: 'exception',
+      })
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_MESSAGE_SENT, {
+        setupId: setupId || null,
+        promptLength: prompt.length,
+        result: 'error',
+        message: error instanceof Error ? error.message : 'Unknown coach request failure',
+      }, { level: 'error' })
+      throw error
+    }
   }, [accessToken, mutateSnapshot])
 
   const error = snapshotError || null
@@ -279,10 +431,23 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     return null
   }, [dataHealth, error, snapshotDegradedMessage, snapshotIsDegraded])
 
+  useEffect(() => {
+    if (lastDataHealthRef.current === dataHealth) return
+    lastDataHealthRef.current = dataHealth
+
+    if (dataHealth !== 'healthy') {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.DATA_HEALTH_CHANGED, {
+        dataHealth,
+        message: dataHealthMessage,
+      }, { level: dataHealth === 'degraded' ? 'warning' : 'info' })
+    }
+  }, [dataHealth, dataHealthMessage])
+
   const value = useMemo<SPXCommandCenterState>(() => ({
     dataHealth,
     dataHealthMessage,
     spxPrice,
+    spxTickTimestamp,
     spyPrice,
     snapshotGeneratedAt: snapshotData?.generatedAt || null,
     priceStreamConnected: stream.isConnected,
@@ -329,6 +494,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     stream.error,
     stream.isConnected,
     spxPrice,
+    spxTickTimestamp,
     spyPrice,
     toggleLevelCategory,
     toggleSPYDerived,
