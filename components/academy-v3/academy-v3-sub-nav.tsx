@@ -22,7 +22,7 @@ export function AcademyV3SubNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="sticky top-[var(--members-topbar-h)] z-20 mb-6 border border-white/10 bg-[#111318]/90 backdrop-blur-sm">
+    <nav className="glass-card-heavy sticky top-[var(--members-topbar-h)] z-20 mb-6 border border-white/10">
       <ul className="flex items-center gap-2 overflow-x-auto px-3 py-2">
         {ITEMS.map((item) => {
           const active = isActive(pathname, item.href)

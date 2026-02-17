@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { AcademyPanel, AcademyV3Shell } from '@/components/academy-v3/academy-v3-shell'
 import { fetchReviewQueue, submitReview } from '@/lib/academy-v3/client'
+import { Analytics } from '@/lib/analytics'
 
 type ReviewQueueData = Awaited<ReturnType<typeof fetchReviewQueue>>
 
@@ -67,7 +68,7 @@ export function ReviewWorkbench() {
       description="Keep weak competencies fresh with short, due-now retrieval prompts."
     >
       {loading ? (
-        <div className="rounded-xl border border-white/10 bg-[#111318] p-6 text-sm text-zinc-300">Loading review queue...</div>
+        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading review queue...</div>
       ) : error ? (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
       ) : (
@@ -110,7 +111,10 @@ export function ReviewWorkbench() {
 
                     <button
                       type="button"
-                      onClick={() => void handleSubmit(item.queueId)}
+                      onClick={() => {
+                        Analytics.trackAcademyAction('submit_review_answer')
+                        void handleSubmit(item.queueId)
+                      }}
                       disabled={submittingId === item.queueId}
                       className="mt-3 rounded-md bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                     >

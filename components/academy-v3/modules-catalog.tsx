@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import { AcademyPanel, AcademyV3Shell } from '@/components/academy-v3/academy-v3-shell'
 import { AcademyMarkdown } from '@/components/academy-v3/shared/academy-markdown'
 import { fetchAcademyLesson, fetchAcademyModule, fetchAcademyPlan } from '@/lib/academy-v3/client'
+import { Analytics } from '@/lib/analytics'
 
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 type ModuleData = Awaited<ReturnType<typeof fetchAcademyModule>>
@@ -207,7 +208,7 @@ export function ModulesCatalog() {
       description="Choose a module and work lesson-by-lesson through structured blocks, assessments, and remediation."
     >
       {loading ? (
-        <div className="rounded-xl border border-white/10 bg-[#111318] p-6 text-sm text-zinc-300">Loading modules...</div>
+        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading modules...</div>
       ) : error ? (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
       ) : (
@@ -221,7 +222,10 @@ export function ModulesCatalog() {
                     <button
                       type="button"
                       aria-pressed={moduleItem.slug === selectedSlug}
-                      onClick={() => selectModule(moduleItem.slug)}
+                      onClick={() => {
+                        Analytics.trackAcademyAction('select_module')
+                        selectModule(moduleItem.slug)
+                      }}
                       className={`w-full rounded-md border px-3 py-3 text-left transition-colors ${
                         moduleItem.slug === selectedSlug
                           ? 'border-emerald-500/40 bg-emerald-500/10'
@@ -275,7 +279,10 @@ export function ModulesCatalog() {
                         <button
                           type="button"
                           aria-pressed={lesson.id === selectedLessonId}
-                          onClick={() => selectLesson(lesson.id)}
+                          onClick={() => {
+                            Analytics.trackAcademyAction('select_lesson')
+                            selectLesson(lesson.id)
+                          }}
                           className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
                             lesson.id === selectedLessonId
                               ? 'border-emerald-500/40 bg-emerald-500/10'

@@ -11,7 +11,9 @@ import {
 } from '@/lib/academy-v3/services'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { toSafeErrorMessage } from '@/lib/academy/api-utils'
-import { academyV3ErrorResponse } from '@/app/api/academy-v3/_shared'
+import { academyV3ErrorResponse, logAcademyError } from '@/app/api/academy-v3/_shared'
+
+const ROUTE = 'assessments/[id]/submit'
 
 export async function POST(
   request: NextRequest,
@@ -29,9 +31,18 @@ export async function POST(
     }
 
     const rawBody = await request.json().catch(() => null)
+    if (rawBody === null) {
+      return academyV3ErrorResponse(400, 'INVALID_BODY', 'Request body must be valid JSON')
+    }
+
     const parsedBody = submitAssessmentRequestSchema.safeParse(rawBody)
     if (!parsedBody.success) {
       return academyV3ErrorResponse(400, 'INVALID_BODY', 'Invalid request body', parsedBody.error.flatten())
+    }
+
+    // Validate answers are not empty
+    if (!parsedBody.data.answers || parsedBody.data.answers.length === 0) {
+      return academyV3ErrorResponse(400, 'EMPTY_ANSWERS', 'Assessment submission must include at least one answer')
     }
 
     const service = new AcademyAssessmentService(auth.supabase)
@@ -46,6 +57,10 @@ export async function POST(
     if (error instanceof AcademyAssessmentNotFoundError) {
       return academyV3ErrorResponse(404, 'ASSESSMENT_NOT_FOUND', error.message)
     }
+
+    logAcademyError(ROUTE, 'INTERNAL_ERROR', error, {
+      assessmentId: (await params).id,
+    })
 
     return academyV3ErrorResponse(
       500,

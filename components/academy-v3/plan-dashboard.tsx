@@ -9,6 +9,7 @@ import {
   fetchMastery,
   fetchRecommendations,
 } from '@/lib/academy-v3/client'
+import { Analytics } from '@/lib/analytics'
 
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 type MasteryData = Awaited<ReturnType<typeof fetchMastery>>
@@ -64,7 +65,7 @@ export function PlanDashboard() {
       description="Follow your highest-impact next action. Progress is competency-based, with review and remediation built into every step."
     >
       {loading ? (
-        <div className="rounded-xl border border-white/10 bg-[#111318] p-6 text-sm text-zinc-300">Loading your plan...</div>
+        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading your plan...</div>
       ) : error ? (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
       ) : (
@@ -82,7 +83,11 @@ export function PlanDashboard() {
                   <li key={`${item.type}-${index}`} className="rounded-md border border-white/10 p-3">
                     <p className="text-sm font-medium text-white">{item.title}</p>
                     <p className="mt-1 text-xs text-zinc-400">{item.reason}</p>
-                    <Link className="mt-2 inline-flex text-xs text-emerald-300 hover:text-emerald-200" href={item.actionTarget}>
+                    <Link
+                      className="mt-2 inline-flex text-xs text-emerald-300 hover:text-emerald-200"
+                      href={item.actionTarget}
+                      onClick={() => Analytics.trackAcademyAction('recommendation_action')}
+                    >
                       {item.actionLabel}
                     </Link>
                   </li>
@@ -113,13 +118,25 @@ export function PlanDashboard() {
       )}
 
       <div className="grid gap-3 md:grid-cols-3">
-        <Link className="rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-sm text-zinc-200 hover:border-emerald-500/30 hover:text-white" href="/members/academy-v3/modules">
+        <Link
+          className="glass-card-heavy rounded-lg border border-white/10 px-4 py-3 text-sm text-zinc-200 hover:border-emerald-500/30 hover:text-white"
+          href="/members/academy-v3/modules"
+          onClick={() => Analytics.trackAcademyAction('browse_modules')}
+        >
           Browse Modules
         </Link>
-        <Link className="rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-sm text-zinc-200 hover:border-emerald-500/30 hover:text-white" href="/members/academy-v3/review">
+        <Link
+          className="glass-card-heavy rounded-lg border border-white/10 px-4 py-3 text-sm text-zinc-200 hover:border-emerald-500/30 hover:text-white"
+          href="/members/academy-v3/review"
+          onClick={() => Analytics.trackAcademyAction('open_review_queue')}
+        >
           Open Review Queue
         </Link>
-        <Link className="rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-sm text-zinc-200 hover:border-emerald-500/30 hover:text-white" href="/members/academy-v3/progress">
+        <Link
+          className="glass-card-heavy rounded-lg border border-white/10 px-4 py-3 text-sm text-zinc-200 hover:border-emerald-500/30 hover:text-white"
+          href="/members/academy-v3/progress"
+          onClick={() => Analytics.trackAcademyAction('view_progress')}
+        >
           View Progress
         </Link>
       </div>

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 
 import { AcademyPanel, AcademyV3Shell } from '@/components/academy-v3/academy-v3-shell'
 import { fetchMastery, fetchRecommendations } from '@/lib/academy-v3/client'
+import { Analytics } from '@/lib/analytics'
 
 type MasteryData = Awaited<ReturnType<typeof fetchMastery>>
 type RecommendationData = Awaited<ReturnType<typeof fetchRecommendations>>
@@ -45,7 +46,7 @@ export function ProgressOverview() {
       description="Track competency growth over time and clear remediation priorities early."
     >
       {loading ? (
-        <div className="rounded-xl border border-white/10 bg-[#111318] p-6 text-sm text-zinc-300">Loading progress...</div>
+        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading progress...</div>
       ) : error ? (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
       ) : (
@@ -65,7 +66,11 @@ export function ProgressOverview() {
               <div>
                 <p className="text-sm font-medium text-white">{recommendations.items[0].title}</p>
                 <p className="mt-1 text-xs text-zinc-400">{recommendations.items[0].reason}</p>
-                <Link className="mt-2 inline-flex text-xs text-emerald-300 hover:text-emerald-200" href={recommendations.items[0].actionTarget}>
+                <Link
+                  className="mt-2 inline-flex text-xs text-emerald-300 hover:text-emerald-200"
+                  href={recommendations.items[0].actionTarget}
+                  onClick={() => Analytics.trackAcademyAction('progress_recommendation_action')}
+                >
                   {recommendations.items[0].actionLabel}
                 </Link>
               </div>
