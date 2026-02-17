@@ -14,10 +14,22 @@ import {
 } from '../services/workerHealth';
 
 const WORKER_NAME = 'spx_data_loop_worker';
-const OPEN_INTERVAL_MS = 60_000;
-const PRE_MARKET_INTERVAL_MS = 300_000;
-const CLOSED_CHECK_INTERVAL_MS = 900_000;
-const INITIAL_DELAY_MS = 20_000;
+const IS_RAILWAY_RUNTIME = Boolean(process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_ENVIRONMENT);
+const configuredLoopFactor = Number.parseFloat(process.env.SPX_DATA_LOOP_FACTOR || '');
+const LOOP_FACTOR = Number.isFinite(configuredLoopFactor) && configuredLoopFactor > 0
+  ? configuredLoopFactor
+  : IS_RAILWAY_RUNTIME
+    ? 3
+    : 1;
+
+function scaleInterval(baseMs: number): number {
+  return Math.max(5_000, Math.round(baseMs * LOOP_FACTOR));
+}
+
+const OPEN_INTERVAL_MS = scaleInterval(60_000);
+const PRE_MARKET_INTERVAL_MS = scaleInterval(300_000);
+const CLOSED_CHECK_INTERVAL_MS = scaleInterval(900_000);
+const INITIAL_DELAY_MS = scaleInterval(20_000);
 
 registerWorker(WORKER_NAME);
 
@@ -254,7 +266,12 @@ export function startSPXDataLoop(): void {
 
   isRunning = true;
   markWorkerStarted(WORKER_NAME);
-  logger.info('SPX data loop worker started');
+  logger.info('SPX data loop worker started', {
+    loopFactor: LOOP_FACTOR,
+    openIntervalMs: OPEN_INTERVAL_MS,
+    preMarketIntervalMs: PRE_MARKET_INTERVAL_MS,
+    closedIntervalMs: CLOSED_CHECK_INTERVAL_MS,
+  });
   markWorkerNextRun(WORKER_NAME, INITIAL_DELAY_MS);
   timer = setTimeout(runCycle, INITIAL_DELAY_MS);
 }

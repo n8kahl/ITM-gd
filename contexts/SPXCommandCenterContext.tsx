@@ -78,6 +78,7 @@ interface SPXCommandCenterState {
 const ALL_CATEGORIES: LevelCategory[] = ['structural', 'tactical', 'intraday', 'options', 'spy_derived', 'fibonacci']
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['forming', 'ready', 'triggered'])
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
+const SNAPSHOT_DELAY_HEALTH_MS = 12_000
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -126,6 +127,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('5m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
+  const [snapshotRequestLate, setSnapshotRequestLate] = useState(false)
   const [ephemeralCoachMessages, setEphemeralCoachMessages] = useState<CoachMessage[]>([])
   const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
@@ -237,6 +239,21 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       durationMs,
     }, { persist: true })
   }, [activeSetups])
+
+  useEffect(() => {
+    if (!isLoading || snapshotData) {
+      setSnapshotRequestLate(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSnapshotRequestLate(true)
+    }, SNAPSHOT_DELAY_HEALTH_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [isLoading, snapshotData])
 
   const toggleLevelCategory = useCallback((category: LevelCategory) => {
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
@@ -470,10 +487,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   const error = snapshotError || null
   const dataHealth = useMemo<'healthy' | 'degraded' | 'stale'>(() => {
-    if (snapshotIsDegraded || error) return 'degraded'
+    if (snapshotIsDegraded || error || snapshotRequestLate) return 'degraded'
     if (!stream.isConnected && Boolean(snapshotData?.generatedAt)) return 'stale'
     return 'healthy'
-  }, [error, snapshotData?.generatedAt, snapshotIsDegraded, stream.isConnected])
+  }, [error, snapshotData?.generatedAt, snapshotIsDegraded, snapshotRequestLate, stream.isConnected])
 
   const dataHealthMessage = useMemo(() => {
     if (snapshotIsDegraded) {
@@ -482,11 +499,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     if (error?.message) {
       return error.message
     }
+    if (snapshotRequestLate && !snapshotData) {
+      return 'SPX snapshot request is delayed. Core chart stream is still active while analytics recover.'
+    }
     if (dataHealth === 'stale') {
       return 'Live stream disconnected and snapshot is stale. Reconnecting in background.'
     }
     return null
-  }, [dataHealth, error, snapshotDegradedMessage, snapshotIsDegraded])
+  }, [dataHealth, error, snapshotData, snapshotDegradedMessage, snapshotIsDegraded, snapshotRequestLate])
 
   useEffect(() => {
     if (lastDataHealthRef.current === dataHealth) return
