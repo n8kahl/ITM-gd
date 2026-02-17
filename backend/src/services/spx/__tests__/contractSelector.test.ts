@@ -29,6 +29,11 @@ function getSpreadPct(contract: Pick<OptionContract, 'bid' | 'ask'>): number {
 }
 
 const MAX_SPREAD_PCT = 0.35;
+const CONTRACT_MULTIPLIER = 100;
+const MAX_CONTRACT_RISK_STRICT = 2_500;
+const MAX_CONTRACT_RISK_RELAXED = 3_500;
+const MAX_DELTA_STRICT = 0.65;
+const MAX_DELTA_RELAXED = 0.80;
 
 function scoreContract(setup: Pick<Setup, 'type'>, contract: OptionContract): number {
   const targetDelta = deltaTargetForSetup(setup);
@@ -64,15 +69,21 @@ function filterCandidates(
   const minVol = relaxed ? 1 : 10;
   const maxSpread = relaxed ? 0.50 : MAX_SPREAD_PCT;
   const minDelta = relaxed ? 0.02 : 0.05;
+  const maxDelta = relaxed ? MAX_DELTA_RELAXED : MAX_DELTA_STRICT;
+  const maxRisk = relaxed ? MAX_CONTRACT_RISK_RELAXED : MAX_CONTRACT_RISK_STRICT;
 
   return contracts.filter((contract) => {
     if (contract.type !== desiredType) return false;
     if (!(contract.bid > 0 && contract.ask > contract.bid)) return false;
     const absDelta = Math.abs(contract.delta || 0);
-    if (!Number.isFinite(absDelta) || absDelta < minDelta) return false;
+    if (!Number.isFinite(absDelta) || absDelta < minDelta || absDelta > maxDelta) return false;
     if ((contract.openInterest || 0) < minOI && (contract.volume || 0) < minVol) return false;
     const spreadPct = getSpreadPct(contract);
-    return Number.isFinite(spreadPct) && spreadPct <= maxSpread;
+    if (!Number.isFinite(spreadPct) || spreadPct > maxSpread) return false;
+
+    const perContractRisk = getMid(contract) * CONTRACT_MULTIPLIER;
+    if (!Number.isFinite(perContractRisk) || perContractRisk <= 0) return false;
+    return perContractRisk <= maxRisk;
   });
 }
 
@@ -234,6 +245,13 @@ describe('contractSelector', () => {
       expect(filterCandidates(setup, contracts, false)).toHaveLength(0);
     });
 
+    it('rejects contracts above max delta in strict mode', () => {
+      const setup = makeSetup({ direction: 'bullish' });
+      const contracts = [makeContract({ type: 'call', delta: 0.91 })];
+
+      expect(filterCandidates(setup, contracts, false)).toHaveLength(0);
+    });
+
     it('accepts low-delta contracts in relaxed mode', () => {
       const setup = makeSetup({ direction: 'bullish' });
       const contracts = [makeContract({ type: 'call', delta: 0.03 })];
@@ -264,6 +282,14 @@ describe('contractSelector', () => {
       expect(filterCandidates(setup, contracts, false)).toHaveLength(0);
       // Relaxed: 0.46 < 0.50 → accepted
       expect(filterCandidates(setup, contracts, true)).toHaveLength(1);
+    });
+
+    it('rejects contracts with excessive per-contract risk', () => {
+      const setup = makeSetup({ direction: 'bullish' });
+      const contracts = [makeContract({ type: 'call', bid: 38.0, ask: 39.0, delta: 0.55 })];
+
+      expect(filterCandidates(setup, contracts, false)).toHaveLength(0);
+      expect(filterCandidates(setup, contracts, true)).toHaveLength(0);
     });
   });
 

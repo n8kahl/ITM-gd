@@ -11,6 +11,11 @@ const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready'
 const MIN_OPEN_INTEREST = 100;
 const MIN_VOLUME = 10;
 const MAX_SPREAD_PCT = 0.35;
+const CONTRACT_MULTIPLIER = 100;
+const MAX_CONTRACT_RISK_STRICT = 2_500;
+const MAX_CONTRACT_RISK_RELAXED = 3_500;
+const MAX_DELTA_STRICT = 0.65;
+const MAX_DELTA_RELAXED = 0.80;
 
 function deltaTargetForSetup(setup: Setup): number {
   switch (setup.type) {
@@ -92,8 +97,9 @@ function toContractRecommendation(setup: Setup, contract: OptionContract): Contr
     riskReward: round(reward / risk, 2),
     expectedPnlAtTarget1: round((projectedTarget1 - mid) * 100, 2),
     expectedPnlAtTarget2: round((projectedTarget2 - mid) * 100, 2),
-    maxLoss: round(mid * 100, 2),
-    reasoning: `Selected for ${setup.type} with calibrated delta fit, executable spread, and strong liquidity.`,
+    // Worst-case debit risk should use ask (entry at offer), not midpoint.
+    maxLoss: round(Math.max(contract.ask, mid) * CONTRACT_MULTIPLIER, 2),
+    reasoning: `Selected for ${setup.type} with calibrated delta fit, executable spread, strong liquidity, and controlled per-contract risk.`,
   };
 }
 
@@ -107,15 +113,21 @@ function filterCandidates(
   const minVol = relaxed ? 1 : MIN_VOLUME;
   const maxSpread = relaxed ? 0.50 : MAX_SPREAD_PCT;
   const minDelta = relaxed ? 0.02 : 0.05;
+  const maxDelta = relaxed ? MAX_DELTA_RELAXED : MAX_DELTA_STRICT;
+  const maxRisk = relaxed ? MAX_CONTRACT_RISK_RELAXED : MAX_CONTRACT_RISK_STRICT;
 
   return contracts.filter((contract) => {
     if (contract.type !== desiredType) return false;
     if (!(contract.bid > 0 && contract.ask > contract.bid)) return false;
     const absDelta = Math.abs(contract.delta || 0);
-    if (!Number.isFinite(absDelta) || absDelta < minDelta) return false;
+    if (!Number.isFinite(absDelta) || absDelta < minDelta || absDelta > maxDelta) return false;
     if ((contract.openInterest || 0) < minOI && (contract.volume || 0) < minVol) return false;
     const spreadPct = getSpreadPct(contract);
-    return Number.isFinite(spreadPct) && spreadPct <= maxSpread;
+    if (!Number.isFinite(spreadPct) || spreadPct > maxSpread) return false;
+
+    const perContractRisk = getMid(contract) * CONTRACT_MULTIPLIER;
+    if (!Number.isFinite(perContractRisk) || perContractRisk <= 0) return false;
+    return perContractRisk <= maxRisk;
   });
 }
 

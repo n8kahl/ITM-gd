@@ -139,7 +139,7 @@ export function GEXLandscape({ profile }: { profile: GEXProfile | null }) {
                   return (
                     <div
                       key={`${level.strike}-${level.gex}`}
-                      className="flex-1 min-w-[3px]"
+                      className="flex h-full min-w-[3px] flex-1 items-end"
                       title={`${level.strike.toFixed(0)}: ${(level.gex / 1e6).toFixed(1)}M`}
                     >
                       <div

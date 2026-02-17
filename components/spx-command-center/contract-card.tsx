@@ -80,8 +80,8 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
             title="Break-even"
           />
         </div>
-        <div className="mt-1 flex justify-between text-[9px] font-mono">
-          <span className="text-rose-300/70">-${maxLossAbs.toFixed(0)}</span>
+      <div className="mt-1 flex justify-between text-[9px] font-mono">
+          <span className="text-rose-300/70">Risk ${maxLossAbs.toFixed(0)} /1c</span>
           <span className="text-emerald-300/70">T1 +${t1Abs.toFixed(0)}</span>
           <span className="text-champagne/70">T2 +${t2Abs.toFixed(0)}</span>
         </div>
@@ -138,8 +138,8 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
           </div>
           <div className="grid grid-cols-2 gap-2 text-[10px]">
             <div>
-              <p className="text-white/40">Max Loss</p>
-              <p className="font-mono text-rose-200">${contract.maxLoss.toFixed(0)}</p>
+              <p className="text-white/40">Max Risk (1 contract)</p>
+              <p className="font-mono text-rose-200">${contract.maxLoss.toFixed(0)} (SPX x100)</p>
             </div>
             <div>
               <p className="text-white/40">Expiry</p>
