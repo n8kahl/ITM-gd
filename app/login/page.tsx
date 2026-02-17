@@ -310,9 +310,13 @@ function LoginContent() {
               <Link href="/terms-of-service" className="text-emerald-500 hover:underline">
                 Terms of Service
               </Link>
-              {' '}and{' '}
+              {', '}
               <Link href="/privacy-policy" className="text-emerald-500 hover:underline">
                 Privacy Policy
+              </Link>
+              {' '}and{' '}
+              <Link href="/refund-policy" className="text-emerald-500 hover:underline">
+                Refund Policy
               </Link>
             </p>
           </div>

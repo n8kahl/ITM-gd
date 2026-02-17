@@ -31,7 +31,7 @@ export default function TermsOfService() {
 
           <div className="glass-card-heavy rounded-2xl border border-champagne/20 p-8 md:p-12">
             <h1 className="text-3xl md:text-4xl font-bold text-gradient-champagne mb-2">Terms of Service</h1>
-            <p className="text-muted-foreground mb-8">Last Updated: January 28, 2026</p>
+            <p className="text-muted-foreground mb-8">Last Updated: February 16, 2026</p>
 
             <div className="prose prose-invert prose-sm max-w-none space-y-6 text-smoke/80">
               {/* Important Disclaimer Box */}
@@ -97,17 +97,19 @@ export default function TermsOfService() {
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">5. Money-Back Guarantee Terms</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">5. Billing and Refund Policy</h2>
                 <p>
-                  Our 30-day money-back guarantee is subject to the following conditions:
+                  Trade In The Money operates under an all-sales-final policy. To the maximum extent permitted by law, we are not obligated to issue refunds under any circumstances.
                 </p>
-                <p className="mt-2">- You must have followed our signals as instructed during the 30-day period</p>
-                <p>- You must provide documentation of your trades upon request</p>
-                <p>- The guarantee applies to subscription fees only, not trading losses</p>
-                <p>- Refund requests must be submitted within 30 days of purchase</p>
-                <p>- We reserve the right to verify compliance with signal following before issuing refunds</p>
+                <p className="mt-2">- All sales are final once access is delivered</p>
+                <p>- Trading losses, market outcomes, dissatisfaction, or change of mind are not refund grounds</p>
+                <p>- Billing disputes should be submitted through our support channel for review</p>
+                <p>- Any exception, credit, or adjustment is solely at our discretion and does not create ongoing obligations</p>
                 <p className="mt-3">
-                  The money-back guarantee does not guarantee trading profits. It is a satisfaction guarantee for our service quality.
+                  For full details, see our{" "}
+                  <Link href="/refund-policy" className="text-champagne hover:underline">
+                    Refund Policy
+                  </Link>.
                 </p>
               </section>
 
@@ -132,8 +134,10 @@ export default function TermsOfService() {
               <section>
                 <h2 className="text-xl font-semibold text-ivory mb-3">8. Subscription and Payments</h2>
                 <p className="mt-2">- Subscriptions are billed on a recurring basis according to your selected plan</p>
+                <p>- Precision Cohort is a fixed 90-day program and does not auto-renew unless explicitly stated at checkout</p>
+                <p>- Private 1-on-1 mentorship is a fixed 8-week program and does not auto-renew unless explicitly stated at checkout</p>
                 <p>- You may cancel your subscription at any time through your Whop account</p>
-                <p>- Refunds are subject to our money-back guarantee policy</p>
+                <p>- Refund obligations are governed by our all-sales-final policy in the Refund Policy</p>
                 <p>- We reserve the right to modify pricing with 30 days notice</p>
               </section>
 
@@ -211,6 +215,7 @@ export default function TermsOfService() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <Link href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</Link>
               <Link href="/terms-of-service" className="text-champagne transition-colors duration-300">Terms of Service</Link>
+              <Link href="/refund-policy" className="hover:text-champagne transition-colors duration-300">Refund Policy</Link>
               <ContactLink className="hover:text-champagne transition-colors duration-300">Contact</ContactLink>
             </div>
           </div>

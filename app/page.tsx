@@ -19,7 +19,6 @@ import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/min
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { Analytics } from "@/lib/analytics";
-import { BillingToggle } from "@/components/ui/billing-toggle";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
 import SparkleLog from "@/components/ui/sparkle-logo";
 import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
@@ -61,7 +60,6 @@ export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
 
   // Legacy handler for contact modal with preset message (kept for fallback)
@@ -385,24 +383,14 @@ export default function Home() {
             </RevealContent>
           </div>
 
-          {/* Billing Toggle */}
-          <RevealContent delay={0.3}>
-            <div className="flex justify-center mb-10">
-              <BillingToggle billingCycle={billingCycle} onChange={setBillingCycle} />
-            </div>
-          </RevealContent>
-
           {/* Pricing Cards Grid - Core → Pro → Execute */}
           <StaggerContainer className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch" staggerDelay={0.15}>
             {/* Core Sniper Card */}
             <StaggerItem>
               <PricingCard
                 name={pricingTiers.find(t => t.id === 'core')?.name || "Core Sniper"}
-                price={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'core')?.monthly_price || "$199")
-                  : (pricingTiers.find(t => t.id === 'core')?.yearly_price || "$1,990")
-                }
-                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                price={pricingTiers.find(t => t.id === 'core')?.monthly_price || "$199"}
+                period="/month"
                 description={pricingTiers.find(t => t.id === 'core')?.description || "For disciplined traders who want full market exposure"}
                 features={pricingTiers.find(t => t.id === 'core')?.features || [
                   "👀 Morning Watchlist",
@@ -410,13 +398,10 @@ export default function Home() {
                   "🔔 High-volume & momentum alerts",
                   "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/")
-                  : (pricingTiers.find(t => t.id === 'core')?.yearly_link || pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/")
-                }
+                whopLink={pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/"}
                 tier="core"
                 tagline={pricingTiers.find(t => t.id === 'core')?.tagline || "Execution focused education"}
-                isYearly={billingCycle === 'yearly'}
+                isYearly={false}
               />
             </StaggerItem>
 
@@ -424,11 +409,8 @@ export default function Home() {
             <StaggerItem>
               <PricingCard
                 name={pricingTiers.find(t => t.id === 'pro')?.name || "Pro Sniper"}
-                price={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'pro')?.monthly_price || "$299")
-                  : (pricingTiers.find(t => t.id === 'pro')?.yearly_price || "$2,990")
-                }
-                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                price={pricingTiers.find(t => t.id === 'pro')?.monthly_price || "$299"}
+                period="/month"
                 description={pricingTiers.find(t => t.id === 'pro')?.description || "For traders scaling beyond day trades"}
                 features={pricingTiers.find(t => t.id === 'pro')?.features || [
                   "Everything in Core Sniper, plus:",
@@ -438,13 +420,10 @@ export default function Home() {
                   "📊 Longer term market structure insight",
                   "🎯 Capital allocation education",
                 ]}
-                whopLink={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/")
-                  : (pricingTiers.find(t => t.id === 'pro')?.yearly_link || pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/")
-                }
+                whopLink={pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/"}
                 tier="pro"
                 tagline={pricingTiers.find(t => t.id === 'pro')?.tagline || "More patience & strategy, not just speed"}
-                isYearly={billingCycle === 'yearly'}
+                isYearly={false}
               />
             </StaggerItem>
 
@@ -452,11 +431,8 @@ export default function Home() {
             <StaggerItem>
               <PricingCard
                 name={pricingTiers.find(t => t.id === 'executive')?.name || "Executive Sniper"}
-                price={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'executive')?.monthly_price || "$499")
-                  : (pricingTiers.find(t => t.id === 'executive')?.yearly_price || "$4,990")
-                }
-                period={billingCycle === 'monthly' ? "/month" : "/year"}
+                price={pricingTiers.find(t => t.id === 'executive')?.monthly_price || "$499"}
+                period="/month"
                 description={pricingTiers.find(t => t.id === 'executive')?.description || "For serious traders only"}
                 features={pricingTiers.find(t => t.id === 'executive')?.features || [
                   "Everything in Pro Sniper, plus:",
@@ -465,13 +441,10 @@ export default function Home() {
                   "🎯 Higher-level trade commentary",
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink={billingCycle === 'monthly'
-                  ? (pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-executive-sniper-access-0AoRousnaGeJzN/app/")
-                  : (pricingTiers.find(t => t.id === 'executive')?.yearly_link || pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-executive-sniper-access-0AoRousnaGeJzN/app/")
-                }
+                whopLink={pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-executive-sniper-access-0AoRousnaGeJzN/app/"}
                 tier="executive"
                 tagline={pricingTiers.find(t => t.id === 'executive')?.tagline || "Maximum conviction, maximum execution"}
-                isYearly={billingCycle === 'yearly'}
+                isYearly={false}
               />
             </StaggerItem>
           </StaggerContainer>
@@ -487,10 +460,10 @@ export default function Home() {
                   </div>
                   <div className="text-center sm:text-left">
                     <div className="text-lg font-bold text-emerald-400">
-                      Action-Based Money-Back Guarantee*
+                      Support-First Billing Policy*
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Follow our trade alerts for 30 days. If you don&apos;t see value, we&apos;ll refund you. *Terms apply.
+                      If you have a billing error or account-access issue, our team reviews every case quickly and fairly under our Refund Policy.
                     </p>
                   </div>
                 </div>
@@ -759,7 +732,7 @@ export default function Home() {
               </Button>
 
               <p className="text-xs text-muted-foreground/60 mt-4">
-                30-day money-back guarantee
+                All sales final. No refund obligation.
               </p>
             </div>
           </div>
@@ -788,6 +761,7 @@ export default function Home() {
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
               <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
+              <a href="/refund-policy" className="hover:text-champagne transition-colors duration-300">Refund Policy</a>
               <a href="https://whop.com/trade-in-the-money/affiliates" target="_blank" rel="noopener noreferrer" className="hover:text-champagne transition-colors duration-300">Affiliates</a>
               <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>

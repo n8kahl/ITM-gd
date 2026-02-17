@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import type { CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import SparkleLog from './sparkle-logo'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
@@ -19,30 +20,33 @@ export function Skeleton({
   animation = 'subtle',
   style,
 }: SkeletonProps) {
+  const screenOverlay = (
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050505]">
+      <SparkleLog
+        src={BRAND_LOGO_SRC}
+        alt={BRAND_NAME}
+        width={96}
+        height={96}
+        sparkleCount={15}
+        enableFloat={true}
+        enableGlow={true}
+        glowIntensity="high"
+      />
+      <div className="mt-8 flex flex-col items-center gap-2">
+        <div className="h-1 w-32 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full w-1/2 bg-emerald-500 animate-[shimmer_1.5s_infinite]" />
+        </div>
+        <span className="text-xs font-medium uppercase tracking-widest text-emerald-500/60">
+          Loading
+        </span>
+      </div>
+    </div>
+  )
+
   // Full Screen Loading State - "White Glove" Experience
   if (variant === 'screen') {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050505]">
-        <SparkleLog
-          src={BRAND_LOGO_SRC}
-          alt={BRAND_NAME}
-          width={96}
-          height={96}
-          sparkleCount={15}
-          enableFloat={true}
-          enableGlow={true}
-          glowIntensity="high"
-        />
-        <div className="mt-8 flex flex-col items-center gap-2">
-          <div className="h-1 w-32 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 w-1/2 animate-[shimmer_1.5s_infinite]" />
-          </div>
-          <span className="text-xs font-medium text-emerald-500/60 tracking-widest uppercase">
-            Loading
-          </span>
-        </div>
-      </div>
-    )
+    if (typeof document === 'undefined') return screenOverlay
+    return createPortal(screenOverlay, document.body)
   }
 
   // Standard Skeleton for cards/content

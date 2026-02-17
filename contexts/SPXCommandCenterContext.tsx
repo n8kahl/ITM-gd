@@ -75,6 +75,35 @@ interface SPXCommandCenterState {
 
 const ALL_CATEGORIES: LevelCategory[] = ['structural', 'tactical', 'intraday', 'options', 'spy_derived', 'fibonacci']
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['forming', 'ready', 'triggered'])
+const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
+const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
+  triggered: 0,
+  ready: 1,
+  forming: 2,
+  invalidated: 3,
+  expired: 4,
+}
+
+function toEpoch(value: string | null | undefined): number {
+  if (!value) return 0
+  const epoch = Date.parse(value)
+  return Number.isFinite(epoch) ? epoch : 0
+}
+
+function rankSetups(setups: Setup[]): Setup[] {
+  return [...setups].sort((a, b) => {
+    const statusDelta = SETUP_STATUS_PRIORITY[a.status] - SETUP_STATUS_PRIORITY[b.status]
+    if (statusDelta !== 0) return statusDelta
+    if (b.confluenceScore !== a.confluenceScore) return b.confluenceScore - a.confluenceScore
+    if (b.probability !== a.probability) return b.probability - a.probability
+
+    const recencyA = a.triggeredAt ? toEpoch(a.triggeredAt) : toEpoch(a.createdAt)
+    const recencyB = b.triggeredAt ? toEpoch(b.triggeredAt) : toEpoch(b.createdAt)
+    if (recencyB !== recencyA) return recencyB - recencyA
+
+    return a.id.localeCompare(b.id)
+  })
+}
 
 const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null)
 
@@ -96,15 +125,19 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
 
-  const activeSetups = useMemo(
-    () => (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status)),
-    [snapshotData?.setups],
-  )
+  const activeSetups = useMemo(() => {
+    const filtered = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
+    return rankSetups(filtered)
+  }, [snapshotData?.setups])
   const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
 
   const selectedSetup = useMemo(() => {
-    if (!selectedSetupId) return activeSetups[0] || null
-    return activeSetups.find((setup) => setup.id === selectedSetupId) || activeSetups[0] || null
+    const defaultSetup =
+      activeSetups.find((setup) => IMMEDIATELY_ACTIONABLE_STATUSES.has(setup.status)) ||
+      activeSetups[0] ||
+      null
+    if (!selectedSetupId) return defaultSetup
+    return activeSetups.find((setup) => setup.id === selectedSetupId) || defaultSetup
   }, [activeSetups, selectedSetupId])
 
   const spxPrice = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0

@@ -106,8 +106,14 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
 
   // Determine notification type
   const isCohortApplication = contact.submission_type === 'cohort_application'
-  const isLegacyApplication = contact.message?.toLowerCase().includes('precision cohort') ||
-                              contact.message?.toLowerCase().includes('annual mentorship')
+  const messageLower = contact.message?.toLowerCase() || ''
+  const isLegacyApplication = messageLower.includes('precision cohort') ||
+                              messageLower.includes('90 day mentorship') ||
+                              messageLower.includes('90-day mentorship') ||
+                              messageLower.includes('1-on-1 mentorship') ||
+                              messageLower.includes('one-on-one mentorship') ||
+                              messageLower.includes('8 week mentorship') ||
+                              messageLower.includes('8-week mentorship')
 
   // If this is a cohort application, insert directly into cohort_applications
   // This ensures the record exists even if the Edge Function fails
