@@ -407,7 +407,31 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         result: 'error',
         message: error instanceof Error ? error.message : 'Unknown coach request failure',
       }, { level: 'error' })
-      throw error
+
+      const fallbackMessage: CoachMessage = {
+        id: `coach_fallback_${Date.now()}`,
+        type: 'behavioral',
+        priority: 'alert',
+        setupId: setupId || null,
+        content: `Coach request failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please retry in a few seconds.`,
+        structuredData: {
+          source: 'client_fallback',
+          failed: true,
+          setupId: setupId || null,
+        },
+        timestamp: new Date().toISOString(),
+      }
+
+      await mutateSnapshot((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          coachMessages: [fallbackMessage, ...prev.coachMessages],
+          generatedAt: new Date().toISOString(),
+        }
+      }, false)
+
+      return fallbackMessage
     }
   }, [accessToken, mutateSnapshot])
 

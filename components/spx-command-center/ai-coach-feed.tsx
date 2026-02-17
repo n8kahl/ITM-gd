@@ -25,6 +25,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   const { coachMessages, selectedSetup, activeSetups, sendCoachMessage } = useSPXCommandCenter()
   const [prompt, setPrompt] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [showAllMessages, setShowAllMessages] = useState(false)
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(() => loadDismissedCoachAlertIds())
 
@@ -103,10 +104,13 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   const sendMessage = async (text: string) => {
+    setSendError(null)
     setIsSending(true)
     try {
       await sendCoachMessage(text, selectedSetup?.id)
       setPrompt('')
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'Coach request failed. Please try again.')
     } finally {
       setIsSending(false)
     }
@@ -183,14 +187,18 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         </div>
       )}
 
-      {!readOnly && selectedSetup && (
+      {!readOnly && (
         <div className="flex flex-wrap gap-1">
           {QUICK_ACTIONS.map((action) => (
             <button
               key={action.label}
               type="button"
               disabled={isSending}
-              onClick={() => sendMessage(`${action.prompt}\nSetup ID: ${selectedSetup.id}`)}
+              onClick={() => sendMessage(
+                selectedSetup
+                  ? `${action.prompt}\nSetup ID: ${selectedSetup.id}`
+                  : action.prompt,
+              )}
               className={cn(
                 'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[9px] uppercase tracking-[0.06em] transition-colors',
                 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-200/80 hover:bg-emerald-500/15 hover:text-emerald-200',
@@ -207,7 +215,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       <div className="flex-1 space-y-1.5 max-h-[240px] overflow-auto pr-0.5">
         {groupedMessages.length === 0 ? (
           <p className="text-[11px] text-white/45">
-            {selectedSetup ? 'No coaching messages in this scope yet.' : 'Select a setup for contextual coaching.'}
+            {selectedSetup ? 'No coaching messages in this scope yet.' : 'No coaching messages yet. Ask coach a question below.'}
           </p>
         ) : (
           groupedMessages.map((group) => (
@@ -226,22 +234,29 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       {readOnly ? (
         <p className="text-[10px] text-white/40">Read-only on mobile.</p>
       ) : (
-        <form onSubmit={onSubmit} className="flex items-center gap-1.5">
-          <input
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={selectedSetup ? 'Ask about this setup...' : 'Ask coach...'}
-            className="flex-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-ivory placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-emerald-300/50"
-          />
-          <button
-            type="submit"
-            disabled={isSending || !prompt.trim()}
-            className="inline-flex items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-500/12 p-1.5 text-emerald-200 disabled:opacity-40"
-            aria-label="Send coach message"
-          >
-            <Send className="h-3.5 w-3.5" />
-          </button>
-        </form>
+        <div className="space-y-1.5">
+          {sendError && (
+            <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-100">
+              {sendError}
+            </div>
+          )}
+          <form onSubmit={onSubmit} className="flex items-center gap-1.5">
+            <input
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder={selectedSetup ? 'Ask about this setup...' : 'Ask coach...'}
+              className="flex-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-ivory placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-emerald-300/50"
+            />
+            <button
+              type="submit"
+              disabled={isSending || !prompt.trim()}
+              className="inline-flex items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-500/12 p-1.5 text-emerald-200 disabled:opacity-40"
+              aria-label="Send coach message"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </div>
       )}
     </section>
   )
