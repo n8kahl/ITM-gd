@@ -162,6 +162,11 @@ export const Analytics = {
   trackPricingClick: (plan: string) => trackButtonClick('pricing_card', plan),
   trackNavClick: (label: string) => trackButtonClick('nav_link', label),
   trackSocialClick: (platform: string) => trackButtonClick('social_link', platform),
+  trackMemberNavItem: (label: string) => trackButtonClick('nav_item', label),
+  trackJournalAction: (label: string) => trackButtonClick('journal_action', label),
+  trackAICoachAction: (label: string) => trackButtonClick('ai_coach_action', label),
+  trackMembersSocialAction: (label: string) => trackButtonClick('social_action', label),
+  trackAcademyAction: (label: string) => trackButtonClick('academy_action', label),
 
   // Conversion events
   trackModalOpen: (modalName: string) => trackEvent('modal_opened', modalName),
