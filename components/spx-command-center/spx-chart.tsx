@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { TradingChart, type LevelAnnotation } from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
-import { getChartData, type ChartBar } from '@/lib/api/ai-coach'
+import { getChartData, type ChartBar, type ChartTimeframe } from '@/lib/api/ai-coach'
 import { ClusterZoneBar } from '@/components/spx-command-center/cluster-zone-bar'
 import { ProbabilityCone } from '@/components/spx-command-center/probability-cone'
 import { FibOverlay } from '@/components/spx-command-center/fib-overlay'
@@ -25,6 +25,8 @@ export function SPXChart() {
     fibLevels,
     prediction,
     spxPrice,
+    selectedTimeframe,
+    setChartTimeframe,
   } = useSPXCommandCenter()
 
   const [bars, setBars] = useState<ChartBar[]>([])
@@ -42,7 +44,7 @@ export function SPXChart() {
 
       setIsLoading(true)
       try {
-        const response = await getChartData('SPX', '5m', session.access_token)
+        const response = await getChartData('SPX', selectedTimeframe, session.access_token)
         if (!isCancelled) {
           setBars(response.bars)
         }
@@ -62,7 +64,7 @@ export function SPXChart() {
     return () => {
       isCancelled = true
     }
-  }, [session?.access_token])
+  }, [selectedTimeframe, session?.access_token])
 
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({
@@ -169,10 +171,28 @@ export function SPXChart() {
           {focusedLevelAnnotations.length}/{levelAnnotations.length} shown
         </span>
       </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(['1m', '5m', '15m', '1h', '4h', '1D'] as ChartTimeframe[]).map((timeframe) => (
+          <button
+            key={timeframe}
+            type="button"
+            onClick={() => setChartTimeframe(timeframe)}
+            className={
+              selectedTimeframe === timeframe
+                ? 'rounded-md border border-emerald-400/45 bg-emerald-500/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-emerald-200'
+                : 'rounded-md border border-white/20 bg-white/[0.03] px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white'
+            }
+            title={`Switch chart timeframe to ${timeframe}`}
+          >
+            {timeframe}
+          </button>
+        ))}
+        <span className="text-[11px] text-white/50">Current timeframe: {selectedTimeframe}</span>
+      </div>
       <div className="h-[440px] md:h-[540px]">
         <TradingChart
           symbol="SPX"
-          timeframe="5m"
+          timeframe={selectedTimeframe}
           bars={bars}
           levels={[...focusedLevelAnnotations, ...setupAnnotations]}
           isLoading={isLoading}
