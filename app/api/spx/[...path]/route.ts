@@ -98,15 +98,7 @@ function resolveBackendBaseUrls(request: Request): string[] {
     filtered.push(candidate)
   }
 
-  if (filtered.length > 0) {
-    return filtered
-  }
-
-  return isLocalHost && preferLocalInDev
-    ? allowRemoteFallbackInDev
-      ? [DEFAULT_LOCAL_BACKEND, DEFAULT_REMOTE_BACKEND]
-      : [DEFAULT_LOCAL_BACKEND]
-    : [DEFAULT_REMOTE_BACKEND]
+  return filtered
 }
 
 function getTimeoutMs(method: string, segments: string[]): number {
