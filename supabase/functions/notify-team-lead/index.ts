@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
+const APP_URL = (Deno.env.get('APP_URL') || 'https://tradeitm.com').replace(/\/+$/, '')
 
 // Rate limit: max 20 notifications per minute per caller
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
@@ -197,7 +198,7 @@ serve(async (req) => {
     }
 
     if (submission_id && /^[0-9a-f-]{36}$/i.test(submission_id)) {
-      const leadsUrl = `https://trade-itm-prod.up.railway.app/admin/leads?highlight=${submission_id}`
+      const leadsUrl = `${APP_URL}/admin/leads?highlight=${submission_id}`
       embed.description = `[📋 Quick Review in Admin Panel](${leadsUrl})`
     }
 

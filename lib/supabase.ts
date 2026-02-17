@@ -148,7 +148,9 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
         email: contact.email,
         phone: contact.phone,
         message: contact.message,
-        source: isCohortApplication ? 'Application Wizard' : (isLegacyApplication ? 'Cohort Apply Button' : 'Contact Form'),
+        source: isCohortApplication
+          ? 'Application Wizard'
+          : (isLegacyApplication ? 'Cohort Apply Button' : (contact.metadata?.source || 'Contact Form')),
         metadata: contact.metadata,
         submission_id: data.id,
       }),

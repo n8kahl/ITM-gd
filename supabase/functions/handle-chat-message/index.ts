@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
+const APP_URL = (Deno.env.get('APP_URL') || 'https://tradeitm.com').replace(/\/+$/, '')
 const RATE_LIMIT_MAX_MESSAGES = 30 // Max messages per minute per visitor
 const MAX_MESSAGE_LENGTH = 2000
 
@@ -273,12 +274,12 @@ serve(async (req) => {
     if (conversation.isNewConversation) {
       await sendDiscordNotification(
         supabase,
-        conversation.id,
-        'New conversation started',
-        conversation.visitor_name || visitorInfo.name,
-        3, // Lower priority for new conversations
-        [{ sender_type: 'visitor', message_text: visitorMessage, sender_name: conversation.visitor_name || 'Visitor' }], // Include first question
-        conversation.visitor_email
+        {
+          conversationId: conversation.id,
+          visitorName: conversation.visitor_name || visitorInfo.name,
+          visitorEmail: conversation.visitor_email,
+          initialMessage: sanitizedMessage,
+        }
       )
     }
 
@@ -428,15 +429,20 @@ serve(async (req) => {
 // HELPER FUNCTIONS
 // ============================================
 
-// Send Discord notification for escalations
+// Send Discord notification for new chat conversations
 async function sendDiscordNotification(
   supabase: any,
-  conversationId: string,
-  reason: string,
-  visitorName?: string,
-  leadScore?: number,
-  messageHistory?: any[],
-  visitorEmail?: string
+  {
+    conversationId,
+    visitorName,
+    visitorEmail,
+    initialMessage,
+  }: {
+    conversationId: string
+    visitorName?: string
+    visitorEmail?: string
+    initialMessage?: string
+  }
 ): Promise<void> {
   try {
     // Get Discord webhook URL from app_settings
@@ -453,76 +459,32 @@ async function sendDiscordNotification(
     }
 
     const name = visitorName || 'Visitor'
-    const isHighValue = leadScore && leadScore >= 7
-    const isNewConversation = reason.includes('New conversation')
-    const isReopened = reason.includes('reopened')
-
-    // Different colors: orange for high-value, blue for new, green for escalations
-    const embedColor = isHighValue ? 16744256 : isNewConversation ? 3447003 : 5763719
-
-    // Determine title based on notification type
-    let title: string
-    if (isHighValue) {
-      title = '🚨 High-Value Chat Escalated'
-    } else if (isNewConversation) {
-      title = '💬 New Chat Started'
-    } else if (isReopened) {
-      title = '🔄 Chat Reopened'
-    } else {
-      title = '👋 Chat Escalated'
-    }
 
     // Build chat URL (admin must be logged in via Discord OAuth)
-    const chatUrl = `https://trade-itm-prod.up.railway.app/admin/chat?id=${conversationId}`
-    let description = `**${name}** - ${reason}`
-    if (visitorEmail) {
-      description += `\n📧 ${visitorEmail}`
-    }
+    const chatUrl = `${APP_URL}/admin/chat?id=${conversationId}`
+
+    // Build description with email and admin link
+    let description = `**${name}** started a conversation`
+    description += `\n📧 ${visitorEmail || 'Not yet provided'}`
     description += `\n\n🔗 [**View & Respond**](${chatUrl})`
 
-    // Build fields array
+    // Build fields: include the initial message
     const fields: { name: string; value: string; inline?: boolean }[] = []
-
-    // Add lead score if significant
-    if (leadScore && leadScore > 3) {
-      fields.push({ name: 'Lead Score', value: `${leadScore}/10`, inline: true })
-    }
-
-    // Generate conversation recap from last 4 messages (if available)
-    if (messageHistory && messageHistory.length > 0) {
-      const recentMessages = messageHistory
-        .filter(msg => msg.sender_type !== 'system') // Exclude system messages
-        .slice(-4) // Last 4 non-system messages
-        .map(msg => {
-          const sender = msg.sender_type === 'visitor' ? 'Visitor' : 'AI'
-          // Truncate long messages
-          const text = msg.message_text.length > 150
-            ? msg.message_text.substring(0, 147) + '...'
-            : msg.message_text
-          return `${sender}: ${text}`
-        })
-        .join('\n')
-
-      // Limit recap to 1024 characters for Discord embed field limits
-      const recap = recentMessages.length > 1024
-        ? recentMessages.substring(0, 1021) + '...'
-        : recentMessages
-
-      if (recap) {
-        fields.push({ name: '💬 Recent History', value: recap, inline: false })
-      }
+    if (initialMessage) {
+      const messageText = initialMessage.length > 500
+        ? initialMessage.substring(0, 497) + '...'
+        : initialMessage
+      fields.push({ name: '💬 Initial Message', value: messageText, inline: false })
     }
 
     const payload = {
       embeds: [{
-        title,
+        title: '💬 New Chat Started',
         description,
-        color: embedColor,
+        color: 3447003, // Blue
         fields,
         timestamp: new Date().toISOString()
       }]
-      // Note: Discord webhooks don't support interactive components (buttons)
-      // The link is included in the description instead
     }
 
     const response = await fetch(webhookUrl, {

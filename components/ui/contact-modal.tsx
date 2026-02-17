@@ -57,6 +57,10 @@ export function ContactModal({ isOpen, onClose, presetMessage }: ContactModalPro
         email: data.email,
         phone: data.phone || undefined,
         message: data.message,
+        submission_type: 'contact',
+        metadata: {
+          source: typeof window !== 'undefined' ? window.location.href : 'Contact Form',
+        },
       });
       setIsSuccess(true);
       reset();
