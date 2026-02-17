@@ -35,6 +35,8 @@ interface SPXFlowEvent {
 }
 
 interface SPXSnapshotResponse {
+  degraded?: boolean
+  message?: string
   levels: SPXLevel[]
   clusters: ClusterZone[]
   fibLevels: FibLevel[]
@@ -101,6 +103,8 @@ export function useSPXSnapshot() {
 
   return {
     snapshot: query.data || null,
+    isDegraded: query.data?.degraded === true,
+    degradedMessage: typeof query.data?.message === 'string' ? query.data.message : null,
     isLoading: query.isLoading,
     error: query.error,
     mutate: query.mutate,

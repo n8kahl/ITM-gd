@@ -154,7 +154,8 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
   }
 
   const payload = await response.json() as Record<string, unknown>
-  if (payload && payload.degraded === true && !hasMeaningfulSPXData(payload)) {
+  const isSnapshotEndpoint = /\/api\/spx\/snapshot(?:\?|$)/.test(url)
+  if (payload && payload.degraded === true && !hasMeaningfulSPXData(payload) && !isSnapshotEndpoint) {
     throw new Error('SPX service is running in degraded mode. Live data temporarily unavailable.')
   }
 
