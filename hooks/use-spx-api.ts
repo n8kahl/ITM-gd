@@ -7,6 +7,7 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 type SPXKey = [url: string, token: string]
 const browserSupabase = createBrowserSupabase()
 const SPX_REQUEST_TIMEOUT_MS = 20_000
+const SPX_SNAPSHOT_REQUEST_TIMEOUT_MS = 55_000
 const SPX_STREAM_TIMEOUT_MS = 25_000
 
 function parseSSEDataBlocks<T>(raw: string): T[] {
@@ -170,6 +171,20 @@ function hasMeaningfulSPXData(payload: Record<string, unknown>): boolean {
   return false
 }
 
+function getSPXRequestTimeoutMs(url: string): number {
+  if (/\/api\/spx\/snapshot(?:\?|$)/.test(url)) {
+    return SPX_SNAPSHOT_REQUEST_TIMEOUT_MS
+  }
+  return SPX_REQUEST_TIMEOUT_MS
+}
+
+function getSPXRequestLabel(url: string): string {
+  if (/\/api\/spx\/snapshot(?:\?|$)/.test(url)) {
+    return 'SPX snapshot request'
+  }
+  return 'SPX data request'
+}
+
 const fetcher = async <T>(key: SPXKey): Promise<T> => {
   const [url, token] = key
   const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
@@ -178,13 +193,16 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
     throw new Error('Invalid test session token detected. Please sign out and sign in again.')
   }
 
+  const timeoutMs = getSPXRequestTimeoutMs(url)
+  const timeoutLabel = getSPXRequestLabel(url)
+
   const requestWithToken = (accessToken: string) => fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     cache: 'no-store',
-  }, SPX_REQUEST_TIMEOUT_MS, 'SPX data request')
+  }, timeoutMs, timeoutLabel)
 
   let activeToken = token
   let response = await requestWithToken(activeToken)
