@@ -10,7 +10,6 @@ import { ActionStrip } from '@/components/spx-command-center/action-strip'
 import { SetupFeed } from '@/components/spx-command-center/setup-feed'
 import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
-import { RegimeBar } from '@/components/spx-command-center/regime-bar'
 import { FlowTicker } from '@/components/spx-command-center/flow-ticker'
 import { AICoachFeed } from '@/components/spx-command-center/ai-coach-feed'
 import { ContractSelector } from '@/components/spx-command-center/contract-selector'
@@ -20,7 +19,6 @@ import { GEXHeatmap } from '@/components/spx-command-center/gex-heatmap'
 import { MobilePanelTabs, type MobilePanelTab } from '@/components/spx-command-center/mobile-panel-tabs'
 import { SPXPanelSkeleton, SPXSkeleton } from '@/components/spx-command-center/spx-skeleton'
 import { FADE_UP_VARIANT, STAGGER_CHILDREN } from '@/lib/motion-primitives'
-import { SPX_FEATURE_FLAGS } from '@/lib/spx/feature-flags'
 
 function SPXCommandCenterContent() {
   const isMobile = useIsMobile(768)
@@ -38,7 +36,7 @@ function SPXCommandCenterContent() {
   } = useSPXCommandCenter()
 
   const [mobileTab, setMobileTab] = useState<MobilePanelTab>('chart')
-  const useActionStrip = SPX_FEATURE_FLAGS.actionStripV1
+  const [showDesktopLevelOverlay, setShowDesktopLevelOverlay] = useState(false)
   const rootVariants = prefersReducedMotion ? undefined : STAGGER_CHILDREN
   const itemVariants = prefersReducedMotion ? undefined : FADE_UP_VARIANT
 
@@ -70,11 +68,9 @@ function SPXCommandCenterContent() {
         </motion.div>
       )}
 
-      {useActionStrip && (
-        <motion.div variants={itemVariants}>
-          <ActionStrip />
-        </motion.div>
-      )}
+      <motion.div variants={itemVariants}>
+        <ActionStrip />
+      </motion.div>
 
       {isMobile ? (
         <motion.div variants={itemVariants} className="space-y-3">
@@ -85,14 +81,6 @@ function SPXCommandCenterContent() {
 
           {mobileTab === 'chart' && (
             <>
-              {!useActionStrip && (
-                <RegimeBar
-                  regime={regime}
-                  direction={prediction ? (prediction.direction.bullish >= prediction.direction.bearish ? 'bullish' : 'bearish') : null}
-                  confidence={prediction?.confidence || null}
-                  prediction={prediction}
-                />
-              )}
               <SPXChart />
               <FlowTicker />
             </>
@@ -133,42 +121,53 @@ function SPXCommandCenterContent() {
             <SPXPanelSkeleton />
           ) : (
             <PanelGroup direction="horizontal" className="min-h-[72vh]">
-              <Panel defaultSize={25} minSize={20}>
-                <div className="h-full space-y-3 pr-1">
-                  <SetupFeed />
-                  <LevelMatrix />
-                </div>
-              </Panel>
-
-              <PanelResizeHandle className="w-2.5 bg-transparent hover:bg-emerald-500/15 active:bg-emerald-500/25 transition-colors cursor-col-resize relative group" />
-
-              <Panel defaultSize={50} minSize={35}>
-                <div className="h-full px-1 space-y-3">
-                  {!useActionStrip && (
-                    <RegimeBar
-                      regime={regime}
-                      direction={prediction ? (prediction.direction.bullish >= prediction.direction.bearish ? 'bullish' : 'bearish') : null}
-                      confidence={prediction?.confidence || null}
-                      prediction={prediction}
-                    />
-                  )}
+              <Panel defaultSize={62} minSize={45}>
+                <div className="relative h-full space-y-3 pr-1">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowDesktopLevelOverlay(true)}
+                      className="rounded-lg border border-white/15 bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.1em] text-white/70 hover:text-white"
+                    >
+                      Open Level Matrix
+                    </button>
+                  </div>
                   <SPXChart />
                   <FlowTicker />
+
+                  {showDesktopLevelOverlay && (
+                    <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/45 p-3 backdrop-blur-[2px]">
+                      <div className="max-h-full w-[440px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
+                          <button
+                            type="button"
+                            onClick={() => setShowDesktopLevelOverlay(false)}
+                            className="rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <LevelMatrix />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Panel>
 
               <PanelResizeHandle className="w-2.5 bg-transparent hover:bg-emerald-500/15 active:bg-emerald-500/25 transition-colors cursor-col-resize relative group" />
 
-              <Panel defaultSize={25} minSize={20}>
+              <Panel defaultSize={38} minSize={28}>
                 <div className="h-full space-y-3 pl-1">
-                  <AICoachFeed />
+                  <SetupFeed />
                   <ContractSelector />
-                  <BasisIndicator basis={basis} />
+                  <AICoachFeed />
                   <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
                     <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
                       Show Advanced GEX Analytics
                     </summary>
                     <div className="mt-3 space-y-3">
+                      <BasisIndicator basis={basis} />
                       <GEXLandscape profile={gexProfile?.combined || null} />
                       <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
                     </div>
