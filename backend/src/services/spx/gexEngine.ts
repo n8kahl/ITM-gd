@@ -7,6 +7,8 @@ import { nowIso, round } from './utils';
 
 const GEX_CACHE_KEY = 'spx_command_center:gex:unified';
 const GEX_CACHE_TTL_SECONDS = 15;
+const SPY_TO_SPX_GEX_SCALE = 0.1;
+const COMBINED_GEX_SPOT_WINDOW_POINTS = 220;
 let gexInFlight: Promise<{
   spx: GEXProfile;
   spy: GEXProfile;
@@ -84,7 +86,9 @@ function mergeStrikeMaps(
 
   for (const level of spy) {
     const convertedStrike = level.strike * 10 + basis;
-    addValue(convertedStrike, level.gexValue);
+    // Convert SPY gamma exposure into SPX-point context.
+    // SPY is ~1/10th SPX index level, so 1 SPX point ~= 0.1 SPY point.
+    addValue(convertedStrike, level.gexValue * SPY_TO_SPX_GEX_SCALE);
   }
 
   return Array.from(merged.entries())
@@ -97,7 +101,11 @@ function buildCombinedProfile(
   spyProfile: OptionsGEXProfile,
 ): GEXProfile {
   const basis = spxProfile.spotPrice - spyProfile.spotPrice * 10;
-  const strikePairs = mergeStrikeMaps(spxProfile.gexByStrike, spyProfile.gexByStrike, basis);
+  const mergedStrikePairs = mergeStrikeMaps(spxProfile.gexByStrike, spyProfile.gexByStrike, basis);
+  const contextualStrikePairs = mergedStrikePairs.filter((item) => (
+    Math.abs(item.strike - spxProfile.spotPrice) <= COMBINED_GEX_SPOT_WINDOW_POINTS
+  ));
+  const strikePairs = contextualStrikePairs.length >= 16 ? contextualStrikePairs : mergedStrikePairs;
 
   const callWall = strikePairs
     .filter((item) => item.gex > 0)
@@ -210,6 +218,7 @@ export async function computeUnifiedGEXLandscape(options?: {
     spyNetGex: spy.netGex,
     combinedNetGex: combined.netGex,
     flipPoint: combined.flipPoint,
+    combinedStrikes: combined.gexByStrike.length,
   });
 
   return payload;
