@@ -6,6 +6,7 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 type SPXKey = [url: string, token: string]
 const browserSupabase = createBrowserSupabase()
+const SPX_REQUEST_TIMEOUT_MS = 20_000
 const SPX_STREAM_TIMEOUT_MS = 25_000
 
 function parseSSEDataBlocks<T>(raw: string): T[] {
@@ -69,7 +70,12 @@ function parseSSEBlocks(raw: string): ParsedSSEBlock[] {
     })
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<Response> {
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  timeoutLabel = 'SPX request',
+): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -79,7 +85,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, tim
     })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`SPX coach request timed out after ${Math.round(timeoutMs / 1000)}s`)
+      throw new Error(`${timeoutLabel} timed out after ${Math.round(timeoutMs / 1000)}s`)
     }
     throw error
   } finally {
@@ -172,13 +178,13 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
     throw new Error('Invalid test session token detected. Please sign out and sign in again.')
   }
 
-  const requestWithToken = (accessToken: string) => fetch(url, {
+  const requestWithToken = (accessToken: string) => fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     cache: 'no-store',
-  })
+  }, SPX_REQUEST_TIMEOUT_MS, 'SPX data request')
 
   let activeToken = token
   let response = await requestWithToken(activeToken)
@@ -248,7 +254,7 @@ export async function postSPX<T>(endpoint: string, token: string, body: Record<s
     throw new Error('Invalid test session token detected. Please sign out and sign in again.')
   }
 
-  const requestWithToken = (accessToken: string) => fetch(endpoint, {
+  const requestWithToken = (accessToken: string) => fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -256,7 +262,7 @@ export async function postSPX<T>(endpoint: string, token: string, body: Record<s
     },
     body: JSON.stringify(body),
     cache: 'no-store',
-  })
+  }, SPX_REQUEST_TIMEOUT_MS, 'SPX command request')
 
   let activeToken = token
   let response = await requestWithToken(activeToken)
@@ -308,7 +314,7 @@ export async function postSPXStream<T>(endpoint: string, token: string, body: Re
     },
     body: JSON.stringify(body),
     cache: 'no-store',
-  }, SPX_STREAM_TIMEOUT_MS)
+  }, SPX_STREAM_TIMEOUT_MS, 'SPX coach request')
 
   let activeToken = token
   let response = await requestWithToken(activeToken)

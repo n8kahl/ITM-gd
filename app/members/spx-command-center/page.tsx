@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { motion, useReducedMotion } from 'framer-motion'
 import { SPXCommandCenterProvider, useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
@@ -24,6 +24,7 @@ import { FADE_UP_VARIANT, STAGGER_CHILDREN } from '@/lib/motion-primitives'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
 function SPXCommandCenterContent() {
+  const INITIAL_SKELETON_MAX_MS = 8_000
   const isMobile = useIsMobile(768)
   const prefersReducedMotion = useReducedMotion()
   const {
@@ -38,6 +39,7 @@ function SPXCommandCenterContent() {
 
   const [mobileTab, setMobileTab] = useState<MobilePanelTab>('chart')
   const [showLevelOverlay, setShowLevelOverlay] = useState(false)
+  const [initialSkeletonExpired, setInitialSkeletonExpired] = useState(false)
   const rootVariants = prefersReducedMotion ? undefined : STAGGER_CHILDREN
   const itemVariants = prefersReducedMotion ? undefined : FADE_UP_VARIANT
   const handleMobileTabChange = (next: MobilePanelTab) => {
@@ -48,7 +50,19 @@ function SPXCommandCenterContent() {
     })
   }
 
-  if (isLoading && activeSetups.length === 0 && levels.length === 0) {
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setInitialSkeletonExpired(true)
+    }, INITIAL_SKELETON_MAX_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [])
+
+  const shouldShowInitialSkeleton = !initialSkeletonExpired && isLoading && activeSetups.length === 0 && levels.length === 0
+
+  if (shouldShowInitialSkeleton) {
     return <SPXSkeleton />
   }
 
@@ -123,7 +137,7 @@ function SPXCommandCenterContent() {
         </motion.div>
       ) : (
         <motion.div variants={itemVariants}>
-          {isLoading && levels.length === 0 ? (
+          {!initialSkeletonExpired && isLoading && levels.length === 0 ? (
             <SPXPanelSkeleton />
           ) : (
             <PanelGroup direction="horizontal" className="min-h-[68vh]">
