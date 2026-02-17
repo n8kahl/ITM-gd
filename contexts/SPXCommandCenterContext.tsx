@@ -126,6 +126,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('5m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
+  const [ephemeralCoachMessages, setEphemeralCoachMessages] = useState<CoachMessage[]>([])
   const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const hasTrackedFirstActionableRef = useRef(false)
@@ -189,6 +190,20 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       .filter((level) => visibleLevelCategories.has(level.category))
       .filter((level) => (showSPYDerived ? true : level.category !== 'spy_derived'))
   }, [allLevels, showSPYDerived, visibleLevelCategories])
+
+  const coachMessages = useMemo(() => {
+    const snapshotMessages = snapshotData?.coachMessages || []
+    const deduped = new Map<string, CoachMessage>()
+
+    for (const message of [...ephemeralCoachMessages, ...snapshotMessages]) {
+      if (!message?.id) continue
+      deduped.set(message.id, message)
+    }
+
+    return Array.from(deduped.values())
+      .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+      .slice(0, 80)
+  }, [ephemeralCoachMessages, snapshotData?.coachMessages])
 
   useEffect(() => {
     if (hasTrackedPageViewRef.current) return
@@ -380,6 +395,15 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         throw new Error('SPX coach returned no messages')
       }
 
+      setEphemeralCoachMessages((previous) => {
+        const deduped = new Map<string, CoachMessage>()
+        for (const message of [...nextMessages, ...previous]) {
+          if (!message?.id) continue
+          deduped.set(message.id, message)
+        }
+        return Array.from(deduped.values()).slice(0, 80)
+      })
+
       await mutateSnapshot((prev) => {
         if (!prev) return prev
         return {
@@ -421,6 +445,15 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         },
         timestamp: new Date().toISOString(),
       }
+
+      setEphemeralCoachMessages((previous) => {
+        const deduped = new Map<string, CoachMessage>()
+        for (const message of [fallbackMessage, ...previous]) {
+          if (!message?.id) continue
+          deduped.set(message.id, message)
+        }
+        return Array.from(deduped.values()).slice(0, 80)
+      })
 
       await mutateSnapshot((prev) => {
         if (!prev) return prev
@@ -484,7 +517,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     fibLevels: snapshotData?.fibLevels || [],
     gexProfile: snapshotData?.gex || null,
     activeSetups,
-    coachMessages: snapshotData?.coachMessages || [],
+    coachMessages,
     selectedSetup,
     selectedTimeframe,
     setChartTimeframe,
@@ -515,6 +548,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     setChartTimeframe,
     showSPYDerived,
     snapshotData,
+    coachMessages,
     stream.error,
     stream.isConnected,
     spxPrice,

@@ -6,6 +6,7 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
 type SPXKey = [url: string, token: string]
 const browserSupabase = createBrowserSupabase()
+const SPX_STREAM_TIMEOUT_MS = 25_000
 
 function parseSSEDataBlocks<T>(raw: string): T[] {
   const events = raw
@@ -34,6 +35,56 @@ function parseSSEDataBlocks<T>(raw: string): T[] {
   }
 
   return parsed
+}
+
+interface ParsedSSEBlock {
+  event: string
+  data: string
+}
+
+function parseSSEBlocks(raw: string): ParsedSSEBlock[] {
+  return raw
+    .split(/\n\n+/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      let event = 'message'
+      const dataLines: string[] = []
+
+      chunk.split('\n').forEach((line) => {
+        const trimmed = line.trim()
+        if (trimmed.startsWith('event:')) {
+          event = trimmed.replace(/^event:\s*/, '') || 'message'
+          return
+        }
+        if (trimmed.startsWith('data:')) {
+          dataLines.push(trimmed.replace(/^data:\s*/, ''))
+        }
+      })
+
+      return {
+        event,
+        data: dataLines.join('\n').trim(),
+      }
+    })
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`SPX coach request timed out after ${Math.round(timeoutMs / 1000)}s`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 function trimMessage(input: string, max = 240): string {
@@ -249,7 +300,7 @@ export async function postSPXStream<T>(endpoint: string, token: string, body: Re
     throw new Error('Invalid test session token detected. Please sign out and sign in again.')
   }
 
-  const requestWithToken = (accessToken: string) => fetch(endpoint, {
+  const requestWithToken = (accessToken: string) => fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -257,7 +308,7 @@ export async function postSPXStream<T>(endpoint: string, token: string, body: Re
     },
     body: JSON.stringify(body),
     cache: 'no-store',
-  })
+  }, SPX_STREAM_TIMEOUT_MS)
 
   let activeToken = token
   let response = await requestWithToken(activeToken)
@@ -289,5 +340,37 @@ export async function postSPXStream<T>(endpoint: string, token: string, body: Re
   }
 
   const raw = await response.text()
+  const parsedBlocks = parseSSEBlocks(raw)
+  const messages: T[] = []
+
+  for (const block of parsedBlocks) {
+    if (!block.data || block.data === '[DONE]') continue
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(block.data)
+    } catch {
+      continue
+    }
+
+    if (block.event === 'error') {
+      const payload = parsed as { message?: unknown; error?: unknown }
+      const message = typeof payload.message === 'string'
+        ? payload.message
+        : typeof payload.error === 'string'
+          ? payload.error
+          : 'SPX coach stream failed'
+      throw new Error(trimMessage(message))
+    }
+
+    if (block.event === 'coach_message' || block.event === 'message') {
+      messages.push(parsed as T)
+    }
+  }
+
+  if (messages.length > 0) {
+    return messages
+  }
+
   return parseSSEDataBlocks<T>(raw)
 }

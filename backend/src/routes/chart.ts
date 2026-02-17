@@ -14,6 +14,7 @@ import { authenticateToken } from '../middleware/auth';
 import { validateParams, validateQuery } from '../middleware/validate';
 import { cacheGet, cacheSet } from '../config/redis';
 import { getChartData } from '../services/charts/chartDataService';
+import { getRecentTicks } from '../services/tickCache';
 import { chartParamSchema, chartQuerySchema } from '../schemas/chartValidation';
 
 const router = Router();
@@ -28,6 +29,11 @@ interface TimeframeConfig {
   timespan: 'minute' | 'hour' | 'day';
   daysBack: number;
   cacheTTL: number;
+}
+
+interface DateRange {
+  from: string;
+  to: string;
 }
 
 interface IndicatorPoint {
@@ -87,6 +93,64 @@ function getDateRange(daysBack: number): { from: string; to: string } {
     from: from.toISOString().split('T')[0],
     to: to.toISOString().split('T')[0],
   };
+}
+
+function getFallbackDateRangeForEmptyBars(timeframe: ChartTimeframe): DateRange | null {
+  // Intraday windows can be empty around weekends/holidays/pre-market.
+  // Broaden range only when initial fetch returns zero bars.
+  if (timeframe === '1m') return getDateRange(21);
+  if (timeframe === '5m') return getDateRange(10);
+  if (timeframe === '15m') return getDateRange(14);
+  return null;
+}
+
+function mapAggregatesToBars(aggregates: MassiveAggregate[]) {
+  return (aggregates || [])
+    .map((bar: MassiveAggregate) => ({
+      time: Math.floor(toSafeNumber(bar.t) / 1000), // Convert ms to seconds for lightweight-charts
+      open: toSafeNumber(bar.o),
+      high: toSafeNumber(bar.h),
+      low: toSafeNumber(bar.l),
+      close: toSafeNumber(bar.c),
+      // Index feeds (SPX/NDX) can omit volume; normalize to zero for chart compatibility.
+      volume: toSafeNumber(bar.v),
+    }))
+    .filter((bar) => bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
+}
+
+function mapTicksToMinuteBars(ticks: Array<{ timestamp: number; price: number; size: number }>) {
+  if (!Array.isArray(ticks) || ticks.length === 0) return [];
+
+  const buckets = new Map<number, { time: number; open: number; high: number; low: number; close: number; volume: number }>();
+  const sortedTicks = [...ticks]
+    .filter((tick) => Number.isFinite(tick.timestamp) && Number.isFinite(tick.price) && tick.price > 0)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  for (const tick of sortedTicks) {
+    const bucketStartMs = Math.floor(tick.timestamp / 60_000) * 60_000;
+    const existing = buckets.get(bucketStartMs);
+    if (!existing) {
+      buckets.set(bucketStartMs, {
+        time: Math.floor(bucketStartMs / 1000),
+        open: tick.price,
+        high: tick.price,
+        low: tick.price,
+        close: tick.price,
+        volume: Math.max(0, Math.floor(tick.size || 0)),
+      });
+      continue;
+    }
+
+    existing.high = Math.max(existing.high, tick.price);
+    existing.low = Math.min(existing.low, tick.price);
+    existing.close = tick.price;
+    existing.volume += Math.max(0, Math.floor(tick.size || 0));
+  }
+
+  return Array.from(buckets.values())
+    .filter((bar) => bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0)
+    .sort((a, b) => a.time - b.time)
+    .slice(-390);
 }
 
 function toIndicatorPoints(values: MassiveSingleIndicatorValue[]): IndicatorPoint[] {
@@ -239,18 +303,42 @@ router.get(
 
       // Fetch from Massive.com
       const response = await getAggregates(ticker, config.multiplier, config.timespan, from, to);
+      let bars = mapAggregatesToBars(response.results || []);
 
-      const bars = (response.results || [])
-        .map((bar: MassiveAggregate) => ({
-          time: Math.floor(toSafeNumber(bar.t) / 1000), // Convert ms to seconds for lightweight-charts
-          open: toSafeNumber(bar.o),
-          high: toSafeNumber(bar.h),
-          low: toSafeNumber(bar.l),
-          close: toSafeNumber(bar.c),
-          // Index feeds (SPX/NDX) can omit volume; normalize to zero for chart compatibility.
-          volume: toSafeNumber(bar.v),
-        }))
-        .filter((bar) => bar.time > 0 && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
+      if (bars.length === 0) {
+        const fallbackRange = getFallbackDateRangeForEmptyBars(timeframe);
+        if (fallbackRange) {
+          const fallbackResponse = await getAggregates(
+            ticker,
+            config.multiplier,
+            config.timespan,
+            fallbackRange.from,
+            fallbackRange.to,
+          );
+          bars = mapAggregatesToBars(fallbackResponse.results || []);
+        }
+      }
+
+      // Last-resort fallback for 1m: synthesize candles from the live tick cache.
+      // This keeps the chart usable when provider minute aggregates are temporarily empty.
+      if (timeframe === '1m' && bars.length === 0) {
+        const ticks = getRecentTicks(symbol, 6_000);
+        bars = mapTicksToMinuteBars(ticks);
+        if (bars.length > 0) {
+          logger.info('Chart route served 1m bars from tick-cache fallback', {
+            symbol,
+            bars: bars.length,
+            ticks: ticks.length,
+          });
+        }
+      }
+
+      if (timeframe === '1m' && bars.length === 0) {
+        logger.warn('Chart route has no 1m bars after provider and tick-cache fallback', {
+          symbol,
+          timeframe,
+        });
+      }
 
       const providerIndicators = includeIndicators
         ? await fetchProviderIndicators(ticker, timeframe, bars.length, { from, to })

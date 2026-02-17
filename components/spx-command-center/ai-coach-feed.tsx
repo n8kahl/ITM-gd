@@ -212,6 +212,12 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         </div>
       )}
 
+      {isSending && (
+        <p className="text-[10px] text-emerald-200/75">
+          Coach is analyzing context...
+        </p>
+      )}
+
       <div className="flex-1 space-y-1.5 max-h-[240px] overflow-auto pr-0.5">
         {groupedMessages.length === 0 ? (
           <p className="text-[11px] text-white/45">
@@ -245,6 +251,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={selectedSetup ? 'Ask about this setup...' : 'Ask coach...'}
+              disabled={isSending}
               className="flex-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-ivory placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-emerald-300/50"
             />
             <button

@@ -37,6 +37,7 @@ import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/s
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { startSPXDataLoop, stopSPXDataLoop } from './workers/spxDataLoop';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
+import { startMassiveTickStream, stopMassiveTickStream } from './services/massiveTickStream';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
 import { initializeMarketHolidays } from './services/marketHours';
 
@@ -82,6 +83,12 @@ app.use(morgan('dev'));
 app.use((req: Request, res: Response, next: any) => {
   const timeout = req.path.startsWith('/api/chat')
     ? 60000
+    : req.path.startsWith('/api/spx/snapshot')
+      ? 75000
+      : req.path.startsWith('/api/spx/contract-select')
+        ? 60000
+        : req.path.startsWith('/api/spx')
+          ? 45000
     : (req.path.startsWith('/api/brief') || req.path.startsWith('/api/market'))
       ? 45000
       : 30000;
@@ -193,10 +200,11 @@ async function start() {
     }
 
     httpServer = app.listen(PORT, () => { logger.info(`Server running on http://localhost:${PORT}`); });
-    httpServer.setTimeout(30000);
+    httpServer.setTimeout(90000);
 
     // Initialize WebSocket server for real-time price updates
     initWebSocket(httpServer);
+    startMassiveTickStream();
 
     // Start background alert worker
     startAlertWorker();
@@ -233,6 +241,7 @@ async function gracefulShutdown(signal: string) {
     stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
     stopSPXDataLoop();
+    stopMassiveTickStream();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();

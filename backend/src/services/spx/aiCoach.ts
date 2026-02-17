@@ -9,10 +9,43 @@ import { nowIso, round, uuid } from './utils';
 
 const COACH_CACHE_KEY = 'spx_command_center:coach_state';
 const COACH_CACHE_TTL_SECONDS = 15;
+const COACH_SETUP_TIMEOUT_MS = 3_500;
+const COACH_PREDICTION_TIMEOUT_MS = 2_500;
+const COACH_CONTRACT_TIMEOUT_MS = 1_500;
 let coachInFlight: Promise<{
   messages: CoachMessage[];
   generatedAt: string;
 }> | null = null;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+function fallbackPredictionState(): Awaited<ReturnType<typeof getPredictionState>> {
+  return {
+    regime: 'compression',
+    direction: { bullish: 0, bearish: 0, neutral: 100 },
+    magnitude: { small: 100, medium: 0, large: 0 },
+    timingWindow: { description: 'Coach fallback timing window', actionable: false },
+    nextTarget: {
+      upside: { price: 0, zone: 'unavailable' },
+      downside: { price: 0, zone: 'unavailable' },
+    },
+    probabilityCone: [],
+    confidence: 0,
+  };
+}
 
 function setupHeadline(setup: Setup): string {
   return `${setup.type.replace(/_/g, ' ')} at ${round((setup.entryZone.low + setup.entryZone.high) / 2, 2)}`;
@@ -178,7 +211,7 @@ export async function getCoachState(options?: {
   }> => {
   if (!forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<{ messages: CoachMessage[]; generatedAt: string }>(COACH_CACHE_KEY);
-    if (cached) {
+    if (cached && Array.isArray(cached.messages) && cached.messages.length > 0) {
       return cached;
     }
   }
@@ -186,17 +219,39 @@ export async function getCoachState(options?: {
   const [setups, prediction] = await Promise.all([
     setupsInput
       ? Promise.resolve(setupsInput)
-      : detectActiveSetups({ forceRefresh }),
+      : withTimeout(detectActiveSetups({ forceRefresh }), COACH_SETUP_TIMEOUT_MS, 'detectActiveSetups')
+        .catch((error) => {
+          logger.warn('SPX coach setup detection fallback', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return [] as Setup[];
+        }),
     predictionInput
       ? Promise.resolve(predictionInput)
-      : getPredictionState({ forceRefresh }),
+      : withTimeout(getPredictionState({ forceRefresh }), COACH_PREDICTION_TIMEOUT_MS, 'getPredictionState')
+        .catch((error) => {
+          logger.warn('SPX coach prediction fallback', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return fallbackPredictionState();
+        }),
   ]);
 
   const readySetup = setups.find((setup) => setup.status === 'ready') || setups[0] || null;
   const messages: CoachMessage[] = [];
 
   if (readySetup) {
-    const contract = await getContractRecommendation({ setupId: readySetup.id, setup: readySetup, forceRefresh });
+    const contract = await withTimeout(
+      getContractRecommendation({ setupId: readySetup.id, setup: readySetup, forceRefresh }),
+      COACH_CONTRACT_TIMEOUT_MS,
+      'getContractRecommendation',
+    ).catch((error) => {
+      logger.warn('SPX coach contract recommendation skipped due timeout/failure', {
+        setupId: readySetup.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
 
     const setupMessage = createPreTradeMessage({
       ...readySetup,
@@ -268,7 +323,16 @@ export async function generateCoachStream(input: {
   const regimeMessage = state.messages.find((message) => message.type === 'behavioral') || state.messages[0];
   const riskMessage = state.messages.find((message) => message.type === 'alert') || state.messages[0];
 
-  const activeSetups = await detectActiveSetups({ forceRefresh: input.forceRefresh });
+  const activeSetups = await withTimeout(
+    detectActiveSetups({ forceRefresh: input.forceRefresh }),
+    COACH_SETUP_TIMEOUT_MS,
+    'detectActiveSetups',
+  ).catch((error) => {
+    logger.warn('SPX coach stream setup lookup fallback', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [] as Setup[];
+  });
   const targetedSetup = input.setupId
     ? activeSetups.find((setup) => setup.id === input.setupId) || activeSetups[0] || null
     : activeSetups[0] || null;

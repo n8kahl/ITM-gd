@@ -22,10 +22,15 @@ jest.mock('../../services/charts/chartDataService', () => ({
   getChartData: jest.fn(),
 }));
 
+jest.mock('../../services/tickCache', () => ({
+  getRecentTicks: jest.fn(),
+}));
+
 import chartRouter from '../chart';
 import { getAggregates, getEMAIndicator, getRSIIndicator, getMACDIndicator } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getChartData } from '../../services/charts/chartDataService';
+import { getRecentTicks } from '../../services/tickCache';
 
 const mockGetAggregates = getAggregates as jest.MockedFunction<typeof getAggregates>;
 const mockGetEMAIndicator = getEMAIndicator as jest.MockedFunction<typeof getEMAIndicator>;
@@ -34,6 +39,7 @@ const mockGetMACDIndicator = getMACDIndicator as jest.MockedFunction<typeof getM
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
 const mockGetChartData = getChartData as jest.MockedFunction<typeof getChartData>;
+const mockGetRecentTicks = getRecentTicks as jest.MockedFunction<typeof getRecentTicks>;
 
 const app = express();
 app.use(express.json());
@@ -69,6 +75,7 @@ describeWithSockets('Chart Routes', () => {
       timestamp: new Date().toISOString(),
       cached: false,
     } as any);
+    mockGetRecentTicks.mockReturnValue([]);
   });
 
   it('normalizes missing index volume to zero for intraday bars', async () => {
@@ -127,6 +134,89 @@ describeWithSockets('Chart Routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.bars).toHaveLength(1);
     expect(res.body.bars[0].volume).toBe(2214);
+  });
+
+  it('expands intraday date range when 1m response is empty', async () => {
+    mockGetAggregates
+      .mockResolvedValueOnce({
+        status: 'OK',
+        ticker: 'I:SPX',
+        queryCount: 1,
+        resultsCount: 0,
+        adjusted: true,
+        request_id: 'test-empty',
+        count: 0,
+        results: [],
+      } as any)
+      .mockResolvedValueOnce({
+        status: 'OK',
+        ticker: 'I:SPX',
+        queryCount: 1,
+        resultsCount: 1,
+        adjusted: true,
+        request_id: 'test-fallback',
+        count: 1,
+        results: [
+          {
+            t: 1770647400000,
+            o: 6917.26,
+            h: 6919.4,
+            l: 6906.01,
+            c: 6910.98,
+            v: 1234,
+          } as any,
+        ],
+      } as any);
+
+    const res = await request(app).get('/api/chart/spx?timeframe=1m');
+
+    expect(res.status).toBe(200);
+    expect(res.body.timeframe).toBe('1m');
+    expect(res.body.bars).toHaveLength(1);
+    expect(mockGetAggregates).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to tick-cache derived 1m bars when provider bars remain empty', async () => {
+    mockGetAggregates
+      .mockResolvedValueOnce({
+        status: 'OK',
+        ticker: 'I:SPX',
+        queryCount: 1,
+        resultsCount: 0,
+        adjusted: true,
+        request_id: 'test-empty-primary',
+        count: 0,
+        results: [],
+      } as any)
+      .mockResolvedValueOnce({
+        status: 'OK',
+        ticker: 'I:SPX',
+        queryCount: 1,
+        resultsCount: 0,
+        adjusted: true,
+        request_id: 'test-empty-fallback',
+        count: 0,
+        results: [],
+      } as any);
+
+    mockGetRecentTicks.mockReturnValue([
+      { symbol: 'SPX', rawSymbol: 'I:SPX', timestamp: 1770647401000, price: 6910.5, size: 2, sequence: 1 },
+      { symbol: 'SPX', rawSymbol: 'I:SPX', timestamp: 1770647410000, price: 6911.25, size: 1, sequence: 2 },
+      { symbol: 'SPX', rawSymbol: 'I:SPX', timestamp: 1770647462000, price: 6909.75, size: 3, sequence: 3 },
+    ] as any);
+
+    const res = await request(app).get('/api/chart/spx?timeframe=1m');
+
+    expect(res.status).toBe(200);
+    expect(res.body.timeframe).toBe('1m');
+    expect(res.body.bars.length).toBeGreaterThan(0);
+    expect(res.body.bars[0]).toEqual(expect.objectContaining({
+      open: 6910.5,
+      high: 6911.25,
+      low: 6910.5,
+      close: 6911.25,
+    }));
+    expect(mockGetRecentTicks).toHaveBeenCalledWith('SPX', 6000);
   });
 
   it('returns 400 for invalid timeframe query', async () => {

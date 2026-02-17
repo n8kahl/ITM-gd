@@ -301,13 +301,38 @@ router.post('/coach/message', async (req: Request, res: Response) => {
     const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
     const forceRefresh = parseBoolean(req.body?.forceRefresh);
     const userId = req.user?.id;
+    const coachTimeoutMs = 20_000;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders?.();
 
-    const messages = await generateCoachStream({ prompt, setupId, forceRefresh, userId });
+    const messages = await Promise.race([
+      generateCoachStream({ prompt, setupId, forceRefresh, userId }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Coach stream timed out after ${coachTimeoutMs}ms`)), coachTimeoutMs);
+      }),
+    ]).catch((error) => {
+      logger.error('SPX coach message generation failed; returning fallback message', {
+        error: error instanceof Error ? error.message : String(error),
+        setupId,
+      });
+
+      return [{
+        id: `coach_stream_fallback_${Date.now()}`,
+        type: 'alert',
+        priority: 'alert',
+        setupId: setupId || null,
+        content: 'Coach is temporarily delayed. Retry in a few seconds or switch to risk-first execution rules.',
+        structuredData: {
+          source: 'route_fallback',
+          failed: true,
+          setupId: setupId || null,
+        },
+        timestamp: new Date().toISOString(),
+      }];
+    });
 
     for (const message of messages) {
       res.write(`event: coach_message\n`);
