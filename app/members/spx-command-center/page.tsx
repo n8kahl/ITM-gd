@@ -28,8 +28,6 @@ function SPXCommandCenterContent() {
     dataHealth,
     dataHealthMessage,
     basis,
-    regime,
-    prediction,
     gexProfile,
     activeSetups,
     levels,
@@ -103,7 +101,7 @@ function SPXCommandCenterContent() {
           {mobileTab === 'levels' && (
             <div className="space-y-3">
               <LevelMatrix />
-              <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+              <details open className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
                 <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
                   Show Advanced GEX Analytics
                 </summary>
@@ -162,7 +160,7 @@ function SPXCommandCenterContent() {
                   <SetupFeed />
                   <ContractSelector />
                   <AICoachFeed />
-                  <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <details open className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
                     <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
                       Show Advanced GEX Analytics
                     </summary>

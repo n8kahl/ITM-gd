@@ -49,6 +49,7 @@ interface SPXCommandCenterState {
   coachMessages: CoachMessage[]
   selectedSetup: Setup | null
   selectedTimeframe: ChartTimeframe
+  setChartTimeframe: (timeframe: ChartTimeframe) => void
   visibleLevelCategories: Set<LevelCategory>
   showSPYDerived: boolean
   chartAnnotations: ChartAnnotation[]
@@ -208,6 +209,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
   }, [])
 
+  const setChartTimeframe = useCallback((timeframe: ChartTimeframe) => {
+    setSelectedTimeframe(timeframe)
+  }, [])
+
   const requestContractRecommendation = useCallback(async (setupId: string) => {
     if (!accessToken) {
       return null
@@ -293,6 +298,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     coachMessages: snapshotData?.coachMessages || [],
     selectedSetup,
     selectedTimeframe,
+    setChartTimeframe,
     visibleLevelCategories,
     showSPYDerived,
     chartAnnotations,
@@ -317,6 +323,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     sendCoachMessage,
     selectedSetup,
     selectedTimeframe,
+    setChartTimeframe,
     showSPYDerived,
     snapshotData,
     stream.error,
