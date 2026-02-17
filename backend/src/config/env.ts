@@ -41,6 +41,15 @@ const envSchema = z.object({
     (key) => process.env.NODE_ENV !== 'production' || (key && key.length > 0),
     'MASSIVE_API_KEY is required in production'
   ),
+  MASSIVE_TICK_WS_ENABLED: booleanFromEnv.default(false),
+  MASSIVE_TICK_WS_URL: z.string().url().default('wss://socket.massive.com/indices'),
+  MASSIVE_TICK_SYMBOLS: z.string().default('SPX,SPY'),
+  MASSIVE_TICK_EVENT_PREFIX: z.string().default('V.'),
+  MASSIVE_TICK_RECONNECT_BASE_MS: z.string().default('1000').transform(Number),
+  MASSIVE_TICK_RECONNECT_MAX_MS: z.string().default('30000').transform(Number),
+  MASSIVE_TICK_FANOUT_THROTTLE_MS: z.string().default('150').transform(Number),
+  MASSIVE_MICROBAR_FANOUT_THROTTLE_MS: z.string().default('250').transform(Number),
+  MASSIVE_TICK_STALE_MS: z.string().default('5000').transform(Number),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   ALPHA_VANTAGE_BASE_URL: z.string().url().optional(),
 
