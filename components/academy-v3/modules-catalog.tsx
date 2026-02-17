@@ -86,6 +86,7 @@ export function ModulesCatalog() {
   const selectModule = (slug: string | null) => {
     setSelectedSlug(slug)
     setModuleLoading(Boolean(slug))
+    setSelectedModule(null)
     setSelectedLessonId(null)
     setSelectedLesson(null)
     setLessonLoading(false)
@@ -142,6 +143,7 @@ export function ModulesCatalog() {
       .then((moduleData) => {
         if (!active) return
         setSelectedModule(moduleData)
+        setError(null)
         const preferredLessonId = (
           requestedLessonId && moduleData.lessons.some((lesson) => lesson.id === requestedLessonId)
         )
@@ -173,6 +175,7 @@ export function ModulesCatalog() {
       .then((lessonData) => {
         if (!active) return
         setSelectedLesson(lessonData)
+        setError(null)
       })
       .catch((err: unknown) => {
         if (!active) return
@@ -208,136 +211,143 @@ export function ModulesCatalog() {
       ) : error ? (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[1fr,1.4fr]">
-          <AcademyPanel title="Module List">
-            <ul className="space-y-2">
-              {modules.map((moduleItem) => (
-                <li key={moduleItem.id}>
-                  <button
-                    type="button"
-                    onClick={() => selectModule(moduleItem.slug)}
-                    className={`w-full rounded-md border px-3 py-3 text-left transition-colors ${
-                      moduleItem.slug === selectedSlug
-                        ? 'border-emerald-500/40 bg-emerald-500/10'
-                        : 'border-white/10 bg-transparent hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
-                        <Image
-                          src={resolveModuleImage(moduleItem)}
-                          alt={`${moduleItem.title} cover`}
-                          fill
-                          className="object-cover"
-                          sizes="48px"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white">{moduleItem.title}</p>
-                        <p className="mt-1 text-xs text-zinc-400">{moduleItem.trackTitle} · {moduleItem.lessons.length} lessons</p>
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </AcademyPanel>
-
-          <AcademyPanel title="Module + Lesson Content">
-            {moduleLoading ? (
-              <p className="text-sm text-zinc-400">Loading module details...</p>
-            ) : selectedModule ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-base font-medium text-white">{selectedModule.title}</p>
-                  <p className="mt-1 text-sm text-zinc-300">{selectedModule.description || 'No description provided.'}</p>
-                  <p className="mt-2 text-xs text-zinc-400">{selectedModule.estimatedMinutes} minutes estimated</p>
-                  <div className="relative mt-3 h-36 overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
-                    <Image
-                      src={resolveModuleImage(selectedModule)}
-                      alt={`${selectedModule.title} artwork`}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 1024px) 100vw, 50vw"
-                    />
-                  </div>
-                </div>
-
-                <ol className="space-y-2">
-                  {selectedModule.lessons.map((lesson, index) => (
-                    <li key={lesson.id}>
-                      <button
-                        type="button"
-                        onClick={() => selectLesson(lesson.id)}
-                        className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
-                          lesson.id === selectedLessonId
-                            ? 'border-emerald-500/40 bg-emerald-500/10'
-                            : 'border-white/10 bg-transparent hover:border-white/20'
-                        }`}
-                      >
-                        <p className="text-sm text-white">{index + 1}. {lesson.title}</p>
-                        <p className="mt-1 text-xs text-zinc-400">
-                          {lesson.estimatedMinutes} min · {lesson.difficulty}
-                        </p>
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-
-                <div className="rounded-md border border-white/10 bg-[#0f1117] p-4">
-                  {lessonLoading ? (
-                    <p className="text-sm text-zinc-400">Loading lesson content...</p>
-                  ) : selectedLesson ? (
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-base font-semibold text-white">{selectedLesson.title}</p>
-                        <p className="mt-1 text-sm text-zinc-300">{selectedLesson.learningObjective}</p>
-                        <div className="relative mt-3 h-40 overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <AcademyPanel title="Step 1 · Modules">
+            <div data-testid="academy-step-modules" className="space-y-3">
+              <p className="text-xs text-zinc-400">Start by selecting a module.</p>
+              <ul className="space-y-2">
+                {modules.map((moduleItem) => (
+                  <li key={moduleItem.id}>
+                    <button
+                      type="button"
+                      aria-pressed={moduleItem.slug === selectedSlug}
+                      onClick={() => selectModule(moduleItem.slug)}
+                      className={`w-full rounded-md border px-3 py-3 text-left transition-colors ${
+                        moduleItem.slug === selectedSlug
+                          ? 'border-emerald-500/40 bg-emerald-500/10'
+                          : 'border-white/10 bg-transparent hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
                           <Image
-                            src={resolveLessonImage(selectedLesson)}
-                            alt={`${selectedLesson.title} lesson artwork`}
+                            src={resolveModuleImage(moduleItem)}
+                            alt={`${moduleItem.title} cover`}
                             fill
                             className="object-cover"
-                            sizes="(max-width: 1024px) 100vw, 50vw"
+                            sizes="48px"
                           />
                         </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white">{moduleItem.title}</p>
+                          <p className="mt-1 text-xs text-zinc-400">{moduleItem.trackTitle} · {moduleItem.lessons.length} lessons</p>
+                        </div>
                       </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </AcademyPanel>
 
-                      {selectedLesson.blocks.length === 0 ? (
-                        <p className="text-sm text-zinc-400">No lesson blocks are available yet.</p>
-                      ) : (
-                        <ol className="space-y-3">
-                          {selectedLesson.blocks.map((block, index) => (
-                            <li key={block.id} className="rounded-md border border-white/10 bg-[#10131a] p-3">
-                              <p className="text-xs uppercase tracking-wide text-emerald-300">
-                                Step {index + 1}: {block.blockType.replaceAll('_', ' ')}
-                              </p>
-                              {block.title ? <p className="mt-1 text-sm font-medium text-white">{block.title}</p> : null}
-                              <div className="relative mt-3 h-32 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
-                                <Image
-                                  src={resolveBlockImage(block, resolveLessonImage(selectedLesson))}
-                                  alt={`${block.title || selectedLesson.title} illustration`}
-                                  fill
-                                  className="object-cover"
-                                  sizes="(max-width: 1024px) 100vw, 40vw"
-                                />
-                              </div>
-                              <div className="mt-2 text-sm text-zinc-200">
-                                <AcademyMarkdown>{getBlockMarkdown(block)}</AcademyMarkdown>
-                              </div>
-                            </li>
-                          ))}
-                        </ol>
-                      )}
+          <AcademyPanel title="Step 2 · Lessons">
+            <div data-testid="academy-step-lessons" className="space-y-3">
+              {moduleLoading ? (
+                <p className="text-sm text-zinc-400">Loading module details...</p>
+              ) : selectedModule ? (
+                <>
+                  <div className="rounded-md border border-white/10 bg-[#0f1117] p-3">
+                    <p className="text-sm font-medium text-white">{selectedModule.title}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{selectedModule.estimatedMinutes} minutes estimated</p>
+                    <div className="relative mt-3 h-28 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
+                      <Image
+                        src={resolveModuleImage(selectedModule)}
+                        alt={`${selectedModule.title} artwork`}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 1024px) 100vw, 33vw"
+                      />
                     </div>
+                  </div>
+                  <ol className="space-y-2">
+                    {selectedModule.lessons.map((lesson, index) => (
+                      <li key={lesson.id}>
+                        <button
+                          type="button"
+                          aria-pressed={lesson.id === selectedLessonId}
+                          onClick={() => selectLesson(lesson.id)}
+                          className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                            lesson.id === selectedLessonId
+                              ? 'border-emerald-500/40 bg-emerald-500/10'
+                              : 'border-white/10 bg-transparent hover:border-white/20'
+                          }`}
+                        >
+                          <p className="text-sm text-white">{index + 1}. {lesson.title}</p>
+                          <p className="mt-1 text-xs text-zinc-400">
+                            {lesson.estimatedMinutes} min · {lesson.difficulty}
+                          </p>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <p className="text-sm text-zinc-400">Choose a module to load lessons.</p>
+              )}
+            </div>
+          </AcademyPanel>
+
+          <AcademyPanel title="Step 3 · Lesson Content">
+            <div data-testid="academy-step-content" className="space-y-4">
+              {lessonLoading ? (
+                <p className="text-sm text-zinc-400">Loading lesson content...</p>
+              ) : selectedLesson ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-base font-semibold text-white">{selectedLesson.title}</p>
+                    <p className="mt-1 text-sm text-zinc-300">{selectedLesson.learningObjective}</p>
+                    <div className="relative mt-3 h-40 overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
+                      <Image
+                        src={resolveLessonImage(selectedLesson)}
+                        alt={`${selectedLesson.title} lesson artwork`}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 1024px) 100vw, 40vw"
+                      />
+                    </div>
+                  </div>
+
+                  {selectedLesson.blocks.length === 0 ? (
+                    <p className="text-sm text-zinc-400">No lesson blocks are available yet.</p>
                   ) : (
-                    <p className="text-sm text-zinc-400">Choose a lesson to view full content.</p>
+                    <ol className="space-y-3">
+                      {selectedLesson.blocks.map((block, index) => (
+                        <li key={block.id} className="rounded-md border border-white/10 bg-[#10131a] p-3">
+                          <p className="text-xs uppercase tracking-wide text-emerald-300">
+                            Step {index + 1}: {block.blockType.replaceAll('_', ' ')}
+                          </p>
+                          {block.title ? <p className="mt-1 text-sm font-medium text-white">{block.title}</p> : null}
+                          <div className="relative mt-3 h-32 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
+                            <Image
+                              src={resolveBlockImage(block, resolveLessonImage(selectedLesson))}
+                              alt={`${block.title || selectedLesson.title} illustration`}
+                              fill
+                              className="object-cover"
+                              sizes="(max-width: 1024px) 100vw, 40vw"
+                            />
+                          </div>
+                          <div className="mt-2 text-sm text-zinc-200">
+                            <AcademyMarkdown>{getBlockMarkdown(block)}</AcademyMarkdown>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
                   )}
                 </div>
-              </div>
-            ) : (
-              <p className="text-sm text-zinc-400">Choose a module to view lessons.</p>
-            )}
+              ) : (
+                <p className="text-sm text-zinc-400">Choose a lesson to view full content.</p>
+              )}
+            </div>
           </AcademyPanel>
         </div>
       )}

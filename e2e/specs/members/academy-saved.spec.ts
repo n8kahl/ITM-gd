@@ -24,6 +24,6 @@ test.describe('Academy v3 module routing', () => {
     await page.goto(`/members/academy-v3/modules?module=${ACADEMY_V3_FIXTURES.moduleSlugs.execution}`)
 
     await page.waitForURL(`**/members/academy-v3/modules?module=${ACADEMY_V3_FIXTURES.moduleSlugs.execution}`)
-    await expect(page.getByText('Execution Drill 1')).toBeVisible()
+    await expect(page.getByTestId('academy-step-content').getByText('Execution Drill 1')).toBeVisible()
   })
 })

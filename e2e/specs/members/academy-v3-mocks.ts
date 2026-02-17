@@ -10,6 +10,10 @@ const LESSON_A1_ID = '11111111-1111-4111-8111-111111111111'
 const LESSON_A2_ID = '11111111-1111-4111-8111-222222222222'
 const LESSON_B1_ID = '11111111-1111-4111-8111-333333333333'
 
+const BLOCK_A1_1_ID = '44444444-4444-4444-8444-111111111111'
+const BLOCK_A1_2_ID = '44444444-4444-4444-8444-222222222222'
+const BLOCK_B1_1_ID = '44444444-4444-4444-8444-333333333333'
+
 const COMP_A_ID = '22222222-2222-4222-8222-111111111111'
 const COMP_B_ID = '22222222-2222-4222-8222-222222222222'
 
@@ -60,6 +64,7 @@ function buildPlanPayload() {
               code: 'M-SETUP-RISK',
               title: ACADEMY_V3_FIXTURES.moduleTitles.setupRisk,
               description: 'Build repeatable setup criteria and risk structure.',
+              coverImageUrl: '/academy/illustrations/risk-sizing.svg',
               learningOutcomes: ['Define checklist before entry', 'Size risk consistently'],
               estimatedMinutes: 40,
               position: 0,
@@ -71,6 +76,7 @@ function buildPlanPayload() {
                   slug: 'define-risk-before-entry',
                   title: 'Define Risk Before Entry',
                   learningObjective: 'Map invalidation and stop before execution.',
+                  heroImageUrl: '/academy/illustrations/entry-validation.svg',
                   estimatedMinutes: 12,
                   difficulty: 'beginner',
                   prerequisiteLessonIds: [],
@@ -83,6 +89,7 @@ function buildPlanPayload() {
                   slug: 'position-size-discipline',
                   title: 'Position Size Discipline',
                   learningObjective: 'Apply fixed-risk sizing process.',
+                  heroImageUrl: '/academy/illustrations/risk-sizing.svg',
                   estimatedMinutes: 14,
                   difficulty: 'beginner',
                   prerequisiteLessonIds: [LESSON_A1_ID],
@@ -98,6 +105,7 @@ function buildPlanPayload() {
               code: 'M-EXEC-MGMT',
               title: ACADEMY_V3_FIXTURES.moduleTitles.execution,
               description: 'Improve in-trade decisions and exits.',
+              coverImageUrl: '/academy/illustrations/trade-management.svg',
               learningOutcomes: ['Manage winners systematically', 'Avoid emotional exits'],
               estimatedMinutes: 35,
               position: 1,
@@ -109,6 +117,7 @@ function buildPlanPayload() {
                   slug: 'execution-drill-1',
                   title: 'Execution Drill 1',
                   learningObjective: 'Practice execution sequencing under pressure.',
+                  heroImageUrl: '/academy/illustrations/market-context.svg',
                   estimatedMinutes: 11,
                   difficulty: 'intermediate',
                   prerequisiteLessonIds: [LESSON_A2_ID],
@@ -129,6 +138,67 @@ function buildModulePayload(slug: string) {
   const moduleRecord = plan.tracks.flatMap((track) => track.modules).find((moduleItem) => moduleItem.slug === slug)
   if (!moduleRecord) return null
   return { data: moduleRecord }
+}
+
+function buildLessonPayload(lessonId: string) {
+  const lessons = buildPlanPayload().data.tracks.flatMap((track) =>
+    track.modules.flatMap((moduleItem) => moduleItem.lessons)
+  )
+  const lessonRecord = lessons.find((lesson) => lesson.id === lessonId)
+  if (!lessonRecord) return null
+
+  const blocksByLesson: Record<string, Array<{ id: string; blockType: string; position: number; title: string | null; contentJson: Record<string, unknown> }>> = {
+    [LESSON_A1_ID]: [
+      {
+        id: BLOCK_A1_1_ID,
+        blockType: 'hook',
+        position: 0,
+        title: 'Risk Starts Before Entry',
+        contentJson: {
+          markdown: 'Define invalidation first, then position size.',
+          imageUrl: '/academy/illustrations/entry-validation.svg',
+        },
+      },
+      {
+        id: BLOCK_A1_2_ID,
+        blockType: 'guided_practice',
+        position: 1,
+        title: 'Map Invalidation',
+        contentJson: {
+          markdown: 'Practice selecting one invalidation level for each setup.',
+          imageUrl: '/academy/illustrations/risk-sizing.svg',
+        },
+      },
+    ],
+    [LESSON_B1_ID]: [
+      {
+        id: BLOCK_B1_1_ID,
+        blockType: 'worked_example',
+        position: 0,
+        title: 'Execution Sequence',
+        contentJson: {
+          markdown: 'Follow the sequence: setup, trigger, manage, exit.',
+          imageUrl: '/academy/illustrations/trade-management.svg',
+        },
+      },
+    ],
+  }
+
+  const blocks = (blocksByLesson[lessonId] || []).map((block) => ({
+    id: block.id,
+    lessonId,
+    blockType: block.blockType,
+    position: block.position,
+    title: block.title,
+    contentJson: block.contentJson,
+  }))
+
+  return {
+    data: {
+      ...lessonRecord,
+      blocks,
+    },
+  }
 }
 
 function buildMasteryPayload() {
@@ -243,6 +313,17 @@ export async function setupAcademyV3Mocks(page: Page, options?: { reviewItemCoun
     const payload = buildModulePayload(decodeURIComponent(slug))
     if (!payload) {
       await fulfillJson(route, { error: { code: 'NOT_FOUND', message: 'Module not found' } }, 404)
+      return
+    }
+
+    await fulfillJson(route, payload)
+  })
+
+  await page.route('**/api/academy-v3/lessons/*', async (route: Route) => {
+    const lessonId = route.request().url().split('/').pop() || ''
+    const payload = buildLessonPayload(decodeURIComponent(lessonId))
+    if (!payload) {
+      await fulfillJson(route, { error: { code: 'NOT_FOUND', message: 'Lesson not found' } }, 404)
       return
     }
 
