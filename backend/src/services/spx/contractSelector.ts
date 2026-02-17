@@ -97,16 +97,41 @@ function toContractRecommendation(setup: Setup, contract: OptionContract): Contr
   };
 }
 
-function pickBestContract(setup: Setup, contracts: OptionContract[]): OptionContract | null {
+function filterCandidates(
+  setup: Setup,
+  contracts: OptionContract[],
+  relaxed: boolean,
+): OptionContract[] {
   const desiredType: OptionContract['type'] = setup.direction === 'bullish' ? 'call' : 'put';
-  const candidates = contracts.filter((contract) => {
+  const minOI = relaxed ? 10 : MIN_OPEN_INTEREST;
+  const minVol = relaxed ? 1 : MIN_VOLUME;
+  const maxSpread = relaxed ? 0.50 : MAX_SPREAD_PCT;
+  const minDelta = relaxed ? 0.02 : 0.05;
+
+  return contracts.filter((contract) => {
     if (contract.type !== desiredType) return false;
     if (!(contract.bid > 0 && contract.ask > contract.bid)) return false;
-    if (!Number.isFinite(contract.delta || 0) || Math.abs(contract.delta || 0) < 0.05) return false;
-    if ((contract.openInterest || 0) < MIN_OPEN_INTEREST && (contract.volume || 0) < MIN_VOLUME) return false;
+    const absDelta = Math.abs(contract.delta || 0);
+    if (!Number.isFinite(absDelta) || absDelta < minDelta) return false;
+    if ((contract.openInterest || 0) < minOI && (contract.volume || 0) < minVol) return false;
     const spreadPct = getSpreadPct(contract);
-    return Number.isFinite(spreadPct) && spreadPct <= MAX_SPREAD_PCT;
+    return Number.isFinite(spreadPct) && spreadPct <= maxSpread;
   });
+}
+
+function pickBestContract(setup: Setup, contracts: OptionContract[]): OptionContract | null {
+  let candidates = filterCandidates(setup, contracts, false);
+
+  if (candidates.length === 0) {
+    candidates = filterCandidates(setup, contracts, true);
+    if (candidates.length > 0) {
+      logger.info('Contract selector using relaxed filters', {
+        setupId: setup.id,
+        relaxedCandidates: candidates.length,
+      });
+    }
+  }
+
   if (candidates.length === 0) return null;
 
   return [...candidates]

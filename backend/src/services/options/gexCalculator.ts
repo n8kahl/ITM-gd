@@ -22,8 +22,9 @@ interface StrikeAccumulator {
 
 const GEX_CACHE_TTL_SECONDS = 300;
 const DEFAULT_STRIKE_RANGE = 30;
-const DEFAULT_MAX_EXPIRATIONS = 6;
-const MAX_EXPIRATIONS_ALLOWED = 12;
+const DEFAULT_MAX_EXPIRATIONS = 4;
+const MAX_EXPIRATIONS_ALLOWED = 8;
+const GEX_EXPIRY_CONCURRENCY = 3;
 
 function roundNumber(value: number, decimals: number = 2): number {
   return Number(value.toFixed(decimals));
@@ -156,8 +157,29 @@ export async function calculateGEXProfile(
   const strikeMap = new Map<number, StrikeAccumulator>();
   let spotPrice = 0;
 
-  for (const expiry of expirations) {
-    const chain = await fetchOptionsChain(symbol, expiry, strikeRange);
+  // Fetch chains concurrently (bounded) with per-expiry error resilience
+  const fetchExpiry = async (expiry: string) => {
+    try {
+      return await fetchOptionsChain(symbol, expiry, strikeRange);
+    } catch (error) {
+      logger.warn('GEX: skipping failed expiry chain fetch', {
+        symbol,
+        expiry,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  };
+
+  const chains = [];
+  for (let i = 0; i < expirations.length; i += GEX_EXPIRY_CONCURRENCY) {
+    const batch = expirations.slice(i, i + GEX_EXPIRY_CONCURRENCY);
+    const results = await Promise.all(batch.map(fetchExpiry));
+    chains.push(...results);
+  }
+
+  for (const chain of chains) {
+    if (!chain) continue;
     spotPrice = chain.currentPrice;
 
     for (const call of chain.options.calls) {

@@ -41,6 +41,18 @@ const OPTIONS_MATRIX_CACHE_TTL = 60; // 60 seconds
 const DEFAULT_MATRIX_EXPIRATIONS = 5;
 const DEFAULT_MATRIX_STRIKE_RANGE = 50;
 const MATRIX_FETCH_CONCURRENCY = 2;
+const SNAPSHOT_BULK_CACHE_TTL_MS = 15_000;
+const SNAPSHOT_BATCH_SIZE = 12;
+const SNAPSHOT_BATCH_DELAY_MS = 60;
+const BULK_SNAPSHOT_MIN_CONTRACTS = 20;
+
+interface BulkSnapshotCacheEntry {
+  capturedAt: number;
+  byTicker: Map<string, OptionsSnapshot>;
+}
+
+const bulkSnapshotCache = new Map<string, BulkSnapshotCacheEntry>();
+const bulkSnapshotInFlight = new Map<string, Promise<Map<string, OptionsSnapshot>>>();
 
 /**
  * Get current price for underlying symbol
@@ -125,6 +137,115 @@ function filterStrikesByRange(
   const endIdx = Math.min(sortedStrikes.length, closestStrikeIndex + range + 1);
 
   return sortedStrikes.slice(startIdx, endIdx);
+}
+
+function toSnapshotTicker(snapshot: OptionsSnapshot): string | null {
+  const raw = snapshot.ticker || snapshot.details?.ticker;
+  if (typeof raw !== 'string') return null;
+  const normalized = raw.trim().toUpperCase();
+  return normalized || null;
+}
+
+async function getBulkSnapshotIndex(symbol: string): Promise<Map<string, OptionsSnapshot>> {
+  const cacheKey = symbol.toUpperCase();
+  const cached = bulkSnapshotCache.get(cacheKey);
+
+  if (cached && (Date.now() - cached.capturedAt) <= SNAPSHOT_BULK_CACHE_TTL_MS) {
+    return cached.byTicker;
+  }
+
+  const inFlight = bulkSnapshotInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const run = (async () => {
+    const snapshots = await getOptionsSnapshot(symbol);
+    const rows = Array.isArray(snapshots) ? snapshots : (snapshots ? [snapshots] : []);
+    const byTicker = new Map<string, OptionsSnapshot>();
+
+    for (const row of rows) {
+      const ticker = toSnapshotTicker(row);
+      if (!ticker) continue;
+      byTicker.set(ticker, row);
+    }
+
+    bulkSnapshotCache.set(cacheKey, {
+      capturedAt: Date.now(),
+      byTicker,
+    });
+
+    logger.info('Options snapshot bulk index refreshed', {
+      symbol: cacheKey,
+      count: byTicker.size,
+    });
+
+    return byTicker;
+  })();
+
+  bulkSnapshotInFlight.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    bulkSnapshotInFlight.delete(cacheKey);
+  }
+}
+
+async function resolveSnapshotsForContracts(
+  symbol: string,
+  contracts: MassiveOptionsContract[],
+): Promise<{ snapshots: Map<string, OptionsSnapshot>; bulkUsed: boolean; bulkHits: number }> {
+  const snapshots = new Map<string, OptionsSnapshot>();
+  let bulkUsed = false;
+  let bulkHits = 0;
+
+  if (contracts.length >= BULK_SNAPSHOT_MIN_CONTRACTS) {
+    try {
+      const bulkIndex = await getBulkSnapshotIndex(symbol);
+      bulkUsed = true;
+
+      for (const contract of contracts) {
+        const ticker = contract.ticker.trim().toUpperCase();
+        const snapshot = bulkIndex.get(ticker);
+        if (!snapshot) continue;
+        snapshots.set(contract.ticker, snapshot);
+        bulkHits += 1;
+      }
+    } catch (error) {
+      logger.warn('Bulk options snapshot lookup failed, falling back to per-contract fetch', {
+        symbol,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const missingContracts = contracts.filter((contract) => !snapshots.has(contract.ticker));
+  for (let i = 0; i < missingContracts.length; i += SNAPSHOT_BATCH_SIZE) {
+    const batch = missingContracts.slice(i, i + SNAPSHOT_BATCH_SIZE);
+
+    await Promise.all(batch.map(async (contract) => {
+      try {
+        const snapshotData = await getOptionsSnapshot(symbol, contract.ticker);
+        const snapshotRows = Array.isArray(snapshotData)
+          ? snapshotData
+          : (snapshotData ? [snapshotData as unknown as OptionsSnapshot] : []);
+
+        if (snapshotRows.length > 0) {
+          snapshots.set(contract.ticker, snapshotRows[0]);
+        }
+      } catch (error) {
+        logger.error(`Failed to fetch snapshot for ${contract.ticker}`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }));
+
+    if (i + SNAPSHOT_BATCH_SIZE < missingContracts.length) {
+      await new Promise((resolve) => setTimeout(resolve, SNAPSHOT_BATCH_DELAY_MS));
+    }
+  }
+
+  return { snapshots, bulkUsed, bulkHits };
 }
 
 function calculateContractGex(
@@ -326,36 +447,11 @@ export async function fetchOptionsChain(
       filteredStrikes.includes(c.strike_price)
     );
 
-    // Fetch snapshots for all contracts (in batches to avoid rate limits)
-    const BATCH_SIZE = 50;
-    const snapshots: Map<string, OptionsSnapshot> = new Map();
-
-    for (let i = 0; i < filteredContracts.length; i += BATCH_SIZE) {
-      const batch = filteredContracts.slice(i, i + BATCH_SIZE);
-
-      // Fetch snapshots in parallel for this batch
-      const snapshotPromises = batch.map(async contract => {
-        try {
-          const snapshotData = await getOptionsSnapshot(symbol, contract.ticker);
-          const snapshotRows = Array.isArray(snapshotData)
-            ? snapshotData
-            : (snapshotData ? [snapshotData as unknown as OptionsSnapshot] : []);
-
-          if (snapshotRows.length > 0) {
-            snapshots.set(contract.ticker, snapshotRows[0]);
-          }
-        } catch (error) {
-          logger.error(`Failed to fetch snapshot for ${contract.ticker}`, { error: error instanceof Error ? error.message : String(error) });
-        }
-      });
-
-      await Promise.all(snapshotPromises);
-
-      // Small delay between batches to respect rate limits
-      if (i + BATCH_SIZE < filteredContracts.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    const {
+      snapshots,
+      bulkUsed,
+      bulkHits,
+    } = await resolveSnapshotsForContracts(symbol, filteredContracts);
 
     // Convert to our OptionContract format
     const calls: OptionContract[] = [];
@@ -394,7 +490,18 @@ export async function fetchOptionsChain(
         expiry,
         contractsFetched: contracts.length,
         contractsFiltered: filteredContracts.length,
-        snapshotsFetched: snapshots.size
+        snapshotsFetched: snapshots.size,
+        bulkUsed,
+        bulkHits,
+      });
+    } else {
+      logger.info('Options chain snapshot coverage', {
+        symbol,
+        expiry,
+        filteredContracts: filteredContracts.length,
+        snapshotsFetched: snapshots.size,
+        bulkUsed,
+        bulkHits,
       });
     }
 
