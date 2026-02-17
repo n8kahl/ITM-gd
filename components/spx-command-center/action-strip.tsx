@@ -1,92 +1,95 @@
 'use client'
 
-import { AlertTriangle, Dot, Gauge, Sparkles } from 'lucide-react'
+import { AlertTriangle, Dot, Gauge, Hexagon, Sparkles } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
-import { InfoTip } from '@/components/ui/info-tip'
 import { cn } from '@/lib/utils'
+
+function formatGexShort(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}M`
+  return `${(value / 1_000).toFixed(0)}K`
+}
 
 function summarizeFlowBias(flowEvents: Array<{ direction: 'bullish' | 'bearish'; premium: number }>): {
   label: string
   tone: string
 } {
   if (flowEvents.length === 0) {
-    return { label: 'Flow warming up', tone: 'border-white/20 bg-white/5 text-white/70' }
+    return { label: 'Flow warming', tone: 'border-white/15 bg-white/[0.04] text-white/60' }
   }
-
-  const bullish = flowEvents
-    .filter((event) => event.direction === 'bullish')
-    .reduce((sum, event) => sum + event.premium, 0)
-  const bearish = flowEvents
-    .filter((event) => event.direction === 'bearish')
-    .reduce((sum, event) => sum + event.premium, 0)
-
+  const bullish = flowEvents.filter((e) => e.direction === 'bullish').reduce((s, e) => s + e.premium, 0)
+  const bearish = flowEvents.filter((e) => e.direction === 'bearish').reduce((s, e) => s + e.premium, 0)
   const gross = bullish + bearish
-  const bullishPct = gross > 0 ? Math.round((bullish / gross) * 100) : 50
-
-  if (bullishPct >= 60) {
-    return { label: `Bullish pressure ${bullishPct}%`, tone: 'border-emerald-400/35 bg-emerald-500/15 text-emerald-200' }
-  }
-  if (bullishPct <= 40) {
-    return { label: `Bearish pressure ${100 - bullishPct}%`, tone: 'border-rose-400/35 bg-rose-500/15 text-rose-200' }
-  }
-  return { label: `Balanced flow ${bullishPct}%`, tone: 'border-amber-400/35 bg-amber-500/12 text-amber-100' }
+  const pct = gross > 0 ? Math.round((bullish / gross) * 100) : 50
+  if (pct >= 60) return { label: `Bullish pressure ${pct}%`, tone: 'border-emerald-400/30 bg-emerald-500/12 text-emerald-200' }
+  if (pct <= 40) return { label: `Bearish pressure ${100 - pct}%`, tone: 'border-rose-400/30 bg-rose-500/10 text-rose-200' }
+  return { label: `Balanced ${pct}%`, tone: 'border-amber-400/25 bg-amber-500/8 text-amber-200' }
 }
 
 export function ActionStrip() {
-  const { activeSetups, coachMessages, regime, prediction, flowEvents } = useSPXCommandCenter()
+  const { activeSetups, coachMessages, regime, prediction, flowEvents, gexProfile } = useSPXCommandCenter()
 
-  const actionableCount = activeSetups.filter((setup) => setup.status === 'ready' || setup.status === 'triggered').length
+  const actionableCount = activeSetups.filter((s) => s.status === 'ready' || s.status === 'triggered').length
   const flowBias = summarizeFlowBias(flowEvents.slice(0, 10))
+
   const topAlert = [...coachMessages]
     .sort((a, b) => {
-      const rank = { alert: 0, setup: 1, guidance: 2, behavioral: 3 }
-      const priorityDelta = rank[a.priority] - rank[b.priority]
-      if (priorityDelta !== 0) return priorityDelta
-      return Date.parse(b.timestamp) - Date.parse(a.timestamp)
+      const rank = { alert: 0, setup: 1, guidance: 2, behavioral: 3 } as const
+      return (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3) || Date.parse(b.timestamp) - Date.parse(a.timestamp)
     })
-    .find((message) => message.priority === 'alert' || message.priority === 'setup') || null
+    .find((m) => m.priority === 'alert' || m.priority === 'setup') || null
 
-  const postureDirection = prediction
-    ? prediction.direction.bullish >= prediction.direction.bearish
-      ? 'bullish'
-      : 'bearish'
+  const postureDir = prediction
+    ? prediction.direction.bullish >= prediction.direction.bearish ? 'bullish' : 'bearish'
     : 'neutral'
-  const postureConfidence = prediction?.confidence ?? null
-  const postureLabel = `${(regime || 'unknown').toUpperCase()} ${postureDirection.toUpperCase()}${postureConfidence != null ? ` ${postureConfidence.toFixed(0)}%` : ''}`
+  const postureConf = prediction?.confidence ?? null
+  const postureLabel = `${(regime || '--').toUpperCase()} ${postureDir.toUpperCase()}${postureConf != null ? ` ${postureConf.toFixed(0)}%` : ''}`
+
+  const gexNet = gexProfile?.combined?.netGex ?? null
+  const gexLabel = gexNet != null
+    ? `GEX ${gexNet >= 0 ? 'Supportive' : 'Unstable'} ${formatGexShort(gexNet)}`
+    : null
 
   return (
-    <section className="glass-card-heavy rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.03] via-emerald-500/[0.03] to-champagne/10 p-3 md:p-4">
+    <section className="rounded-2xl border border-white/8 bg-gradient-to-r from-white/[0.02] via-emerald-500/[0.02] to-champagne/[0.04] px-3 py-2.5">
       {topAlert && (
-        <div className="mb-2 flex items-start gap-2 rounded-lg border border-rose-400/35 bg-rose-500/12 px-3 py-2">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-200" />
+        <div className="mb-2 flex items-start gap-2 rounded-lg border border-rose-400/30 bg-rose-500/8 px-3 py-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-200" />
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-rose-200/90">Top Coach Alert</p>
-            <p className="truncate text-sm text-rose-50">{topAlert.content}</p>
+            <p className="text-[9px] uppercase tracking-[0.1em] text-rose-200/80">Top Coach Alert</p>
+            <p className="text-[13px] leading-snug text-rose-50">{topAlert.content}</p>
           </div>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/12 px-2.5 py-1 text-[11px] text-emerald-200">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200" title="Number of trade setups currently in 'ready' or 'triggered' status">
           <Sparkles className="h-3 w-3" />
-          {actionableCount} setups actionable
+          Setups: {actionableCount} actionable
         </span>
 
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-black/20 px-2.5 py-1 text-[11px] text-white/80">
+        <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-[10px] text-white/70" title="AI-predicted market posture combining regime, direction, and confidence">
           <Gauge className="h-3 w-3 text-champagne" />
-          {postureLabel}
+          Posture: {postureLabel}
         </span>
 
-        <span className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px]', flowBias.tone)}>
+        <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]', flowBias.tone)} title="Options order flow bias — comparing bullish vs bearish premium in recent transactions">
           <Dot className="h-3 w-3" />
-          {flowBias.label}
+          Flow: {flowBias.label}
         </span>
 
-        <span className="ml-auto">
-          <InfoTip label="How to use action strip" panelClassName="w-64">
-            This strip is your mission briefing: actionable setup count, current market posture, and flow bias confirmation.
-          </InfoTip>
-        </span>
+        {gexLabel && (
+          <span className={cn(
+            'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]',
+            gexNet != null && gexNet >= 0
+              ? 'border-emerald-400/20 bg-emerald-500/8 text-emerald-200/80'
+              : 'border-rose-400/20 bg-rose-500/8 text-rose-200/80',
+          )} title="Net gamma exposure posture — Supportive means dealers dampen moves, Unstable means they amplify">
+            <Hexagon className="h-3 w-3" />
+            {gexLabel}
+          </span>
+        )}
       </div>
     </section>
   )

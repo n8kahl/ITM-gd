@@ -1,14 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
 import { TradingChart, type LevelAnnotation } from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { getChartData, type ChartBar, type ChartTimeframe } from '@/lib/api/ai-coach'
-import { ClusterZoneBar } from '@/components/spx-command-center/cluster-zone-bar'
-import { ProbabilityCone } from '@/components/spx-command-center/probability-cone'
-import { FibOverlay } from '@/components/spx-command-center/fib-overlay'
-import { InfoTip } from '@/components/ui/info-tip'
+import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
 function toLineStyle(style: 'solid' | 'dashed' | 'dotted' | 'dot-dash'): 'solid' | 'dashed' | 'dotted' {
   if (style === 'dot-dash') return 'dashed'
@@ -21,10 +19,8 @@ export function SPXChart() {
     levels,
     selectedSetup,
     chartAnnotations,
-    clusterZones,
-    fibLevels,
-    prediction,
     spxPrice,
+    spxTickTimestamp,
     selectedTimeframe,
     setChartTimeframe,
   } = useSPXCommandCenter()
@@ -65,6 +61,15 @@ export function SPXChart() {
       isCancelled = true
     }
   }, [selectedTimeframe, session?.access_token])
+
+  useEffect(() => {
+    if (!spxTickTimestamp || !Number.isFinite(spxPrice) || spxPrice <= 0) return
+
+    setBars((prev) => {
+      const merged = mergeRealtimePriceIntoBars(prev, selectedTimeframe, spxPrice, spxTickTimestamp)
+      return merged.changed ? merged.bars : prev
+    })
+  }, [selectedTimeframe, spxPrice, spxTickTimestamp])
 
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({
@@ -159,37 +164,38 @@ export function SPXChart() {
   }, [chartAnnotations, selectedSetup])
 
   return (
-    <section className="glass-card-heavy rounded-2xl p-3 md:p-4 space-y-3">
+    <section className="glass-card-heavy rounded-2xl p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Price + Focus Levels</h3>
-          <InfoTip label="How focused chart levels work">
-            To reduce clutter, the chart shows the most decision-relevant levels near current price by default. Full level detail remains in Level Matrix.
-          </InfoTip>
-        </div>
-        <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-white/60">
+        <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">Price + Focus Levels</h3>
+        <span className="text-[9px] font-mono text-white/40">
           {focusedLevelAnnotations.length}/{levelAnnotations.length} shown
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+
+      <div className="flex flex-wrap items-center gap-1">
         {(['1m', '5m', '15m', '1h', '4h', '1D'] as ChartTimeframe[]).map((timeframe) => (
           <button
             key={timeframe}
             type="button"
-            onClick={() => setChartTimeframe(timeframe)}
+            onClick={() => {
+              setChartTimeframe(timeframe)
+              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                surface: 'chart_timeframe',
+                timeframe,
+              })
+            }}
             className={
               selectedTimeframe === timeframe
-                ? 'rounded-md border border-emerald-400/45 bg-emerald-500/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-emerald-200'
-                : 'rounded-md border border-white/20 bg-white/[0.03] px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white'
+                ? 'rounded-md border border-emerald-400/40 bg-emerald-500/12 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200'
+                : 'rounded-md border border-white/15 bg-white/[0.02] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/50 hover:text-white/70'
             }
-            title={`Switch chart timeframe to ${timeframe}`}
           >
             {timeframe}
           </button>
         ))}
-        <span className="text-[11px] text-white/50">Current timeframe: {selectedTimeframe}</span>
       </div>
-      <div className="h-[440px] md:h-[540px]">
+
+      <div className="h-[400px] md:h-[500px]">
         <TradingChart
           symbol="SPX"
           timeframe={selectedTimeframe}
@@ -198,20 +204,6 @@ export function SPXChart() {
           isLoading={isLoading}
         />
       </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        <ClusterZoneBar zones={clusterZones.slice(0, 4)} />
-        <ProbabilityCone prediction={prediction} />
-      </div>
-
-      <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-        <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.1em] text-white/60">
-          Show Advanced Overlays
-        </summary>
-        <div className="mt-3">
-          <FibOverlay levels={fibLevels.slice(0, 8)} />
-        </div>
-      </details>
     </section>
   )
 }

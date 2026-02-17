@@ -1,51 +1,48 @@
 'use client'
 
-import { Target } from 'lucide-react'
+import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import type { Setup } from '@/lib/types/spx-command-center'
 
-function statusClass(status: Setup['status']): string {
-  if (status === 'ready') return 'border-emerald-400/45 bg-emerald-500/10'
-  if (status === 'triggered') return 'border-emerald-400/55 bg-emerald-500/15 animate-pulse-emerald'
-  if (status === 'forming') return 'border-amber-400/35 bg-amber-500/[0.06]'
-  if (status === 'invalidated') return 'border-rose-400/45 bg-rose-500/10'
-  if (status === 'expired') return 'border-white/20 bg-white/[0.03] opacity-60'
-  return 'border-white/15 bg-white/[0.02]'
+function statusBadge(status: Setup['status']): { label: string; cls: string } {
+  if (status === 'triggered') return { label: 'TRIGGERED', cls: 'border-emerald-300/55 bg-emerald-400/25 text-emerald-100 animate-pulse-emerald' }
+  if (status === 'ready') return { label: 'ACTIONABLE', cls: 'border-emerald-300/35 bg-emerald-400/12 text-emerald-100' }
+  if (status === 'forming') return { label: 'FORMING', cls: 'border-amber-300/35 bg-amber-400/12 text-amber-100' }
+  if (status === 'invalidated') return { label: 'INVALIDATED', cls: 'border-rose-300/35 bg-rose-400/12 text-rose-100' }
+  return { label: 'EXPIRED', cls: 'border-white/25 bg-white/10 text-white/60' }
 }
 
-function statusMeta(status: Setup['status']): { label: string; badgeClass: string; hint: string } {
-  if (status === 'triggered') {
-    return {
-      label: 'Triggered',
-      badgeClass: 'border-emerald-300/45 bg-emerald-400/20 text-emerald-100',
-      hint: 'Live setup: manage with stop discipline.',
-    }
-  }
-  if (status === 'ready') {
-    return {
-      label: 'Actionable',
-      badgeClass: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100',
-      hint: 'Valid now: entry conditions are in play.',
-    }
-  }
-  if (status === 'forming') {
-    return {
-      label: 'Watchlist',
-      badgeClass: 'border-amber-300/35 bg-amber-400/10 text-amber-100',
-      hint: 'Not valid yet: wait for confirmation.',
-    }
-  }
-  if (status === 'invalidated') {
-    return {
-      label: 'Invalidated',
-      badgeClass: 'border-rose-300/35 bg-rose-400/10 text-rose-100',
-      hint: 'No longer tradable.',
-    }
-  }
+function borderClass(status: Setup['status']): string {
+  if (status === 'triggered') return 'border-emerald-400/55 bg-emerald-500/[0.08]'
+  if (status === 'ready') return 'border-emerald-400/40 bg-emerald-500/[0.05]'
+  if (status === 'forming') return 'border-amber-400/30 bg-amber-500/[0.04]'
+  if (status === 'invalidated') return 'border-rose-400/40 bg-rose-500/[0.06]'
+  return 'border-white/15 bg-white/[0.02] opacity-60'
+}
+
+/** Compute thermometer positions as percentages along the trade range */
+function computeThermometer(setup: Setup, currentPrice: number) {
+  const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
+  const isBullish = setup.direction === 'bullish'
+
+  // Full range from stop → target2 (or reverse for bearish)
+  const rangeMin = isBullish ? setup.stop : setup.target2.price
+  const rangeMax = isBullish ? setup.target2.price : setup.stop
+  const span = Math.abs(rangeMax - rangeMin)
+  if (span <= 0) return null
+
+  const pct = (price: number) => Math.max(0, Math.min(100, ((price - rangeMin) / span) * 100))
+
   return {
-    label: 'Expired',
-    badgeClass: 'border-white/25 bg-white/10 text-white/70',
-    hint: 'Out of play for the current window.',
+    stopPct: pct(setup.stop),
+    entryLowPct: pct(setup.entryZone.low),
+    entryHighPct: pct(setup.entryZone.high),
+    target1Pct: pct(setup.target1.price),
+    target2Pct: pct(setup.target2.price),
+    pricePct: Number.isFinite(currentPrice) && currentPrice > 0 ? pct(currentPrice) : null,
+    entryMid,
+    // Is price inside entry zone?
+    inZone: Number.isFinite(currentPrice) && currentPrice >= setup.entryZone.low && currentPrice <= setup.entryZone.high,
   }
 }
 
@@ -62,15 +59,16 @@ export function SetupCard({
   readOnly?: boolean
   onSelect?: () => void
 }) {
-  const meta = statusMeta(setup.status)
+  const badge = statusBadge(setup.status)
+  const thermo = useMemo(() => computeThermometer(setup, currentPrice), [setup, currentPrice])
+
   const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
-  const distanceToEntry = Number.isFinite(currentPrice) && currentPrice > 0
+  const riskPts = Math.abs(entryMid - setup.stop)
+  const rewardPts = Math.abs(setup.target1.price - entryMid)
+  const rr = riskPts > 0 ? (rewardPts / riskPts) : 0
+
+  const distToEntry = Number.isFinite(currentPrice) && currentPrice > 0
     ? Math.abs(currentPrice - entryMid)
-    : null
-  const riskToStop = Math.abs(entryMid - setup.stop)
-  const lastUpdatedEpoch = Date.parse(setup.triggeredAt || setup.createdAt)
-  const lastUpdated = Number.isFinite(lastUpdatedEpoch)
-    ? new Date(lastUpdatedEpoch).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : null
 
   return (
@@ -79,85 +77,132 @@ export function SetupCard({
       onClick={onSelect}
       disabled={!onSelect}
       className={cn(
-        'w-full text-left rounded-xl border p-3 transition-colors',
-        statusClass(setup.status),
-        onSelect ? 'cursor-pointer hover:border-emerald-300/50' : 'cursor-default',
-        selected && 'ring-1 ring-emerald-300/60',
+        'w-full text-left rounded-xl border p-3 transition-all duration-200',
+        borderClass(setup.status),
+        onSelect ? 'cursor-pointer hover:border-emerald-300/50 hover:bg-emerald-500/[0.08]' : 'cursor-default',
+        selected && 'ring-1 ring-emerald-300/60 bg-emerald-500/[0.1]',
       )}
     >
+      {/* ── Row 1: Direction headline + Status badge ── */}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-white/65">{setup.type.replace(/_/g, ' ')}</p>
-        <span
-          className={cn(
-            'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]',
-            meta.badgeClass,
-          )}
-        >
-          {meta.label}
+        <h4 className="text-base font-semibold tracking-tight text-ivory uppercase">
+          {setup.direction} {setup.regime}
+        </h4>
+        <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]', badge.cls)}>
+          {badge.label}
         </span>
       </div>
 
-      <p className="mt-1 text-sm font-medium text-ivory capitalize">{setup.direction} {setup.regime}</p>
-      <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-white/55">{meta.hint}</p>
-
-      <div className="mt-2 flex items-center gap-1.5">
-        {Array.from({ length: 5 }).map((_, idx) => (
-          <span
-            key={`${setup.id}-dot-${idx}`}
-            className={cn(
-              'h-1.5 w-1.5 rounded-full border border-white/20',
-              idx < setup.confluenceScore ? 'bg-emerald-300 border-emerald-300/50' : 'bg-transparent',
-            )}
-          />
-        ))}
-        <span className="text-[11px] text-white/60">{setup.confluenceScore}/5</span>
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-        <div>
-          <p className="text-white/45">Entry</p>
-          <p className="font-mono text-ivory">{setup.entryZone.low.toFixed(2)}-{setup.entryZone.high.toFixed(2)}</p>
-        </div>
-        <div>
-          <p className="text-white/45">Stop</p>
-          <p className="font-mono text-rose-300">{setup.stop.toFixed(2)}</p>
-        </div>
-        <div>
-          <p className="text-white/45">Target 1</p>
-          <p className="font-mono text-emerald-200">{setup.target1.price.toFixed(2)}</p>
-        </div>
-        <div>
-          <p className="text-white/45">Target 2</p>
-          <p className="font-mono text-champagne">{setup.target2.price.toFixed(2)}</p>
+      {/* ── Row 2: Setup type + Confluence score ── */}
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-[0.12em] text-white/55">
+          {setup.type.replace(/_/g, ' ')}
+        </span>
+        <div className="flex items-center gap-1">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <span
+              key={`${setup.id}-c-${idx}`}
+              className={cn(
+                'h-2 w-2 rounded-full',
+                idx < setup.confluenceScore
+                  ? 'bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.4)]'
+                  : 'bg-white/15',
+              )}
+            />
+          ))}
+          <span className="ml-1 text-[11px] font-mono text-white/60">{setup.confluenceScore}/5</span>
         </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-white/65">
-        <div>
-          <p className="text-white/45">Dist to Entry</p>
-          <p className="font-mono text-ivory">{distanceToEntry != null ? distanceToEntry.toFixed(2) : '--'}</p>
-        </div>
-        <div>
-          <p className="text-white/45">Risk to Stop</p>
-          <p className="font-mono text-rose-200">{riskToStop.toFixed(2)}</p>
-        </div>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2 text-[11px] text-white/60">
-        <Target className="h-3 w-3 text-emerald-300" />
-        <span>Win probability {setup.probability.toFixed(0)}%</span>
-        {lastUpdated && <span className="text-white/40">Updated {lastUpdated}</span>}
-      </div>
-
+      {/* ── Row 3: Confluence source pills ── */}
       {setup.confluenceSources.length > 0 && (
-        <p className="mt-1 text-[10px] text-white/45">
-          Why now: {setup.confluenceSources.slice(0, 2).join(' + ')}
-          {setup.confluenceSources.length > 2 ? '…' : ''}
-        </p>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {setup.confluenceSources.slice(0, 4).map((source) => (
+            <span
+              key={source}
+              className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200"
+            >
+              {source.replace(/_/g, ' ')}
+            </span>
+          ))}
+        </div>
       )}
 
+      {/* ── Row 4: Entry proximity thermometer ── */}
+      {thermo && (
+        <div className="mt-2.5 rounded-lg border border-white/10 bg-black/30 px-2 py-2">
+          <div className="relative h-3 rounded-full bg-white/[0.06] overflow-hidden">
+            {/* Stop zone (red) */}
+            <div
+              className="absolute top-0 h-full bg-rose-500/30 rounded-l-full"
+              style={{ left: 0, width: `${Math.min(thermo.stopPct, thermo.entryLowPct)}%` }}
+            />
+            {/* Entry zone (emerald band) */}
+            <div
+              className={cn(
+                'absolute top-0 h-full',
+                thermo.inZone ? 'bg-emerald-400/50 animate-pulse' : 'bg-emerald-500/25',
+              )}
+              style={{
+                left: `${thermo.entryLowPct}%`,
+                width: `${Math.max(1, thermo.entryHighPct - thermo.entryLowPct)}%`,
+              }}
+            />
+            {/* Target 1 marker */}
+            <div
+              className="absolute top-0 h-full w-0.5 bg-emerald-300/60"
+              style={{ left: `${thermo.target1Pct}%` }}
+            />
+            {/* Target 2 marker */}
+            <div
+              className="absolute top-0 h-full w-0.5 bg-champagne/50"
+              style={{ left: `${thermo.target2Pct}%` }}
+            />
+            {/* Current price indicator */}
+            {thermo.pricePct != null && (
+              <div
+                className={cn(
+                  'absolute top-1/2 -translate-y-1/2 h-4 w-1.5 rounded-full border',
+                  thermo.inZone
+                    ? 'bg-emerald-300 border-emerald-200 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                    : 'bg-white border-white/60 shadow-[0_0_6px_rgba(255,255,255,0.3)]',
+                )}
+                style={{ left: `${thermo.pricePct}%`, transform: 'translate(-50%, -50%)' }}
+              />
+            )}
+          </div>
+          {/* Thermometer labels */}
+          <div className="mt-1 flex justify-between text-[9px] font-mono">
+            <span className="text-rose-300">{setup.stop.toFixed(0)}</span>
+            <span className="text-emerald-200">{entryMid.toFixed(0)}</span>
+            <span className="text-emerald-300">T1 {setup.target1.price.toFixed(0)}</span>
+            <span className="text-champagne">T2 {setup.target2.price.toFixed(0)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Row 5: Key decision metrics (compact) ── */}
+      <div className="mt-2 grid grid-cols-4 gap-1.5 text-[10px]">
+        <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
+          <p className="text-white/40">R:R</p>
+          <p className="font-mono text-emerald-200 font-medium">{rr.toFixed(1)}</p>
+        </div>
+        <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
+          <p className="text-white/40">Win%</p>
+          <p className="font-mono text-ivory font-medium">{setup.probability.toFixed(0)}%</p>
+        </div>
+        <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
+          <p className="text-white/40">Dist</p>
+          <p className="font-mono text-ivory font-medium">{distToEntry != null ? distToEntry.toFixed(1) : '--'}</p>
+        </div>
+        <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
+          <p className="text-white/40">Risk</p>
+          <p className="font-mono text-rose-200 font-medium">{riskPts.toFixed(1)}</p>
+        </div>
+      </div>
+
       {readOnly && (
-        <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-white/40">Read-only</p>
+        <p className="mt-1.5 text-[9px] uppercase tracking-[0.1em] text-white/35">Read-only</p>
       )}
     </button>
   )
