@@ -13,6 +13,7 @@ const HEAVY_ENDPOINT_TIMEOUT_MS = 25000
 const COACH_STREAM_TIMEOUT_MS = 15000
 const STALE_CACHE_TTL_MS = 5 * 60 * 1000
 const STALE_CACHEABLE_ENDPOINTS = new Set(['snapshot', 'contract-select'])
+const SNAPSHOT_DEGRADEABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504])
 
 interface StaleCacheEntry {
   payload: string
@@ -241,6 +242,20 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
   )
 }
 
+function shouldDegradeSnapshotStatus(status: number): boolean {
+  return SNAPSHOT_DEGRADEABLE_STATUS_CODES.has(status)
+}
+
+function isSnapshotRequest(request: NextRequest): boolean {
+  if (request.method !== 'GET') return false
+  try {
+    const { pathname } = new URL(request.url)
+    return pathname === '/api/spx/snapshot' || pathname.endsWith('/api/spx/snapshot')
+  } catch {
+    return false
+  }
+}
+
 function dedupeAuthHeaders(values: Array<string | undefined>): string[] {
   const seen = new Set<string>()
   const out: string[] = []
@@ -377,7 +392,7 @@ async function proxy(
           }
 
           // Retry against the next backend candidate if this upstream is unhealthy.
-          const isRetryableStatus = response.status >= 500
+          const isRetryableStatus = response.status >= 500 || response.status === 408 || response.status === 429
           if (isRetryableStatus) {
             break
           }
@@ -422,7 +437,7 @@ async function proxy(
     }
 
     if (lastResponse) {
-      if (lastResponse.status >= 500) {
+      if (lastResponse.status >= 500 || (request.method === 'GET' && endpoint === 'snapshot' && shouldDegradeSnapshotStatus(lastResponse.status))) {
         const stale = getStaleCache(staleCacheKey)
         if (stale) {
           return new NextResponse(stale.payload, {
@@ -437,7 +452,13 @@ async function proxy(
         }
 
         if (request.method === 'GET' && endpoint === 'snapshot') {
-          return degradedSnapshotResponse('SPX service unavailable (degraded fallback).', timeoutMs, lastUpstreamBase)
+          return degradedSnapshotResponse(
+            shouldDegradeSnapshotStatus(lastResponse.status)
+              ? `SPX snapshot unavailable (${lastResponse.status}, degraded fallback).`
+              : 'SPX service unavailable (degraded fallback).',
+            timeoutMs,
+            lastUpstreamBase,
+          )
         }
       }
 
@@ -497,6 +518,10 @@ async function proxy(
       },
     )
   } catch {
+    if (isSnapshotRequest(request)) {
+      return degradedSnapshotResponse('SPX snapshot request failed unexpectedly (degraded fallback).', SNAPSHOT_PROXY_TIMEOUT_MS)
+    }
+
     return NextResponse.json(
       {
         error: 'Proxy error',
