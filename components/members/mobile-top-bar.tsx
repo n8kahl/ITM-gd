@@ -8,8 +8,12 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { getMemberFallbackTitle, getMemberTabHref, isMemberTabActive, resolveMemberTabLabel } from '@/lib/member-navigation'
 
 function isTabRootPath(pathname: string, tabPath: string): boolean {
-  if (tabPath === '/members/academy/courses') {
-    return pathname === '/members/library' || pathname === '/members/academy' || pathname === '/members/academy/courses'
+  if (tabPath === '/members/academy-v3/modules') {
+    return (
+      pathname === '/members/library' ||
+      pathname === '/members/academy-v3' ||
+      pathname === '/members/academy-v3/modules'
+    )
   }
   return pathname === tabPath
 }

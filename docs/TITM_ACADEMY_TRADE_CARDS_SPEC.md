@@ -1,6 +1,9 @@
 # TITM Academy Trade Card Generation System
 ## Comprehensive Implementation Specification
 
+> Archive note (February 17, 2026): This spec references Academy V2 route paths in examples.  
+> For active academy integrations, use Academy V3 paths (`/members/academy-v3/*`, `/api/academy-v3/*`).
+
 **Document Status:** Development Specification (Codex Ready)
 **Target Stack:** Next.js 16, TypeScript (strict mode), Supabase, Satori + Resvg-js
 **Created:** February 2026
@@ -1505,4 +1508,3 @@ describe('Trade Card Generation', () => {
 **END OF SPECIFICATION**
 
 All code is production-ready, TypeScript strict-compliant, and follows the Next.js 16 + Supabase patterns established in the TITM codebase.
-

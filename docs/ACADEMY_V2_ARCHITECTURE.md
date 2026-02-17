@@ -6,6 +6,10 @@ Purpose: Academy V2 architecture reference for schema, APIs, UI composition, dat
 
 # TITM Academy V2 Architecture
 
+> Archive note (February 17, 2026): Academy V2 runtime routes/components are removed.  
+> Canonical member routes: `/members/academy-v3/*` (entry alias: `/members/library`).  
+> Canonical APIs: `/api/academy-v3/*`.
+
 ## 1. Scope
 
 This document describes the production Academy V2 architecture implemented in this repository:
@@ -527,4 +531,3 @@ Academy V2 content seed targets:
 - 9 published courses
 - 53 published lessons
 - all seeded lessons include valid `chunk_data` and `competency_keys`
-

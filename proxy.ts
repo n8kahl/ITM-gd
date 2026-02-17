@@ -85,7 +85,6 @@ const AUTH_PREFIXES = [
   '/api/admin',
   '/admin',
   '/api/members',
-  '/api/academy',
   '/api/social',
   '/members',
   '/join-discord',
@@ -110,7 +109,6 @@ function isAdminRoute(pathname: string): boolean {
 function isMembersAreaRoute(pathname: string): boolean {
   return pathname === '/members' || pathname.startsWith('/members/') ||
     pathname === '/api/members' || pathname.startsWith('/api/members/') ||
-    pathname === '/api/academy' || pathname.startsWith('/api/academy/') ||
     pathname === '/api/social' || pathname.startsWith('/api/social/')
 }
 
@@ -145,7 +143,7 @@ export async function proxy(request: NextRequest) {
   // Canonical route for the legacy members library namespace.
   if (pathname === '/members/library') {
     return addSecurityHeaders(
-      NextResponse.redirect(getAbsoluteUrl('/members/academy/courses', request), 308),
+      NextResponse.redirect(getAbsoluteUrl('/members/academy-v3/modules', request), 308),
       nonce,
     )
   }
@@ -163,7 +161,6 @@ export async function proxy(request: NextRequest) {
       '/members',
       '/admin',
       '/api/members',
-      '/api/academy',
       '/api/social',
       '/api/admin',
       '/join-discord',

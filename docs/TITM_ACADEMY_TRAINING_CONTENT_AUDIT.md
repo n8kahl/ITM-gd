@@ -1,5 +1,8 @@
 # TITM Training Academy — Training Content Audit & Upgrade Plan
 
+> Archive note (February 17, 2026): This document audits Academy V2-era implementation details.  
+> Active runtime now uses Academy V3 endpoints/routes (`/api/academy-v3/*`, `/members/academy-v3/*`).
+
 Date: 2026-02-11
 
 This audit covers:
@@ -119,4 +122,3 @@ These changes are in the repo and can be tried immediately:
 ### E) Restore progression gating (optional)
 - Lock lessons until the previous is completed or quiz is passed (configurable per path).
 - Keeps the academy from feeling like a loose content library.
-

@@ -64,19 +64,27 @@ export default function ProfilePage() {
         setAffiliateStats({ stats: affiliateData.data?.stats ?? null })
       }
 
-      // Fetch academy data from academy dashboard payload
+      // Derive academy profile metrics from v3 mastery data.
       try {
-        const academyRes = await fetch('/api/academy/dashboard')
+        const academyRes = await fetch('/api/academy-v3/mastery')
         if (academyRes.ok) {
           const academyJson = await academyRes.json()
-          const currentXp = academyJson?.data?.stats?.currentXp ?? 0
-          const rank = getRankForXP(currentXp)
-          const nextRank = getXPToNextRank(currentXp)
+          const masteryItems = Array.isArray(academyJson?.data?.items) ? academyJson.data.items : []
+          const averageMasteryScore = masteryItems.length > 0
+            ? masteryItems.reduce((sum: number, item: { currentScore?: number }) => (
+              sum + (typeof item.currentScore === 'number' ? item.currentScore : 0)
+            ), 0) / masteryItems.length
+            : 0
+          const inferredXp = Math.round(averageMasteryScore * 120)
+          const rank = getRankForXP(inferredXp)
+          const nextRank = getXPToNextRank(inferredXp)
           setAcademyData({
             rank,
-            xp: currentXp,
-            nextRankXp: currentXp + nextRank.xpNeeded,
-            achievementCount: academyJson?.data?.recentAchievements?.length || 0,
+            xp: inferredXp,
+            nextRankXp: inferredXp + nextRank.xpNeeded,
+            achievementCount: masteryItems.filter((item: { currentScore?: number }) => (
+              typeof item.currentScore === 'number' && item.currentScore >= 85
+            )).length,
           })
         }
       } catch {

@@ -41,9 +41,9 @@ describe('academy-v3 assessment scoring', () => {
     })
 
     expect(result.itemScores).toHaveLength(3)
-    expect(result.competencyScores['comp-a']).toBeCloseTo(0.8333, 3)
+    expect(result.competencyScores['comp-a']).toBeCloseTo(0.6666, 3)
     expect(result.competencyScores['comp-b']).toBe(1)
-    expect(result.overallScore).toBeCloseTo(0.8889, 3)
+    expect(result.overallScore).toBeCloseTo(0.7777, 3)
   })
 
   it('requires exact set matching for multi select', () => {

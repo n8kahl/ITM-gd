@@ -111,7 +111,8 @@ test.describe('academy resume resolver contract', () => {
     expect(target?.lessonId).toBe('lesson-b1')
     expect(target?.source).toBe('in_progress')
     expect(target?.courseSlug).toBe('beta')
-    expect(target?.resumeUrl).toBe('/members/academy/learn/lesson-b1')
+    expect(target?.resumeUrl).toBe('/members/academy-v3/modules?lesson=lesson-b1')
+    expect(target?.courseUrl).toBe('/members/academy-v3/modules?module=beta')
   })
 
   test('falls back to first unlocked incomplete lesson when no in-progress lesson exists', async () => {

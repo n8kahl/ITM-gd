@@ -1,4 +1,6 @@
-import { test, expect, type Route } from '@playwright/test'
+import { test, expect } from '@playwright/test'
+
+import { ACADEMY_V3_FIXTURES, setupAcademyV3Mocks } from './academy-v3-mocks'
 
 test.use({
   extraHTTPHeaders: {
@@ -6,112 +8,28 @@ test.use({
   },
 })
 
-test.describe('Academy resume UI integration', () => {
-  test('Continue page surfaces canonical resume target from /api/academy/resume', async ({ page }) => {
-    await page.route('**/api/academy/courses', async (route: Route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: {
-            courses: [],
-            paths: ['Options'],
-          },
-        }),
-      })
-    })
+test.describe('Academy v3 plan recommendations', () => {
+  test('loads academy-v3 plan as canonical continue surface', async ({ page }) => {
+    await setupAcademyV3Mocks(page)
 
-    await page.route('**/api/academy/resume', async (route: Route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: {
-            target: {
-              lessonId: 'resume-lesson',
-              lessonTitle: 'Gamma Traps in Fast Markets',
-              lessonNumber: 3,
-              totalLessons: 9,
-              courseProgressPercent: 44,
-              courseSlug: 'options-basics',
-              courseTitle: 'Options Basics',
-              resumeUrl: '/members/academy/learn/resume-lesson',
-            },
-          },
-        }),
-      })
-    })
+    await page.goto('/members/academy-v3')
 
-    await page.goto('/members/academy/continue')
-
-    await expect(page.getByText('Next Up')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Gamma Traps in Fast Markets' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Resume Next Lesson' })).toHaveAttribute(
-      'href',
-      '/members/academy/learn/resume-lesson'
-    )
+    await page.waitForURL('**/members/academy-v3')
+    await expect(page.getByRole('heading', { name: 'My Learning Plan' })).toBeVisible()
   })
 
-  test('Course detail continue CTA honors resumeLessonId from API payload', async ({ page }) => {
-    await page.route('**/api/academy/courses/options-basics', async (route: Route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: {
-            slug: 'options-basics',
-            title: 'Options Basics',
-            description: 'Learn options mechanics.',
-            longDescription: 'Learn options mechanics.',
-            thumbnailUrl: null,
-            difficulty: 'beginner',
-            path: 'Options',
-            estimatedMinutes: 55,
-            lessons: [
-              {
-                id: 'lesson-1',
-                title: 'Delta Basics',
-                order: 1,
-                durationMinutes: 12,
-                contentType: 'markdown',
-                isCompleted: false,
-                isLocked: false,
-              },
-              {
-                id: 'lesson-2',
-                title: 'Gamma Exposure',
-                order: 2,
-                durationMinutes: 14,
-                contentType: 'markdown',
-                isCompleted: false,
-                isLocked: true,
-              },
-              {
-                id: 'lesson-3',
-                title: 'Trade Management',
-                order: 3,
-                durationMinutes: 15,
-                contentType: 'markdown',
-                isCompleted: false,
-                isLocked: true,
-              },
-            ],
-            totalLessons: 3,
-            completedLessons: 0,
-            resumeLessonId: 'lesson-3',
-            objectives: [],
-            prerequisites: [],
-          },
-        }),
-      })
-    })
+  test('recommendation links point to v3 routes', async ({ page }) => {
+    await setupAcademyV3Mocks(page)
 
-    await page.goto('/members/academy/courses/options-basics')
+    await page.goto('/members/academy-v3')
 
-    const cta = page.getByRole('link', { name: 'Start Course' })
-    await expect(cta).toHaveAttribute('href', '/members/academy/learn/lesson-3')
+    await expect(page.getByRole('link', { name: 'Start review' })).toHaveAttribute(
+      'href',
+      '/members/academy-v3/review'
+    )
+    await expect(page.getByRole('link', { name: 'Open lesson' })).toHaveAttribute(
+      'href',
+      `/members/academy-v3/modules?lesson=${ACADEMY_V3_FIXTURES.lessonIds.executionOne}`
+    )
   })
 })

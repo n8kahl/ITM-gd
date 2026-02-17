@@ -35,7 +35,7 @@ const PRIMARY_TABS: NavTab[] = [
   { id: 'dashboard', tabId: 'dashboard', label: 'Dashboard', href: '/members', icon: LayoutDashboard },
   { id: 'journal', tabId: 'journal', label: 'Journal', href: '/members/journal', icon: BookOpen },
   { id: 'ai-coach', tabId: 'ai-coach', label: 'AI Coach', href: '/members/ai-coach', icon: Bot },
-  { id: 'library', tabId: 'library', label: 'Academy', href: '/members/academy/courses', icon: GraduationCap },
+  { id: 'library', tabId: 'library', label: 'Academy', href: '/members/academy-v3/modules', icon: GraduationCap },
 ]
 
 function isActivePath(pathname: string, tab: NavTab): boolean {

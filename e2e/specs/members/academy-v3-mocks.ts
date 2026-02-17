@@ -1,0 +1,282 @@
+import type { Page, Route } from '@playwright/test'
+
+const PROGRAM_ID = '00000000-0000-4000-8000-000000000001'
+const TRACK_ID = '00000000-0000-4000-8000-000000000010'
+
+const MODULE_A_ID = '00000000-0000-4000-8000-000000000101'
+const MODULE_B_ID = '00000000-0000-4000-8000-000000000102'
+
+const LESSON_A1_ID = '11111111-1111-4111-8111-111111111111'
+const LESSON_A2_ID = '11111111-1111-4111-8111-222222222222'
+const LESSON_B1_ID = '11111111-1111-4111-8111-333333333333'
+
+const COMP_A_ID = '22222222-2222-4222-8222-111111111111'
+const COMP_B_ID = '22222222-2222-4222-8222-222222222222'
+
+const QUEUE_A_ID = '33333333-3333-4333-8333-111111111111'
+const QUEUE_B_ID = '33333333-3333-4333-8333-222222222222'
+
+export const ACADEMY_V3_FIXTURES = {
+  moduleSlugs: {
+    setupRisk: 'setup-risk-framework',
+    execution: 'execution-and-management',
+  },
+  moduleTitles: {
+    setupRisk: 'Setup and Risk Framework',
+    execution: 'Execution and Management',
+  },
+  lessonIds: {
+    setupRiskOne: LESSON_A1_ID,
+    executionOne: LESSON_B1_ID,
+  },
+}
+
+function buildPlanPayload() {
+  return {
+    data: {
+      program: {
+        id: PROGRAM_ID,
+        code: 'FOUNDATIONS',
+        title: 'TITM Foundations Program',
+        description: 'Structured competency-based core training.',
+        isActive: true,
+        createdAt: '2026-02-10T12:00:00.000Z',
+        updatedAt: '2026-02-10T12:00:00.000Z',
+      },
+      tracks: [
+        {
+          id: TRACK_ID,
+          programId: PROGRAM_ID,
+          code: 'CORE',
+          title: 'Core Execution',
+          description: 'Risk-first execution and management.',
+          position: 0,
+          isActive: true,
+          modules: [
+            {
+              id: MODULE_A_ID,
+              trackId: TRACK_ID,
+              slug: ACADEMY_V3_FIXTURES.moduleSlugs.setupRisk,
+              code: 'M-SETUP-RISK',
+              title: ACADEMY_V3_FIXTURES.moduleTitles.setupRisk,
+              description: 'Build repeatable setup criteria and risk structure.',
+              learningOutcomes: ['Define checklist before entry', 'Size risk consistently'],
+              estimatedMinutes: 40,
+              position: 0,
+              isPublished: true,
+              lessons: [
+                {
+                  id: LESSON_A1_ID,
+                  moduleId: MODULE_A_ID,
+                  slug: 'define-risk-before-entry',
+                  title: 'Define Risk Before Entry',
+                  learningObjective: 'Map invalidation and stop before execution.',
+                  estimatedMinutes: 12,
+                  difficulty: 'beginner',
+                  prerequisiteLessonIds: [],
+                  position: 0,
+                  isPublished: true,
+                },
+                {
+                  id: LESSON_A2_ID,
+                  moduleId: MODULE_A_ID,
+                  slug: 'position-size-discipline',
+                  title: 'Position Size Discipline',
+                  learningObjective: 'Apply fixed-risk sizing process.',
+                  estimatedMinutes: 14,
+                  difficulty: 'beginner',
+                  prerequisiteLessonIds: [LESSON_A1_ID],
+                  position: 1,
+                  isPublished: true,
+                },
+              ],
+            },
+            {
+              id: MODULE_B_ID,
+              trackId: TRACK_ID,
+              slug: ACADEMY_V3_FIXTURES.moduleSlugs.execution,
+              code: 'M-EXEC-MGMT',
+              title: ACADEMY_V3_FIXTURES.moduleTitles.execution,
+              description: 'Improve in-trade decisions and exits.',
+              learningOutcomes: ['Manage winners systematically', 'Avoid emotional exits'],
+              estimatedMinutes: 35,
+              position: 1,
+              isPublished: true,
+              lessons: [
+                {
+                  id: LESSON_B1_ID,
+                  moduleId: MODULE_B_ID,
+                  slug: 'execution-drill-1',
+                  title: 'Execution Drill 1',
+                  learningObjective: 'Practice execution sequencing under pressure.',
+                  estimatedMinutes: 11,
+                  difficulty: 'intermediate',
+                  prerequisiteLessonIds: [LESSON_A2_ID],
+                  position: 0,
+                  isPublished: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  }
+}
+
+function buildModulePayload(slug: string) {
+  const plan = buildPlanPayload().data
+  const moduleRecord = plan.tracks.flatMap((track) => track.modules).find((moduleItem) => moduleItem.slug === slug)
+  if (!moduleRecord) return null
+  return { data: moduleRecord }
+}
+
+function buildMasteryPayload() {
+  return {
+    data: {
+      items: [
+        {
+          competencyId: COMP_A_ID,
+          competencyKey: 'risk_definition',
+          competencyTitle: 'Risk Definition',
+          currentScore: 78,
+          confidence: 0.72,
+          needsRemediation: false,
+          lastEvaluatedAt: '2026-02-14T15:00:00.000Z',
+        },
+        {
+          competencyId: COMP_B_ID,
+          competencyKey: 'execution_discipline',
+          competencyTitle: 'Execution Discipline',
+          currentScore: 62,
+          confidence: 0.61,
+          needsRemediation: true,
+          lastEvaluatedAt: '2026-02-14T15:00:00.000Z',
+        },
+      ],
+    },
+  }
+}
+
+function buildRecommendationsPayload() {
+  return {
+    data: {
+      items: [
+        {
+          type: 'review',
+          title: 'Clear your review queue',
+          reason: '2 review items are due now.',
+          actionLabel: 'Start review',
+          actionTarget: '/members/academy-v3/review',
+        },
+        {
+          type: 'lesson',
+          title: 'Execution Drill 1',
+          reason: 'Targets execution discipline improvement.',
+          actionLabel: 'Open lesson',
+          actionTarget: `/members/academy-v3/modules?lesson=${LESSON_B1_ID}`,
+        },
+      ],
+    },
+  }
+}
+
+function buildReviewItems(count: number) {
+  const baseItems = [
+    {
+      queueId: QUEUE_A_ID,
+      competencyId: COMP_A_ID,
+      prompt: { prompt: 'What must be defined before entry?' },
+      dueAt: '2026-02-16T14:00:00.000Z',
+      intervalDays: 2,
+      priorityWeight: 1.1,
+    },
+    {
+      queueId: QUEUE_B_ID,
+      competencyId: COMP_B_ID,
+      prompt: { prompt: 'Which behavior reduces execution drift?' },
+      dueAt: '2026-02-16T15:00:00.000Z',
+      intervalDays: 3,
+      priorityWeight: 1.3,
+    },
+  ]
+
+  return baseItems.slice(0, Math.max(0, Math.min(baseItems.length, count)))
+}
+
+async function fulfillJson(route: Route, body: unknown, status = 200) {
+  await route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function setupAcademyV3Mocks(page: Page, options?: { reviewItemCount?: number }) {
+  const reviewItemCount = options?.reviewItemCount ?? 2
+  let reviewItems = buildReviewItems(reviewItemCount)
+
+  await page.route('**/api/config/roles', async (route: Route) => {
+    await fulfillJson(route, {
+      'e2e-role-core': 'core',
+      'e2e-role-pro': 'pro',
+    })
+  })
+
+  await page.route('**/api/config/tabs', async (route: Route) => {
+    await fulfillJson(route, {
+      success: true,
+      data: [
+        { tab_id: 'dashboard', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 1, label: 'Dashboard', icon: 'layout-dashboard', path: '/members' },
+        { tab_id: 'journal', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 2, label: 'Journal', icon: 'book-open', path: '/members/journal' },
+        { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'Academy', icon: 'graduation-cap', path: '/members/academy-v3/modules' },
+      ],
+    })
+  })
+
+  await page.route('**/api/academy-v3/plan**', async (route: Route) => {
+    await fulfillJson(route, buildPlanPayload())
+  })
+
+  await page.route('**/api/academy-v3/modules/*', async (route: Route) => {
+    const slug = route.request().url().split('/').pop() || ''
+    const payload = buildModulePayload(decodeURIComponent(slug))
+    if (!payload) {
+      await fulfillJson(route, { error: { code: 'NOT_FOUND', message: 'Module not found' } }, 404)
+      return
+    }
+
+    await fulfillJson(route, payload)
+  })
+
+  await page.route('**/api/academy-v3/mastery**', async (route: Route) => {
+    await fulfillJson(route, buildMasteryPayload())
+  })
+
+  await page.route('**/api/academy-v3/recommendations**', async (route: Route) => {
+    await fulfillJson(route, buildRecommendationsPayload())
+  })
+
+  await page.route('**/api/academy-v3/review**', async (route: Route) => {
+    await fulfillJson(route, {
+      data: {
+        dueCount: reviewItems.length,
+        items: reviewItems,
+      },
+    })
+  })
+
+  await page.route('**/api/academy-v3/review/*/submit', async (route: Route) => {
+    const queueId = route.request().url().split('/').slice(-2)[0]
+    reviewItems = reviewItems.filter((item) => item.queueId !== queueId)
+
+    await fulfillJson(route, {
+      data: {
+        queueId,
+        isCorrect: true,
+        nextDueAt: '2026-02-18T16:00:00.000Z',
+        intervalDays: 2,
+      },
+    })
+  })
+}
