@@ -101,9 +101,10 @@ describe('spx/gexEngine', () => {
       maxExpirations: 2,
     });
 
-    expect(result.spx.expirationBreakdown['2026-03-20']).toBeDefined();
-    expect(result.spy.expirationBreakdown['2026-03-27']).toBeDefined();
-    expect(result.combined.expirationBreakdown['2026-03-20'].netGex).toBeGreaterThan(0);
+    // Per-expiry breakdown removed to cut redundant API calls; verify it defaults to empty.
+    expect(result.spx.expirationBreakdown).toEqual({});
+    expect(result.spy.expirationBreakdown).toEqual({});
+    expect(result.combined.expirationBreakdown).toEqual({});
     expect(result.combined.keyLevels.length).toBeGreaterThan(0);
 
     expect(mockCalculateGEXProfile).toHaveBeenCalledWith('SPX', expect.objectContaining({
@@ -112,6 +113,8 @@ describe('spx/gexEngine', () => {
     expect(mockCalculateGEXProfile).toHaveBeenCalledWith('SPY', expect.objectContaining({
       maxExpirations: 2,
     }));
+    // Only 2 calls (SPX aggregate + SPY aggregate), no per-expiry breakdown calls.
+    expect(mockCalculateGEXProfile).toHaveBeenCalledTimes(2);
     expect(mockCacheSet).toHaveBeenCalled();
   });
 });

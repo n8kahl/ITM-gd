@@ -137,10 +137,13 @@ function normalizeOptionsUnderlyingTicker(underlyingTicker: string): string {
   return normalized.startsWith('I:') ? normalized.slice(2) : normalized;
 }
 
+const SNAPSHOT_INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'VIX', 'RUT', 'DJX']);
+
 function toOptionsSnapshotUnderlyingTicker(underlyingTicker: string): string {
-  // Options snapshot endpoints expect the plain underlying symbol (e.g. SPX),
-  // not index-prefixed tickers like I:SPX.
-  return normalizeOptionsUnderlyingTicker(underlyingTicker);
+  const normalized = underlyingTicker.trim().toUpperCase();
+  const stripped = normalized.startsWith('I:') ? normalized.slice(2) : normalized;
+  // Options snapshot endpoints require the I: prefix for index underlyings.
+  return SNAPSHOT_INDEX_SYMBOLS.has(stripped) ? `I:${stripped}` : stripped;
 }
 
 
@@ -683,16 +686,16 @@ export async function getOptionsSnapshot(
 ): Promise<OptionsSnapshot[]> {
   try {
     const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
-    const encodedUnderlying = encodeURIComponent(snapshotUnderlyingTicker);
     const MAX_PAGES = 5;
     const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
       if (!results) return [];
       return Array.isArray(results) ? results : [results];
     };
 
+    // Massive.com API uses O: and I: prefixes as literal path segments, not URL-encoded.
     const url = optionTicker
-      ? `/v3/snapshot/options/${encodedUnderlying}/${encodeURIComponent(optionTicker)}`
-      : `/v3/snapshot/options/${encodedUnderlying}`;
+      ? `/v3/snapshot/options/${snapshotUnderlyingTicker}/${optionTicker}`
+      : `/v3/snapshot/options/${snapshotUnderlyingTicker}`;
 
     const response = await massiveClient.get<OptionsSnapshotResponse>(url, optionTicker ? undefined : {
       params: {
