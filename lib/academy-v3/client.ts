@@ -4,6 +4,7 @@ import {
   academyErrorResponseSchema,
   getAcademyPlanResponseSchema,
   getAcademyModuleResponseSchema,
+  getAcademyLessonResponseSchema,
   getReviewQueueResponseSchema,
   getMasteryResponseSchema,
   getRecommendationsResponseSchema,
@@ -56,6 +57,12 @@ export async function fetchAcademyPlan(programCode?: string) {
 export async function fetchAcademyModule(slug: string) {
   return fetchJson(`/api/academy-v3/modules/${encodeURIComponent(slug)}`, undefined, (value) =>
     getAcademyModuleResponseSchema.parse(value).data
+  )
+}
+
+export async function fetchAcademyLesson(lessonId: string) {
+  return fetchJson(`/api/academy-v3/lessons/${encodeURIComponent(lessonId)}`, undefined, (value) =>
+    getAcademyLessonResponseSchema.parse(value).data
   )
 }
 
