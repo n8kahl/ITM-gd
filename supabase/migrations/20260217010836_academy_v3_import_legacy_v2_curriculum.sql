@@ -60,7 +60,18 @@ SELECT
     'source', 'academy_v2',
     'source_course_id', oc.id,
     'legacy_tier_required', oc.tier_required,
-    'legacy_thumbnail_url', oc.thumbnail_url
+    'legacy_thumbnail_url', oc.thumbnail_url,
+    'coverImageUrl',
+      CASE
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%risk%' THEN '/academy/illustrations/risk-sizing.svg'
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%exit%' THEN '/academy/illustrations/exit-discipline.svg'
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%entry%' THEN '/academy/illustrations/entry-validation.svg'
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%market%' OR lower(oc.slug || ' ' || oc.title) LIKE '%alert%' THEN '/academy/illustrations/market-context.svg'
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%option%' OR lower(oc.slug || ' ' || oc.title) LIKE '%greek%' OR lower(oc.slug || ' ' || oc.title) LIKE '%leaps%' THEN '/academy/illustrations/options-basics.svg'
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%management%' THEN '/academy/illustrations/trade-management.svg'
+        WHEN lower(oc.slug || ' ' || oc.title) LIKE '%review%' OR lower(oc.slug || ' ' || oc.title) LIKE '%psychology%' THEN '/academy/illustrations/review-reflection.svg'
+        ELSE '/academy/illustrations/training-default.svg'
+      END
   )
 FROM ordered_courses oc
 ON CONFLICT (slug) DO UPDATE SET
@@ -111,7 +122,18 @@ SELECT
     'legacy_lesson_type', lo.lesson_type,
     'legacy_video_url', lo.video_url,
     'legacy_ai_tutor_context', lo.ai_tutor_context,
-    'legacy_key_takeaways', lo.key_takeaways
+    'legacy_key_takeaways', lo.key_takeaways,
+    'heroImageUrl',
+      CASE
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%risk%' THEN '/academy/illustrations/risk-sizing.svg'
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%exit%' THEN '/academy/illustrations/exit-discipline.svg'
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%entry%' THEN '/academy/illustrations/entry-validation.svg'
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%market%' OR lower(lo.slug || ' ' || lo.title) LIKE '%alert%' THEN '/academy/illustrations/market-context.svg'
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%option%' OR lower(lo.slug || ' ' || lo.title) LIKE '%greek%' OR lower(lo.slug || ' ' || lo.title) LIKE '%leaps%' THEN '/academy/illustrations/options-basics.svg'
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%management%' THEN '/academy/illustrations/trade-management.svg'
+        WHEN lower(lo.slug || ' ' || lo.title) LIKE '%review%' OR lower(lo.slug || ' ' || lo.title) LIKE '%psychology%' THEN '/academy/illustrations/review-reflection.svg'
+        ELSE '/academy/illustrations/training-default.svg'
+      END
   )
 FROM lesson_order lo
 JOIN courses c ON c.id = lo.course_id
@@ -190,7 +212,16 @@ SELECT
     'content', coalesce(chunk.elem->>'content', ''),
     'content_type', chunk.elem->>'content_type',
     'duration_minutes', chunk.elem->>'duration_minutes',
-    'quick_check', chunk.elem->'quick_check'
+    'quick_check', chunk.elem->'quick_check',
+    'imageUrl',
+      CASE coalesce((chunk.elem->>'order_index')::int, chunk.ord::int - 1)
+        WHEN 0 THEN '/academy/illustrations/market-context.svg'
+        WHEN 1 THEN '/academy/illustrations/training-default.svg'
+        WHEN 2 THEN '/academy/illustrations/trade-management.svg'
+        WHEN 3 THEN '/academy/illustrations/entry-validation.svg'
+        WHEN 4 THEN '/academy/illustrations/risk-sizing.svg'
+        ELSE '/academy/illustrations/review-reflection.svg'
+      END
   )
 FROM lessons l
 JOIN academy_lessons al ON al.id = l.id
@@ -220,7 +251,8 @@ SELECT
     'source', 'academy_v2_markdown',
     'title', l.title,
     'markdown', l.content_markdown,
-    'content', l.content_markdown
+    'content', l.content_markdown,
+    'imageUrl', '/academy/illustrations/training-default.svg'
   )
 FROM lessons l
 JOIN academy_lessons al ON al.id = l.id
