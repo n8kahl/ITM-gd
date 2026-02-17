@@ -32,7 +32,13 @@ const BLOCK_TYPE_CLASSNAMES: Record<string, string> = {
   reflection: 'text-zinc-200 border-white/20 bg-white/5',
 }
 
-export function AcademyLessonViewer({ lessonId }: { lessonId: string }) {
+export function AcademyLessonViewer({
+  lessonId,
+  resume = false,
+}: {
+  lessonId: string
+  resume?: boolean
+}) {
   const [lesson, setLesson] = useState<LessonData | null>(null)
   const [plan, setPlan] = useState<PlanData | null>(null)
   const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set())
@@ -59,11 +65,15 @@ export function AcademyLessonViewer({ lessonId }: { lessonId: string }) {
         const completedSet = new Set(attemptData.completedBlockIds)
         setCompletedBlockIds(completedSet)
 
-        const firstIncompleteIndex = lessonData.blocks.findIndex((block) => !completedSet.has(block.id))
-        if (firstIncompleteIndex >= 0) {
-          setCurrentBlockIndex(firstIncompleteIndex)
+        if (resume) {
+          const firstIncompleteIndex = lessonData.blocks.findIndex((block) => !completedSet.has(block.id))
+          if (firstIncompleteIndex >= 0) {
+            setCurrentBlockIndex(firstIncompleteIndex)
+          } else {
+            setCurrentBlockIndex(Math.max(lessonData.blocks.length - 1, 0))
+          }
         } else {
-          setCurrentBlockIndex(Math.max(lessonData.blocks.length - 1, 0))
+          setCurrentBlockIndex(0)
         }
 
         if (attemptData.status === 'not_started' || attemptData.status === 'failed') {
@@ -80,7 +90,7 @@ export function AcademyLessonViewer({ lessonId }: { lessonId: string }) {
     return () => {
       active = false
     }
-  }, [lessonId])
+  }, [lessonId, resume])
 
   const context = useMemo(() => {
     if (!plan || !lesson) return null

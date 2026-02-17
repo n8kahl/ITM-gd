@@ -18,6 +18,10 @@ type ProgressSummary = Awaited<ReturnType<typeof fetchAcademyProgressSummary>>
 type ResumeData = Awaited<ReturnType<typeof fetchAcademyResume>>
 type RecommendationData = Awaited<ReturnType<typeof fetchRecommendations>>
 
+function withResumeQuery(url: string): string {
+  return url.includes('?') ? `${url}&resume=1` : `${url}?resume=1`
+}
+
 function ProgressRing({ progressPercent }: { progressPercent: number }) {
   const clamped = Math.max(0, Math.min(100, progressPercent))
   const radius = 28
@@ -127,7 +131,7 @@ export function AcademyDashboard() {
                     Lesson {resume.lessonNumber} of {resume.totalLessons} · {resume.courseProgressPercent}% complete
                   </p>
                   <Link
-                    href={resume.resumeUrl}
+                    href={withResumeQuery(resume.resumeUrl)}
                     onClick={() => Analytics.trackAcademyAction('resume_lesson')}
                     className="inline-flex rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-500/20"
                   >
