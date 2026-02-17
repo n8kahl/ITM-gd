@@ -14,8 +14,8 @@ test.describe('Academy v3 module preselection', () => {
 
     await page.goto(`/members/academy-v3/modules?module=${ACADEMY_V3_FIXTURES.moduleSlugs.execution}`)
 
-    await expect(page.getByRole('heading', { name: 'Modules' })).toBeVisible()
-    await expect(page.getByText('Execution Drill 1')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Modules', exact: true })).toBeVisible()
+    await expect(page.getByTestId('academy-step-content').getByText('Execution Drill 1')).toBeVisible()
   })
 
   test('lesson query preselects the parent module for that lesson', async ({ page }) => {
@@ -24,6 +24,6 @@ test.describe('Academy v3 module preselection', () => {
     await page.goto(`/members/academy-v3/modules?lesson=${ACADEMY_V3_FIXTURES.lessonIds.executionOne}`)
 
     await page.waitForURL(`**/members/academy-v3/modules?lesson=${ACADEMY_V3_FIXTURES.lessonIds.executionOne}`)
-    await expect(page.getByText('Execution Drill 1')).toBeVisible()
+    await expect(page.getByTestId('academy-step-content').getByText('Execution Drill 1')).toBeVisible()
   })
 })
