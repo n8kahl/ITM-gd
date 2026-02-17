@@ -200,14 +200,46 @@ async function getNextLessonDisplayOrder(
   courseId: string
 ) {
   const { data: lastLesson } = await supabaseAdmin
-    .from('lessons')
-    .select('display_order')
-    .eq('course_id', courseId)
-    .order('display_order', { ascending: false })
+    .from('academy_lessons')
+    .select('position')
+    .eq('module_id', courseId)
+    .order('position', { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  return (lastLesson?.display_order || 0) + 1
+  return (lastLesson?.position || 0) + 1
+}
+
+async function upsertLessonContentBlock(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  input: {
+    lessonId: string
+    title: string
+    markdown: string
+    quizData: ReturnType<typeof buildLessonQuizData>
+    keyTakeaways: string[]
+  }
+) {
+  const { error } = await supabaseAdmin
+    .from('academy_lesson_blocks')
+    .upsert({
+      lesson_id: input.lessonId,
+      block_type: 'concept_explanation',
+      position: 1,
+      title: input.title,
+      content_json: {
+        source: 'admin_ai_generator',
+        title: input.title,
+        markdown: input.markdown,
+        content: input.markdown,
+        quiz: input.quizData,
+        key_takeaways: input.keyTakeaways,
+      },
+    }, { onConflict: 'lesson_id,position' })
+
+  if (error) {
+    throw new Error(`Failed to persist lesson content block: ${error.message}`)
+  }
 }
 
 async function createLesson(
@@ -222,19 +254,24 @@ async function createLesson(
   const baseSlug = slugify(input.title)
   const displayOrder = await getNextLessonDisplayOrder(supabaseAdmin, input.courseId)
   const slug = `${baseSlug}-${Date.now().toString(36)}`
+  const quizData = buildLessonQuizData(input.generated.quiz_questions)
 
   const { data: lesson, error } = await supabaseAdmin
-    .from('lessons')
+    .from('academy_lessons')
     .insert({
-      course_id: input.courseId,
+      module_id: input.courseId,
       title: input.generated.title || input.title,
       slug,
-      content_markdown: input.generated.content_markdown,
-      lesson_type: input.lessonType,
+      learning_objective: input.generated.key_takeaways[0] || input.generated.title || input.title,
       estimated_minutes: input.generated.estimated_minutes,
-      display_order: displayOrder,
-      key_takeaways: input.generated.key_takeaways,
-      quiz_data: buildLessonQuizData(input.generated.quiz_questions),
+      position: displayOrder,
+      is_published: true,
+      metadata: {
+        source: 'admin_ai_generator',
+        lesson_type: input.lessonType,
+        key_takeaways: input.generated.key_takeaways,
+        quiz_data: quizData,
+      },
     })
     .select('id, title, slug')
     .single()
@@ -242,6 +279,14 @@ async function createLesson(
   if (error || !lesson) {
     throw new Error('Failed to create lesson')
   }
+
+  await upsertLessonContentBlock(supabaseAdmin, {
+    lessonId: lesson.id,
+    title: input.generated.title || input.title,
+    markdown: input.generated.content_markdown,
+    quizData,
+    keyTakeaways: input.generated.key_takeaways,
+  })
 
   return lesson
 }
@@ -294,7 +339,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = getSupabaseAdmin()
 
     const { data: course, error: courseError } = await supabaseAdmin
-      .from('courses')
+      .from('academy_modules')
       .select('id, title')
       .eq('id', courseId)
       .maybeSingle()
@@ -348,7 +393,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * PUT /api/admin/academy/generate-lesson
- * Persists generated content to the lessons table.
+ * Persists generated content to academy v3 lesson/block tables.
  */
 export async function PUT(request: NextRequest) {
   try {

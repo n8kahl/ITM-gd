@@ -10,26 +10,25 @@ function getSupabaseAdmin() {
   )
 }
 
-function normalizeCourseRelation(
-  value: unknown
-): { title?: string; slug?: string } | null {
-  if (Array.isArray(value)) {
-    const first = value[0]
-    return first && typeof first === 'object'
-      ? (first as { title?: string; slug?: string })
-      : null
-  }
+function asObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
 
-  if (value && typeof value === 'object') {
-    return value as { title?: string; slug?: string }
+function parsePayloadXp(payload: unknown): number {
+  const parsed = asObject(payload)
+  const candidates = [parsed.xp_earned, parsed.xpEarned, parsed.xp, parsed.points]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate
+    }
   }
-
-  return null
+  return 0
 }
 
 /**
  * GET /api/admin/academy/analytics
- * Admin-only academy analytics using current production schema.
+ * Admin-only academy analytics for academy_v3 schema.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -47,55 +46,55 @@ export async function GET(request: NextRequest) {
     const supabaseAdmin = getSupabaseAdmin()
 
     const [
-      totalLearnersResult,
+      enrollmentsResult,
       lessonCompletionsResult,
       courseCompletionsResult,
       quizRowsResult,
-      courseProgressRowsResult,
       onboardingResult,
-      xpActivityRowsResult,
-      dailyActivityRowsResult,
+      eventsResult,
       activeProgressRowsResult,
+      lessonsWithModuleResult,
     ] = await Promise.all([
       supabaseAdmin
-        .from('user_learning_profiles')
-        .select('id', { count: 'exact', head: true }),
+        .from('academy_user_enrollments')
+        .select('user_id'),
       supabaseAdmin
-        .from('user_lesson_progress')
+        .from('academy_user_lesson_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'passed')
+        .gte('completed_at', sinceDate),
+      supabaseAdmin
+        .from('academy_user_enrollments')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'completed')
         .gte('completed_at', sinceDate),
       supabaseAdmin
-        .from('user_course_progress')
+        .from('academy_user_assessment_attempts')
+        .select('score')
+        .not('score', 'is', null),
+      supabaseAdmin
+        .from('academy_user_enrollments')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'completed')
-        .gte('completed_at', sinceDate),
+        .gte('started_at', sinceDate),
       supabaseAdmin
-        .from('user_lesson_progress')
-        .select('quiz_score, quiz_attempts')
-        .gt('quiz_attempts', 0),
+        .from('academy_learning_events')
+        .select('user_id, event_type, payload, occurred_at, module_id')
+        .gte('occurred_at', sinceDate)
+        .order('occurred_at', { ascending: true }),
       supabaseAdmin
-        .from('user_course_progress')
-        .select('course_id, courses(title, slug)'),
-      supabaseAdmin
-        .from('user_learning_profiles')
-        .select('id', { count: 'exact', head: true })
-        .gte('created_at', sinceDate),
-      supabaseAdmin
-        .from('user_learning_activity_log')
-        .select('activity_type, xp_earned')
-        .gte('created_at', sinceDate)
-        .gt('xp_earned', 0),
-      supabaseAdmin
-        .from('user_learning_activity_log')
-        .select('user_id, created_at')
-        .gte('created_at', sinceDate)
-        .order('created_at', { ascending: true }),
-      supabaseAdmin
-        .from('user_lesson_progress')
+        .from('academy_user_lesson_attempts')
         .select('user_id, started_at, completed_at')
         .or(`started_at.gte.${sinceDate},completed_at.gte.${sinceDate}`),
+      supabaseAdmin
+        .from('academy_lessons')
+        .select('id, module_id, academy_modules(title, slug)'),
     ])
+
+    const totalLearners = new Set(
+      (enrollmentsResult.data || [])
+        .map((row) => row.user_id)
+        .filter(Boolean)
+    ).size
 
     const activeLearners = new Set<string>()
     for (const row of activeProgressRowsResult.data || []) {
@@ -104,34 +103,56 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const quizRows = quizRowsResult.data || []
-    const scoredQuizRows = quizRows.filter((row) => typeof row.quiz_score === 'number')
-    const avgQuizScore = scoredQuizRows.length > 0
-      ? Math.round(scoredQuizRows.reduce((sum, row) => sum + (row.quiz_score || 0), 0) / scoredQuizRows.length)
+    const quizRows = (quizRowsResult.data || []).filter((row) => typeof row.score === 'number')
+    const avgQuizScore = quizRows.length > 0
+      ? Math.round((quizRows.reduce((sum, row) => sum + Number(row.score || 0), 0) / quizRows.length) * 100)
       : 0
-    const quizPassRate = scoredQuizRows.length > 0
-      ? Math.round((scoredQuizRows.filter((row) => (row.quiz_score || 0) >= 70).length / scoredQuizRows.length) * 100)
+    const quizPassRate = quizRows.length > 0
+      ? Math.round((quizRows.filter((row) => Number(row.score || 0) >= 0.7).length / quizRows.length) * 100)
       : 0
 
-    const courseCounts = new Map<string, { count: number; title: string; slug: string }>()
-    for (const row of courseProgressRowsResult.data || []) {
-      const courseId = row.course_id
-      if (!courseId) continue
+    const lessonToModule = new Map<string, { moduleId: string; title: string; slug: string }>()
+    for (const row of lessonsWithModuleResult.data || []) {
+      const relation = Array.isArray(row.academy_modules) ? row.academy_modules[0] : row.academy_modules
+      lessonToModule.set(row.id, {
+        moduleId: row.module_id || 'unknown',
+        title: relation?.title || 'Unknown',
+        slug: relation?.slug || '',
+      })
+    }
 
-      const existing = courseCounts.get(courseId)
-      const courseInfo = normalizeCourseRelation(row.courses)
+    const moduleEventCounts = new Map<string, { count: number; title: string; slug: string }>()
+    for (const row of eventsResult.data || []) {
+      const moduleId = row.module_id || ''
+      if (!moduleId) continue
+
+      const existing = moduleEventCounts.get(moduleId)
       if (existing) {
         existing.count += 1
       } else {
-        courseCounts.set(courseId, {
+        moduleEventCounts.set(moduleId, {
           count: 1,
-          title: courseInfo?.title || 'Unknown',
-          slug: courseInfo?.slug || '',
+          title: 'Unknown',
+          slug: '',
         })
       }
     }
 
-    const topCourses = Array.from(courseCounts.entries())
+    // Backfill module title/slug from lesson relation if event only carried lesson_id in payload.
+    for (const row of eventsResult.data || []) {
+      const payload = asObject(row.payload)
+      const lessonId = typeof payload.lesson_id === 'string' ? payload.lesson_id : null
+      if (!lessonId) continue
+      const lessonModule = lessonToModule.get(lessonId)
+      if (!lessonModule) continue
+      const existing = moduleEventCounts.get(lessonModule.moduleId)
+      if (existing) {
+        existing.title = lessonModule.title
+        existing.slug = lessonModule.slug
+      }
+    }
+
+    const topCourses = Array.from(moduleEventCounts.entries())
       .map(([course_id, info]) => ({
         course_id,
         title: info.title,
@@ -143,17 +164,17 @@ export async function GET(request: NextRequest) {
 
     const xpBySource = new Map<string, number>()
     let totalXpAwarded = 0
-    for (const row of xpActivityRowsResult.data || []) {
-      const source = row.activity_type || 'unknown'
-      const amount = row.xp_earned || 0
+    for (const row of eventsResult.data || []) {
+      const source = row.event_type || 'unknown'
+      const amount = parsePayloadXp(row.payload)
       xpBySource.set(source, (xpBySource.get(source) || 0) + amount)
       totalXpAwarded += amount
     }
 
     const dailyActivityMap = new Map<string, Set<string>>()
-    for (const row of dailyActivityRowsResult.data || []) {
-      if (!row.created_at || !row.user_id) continue
-      const date = row.created_at.slice(0, 10)
+    for (const row of eventsResult.data || []) {
+      if (!row.occurred_at || !row.user_id) continue
+      const date = row.occurred_at.slice(0, 10)
       const users = dailyActivityMap.get(date) || new Set<string>()
       users.add(row.user_id)
       dailyActivityMap.set(date, users)
@@ -171,14 +192,14 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         overview: {
-          total_learners: totalLearnersResult.count || 0,
+          total_learners: totalLearners,
           active_learners: activeLearners.size,
           lessons_completed: lessonCompletionsResult.count || 0,
           courses_completed: courseCompletionsResult.count || 0,
           new_onboardings: onboardingResult.count || 0,
         },
         quiz_stats: {
-          total_attempts: quizRows.reduce((sum, row) => sum + (row.quiz_attempts || 0), 0),
+          total_attempts: quizRows.length,
           avg_score: avgQuizScore,
           pass_rate: quizPassRate,
         },

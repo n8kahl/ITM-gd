@@ -19,13 +19,13 @@ test.describe('Academy v3 layout and routing', () => {
     await expect(page.getByRole('link', { name: 'Modules', exact: true })).toBeVisible()
   })
 
-  test('legacy library route redirects to v3 modules', async ({ page }) => {
+  test('legacy library route redirects to v3 plan', async ({ page }) => {
     await setupAcademyV3Mocks(page)
 
     await page.goto('/members/library')
 
-    await page.waitForURL('**/members/academy-v3/modules')
-    await expect(page.getByRole('heading', { name: 'Modules' })).toBeVisible()
+    await page.waitForURL('**/members/academy-v3')
+    await expect(page.getByRole('heading', { name: 'My Learning Plan' })).toBeVisible()
   })
 
   test('modules page presents a clear 3-step learning flow on desktop and mobile', async ({ page }) => {
@@ -64,7 +64,7 @@ test.describe('Academy v3 layout and routing', () => {
     }
 
     await page.getByRole('button', { name: new RegExp(ACADEMY_V3_FIXTURES.moduleTitles.execution) }).click()
-    await expect(page.getByText('Execution Drill 1')).toBeVisible()
+    await expect(page.getByTestId('academy-step-content').getByText('Execution Drill 1').first()).toBeVisible()
     await expect(page.getByText('Execution Sequence')).toBeVisible()
   })
 })

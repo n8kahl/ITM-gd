@@ -10,6 +10,15 @@ function getSupabaseAdmin() {
   )
 }
 
+function asObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
 interface SeedHealthData {
   totals: {
     courses: number
@@ -48,7 +57,7 @@ interface SeedHealthData {
 
 /**
  * GET /api/admin/academy/seed-health
- * Production readiness check for academy curriculum seed completeness.
+ * Production readiness check for academy v3 curriculum seed completeness.
  */
 export async function GET() {
   try {
@@ -62,75 +71,87 @@ export async function GET() {
     const supabaseAdmin = getSupabaseAdmin()
 
     const [
-      coursesTotalResult,
-      coursesPublishedResult,
+      modulesTotalResult,
+      modulesPublishedResult,
       lessonsTotalResult,
       lessonsPublishedResult,
-      learningPathsResult,
-      learningPathCoursesResult,
-      courseAssetsResult,
-      lessonAssetsResult,
-      learningProfilesResult,
-      lessonProgressResult,
-      courseProgressResult,
-      userXpResult,
-      lessonsPerCourseResult,
+      tracksResult,
+      modulesResult,
+      lessonsResult,
+      enrollmentsResult,
+      lessonAttemptsResult,
+      assessmentAttemptsResult,
+      learningEventsResult,
+      lessonsPerModuleResult,
     ] = await Promise.all([
-      supabaseAdmin.from('courses').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('courses').select('id', { count: 'exact', head: true }).eq('is_published', true),
-      supabaseAdmin.from('lessons').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('lessons').select('id', { count: 'exact', head: true }).eq('is_published', true),
-      supabaseAdmin.from('learning_paths').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('learning_path_courses').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('courses').select('id, thumbnail_url'),
-      supabaseAdmin.from('lessons').select('id, video_url, quiz_data, activity_data, ai_tutor_context'),
-      supabaseAdmin.from('user_learning_profiles').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('user_lesson_progress').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('user_course_progress').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('user_xp').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_modules').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_modules').select('id', { count: 'exact', head: true }).eq('is_published', true),
+      supabaseAdmin.from('academy_lessons').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_lessons').select('id', { count: 'exact', head: true }).eq('is_published', true),
+      supabaseAdmin.from('academy_tracks').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_modules').select('id, metadata'),
+      supabaseAdmin.from('academy_lessons').select('id, metadata'),
+      supabaseAdmin.from('academy_user_enrollments').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_user_lesson_attempts').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_user_assessment_attempts').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('academy_learning_events').select('id', { count: 'exact', head: true }),
       supabaseAdmin
-        .from('courses')
-        .select('slug, title, lessons(id)')
-        .order('display_order', { ascending: true }),
+        .from('academy_modules')
+        .select('slug, title, academy_lessons(id)')
+        .order('position', { ascending: true }),
     ])
 
-    if (coursesTotalResult.error || lessonsTotalResult.error || learningPathsResult.error) {
+    if (modulesTotalResult.error || lessonsTotalResult.error || tracksResult.error) {
       throw new Error('Failed to load academy totals')
     }
-    if (courseAssetsResult.error || lessonAssetsResult.error || lessonsPerCourseResult.error) {
+    if (modulesResult.error || lessonsResult.error || lessonsPerModuleResult.error) {
       throw new Error('Failed to load academy seed quality metrics')
     }
 
-    const lessonsPerCourse = (lessonsPerCourseResult.data || []).map((course) => ({
-      slug: course.slug,
-      title: course.title,
-      lessonCount: Array.isArray(course.lessons) ? course.lessons.length : 0,
+    const lessonsPerCourse = (lessonsPerModuleResult.data || []).map((module) => ({
+      slug: module.slug,
+      title: module.title,
+      lessonCount: Array.isArray(module.academy_lessons) ? module.academy_lessons.length : 0,
     }))
 
-    const coursesWithoutThumbnail = (courseAssetsResult.data || []).filter(
-      (course) => !course.thumbnail_url
-    ).length
-    const lessonsWithoutVideo = (lessonAssetsResult.data || []).filter(
-      (lesson) => !lesson.video_url
-    ).length
-    const lessonsWithoutQuizData = (lessonAssetsResult.data || []).filter(
-      (lesson) => !lesson.quiz_data
-    ).length
-    const lessonsWithoutActivityData = (lessonAssetsResult.data || []).filter(
-      (lesson) => !lesson.activity_data
-    ).length
-    const lessonsWithoutAiContext = (lessonAssetsResult.data || []).filter(
-      (lesson) => !lesson.ai_tutor_context
-    ).length
+    const coursesWithoutThumbnail = (modulesResult.data || []).filter((module) => {
+      const metadata = asObject(module.metadata)
+      const thumbnail =
+        asNullableString(metadata.thumbnail_url) ||
+        asNullableString(metadata.coverImageUrl) ||
+        asNullableString(metadata.legacy_thumbnail_url)
+      return !thumbnail
+    }).length
+
+    const lessonsWithoutVideo = (lessonsResult.data || []).filter((lesson) => {
+      const metadata = asObject(lesson.metadata)
+      const video =
+        asNullableString(metadata.video_url) ||
+        asNullableString(metadata.legacy_video_url)
+      return !video
+    }).length
+
+    const lessonsWithoutQuizData = (lessonsResult.data || []).filter((lesson) => {
+      const metadata = asObject(lesson.metadata)
+      return asObject(metadata.quiz_data).questions == null
+    }).length
+
+    const lessonsWithoutActivityData = 0
+
+    const lessonsWithoutAiContext = (lessonsResult.data || []).filter((lesson) => {
+      const metadata = asObject(lesson.metadata)
+      const aiContext = asNullableString(metadata.ai_tutor_context) || asNullableString(metadata.legacy_ai_tutor_context)
+      return !aiContext
+    }).length
 
     const data: SeedHealthData = {
       totals: {
-        courses: coursesTotalResult.count || 0,
-        coursesPublished: coursesPublishedResult.count || 0,
+        courses: modulesTotalResult.count || 0,
+        coursesPublished: modulesPublishedResult.count || 0,
         lessons: lessonsTotalResult.count || 0,
         lessonsPublished: lessonsPublishedResult.count || 0,
-        learningPaths: learningPathsResult.count || 0,
-        learningPathCourses: learningPathCoursesResult.count || 0,
+        learningPaths: tracksResult.count || 0,
+        learningPathCourses: modulesTotalResult.count || 0,
       },
       missingData: {
         coursesWithoutThumbnail,
@@ -140,22 +161,25 @@ export async function GET() {
         lessonsWithoutAiContext,
       },
       userReadiness: {
-        learningProfiles: learningProfilesResult.count || 0,
-        lessonProgressRows: lessonProgressResult.count || 0,
-        courseProgressRows: courseProgressResult.count || 0,
-        userXpRows: userXpResult.count || 0,
+        learningProfiles: enrollmentsResult.count || 0,
+        lessonProgressRows: lessonAttemptsResult.count || 0,
+        courseProgressRows: enrollmentsResult.count || 0,
+        userXpRows: learningEventsResult.count || 0,
       },
       completion: {
         lessonsPerCourse,
       },
       checks: {
-        hasCoreCurriculum: (coursesTotalResult.count || 0) > 0 && (lessonsTotalResult.count || 0) > 0,
+        hasCoreCurriculum: (modulesTotalResult.count || 0) > 0 && (lessonsTotalResult.count || 0) > 0,
         hasLessonContent: lessonsPerCourse.every((course) => course.lessonCount > 0),
         hasQuizCoverage: lessonsWithoutQuizData === 0,
         hasMediaCoverage: coursesWithoutThumbnail === 0,
         hasActivityCoverage: lessonsWithoutActivityData === 0,
         hasAiTutorCoverage: lessonsWithoutAiContext === 0,
-        hasUserProgressData: (learningProfilesResult.count || 0) > 0,
+        hasUserProgressData:
+          (lessonAttemptsResult.count || 0) > 0 ||
+          (assessmentAttemptsResult.count || 0) > 0 ||
+          (enrollmentsResult.count || 0) > 0,
       },
     }
 

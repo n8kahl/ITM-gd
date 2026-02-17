@@ -85,10 +85,10 @@ describe('design system compliance', () => {
     expect(shellContent).toContain('glass-card-heavy')
   })
 
-  it('academy sub-nav uses glass-card-heavy', () => {
+  it('academy sub-nav composes the shared FeatureSubNav', () => {
     const navContent = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-v3-sub-nav.tsx'))
     expect(navContent).not.toBeNull()
-    expect(navContent).toContain('glass-card-heavy')
+    expect(navContent).toContain('FeatureSubNav')
   })
 })
 

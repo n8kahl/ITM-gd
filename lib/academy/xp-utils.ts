@@ -1,5 +1,14 @@
 import { XP_THRESHOLDS, XP_AWARDS, type Rank } from '@/lib/types/academy'
 
+type AcademyLearningEventType =
+  | 'lesson_started'
+  | 'block_completed'
+  | 'assessment_submitted'
+  | 'assessment_passed'
+  | 'assessment_failed'
+  | 'remediation_assigned'
+  | 'review_completed'
+
 export function getRankForXP(totalXP: number): Rank {
   const ranks = Object.entries(XP_THRESHOLDS).reverse() as [Rank, number][]
   for (const [rank, threshold] of ranks) {
@@ -38,15 +47,42 @@ export async function awardXP(
   activityType: string,
   entityId?: string
 ) {
-  await supabase.rpc('increment_user_xp', { p_user_id: userId, p_xp: amount })
-  await supabase.rpc('update_streak', { p_user_id: userId })
-  await supabase.from('user_learning_activity_log').insert({
-    user_id: userId,
-    activity_type: activityType,
-    entity_id: entityId,
+  const mapEventType = (value: string): AcademyLearningEventType => {
+    switch (value) {
+      case 'lesson_view':
+        return 'lesson_started'
+      case 'lesson_complete':
+        return 'block_completed'
+      case 'quiz_attempt':
+        return 'assessment_submitted'
+      case 'quiz_pass':
+      case 'course_complete':
+      case 'track_complete':
+        return 'assessment_passed'
+      default:
+        return 'review_completed'
+    }
+  }
+
+  const payload: Record<string, unknown> = {
+    source: 'legacy_xp_utils',
+    legacy_activity_type: activityType,
     xp_earned: amount,
-    metadata: {},
+  }
+
+  if (entityId) {
+    payload.legacy_entity_id = entityId
+  }
+
+  const { error } = await supabase.from('academy_learning_events').insert({
+    user_id: userId,
+    event_type: mapEventType(activityType),
+    payload,
   })
+
+  if (error) {
+    throw new Error(error.message || 'Failed to insert academy learning event')
+  }
 }
 
 export { XP_AWARDS }

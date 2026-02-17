@@ -45,8 +45,11 @@ export function resolveMemberTabLabel(tab: Pick<MemberTabLike, 'tab_id' | 'label
 
 export function getMemberTabHref(tab: Pick<MemberTabLike, 'tab_id' | 'path'>): string {
   const rawHref = tab.path.startsWith('/') ? tab.path : `/members/${tab.path}`
-  if (tab.tab_id === 'library' && rawHref === '/members/library') {
-    return '/members/academy-v3/modules'
+  if (
+    tab.tab_id === 'library' &&
+    (rawHref === '/members/library' || rawHref === '/members/academy-v3/modules')
+  ) {
+    return '/members/academy-v3'
   }
   return rawHref
 }

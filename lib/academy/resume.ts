@@ -4,20 +4,19 @@ interface PublishedCourseRow {
   id: string
   slug: string
   title: string
-  display_order: number | null
+  position: number | null
 }
 
 interface LessonRow {
   id: string
-  course_id: string
+  module_id: string
   title: string
-  display_order: number | null
+  position: number | null
 }
 
 interface LessonProgressRow {
-  course_id: string
   lesson_id: string
-  status: 'not_started' | 'in_progress' | 'completed' | null
+  status: 'in_progress' | 'submitted' | 'passed' | 'failed' | null
   started_at: string | null
 }
 
@@ -49,7 +48,7 @@ type CourseWithLessons = {
 
 function sortCourses(courses: PublishedCourseRow[]): PublishedCourseRow[] {
   return [...courses].sort((a, b) => {
-    const orderDelta = (a.display_order ?? 0) - (b.display_order ?? 0)
+    const orderDelta = (a.position ?? 0) - (b.position ?? 0)
     if (orderDelta !== 0) return orderDelta
     return a.slug.localeCompare(b.slug)
   })
@@ -57,7 +56,7 @@ function sortCourses(courses: PublishedCourseRow[]): PublishedCourseRow[] {
 
 function sortLessons(lessons: LessonRow[]): LessonRow[] {
   return [...lessons].sort((a, b) => {
-    const orderDelta = (a.display_order ?? 0) - (b.display_order ?? 0)
+    const orderDelta = (a.position ?? 0) - (b.position ?? 0)
     if (orderDelta !== 0) return orderDelta
     return a.id.localeCompare(b.id)
   })
@@ -100,10 +99,10 @@ export async function resolveAcademyResumeTarget(
   const { userId, courseId } = options
 
   let coursesQuery = supabase
-    .from('courses')
-    .select('id, slug, title, display_order')
+    .from('academy_modules')
+    .select('id, slug, title, position')
     .eq('is_published', true)
-    .order('display_order', { ascending: true })
+    .order('position', { ascending: true })
 
   if (courseId) {
     coursesQuery = coursesQuery.eq('id', courseId)
@@ -118,19 +117,12 @@ export async function resolveAcademyResumeTarget(
   const courses = sortCourses((publishedCourses || []) as PublishedCourseRow[])
   const courseIds = courses.map((course) => course.id)
 
-  const [lessonsResult, progressResult] = await Promise.all([
-    supabase
-      .from('lessons')
-      .select('id, course_id, title, display_order')
-      .in('course_id', courseIds)
-      .order('course_id', { ascending: true })
-      .order('display_order', { ascending: true }),
-    supabase
-      .from('user_lesson_progress')
-      .select('course_id, lesson_id, status, started_at')
-      .eq('user_id', userId)
-      .in('course_id', courseIds),
-  ])
+  const lessonsResult = await supabase
+    .from('academy_lessons')
+    .select('id, module_id, title, position')
+    .in('module_id', courseIds)
+    .order('module_id', { ascending: true })
+    .order('position', { ascending: true })
 
   if (lessonsResult.error) {
     return null
@@ -141,6 +133,14 @@ export async function resolveAcademyResumeTarget(
     return null
   }
 
+  const lessonIds = lessons.map((lesson) => lesson.id)
+
+  const progressResult = await supabase
+    .from('academy_user_lesson_attempts')
+    .select('lesson_id, status, started_at')
+    .eq('user_id', userId)
+    .in('lesson_id', lessonIds)
+
   const progressRows: LessonProgressRow[] = progressResult.error
     ? []
     : ((progressResult.data || []) as LessonProgressRow[])
@@ -150,9 +150,9 @@ export async function resolveAcademyResumeTarget(
 
   for (const lesson of lessons) {
     lessonById.set(lesson.id, lesson)
-    const scoped = lessonsByCourseId.get(lesson.course_id) || []
+    const scoped = lessonsByCourseId.get(lesson.module_id) || []
     scoped.push(lesson)
-    lessonsByCourseId.set(lesson.course_id, scoped)
+    lessonsByCourseId.set(lesson.module_id, scoped)
   }
 
   const progressByLessonId = new Map<string, LessonProgressRow>()
@@ -162,10 +162,12 @@ export async function resolveAcademyResumeTarget(
 
   const completedLessonsByCourseId = new Map<string, number>()
   for (const row of progressRows) {
-    if (row.status !== 'completed') continue
+    if (row.status !== 'passed') continue
+    const lesson = lessonById.get(row.lesson_id)
+    if (!lesson) continue
     completedLessonsByCourseId.set(
-      row.course_id,
-      (completedLessonsByCourseId.get(row.course_id) || 0) + 1
+      lesson.module_id,
+      (completedLessonsByCourseId.get(lesson.module_id) || 0) + 1
     )
   }
 
@@ -184,7 +186,10 @@ export async function resolveAcademyResumeTarget(
   }
 
   const latestInProgress = progressRows
-    .filter((row) => row.status === 'in_progress' && lessonById.has(row.lesson_id))
+    .filter((row) => {
+      if (!lessonById.has(row.lesson_id)) return false
+      return row.status === 'in_progress' || row.status === 'submitted'
+    })
     .sort((a, b) => {
       const aStartedAt = a.started_at ? Date.parse(a.started_at) : 0
       const bStartedAt = b.started_at ? Date.parse(b.started_at) : 0
@@ -193,7 +198,9 @@ export async function resolveAcademyResumeTarget(
 
   if (latestInProgress) {
     const lesson = lessonById.get(latestInProgress.lesson_id)
-    const scopedCourse = scopedCourses.find((entry) => entry.course.id === latestInProgress.course_id)
+    const scopedCourse = lesson
+      ? scopedCourses.find((entry) => entry.course.id === lesson.module_id)
+      : null
     if (lesson && scopedCourse) {
       return buildResumeTarget(
         scopedCourse,
@@ -208,12 +215,12 @@ export async function resolveAcademyResumeTarget(
     for (let index = 0; index < scopedCourse.lessons.length; index += 1) {
       const lesson = scopedCourse.lessons[index]
       const currentStatus = progressByLessonId.get(lesson.id)?.status || 'not_started'
-      const isCompleted = currentStatus === 'completed'
+      const isCompleted = currentStatus === 'passed'
       const previousLesson = index > 0 ? scopedCourse.lessons[index - 1] : null
       const previousStatus = previousLesson
         ? progressByLessonId.get(previousLesson.id)?.status || 'not_started'
-        : 'completed'
-      const previousCompleted = previousStatus === 'completed'
+        : 'passed'
+      const previousCompleted = previousStatus === 'passed'
       const isUnlocked = isCompleted || previousCompleted
 
       if (!isCompleted && isUnlocked) {

@@ -299,7 +299,7 @@ export async function setupAcademyV3Mocks(page: Page, options?: { reviewItemCoun
       data: [
         { tab_id: 'dashboard', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 1, label: 'Dashboard', icon: 'layout-dashboard', path: '/members' },
         { tab_id: 'journal', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 2, label: 'Journal', icon: 'book-open', path: '/members/journal' },
-        { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'Academy', icon: 'graduation-cap', path: '/members/academy-v3/modules' },
+        { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'Academy', icon: 'graduation-cap', path: '/members/academy-v3' },
       ],
     })
   })

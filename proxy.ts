@@ -143,7 +143,7 @@ export async function proxy(request: NextRequest) {
   // Canonical route for the legacy members library namespace.
   if (pathname === '/members/library') {
     return addSecurityHeaders(
-      NextResponse.redirect(getAbsoluteUrl('/members/academy-v3/modules', request), 308),
+      NextResponse.redirect(getAbsoluteUrl('/members/academy-v3', request), 308),
       nonce,
     )
   }

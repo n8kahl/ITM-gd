@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { Analytics } from '@/lib/analytics'
 import {
   getMemberTabHref,
   getMemberTabIcon,
@@ -35,7 +36,7 @@ const PRIMARY_TABS: NavTab[] = [
   { id: 'dashboard', tabId: 'dashboard', label: 'Dashboard', href: '/members', icon: LayoutDashboard },
   { id: 'journal', tabId: 'journal', label: 'Journal', href: '/members/journal', icon: BookOpen },
   { id: 'ai-coach', tabId: 'ai-coach', label: 'AI Coach', href: '/members/ai-coach', icon: Bot },
-  { id: 'library', tabId: 'library', label: 'Academy', href: '/members/academy-v3/modules', icon: GraduationCap },
+  { id: 'library', tabId: 'library', label: 'Academy', href: '/members/academy-v3', icon: GraduationCap },
 ]
 
 function isActivePath(pathname: string, tab: NavTab): boolean {
@@ -102,6 +103,7 @@ export function MemberBottomNav() {
                 href={tab.href}
                 onClick={() => {
                   triggerHaptic()
+                  Analytics.trackMemberNavItem(tab.label)
                   setMoreOpenPath(null)
                 }}
                 className="relative flex-1 max-w-[84px] flex flex-col items-center justify-center py-1.5"
@@ -198,6 +200,7 @@ export function MemberBottomNav() {
                           href={item.href}
                           onClick={() => {
                             triggerHaptic()
+                            Analytics.trackMemberNavItem(item.label)
                             setMoreOpenPath(null)
                           }}
                           className={cn(

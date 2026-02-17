@@ -269,10 +269,10 @@ export async function GET(request: NextRequest) {
         .eq('status', 'pending'),
       startIso
         ? supabaseAdmin
-            .from('user_lesson_progress')
+            .from('academy_user_lesson_attempts')
             .select('user_id, started_at, completed_at')
             .or(`started_at.gte.${startIso},completed_at.gte.${startIso}`)
-        : supabaseAdmin.from('user_lesson_progress').select('user_id'),
+        : supabaseAdmin.from('academy_user_lesson_attempts').select('user_id'),
       aiCoachSessionsQuery,
       supabaseAdmin.from('pricing_tiers').select('id, name, monthly_price'),
       supabaseAdmin.schema('auth').from('users').select('id', { count: 'exact', head: true }),
@@ -306,7 +306,7 @@ export async function GET(request: NextRequest) {
     warnIfError('total_contacts_count', totalContactsCountResult)
     warnIfError('subscribed_count', subscribedCountResult)
     warnIfError('cohort_applications', pendingApplicationsResult)
-    warnIfError('user_lesson_progress', activeLearnersResult)
+    warnIfError('academy_user_lesson_attempts', activeLearnersResult)
     warnIfError('ai_coach_sessions', aiCoachSessionsResult)
     warnIfError('pricing_tiers', pricingTiersResult)
     warnIfError('auth_users_total', manualTotalMembersResult)
