@@ -85,8 +85,8 @@ function buildResumeTarget(
     courseId: scopedCourse.course.id,
     courseSlug: scopedCourse.course.slug,
     courseTitle: scopedCourse.course.title,
-    resumeUrl: `/members/academy-v3/modules?lesson=${encodeURIComponent(lesson.id)}`,
-    courseUrl: `/members/academy-v3/modules?module=${encodeURIComponent(scopedCourse.course.slug)}`,
+    resumeUrl: `/members/academy/lessons/${encodeURIComponent(lesson.id)}`,
+    courseUrl: `/members/academy/modules/${encodeURIComponent(scopedCourse.course.slug)}`,
     source,
     source_reason: sourceReason,
   }

@@ -38,7 +38,7 @@ export class AcademyRecommendationService {
         title: 'Clear your review queue',
         reason: `${dueReviewItems.length} review item${dueReviewItems.length === 1 ? '' : 's'} are due now.`,
         actionLabel: 'Start review',
-        actionTarget: '/members/academy-v3/review',
+        actionTarget: '/members/academy/review',
       })
     }
 
@@ -63,7 +63,7 @@ export class AcademyRecommendationService {
         title: lesson.lessonTitle,
         reason: `Targets ${competencyLabel} improvement.`,
         actionLabel: 'Open lesson',
-        actionTarget: `/members/academy-v3/modules?lesson=${lesson.lessonId}`,
+        actionTarget: `/members/academy/lessons/${lesson.lessonId}`,
       })
     }
 

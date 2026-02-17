@@ -39,12 +39,12 @@ async function stabilizePage(page: Page): Promise<void> {
 async function gotoAcademyModules(page: Page): Promise<void> {
   await page.context().setExtraHTTPHeaders(BYPASS_HEADERS)
   await setupAcademyV3Mocks(page)
-  await page.goto(`/members/academy-v3/modules?module=${ACADEMY_V3_FIXTURES.moduleSlugs.execution}`, {
+  await page.goto('/members/academy/modules', {
     waitUntil: 'domcontentloaded',
   })
   await page.waitForLoadState('networkidle')
   await expect(page.getByRole('heading', { name: 'Modules', exact: true })).toBeVisible()
-  await expect(page.getByTestId('academy-step-content').getByText('Execution Drill 1')).toBeVisible()
+  await expect(page.getByText(ACADEMY_V3_FIXTURES.moduleTitles.execution)).toBeVisible()
   await stabilizePage(page)
 }
 
@@ -52,7 +52,7 @@ test.describe('Academy visual regression', () => {
   test.describe('desktop', () => {
     test.use({ viewport: { width: 1440, height: 900 } })
 
-    test('modules 3-step flow baseline', async ({ page }) => {
+    test('modules catalog baseline', async ({ page }) => {
       await gotoAcademyModules(page)
 
       await expect(page).toHaveScreenshot('academy-modules-desktop.png', {
@@ -65,7 +65,7 @@ test.describe('Academy visual regression', () => {
   test.describe('mobile', () => {
     test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-    test('modules 3-step flow baseline', async ({ page }) => {
+    test('modules catalog baseline', async ({ page }) => {
       await gotoAcademyModules(page)
 
       await expect(page).toHaveScreenshot('academy-modules-mobile.png', {

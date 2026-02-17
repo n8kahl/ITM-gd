@@ -8,13 +8,13 @@ test.use({
   },
 })
 
-test.describe('Academy v3 review queue', () => {
+test.describe('Academy review queue', () => {
   test('shows due items and accepts review submissions', async ({ page }) => {
     await setupAcademyV3Mocks(page, { reviewItemCount: 2 })
 
-    await page.goto('/members/academy-v3/review')
+    await page.goto('/members/academy/review')
 
-    await expect(page.getByRole('heading', { name: 'Review' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Review Queue' })).toBeVisible()
     await expect(page.getByText('2 due items')).toBeVisible()
 
     await page.getByPlaceholder('Type your answer...').first().fill('Define risk and invalidation first.')
@@ -27,7 +27,7 @@ test.describe('Academy v3 review queue', () => {
   test('shows queue-clear state when no items are due', async ({ page }) => {
     await setupAcademyV3Mocks(page, { reviewItemCount: 0 })
 
-    await page.goto('/members/academy-v3/review')
+    await page.goto('/members/academy/review')
 
     await expect(page.getByText('Queue clear. You are caught up for now.')).toBeVisible()
     await expect(page.getByText('No review items due.')).toBeVisible()

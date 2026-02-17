@@ -1,5 +1,5 @@
-import { ProgressOverview } from '@/components/academy-v3/progress-overview'
+import { permanentRedirect } from 'next/navigation'
 
 export default function AcademyV3ProgressPage() {
-  return <ProgressOverview />
+  permanentRedirect('/members/academy/progress')
 }

@@ -144,6 +144,76 @@ export const getRecommendationsResponseSchema = z.object({
   }),
 })
 
+export const academyResumeTargetSchema = z.object({
+  lessonId: z.string().uuid(),
+  lessonTitle: z.string().min(1),
+  lessonNumber: z.number().int().positive(),
+  totalLessons: z.number().int().positive(),
+  completedLessons: z.number().int().nonnegative(),
+  courseProgressPercent: z.number().min(0).max(100),
+  courseId: z.string().uuid(),
+  courseSlug: z.string().min(1),
+  courseTitle: z.string().min(1),
+  resumeUrl: z.string().min(1),
+  courseUrl: z.string().min(1),
+  source: z.enum(['in_progress', 'next_unlocked']),
+  source_reason: z.enum(['last_in_progress', 'next_unlocked', 'first_lesson']),
+})
+
+export const getAcademyResumeResponseSchema = z.object({
+  data: academyResumeTargetSchema.nullable(),
+})
+
+export const lessonAttemptStateSchema = z.object({
+  lessonId: z.string().uuid(),
+  status: z.enum(['not_started', 'in_progress', 'submitted', 'passed', 'failed']),
+  progressPercent: z.number().min(0).max(100),
+  completedBlockIds: z.array(z.string().uuid()),
+})
+
+export const getAcademyModuleProgressResponseSchema = z.object({
+  data: z.object({
+    moduleId: z.string().uuid(),
+    moduleSlug: z.string().min(1),
+    lessons: z.array(lessonAttemptStateSchema),
+  }),
+})
+
+export const getAcademyLessonAttemptResponseSchema = z.object({
+  data: lessonAttemptStateSchema,
+})
+
+export const moduleProgressSummaryItemSchema = z.object({
+  moduleId: z.string().uuid(),
+  moduleSlug: z.string().min(1),
+  moduleTitle: z.string().min(1),
+  trackId: z.string().uuid(),
+  totalLessons: z.number().int().nonnegative(),
+  completedLessons: z.number().int().nonnegative(),
+  inProgressLessons: z.number().int().nonnegative(),
+  progressPercent: z.number().min(0).max(100),
+})
+
+export const trackProgressSummaryItemSchema = z.object({
+  trackId: z.string().uuid(),
+  trackTitle: z.string().min(1),
+  totalLessons: z.number().int().nonnegative(),
+  completedLessons: z.number().int().nonnegative(),
+  inProgressLessons: z.number().int().nonnegative(),
+  progressPercent: z.number().min(0).max(100),
+})
+
+export const getAcademyProgressSummaryResponseSchema = z.object({
+  data: z.object({
+    totalLessons: z.number().int().nonnegative(),
+    completedLessons: z.number().int().nonnegative(),
+    inProgressLessons: z.number().int().nonnegative(),
+    progressPercent: z.number().min(0).max(100),
+    tracks: z.array(trackProgressSummaryItemSchema),
+    modules: z.array(moduleProgressSummaryItemSchema),
+  }),
+})
+
 export type ApiErrorResponse = z.infer<typeof academyErrorResponseSchema>
 export type GetAcademyPlanResponse = z.infer<typeof getAcademyPlanResponseSchema>
 export type GetAcademyModuleParams = z.infer<typeof getAcademyModuleParamsSchema>
@@ -163,3 +233,11 @@ export type SubmitReviewRequest = z.infer<typeof submitReviewRequestSchema>
 export type SubmitReviewResponse = z.infer<typeof submitReviewResponseSchema>
 export type GetMasteryResponse = z.infer<typeof getMasteryResponseSchema>
 export type GetRecommendationsResponse = z.infer<typeof getRecommendationsResponseSchema>
+export type AcademyResumeTarget = z.infer<typeof academyResumeTargetSchema>
+export type GetAcademyResumeResponse = z.infer<typeof getAcademyResumeResponseSchema>
+export type LessonAttemptState = z.infer<typeof lessonAttemptStateSchema>
+export type GetAcademyModuleProgressResponse = z.infer<typeof getAcademyModuleProgressResponseSchema>
+export type GetAcademyLessonAttemptResponse = z.infer<typeof getAcademyLessonAttemptResponseSchema>
+export type ModuleProgressSummaryItem = z.infer<typeof moduleProgressSummaryItemSchema>
+export type TrackProgressSummaryItem = z.infer<typeof trackProgressSummaryItemSchema>
+export type GetAcademyProgressSummaryResponse = z.infer<typeof getAcademyProgressSummaryResponseSchema>

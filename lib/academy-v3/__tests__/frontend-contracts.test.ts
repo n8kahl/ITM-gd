@@ -1,25 +1,17 @@
 /**
- * Academy V3 Frontend Contract Tests
+ * Academy Frontend Contract Tests
  *
- * Validates that frontend components follow production quality standards:
- * - All components use glass-card-heavy (not hardcoded bg-[#111318])
- * - Error boundaries exist at every route level
- * - Loading states use skeleton-loader pattern
- * - No forbidden D4AF37 gold color
- * - Design system CSS variables used consistently
- *
- * PASSING CRITERIA:
- * - 0 occurrences of bg-[#111318] in academy components
- * - error.tsx exists at root + 3 sub-routes (4 total)
- * - loading.tsx exists at root + 3 sub-routes (4 total)
- * - 0 occurrences of #D4AF37 anywhere
+ * Validates production quality guardrails for the academy redesign:
+ * - Components use design system primitives
+ * - Error boundaries and loading states exist across academy routes
+ * - Forbidden legacy gold color does not appear
  */
 import { describe, expect, it } from 'vitest'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-const COMPONENTS_DIR = path.resolve(process.cwd(), 'components/academy-v3')
-const ROUTES_DIR = path.resolve(process.cwd(), 'app/members/academy-v3')
+const COMPONENTS_DIR = path.resolve(process.cwd(), 'components/academy')
+const ROUTES_DIR = path.resolve(process.cwd(), 'app/members/academy')
 
 function readFileIfExists(filePath: string): string | null {
   try {
@@ -63,10 +55,7 @@ describe('design system compliance', () => {
   })
 
   it('no forbidden gold color #D4AF37 in academy files', () => {
-    const allFiles = [
-      ...getAllTsxFiles(COMPONENTS_DIR),
-      ...getAllTsxFiles(ROUTES_DIR),
-    ]
+    const allFiles = [...getAllTsxFiles(COMPONENTS_DIR), ...getAllTsxFiles(ROUTES_DIR)]
     const violations: string[] = []
 
     for (const file of allFiles) {
@@ -80,13 +69,13 @@ describe('design system compliance', () => {
   })
 
   it('academy shell uses glass-card-heavy', () => {
-    const shellContent = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-v3-shell.tsx'))
+    const shellContent = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-shell.tsx'))
     expect(shellContent).not.toBeNull()
     expect(shellContent).toContain('glass-card-heavy')
   })
 
   it('academy sub-nav composes the shared FeatureSubNav', () => {
-    const navContent = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-v3-sub-nav.tsx'))
+    const navContent = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-sub-nav.tsx'))
     expect(navContent).not.toBeNull()
     expect(navContent).toContain('FeatureSubNav')
   })
@@ -96,6 +85,8 @@ describe('error boundary coverage', () => {
   const ERROR_BOUNDARY_PATHS = [
     path.join(ROUTES_DIR, 'error.tsx'),
     path.join(ROUTES_DIR, 'modules/error.tsx'),
+    path.join(ROUTES_DIR, 'modules/[slug]/error.tsx'),
+    path.join(ROUTES_DIR, 'lessons/[id]/error.tsx'),
     path.join(ROUTES_DIR, 'review/error.tsx'),
     path.join(ROUTES_DIR, 'progress/error.tsx'),
   ]
@@ -128,6 +119,8 @@ describe('loading state coverage', () => {
   const LOADING_PATHS = [
     path.join(ROUTES_DIR, 'loading.tsx'),
     path.join(ROUTES_DIR, 'modules/loading.tsx'),
+    path.join(ROUTES_DIR, 'modules/[slug]/loading.tsx'),
+    path.join(ROUTES_DIR, 'lessons/[id]/loading.tsx'),
     path.join(ROUTES_DIR, 'review/loading.tsx'),
     path.join(ROUTES_DIR, 'progress/loading.tsx'),
   ]
@@ -152,32 +145,36 @@ describe('loading state coverage', () => {
 })
 
 describe('component quality checks', () => {
-  it('all academy components are client components', () => {
+  it('interactive academy components are client components', () => {
     const components = [
-      'plan-dashboard.tsx',
-      'modules-catalog.tsx',
-      'progress-overview.tsx',
-      'review-workbench.tsx',
-      'academy-v3-sub-nav.tsx',
+      'academy-dashboard.tsx',
+      'academy-module-catalog.tsx',
+      'academy-module-detail.tsx',
+      'academy-lesson-viewer.tsx',
+      'academy-review-queue.tsx',
+      'academy-progress-overview.tsx',
+      'academy-sub-nav.tsx',
+      'academy-module-card.tsx',
+      'academy-lesson-row.tsx',
     ]
 
-    for (const comp of components) {
-      const content = readFileIfExists(path.join(COMPONENTS_DIR, comp))
+    for (const component of components) {
+      const content = readFileIfExists(path.join(COMPONENTS_DIR, component))
       expect(content).not.toBeNull()
       expect(content).toContain("'use client'")
     }
   })
 
-  it('modules-catalog uses Image component from next/image', () => {
-    const content = readFileIfExists(path.join(COMPONENTS_DIR, 'modules-catalog.tsx'))
-    expect(content).toContain("import Image from 'next/image'")
+  it('lesson viewer uses AcademyMarkdown rendering', () => {
+    const content = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-lesson-viewer.tsx'))
+    expect(content).toContain('AcademyMarkdown')
   })
 
-  it('components use Analytics tracking', () => {
-    const components = ['plan-dashboard.tsx', 'modules-catalog.tsx', 'review-workbench.tsx']
+  it('dashboard and progress components use Analytics tracking', () => {
+    const components = ['academy-dashboard.tsx', 'academy-review-queue.tsx', 'academy-progress-overview.tsx']
 
-    for (const comp of components) {
-      const content = readFileIfExists(path.join(COMPONENTS_DIR, comp))
+    for (const component of components) {
+      const content = readFileIfExists(path.join(COMPONENTS_DIR, component))
       expect(content).toContain('Analytics.trackAcademyAction')
     }
   })

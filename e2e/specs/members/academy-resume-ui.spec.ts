@@ -8,28 +8,28 @@ test.use({
   },
 })
 
-test.describe('Academy v3 plan recommendations', () => {
-  test('loads academy-v3 plan as canonical continue surface', async ({ page }) => {
+test.describe('Academy plan recommendations', () => {
+  test('loads academy dashboard as canonical continue surface', async ({ page }) => {
     await setupAcademyV3Mocks(page)
 
-    await page.goto('/members/academy-v3')
+    await page.goto('/members/academy')
 
-    await page.waitForURL('**/members/academy-v3')
-    await expect(page.getByRole('heading', { name: 'My Learning Plan' })).toBeVisible()
+    await page.waitForURL('**/members/academy')
+    await expect(page.getByRole('heading', { name: 'Your Learning Plan' })).toBeVisible()
   })
 
-  test('recommendation links point to v3 routes', async ({ page }) => {
+  test('recommendation links point to academy routes', async ({ page }) => {
     await setupAcademyV3Mocks(page)
 
-    await page.goto('/members/academy-v3')
+    await page.goto('/members/academy')
 
     await expect(page.getByRole('link', { name: 'Start review' })).toHaveAttribute(
       'href',
-      '/members/academy-v3/review'
+      '/members/academy/review'
     )
     await expect(page.getByRole('link', { name: 'Open lesson' })).toHaveAttribute(
       'href',
-      `/members/academy-v3/modules?lesson=${ACADEMY_V3_FIXTURES.lessonIds.executionOne}`
+      `/members/academy/lessons/${ACADEMY_V3_FIXTURES.lessonIds.executionOne}`
     )
   })
 })

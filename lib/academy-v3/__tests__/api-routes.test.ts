@@ -336,7 +336,7 @@ describe('academy-v3 api route contracts', () => {
           title: 'Clear review queue',
           reason: '1 item due.',
           actionLabel: 'Start review',
-          actionTarget: '/members/academy-v3/review',
+          actionTarget: '/members/academy/review',
         },
       ],
     })

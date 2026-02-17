@@ -1,5 +1,5 @@
-import { ReviewWorkbench } from '@/components/academy-v3/review-workbench'
+import { permanentRedirect } from 'next/navigation'
 
 export default function AcademyV3ReviewPage() {
-  return <ReviewWorkbench />
+  permanentRedirect('/members/academy/review')
 }

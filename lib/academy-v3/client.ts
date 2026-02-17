@@ -8,6 +8,10 @@ import {
   getReviewQueueResponseSchema,
   getMasteryResponseSchema,
   getRecommendationsResponseSchema,
+  getAcademyResumeResponseSchema,
+  getAcademyModuleProgressResponseSchema,
+  getAcademyLessonAttemptResponseSchema,
+  getAcademyProgressSummaryResponseSchema,
   submitReviewResponseSchema,
   startLessonResponseSchema,
   completeBlockResponseSchema,
@@ -92,6 +96,30 @@ export async function fetchMastery() {
 export async function fetchRecommendations() {
   return fetchJson('/api/academy-v3/recommendations', undefined, (value) =>
     getRecommendationsResponseSchema.parse(value).data
+  )
+}
+
+export async function fetchAcademyResume() {
+  return fetchJson('/api/academy-v3/resume', undefined, (value) =>
+    getAcademyResumeResponseSchema.parse(value).data
+  )
+}
+
+export async function fetchAcademyModuleProgress(slug: string) {
+  return fetchJson(`/api/academy-v3/modules/${encodeURIComponent(slug)}/progress`, undefined, (value) =>
+    getAcademyModuleProgressResponseSchema.parse(value).data
+  )
+}
+
+export async function fetchAcademyLessonAttempt(lessonId: string) {
+  return fetchJson(`/api/academy-v3/lessons/${encodeURIComponent(lessonId)}/attempt`, undefined, (value) =>
+    getAcademyLessonAttemptResponseSchema.parse(value).data
+  )
+}
+
+export async function fetchAcademyProgressSummary() {
+  return fetchJson('/api/academy-v3/progress-summary', undefined, (value) =>
+    getAcademyProgressSummaryResponseSchema.parse(value).data
   )
 }
 

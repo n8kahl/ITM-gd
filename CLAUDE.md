@@ -56,6 +56,11 @@
 * **Required Env Vars:** `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_COMPANY_ID`
 * **Handled Events:** `membership.went_valid`, `membership.went_invalid`, `payment.succeeded`, `setup_intent.succeeded`
 
+## Academy
+* **Canonical Routes:** `/members/academy`, `/members/academy/modules`, `/members/academy/modules/[slug]`, `/members/academy/lessons/[id]`, `/members/academy/review`, `/members/academy/progress`
+* **Legacy Redirects:** `/members/library` and `/members/academy-v3/*` redirect to canonical academy routes.
+* **API Namespace:** Academy runtime APIs remain under `/api/academy-v3/*`.
+
 
 ## Update: 2026-02-14 Upload Intelligence Rollout
 - AI Coach screenshot analysis now returns structured intent and suggested action IDs.

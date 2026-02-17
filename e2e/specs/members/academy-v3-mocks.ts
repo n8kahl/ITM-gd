@@ -237,16 +237,145 @@ function buildRecommendationsPayload() {
           title: 'Clear your review queue',
           reason: '2 review items are due now.',
           actionLabel: 'Start review',
-          actionTarget: '/members/academy-v3/review',
+          actionTarget: '/members/academy/review',
         },
         {
           type: 'lesson',
           title: 'Execution Drill 1',
           reason: 'Targets execution discipline improvement.',
           actionLabel: 'Open lesson',
-          actionTarget: `/members/academy-v3/modules?lesson=${LESSON_B1_ID}`,
+          actionTarget: `/members/academy/lessons/${LESSON_B1_ID}`,
         },
       ],
+    },
+  }
+}
+
+function buildResumePayload() {
+  return {
+    data: {
+      lessonId: LESSON_B1_ID,
+      lessonTitle: 'Execution Drill 1',
+      lessonNumber: 1,
+      totalLessons: 1,
+      completedLessons: 0,
+      courseProgressPercent: 0,
+      courseId: MODULE_B_ID,
+      courseSlug: ACADEMY_V3_FIXTURES.moduleSlugs.execution,
+      courseTitle: ACADEMY_V3_FIXTURES.moduleTitles.execution,
+      resumeUrl: `/members/academy/lessons/${LESSON_B1_ID}`,
+      courseUrl: `/members/academy/modules/${ACADEMY_V3_FIXTURES.moduleSlugs.execution}`,
+      source: 'in_progress',
+      source_reason: 'last_in_progress',
+    },
+  }
+}
+
+function buildProgressSummaryPayload() {
+  return {
+    data: {
+      totalLessons: 3,
+      completedLessons: 1,
+      inProgressLessons: 1,
+      progressPercent: 33,
+      tracks: [
+        {
+          trackId: TRACK_ID,
+          trackTitle: 'Core Execution',
+          totalLessons: 3,
+          completedLessons: 1,
+          inProgressLessons: 1,
+          progressPercent: 33,
+        },
+      ],
+      modules: [
+        {
+          moduleId: MODULE_A_ID,
+          moduleSlug: ACADEMY_V3_FIXTURES.moduleSlugs.setupRisk,
+          moduleTitle: ACADEMY_V3_FIXTURES.moduleTitles.setupRisk,
+          trackId: TRACK_ID,
+          totalLessons: 2,
+          completedLessons: 1,
+          inProgressLessons: 0,
+          progressPercent: 50,
+        },
+        {
+          moduleId: MODULE_B_ID,
+          moduleSlug: ACADEMY_V3_FIXTURES.moduleSlugs.execution,
+          moduleTitle: ACADEMY_V3_FIXTURES.moduleTitles.execution,
+          trackId: TRACK_ID,
+          totalLessons: 1,
+          completedLessons: 0,
+          inProgressLessons: 1,
+          progressPercent: 0,
+        },
+      ],
+    },
+  }
+}
+
+function buildModuleProgressPayload(slug: string) {
+  if (slug === ACADEMY_V3_FIXTURES.moduleSlugs.setupRisk) {
+    return {
+      data: {
+        moduleId: MODULE_A_ID,
+        moduleSlug: slug,
+        lessons: [
+          {
+            lessonId: LESSON_A1_ID,
+            status: 'passed',
+            progressPercent: 100,
+            completedBlockIds: [BLOCK_A1_1_ID, BLOCK_A1_2_ID],
+          },
+          {
+            lessonId: LESSON_A2_ID,
+            status: 'not_started',
+            progressPercent: 0,
+            completedBlockIds: [],
+          },
+        ],
+      },
+    }
+  }
+
+  if (slug === ACADEMY_V3_FIXTURES.moduleSlugs.execution) {
+    return {
+      data: {
+        moduleId: MODULE_B_ID,
+        moduleSlug: slug,
+        lessons: [
+          {
+            lessonId: LESSON_B1_ID,
+            status: 'in_progress',
+            progressPercent: 50,
+            completedBlockIds: [],
+          },
+        ],
+      },
+    }
+  }
+
+  return null
+}
+
+function buildLessonAttemptPayload(lessonId: string) {
+  if (lessonId === LESSON_B1_ID) {
+    return {
+      data: {
+        lessonId,
+        status: 'in_progress',
+        progressPercent: 50,
+        completedBlockIds: [],
+      },
+    }
+  }
+
+  return {
+    data: {
+      lessonId,
+      status: 'not_started',
+      progressPercent: 0,
+      completedBlockIds: [],
     },
   }
 }
@@ -299,7 +428,7 @@ export async function setupAcademyV3Mocks(page: Page, options?: { reviewItemCoun
       data: [
         { tab_id: 'dashboard', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 1, label: 'Dashboard', icon: 'layout-dashboard', path: '/members' },
         { tab_id: 'journal', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 2, label: 'Journal', icon: 'book-open', path: '/members/journal' },
-        { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'Academy', icon: 'graduation-cap', path: '/members/academy-v3' },
+        { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'Academy', icon: 'graduation-cap', path: '/members/academy' },
       ],
     })
   })
@@ -319,6 +448,19 @@ export async function setupAcademyV3Mocks(page: Page, options?: { reviewItemCoun
     await fulfillJson(route, payload)
   })
 
+  await page.route('**/api/academy-v3/modules/*/progress', async (route: Route) => {
+    const parts = route.request().url().split('/')
+    const slug = decodeURIComponent(parts[parts.length - 2] || '')
+    const payload = buildModuleProgressPayload(slug)
+
+    if (!payload) {
+      await fulfillJson(route, { error: { code: 'NOT_FOUND', message: 'Module not found' } }, 404)
+      return
+    }
+
+    await fulfillJson(route, payload)
+  })
+
   await page.route('**/api/academy-v3/lessons/*', async (route: Route) => {
     const lessonId = route.request().url().split('/').pop() || ''
     const payload = buildLessonPayload(decodeURIComponent(lessonId))
@@ -330,12 +472,45 @@ export async function setupAcademyV3Mocks(page: Page, options?: { reviewItemCoun
     await fulfillJson(route, payload)
   })
 
+  await page.route('**/api/academy-v3/lessons/*/attempt', async (route: Route) => {
+    const parts = route.request().url().split('/')
+    const lessonId = decodeURIComponent(parts[parts.length - 2] || '')
+    await fulfillJson(route, buildLessonAttemptPayload(lessonId))
+  })
+
+  await page.route('**/api/academy-v3/lessons/*/start', async (route: Route) => {
+    await fulfillJson(route, {
+      data: {
+        lessonAttemptId: '55555555-5555-4555-8555-111111111111',
+        status: 'in_progress',
+      },
+    })
+  })
+
+  await page.route('**/api/academy-v3/lessons/*/complete-block', async (route: Route) => {
+    await fulfillJson(route, {
+      data: {
+        progressPercent: 100,
+        nextBlockId: null,
+        status: 'passed',
+      },
+    })
+  })
+
   await page.route('**/api/academy-v3/mastery**', async (route: Route) => {
     await fulfillJson(route, buildMasteryPayload())
   })
 
   await page.route('**/api/academy-v3/recommendations**', async (route: Route) => {
     await fulfillJson(route, buildRecommendationsPayload())
+  })
+
+  await page.route('**/api/academy-v3/resume**', async (route: Route) => {
+    await fulfillJson(route, buildResumePayload())
+  })
+
+  await page.route('**/api/academy-v3/progress-summary**', async (route: Route) => {
+    await fulfillJson(route, buildProgressSummaryPayload())
   })
 
   await page.route('**/api/academy-v3/review**', async (route: Route) => {

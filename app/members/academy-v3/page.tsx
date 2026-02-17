@@ -1,5 +1,5 @@
-import { PlanDashboard } from '@/components/academy-v3/plan-dashboard'
+import { permanentRedirect } from 'next/navigation'
 
 export default function AcademyV3PlanPage() {
-  return <PlanDashboard />
+  permanentRedirect('/members/academy')
 }
