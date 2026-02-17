@@ -118,7 +118,7 @@ function getTimeoutMs(method: string, segments: string[]): number {
     return SNAPSHOT_PROXY_TIMEOUT_MS
   }
 
-  if (method === 'GET' && endpoint === 'contract-select') {
+  if ((method === 'GET' || method === 'POST') && endpoint === 'contract-select') {
     return CONTRACT_SELECT_TIMEOUT_MS
   }
   if (method === 'GET' && (endpoint === 'levels' || endpoint === 'clusters' || endpoint === 'gex' || endpoint === 'flow' || endpoint === 'regime')) {

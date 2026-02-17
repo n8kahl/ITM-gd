@@ -13,6 +13,7 @@ export interface PriceUpdate {
   changePct: number
   volume: number
   timestamp: string
+  source?: 'tick' | 'poll' | 'snapshot'
 }
 
 export interface MarketStatusUpdate {
@@ -322,6 +323,9 @@ function handleSocketMessage(event: MessageEvent<string>): void {
         changePct: Number(message.changePct || 0),
         volume: Number(message.volume || 0),
         timestamp: typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString(),
+        source: message.source === 'tick' || message.source === 'poll' || message.source === 'snapshot'
+          ? message.source
+          : undefined,
       })
       notifyConsumers()
       notifyChannelConsumers(message)

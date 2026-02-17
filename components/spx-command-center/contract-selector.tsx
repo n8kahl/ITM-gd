@@ -40,7 +40,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
       setIsLoading(true)
       setErrorMessage(null)
       try {
-        const rec = await requestContractRecommendation(selectedSetup.id)
+        const rec = await requestContractRecommendation(selectedSetup)
         if (!isCancelled) {
           setContract(rec)
           if (!rec) {

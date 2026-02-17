@@ -11,6 +11,7 @@ import {
   type CandlestickData,
   type HistogramData,
   type LineData,
+  TickMarkType,
   type Time,
   ColorType,
   CrosshairMode,
@@ -113,6 +114,56 @@ const CHART_COLORS = {
   macdSignal: '#f59e0b',
   macdPositive: 'rgba(16, 185, 129, 0.35)',
   macdNegative: 'rgba(239, 68, 68, 0.35)',
+}
+
+const CHART_DISPLAY_TIMEZONE = 'America/New_York'
+const ET_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: CHART_DISPLAY_TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+const ET_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: CHART_DISPLAY_TIMEZONE,
+  month: 'short',
+  day: 'numeric',
+})
+
+function toUnixSecondsFromChartTime(time: Time): number | null {
+  if (typeof time === 'number' && Number.isFinite(time)) {
+    return Math.floor(time)
+  }
+  if (typeof time === 'string') {
+    const parsed = Date.parse(time)
+    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000)
+    return null
+  }
+  if (time && typeof time === 'object' && 'year' in time && 'month' in time && 'day' in time) {
+    const date = new Date(Date.UTC(time.year, time.month - 1, time.day))
+    return Math.floor(date.getTime() / 1000)
+  }
+  return null
+}
+
+function formatChartTickInEt(time: Time, timeframe: string, tickMarkType?: TickMarkType): string {
+  const unixSeconds = toUnixSecondsFromChartTime(time)
+  if (unixSeconds == null) return ''
+
+  const date = new Date(unixSeconds * 1000)
+  const isIntraday = timeframe !== '1D'
+  if (!isIntraday) {
+    return ET_DATE_FORMATTER.format(date)
+  }
+
+  if (
+    tickMarkType === TickMarkType.DayOfMonth
+    || tickMarkType === TickMarkType.Month
+    || tickMarkType === TickMarkType.Year
+  ) {
+    return ET_DATE_FORMATTER.format(date)
+  }
+
+  return ET_TIME_FORMATTER.format(date)
 }
 
 // ============================================
@@ -311,6 +362,10 @@ export function TradingChart({
         fontFamily: "'Inter', system-ui, sans-serif",
         fontSize: 11,
       },
+      localization: {
+        locale: 'en-US',
+        timeFormatter: (time: Time) => formatChartTickInEt(time, timeframe),
+      },
       grid: {
         vertLines: { color: CHART_COLORS.gridColor },
         horzLines: { color: CHART_COLORS.gridColor },
@@ -340,6 +395,9 @@ export function TradingChart({
         lockVisibleTimeRangeOnResize: true,
         rightBarStaysOnScroll: false,
         shiftVisibleRangeOnNewBar: true,
+        tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) => (
+          formatChartTickInEt(time, timeframe, tickMarkType)
+        ),
       },
       handleScroll: {
         mouseWheel: true,

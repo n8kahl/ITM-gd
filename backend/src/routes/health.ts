@@ -5,6 +5,7 @@ import { testMassiveConnection, getDailyAggregates, getMinuteAggregates, getOpti
 import { testOpenAIConnection, openaiClient, CHAT_MODEL } from '../config/openai';
 import { logger } from '../lib/logger';
 import { getWorkerHealthSnapshot } from '../services/workerHealth';
+import { getMassiveTickStreamStatus } from '../services/massiveTickStream';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ interface ReadinessResult {
     database: boolean;
     redis: boolean;
     massive: boolean;
+    massiveTick: boolean;
     openai: boolean;
   };
 }
@@ -73,6 +75,21 @@ async function runReadinessChecks(): Promise<ReadinessResult> {
     overallHealthy = false;
   }
 
+  const tickStream = getMassiveTickStreamStatus();
+  const tickConnected = tickStream.enabled && tickStream.connected;
+  checks.massive_tick_stream = {
+    status: tickConnected ? 'pass' : 'fail',
+    latency: 0,
+    message: tickConnected
+      ? `connected (${tickStream.subscribedSymbols.join(', ') || 'no symbols'})`
+      : tickStream.enabled
+        ? 'enabled but disconnected'
+        : 'disabled',
+  };
+  if (process.env.NODE_ENV === 'production' && !tickConnected) {
+    overallHealthy = false;
+  }
+
   return {
     checks,
     overallHealthy,
@@ -80,6 +97,7 @@ async function runReadinessChecks(): Promise<ReadinessResult> {
       database: checks.database?.status === 'pass',
       redis: checks.redis?.status === 'pass',
       massive: checks.massive?.status === 'pass',
+      massiveTick: tickConnected,
       openai: checks.openai?.status === 'pass',
     },
   };

@@ -293,7 +293,7 @@ export async function detectActiveSetups(options?: {
 
   const sessionDate = toEasternTime(new Date()).dateStr;
 
-  const setups: Setup[] = candidateZones.map((zone, idx) => {
+  const setups: Setup[] = candidateZones.map((zone) => {
     const direction = setupDirection(zone, currentPrice);
     const zoneCenter = (zone.priceLow + zone.priceHigh) / 2;
 
@@ -334,10 +334,9 @@ export async function detectActiveSetups(options?: {
     const setupIdSeed = [
       sessionDate,
       setupType,
+      zone.id,
       round(zone.priceLow, 2),
       round(zone.priceHigh, 2),
-      round(zone.clusterScore, 2),
-      idx + 1,
     ].join('|');
     const setupId = stableId('spx_setup', setupIdSeed);
     const previous = previousById.get(setupId) || null;

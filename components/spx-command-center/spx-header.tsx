@@ -38,6 +38,8 @@ function formatFreshness(ageMs: number | null): string {
 export function SPXHeader() {
   const {
     spxPrice,
+    spxTickTimestamp,
+    spxPriceSource,
     basis,
     regime,
     prediction,
@@ -51,6 +53,10 @@ export function SPXHeader() {
 
   const snapshotAgeMs = getAgeMs(snapshotGeneratedAt)
   const snapshotFreshness = formatFreshness(snapshotAgeMs)
+  const tickAgeMs = getAgeMs(spxTickTimestamp)
+  const wsTickLive = priceStreamConnected && spxPriceSource === 'tick' && (tickAgeMs == null || tickAgeMs <= 5_000)
+  const wsPollFallback = priceStreamConnected && spxPriceSource === 'poll'
+  const wsConnectedUnknownSource = priceStreamConnected && !wsTickLive && !wsPollFallback
 
   const actionableCount = useMemo(
     () => activeSetups.filter((s) => s.status === 'ready' || s.status === 'triggered').length,
@@ -94,13 +100,25 @@ export function SPXHeader() {
             <span
               className={cn(
                 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em]',
-                priceStreamConnected
+                wsTickLive
                   ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200/85'
+                  : wsPollFallback
+                    ? 'border-amber-300/35 bg-amber-500/12 text-amber-100/85'
+                    : wsConnectedUnknownSource
+                      ? 'border-white/20 bg-white/[0.06] text-white/70'
                   : 'border-amber-400/30 bg-amber-500/10 text-amber-200/85',
               )}
-              title={priceStreamConnected ? 'WebSocket tick stream connected' : (priceStreamError || 'WebSocket reconnecting')}
+              title={
+                wsTickLive
+                  ? 'WebSocket connected with tick-level updates'
+                  : wsPollFallback
+                    ? 'WebSocket connected; using slower poll fallback prices'
+                    : wsConnectedUnknownSource
+                      ? 'WebSocket connected; awaiting fresh price source'
+                      : (priceStreamError || 'WebSocket reconnecting')
+              }
             >
-              {priceStreamConnected ? 'WS Live' : 'WS Retry'}
+              {wsTickLive ? 'WS Tick' : wsPollFallback ? 'WS Poll' : wsConnectedUnknownSource ? 'WS Link' : 'WS Retry'}
             </span>
             <span
               className={cn(

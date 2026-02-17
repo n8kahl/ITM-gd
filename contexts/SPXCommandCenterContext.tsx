@@ -36,6 +36,7 @@ interface SPXCommandCenterState {
   dataHealthMessage: string | null
   spxPrice: number
   spxTickTimestamp: string | null
+  spxPriceSource: 'tick' | 'poll' | 'snapshot' | null
   spyPrice: number
   snapshotGeneratedAt: string | null
   priceStreamConnected: boolean
@@ -71,7 +72,7 @@ interface SPXCommandCenterState {
   selectSetup: (setup: Setup | null) => void
   toggleLevelCategory: (category: LevelCategory) => void
   toggleSPYDerived: () => void
-  requestContractRecommendation: (setupId: string) => Promise<ContractRecommendation | null>
+  requestContractRecommendation: (setup: Setup) => Promise<ContractRecommendation | null>
   sendCoachMessage: (prompt: string, setupId?: string | null) => Promise<CoachMessage>
 }
 
@@ -153,6 +154,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   const spxPrice = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
   const spxTickTimestamp = stream.prices.get('SPX')?.timestamp ?? null
+  const spxPriceSource = stream.prices.get('SPX')?.source ?? (snapshotData?.basis?.spxPrice ? 'snapshot' : null)
   const spyPrice = stream.prices.get('SPY')?.price ?? snapshotData?.basis?.spyPrice ?? 0
 
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
@@ -317,7 +319,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     setSelectedTimeframe(timeframe)
   }, [])
 
-  const requestContractRecommendation = useCallback(async (setupId: string) => {
+  const requestContractRecommendation = useCallback(async (setup: Setup) => {
+    const setupId = setup.id
     const stopTimer = startSPXPerfTimer('contract_recommendation_latency')
 
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_REQUESTED, {
@@ -335,11 +338,16 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
 
     try {
-      const response = await fetch(`/api/spx/contract-select?setupId=${encodeURIComponent(setupId)}`, {
+      const response = await fetch('/api/spx/contract-select', {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          setupId,
+          setup,
+        }),
         cache: 'no-store',
       })
 
@@ -488,9 +496,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const error = snapshotError || null
   const dataHealth = useMemo<'healthy' | 'degraded' | 'stale'>(() => {
     if (snapshotIsDegraded || error || snapshotRequestLate) return 'degraded'
+    if (stream.isConnected && spxPriceSource === 'poll') return 'stale'
     if (!stream.isConnected && Boolean(snapshotData?.generatedAt)) return 'stale'
     return 'healthy'
-  }, [error, snapshotData?.generatedAt, snapshotIsDegraded, snapshotRequestLate, stream.isConnected])
+  }, [error, snapshotData?.generatedAt, snapshotIsDegraded, snapshotRequestLate, spxPriceSource, stream.isConnected])
 
   const dataHealthMessage = useMemo(() => {
     if (snapshotIsDegraded) {
@@ -502,11 +511,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     if (snapshotRequestLate && !snapshotData) {
       return 'SPX snapshot request is delayed. Core chart stream is still active while analytics recover.'
     }
+    if (spxPriceSource === 'poll' && stream.isConnected) {
+      return 'Live tick feed unavailable. Streaming over poll fallback, so chart and price updates may lag.'
+    }
     if (dataHealth === 'stale') {
       return 'Live stream disconnected and snapshot is stale. Reconnecting in background.'
     }
     return null
-  }, [dataHealth, error, snapshotData, snapshotDegradedMessage, snapshotIsDegraded, snapshotRequestLate])
+  }, [dataHealth, error, snapshotData, snapshotDegradedMessage, snapshotIsDegraded, snapshotRequestLate, spxPriceSource, stream.isConnected])
 
   useEffect(() => {
     if (lastDataHealthRef.current === dataHealth) return
@@ -525,6 +537,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     dataHealthMessage,
     spxPrice,
     spxTickTimestamp,
+    spxPriceSource,
     spyPrice,
     snapshotGeneratedAt: snapshotData?.generatedAt || null,
     priceStreamConnected: stream.isConnected,
@@ -573,6 +586,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     stream.isConnected,
     spxPrice,
     spxTickTimestamp,
+    spxPriceSource,
     spyPrice,
     toggleLevelCategory,
     toggleSPYDerived,

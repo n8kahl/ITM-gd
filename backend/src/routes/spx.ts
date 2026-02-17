@@ -14,11 +14,26 @@ import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { classifyCurrentRegime } from '../services/spx/regimeClassifier';
 import { detectActiveSetups, getSetupById } from '../services/spx/setupDetector';
+import type { Setup } from '../services/spx/types';
 
 const router = Router();
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
+}
+
+function parseSetupPayload(value: unknown): Setup | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const setup = value as Partial<Setup>;
+  if (typeof setup.id !== 'string' || setup.id.length === 0) return null;
+  if (setup.entryZone == null || typeof setup.entryZone !== 'object') return null;
+  if (typeof setup.entryZone.low !== 'number' || typeof setup.entryZone.high !== 'number') return null;
+  if (typeof setup.stop !== 'number') return null;
+  if (setup.target1 == null || typeof setup.target1 !== 'object') return null;
+  if (setup.target2 == null || typeof setup.target2 !== 'object') return null;
+  if (typeof setup.target1.price !== 'number' || typeof setup.target2.price !== 'number') return null;
+  if (typeof setup.direction !== 'string' || typeof setup.type !== 'string') return null;
+  return setup as Setup;
 }
 
 router.use(authenticateToken, requireTier('pro'));
@@ -269,6 +284,36 @@ router.get('/contract-select', async (req: Request, res: Response) => {
     return res.json(recommendation);
   } catch (error) {
     logger.error('SPX contract selector endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to compute contract recommendation.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/contract-select', async (req: Request, res: Response) => {
+  try {
+    const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
+    const setup = parseSetupPayload(req.body?.setup);
+    const recommendation = await getContractRecommendation({
+      setupId,
+      setup,
+      forceRefresh: parseBoolean(req.body?.forceRefresh),
+    });
+
+    if (!recommendation) {
+      return res.status(404).json({
+        error: 'No recommendation',
+        message: 'No qualifying setup/contract recommendation is currently available.',
+      });
+    }
+
+    return res.json(recommendation);
+  } catch (error) {
+    logger.error('SPX contract selector POST endpoint failed', {
       error: error instanceof Error ? error.message : String(error),
     });
     return res.status(503).json({
