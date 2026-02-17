@@ -15,19 +15,10 @@
 - `coach_alert_ack_latency_ms`: time to acknowledge top alert.
 - `ui_error_log_rate`: browser console/network error volume per session.
 
-## 3. Feature Flags
-All flags are env-driven for controlled rollout.
-
-- `NEXT_PUBLIC_SPX_BRIEFING_BAR_V1`
-- `NEXT_PUBLIC_SPX_ACTION_STRIP_V1`
-- `NEXT_PUBLIC_SPX_TWO_TIER_LAYOUT_V1`
-- `NEXT_PUBLIC_SPX_SETUP_CARD_V2`
-- `NEXT_PUBLIC_SPX_FLOW_V2`
-- `NEXT_PUBLIC_SPX_LEVEL_MAP_V2`
-- `NEXT_PUBLIC_SPX_COACH_V2`
-- `NEXT_PUBLIC_SPX_MOBILE_BRIEF_V1`
-
-Implementation source: `/Users/natekahl/ITM-gd/lib/spx/feature-flags.ts`
+## 3. Rollout Strategy (Single-Operator Mode)
+- This environment is single-operator and does not use runtime feature flags.
+- Changes ship directly behind branch-level commits.
+- Rollback is commit-based (`git revert` on SPX commits), not flag-based.
 
 ## 4. Phased Delivery Plan
 ### Phase 0: Reliability and Safety Gates
@@ -78,15 +69,13 @@ Implementation source: `/Users/natekahl/ITM-gd/lib/spx/feature-flags.ts`
 
 ## 6. Rollout and Rollback
 ### Rollout
-1. Deploy with all new UX flags off in production.
-2. Enable internal cohort only.
-3. Enable canary cohort (5-10%).
-4. Ramp to 25%, 50%, 100% with KPI gates.
+1. Deploy reliability hardening and UX changes together on SPX branch.
+2. Validate in live environment with KPI gates.
+3. Continue phased commits for each major UX slice.
 
 ### Rollback
-- Toggle off any failing UX flag instantly.
-- Keep Phase 0 reliability hardening enabled.
-- If data errors exceed threshold, force legacy header/layout flags off.
+- Revert latest SPX-specific commit(s) if KPI/error thresholds fail.
+- Keep proxy hardening whenever possible; revert only presentation changes first.
 
 ## 7. Definition of Done
 - No console/network error flood under degraded upstream.

@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import { Activity, Dot, Target } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { InfoTip } from '@/components/ui/info-tip'
-import { SPX_FEATURE_FLAGS } from '@/lib/spx/feature-flags'
 import { cn } from '@/lib/utils'
 
 function formatSigned(value: number): string {
@@ -49,7 +48,6 @@ function flowBiasLabel(flowEvents: Array<{ direction: 'bullish' | 'bearish'; pre
 export function SPXHeader() {
   const {
     spxPrice,
-    spyPrice,
     basis,
     regime,
     prediction,
@@ -76,85 +74,10 @@ export function SPXHeader() {
   const postureLabel = `${(regime || 'unknown').toUpperCase()} ${postureDirection.toUpperCase()}${prediction ? ` ${prediction.confidence.toFixed(0)}%` : ''}`
   const actionLine = `${actionableCount} setups actionable · ${(regime || 'unknown')} regime · ${flowBiasLabel(flowEvents.slice(0, 10))}`
 
-  if (SPX_FEATURE_FLAGS.briefingBarV1) {
-    return (
-      <header className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] via-white/[0.015] to-emerald-500/[0.035] px-4 py-3 md:px-5 md:py-4">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-52 w-52 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="relative z-10">
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-emerald-300" />
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/60">SPX Command Center</p>
-              <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">LIVE</span>
-              <InfoTip label="What is SPX Command Center?">
-                Real-time decision cockpit for SPX options: setups, levels, flow, and coaching are fused so you can act from one view.
-              </InfoTip>
-            </div>
-            <h1 className="mt-1 font-serif text-3xl leading-tight text-ivory md:text-4xl">
-              {formatPrice(spxPrice)}
-            </h1>
-            <p className="mt-1 text-sm text-white/80">{actionLine}</p>
-          </div>
-
-          <div className="relative z-10 grid grid-cols-2 gap-2 md:min-w-[360px]">
-            <div className="col-span-2 rounded-xl border border-champagne/30 bg-champagne/10 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-white/55">Market Posture</p>
-              <p className="font-mono text-sm text-champagne">{postureLabel}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Basis</p>
-              <p className={cn('font-mono text-lg', basisColor)}>{basis ? formatSigned(basis.current) : '--'}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Actionable</p>
-              <p className="font-mono text-lg text-emerald-200">{actionableCount}</p>
-            </div>
-            {prediction && (
-              <div className="col-span-2 grid grid-cols-3 gap-2 text-xs text-white/75">
-                <span className="rounded-md border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-1">↑ {prediction.direction.bullish.toFixed(0)}%</span>
-                <span className="rounded-md border border-rose-400/20 bg-rose-500/10 px-1.5 py-1">↓ {prediction.direction.bearish.toFixed(0)}%</span>
-                <span className="rounded-md border border-white/20 bg-white/[0.05] px-1.5 py-1">↔ {prediction.direction.neutral.toFixed(0)}%</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="relative z-10 mt-3 flex flex-wrap items-center gap-2 text-xs text-white/65">
-          <Activity className="h-3.5 w-3.5 text-emerald-300" />
-          <span>Sniper briefing bar active</span>
-          <Dot className="h-4 w-4 text-emerald-300" />
-          <span>Pro Tier</span>
-          <span
-            className={cn(
-              'ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.08em]',
-              priceStreamConnected
-                ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-200'
-                : 'border-amber-400/35 bg-amber-500/15 text-amber-200',
-            )}
-            title={priceStreamConnected ? 'WebSocket tick stream connected' : (priceStreamError || 'WebSocket reconnecting')}
-          >
-            {priceStreamConnected ? 'WS Live' : 'WS Retry'}
-          </span>
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.08em]',
-              snapshotAgeMs != null && snapshotAgeMs < 20_000
-                ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-200'
-                : 'border-white/20 bg-white/5 text-white/65',
-            )}
-            title={snapshotGeneratedAt ? `Snapshot generated ${new Date(snapshotGeneratedAt).toLocaleTimeString()}` : 'Snapshot timestamp unavailable'}
-          >
-            Snapshot {snapshotFreshness}
-          </span>
-        </div>
-      </header>
-    )
-  }
-
   return (
     <header className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] via-white/[0.015] to-emerald-500/[0.035] px-4 py-3 md:px-5 md:py-4">
       <div className="pointer-events-none absolute -right-24 -top-24 h-52 w-52 rounded-full bg-emerald-500/10 blur-3xl" />
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="relative z-10">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4 text-emerald-300" />
@@ -164,32 +87,38 @@ export function SPXHeader() {
               Real-time decision cockpit for SPX options: setups, levels, flow, and coaching are fused so you can act from one view.
             </InfoTip>
           </div>
-          <h1 className="mt-1 font-serif text-xl text-ivory md:text-2xl">Institutional Setup Intelligence</h1>
+          <h1 className="mt-1 font-serif text-3xl leading-tight text-ivory md:text-4xl">
+            {formatPrice(spxPrice)}
+          </h1>
+          <p className="mt-1 text-sm text-white/80">{actionLine}</p>
         </div>
 
-        <div className="relative z-10 grid grid-cols-2 gap-2 text-sm md:flex md:gap-3">
-          <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">SPX</p>
-            <p className="font-mono text-lg text-ivory">{formatPrice(spxPrice)}</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">SPY</p>
-            <p className="font-mono text-lg text-ivory">{formatPrice(spyPrice)}</p>
+        <div className="relative z-10 grid grid-cols-2 gap-2 md:min-w-[360px]">
+          <div className="col-span-2 rounded-xl border border-champagne/30 bg-champagne/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-white/55">Market Posture</p>
+            <p className="font-mono text-sm text-champagne">{postureLabel}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
             <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Basis</p>
             <p className={cn('font-mono text-lg', basisColor)}>{basis ? formatSigned(basis.current) : '--'}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Regime</p>
-            <p className="font-mono text-lg text-champagne capitalize">{regime || '--'}</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Actionable</p>
+            <p className="font-mono text-lg text-emerald-200">{actionableCount}</p>
           </div>
+          {prediction && (
+            <div className="col-span-2 grid grid-cols-3 gap-2 text-xs text-white/75">
+              <span className="rounded-md border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-1">↑ {prediction.direction.bullish.toFixed(0)}%</span>
+              <span className="rounded-md border border-rose-400/20 bg-rose-500/10 px-1.5 py-1">↓ {prediction.direction.bearish.toFixed(0)}%</span>
+              <span className="rounded-md border border-white/20 bg-white/[0.05] px-1.5 py-1">↔ {prediction.direction.neutral.toFixed(0)}%</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="relative z-10 mt-3 flex flex-wrap items-center gap-2 text-xs text-white/65">
         <Activity className="h-3.5 w-3.5 text-emerald-300" />
-        <span>Real-time level matrix, setup lifecycle, and AI guidance</span>
+        <span>Sniper briefing bar active</span>
         <Dot className="h-4 w-4 text-emerald-300" />
         <span>Pro Tier</span>
         <span
