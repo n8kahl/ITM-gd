@@ -31,6 +31,8 @@ interface ChartAnnotation {
 }
 
 interface SPXCommandCenterState {
+  dataHealth: 'healthy' | 'degraded' | 'stale'
+  dataHealthMessage: string | null
   spxPrice: number
   spyPrice: number
   snapshotGeneratedAt: string | null
@@ -108,6 +110,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const { session } = useMemberAuth()
   const {
     snapshot: snapshotData,
+    isDegraded: snapshotIsDegraded,
+    degradedMessage: snapshotDegradedMessage,
     isLoading,
     error: snapshotError,
     mutate: mutateSnapshot,
@@ -251,8 +255,28 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [accessToken, mutateSnapshot])
 
   const error = snapshotError || null
+  const dataHealth = useMemo<'healthy' | 'degraded' | 'stale'>(() => {
+    if (snapshotIsDegraded || error) return 'degraded'
+    if (!stream.isConnected && Boolean(snapshotData?.generatedAt)) return 'stale'
+    return 'healthy'
+  }, [error, snapshotData?.generatedAt, snapshotIsDegraded, stream.isConnected])
+
+  const dataHealthMessage = useMemo(() => {
+    if (snapshotIsDegraded) {
+      return snapshotDegradedMessage || 'SPX service is running in degraded mode.'
+    }
+    if (error?.message) {
+      return error.message
+    }
+    if (dataHealth === 'stale') {
+      return 'Live stream disconnected and snapshot is stale. Reconnecting in background.'
+    }
+    return null
+  }, [dataHealth, error, snapshotDegradedMessage, snapshotIsDegraded])
 
   const value = useMemo<SPXCommandCenterState>(() => ({
+    dataHealth,
+    dataHealthMessage,
     spxPrice,
     spyPrice,
     snapshotGeneratedAt: snapshotData?.generatedAt || null,
@@ -283,6 +307,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }), [
     activeSetups,
     chartAnnotations,
+    dataHealth,
+    dataHealthMessage,
     error,
     filteredLevels,
     isLoading,
