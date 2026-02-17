@@ -1,9 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Activity, Dot, Target } from 'lucide-react'
+import { Dot, Target } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
-import { InfoTip } from '@/components/ui/info-tip'
 import { cn } from '@/lib/utils'
 
 function formatPrice(value: number): string {
@@ -79,132 +78,107 @@ export function SPXHeader() {
   const flipPoint = gexProfile?.combined?.flipPoint ?? null
 
   return (
-    <header className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] via-white/[0.015] to-emerald-500/[0.035] px-4 py-3 md:px-5 md:py-4">
-      <div className="pointer-events-none absolute -right-24 -top-24 h-52 w-52 rounded-full bg-emerald-500/10 blur-3xl" />
+    <header className="glass-card-heavy relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.025] via-white/[0.01] to-emerald-500/[0.03] px-3 py-2 md:px-4 md:py-2.5">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-44 w-44 rounded-full bg-emerald-500/8 blur-3xl" />
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        {/* ── Left: Hero price ── */}
-        <div className="relative z-10">
-          <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-emerald-300" />
-            <p className="text-[10px] uppercase tracking-[0.18em] text-white/50">SPX Command Center</p>
-            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300">LIVE</span>
-            <InfoTip label="What is SPX Command Center?">
-              Real-time decision cockpit for SPX options: setups, levels, flow, and coaching fused in one view.
-            </InfoTip>
+      <div className="relative z-10 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.12em] text-white/55">
+              <Target className="h-3.5 w-3.5 text-emerald-300" />
+              SPX Command Center
+            </span>
+            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-emerald-200">
+              Live
+            </span>
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em]',
+                priceStreamConnected
+                  ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200/85'
+                  : 'border-amber-400/30 bg-amber-500/10 text-amber-200/85',
+              )}
+              title={priceStreamConnected ? 'WebSocket tick stream connected' : (priceStreamError || 'WebSocket reconnecting')}
+            >
+              {priceStreamConnected ? 'WS Live' : 'WS Retry'}
+            </span>
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em]',
+                snapshotAgeMs != null && snapshotAgeMs < 20_000
+                  ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200/85'
+                  : 'border-white/20 bg-white/[0.04] text-white/60',
+              )}
+            >
+              Snapshot {snapshotFreshness}
+            </span>
           </div>
-          <h1 className="mt-1 font-serif text-[2.6rem] leading-none text-ivory md:text-[3rem]">
-            {formatPrice(spxPrice)}
-          </h1>
-          <p className="mt-1.5 text-[12px] text-white/55">
-            <span className="text-white/70">{actionableCount} setups actionable</span>
-            {' · '}
-            <span title="Current market regime classification">Regime: <span className="text-ivory">{regime || '--'}</span></span>
-            {' · '}
-            <span title="Options flow direction bias (bull vs bear premium)">Flow: <span className="text-ivory">{flowBias}</span></span>
+
+          <div className="mt-0.5 flex items-end gap-1.5">
+            <h1 className="font-serif text-[2.05rem] leading-none text-ivory md:text-[2.35rem]">
+              {formatPrice(spxPrice)}
+            </h1>
+          </div>
+
+          <p className="mt-0.5 truncate text-[11px] text-white/58">
+            <span className="text-white/75">{actionableCount} setups actionable</span>
+            <Dot className="inline h-3.5 w-3.5 align-text-bottom text-white/30" />
+            <span>Regime: <span className="text-ivory">{regime || '--'}</span></span>
+            <Dot className="inline h-3.5 w-3.5 align-text-bottom text-white/30" />
+            <span>Flow: <span className="text-ivory">{flowBias}</span></span>
           </p>
         </div>
 
-        {/* ── Right: Decision metrics ── */}
-        <div className="relative z-10 grid grid-cols-2 gap-2 md:min-w-[340px]">
-          {/* Market posture (span full) */}
-          <div className="col-span-2 rounded-xl border border-champagne/25 bg-champagne/[0.06] px-3 py-2" title="AI prediction combining regime, flow, and GEX data — shows directional bias and confidence level">
-            <p className="text-[9px] uppercase tracking-[0.12em] text-white/45">Market Posture · AI Prediction</p>
-            <p className="font-mono text-sm font-semibold text-champagne">{postureLabel}</p>
-          </div>
-
-          {/* 4 compact metric cells */}
-          <div className="rounded-lg border border-white/8 bg-black/25 px-2.5 py-1.5 text-center" title="SPX minus SPY×10 spread — positive means SPX leads, negative means SPY leads">
-            <p className="text-[8px] uppercase tracking-[0.12em] text-white/40">SPX/SPY Basis</p>
-            <p className={cn('font-mono text-sm font-semibold', basis && basis.current >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
-              {basis ? formatSigned(basis.current) : '--'}
-            </p>
-            {basis && (
-              <p className="text-[8px] text-white/30">{basis.leading} leads</p>
-            )}
-          </div>
-          <div className="rounded-lg border border-white/8 bg-black/25 px-2.5 py-1.5 text-center" title="How extreme the current basis is vs its 20-period average — above ±1 is notable, ±2 is extreme">
-            <p className="text-[8px] uppercase tracking-[0.12em] text-white/40">Basis Z-Score</p>
-            <p className={cn('font-mono text-sm font-semibold', basis && basis.zscore < -1 ? 'text-rose-300' : basis && basis.zscore > 1 ? 'text-emerald-300' : 'text-ivory')}>
-              {basis ? basis.zscore.toFixed(2) : '--'}
-            </p>
-            {basis && (
-              <p className="text-[8px] text-white/30">
-                {Math.abs(basis.zscore) >= 2 ? 'Extreme' : Math.abs(basis.zscore) >= 1 ? 'Notable' : 'Normal'}
-              </p>
-            )}
-          </div>
-          <div className="rounded-lg border border-white/8 bg-black/25 px-2.5 py-1.5 text-center" title="Net gamma exposure — Supportive means dealers dampen moves, Unstable means dealers amplify moves">
-            <p className="text-[8px] uppercase tracking-[0.12em] text-white/40">GEX Net</p>
-            <p className={cn('font-mono text-sm font-semibold', gexNet != null && gexNet >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
-              {gexNet != null ? gexPosture : '--'}
-            </p>
-            {gexNet != null && (
-              <p className="text-[8px] font-mono text-white/35">{formatGexNet(gexNet)}</p>
-            )}
-          </div>
-          <div className="rounded-lg border border-white/8 bg-black/25 px-2.5 py-1.5 text-center" title="GEX flip point — above this level dealers stabilize, below they amplify. Key pivot for directional moves">
-            <p className="text-[8px] uppercase tracking-[0.12em] text-white/40">GEX Flip Point</p>
-            <p className="font-mono text-sm font-semibold text-ivory">
-              {flipPoint != null ? flipPoint.toFixed(0) : '--'}
-            </p>
-            {flipPoint != null && spxPrice > 0 && (
-              <p className="text-[8px] font-mono text-white/30">
-                {spxPrice >= flipPoint ? 'Above' : 'Below'} ({(spxPrice - flipPoint) >= 0 ? '+' : ''}{(spxPrice - flipPoint).toFixed(0)})
-              </p>
-            )}
-          </div>
-
-          {/* Direction probabilities */}
-          {prediction && (
-            <div className="col-span-2">
-              <p className="mb-1 text-[8px] uppercase tracking-[0.12em] text-white/35">Direction Probability</p>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
-                <span className="rounded-md border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-1 text-center text-emerald-200">
-                  <span className="text-[7px] uppercase tracking-wider text-emerald-300/50 block leading-tight">Bull</span>
+        <div className="grid w-full gap-1.5 md:max-w-[520px]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center rounded-md border border-champagne/25 bg-champagne/[0.07] px-2 py-1 text-[10px] font-mono text-champagne">
+              {postureLabel}
+            </span>
+            {prediction && (
+              <div className="ml-auto grid grid-cols-3 gap-1 text-[10px] md:ml-0">
+                <span className="rounded border border-emerald-400/20 bg-emerald-500/12 px-1.5 py-0.5 text-emerald-200">
                   ↑ {prediction.direction.bullish.toFixed(0)}%
                 </span>
-                <span className="rounded-md border border-rose-400/20 bg-rose-500/10 px-1.5 py-1 text-center text-rose-200">
-                  <span className="text-[7px] uppercase tracking-wider text-rose-300/50 block leading-tight">Bear</span>
+                <span className="rounded border border-rose-400/20 bg-rose-500/10 px-1.5 py-0.5 text-rose-200">
                   ↓ {prediction.direction.bearish.toFixed(0)}%
                 </span>
-                <span className="rounded-md border border-white/15 bg-white/[0.04] px-1.5 py-1 text-center text-white/60">
-                  <span className="text-[7px] uppercase tracking-wider text-white/30 block leading-tight">Flat</span>
+                <span className="rounded border border-white/15 bg-white/[0.04] px-1.5 py-0.5 text-white/65">
                   ↔ {prediction.direction.neutral.toFixed(0)}%
                 </span>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
 
-      {/* ── Status bar ── */}
-      <div className="relative z-10 mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-white/55">
-        <Activity className="h-3.5 w-3.5 text-emerald-300" />
-        <span>Sniper briefing active</span>
-        <Dot className="h-4 w-4 text-emerald-300" />
-        <span>Pro Tier</span>
-        <span
-          className={cn(
-            'ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.08em]',
-            priceStreamConnected
-              ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-200'
-              : 'border-amber-400/35 bg-amber-500/15 text-amber-200',
-          )}
-          title={priceStreamConnected ? 'WebSocket tick stream connected' : (priceStreamError || 'WebSocket reconnecting')}
-        >
-          {priceStreamConnected ? 'WS Live' : 'WS Retry'}
-        </span>
-        <span
-          className={cn(
-            'inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.08em]',
-            snapshotAgeMs != null && snapshotAgeMs < 20_000
-              ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-200'
-              : 'border-white/20 bg-white/5 text-white/55',
-          )}
-        >
-          Snapshot {snapshotFreshness}
-        </span>
+          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
+            <div className="rounded-md border border-white/10 bg-black/25 px-2 py-1">
+              <p className="text-[8px] uppercase tracking-[0.1em] text-white/40">Basis</p>
+              <p className={cn('font-mono text-[11px] font-semibold', basis && basis.current >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                {basis ? formatSigned(basis.current) : '--'}
+              </p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 px-2 py-1">
+              <p className="text-[8px] uppercase tracking-[0.1em] text-white/40">Z-Score</p>
+              <p className={cn('font-mono text-[11px] font-semibold', basis && Math.abs(basis.zscore) >= 1 ? (basis.zscore > 0 ? 'text-emerald-300' : 'text-rose-300') : 'text-ivory')}>
+                {basis ? basis.zscore.toFixed(2) : '--'}
+              </p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 px-2 py-1">
+              <p className="text-[8px] uppercase tracking-[0.1em] text-white/40">GEX Net</p>
+              <p className={cn('font-mono text-[11px] font-semibold', gexNet != null && gexNet >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                {gexNet != null ? formatGexNet(gexNet) : '--'}
+              </p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 px-2 py-1">
+              <p className="text-[8px] uppercase tracking-[0.1em] text-white/40">Flip</p>
+              <p className="font-mono text-[11px] font-semibold text-ivory">
+                {flipPoint != null ? flipPoint.toFixed(0) : '--'}
+              </p>
+              {gexNet != null && (
+                <p className="text-[8px] text-white/35">{gexPosture}</p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </header>
   )

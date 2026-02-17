@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
 function ageSeconds(timestamp: string): number {
   const parsed = Date.parse(timestamp)
@@ -26,6 +27,7 @@ function relativeAge(timestamp: string): string {
 
 export function FlowTicker() {
   const { flowEvents, spxPrice, selectedSetup } = useSPXCommandCenter()
+  const [expanded, setExpanded] = useState(false)
 
   const ranked = useMemo(() => {
     return [...flowEvents]
@@ -72,6 +74,11 @@ export function FlowTicker() {
   const bearishPremium = ranked.filter((e) => e.direction === 'bearish').reduce((s, e) => s + e.premium, 0)
   const grossPremium = bullishPremium + bearishPremium
   const bullishShare = grossPremium > 0 ? (bullishPremium / grossPremium) * 100 : 50
+  const topEvent = ranked[0] ?? null
+  const entryMid =
+    selectedSetup
+      ? (selectedSetup.entryZone.low + selectedSetup.entryZone.high) / 2
+      : null
 
   if (flowEvents.length === 0) {
     return (
@@ -82,12 +89,9 @@ export function FlowTicker() {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-      {/* Row 1: Tug-of-war + conviction badge */}
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2" data-testid="spx-flow-ticker">
       <div className="flex items-center gap-2">
         <span className="shrink-0 text-[10px] uppercase tracking-[0.1em] text-white/45">Flow</span>
-
-        {/* Tug-of-war bar — compact */}
         <div className="flex-1">
           <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(5, Math.min(95, bullishShare))}%` }} />
@@ -116,33 +120,80 @@ export function FlowTicker() {
         )}
       </div>
 
-      {/* Row 2: Top flow events — horizontal compact chips */}
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {ranked.slice(0, 4).map((event) => {
-          const nearEntry = selectedSetup && spxPrice > 0 && event.symbol === 'SPX'
-            ? Math.abs(event.strike - ((selectedSetup.entryZone.low + selectedSetup.entryZone.high) / 2)) < 25
-            : false
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        {topEvent ? (
+          <div
+            className={cn(
+              'inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-mono',
+              topEvent.direction === 'bullish'
+                ? 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-100'
+                : 'border-rose-400/20 bg-rose-500/[0.06] text-rose-100',
+            )}
+          >
+            <span className="font-medium">{topEvent.symbol} {topEvent.type.toUpperCase().slice(0, 3)}</span>
+            <span>{topEvent.strike}</span>
+            <span className="text-white/40">{formatPremium(topEvent.premium)}</span>
+            <span className="text-white/30">{relativeAge(topEvent.timestamp)}</span>
+            {entryMid != null && spxPrice > 0 && topEvent.symbol === 'SPX' && Math.abs(topEvent.strike - entryMid) <= 20 && (
+              <span className="rounded border border-champagne/35 bg-champagne/10 px-1 py-0 text-[8px] uppercase tracking-[0.08em] text-champagne">
+                Near Entry
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[10px] text-white/45">No ranked event.</span>
+        )}
 
-          return (
-            <span
-              key={event.id}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-mono',
-                event.direction === 'bullish'
-                  ? 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-100'
-                  : 'border-rose-400/20 bg-rose-500/[0.06] text-rose-100',
-                nearEntry && 'ring-1 ring-champagne/40',
-              )}
-            >
-              <span className="font-medium">{event.symbol} {event.type.toUpperCase().slice(0, 3)}</span>
-              <span>{event.strike}</span>
-              <span className="text-white/40">{formatPremium(event.premium)}</span>
-              <span className="text-white/30">{relativeAge(event.timestamp)}</span>
-              {nearEntry && <span className="text-champagne text-[8px]">●</span>}
-            </span>
-          )
-        })}
+        <button
+          type="button"
+          data-testid="spx-flow-toggle"
+          onClick={() => {
+            const next = !expanded
+            setExpanded(next)
+            trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.FLOW_MODE_TOGGLED, {
+              mode: next ? 'expanded' : 'compact',
+              rankedCount: ranked.length,
+              hasSelectedSetup: Boolean(selectedSetup),
+            })
+          }}
+          className="shrink-0 rounded border border-white/15 bg-white/[0.03] px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/60 hover:text-white/80"
+        >
+          {expanded ? 'Compact' : `Expand (${Math.max(0, ranked.length - 1)})`}
+        </button>
       </div>
+
+      {expanded && (
+        <div className="mt-1.5 space-y-1" data-testid="spx-flow-expanded">
+          {ranked.slice(1).map((event) => {
+            const nearEntry = entryMid != null && spxPrice > 0 && event.symbol === 'SPX'
+              ? Math.abs(event.strike - entryMid) <= 20
+              : false
+
+            return (
+              <div
+                key={event.id}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-mono',
+                  event.direction === 'bullish'
+                    ? 'border-emerald-400/20 bg-emerald-500/[0.05] text-emerald-100'
+                    : 'border-rose-400/20 bg-rose-500/[0.05] text-rose-100',
+                )}
+              >
+                <span className="font-medium">{event.symbol}</span>
+                <span>{event.type.toUpperCase().slice(0, 3)}</span>
+                <span>{event.strike}</span>
+                <span className="ml-auto text-white/40">{formatPremium(event.premium)}</span>
+                <span className="text-white/30">{relativeAge(event.timestamp)}</span>
+                {nearEntry && (
+                  <span className="rounded border border-champagne/35 bg-champagne/10 px-1 py-0 text-[8px] uppercase tracking-[0.08em] text-champagne">
+                    Near Entry
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

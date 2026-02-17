@@ -19,6 +19,7 @@ import { GEXHeatmap } from '@/components/spx-command-center/gex-heatmap'
 import { MobilePanelTabs, type MobilePanelTab } from '@/components/spx-command-center/mobile-panel-tabs'
 import { SPXPanelSkeleton, SPXSkeleton } from '@/components/spx-command-center/spx-skeleton'
 import { DecisionContext } from '@/components/spx-command-center/decision-context'
+import { MobileBriefPanel } from '@/components/spx-command-center/mobile-brief-panel'
 import { FADE_UP_VARIANT, STAGGER_CHILDREN } from '@/lib/motion-primitives'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
@@ -87,6 +88,8 @@ function SPXCommandCenterContent() {
             Mobile mode is read-only for monitoring. Use desktop for contract execution and interactive coaching.
           </div>
           <MobilePanelTabs active={mobileTab} onChange={handleMobileTabChange} />
+
+          {mobileTab === 'brief' && <MobileBriefPanel />}
 
           {mobileTab === 'chart' && (
             <>

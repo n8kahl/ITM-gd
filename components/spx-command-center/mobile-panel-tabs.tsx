@@ -2,9 +2,10 @@
 
 import { cn } from '@/lib/utils'
 
-export type MobilePanelTab = 'chart' | 'setups' | 'coach' | 'levels'
+export type MobilePanelTab = 'brief' | 'chart' | 'setups' | 'coach' | 'levels'
 
 const TABS: Array<{ id: MobilePanelTab; label: string }> = [
+  { id: 'brief', label: 'Brief' },
   { id: 'chart', label: 'Chart' },
   { id: 'setups', label: 'Setups' },
   { id: 'coach', label: 'Coach' },
@@ -19,7 +20,7 @@ export function MobilePanelTabs({
   onChange: (next: MobilePanelTab) => void
 }) {
   return (
-    <div className="glass-card-heavy rounded-xl p-1 grid grid-cols-4 gap-1">
+    <div className="glass-card-heavy grid grid-cols-5 gap-1 rounded-xl p-1">
       {TABS.map((tab) => (
         <button
           key={tab.id}
