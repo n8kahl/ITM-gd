@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
@@ -10,6 +11,50 @@ import { fetchAcademyLesson, fetchAcademyModule, fetchAcademyPlan } from '@/lib/
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 type ModuleData = Awaited<ReturnType<typeof fetchAcademyModule>>
 type LessonData = Awaited<ReturnType<typeof fetchAcademyLesson>>
+
+const BLOCK_IMAGE_BY_TYPE: Record<LessonData['blocks'][number]['blockType'], string> = {
+  hook: '/academy/illustrations/market-context.svg',
+  concept_explanation: '/academy/illustrations/training-default.svg',
+  worked_example: '/academy/illustrations/trade-management.svg',
+  guided_practice: '/academy/illustrations/entry-validation.svg',
+  independent_practice: '/academy/illustrations/risk-sizing.svg',
+  reflection: '/academy/illustrations/review-reflection.svg',
+}
+
+const DEFAULT_MEDIA_IMAGE = '/academy/illustrations/training-default.svg'
+
+function inferImageFromText(value: string): string {
+  const normalized = value.toLowerCase()
+  if (normalized.includes('risk')) return '/academy/illustrations/risk-sizing.svg'
+  if (normalized.includes('exit')) return '/academy/illustrations/exit-discipline.svg'
+  if (normalized.includes('entry')) return '/academy/illustrations/entry-validation.svg'
+  if (normalized.includes('market') || normalized.includes('alert')) return '/academy/illustrations/market-context.svg'
+  if (normalized.includes('option') || normalized.includes('greek') || normalized.includes('leaps')) {
+    return '/academy/illustrations/options-basics.svg'
+  }
+  if (normalized.includes('management')) return '/academy/illustrations/trade-management.svg'
+  if (normalized.includes('review') || normalized.includes('psychology')) return '/academy/illustrations/review-reflection.svg'
+  return DEFAULT_MEDIA_IMAGE
+}
+
+function resolveModuleImage(moduleItem: { slug: string; title: string; coverImageUrl: string | null }): string {
+  if (moduleItem.coverImageUrl) return moduleItem.coverImageUrl
+  return inferImageFromText(`${moduleItem.slug} ${moduleItem.title}`)
+}
+
+function resolveLessonImage(lesson: { slug: string; title: string; heroImageUrl: string | null }): string {
+  if (lesson.heroImageUrl) return lesson.heroImageUrl
+  return inferImageFromText(`${lesson.slug} ${lesson.title}`)
+}
+
+function resolveBlockImage(block: LessonData['blocks'][number], lessonImageUrl: string): string {
+  const explicitImage = block.contentJson?.imageUrl ?? block.contentJson?.image_url
+  if (typeof explicitImage === 'string' && explicitImage.trim().length > 0) {
+    return explicitImage
+  }
+
+  return BLOCK_IMAGE_BY_TYPE[block.blockType] || lessonImageUrl
+}
 
 function getBlockMarkdown(block: LessonData['blocks'][number]): string {
   const markdown = block.contentJson?.markdown
@@ -177,8 +222,21 @@ export function ModulesCatalog() {
                         : 'border-white/10 bg-transparent hover:border-white/20'
                     }`}
                   >
-                    <p className="text-sm font-medium text-white">{moduleItem.title}</p>
-                    <p className="mt-1 text-xs text-zinc-400">{moduleItem.trackTitle} · {moduleItem.lessons.length} lessons</p>
+                    <div className="flex items-center gap-3">
+                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
+                        <Image
+                          src={resolveModuleImage(moduleItem)}
+                          alt={`${moduleItem.title} cover`}
+                          fill
+                          className="object-cover"
+                          sizes="48px"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white">{moduleItem.title}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{moduleItem.trackTitle} · {moduleItem.lessons.length} lessons</p>
+                      </div>
+                    </div>
                   </button>
                 </li>
               ))}
@@ -194,6 +252,15 @@ export function ModulesCatalog() {
                   <p className="text-base font-medium text-white">{selectedModule.title}</p>
                   <p className="mt-1 text-sm text-zinc-300">{selectedModule.description || 'No description provided.'}</p>
                   <p className="mt-2 text-xs text-zinc-400">{selectedModule.estimatedMinutes} minutes estimated</p>
+                  <div className="relative mt-3 h-36 overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
+                    <Image
+                      src={resolveModuleImage(selectedModule)}
+                      alt={`${selectedModule.title} artwork`}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                    />
+                  </div>
                 </div>
 
                 <ol className="space-y-2">
@@ -225,6 +292,15 @@ export function ModulesCatalog() {
                       <div>
                         <p className="text-base font-semibold text-white">{selectedLesson.title}</p>
                         <p className="mt-1 text-sm text-zinc-300">{selectedLesson.learningObjective}</p>
+                        <div className="relative mt-3 h-40 overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
+                          <Image
+                            src={resolveLessonImage(selectedLesson)}
+                            alt={`${selectedLesson.title} lesson artwork`}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 1024px) 100vw, 50vw"
+                          />
+                        </div>
                       </div>
 
                       {selectedLesson.blocks.length === 0 ? (
@@ -237,8 +313,17 @@ export function ModulesCatalog() {
                                 Step {index + 1}: {block.blockType.replaceAll('_', ' ')}
                               </p>
                               {block.title ? <p className="mt-1 text-sm font-medium text-white">{block.title}</p> : null}
+                              <div className="relative mt-3 h-32 overflow-hidden rounded-md border border-white/10 bg-[#0f1117]">
+                                <Image
+                                  src={resolveBlockImage(block, resolveLessonImage(selectedLesson))}
+                                  alt={`${block.title || selectedLesson.title} illustration`}
+                                  fill
+                                  className="object-cover"
+                                  sizes="(max-width: 1024px) 100vw, 40vw"
+                                />
+                              </div>
                               <div className="mt-2 text-sm text-zinc-200">
-                                <AcademyMarkdown content={getBlockMarkdown(block)} />
+                                <AcademyMarkdown>{getBlockMarkdown(block)}</AcademyMarkdown>
                               </div>
                             </li>
                           ))}

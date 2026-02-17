@@ -13,7 +13,7 @@ export class SupabaseAcademyLessonRepository implements AcademyLessonRepository 
   async getPublishedLessonById(lessonId: string): Promise<AcademyLesson | null> {
     const { data, error } = await this.supabase
       .from('academy_lessons')
-      .select('id, module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published')
+      .select('id, module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata')
       .eq('id', lessonId)
       .eq('is_published', true)
       .maybeSingle()
@@ -28,7 +28,7 @@ export class SupabaseAcademyLessonRepository implements AcademyLessonRepository 
   async listPublishedLessonsForModule(moduleId: string): Promise<AcademyLesson[]> {
     const { data, error } = await this.supabase
       .from('academy_lessons')
-      .select('id, module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published')
+      .select('id, module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata')
       .eq('module_id', moduleId)
       .eq('is_published', true)
       .order('position', { ascending: true })

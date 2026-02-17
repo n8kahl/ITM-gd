@@ -24,6 +24,21 @@ function asStringArray(value: Nullable<unknown>): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
+function asRecord(value: Nullable<unknown>): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function resolveImageUrl(metadata: Nullable<unknown>, keys: string[]): string | null {
+  const record = asRecord(metadata)
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value
+    }
+  }
+  return null
+}
+
 export function mapAcademyProgramRow(row: Record<string, unknown>): AcademyProgram {
   return {
     id: asString(row.id),
@@ -56,6 +71,7 @@ export function mapAcademyModuleRow(row: Record<string, unknown>): AcademyModule
     code: asString(row.code),
     title: asString(row.title),
     description: typeof row.description === 'string' ? row.description : null,
+    coverImageUrl: resolveImageUrl(row.metadata, ['coverImageUrl', 'cover_image_url', 'imageUrl', 'image_url']),
     learningOutcomes: asStringArray(row.learning_outcomes),
     estimatedMinutes: asNumber(row.estimated_minutes),
     position: asNumber(row.position),
@@ -70,6 +86,7 @@ export function mapAcademyLessonRow(row: Record<string, unknown>): AcademyLesson
     slug: asString(row.slug),
     title: asString(row.title),
     learningObjective: asString(row.learning_objective),
+    heroImageUrl: resolveImageUrl(row.metadata, ['heroImageUrl', 'hero_image_url', 'coverImageUrl', 'cover_image_url']),
     estimatedMinutes: asNumber(row.estimated_minutes),
     difficulty: row.difficulty === 'intermediate' || row.difficulty === 'advanced' ? row.difficulty : 'beginner',
     prerequisiteLessonIds: asStringArray(row.prerequisite_lesson_ids),
