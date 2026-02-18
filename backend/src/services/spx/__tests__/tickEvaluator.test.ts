@@ -40,8 +40,18 @@ function makeSetup(overrides?: Partial<Setup>): Setup {
 }
 
 describe('spx/tickEvaluator', () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     resetTickEvaluatorState();
+    process.env = {
+      ...originalEnv,
+      SPX_SETUP_STOP_CONFIRMATION_TICKS: '2',
+    };
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   it('emits ready -> triggered transition when entry is touched', () => {
@@ -126,5 +136,31 @@ describe('spx/tickEvaluator', () => {
     });
     expect(events).toHaveLength(0);
   });
-});
 
+  it('requires configured stop confirmation streak before invalidation transition', () => {
+    syncTickEvaluatorSetups([makeSetup({ status: 'triggered', triggeredAt: '2026-02-17T12:01:00.000Z' })]);
+
+    const firstBreach = evaluateTickSetupTransitions({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 5994.5,
+      size: 1,
+      timestamp: 1700000000000,
+      sequence: 1,
+    });
+    expect(firstBreach).toHaveLength(0);
+
+    const secondBreach = evaluateTickSetupTransitions({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 5994.25,
+      size: 1,
+      timestamp: 1700000002000,
+      sequence: 2,
+    });
+    expect(secondBreach).toHaveLength(1);
+    expect(secondBreach[0].toPhase).toBe('invalidated');
+    expect(secondBreach[0].reason).toBe('stop');
+    expect(secondBreach[0].setup.invalidationReason).toBe('stop_breach_confirmed');
+  });
+});

@@ -12,6 +12,7 @@ import type {
   Regime,
   RegimeState,
   Setup,
+  SetupInvalidationReason,
   SetupType,
   SPXFlowEvent,
   SPXLevel,
@@ -27,14 +28,34 @@ const FLOW_ZONE_TOLERANCE_POINTS = 12;
 const FLOW_MIN_DIRECTIONAL_PREMIUM = 75_000;
 const FLOW_MIN_LOCAL_PREMIUM = 150_000;
 const FLOW_MIN_LOCAL_EVENTS = 2;
-const REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
-const FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD = 38;
-const CONTEXT_DEMOTION_STREAK = 2;
-const CONTEXT_INVALIDATION_STREAK = 3;
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
+
+const DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
+const DEFAULT_FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD = 38;
+const DEFAULT_CONTEXT_DEMOTION_STREAK = 2;
+const DEFAULT_CONTEXT_INVALIDATION_STREAK = 3;
+const DEFAULT_STOP_CONFIRMATION_TICKS = 2;
+const DEFAULT_TTL_FORMING_MS = 20 * 60 * 1000;
+const DEFAULT_TTL_READY_MS = 25 * 60 * 1000;
+const DEFAULT_TTL_TRIGGERED_MS = 90 * 60 * 1000;
+
+interface SetupLifecycleConfig {
+  lifecycleEnabled: boolean;
+  telemetryEnabled: boolean;
+  regimeConflictConfidenceThreshold: number;
+  flowDivergenceAlignmentThreshold: number;
+  contextDemotionStreak: number;
+  contextInvalidationStreak: number;
+  stopConfirmationTicks: number;
+  ttlFormingMs: number;
+  ttlReadyMs: number;
+  ttlTriggeredMs: number;
+}
+
 interface SetupContextState {
   regimeConflictStreak: number;
   flowDivergenceStreak: number;
+  stopBreachStreak: number;
   updatedAtMs: number;
 }
 const setupContextStateById = new Map<string, SetupContextState>();
@@ -50,6 +71,68 @@ const WIN_RATE_BY_SCORE: Record<number, number> = {
   4: 71,
   5: 82,
 };
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return fallback;
+}
+
+function parseIntEnv(value: string | undefined, fallback: number, minimum = 0): number {
+  if (typeof value !== 'string') return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(parsed, minimum);
+}
+
+function getSetupLifecycleConfig(): SetupLifecycleConfig {
+  return {
+    lifecycleEnabled: parseBooleanEnv(process.env.SPX_SETUP_LIFECYCLE_ENABLED, true),
+    telemetryEnabled: parseBooleanEnv(process.env.SPX_SETUP_TRANSITION_TELEMETRY_ENABLED, true),
+    regimeConflictConfidenceThreshold: parseIntEnv(
+      process.env.SPX_SETUP_REGIME_CONFLICT_CONFIDENCE_THRESHOLD,
+      DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD,
+      0,
+    ),
+    flowDivergenceAlignmentThreshold: parseIntEnv(
+      process.env.SPX_SETUP_FLOW_DIVERGENCE_THRESHOLD,
+      DEFAULT_FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD,
+      0,
+    ),
+    contextDemotionStreak: parseIntEnv(
+      process.env.SPX_SETUP_DEMOTION_STREAK,
+      DEFAULT_CONTEXT_DEMOTION_STREAK,
+      1,
+    ),
+    contextInvalidationStreak: parseIntEnv(
+      process.env.SPX_SETUP_INVALIDATION_STREAK,
+      DEFAULT_CONTEXT_INVALIDATION_STREAK,
+      1,
+    ),
+    stopConfirmationTicks: parseIntEnv(
+      process.env.SPX_SETUP_STOP_CONFIRMATION_TICKS,
+      DEFAULT_STOP_CONFIRMATION_TICKS,
+      1,
+    ),
+    ttlFormingMs: parseIntEnv(
+      process.env.SPX_SETUP_TTL_FORMING_MS,
+      DEFAULT_TTL_FORMING_MS,
+      60_000,
+    ),
+    ttlReadyMs: parseIntEnv(
+      process.env.SPX_SETUP_TTL_READY_MS,
+      DEFAULT_TTL_READY_MS,
+      60_000,
+    ),
+    ttlTriggeredMs: parseIntEnv(
+      process.env.SPX_SETUP_TTL_TRIGGERED_MS,
+      DEFAULT_TTL_TRIGGERED_MS,
+      60_000,
+    ),
+  };
+}
 
 function setupTypeForRegime(regime: Regime): SetupType {
   switch (regime) {
@@ -208,8 +291,12 @@ function flowAlignmentPercent(input: {
   return (alignedPremium / totalPremium) * 100;
 }
 
-function hasRegimeConflict(direction: 'bullish' | 'bearish', regimeState: RegimeState): boolean {
-  if (regimeState.confidence < REGIME_CONFLICT_CONFIDENCE_THRESHOLD) return false;
+function hasRegimeConflict(
+  direction: 'bullish' | 'bearish',
+  regimeState: RegimeState,
+  confidenceThreshold: number,
+): boolean {
+  if (regimeState.confidence < confidenceThreshold) return false;
   if (regimeState.direction === 'neutral') return false;
   return regimeState.direction !== direction;
 }
@@ -219,16 +306,23 @@ function updateSetupContextState(input: {
   nowMs: number;
   regimeConflict: boolean;
   flowDivergence: boolean;
+  stopBreach: boolean;
 }): SetupContextState {
   const previous = setupContextStateById.get(input.setupId);
   const stale = !previous || (input.nowMs - previous.updatedAtMs > CONTEXT_STREAK_TTL_MS);
   const base = stale
-    ? { regimeConflictStreak: 0, flowDivergenceStreak: 0, updatedAtMs: input.nowMs }
+    ? {
+      regimeConflictStreak: 0,
+      flowDivergenceStreak: 0,
+      stopBreachStreak: 0,
+      updatedAtMs: input.nowMs,
+    }
     : previous;
 
   const next: SetupContextState = {
     regimeConflictStreak: input.regimeConflict ? base.regimeConflictStreak + 1 : 0,
     flowDivergenceStreak: input.flowDivergence ? base.flowDivergenceStreak + 1 : 0,
+    stopBreachStreak: input.stopBreach ? base.stopBreachStreak + 1 : 0,
     updatedAtMs: input.nowMs,
   };
 
@@ -261,6 +355,12 @@ function isTarget2Reached(setup: Pick<Setup, 'direction' | 'target2'>, price: nu
     : price <= setup.target2.price;
 }
 
+function toEpochMs(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function resolveLifecycleStatus(input: {
   computedStatus: Setup['status'];
   currentPrice: number;
@@ -275,10 +375,6 @@ function resolveLifecycleStatus(input: {
   const isTriggeredNow = status === 'triggered';
 
   if (wasTriggered && previous) {
-    if (isStopBreached(previous, input.currentPrice)) {
-      return 'invalidated';
-    }
-
     if (isTarget2Reached(previous, input.currentPrice)) {
       return 'expired';
     }
@@ -287,10 +383,6 @@ function resolveLifecycleStatus(input: {
   // Once triggered, keep setup in triggered state until explicit resolution.
   if (wasTriggered && !isTriggeredNow) {
     status = 'triggered';
-  }
-
-  if ((wasTriggered || isTriggeredNow) && isStopBreached(input.setup, input.currentPrice)) {
-    return 'invalidated';
   }
 
   if ((wasTriggered || isTriggeredNow) && isTarget2Reached(input.setup, input.currentPrice)) {
@@ -306,6 +398,83 @@ function resolveLifecycleStatus(input: {
   }
 
   return status;
+}
+
+function ttlMsForStatus(status: Setup['status'], config: SetupLifecycleConfig): number | null {
+  if (status === 'forming') return config.ttlFormingMs;
+  if (status === 'ready') return config.ttlReadyMs;
+  if (status === 'triggered') return config.ttlTriggeredMs;
+  return null;
+}
+
+function resolveContextInvalidationReason(input: {
+  contextState: SetupContextState;
+  config: SetupLifecycleConfig;
+}): SetupInvalidationReason | null {
+  const { contextState, config } = input;
+  const regimeInvalidates = contextState.regimeConflictStreak >= config.contextInvalidationStreak;
+  const flowInvalidates = contextState.flowDivergenceStreak >= config.contextInvalidationStreak;
+  if (!regimeInvalidates && !flowInvalidates) return null;
+  if (regimeInvalidates && flowInvalidates) {
+    return contextState.regimeConflictStreak >= contextState.flowDivergenceStreak
+      ? 'regime_conflict'
+      : 'flow_divergence';
+  }
+  return regimeInvalidates ? 'regime_conflict' : 'flow_divergence';
+}
+
+function resolveLifecycleMetadata(input: {
+  nowMs: number;
+  currentStatus: Setup['status'];
+  previous: Setup | null;
+  invalidationReason: SetupInvalidationReason | null;
+  config: SetupLifecycleConfig;
+}): {
+  status: Setup['status'];
+  statusUpdatedAt: string;
+  ttlExpiresAt: string | null;
+  invalidationReason: SetupInvalidationReason | null;
+} {
+  let status = input.currentStatus;
+  let invalidationReason = status === 'invalidated' ? input.invalidationReason || 'unknown' : null;
+
+  const previousStatus = input.previous?.status || null;
+  const previousStatusUpdatedAtMs = toEpochMs(input.previous?.statusUpdatedAt || input.previous?.createdAt || null);
+  let statusAnchorMs = previousStatus === status && previousStatusUpdatedAtMs > 0
+    ? previousStatusUpdatedAtMs
+    : input.nowMs;
+
+  const ttlMs = ttlMsForStatus(status, input.config);
+  let ttlExpiresAt: string | null = ttlMs ? new Date(statusAnchorMs + ttlMs).toISOString() : null;
+
+  if (ttlMs && input.nowMs > statusAnchorMs + ttlMs) {
+    if (status === 'triggered') {
+      status = 'invalidated';
+      invalidationReason = 'ttl_expired';
+    } else {
+      status = 'expired';
+      invalidationReason = null;
+    }
+    statusAnchorMs = input.nowMs;
+    ttlExpiresAt = null;
+  }
+
+  if (status === 'invalidated' && !invalidationReason) {
+    invalidationReason = input.previous?.invalidationReason || 'unknown';
+  }
+  if (status !== 'invalidated') {
+    invalidationReason = null;
+  }
+  if (status === 'expired' || status === 'invalidated') {
+    ttlExpiresAt = null;
+  }
+
+  return {
+    status,
+    statusUpdatedAt: new Date(statusAnchorMs).toISOString(),
+    ttlExpiresAt,
+    invalidationReason,
+  };
 }
 
 export async function detectActiveSetups(options?: {
@@ -362,19 +531,25 @@ export async function detectActiveSetups(options?: {
   const candidateZones = pickCandidateZones(levels.clusters, currentPrice);
   const setupType = setupTypeForRegime(regimeState.regime);
   const nowMs = Date.now();
+  const lifecycleConfig = getSetupLifecycleConfig();
 
   const sessionDate = toEasternTime(new Date()).dateStr;
 
   const setups: Setup[] = candidateZones.map((zone) => {
     const direction = setupDirection(zone, currentPrice);
     const zoneCenter = (zone.priceLow + zone.priceHigh) / 2;
-    const regimeConflict = hasRegimeConflict(direction, regimeState);
+    const regimeConflict = hasRegimeConflict(
+      direction,
+      regimeState,
+      lifecycleConfig.regimeConflictConfidenceThreshold,
+    );
     const alignmentPct = flowAlignmentPercent({
       flowEvents,
       direction,
       nowMs,
     });
-    const flowDivergence = alignmentPct != null && alignmentPct < FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD;
+    const flowDivergence = alignmentPct != null
+      && alignmentPct < lifecycleConfig.flowDivergenceAlignmentThreshold;
 
     const fibTouch = fibLevels.some((fib) => Math.abs(fib.price - zoneCenter) <= 0.5);
     const flowConfirmed = hasFlowConfirmation({
@@ -418,36 +593,59 @@ export async function detectActiveSetups(options?: {
       round(zone.priceHigh, 2),
     ].join('|');
     const setupId = stableId('spx_setup', setupIdSeed);
+    const previous = previousById.get(setupId) || null;
+    const lifecycleSetup = previous?.status === 'triggered'
+      ? {
+        direction: previous.direction,
+        entryZone: previous.entryZone,
+        stop: previous.stop,
+        target2: previous.target2,
+      }
+      : {
+        direction,
+        entryZone: { low: entryLow, high: entryHigh },
+        stop,
+        target2: { price: target2, label: 'Target 2' as const },
+      };
+    const stopBreachedNow = isStopBreached({
+      direction: lifecycleSetup.direction,
+      stop: lifecycleSetup.stop,
+    }, currentPrice);
     const contextState = updateSetupContextState({
       setupId,
       nowMs,
       regimeConflict,
       flowDivergence,
+      stopBreach: stopBreachedNow,
     });
-    const previous = previousById.get(setupId) || null;
 
     let status = resolveLifecycleStatus({
       computedStatus,
       currentPrice,
       fallbackDistance,
-      setup: {
-        direction,
-        entryZone: { low: entryLow, high: entryHigh },
-        stop,
-        target2: { price: target2, label: 'Target 2' },
-      },
+      setup: lifecycleSetup,
       previous,
     });
 
-    const contextInvalidate = contextState.regimeConflictStreak >= CONTEXT_INVALIDATION_STREAK
-      || contextState.flowDivergenceStreak >= CONTEXT_INVALIDATION_STREAK;
-    const contextDemote = contextState.regimeConflictStreak >= CONTEXT_DEMOTION_STREAK
-      || contextState.flowDivergenceStreak >= CONTEXT_DEMOTION_STREAK;
+    let invalidationReason: SetupInvalidationReason | null = null;
+    if (lifecycleConfig.lifecycleEnabled) {
+      const contextInvalidationReason = resolveContextInvalidationReason({
+        contextState,
+        config: lifecycleConfig,
+      });
+      const contextDemote = contextState.regimeConflictStreak >= lifecycleConfig.contextDemotionStreak
+        || contextState.flowDivergenceStreak >= lifecycleConfig.contextDemotionStreak;
+      const stopBreachedConfirmed = contextState.stopBreachStreak >= lifecycleConfig.stopConfirmationTicks;
 
-    if (status === 'triggered' && contextInvalidate) {
-      status = 'invalidated';
-    } else if (status === 'ready' && contextDemote) {
-      status = 'forming';
+      if ((status === 'ready' || status === 'triggered') && stopBreachedConfirmed) {
+        status = 'invalidated';
+        invalidationReason = 'stop_breach_confirmed';
+      } else if (status === 'triggered' && contextInvalidationReason) {
+        status = 'invalidated';
+        invalidationReason = contextInvalidationReason;
+      } else if (status === 'ready' && contextDemote) {
+        status = 'forming';
+      }
     }
 
     let triggeredAt: string | null = previous?.triggeredAt || null;
@@ -459,6 +657,13 @@ export async function detectActiveSetups(options?: {
     }
 
     const createdAt = previous?.createdAt || nowIso();
+    const lifecycle = resolveLifecycleMetadata({
+      nowMs,
+      currentStatus: status,
+      previous,
+      invalidationReason,
+      config: lifecycleConfig,
+    });
 
     return {
       id: setupId,
@@ -472,11 +677,16 @@ export async function detectActiveSetups(options?: {
       confluenceSources: confluence.sources,
       clusterZone: zone,
       regime: regimeState.regime,
-      status,
+      status: lifecycle.status,
+      statusUpdatedAt: lifecycle.statusUpdatedAt,
+      ttlExpiresAt: lifecycle.ttlExpiresAt,
+      invalidationReason: lifecycle.invalidationReason,
       probability: WIN_RATE_BY_SCORE[confluence.score] || 32,
       recommendedContract: null,
       createdAt,
-      triggeredAt,
+      triggeredAt: lifecycle.status === 'triggered' || lifecycle.status === 'invalidated' || lifecycle.status === 'expired'
+        ? triggeredAt
+        : null,
     };
   });
 
@@ -489,6 +699,9 @@ export async function detectActiveSetups(options?: {
     setups.push({
       ...previous,
       status: 'expired',
+      statusUpdatedAt: new Date(nowMs).toISOString(),
+      ttlExpiresAt: null,
+      invalidationReason: null,
     });
   }
 
@@ -501,10 +714,32 @@ export async function detectActiveSetups(options?: {
 
   await cacheSet(SETUPS_CACHE_KEY, setups, SETUPS_CACHE_TTL_SECONDS);
 
+  const invalidationReasons = setups
+    .filter((setup) => setup.status === 'invalidated' && setup.invalidationReason)
+    .reduce<Record<string, number>>((acc, setup) => {
+      const reason = setup.invalidationReason || 'unknown';
+      acc[reason] = (acc[reason] || 0) + 1;
+      return acc;
+    }, {});
+
+  if (lifecycleConfig.telemetryEnabled) {
+    logger.info('SPX setup lifecycle telemetry', {
+      lifecycleEnabled: lifecycleConfig.lifecycleEnabled,
+      contextDemotionStreak: lifecycleConfig.contextDemotionStreak,
+      contextInvalidationStreak: lifecycleConfig.contextInvalidationStreak,
+      stopConfirmationTicks: lifecycleConfig.stopConfirmationTicks,
+      invalidationReasons,
+    });
+  }
+
   logger.info('SPX setups detected', {
     count: setups.length,
     ready: setups.filter((setup) => setup.status === 'ready').length,
     triggered: setups.filter((setup) => setup.status === 'triggered').length,
+    invalidated: setups.filter((setup) => setup.status === 'invalidated').length,
+    expired: setups.filter((setup) => setup.status === 'expired').length,
+    invalidationReasons,
+    lifecycleEnabled: lifecycleConfig.lifecycleEnabled,
   });
 
   return setups;

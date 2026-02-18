@@ -68,6 +68,14 @@ export type SetupType = 'fade_at_wall' | 'breakout_vacuum' | 'mean_reversion' | 
 
 export type SetupStatus = 'forming' | 'ready' | 'triggered' | 'invalidated' | 'expired'
 
+export type SetupInvalidationReason =
+  | 'stop_breach_confirmed'
+  | 'regime_conflict'
+  | 'flow_divergence'
+  | 'ttl_expired'
+  | 'manual'
+  | 'unknown'
+
 export type Regime = 'trending' | 'ranging' | 'compression' | 'breakout'
 
 export interface Setup {
@@ -83,6 +91,9 @@ export interface Setup {
   clusterZone: ClusterZone
   regime: Regime
   status: SetupStatus
+  statusUpdatedAt?: string
+  ttlExpiresAt?: string | null
+  invalidationReason?: SetupInvalidationReason | null
   probability: number
   recommendedContract: ContractRecommendation | null
   createdAt: string

@@ -365,6 +365,33 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       const action = typeof (payload as { action?: unknown }).action === 'string'
         ? (payload as { action: string }).action
         : 'updated'
+      const transition = (payload as { transition?: unknown }).transition
+      if (transition && typeof transition === 'object' && !Array.isArray(transition)) {
+        const fromPhase = typeof (transition as { fromPhase?: unknown }).fromPhase === 'string'
+          ? (transition as { fromPhase: string }).fromPhase
+          : null
+        const toPhase = typeof (transition as { toPhase?: unknown }).toPhase === 'string'
+          ? (transition as { toPhase: string }).toPhase
+          : null
+        const reason = typeof (transition as { reason?: unknown }).reason === 'string'
+          ? (transition as { reason: string }).reason
+          : null
+
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SETUP_TRANSITION_RECEIVED, {
+          setupId: setupCandidate.id,
+          action,
+          fromPhase,
+          toPhase,
+          reason,
+        })
+      }
+      if (setupCandidate.status === 'invalidated') {
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SETUP_INVALIDATED, {
+          setupId: setupCandidate.id,
+          reason: setupCandidate.invalidationReason || 'unknown',
+          statusUpdatedAt: setupCandidate.statusUpdatedAt || null,
+        })
+      }
 
       setRealtimeSetups((previous) => {
         const map = new Map(previous.map((item) => [item.id, item]))

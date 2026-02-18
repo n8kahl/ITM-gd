@@ -47,6 +47,7 @@ const mockClassifyCurrentRegime = classifyCurrentRegime as jest.MockedFunction<t
 const mockGetFlowEvents = getFlowEvents as jest.MockedFunction<typeof getFlowEvents>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
+const originalEnv = { ...process.env };
 
 function buildBaseMocks(currentPrice: number) {
   mockGetMergedLevels.mockResolvedValue({
@@ -127,9 +128,23 @@ describe('spx/setupDetector', () => {
     jest.clearAllMocks();
     mockCacheSet.mockResolvedValue(undefined as never);
     __resetSetupDetectorStateForTests();
+    process.env = {
+      ...originalEnv,
+      SPX_SETUP_LIFECYCLE_ENABLED: 'true',
+      SPX_SETUP_DEMOTION_STREAK: '2',
+      SPX_SETUP_INVALIDATION_STREAK: '3',
+      SPX_SETUP_STOP_CONFIRMATION_TICKS: '2',
+      SPX_SETUP_TTL_FORMING_MS: String(20 * 60 * 1000),
+      SPX_SETUP_TTL_READY_MS: String(25 * 60 * 1000),
+      SPX_SETUP_TTL_TRIGGERED_MS: String(90 * 60 * 1000),
+    };
   });
 
-  it('marks previously triggered setups as invalidated when stop is breached', async () => {
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('marks previously triggered setups as invalidated only after confirmed stop breach streak', async () => {
     buildBaseMocks(101);
     mockCacheGet.mockResolvedValueOnce(null as never);
 
@@ -142,17 +157,23 @@ describe('spx/setupDetector', () => {
       direction: 'bullish' as const,
       stop: 98.5,
       triggeredAt: '2026-02-15T14:30:00.000Z',
+      statusUpdatedAt: new Date().toISOString(),
     };
 
     buildBaseMocks(97);
-    mockCacheGet.mockResolvedValueOnce([previousTriggered] as never);
+    mockCacheGet.mockResolvedValue([previousTriggered] as never);
 
-    const next = await detectActiveSetups({ forceRefresh: true });
-    const sameSetup = next.find((setup) => setup.id === previousTriggered.id);
+    const firstBreach = await detectActiveSetups({ forceRefresh: true });
+    const secondBreach = await detectActiveSetups({ forceRefresh: true });
+    const firstSameSetup = firstBreach.find((setup) => setup.id === previousTriggered.id);
+    const secondSameSetup = secondBreach.find((setup) => setup.id === previousTriggered.id);
 
-    expect(sameSetup).toBeTruthy();
-    expect(sameSetup?.status).toBe('invalidated');
-    expect(sameSetup?.triggeredAt).toBe(previousTriggered.triggeredAt);
+    expect(firstSameSetup).toBeTruthy();
+    expect(firstSameSetup?.status).toBe('triggered');
+    expect(secondSameSetup).toBeTruthy();
+    expect(secondSameSetup?.status).toBe('invalidated');
+    expect(secondSameSetup?.invalidationReason).toBe('stop_breach_confirmed');
+    expect(secondSameSetup?.triggeredAt).toBe(previousTriggered.triggeredAt);
   });
 
   it('carries forward missing active setups as expired', async () => {
@@ -184,6 +205,9 @@ describe('spx/setupDetector', () => {
       recommendedContract: null,
       createdAt: '2026-02-15T13:00:00.000Z',
       triggeredAt: null,
+      statusUpdatedAt: '2026-02-15T13:05:00.000Z',
+      ttlExpiresAt: '2026-02-15T13:30:00.000Z',
+      invalidationReason: null,
     };
 
     mockGetMergedLevels.mockResolvedValue({ levels: [], clusters: [], generatedAt: '2026-02-15T14:40:00.000Z' });
@@ -209,6 +233,8 @@ describe('spx/setupDetector', () => {
     expect(setups.length).toBe(1);
     expect(setups[0].id).toBe(previous.id);
     expect(setups[0].status).toBe('expired');
+    expect(setups[0].statusUpdatedAt).toBeTruthy();
+    expect(setups[0].ttlExpiresAt).toBeNull();
   });
 
   it('invalidates triggered setups after persistent regime conflict', async () => {
@@ -230,6 +256,7 @@ describe('spx/setupDetector', () => {
     expect(first[0]?.status).toBe('triggered');
     expect(second[0]?.status).toBe('triggered');
     expect(third[0]?.status).toBe('invalidated');
+    expect(third[0]?.invalidationReason).toBe('regime_conflict');
   });
 
   it('demotes ready setups to forming on persistent directional divergence', async () => {
@@ -249,5 +276,28 @@ describe('spx/setupDetector', () => {
 
     expect(first[0]?.status).toBe('ready');
     expect(second[0]?.status).toBe('forming');
+  });
+
+  it('invalidates triggered setups with ttl_expired reason when triggered ttl is exceeded', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    const initial = await detectActiveSetups({ forceRefresh: true });
+    const setup = initial[0];
+
+    const staleTriggered = {
+      ...setup,
+      status: 'triggered' as const,
+      statusUpdatedAt: '2020-01-01T00:00:00.000Z',
+      triggeredAt: setup.triggeredAt || '2020-01-01T00:00:00.000Z',
+    };
+
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce([staleTriggered] as never);
+    const next = await detectActiveSetups({ forceRefresh: true });
+    const sameSetup = next.find((candidate) => candidate.id === setup.id);
+
+    expect(sameSetup?.status).toBe('invalidated');
+    expect(sameSetup?.invalidationReason).toBe('ttl_expired');
+    expect(sameSetup?.ttlExpiresAt).toBeNull();
   });
 });

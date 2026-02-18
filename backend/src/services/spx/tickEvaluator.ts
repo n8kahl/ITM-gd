@@ -39,11 +39,20 @@ interface SetupRuntimeState {
   phase: TransitionPhase;
   setup: Setup;
   lastTransitionAtMs: number;
+  stopBreachStreak: number;
   sequence: number;
 }
 
 const DEFAULT_MIN_TRANSITION_GAP_MS = 1000;
+const DEFAULT_STOP_CONFIRMATION_TICKS = 2;
 const setupStateById = new Map<string, SetupRuntimeState>();
+
+function parseIntEnv(value: string | undefined, fallback: number, minimum = 1): number {
+  if (typeof value !== 'string') return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(parsed, minimum);
+}
 
 function phaseFromSetupStatus(setup: Setup): TransitionPhase {
   if (setup.status === 'triggered') return 'triggered';
@@ -85,15 +94,25 @@ function applyPhaseToSetup(
   setup: Setup,
   phase: TransitionPhase,
   transitionTimestampIso: string,
+  transitionReason?: SetupTransitionEvent['reason'],
 ): Setup {
   const status = toSetupStatus(phase);
   const nextTriggeredAt = (phase === 'triggered' || phase === 'target1_hit' || phase === 'target2_hit')
     ? (setup.triggeredAt || transitionTimestampIso)
     : setup.triggeredAt;
 
+  const invalidationReason = status === 'invalidated'
+    ? transitionReason === 'stop'
+      ? 'stop_breach_confirmed'
+      : setup.invalidationReason || 'unknown'
+    : null;
+
   return {
     ...setup,
     status,
+    statusUpdatedAt: transitionTimestampIso,
+    ttlExpiresAt: null,
+    invalidationReason,
     triggeredAt: nextTriggeredAt,
   };
 }
@@ -151,6 +170,7 @@ export function syncTickEvaluatorSetups(setups: Setup[]): void {
         phase: incomingPhase,
         setup,
         lastTransitionAtMs: 0,
+        stopBreachStreak: 0,
         sequence: 0,
       });
       continue;
@@ -164,6 +184,7 @@ export function syncTickEvaluatorSetups(setups: Setup[]): void {
       ...existing,
       setup: applyPhaseToSetup(setup, phase, setup.triggeredAt || nowIso()),
       phase,
+      stopBreachStreak: 0,
     });
   }
 
@@ -193,9 +214,14 @@ export function applyTickStateToSetups(setups: Setup[]): Setup[] {
 
 export function evaluateTickSetupTransitions(
   tick: NormalizedMarketTick,
-  options?: { minTransitionGapMs?: number },
+  options?: { minTransitionGapMs?: number; minStopBreachTicks?: number },
 ): SetupTransitionEvent[] {
   const minGapMs = Math.max(0, options?.minTransitionGapMs ?? DEFAULT_MIN_TRANSITION_GAP_MS);
+  const minStopBreachTicks = Math.max(
+    1,
+    options?.minStopBreachTicks
+      ?? parseIntEnv(process.env.SPX_SETUP_STOP_CONFIRMATION_TICKS, DEFAULT_STOP_CONFIRMATION_TICKS, 1),
+  );
   const events: SetupTransitionEvent[] = [];
   const transitionTimestampIso = new Date(tick.timestamp).toISOString();
 
@@ -203,16 +229,26 @@ export function evaluateTickSetupTransitions(
     if (TERMINAL_PHASES.has(state.phase)) continue;
     if (tick.symbol !== 'SPX') continue;
 
+    if (stopBreached(state.setup, tick.price)) {
+      state.stopBreachStreak += 1;
+    } else {
+      state.stopBreachStreak = 0;
+    }
+
     const transition = resolveTransition(state.phase, state.setup, tick.price);
     if (!transition) continue;
+    if (transition.toPhase === 'invalidated' && transition.reason === 'stop' && state.stopBreachStreak < minStopBreachTicks) {
+      continue;
+    }
     if (tick.timestamp - state.lastTransitionAtMs < minGapMs) continue;
     if (PHASE_RANK[transition.toPhase] <= PHASE_RANK[state.phase]) continue;
 
     const previousPhase = state.phase;
     state.phase = transition.toPhase;
     state.lastTransitionAtMs = tick.timestamp;
+    state.stopBreachStreak = 0;
     state.sequence += 1;
-    state.setup = applyPhaseToSetup(state.setup, transition.toPhase, transitionTimestampIso);
+    state.setup = applyPhaseToSetup(state.setup, transition.toPhase, transitionTimestampIso, transition.reason);
 
     events.push({
       id: `${state.setupId}:${state.sequence}:${transition.toPhase}:${tick.timestamp}`,
@@ -234,4 +270,3 @@ export function evaluateTickSetupTransitions(
 export function resetTickEvaluatorState(): void {
   setupStateById.clear();
 }
-

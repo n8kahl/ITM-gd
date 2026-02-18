@@ -10,6 +10,14 @@ export type SetupStatus = 'forming' | 'ready' | 'triggered' | 'invalidated' | 'e
 
 export type Regime = 'trending' | 'ranging' | 'compression' | 'breakout';
 
+export type SetupInvalidationReason =
+  | 'stop_breach_confirmed'
+  | 'regime_conflict'
+  | 'flow_divergence'
+  | 'ttl_expired'
+  | 'manual'
+  | 'unknown';
+
 export interface SPXLevel {
   id: string;
   symbol: 'SPX' | 'SPY';
@@ -128,6 +136,9 @@ export interface Setup {
   clusterZone: ClusterZone;
   regime: Regime;
   status: SetupStatus;
+  statusUpdatedAt?: string;
+  ttlExpiresAt?: string | null;
+  invalidationReason?: SetupInvalidationReason | null;
   probability: number;
   recommendedContract: ContractRecommendation | null;
   createdAt: string;

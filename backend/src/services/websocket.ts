@@ -415,7 +415,7 @@ function clustersSignature(clusters: SPXSnapshot['clusters']): string {
 
 function setupsSignature(setups: Setup[]): string {
   return setups
-    .map((setup) => `${setup.id}|${setup.status}|${setup.direction}|${setup.entryZone.low.toFixed(2)}|${setup.entryZone.high.toFixed(2)}`)
+    .map((setup) => `${setup.id}|${setup.status}|${setup.direction}|${setup.entryZone.low.toFixed(2)}|${setup.entryZone.high.toFixed(2)}|${setup.statusUpdatedAt || ''}|${setup.ttlExpiresAt || ''}|${setup.invalidationReason || ''}`)
     .sort()
     .join(';');
 }
@@ -498,6 +498,9 @@ function diffSetups(
 
     if (
       prior.status !== setup.status
+      || prior.statusUpdatedAt !== setup.statusUpdatedAt
+      || prior.ttlExpiresAt !== setup.ttlExpiresAt
+      || prior.invalidationReason !== setup.invalidationReason
       || prior.stop !== setup.stop
       || prior.target1.price !== setup.target1.price
       || prior.target2.price !== setup.target2.price
@@ -515,6 +518,9 @@ function diffSetups(
         setup: {
           ...setup,
           status: 'expired',
+          statusUpdatedAt: new Date().toISOString(),
+          ttlExpiresAt: null,
+          invalidationReason: null,
         },
         action: 'expired',
       });

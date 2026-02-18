@@ -17,6 +17,8 @@ export const SPX_TELEMETRY_EVENT = {
   FIRST_ACTIONABLE_RENDER: 'spx_first_actionable_render',
   FIRST_SETUP_SELECT: 'spx_first_setup_select',
   DATA_HEALTH_CHANGED: 'spx_data_health_changed',
+  SETUP_TRANSITION_RECEIVED: 'spx_setup_transition_received',
+  SETUP_INVALIDATED: 'spx_setup_invalidated',
 } as const
 
 export type SPXTelemetryEventName = (typeof SPX_TELEMETRY_EVENT)[keyof typeof SPX_TELEMETRY_EVENT]
