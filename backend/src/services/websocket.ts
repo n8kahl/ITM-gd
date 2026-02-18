@@ -415,7 +415,7 @@ function clustersSignature(clusters: SPXSnapshot['clusters']): string {
 
 function setupsSignature(setups: Setup[]): string {
   return setups
-    .map((setup) => `${setup.id}|${setup.status}|${setup.direction}|${setup.entryZone.low.toFixed(2)}|${setup.entryZone.high.toFixed(2)}|${setup.statusUpdatedAt || ''}|${setup.ttlExpiresAt || ''}|${setup.invalidationReason || ''}`)
+    .map((setup) => `${setup.id}|${setup.status}|${setup.direction}|${setup.entryZone.low.toFixed(2)}|${setup.entryZone.high.toFixed(2)}|${setup.statusUpdatedAt || ''}|${setup.ttlExpiresAt || ''}|${setup.invalidationReason || ''}|${setup.score ?? ''}|${setup.evR ?? ''}|${setup.pWinCalibrated ?? ''}|${setup.tier || ''}|${setup.rank ?? ''}`)
     .sort()
     .join(';');
 }
@@ -501,6 +501,11 @@ function diffSetups(
       || prior.statusUpdatedAt !== setup.statusUpdatedAt
       || prior.ttlExpiresAt !== setup.ttlExpiresAt
       || prior.invalidationReason !== setup.invalidationReason
+      || prior.score !== setup.score
+      || prior.evR !== setup.evR
+      || prior.pWinCalibrated !== setup.pWinCalibrated
+      || prior.tier !== setup.tier
+      || prior.rank !== setup.rank
       || prior.stop !== setup.stop
       || prior.target1.price !== setup.target1.price
       || prior.target2.price !== setup.target2.price

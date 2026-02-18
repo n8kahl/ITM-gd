@@ -20,6 +20,14 @@ function borderClass(status: Setup['status']): string {
   return 'border-white/15 bg-white/[0.02] opacity-60'
 }
 
+function tierLabel(tier: Setup['tier'] | undefined): string | null {
+  if (!tier) return null
+  if (tier === 'sniper_primary') return 'SNIPER A'
+  if (tier === 'sniper_secondary') return 'SNIPER B'
+  if (tier === 'watchlist') return 'WATCHLIST'
+  return null
+}
+
 /** Compute thermometer positions as percentages along the trade range */
 function computeThermometer(setup: Setup, currentPrice: number) {
   const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
@@ -66,10 +74,14 @@ export function SetupCard({
   const riskPts = Math.abs(entryMid - setup.stop)
   const rewardPts = Math.abs(setup.target1.price - entryMid)
   const rr = riskPts > 0 ? (rewardPts / riskPts) : 0
+  const calibratedWin = setup.pWinCalibrated != null ? setup.pWinCalibrated * 100 : setup.probability
+  const setupScore = setup.score ?? (setup.confluenceScore * 20)
+  const setupEv = setup.evR ?? null
 
   const distToEntry = Number.isFinite(currentPrice) && currentPrice > 0
     ? Math.abs(currentPrice - entryMid)
     : null
+  const tier = tierLabel(setup.tier)
 
   return (
     <button
@@ -98,7 +110,12 @@ export function SetupCard({
         <span className="text-[10px] uppercase tracking-[0.12em] text-white/55">
           {setup.type.replace(/_/g, ' ')}
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {tier && (
+            <span className="rounded border border-emerald-300/25 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-emerald-200">
+              {tier}
+            </span>
+          )}
           {Array.from({ length: 5 }).map((_, idx) => (
             <span
               key={`${setup.id}-c-${idx}`}
@@ -189,17 +206,25 @@ export function SetupCard({
         </div>
         <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
           <p className="text-white/40">Win%</p>
-          <p className="font-mono text-ivory font-medium">{setup.probability.toFixed(0)}%</p>
+          <p className="font-mono text-ivory font-medium">{calibratedWin.toFixed(0)}%</p>
         </div>
         <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
-          <p className="text-white/40">Dist</p>
-          <p className="font-mono text-ivory font-medium">{distToEntry != null ? distToEntry.toFixed(1) : '--'}</p>
+          <p className="text-white/40">Score</p>
+          <p className="font-mono text-ivory font-medium">{setupScore.toFixed(0)}</p>
         </div>
         <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
-          <p className="text-white/40">Risk</p>
-          <p className="font-mono text-rose-200 font-medium">{riskPts.toFixed(1)}</p>
+          <p className="text-white/40">EV(R)</p>
+          <p className={cn('font-mono font-medium', (setupEv ?? 0) >= 0 ? 'text-emerald-200' : 'text-rose-200')}>
+            {setupEv != null ? `${setupEv >= 0 ? '+' : ''}${setupEv.toFixed(2)}` : '--'}
+          </p>
         </div>
       </div>
+
+      {distToEntry != null && (
+        <p className="mt-1.5 text-[9px] uppercase tracking-[0.09em] text-white/40">
+          Dist to entry {distToEntry.toFixed(1)} pts · Risk {riskPts.toFixed(1)} pts
+        </p>
+      )}
 
       {readOnly && (
         <p className="mt-1.5 text-[9px] uppercase tracking-[0.1em] text-white/35">Read-only</p>

@@ -68,6 +68,8 @@ export type SetupType = 'fade_at_wall' | 'breakout_vacuum' | 'mean_reversion' | 
 
 export type SetupStatus = 'forming' | 'ready' | 'triggered' | 'invalidated' | 'expired'
 
+export type SetupTier = 'sniper_primary' | 'sniper_secondary' | 'watchlist' | 'hidden'
+
 export type SetupInvalidationReason =
   | 'stop_breach_confirmed'
   | 'regime_conflict'
@@ -91,6 +93,11 @@ export interface Setup {
   clusterZone: ClusterZone
   regime: Regime
   status: SetupStatus
+  score?: number
+  pWinCalibrated?: number
+  evR?: number
+  tier?: SetupTier
+  rank?: number
   statusUpdatedAt?: string
   ttlExpiresAt?: string | null
   invalidationReason?: SetupInvalidationReason | null

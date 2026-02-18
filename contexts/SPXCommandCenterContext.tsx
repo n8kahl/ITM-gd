@@ -117,6 +117,12 @@ const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   invalidated: 3,
   expired: 4,
 }
+const SETUP_TIER_PRIORITY: Record<NonNullable<Setup['tier']>, number> = {
+  sniper_primary: 0,
+  sniper_secondary: 1,
+  watchlist: 2,
+  hidden: 3,
+}
 
 function toEpoch(value: string | null | undefined): number {
   if (!value) return 0
@@ -128,6 +134,15 @@ function rankSetups(setups: Setup[]): Setup[] {
   return [...setups].sort((a, b) => {
     const statusDelta = SETUP_STATUS_PRIORITY[a.status] - SETUP_STATUS_PRIORITY[b.status]
     if (statusDelta !== 0) return statusDelta
+    const tierDelta = (SETUP_TIER_PRIORITY[a.tier || 'hidden'] ?? 3) - (SETUP_TIER_PRIORITY[b.tier || 'hidden'] ?? 3)
+    if (tierDelta !== 0) return tierDelta
+    const evDelta = (b.evR || 0) - (a.evR || 0)
+    if (evDelta !== 0) return evDelta
+    const scoreDelta = (b.score || 0) - (a.score || 0)
+    if (scoreDelta !== 0) return scoreDelta
+    if ((a.rank ?? Number.MAX_SAFE_INTEGER) !== (b.rank ?? Number.MAX_SAFE_INTEGER)) {
+      return (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+    }
     if (b.confluenceScore !== a.confluenceScore) return b.confluenceScore - a.confluenceScore
     if (b.probability !== a.probability) return b.probability - a.probability
 

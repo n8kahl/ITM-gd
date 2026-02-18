@@ -60,6 +60,13 @@ const envSchema = z.object({
   SPX_SETUP_TTL_FORMING_MS: z.string().default('1200000').transform(Number),
   SPX_SETUP_TTL_READY_MS: z.string().default('1500000').transform(Number),
   SPX_SETUP_TTL_TRIGGERED_MS: z.string().default('5400000').transform(Number),
+  SPX_SETUP_EV_TIERING_ENABLED: booleanFromEnv.default(true),
+  SPX_SETUP_SNIPER_PRIMARY_SCORE: z.string().default('78').transform(Number),
+  SPX_SETUP_SNIPER_SECONDARY_SCORE: z.string().default('72').transform(Number),
+  SPX_SETUP_SNIPER_PRIMARY_PWIN: z.string().default('0.58').transform(Number),
+  SPX_SETUP_SNIPER_SECONDARY_PWIN: z.string().default('0.54').transform(Number),
+  SPX_SETUP_SNIPER_PRIMARY_EV_R: z.string().default('0.35').transform(Number),
+  SPX_SETUP_SNIPER_SECONDARY_EV_R: z.string().default('0.20').transform(Number),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   ALPHA_VANTAGE_BASE_URL: z.string().url().optional(),
 

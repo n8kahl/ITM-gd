@@ -52,8 +52,11 @@ export function buildSetupDisplayPolicy(input: BuildSetupDisplayPolicyInput): Bu
   const directionalBias = resolveDirectionalBias(input)
   const compressionFilterActive = shouldEnableCompressionFilter(input, directionalBias)
 
-  const actionableAll = input.setups.filter((setup) => setup.status === 'ready' || setup.status === 'triggered')
-  const formingAll = input.setups.filter((setup) => setup.status === 'forming')
+  const actionableAll = input.setups.filter((setup) => (
+    (setup.status === 'ready' || setup.status === 'triggered')
+    && setup.tier !== 'hidden'
+  ))
+  const formingAll = input.setups.filter((setup) => setup.status === 'forming' && setup.tier !== 'hidden')
 
   const actionableFiltered = compressionFilterActive && directionalBias
     ? actionableAll.filter((setup) => setup.direction === directionalBias)
@@ -64,10 +67,13 @@ export function buildSetupDisplayPolicy(input: BuildSetupDisplayPolicyInput): Bu
     : formingAll
 
   const hiddenOppositeCount = Math.max(actionableAll.length - actionableFiltered.length, 0)
+  const sniperRanked = actionableFiltered.filter((setup) => setup.tier === 'sniper_primary' || setup.tier === 'sniper_secondary')
+  const fallbackRanked = actionableFiltered.filter((setup) => setup.tier !== 'sniper_primary' && setup.tier !== 'sniper_secondary')
+  const actionablePrimary = [...sniperRanked, ...fallbackRanked].slice(0, primaryLimit)
 
   return {
     actionableAll,
-    actionablePrimary: actionableFiltered.slice(0, primaryLimit),
+    actionablePrimary,
     forming: formingFiltered,
     hiddenOppositeCount,
     directionalBias,

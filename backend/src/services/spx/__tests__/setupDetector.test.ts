@@ -278,6 +278,22 @@ describe('spx/setupDetector', () => {
     expect(second[0]?.status).toBe('forming');
   });
 
+  it('assigns deterministic score, ev, tier, and rank metadata', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+
+    const setups = await detectActiveSetups({ forceRefresh: true });
+    expect(setups.length).toBeGreaterThan(0);
+
+    const setup = setups[0];
+    expect(typeof setup.score).toBe('number');
+    expect(typeof setup.evR).toBe('number');
+    expect(typeof setup.pWinCalibrated).toBe('number');
+    expect(typeof setup.rank).toBe('number');
+    expect(setup.rank).toBe(1);
+    expect(['sniper_primary', 'sniper_secondary', 'watchlist', 'hidden']).toContain(setup.tier);
+  });
+
   it('invalidates triggered setups with ttl_expired reason when triggered ttl is exceeded', async () => {
     buildBaseMocks(101);
     mockCacheGet.mockResolvedValueOnce(null as never);

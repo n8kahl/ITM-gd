@@ -13,6 +13,7 @@ import type {
   RegimeState,
   Setup,
   SetupInvalidationReason,
+  SetupTier,
   SetupType,
   SPXFlowEvent,
   SPXLevel,
@@ -38,6 +39,12 @@ const DEFAULT_STOP_CONFIRMATION_TICKS = 2;
 const DEFAULT_TTL_FORMING_MS = 20 * 60 * 1000;
 const DEFAULT_TTL_READY_MS = 25 * 60 * 1000;
 const DEFAULT_TTL_TRIGGERED_MS = 90 * 60 * 1000;
+const DEFAULT_SNIPER_PRIMARY_SCORE = 78;
+const DEFAULT_SNIPER_SECONDARY_SCORE = 72;
+const DEFAULT_SNIPER_PRIMARY_PWIN = 0.58;
+const DEFAULT_SNIPER_SECONDARY_PWIN = 0.54;
+const DEFAULT_SNIPER_PRIMARY_EV_R = 0.35;
+const DEFAULT_SNIPER_SECONDARY_EV_R = 0.2;
 
 interface SetupLifecycleConfig {
   lifecycleEnabled: boolean;
@@ -50,6 +57,16 @@ interface SetupLifecycleConfig {
   ttlFormingMs: number;
   ttlReadyMs: number;
   ttlTriggeredMs: number;
+}
+
+interface SetupScoringConfig {
+  evTieringEnabled: boolean;
+  sniperPrimaryScore: number;
+  sniperSecondaryScore: number;
+  sniperPrimaryPWin: number;
+  sniperSecondaryPWin: number;
+  sniperPrimaryEvR: number;
+  sniperSecondaryEvR: number;
 }
 
 interface SetupContextState {
@@ -83,6 +100,13 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean 
 function parseIntEnv(value: string | undefined, fallback: number, minimum = 0): number {
   if (typeof value !== 'string') return fallback;
   const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(parsed, minimum);
+}
+
+function parseFloatEnv(value: string | undefined, fallback: number, minimum = 0): number {
+  if (typeof value !== 'string') return fallback;
+  const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(parsed, minimum);
 }
@@ -130,6 +154,42 @@ function getSetupLifecycleConfig(): SetupLifecycleConfig {
       process.env.SPX_SETUP_TTL_TRIGGERED_MS,
       DEFAULT_TTL_TRIGGERED_MS,
       60_000,
+    ),
+  };
+}
+
+function getSetupScoringConfig(): SetupScoringConfig {
+  return {
+    evTieringEnabled: parseBooleanEnv(process.env.SPX_SETUP_EV_TIERING_ENABLED, true),
+    sniperPrimaryScore: parseIntEnv(
+      process.env.SPX_SETUP_SNIPER_PRIMARY_SCORE,
+      DEFAULT_SNIPER_PRIMARY_SCORE,
+      0,
+    ),
+    sniperSecondaryScore: parseIntEnv(
+      process.env.SPX_SETUP_SNIPER_SECONDARY_SCORE,
+      DEFAULT_SNIPER_SECONDARY_SCORE,
+      0,
+    ),
+    sniperPrimaryPWin: parseFloatEnv(
+      process.env.SPX_SETUP_SNIPER_PRIMARY_PWIN,
+      DEFAULT_SNIPER_PRIMARY_PWIN,
+      0,
+    ),
+    sniperSecondaryPWin: parseFloatEnv(
+      process.env.SPX_SETUP_SNIPER_SECONDARY_PWIN,
+      DEFAULT_SNIPER_SECONDARY_PWIN,
+      0,
+    ),
+    sniperPrimaryEvR: parseFloatEnv(
+      process.env.SPX_SETUP_SNIPER_PRIMARY_EV_R,
+      DEFAULT_SNIPER_PRIMARY_EV_R,
+      0,
+    ),
+    sniperSecondaryEvR: parseFloatEnv(
+      process.env.SPX_SETUP_SNIPER_SECONDARY_EV_R,
+      DEFAULT_SNIPER_SECONDARY_EV_R,
+      0,
     ),
   };
 }
@@ -477,6 +537,105 @@ function resolveLifecycleMetadata(input: {
   };
 }
 
+function clamp(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function regimeWeights(regime: Regime): {
+  structure: number;
+  flow: number;
+  gex: number;
+  regime: number;
+  proximity: number;
+  microTrigger: number;
+} {
+  if (regime === 'compression') {
+    return {
+      structure: 0.24,
+      flow: 0.22,
+      gex: 0.18,
+      regime: 0.16,
+      proximity: 0.12,
+      microTrigger: 0.08,
+    };
+  }
+
+  if (regime === 'trending') {
+    return {
+      structure: 0.30,
+      flow: 0.24,
+      gex: 0.08,
+      regime: 0.20,
+      proximity: 0.10,
+      microTrigger: 0.08,
+    };
+  }
+
+  return {
+    structure: 0.22,
+    flow: 0.20,
+    gex: 0.20,
+    regime: 0.18,
+    proximity: 0.12,
+    microTrigger: 0.08,
+  };
+}
+
+function microTriggerFeature(status: Setup['status'], inEntry: boolean): number {
+  if (status === 'triggered') return 90;
+  if (status === 'ready' && inEntry) return 84;
+  if (status === 'ready') return 66;
+  if (status === 'forming') return 48;
+  if (status === 'invalidated') return 10;
+  return 12;
+}
+
+function deriveSetupTier(input: {
+  status: Setup['status'];
+  score: number;
+  pWinCalibrated: number;
+  evR: number;
+  config: SetupScoringConfig;
+}): SetupTier {
+  if (input.status === 'invalidated' || input.status === 'expired') return 'hidden';
+  if (input.status === 'forming') {
+    return input.score >= 60 ? 'watchlist' : 'hidden';
+  }
+
+  if (
+    input.score >= input.config.sniperPrimaryScore
+    && input.pWinCalibrated >= input.config.sniperPrimaryPWin
+    && input.evR >= input.config.sniperPrimaryEvR
+  ) {
+    return 'sniper_primary';
+  }
+
+  if (
+    input.score >= input.config.sniperSecondaryScore
+    && input.pWinCalibrated >= input.config.sniperSecondaryPWin
+    && input.evR >= input.config.sniperSecondaryEvR
+  ) {
+    return 'sniper_secondary';
+  }
+
+  return input.score >= 60 ? 'watchlist' : 'hidden';
+}
+
+const SETUP_STATUS_SORT_ORDER: Record<Setup['status'], number> = {
+  triggered: 0,
+  ready: 1,
+  forming: 2,
+  invalidated: 3,
+  expired: 4,
+};
+
+const SETUP_TIER_SORT_ORDER: Record<SetupTier, number> = {
+  sniper_primary: 0,
+  sniper_secondary: 1,
+  watchlist: 2,
+  hidden: 3,
+};
+
 export async function detectActiveSetups(options?: {
   forceRefresh?: boolean;
   levelData?: LevelData;
@@ -532,6 +691,7 @@ export async function detectActiveSetups(options?: {
   const setupType = setupTypeForRegime(regimeState.regime);
   const nowMs = Date.now();
   const lifecycleConfig = getSetupLifecycleConfig();
+  const scoringConfig = getSetupScoringConfig();
 
   const sessionDate = toEasternTime(new Date()).dateStr;
 
@@ -664,6 +824,73 @@ export async function detectActiveSetups(options?: {
       invalidationReason,
       config: lifecycleConfig,
     });
+    const entryMid = (entryLow + entryHigh) / 2;
+    const riskToStop = Math.max(Math.abs(entryMid - stop), 0.25);
+    const rewardToTarget1 = Math.abs(target1 - entryMid);
+    const rewardToTarget2 = Math.abs(target2 - entryMid);
+    const inEntryZone = isPriceInsideEntry({ entryZone: { low: entryLow, high: entryHigh } }, currentPrice);
+    const normalizedConfluence = clamp((confluence.score / 5) * 100);
+    const zoneTypeBonus = zone.type === 'fortress'
+      ? 20
+      : zone.type === 'defended'
+        ? 12
+        : zone.type === 'moderate'
+          ? 6
+          : 0;
+    const structureQuality = clamp(((zone.clusterScore / 5) * 60) + (normalizedConfluence * 0.4) + zoneTypeBonus);
+    const flowAlignment = alignmentPct == null ? (flowConfirmed ? 58 : 44) : clamp(alignmentPct + (flowConfirmed ? 6 : 0));
+    const gexAlignment = confluence.sources.includes('gex_alignment') ? 82 : 42;
+    const regimeAlignment = clamp(
+      (regimeAligned ? 82 : 36)
+        + (regimeState.direction === direction ? 8 : 0)
+        - (regimeConflict ? 10 : 0),
+    );
+    const proximityDistance = Math.abs(currentPrice - entryMid);
+    const proximityRatio = 1 - Math.min(1, proximityDistance / Math.max(2, fallbackDistance * 1.25));
+    const proximityUrgency = clamp(35 + (proximityRatio * 65));
+    const microTriggerQuality = microTriggerFeature(lifecycle.status, inEntryZone);
+
+    const weights = regimeWeights(regimeState.regime);
+    const scoreRaw = (
+      (weights.structure * (structureQuality / 100))
+      + (weights.flow * (flowAlignment / 100))
+      + (weights.gex * (gexAlignment / 100))
+      + (weights.regime * (regimeAlignment / 100))
+      + (weights.proximity * (proximityUrgency / 100))
+      + (weights.microTrigger * (microTriggerQuality / 100))
+    );
+    const stalePenalty = Math.min(12, (contextState.regimeConflictStreak + contextState.flowDivergenceStreak) * 3);
+    const contradictionPenalty = (regimeConflict ? 8 : 0) + (flowDivergence ? 7 : 0);
+    const lifecyclePenalty = lifecycle.status === 'forming' ? 6 : lifecycle.status === 'invalidated' ? 90 : lifecycle.status === 'expired' ? 95 : 0;
+    const finalScore = scoringConfig.evTieringEnabled
+      ? clamp((scoreRaw * 100) - stalePenalty - contradictionPenalty - lifecyclePenalty)
+      : normalizedConfluence;
+
+    const baselineWin = (WIN_RATE_BY_SCORE[confluence.score] || 32) / 100;
+    const scoreAdjustment = (finalScore - 50) / 220;
+    const flowAdjustment = alignmentPct == null ? 0 : ((alignmentPct - 50) / 240);
+    const pWinCalibrated = clamp(
+      baselineWin
+        + scoreAdjustment
+        + (regimeAligned ? 0.03 : -0.04)
+        + flowAdjustment,
+      0.05,
+      0.95,
+    );
+    const rTarget1 = rewardToTarget1 / riskToStop;
+    const rTarget2 = rewardToTarget2 / riskToStop;
+    const rBlended = (0.65 * rTarget1) + (0.35 * rTarget2);
+    const costR = 0.08 + (flowConfirmed ? 0 : 0.03) + (lifecycle.status === 'forming' ? 0.05 : 0);
+    const evR = (pWinCalibrated * rBlended) - ((1 - pWinCalibrated) * 1.0) - costR;
+    const tier = scoringConfig.evTieringEnabled
+      ? deriveSetupTier({
+        status: lifecycle.status,
+        score: finalScore,
+        pWinCalibrated,
+        evR,
+        config: scoringConfig,
+      })
+      : (lifecycle.status === 'ready' || lifecycle.status === 'triggered') ? 'watchlist' : 'hidden';
 
     return {
       id: setupId,
@@ -678,6 +905,11 @@ export async function detectActiveSetups(options?: {
       clusterZone: zone,
       regime: regimeState.regime,
       status: lifecycle.status,
+      score: round(finalScore, 2),
+      pWinCalibrated: round(pWinCalibrated, 4),
+      evR: round(evR, 3),
+      tier,
+      rank: undefined,
       statusUpdatedAt: lifecycle.statusUpdatedAt,
       ttlExpiresAt: lifecycle.ttlExpiresAt,
       invalidationReason: lifecycle.invalidationReason,
@@ -712,9 +944,28 @@ export async function detectActiveSetups(options?: {
   );
   pruneSetupContextState(activeContextIds, nowMs);
 
-  await cacheSet(SETUPS_CACHE_KEY, setups, SETUPS_CACHE_TTL_SECONDS);
+  const rankedSetups = [...setups]
+    .sort((a, b) => {
+      const statusDelta = SETUP_STATUS_SORT_ORDER[a.status] - SETUP_STATUS_SORT_ORDER[b.status];
+      if (statusDelta !== 0) return statusDelta;
 
-  const invalidationReasons = setups
+      const tierA = SETUP_TIER_SORT_ORDER[a.tier || 'hidden'];
+      const tierB = SETUP_TIER_SORT_ORDER[b.tier || 'hidden'];
+      if (tierA !== tierB) return tierA - tierB;
+
+      if ((b.evR || 0) !== (a.evR || 0)) return (b.evR || 0) - (a.evR || 0);
+      if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
+      if (b.probability !== a.probability) return b.probability - a.probability;
+      return toEpochMs(b.statusUpdatedAt || b.createdAt) - toEpochMs(a.statusUpdatedAt || a.createdAt);
+    })
+    .map((setup, index) => ({
+      ...setup,
+      rank: index + 1,
+    }));
+
+  await cacheSet(SETUPS_CACHE_KEY, rankedSetups, SETUPS_CACHE_TTL_SECONDS);
+
+  const invalidationReasons = rankedSetups
     .filter((setup) => setup.status === 'invalidated' && setup.invalidationReason)
     .reduce<Record<string, number>>((acc, setup) => {
       const reason = setup.invalidationReason || 'unknown';
@@ -733,16 +984,21 @@ export async function detectActiveSetups(options?: {
   }
 
   logger.info('SPX setups detected', {
-    count: setups.length,
-    ready: setups.filter((setup) => setup.status === 'ready').length,
-    triggered: setups.filter((setup) => setup.status === 'triggered').length,
-    invalidated: setups.filter((setup) => setup.status === 'invalidated').length,
-    expired: setups.filter((setup) => setup.status === 'expired').length,
+    count: rankedSetups.length,
+    ready: rankedSetups.filter((setup) => setup.status === 'ready').length,
+    triggered: rankedSetups.filter((setup) => setup.status === 'triggered').length,
+    invalidated: rankedSetups.filter((setup) => setup.status === 'invalidated').length,
+    expired: rankedSetups.filter((setup) => setup.status === 'expired').length,
+    sniperPrimary: rankedSetups.filter((setup) => setup.tier === 'sniper_primary').length,
+    sniperSecondary: rankedSetups.filter((setup) => setup.tier === 'sniper_secondary').length,
+    watchlist: rankedSetups.filter((setup) => setup.tier === 'watchlist').length,
+    hidden: rankedSetups.filter((setup) => setup.tier === 'hidden').length,
     invalidationReasons,
     lifecycleEnabled: lifecycleConfig.lifecycleEnabled,
+    evTieringEnabled: scoringConfig.evTieringEnabled,
   });
 
-  return setups;
+  return rankedSetups;
   };
 
   if (forceRefresh) {
