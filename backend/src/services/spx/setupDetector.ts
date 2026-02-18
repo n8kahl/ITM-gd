@@ -27,6 +27,17 @@ const FLOW_ZONE_TOLERANCE_POINTS = 12;
 const FLOW_MIN_DIRECTIONAL_PREMIUM = 75_000;
 const FLOW_MIN_LOCAL_PREMIUM = 150_000;
 const FLOW_MIN_LOCAL_EVENTS = 2;
+const REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
+const FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD = 38;
+const CONTEXT_DEMOTION_STREAK = 2;
+const CONTEXT_INVALIDATION_STREAK = 3;
+const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
+interface SetupContextState {
+  regimeConflictStreak: number;
+  flowDivergenceStreak: number;
+  updatedAtMs: number;
+}
+const setupContextStateById = new Map<string, SetupContextState>();
 type LevelData = {
   levels: SPXLevel[];
   clusters: ClusterZone[];
@@ -173,6 +184,67 @@ function hasFlowConfirmation(input: {
   );
 }
 
+function flowAlignmentPercent(input: {
+  flowEvents: SPXFlowEvent[];
+  direction: 'bullish' | 'bearish';
+  nowMs: number;
+}): number | null {
+  const recentDirectional = input.flowEvents.filter((event) => (
+    isRecentFlowEvent(event, input.nowMs)
+      && (event.direction === 'bullish' || event.direction === 'bearish')
+  ));
+
+  const bullishPremium = recentDirectional
+    .filter((event) => event.direction === 'bullish')
+    .reduce((sum, event) => sum + event.premium, 0);
+  const bearishPremium = recentDirectional
+    .filter((event) => event.direction === 'bearish')
+    .reduce((sum, event) => sum + event.premium, 0);
+
+  const totalPremium = bullishPremium + bearishPremium;
+  if (totalPremium < FLOW_MIN_DIRECTIONAL_PREMIUM) return null;
+
+  const alignedPremium = input.direction === 'bullish' ? bullishPremium : bearishPremium;
+  return (alignedPremium / totalPremium) * 100;
+}
+
+function hasRegimeConflict(direction: 'bullish' | 'bearish', regimeState: RegimeState): boolean {
+  if (regimeState.confidence < REGIME_CONFLICT_CONFIDENCE_THRESHOLD) return false;
+  if (regimeState.direction === 'neutral') return false;
+  return regimeState.direction !== direction;
+}
+
+function updateSetupContextState(input: {
+  setupId: string;
+  nowMs: number;
+  regimeConflict: boolean;
+  flowDivergence: boolean;
+}): SetupContextState {
+  const previous = setupContextStateById.get(input.setupId);
+  const stale = !previous || (input.nowMs - previous.updatedAtMs > CONTEXT_STREAK_TTL_MS);
+  const base = stale
+    ? { regimeConflictStreak: 0, flowDivergenceStreak: 0, updatedAtMs: input.nowMs }
+    : previous;
+
+  const next: SetupContextState = {
+    regimeConflictStreak: input.regimeConflict ? base.regimeConflictStreak + 1 : 0,
+    flowDivergenceStreak: input.flowDivergence ? base.flowDivergenceStreak + 1 : 0,
+    updatedAtMs: input.nowMs,
+  };
+
+  setupContextStateById.set(input.setupId, next);
+  return next;
+}
+
+function pruneSetupContextState(activeSetupIds: Set<string>, nowMs: number): void {
+  for (const [setupId, state] of setupContextStateById.entries()) {
+    const stale = nowMs - state.updatedAtMs > CONTEXT_STREAK_TTL_MS;
+    if (stale || !activeSetupIds.has(setupId)) {
+      setupContextStateById.delete(setupId);
+    }
+  }
+}
+
 function isPriceInsideEntry(setup: Pick<Setup, 'entryZone'>, price: number): boolean {
   return price >= setup.entryZone.low && price <= setup.entryZone.high;
 }
@@ -296,6 +368,13 @@ export async function detectActiveSetups(options?: {
   const setups: Setup[] = candidateZones.map((zone) => {
     const direction = setupDirection(zone, currentPrice);
     const zoneCenter = (zone.priceLow + zone.priceHigh) / 2;
+    const regimeConflict = hasRegimeConflict(direction, regimeState);
+    const alignmentPct = flowAlignmentPercent({
+      flowEvents,
+      direction,
+      nowMs,
+    });
+    const flowDivergence = alignmentPct != null && alignmentPct < FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD;
 
     const fibTouch = fibLevels.some((fib) => Math.abs(fib.price - zoneCenter) <= 0.5);
     const flowConfirmed = hasFlowConfirmation({
@@ -339,9 +418,15 @@ export async function detectActiveSetups(options?: {
       round(zone.priceHigh, 2),
     ].join('|');
     const setupId = stableId('spx_setup', setupIdSeed);
+    const contextState = updateSetupContextState({
+      setupId,
+      nowMs,
+      regimeConflict,
+      flowDivergence,
+    });
     const previous = previousById.get(setupId) || null;
 
-    const status = resolveLifecycleStatus({
+    let status = resolveLifecycleStatus({
       computedStatus,
       currentPrice,
       fallbackDistance,
@@ -353,6 +438,17 @@ export async function detectActiveSetups(options?: {
       },
       previous,
     });
+
+    const contextInvalidate = contextState.regimeConflictStreak >= CONTEXT_INVALIDATION_STREAK
+      || contextState.flowDivergenceStreak >= CONTEXT_INVALIDATION_STREAK;
+    const contextDemote = contextState.regimeConflictStreak >= CONTEXT_DEMOTION_STREAK
+      || contextState.flowDivergenceStreak >= CONTEXT_DEMOTION_STREAK;
+
+    if (status === 'triggered' && contextInvalidate) {
+      status = 'invalidated';
+    } else if (status === 'ready' && contextDemote) {
+      status = 'forming';
+    }
 
     let triggeredAt: string | null = previous?.triggeredAt || null;
     if (status === 'triggered' && !triggeredAt) {
@@ -396,6 +492,13 @@ export async function detectActiveSetups(options?: {
     });
   }
 
+  const activeContextIds = new Set(
+    setups
+      .filter((setup) => setup.status !== 'expired' && setup.status !== 'invalidated')
+      .map((setup) => setup.id),
+  );
+  pruneSetupContextState(activeContextIds, nowMs);
+
   await cacheSet(SETUPS_CACHE_KEY, setups, SETUPS_CACHE_TTL_SECONDS);
 
   logger.info('SPX setups detected', {
@@ -422,4 +525,9 @@ export async function detectActiveSetups(options?: {
 export async function getSetupById(id: string, options?: { forceRefresh?: boolean }): Promise<Setup | null> {
   const setups = await detectActiveSetups(options);
   return setups.find((setup) => setup.id === id) || null;
+}
+
+export function __resetSetupDetectorStateForTests(): void {
+  setupContextStateById.clear();
+  setupsInFlight = null;
 }

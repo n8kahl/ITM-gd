@@ -237,29 +237,81 @@ function FibPanel({ fibLevels, spxPrice }: { fibLevels: FibLevel[]; spxPrice: nu
 }
 
 // ─── SPY Impact Summary ───
-function SPYImpact({ levels, spxPrice }: { levels: Array<{ symbol: 'SPX' | 'SPY'; price: number; source: string; category: string }>; spxPrice: number }) {
+function formatSpySource(source: string): string {
+  const normalized = source.toLowerCase()
+  if (normalized.includes('call_wall')) return 'Call Wall'
+  if (normalized.includes('put_wall')) return 'Put Wall'
+  if (normalized.includes('flip_point')) return 'Flip'
+  if (normalized.includes('combined')) return 'Combined Gamma'
+  return source.replace(/_/g, ' ').toUpperCase()
+}
+
+function SPYImpact({
+  levels,
+  spxPrice,
+  basis,
+  selectedDirection,
+}: {
+  levels: Array<{ symbol: 'SPX' | 'SPY'; price: number; source: string; category: string }>
+  spxPrice: number
+  basis: number | null
+  selectedDirection: 'bullish' | 'bearish' | null
+}) {
   const spyLevels = levels.filter((l) => l.symbol === 'SPY' || l.category === 'spy_derived')
   if (spyLevels.length === 0) return null
 
   // Find closest SPY-derived levels above and below
   const above = spyLevels.filter((l) => l.price > spxPrice).sort((a, b) => a.price - b.price)[0]
   const below = spyLevels.filter((l) => l.price <= spxPrice).sort((a, b) => b.price - a.price)[0]
+  const nearest = [...spyLevels]
+    .sort((a, b) => Math.abs(a.price - spxPrice) - Math.abs(b.price - spxPrice))
+    .slice(0, 3)
+
+  const directionalNote = (() => {
+    if (!selectedDirection || !above || !below) return 'SPY levels provide converted support/resistance context for SPX entries.'
+    const supportDistance = Math.abs(spxPrice - below.price)
+    const resistanceDistance = Math.abs(above.price - spxPrice)
+    if (selectedDirection === 'bullish') {
+      return supportDistance <= resistanceDistance
+        ? 'Bullish setup alignment: support is closer than resistance.'
+        : 'Bullish caution: resistance is closer than support.'
+    }
+    return resistanceDistance <= supportDistance
+      ? 'Bearish setup alignment: resistance is closer than support.'
+      : 'Bearish caution: support is closer than resistance.'
+  })()
 
   return (
     <div className="rounded-xl border border-champagne/15 bg-champagne/[0.03] px-3 py-2">
       <span className="text-[9px] uppercase tracking-[0.1em] text-champagne/60">SPY → SPX Impact</span>
-      <div className="mt-1 flex gap-3 text-[10px] font-mono">
-        {below && (
-          <span className="text-emerald-200/70">
-            Support {below.price.toFixed(0)} <span className="text-[8px] text-white/35">({below.source})</span>
+      <div className="mt-1.5 grid grid-cols-1 gap-1.5 text-[10px] md:grid-cols-2">
+        <div className="rounded-md border border-emerald-400/20 bg-emerald-500/8 px-2 py-1">
+          <p className="text-[8px] uppercase tracking-[0.08em] text-emerald-200/70">Nearest Support</p>
+          <p className="font-mono text-emerald-100">
+            {below ? below.price.toFixed(0) : '--'}
+            {below ? ` · ${formatSpySource(below.source)}` : ''}
+          </p>
+        </div>
+        <div className="rounded-md border border-rose-400/20 bg-rose-500/8 px-2 py-1">
+          <p className="text-[8px] uppercase tracking-[0.08em] text-rose-200/70">Nearest Resistance</p>
+          <p className="font-mono text-rose-100">
+            {above ? above.price.toFixed(0) : '--'}
+            {above ? ` · ${formatSpySource(above.source)}` : ''}
+          </p>
+        </div>
+      </div>
+      <p className="mt-1.5 text-[9px] text-white/45">
+        Converted using basis formula <span className="font-mono text-white/60">SPX ≈ (SPY × 10) + basis</span>
+        {basis != null ? `, current basis ${basis.toFixed(2)}` : ''}.
+      </p>
+      <p className="mt-0.5 text-[9px] text-champagne/75">{directionalNote}</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[9px] font-mono text-white/45">
+        {nearest.map((level) => (
+          <span key={`${level.source}-${level.price}`} className="rounded border border-white/12 bg-white/[0.03] px-1.5 py-0.5">
+            {formatSpySource(level.source)} {level.price.toFixed(0)}
           </span>
-        )}
-        {above && (
-          <span className="text-rose-200/70">
-            Resistance {above.price.toFixed(0)} <span className="text-[8px] text-white/35">({above.source})</span>
-          </span>
-        )}
-        <span className="text-white/30">{spyLevels.length} SPY-derived levels</span>
+        ))}
+        <span className="rounded border border-white/10 bg-white/[0.02] px-1.5 py-0.5">{spyLevels.length} converted levels</span>
       </div>
     </div>
   )
@@ -267,7 +319,7 @@ function SPYImpact({ levels, spxPrice }: { levels: Array<{ symbol: 'SPX' | 'SPY'
 
 // ─── Main DecisionContext container ───
 export function DecisionContext() {
-  const { clusterZones, prediction, fibLevels, levels, spxPrice, selectedSetup } = useSPXCommandCenter()
+  const { clusterZones, prediction, fibLevels, levels, spxPrice, selectedSetup, basis } = useSPXCommandCenter()
 
   return (
     <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
@@ -278,7 +330,12 @@ export function DecisionContext() {
       />
       <div className="space-y-2">
         <FibPanel fibLevels={fibLevels.slice(0, 12)} spxPrice={spxPrice} />
-        <SPYImpact levels={levels} spxPrice={spxPrice} />
+        <SPYImpact
+          levels={levels}
+          spxPrice={spxPrice}
+          basis={basis?.current ?? null}
+          selectedDirection={selectedSetup?.direction ?? null}
+        />
       </div>
     </div>
   )

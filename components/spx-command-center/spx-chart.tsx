@@ -7,10 +7,34 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { getChartData, type ChartBar, type ChartTimeframe } from '@/lib/api/ai-coach'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
+import type { SPXLevel } from '@/lib/types/spx-command-center'
 
 function toLineStyle(style: 'solid' | 'dashed' | 'dotted' | 'dot-dash'): 'solid' | 'dashed' | 'dotted' {
   if (style === 'dot-dash') return 'dashed'
   return style
+}
+
+function isSpyDerivedLevel(level: SPXLevel): boolean {
+  return level.category === 'spy_derived'
+    || level.symbol === 'SPY'
+    || level.source.startsWith('spy_')
+}
+
+function labelFromSource(source: string): string {
+  const normalized = source.toLowerCase()
+  if (normalized.includes('call_wall')) return 'Call Wall'
+  if (normalized.includes('put_wall')) return 'Put Wall'
+  if (normalized.includes('flip_point')) return 'Flip'
+  if (normalized.includes('zero_gamma')) return 'Zero Gamma'
+  if (normalized.startsWith('fib_')) return source.replace(/^fib_/, '').replace(/_/g, ' ').toUpperCase()
+  return source.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function chartLevelLabel(level: SPXLevel): string {
+  const base = labelFromSource(level.source)
+  if (isSpyDerivedLevel(level)) return `SPY→SPX ${base}`
+  if (level.category === 'options') return `Options ${base}`
+  return base
 }
 
 export function SPXChart() {
@@ -113,14 +137,16 @@ export function SPXChart() {
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({
       price: level.price,
-      label: level.source,
-      color: level.chartStyle.color,
-      lineStyle: toLineStyle(level.chartStyle.lineStyle),
+      label: chartLevelLabel(level),
+      color: isSpyDerivedLevel(level) ? 'rgba(245, 237, 204, 0.72)' : level.chartStyle.color,
+      lineStyle: toLineStyle(isSpyDerivedLevel(level) ? 'dot-dash' : level.chartStyle.lineStyle),
       lineWidth: level.chartStyle.lineWidth,
-      axisLabelVisible: false,
+      axisLabelVisible: true,
       type: level.category,
       strength: level.strength,
-      description: typeof level.metadata.description === 'string' ? level.metadata.description : level.source,
+      description: typeof level.metadata.description === 'string'
+        ? level.metadata.description
+        : `${chartLevelLabel(level)}${isSpyDerivedLevel(level) ? ' (SPY-derived conversion)' : ''}`,
       testsToday: typeof level.metadata.testsToday === 'number' ? level.metadata.testsToday : undefined,
       lastTest: typeof level.metadata.lastTestAt === 'string' ? level.metadata.lastTestAt : null,
       holdRate: typeof level.metadata.holdRate === 'number' ? level.metadata.holdRate : null,
@@ -155,7 +181,19 @@ export function SPXChart() {
       })
       .sort((a, b) => a.score - b.score)
 
-    return ranked.slice(0, selectedSetup ? 8 : 6).map((item) => item.annotation)
+    const baseFocused = ranked.slice(0, selectedSetup ? 8 : 6).map((item) => item.annotation)
+    const nearestSpyDerived = ranked
+      .filter((item) => item.annotation.type === 'spy_derived')
+      .slice(0, 2)
+      .map((item) => item.annotation)
+
+    const merged = new Map<string, LevelAnnotation>()
+    for (const annotation of [...baseFocused, ...nearestSpyDerived]) {
+      const key = `${annotation.label}:${annotation.price}:${annotation.type || 'unknown'}`
+      if (!merged.has(key)) merged.set(key, annotation)
+    }
+
+    return Array.from(merged.values())
   }, [bars, levelAnnotations, selectedSetup, spxPrice])
 
   const setupAnnotations = useMemo<LevelAnnotation[]>(() => {

@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { Dot, Target } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { cn } from '@/lib/utils'
+import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
 
 function formatPrice(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '--'
@@ -59,8 +60,14 @@ export function SPXHeader() {
   const wsConnectedUnknownSource = priceStreamConnected && !wsTickLive && !wsPollFallback
 
   const actionableCount = useMemo(
-    () => activeSetups.filter((s) => s.status === 'ready' || s.status === 'triggered').length,
-    [activeSetups],
+    () => buildSetupDisplayPolicy({
+      setups: activeSetups,
+      regime,
+      prediction,
+      selectedSetup: null,
+      primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
+    }),
+    [activeSetups, regime, prediction],
   )
 
   const flowBias = useMemo(() => {
@@ -139,7 +146,13 @@ export function SPXHeader() {
           </div>
 
           <p className="mt-0.5 truncate text-[11px] text-white/58">
-            <span className="text-white/75">{actionableCount} setups actionable</span>
+            <span className="text-white/75">{actionableCount.actionableVisibleCount} setups actionable</span>
+            {actionableCount.hiddenOppositeCount > 0 && (
+              <>
+                <Dot className="inline h-3.5 w-3.5 align-text-bottom text-white/30" />
+                <span>{actionableCount.hiddenOppositeCount} filtered</span>
+              </>
+            )}
             <Dot className="inline h-3.5 w-3.5 align-text-bottom text-white/30" />
             <span>Regime: <span className="text-ivory">{regime || '--'}</span></span>
             <Dot className="inline h-3.5 w-3.5 align-text-bottom text-white/30" />

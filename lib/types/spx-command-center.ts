@@ -144,6 +144,27 @@ export interface ContractRecommendation {
   expectedPnlAtTarget2: number
   maxLoss: number
   reasoning: string
+  spreadPct?: number
+  openInterest?: number
+  volume?: number
+  liquidityScore?: number
+  daysToExpiry?: number
+  premiumMid?: number
+  premiumAsk?: number
+  costBand?: 'discount' | 'balanced' | 'expensive'
+  alternatives?: Array<{
+    description: string
+    strike: number
+    expiry: string
+    type: 'call' | 'put'
+    delta: number
+    bid: number
+    ask: number
+    spreadPct: number
+    liquidityScore: number
+    maxLoss: number
+    score: number
+  }>
 }
 
 // ─── Basis Types ───

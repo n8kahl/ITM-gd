@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Dot, Gauge, Hexagon, Sparkles } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { cn } from '@/lib/utils'
+import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
 import {
   COACH_ALERT_DISMISS_EVENT,
   acknowledgeCoachAlert,
@@ -36,7 +37,7 @@ function summarizeFlowBias(flowEvents: Array<{ direction: 'bullish' | 'bearish';
 }
 
 export function ActionStrip() {
-  const { activeSetups, coachMessages, regime, prediction, flowEvents, gexProfile } = useSPXCommandCenter()
+  const { activeSetups, coachMessages, regime, prediction, flowEvents, gexProfile, selectedSetup } = useSPXCommandCenter()
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(() => loadDismissedCoachAlertIds())
 
   useEffect(() => {
@@ -53,7 +54,16 @@ export function ActionStrip() {
     }
   }, [])
 
-  const actionableCount = activeSetups.filter((s) => s.status === 'ready' || s.status === 'triggered').length
+  const setupPolicy = useMemo(
+    () => buildSetupDisplayPolicy({
+      setups: activeSetups,
+      regime,
+      prediction,
+      selectedSetup,
+      primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
+    }),
+    [activeSetups, regime, prediction, selectedSetup],
+  )
   const flowBias = summarizeFlowBias(flowEvents.slice(0, 10))
 
   const topAlert = useMemo(
@@ -109,7 +119,8 @@ export function ActionStrip() {
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200" title="Number of trade setups currently in 'ready' or 'triggered' status">
           <Sparkles className="h-3 w-3" />
-          Setups: {actionableCount} actionable
+          Setups: {setupPolicy.actionableVisibleCount} actionable
+          {setupPolicy.hiddenOppositeCount > 0 ? ` · ${setupPolicy.hiddenOppositeCount} hidden` : ''}
         </span>
 
         <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-[10px] text-white/70" title="AI-predicted market posture combining regime, direction, and confidence">

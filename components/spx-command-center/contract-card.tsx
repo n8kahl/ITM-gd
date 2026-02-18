@@ -6,6 +6,9 @@ import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
 function spreadPct(contract: ContractRecommendation): number | null {
+  if (typeof contract.spreadPct === 'number' && Number.isFinite(contract.spreadPct)) {
+    return contract.spreadPct
+  }
   if (contract.ask <= 0) return null
   const spread = Math.max(contract.ask - contract.bid, 0)
   return (spread / contract.ask) * 100
@@ -16,6 +19,12 @@ function spreadHealth(pct: number | null): { color: string; label: string } {
   if (pct <= 5) return { color: 'bg-emerald-400', label: 'Tight' }
   if (pct <= 12) return { color: 'bg-amber-400', label: 'Fair' }
   return { color: 'bg-rose-400', label: 'Wide' }
+}
+
+function costBandTone(costBand: ContractRecommendation['costBand']): string {
+  if (costBand === 'discount') return 'text-emerald-200'
+  if (costBand === 'expensive') return 'text-rose-200'
+  return 'text-champagne'
 }
 
 export function ContractCard({ contract }: { contract: ContractRecommendation }) {
@@ -106,6 +115,35 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
         </span>
       </div>
 
+      <div className="mt-2 grid grid-cols-2 gap-1.5 text-[9px] md:grid-cols-4">
+        <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+          <p className="text-white/35">Premium</p>
+          <p className="font-mono text-white/75">
+            ${Math.round(contract.premiumAsk ?? contract.ask * 100)}
+          </p>
+        </div>
+        <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+          <p className="text-white/35">Liquidity</p>
+          <p className="font-mono text-white/75">
+            {typeof contract.liquidityScore === 'number' ? `${contract.liquidityScore.toFixed(0)}%` : '--'}
+          </p>
+        </div>
+        <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+          <p className="text-white/35">OI / Vol</p>
+          <p className="font-mono text-white/75">
+            {typeof contract.openInterest === 'number' ? contract.openInterest.toLocaleString() : '--'}
+            {' / '}
+            {typeof contract.volume === 'number' ? contract.volume.toLocaleString() : '--'}
+          </p>
+        </div>
+        <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+          <p className="text-white/35">Cost Band</p>
+          <p className={cn('font-mono uppercase', costBandTone(contract.costBand))}>
+            {contract.costBand || 'balanced'}
+          </p>
+        </div>
+      </div>
+
       {/* Expandable Greeks + detail */}
       <button
         type="button"
@@ -139,13 +177,27 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
           <div className="grid grid-cols-2 gap-2 text-[10px]">
             <div>
               <p className="text-white/40">Max Risk (1 contract)</p>
-              <p className="font-mono text-rose-200">${contract.maxLoss.toFixed(0)} (SPX x100)</p>
+              <p className="font-mono text-rose-200">${Math.abs(contract.maxLoss).toFixed(0)} (SPX x100)</p>
             </div>
             <div>
               <p className="text-white/40">Expiry</p>
               <p className="font-mono text-white/70">{new Date(contract.expiry).toLocaleDateString()}</p>
             </div>
           </div>
+          {Array.isArray(contract.alternatives) && contract.alternatives.length > 0 && (
+            <div className="space-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-2">
+              <p className="text-[9px] uppercase tracking-[0.1em] text-white/45">Alternative Contracts</p>
+              {contract.alternatives.map((alternative) => (
+                <div key={`${alternative.description}-${alternative.score}`} className="grid grid-cols-5 gap-2 text-[9px]">
+                  <span className="font-mono text-white/70">{alternative.description}</span>
+                  <span className="font-mono text-white/50">Δ {alternative.delta.toFixed(2)}</span>
+                  <span className="font-mono text-white/50">${alternative.ask.toFixed(2)} ask</span>
+                  <span className="font-mono text-white/45">{alternative.spreadPct.toFixed(1)}% sprd</span>
+                  <span className="font-mono text-white/45">{alternative.liquidityScore.toFixed(0)} liq</span>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="text-[10px] text-white/55 leading-relaxed">{contract.reasoning}</p>
         </div>
       )}

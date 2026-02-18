@@ -3,6 +3,7 @@
 import { AlertTriangle, Dot, Gauge, Target } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { cn } from '@/lib/utils'
+import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
 
 function formatPremium(premium: number): string {
   const abs = Math.abs(premium)
@@ -17,11 +18,19 @@ function formatPoints(value: number): string {
 }
 
 export function MobileBriefPanel() {
-  const { activeSetups, prediction, flowEvents, coachMessages, spxPrice } = useSPXCommandCenter()
+  const { activeSetups, prediction, flowEvents, coachMessages, spxPrice, regime, selectedSetup } = useSPXCommandCenter()
+
+  const setupPolicy = buildSetupDisplayPolicy({
+    setups: activeSetups,
+    regime,
+    prediction,
+    selectedSetup,
+    primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
+  })
 
   const topSetup =
-    activeSetups.find((setup) => setup.status === 'triggered' || setup.status === 'ready') ||
-    activeSetups[0] ||
+    setupPolicy.actionablePrimary[0] ||
+    setupPolicy.forming[0] ||
     null
 
   const topAlert =

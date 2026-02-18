@@ -16,6 +16,10 @@ const MAX_CONTRACT_RISK_STRICT = 2_500;
 const MAX_CONTRACT_RISK_RELAXED = 3_500;
 const MAX_DELTA_STRICT = 0.65;
 const MAX_DELTA_RELAXED = 0.80;
+interface RankedContract {
+  contract: OptionContract;
+  score: number;
+}
 
 function deltaTargetForSetup(setup: Setup): number {
   switch (setup.type) {
@@ -48,6 +52,23 @@ function daysToExpiry(expiry: string): number {
   return Math.max(0, Math.ceil(msLeft / 86400000));
 }
 
+function getLiquidityScore(contract: OptionContract): number {
+  const spreadPct = getSpreadPct(contract);
+  const spreadScore = Number.isFinite(spreadPct)
+    ? Math.max(0, Math.min(100, 100 - spreadPct * 180))
+    : 0;
+  const oiScore = Math.max(0, Math.min(100, Math.log10((contract.openInterest || 0) + 1) * 22));
+  const volumeScore = Math.max(0, Math.min(100, Math.log10((contract.volume || 0) + 1) * 24));
+  return round((spreadScore * 0.55) + (oiScore * 0.25) + (volumeScore * 0.20), 1);
+}
+
+function costBand(askPrice: number): 'discount' | 'balanced' | 'expensive' {
+  const debit = askPrice * CONTRACT_MULTIPLIER;
+  if (debit <= 1_200) return 'discount';
+  if (debit <= 2_700) return 'balanced';
+  return 'expensive';
+}
+
 function scoreContract(setup: Setup, contract: OptionContract): number {
   const targetDelta = deltaTargetForSetup(setup);
   const absDelta = Math.abs(contract.delta || 0);
@@ -71,17 +92,38 @@ function scoreContract(setup: Setup, contract: OptionContract): number {
   return 100 - deltaPenalty - spreadPenalty - thetaPenalty + liquidityBonus + gammaBonus;
 }
 
-function toContractRecommendation(setup: Setup, contract: OptionContract): ContractRecommendation {
+function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[]): ContractRecommendation {
+  const [{ contract, score }] = rankedContracts;
   const mid = getMid(contract);
   const entry = (setup.entryZone.low + setup.entryZone.high) / 2;
   const moveToTarget1 = Math.abs(setup.target1.price - entry);
   const moveToTarget2 = Math.abs(setup.target2.price - entry);
+  const spreadPct = getSpreadPct(contract);
+  const liquidityScore = getLiquidityScore(contract);
+  const dte = daysToExpiry(contract.expiry);
 
   const projectedTarget1 = mid + (Math.abs(contract.delta || 0) * moveToTarget1 * 0.1) + ((contract.gamma || 0) * moveToTarget1 * 0.8);
   const projectedTarget2 = mid + (Math.abs(contract.delta || 0) * moveToTarget2 * 0.1) + ((contract.gamma || 0) * moveToTarget2 * 0.9);
 
   const risk = Math.max(0.01, Math.abs(entry - setup.stop));
   const reward = Math.abs(setup.target1.price - entry);
+  const alternatives = rankedContracts.slice(1, 4).map((candidate) => {
+    const candidateMid = getMid(candidate.contract);
+    const candidateSpread = getSpreadPct(candidate.contract);
+    return {
+      description: `${candidate.contract.strike}${candidate.contract.type === 'call' ? 'C' : 'P'} ${candidate.contract.expiry}`,
+      strike: round(candidate.contract.strike, 2),
+      expiry: candidate.contract.expiry,
+      type: candidate.contract.type,
+      delta: round(candidate.contract.delta || 0, 3),
+      bid: round(candidate.contract.bid, 2),
+      ask: round(candidate.contract.ask, 2),
+      spreadPct: Number.isFinite(candidateSpread) ? round(candidateSpread * 100, 2) : 0,
+      liquidityScore: getLiquidityScore(candidate.contract),
+      maxLoss: round(Math.max(candidate.contract.ask, candidateMid) * CONTRACT_MULTIPLIER, 2),
+      score: round(candidate.score, 2),
+    };
+  });
 
   return {
     description: `${contract.strike}${contract.type === 'call' ? 'C' : 'P'} ${contract.expiry}`,
@@ -99,7 +141,16 @@ function toContractRecommendation(setup: Setup, contract: OptionContract): Contr
     expectedPnlAtTarget2: round((projectedTarget2 - mid) * 100, 2),
     // Worst-case debit risk should use ask (entry at offer), not midpoint.
     maxLoss: round(Math.max(contract.ask, mid) * CONTRACT_MULTIPLIER, 2),
-    reasoning: `Selected for ${setup.type} with calibrated delta fit, executable spread, strong liquidity, and controlled per-contract risk.`,
+    spreadPct: Number.isFinite(spreadPct) ? round(spreadPct * 100, 2) : undefined,
+    openInterest: contract.openInterest || 0,
+    volume: contract.volume || 0,
+    liquidityScore,
+    daysToExpiry: dte,
+    premiumMid: round(mid * CONTRACT_MULTIPLIER, 2),
+    premiumAsk: round(contract.ask * CONTRACT_MULTIPLIER, 2),
+    costBand: costBand(contract.ask),
+    alternatives,
+    reasoning: `Selected for ${setup.type} with score ${round(score, 1)} (delta fit, spread quality, liquidity, and theta profile).`,
   };
 }
 
@@ -131,7 +182,7 @@ function filterCandidates(
   });
 }
 
-function pickBestContract(setup: Setup, contracts: OptionContract[]): OptionContract | null {
+function rankContracts(setup: Setup, contracts: OptionContract[]): RankedContract[] {
   let candidates = filterCandidates(setup, contracts, false);
 
   if (candidates.length === 0) {
@@ -144,16 +195,25 @@ function pickBestContract(setup: Setup, contracts: OptionContract[]): OptionCont
     }
   }
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return [];
 
-  return [...candidates]
+  return candidates
+    .map((contract) => ({
+      contract,
+      score: scoreContract(setup, contract),
+    }))
     .sort((a, b) => {
-      const aScore = scoreContract(setup, a);
-      const bScore = scoreContract(setup, b);
-      if (aScore !== bScore) return bScore - aScore;
-      return (b.openInterest || 0) - (a.openInterest || 0);
-    })
-    .at(0) || null;
+      if (a.score !== b.score) return b.score - a.score;
+      const aOI = a.contract.openInterest || 0;
+      const bOI = b.contract.openInterest || 0;
+      if (aOI !== bOI) return bOI - aOI;
+      return (b.contract.volume || 0) - (a.contract.volume || 0);
+    });
+}
+
+function topRankedContracts(setup: Setup, contracts: OptionContract[]): RankedContract[] {
+  const ranked = rankContracts(setup, contracts);
+  return ranked.slice(0, 4);
 }
 
 export async function getContractRecommendation(options?: {
@@ -190,9 +250,9 @@ export async function getContractRecommendation(options?: {
 
   const chain = await fetchOptionsChain('SPX', undefined, 20);
   const contracts = [...chain.options.calls, ...chain.options.puts];
-  const contract = pickBestContract(setup, contracts);
+  const rankedContracts = topRankedContracts(setup, contracts);
 
-  if (!contract) {
+  if (rankedContracts.length === 0) {
     logger.warn('SPX contract selector could not find suitable contract', {
       setupId: setup.id,
       direction: setup.direction,
@@ -201,7 +261,7 @@ export async function getContractRecommendation(options?: {
     return null;
   }
 
-  const recommendation = toContractRecommendation(setup, contract);
+  const recommendation = toContractRecommendation(setup, rankedContracts);
   await cacheSet(cacheKey, recommendation, CONTRACT_CACHE_TTL_SECONDS);
 
   return recommendation;

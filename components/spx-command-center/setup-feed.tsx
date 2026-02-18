@@ -4,15 +4,24 @@ import { useMemo, useState } from 'react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { SetupCard } from '@/components/spx-command-center/setup-card'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
+import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
 
 export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
-  const { activeSetups, selectedSetup, selectSetup, spxPrice } = useSPXCommandCenter()
+  const { activeSetups, selectedSetup, selectSetup, spxPrice, regime, prediction } = useSPXCommandCenter()
   const [showWatchlist, setShowWatchlist] = useState(false)
 
-  const { actionable, forming } = useMemo(() => ({
-    actionable: activeSetups.filter((s) => s.status === 'ready' || s.status === 'triggered'),
-    forming: activeSetups.filter((s) => s.status === 'forming'),
-  }), [activeSetups])
+  const policy = useMemo(
+    () => buildSetupDisplayPolicy({
+      setups: activeSetups,
+      regime,
+      prediction,
+      selectedSetup,
+      primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
+    }),
+    [activeSetups, regime, prediction, selectedSetup],
+  )
+  const actionable = policy.actionablePrimary
+  const forming = policy.forming
 
   const watchlistVisible = forming.length > 0 && (showWatchlist || actionable.length === 0)
 
@@ -23,7 +32,7 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
       <div className="relative z-10 flex items-center justify-between">
         <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">Setup Feed</h3>
         <span className="text-[10px] font-mono text-emerald-200/80">
-          {actionable.length} actionable
+          {policy.actionableVisibleCount} actionable
         </span>
       </div>
 
@@ -37,7 +46,11 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
         ) : (
           <>
             {actionable.length === 0 ? (
-              <p className="px-1 text-xs text-white/45">No trade-valid setups yet.</p>
+              <p className="px-1 text-xs text-white/45">
+                {policy.compressionFilterActive
+                  ? `No ${policy.directionalBias || ''} setups in sniper scope. Waiting for alignment.`
+                  : 'No trade-valid setups yet.'}
+              </p>
             ) : (
               actionable.map((setup) => (
                 <SetupCard
@@ -49,6 +62,12 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                   onSelect={() => selectSetup(setup)}
                 />
               ))
+            )}
+
+            {policy.hiddenOppositeCount > 0 && (
+              <p className="px-1 text-[10px] text-white/40">
+                {policy.hiddenOppositeCount} opposite-direction setup{policy.hiddenOppositeCount === 1 ? '' : 's'} hidden for compression focus.
+              </p>
             )}
 
             {forming.length > 0 && (

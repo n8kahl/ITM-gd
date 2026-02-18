@@ -1,4 +1,4 @@
-import { detectActiveSetups } from '../setupDetector';
+import { __resetSetupDetectorStateForTests, detectActiveSetups } from '../setupDetector';
 import { getMergedLevels } from '../levelEngine';
 import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { getFibLevels } from '../fibEngine';
@@ -126,6 +126,7 @@ describe('spx/setupDetector', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCacheSet.mockResolvedValue(undefined as never);
+    __resetSetupDetectorStateForTests();
   });
 
   it('marks previously triggered setups as invalidated when stop is breached', async () => {
@@ -208,5 +209,45 @@ describe('spx/setupDetector', () => {
     expect(setups.length).toBe(1);
     expect(setups[0].id).toBe(previous.id);
     expect(setups[0].status).toBe('expired');
+  });
+
+  it('invalidates triggered setups after persistent regime conflict', async () => {
+    buildBaseMocks(101);
+    mockClassifyCurrentRegime.mockResolvedValue({
+      regime: 'ranging',
+      direction: 'bearish',
+      probability: 70,
+      magnitude: 'small',
+      confidence: 75,
+      timestamp: '2026-02-15T14:40:00.000Z',
+    });
+    mockCacheGet.mockResolvedValue(null as never);
+
+    const first = await detectActiveSetups({ forceRefresh: true });
+    const second = await detectActiveSetups({ forceRefresh: true });
+    const third = await detectActiveSetups({ forceRefresh: true });
+
+    expect(first[0]?.status).toBe('triggered');
+    expect(second[0]?.status).toBe('triggered');
+    expect(third[0]?.status).toBe('invalidated');
+  });
+
+  it('demotes ready setups to forming on persistent directional divergence', async () => {
+    buildBaseMocks(99);
+    mockClassifyCurrentRegime.mockResolvedValue({
+      regime: 'ranging',
+      direction: 'bullish',
+      probability: 72,
+      magnitude: 'small',
+      confidence: 81,
+      timestamp: '2026-02-15T14:40:00.000Z',
+    });
+    mockCacheGet.mockResolvedValue(null as never);
+
+    const first = await detectActiveSetups({ forceRefresh: true });
+    const second = await detectActiveSetups({ forceRefresh: true });
+
+    expect(first[0]?.status).toBe('ready');
+    expect(second[0]?.status).toBe('forming');
   });
 });
