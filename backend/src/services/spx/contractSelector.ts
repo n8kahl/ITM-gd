@@ -21,6 +21,13 @@ interface RankedContract {
   score: number;
 }
 
+interface ContractHealth {
+  score: number;
+  tier: 'green' | 'amber' | 'red';
+  thetaRiskPer15m: number;
+  ivVsRealized: number;
+}
+
 function deltaTargetForSetup(setup: Setup): number {
   switch (setup.type) {
     case 'breakout_vacuum':
@@ -69,6 +76,35 @@ function costBand(askPrice: number): 'discount' | 'balanced' | 'expensive' {
   return 'expensive';
 }
 
+function healthTier(score: number): 'green' | 'amber' | 'red' {
+  if (score >= 75) return 'green';
+  if (score >= 55) return 'amber';
+  return 'red';
+}
+
+function computeContractHealth(contract: OptionContract): ContractHealth {
+  const spreadRatio = getSpreadPct(contract);
+  const spreadPct = Number.isFinite(spreadRatio) ? spreadRatio * 100 : 100;
+  const liquidity = getLiquidityScore(contract);
+  const thetaPer15m = Math.abs(contract.theta || 0) * CONTRACT_MULTIPLIER / 26;
+  const iv = Math.max(0, contract.impliedVolatility || 0);
+  // Proxy: treat 25% IV as baseline realized expectation for intraday SPX options.
+  const ivVsRealized = iv - 0.25;
+
+  const spreadPenalty = Math.min(45, (spreadPct / 20) * 45);
+  const liquidityPenalty = liquidity >= 70 ? 0 : Math.min(25, (70 - liquidity) * 0.45);
+  const thetaPenalty = Math.min(20, (thetaPer15m / 20) * 20);
+  const ivPenalty = iv <= 0.45 ? 0 : Math.min(10, (iv - 0.45) * 80);
+
+  const score = Math.max(0, Math.min(100, 100 - spreadPenalty - liquidityPenalty - thetaPenalty - ivPenalty));
+  return {
+    score: round(score, 1),
+    tier: healthTier(score),
+    thetaRiskPer15m: round(thetaPer15m, 2),
+    ivVsRealized: round(ivVsRealized, 3),
+  };
+}
+
 function scoreContract(setup: Setup, contract: OptionContract): number {
   const targetDelta = deltaTargetForSetup(setup);
   const absDelta = Math.abs(contract.delta || 0);
@@ -101,15 +137,17 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
   const spreadPct = getSpreadPct(contract);
   const liquidityScore = getLiquidityScore(contract);
   const dte = daysToExpiry(contract.expiry);
+  const health = computeContractHealth(contract);
 
   const projectedTarget1 = mid + (Math.abs(contract.delta || 0) * moveToTarget1 * 0.1) + ((contract.gamma || 0) * moveToTarget1 * 0.8);
   const projectedTarget2 = mid + (Math.abs(contract.delta || 0) * moveToTarget2 * 0.1) + ((contract.gamma || 0) * moveToTarget2 * 0.9);
 
   const risk = Math.max(0.01, Math.abs(entry - setup.stop));
   const reward = Math.abs(setup.target1.price - entry);
-  const alternatives = rankedContracts.slice(1, 4).map((candidate) => {
+  const alternativeCandidates = rankedContracts.slice(1, 4).map((candidate) => {
     const candidateMid = getMid(candidate.contract);
     const candidateSpread = getSpreadPct(candidate.contract);
+    const candidateHealth = computeContractHealth(candidate.contract);
     return {
       description: `${candidate.contract.strike}${candidate.contract.type === 'call' ? 'C' : 'P'} ${candidate.contract.expiry}`,
       strike: round(candidate.contract.strike, 2),
@@ -121,7 +159,47 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
       spreadPct: Number.isFinite(candidateSpread) ? round(candidateSpread * 100, 2) : 0,
       liquidityScore: getLiquidityScore(candidate.contract),
       maxLoss: round(Math.max(candidate.contract.ask, candidateMid) * CONTRACT_MULTIPLIER, 2),
+      healthScore: candidateHealth.score,
+      healthTier: candidateHealth.tier,
       score: round(candidate.score, 2),
+    };
+  });
+
+  const taggedAlternativeIndex = new Map<number, 'tighter' | 'safer' | 'higher_conviction'>();
+  if (alternativeCandidates.length > 0) {
+    const tightestIndex = alternativeCandidates.reduce((best, candidate, idx) => (
+      candidate.spreadPct < alternativeCandidates[best].spreadPct ? idx : best
+    ), 0);
+    taggedAlternativeIndex.set(tightestIndex, 'tighter');
+
+    const safestIndex = alternativeCandidates.reduce((best, candidate, idx) => (
+      candidate.maxLoss < alternativeCandidates[best].maxLoss ? idx : best
+    ), 0);
+    if (!taggedAlternativeIndex.has(safestIndex)) {
+      taggedAlternativeIndex.set(safestIndex, 'safer');
+    }
+
+    const convictionIndex = alternativeCandidates.reduce((best, candidate, idx) => (
+      candidate.score > alternativeCandidates[best].score ? idx : best
+    ), 0);
+    if (!taggedAlternativeIndex.has(convictionIndex)) {
+      taggedAlternativeIndex.set(convictionIndex, 'higher_conviction');
+    }
+  }
+
+  const alternatives = alternativeCandidates.map((candidate, index) => {
+    const tag = taggedAlternativeIndex.get(index);
+    const tradeoff = tag === 'tighter'
+      ? 'Lower spread, better execution quality.'
+      : tag === 'safer'
+        ? 'Lower max loss per contract.'
+        : tag === 'higher_conviction'
+          ? 'Highest model score among alternatives.'
+          : undefined;
+    return {
+      ...candidate,
+      tag,
+      tradeoff,
     };
   });
 
@@ -149,8 +227,12 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
     premiumMid: round(mid * CONTRACT_MULTIPLIER, 2),
     premiumAsk: round(contract.ask * CONTRACT_MULTIPLIER, 2),
     costBand: costBand(contract.ask),
+    healthScore: health.score,
+    healthTier: health.tier,
+    thetaRiskPer15m: health.thetaRiskPer15m,
+    ivVsRealized: health.ivVsRealized,
     alternatives,
-    reasoning: `Selected for ${setup.type} with score ${round(score, 1)} (delta fit, spread quality, liquidity, and theta profile).`,
+    reasoning: `Selected for ${setup.type} with model score ${round(score, 1)} and ${health.tier.toUpperCase()} contract health (${health.score}).`,
   };
 }
 

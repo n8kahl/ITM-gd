@@ -16,9 +16,16 @@ function spreadPct(contract: ContractRecommendation): number | null {
 
 function spreadHealth(pct: number | null): { color: string; label: string } {
   if (pct == null) return { color: 'bg-white/20', label: '--' }
-  if (pct <= 5) return { color: 'bg-emerald-400', label: 'Tight' }
-  if (pct <= 12) return { color: 'bg-amber-400', label: 'Fair' }
+  if (pct <= 10) return { color: 'bg-emerald-400', label: 'Tight' }
+  if (pct <= 20) return { color: 'bg-amber-400', label: 'Fair' }
   return { color: 'bg-rose-400', label: 'Wide' }
+}
+
+function healthTone(tier: ContractRecommendation['healthTier']): { text: string; dot: string; label: string } {
+  if (tier === 'green') return { text: 'text-emerald-200', dot: 'bg-emerald-400', label: 'Healthy' }
+  if (tier === 'amber') return { text: 'text-amber-200', dot: 'bg-amber-400', label: 'Caution' }
+  if (tier === 'red') return { text: 'text-rose-200', dot: 'bg-rose-400', label: 'Fragile' }
+  return { text: 'text-white/60', dot: 'bg-white/30', label: 'Unknown' }
 }
 
 function costBandTone(costBand: ContractRecommendation['costBand']): string {
@@ -31,6 +38,7 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
   const [expanded, setExpanded] = useState(false)
   const spread = spreadPct(contract)
   const health = spreadHealth(spread)
+  const contractHealth = healthTone(contract.healthTier)
 
   // R:R visual bar — loss zone (red) | profit zone (green) with T1/T2 markers
   const maxLossAbs = Math.abs(contract.maxLoss)
@@ -50,7 +58,12 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
             AI Pick
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          {typeof contract.healthScore === 'number' && (
+            <span className={cn('text-[9px] font-mono', contractHealth.text)}>
+              {contractHealth.label} {contract.healthScore.toFixed(0)}
+            </span>
+          )}
           {/* Spread health traffic light */}
           <span className={cn('h-2 w-2 rounded-full', health.color)} title={`Spread: ${health.label}`} />
           <span className="text-[9px] text-white/50">{health.label}</span>
@@ -137,12 +150,26 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
           </p>
         </div>
         <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-          <p className="text-white/35">Cost Band</p>
+          <p className="text-white/35">Cost/Health</p>
           <p className={cn('font-mono uppercase', costBandTone(contract.costBand))}>
             {contract.costBand || 'balanced'}
           </p>
+          <p className={cn('font-mono text-[8px]', contractHealth.text)}>
+            {contract.healthTier || 'unknown'}
+          </p>
         </div>
       </div>
+
+      {(typeof contract.thetaRiskPer15m === 'number' || typeof contract.ivVsRealized === 'number') && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[9px] text-white/45">
+          {typeof contract.thetaRiskPer15m === 'number' && (
+            <span className="font-mono">Theta burn ~${contract.thetaRiskPer15m.toFixed(2)}/15m</span>
+          )}
+          {typeof contract.ivVsRealized === 'number' && (
+            <span className="font-mono">IV spread {(contract.ivVsRealized * 100).toFixed(1)}%</span>
+          )}
+        </div>
+      )}
 
       {/* Expandable Greeks + detail */}
       <button
@@ -189,11 +216,24 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
               <p className="text-[9px] uppercase tracking-[0.1em] text-white/45">Alternative Contracts</p>
               {contract.alternatives.map((alternative) => (
                 <div key={`${alternative.description}-${alternative.score}`} className="grid grid-cols-5 gap-2 text-[9px]">
-                  <span className="font-mono text-white/70">{alternative.description}</span>
+                  <span className="font-mono text-white/70">
+                    {alternative.description}
+                    {alternative.tag && (
+                      <span className="ml-1 rounded border border-emerald-300/25 bg-emerald-500/10 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-200">
+                        {alternative.tag.replace('_', ' ')}
+                      </span>
+                    )}
+                  </span>
                   <span className="font-mono text-white/50">Δ {alternative.delta.toFixed(2)}</span>
                   <span className="font-mono text-white/50">${alternative.ask.toFixed(2)} ask</span>
                   <span className="font-mono text-white/45">{alternative.spreadPct.toFixed(1)}% sprd</span>
-                  <span className="font-mono text-white/45">{alternative.liquidityScore.toFixed(0)} liq</span>
+                  <span className="font-mono text-white/45">
+                    {alternative.liquidityScore.toFixed(0)} liq
+                    {typeof alternative.healthScore === 'number' ? ` · H${alternative.healthScore.toFixed(0)}` : ''}
+                  </span>
+                  {alternative.tradeoff && (
+                    <span className="col-span-5 text-[8px] text-white/45">{alternative.tradeoff}</span>
+                  )}
                 </div>
               ))}
             </div>

@@ -170,6 +170,10 @@ export interface ContractRecommendation {
   premiumMid?: number
   premiumAsk?: number
   costBand?: 'discount' | 'balanced' | 'expensive'
+  healthScore?: number
+  healthTier?: 'green' | 'amber' | 'red'
+  thetaRiskPer15m?: number
+  ivVsRealized?: number
   alternatives?: Array<{
     description: string
     strike: number
@@ -181,6 +185,10 @@ export interface ContractRecommendation {
     spreadPct: number
     liquidityScore: number
     maxLoss: number
+    healthScore?: number
+    healthTier?: 'green' | 'amber' | 'red'
+    tag?: 'tighter' | 'safer' | 'higher_conviction'
+    tradeoff?: string
     score: number
   }>
 }
