@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { postSPXStream } from '@/hooks/use-spx-api'
-import { usePriceStream } from '@/hooks/use-price-stream'
+import { usePriceStream, type RealtimeSocketMessage } from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
 import { SPX_TELEMETRY_EVENT, startSPXPerfTimer, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type {
@@ -29,6 +29,21 @@ interface ChartAnnotation {
   priceHigh?: number
   price?: number
   label: string
+}
+
+interface RealtimeMicrobar {
+  symbol: string
+  interval: '1s' | '5s'
+  bucketStartMs: number
+  bucketEndMs: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  trades: number
+  finalized: boolean
+  timestamp: string
 }
 
 interface SPXCommandCenterState {
@@ -67,6 +82,7 @@ interface SPXCommandCenterState {
     premium: number
     timestamp: string
   }>
+  latestMicrobar: RealtimeMicrobar | null
   isLoading: boolean
   error: Error | null
   selectSetup: (setup: Setup | null) => void
@@ -80,6 +96,8 @@ const ALL_CATEGORIES: LevelCategory[] = ['structural', 'tactical', 'intraday', '
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['forming', 'ready', 'triggered'])
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
+const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
+const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -109,6 +127,135 @@ function rankSetups(setups: Setup[]): Setup[] {
   })
 }
 
+function setupRecencyEpoch(setup: Setup): number {
+  return Math.max(toEpoch(setup.triggeredAt), toEpoch(setup.createdAt))
+}
+
+function shouldKeepExistingSetup(existing: Setup, incoming: Setup): boolean {
+  const existingPriority = SETUP_STATUS_PRIORITY[existing.status]
+  const incomingPriority = SETUP_STATUS_PRIORITY[incoming.status]
+  const existingRecency = setupRecencyEpoch(existing)
+  const incomingRecency = setupRecencyEpoch(incoming)
+
+  if (existing.status === 'triggered' && (incoming.status === 'ready' || incoming.status === 'forming')) {
+    return incomingRecency <= existingRecency + 60_000
+  }
+
+  if (existingPriority < incomingPriority && existingRecency >= incomingRecency) {
+    return true
+  }
+
+  return false
+}
+
+function mergeSetup(existing: Setup | undefined, incoming: Setup): Setup {
+  if (!existing) return incoming
+  if (shouldKeepExistingSetup(existing, incoming)) {
+    return {
+      ...incoming,
+      ...existing,
+      recommendedContract: existing.recommendedContract ?? incoming.recommendedContract,
+    }
+  }
+
+  return {
+    ...incoming,
+    recommendedContract: incoming.recommendedContract ?? existing.recommendedContract,
+  }
+}
+
+function mergeActionableSetups(existingSetups: Setup[], incomingSetups: Setup[]): Setup[] {
+  const now = Date.now()
+  const incomingIds = new Set(incomingSetups.map((setup) => setup.id))
+  const merged = new Map(existingSetups.map((setup) => [setup.id, setup]))
+
+  for (const incoming of incomingSetups) {
+    const current = merged.get(incoming.id)
+    const nextSetup = mergeSetup(current, incoming)
+    if (ACTIONABLE_SETUP_STATUSES.has(nextSetup.status)) {
+      merged.set(nextSetup.id, nextSetup)
+    } else {
+      merged.delete(nextSetup.id)
+    }
+  }
+
+  for (const existing of existingSetups) {
+    if (incomingIds.has(existing.id)) continue
+    if (!ACTIONABLE_SETUP_STATUSES.has(existing.status)) {
+      merged.delete(existing.id)
+      continue
+    }
+    const isRecent = now - setupRecencyEpoch(existing) <= REALTIME_SETUP_RETENTION_MS
+    if (!isRecent) {
+      merged.delete(existing.id)
+    }
+  }
+
+  return rankSetups(Array.from(merged.values()))
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function parseRealtimeMicrobar(message: RealtimeSocketMessage): RealtimeMicrobar | null {
+  if (message.type !== 'microbar') return null
+  if (typeof message.symbol !== 'string' || message.symbol.toUpperCase() !== 'SPX') return null
+
+  const interval = message.interval === '5s' ? '5s' : message.interval === '1s' ? '1s' : null
+  const bucketStartMs = toFiniteNumber(message.bucketStartMs)
+  const bucketEndMs = toFiniteNumber(message.bucketEndMs)
+  const open = toFiniteNumber(message.open)
+  const high = toFiniteNumber(message.high)
+  const low = toFiniteNumber(message.low)
+  const close = toFiniteNumber(message.close)
+  const volume = toFiniteNumber(message.volume)
+  const trades = toFiniteNumber(message.trades)
+  const timestamp = typeof message.timestamp === 'string' ? message.timestamp : null
+  if (
+    !interval
+    || bucketStartMs == null
+    || bucketEndMs == null
+    || open == null
+    || high == null
+    || low == null
+    || close == null
+    || volume == null
+    || trades == null
+    || !timestamp
+  ) {
+    return null
+  }
+
+  return {
+    symbol: 'SPX',
+    interval,
+    bucketStartMs,
+    bucketEndMs,
+    open,
+    high,
+    low,
+    close,
+    volume,
+    trades,
+    finalized: message.finalized === true,
+    timestamp,
+  }
+}
+
+function isCoachType(value: unknown): value is CoachMessage['type'] {
+  return value === 'pre_trade' || value === 'in_trade' || value === 'behavioral' || value === 'post_trade' || value === 'alert'
+}
+
+function isCoachPriority(value: unknown): value is CoachMessage['priority'] {
+  return value === 'alert' || value === 'setup' || value === 'guidance' || value === 'behavioral'
+}
+
 const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null)
 
 export function SPXCommandCenterProvider({ children }: { children: React.ReactNode }) {
@@ -122,14 +269,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     mutate: mutateSnapshot,
   } = useSPXSnapshot()
   const accessToken = session?.access_token || null
-
-  const stream = usePriceStream(['SPX', 'SPY'], true, accessToken)
   const [selectedSetupId, setSelectedSetupId] = useState<string | null>(null)
-  const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('5m')
+  const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('1m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
   const [snapshotRequestLate, setSnapshotRequestLate] = useState(false)
   const [ephemeralCoachMessages, setEphemeralCoachMessages] = useState<CoachMessage[]>([])
+  const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
+  const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
   const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const hasTrackedFirstActionableRef = useRef(false)
@@ -137,10 +284,94 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const hasTrackedPageViewRef = useRef(false)
   const lastDataHealthRef = useRef<'healthy' | 'degraded' | 'stale' | null>(null)
 
-  const activeSetups = useMemo(() => {
-    const filtered = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
-    return rankSetups(filtered)
-  }, [snapshotData?.setups])
+  const handleRealtimeMessage = useCallback((message: RealtimeSocketMessage) => {
+    const microbar = parseRealtimeMicrobar(message)
+    if (microbar) {
+      setLatestMicrobar(microbar)
+      return
+    }
+
+    if (message.type === 'spx_setup') {
+      const payload = message.data
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
+      const setup = (payload as { setup?: unknown }).setup
+      if (!setup || typeof setup !== 'object' || Array.isArray(setup)) return
+
+      const setupCandidate = setup as Setup
+      if (typeof setupCandidate.id !== 'string' || setupCandidate.id.length === 0) return
+      const action = typeof (payload as { action?: unknown }).action === 'string'
+        ? (payload as { action: string }).action
+        : 'updated'
+
+      setRealtimeSetups((previous) => {
+        const map = new Map(previous.map((item) => [item.id, item]))
+        if (action === 'expired' || setupCandidate.status === 'expired' || setupCandidate.status === 'invalidated') {
+          map.delete(setupCandidate.id)
+          return rankSetups(Array.from(map.values()))
+        }
+
+        const merged = mergeSetup(map.get(setupCandidate.id), setupCandidate)
+        if (ACTIONABLE_SETUP_STATUSES.has(merged.status)) {
+          map.set(merged.id, merged)
+        } else {
+          map.delete(merged.id)
+        }
+        return rankSetups(Array.from(map.values()))
+      })
+      return
+    }
+
+    if (message.type === 'spx_coach') {
+      const payload = message.data
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
+      const content = typeof (payload as { content?: unknown }).content === 'string'
+        ? (payload as { content: string }).content.trim()
+        : ''
+      if (!content) return
+
+      const timestamp = typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString()
+      const setupId = typeof (payload as { setupId?: unknown }).setupId === 'string'
+        ? (payload as { setupId: string }).setupId
+        : null
+      const messageId = `coach_ws_${timestamp}_${setupId || 'global'}_${content.slice(0, 24)}`
+
+      const coachMessage: CoachMessage = {
+        id: messageId,
+        type: isCoachType((payload as { type?: unknown }).type) ? (payload as { type: CoachMessage['type'] }).type : 'behavioral',
+        priority: isCoachPriority((payload as { priority?: unknown }).priority)
+          ? (payload as { priority: CoachMessage['priority'] }).priority
+          : 'guidance',
+        setupId,
+        content,
+        structuredData: {
+          source: 'ws',
+          channel: typeof message.channel === 'string' ? message.channel : 'coach:message',
+        },
+        timestamp,
+      }
+
+      setEphemeralCoachMessages((previous) => {
+        const deduped = new Map<string, CoachMessage>()
+        for (const messageItem of [coachMessage, ...previous]) {
+          if (!messageItem?.id) continue
+          deduped.set(messageItem.id, messageItem)
+        }
+        return Array.from(deduped.values()).slice(0, 80)
+      })
+    }
+  }, [])
+
+  const stream = usePriceStream(['SPX', 'SPY'], true, accessToken, {
+    channels: [...SPX_PUBLIC_CHANNELS],
+    onMessage: handleRealtimeMessage,
+  })
+
+  useEffect(() => {
+    const snapshotSetups = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
+    setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups))
+  }, [snapshotData?.generatedAt, snapshotData?.setups])
+
+  const activeSetups = useMemo(() => rankSetups(realtimeSetups), [realtimeSetups])
   const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
 
   const selectedSetup = useMemo(() => {
@@ -310,9 +541,6 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
 
     setSelectedSetupId(setup?.id || null)
-    if (setup) {
-      setSelectedTimeframe('5m')
-    }
   }, [])
 
   const setChartTimeframe = useCallback((timeframe: ChartTimeframe) => {
@@ -558,6 +786,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     showSPYDerived,
     chartAnnotations,
     flowEvents: snapshotData?.flow || [],
+    latestMicrobar,
     isLoading,
     error,
     selectSetup,
@@ -573,6 +802,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     error,
     filteredLevels,
     isLoading,
+    latestMicrobar,
     requestContractRecommendation,
     selectSetup,
     sendCoachMessage,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
+import { mergeRealtimeMicrobarIntoBars, mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
 import { TradingChart, type LevelAnnotation } from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
@@ -21,6 +21,7 @@ export function SPXChart() {
     chartAnnotations,
     spxPrice,
     spxTickTimestamp,
+    latestMicrobar,
     selectedTimeframe,
     setChartTimeframe,
   } = useSPXCommandCenter()
@@ -31,37 +32,74 @@ export function SPXChart() {
 
   useEffect(() => {
     let isCancelled = false
+    let inFlight = false
 
-    async function load() {
+    async function load(options?: { background?: boolean }) {
+      if (inFlight) return
+      inFlight = true
       if (!session?.access_token) {
         setBars([])
         setIsLoading(false)
+        inFlight = false
         return
       }
 
-      setIsLoading(true)
+      const background = options?.background === true
+      if (!background) {
+        setIsLoading(true)
+      }
+
       try {
         const response = await getChartData('SPX', selectedTimeframe, session.access_token)
         if (!isCancelled) {
-          setBars(response.bars)
+          if (Array.isArray(response.bars) && response.bars.length > 0) {
+            setBars(response.bars)
+          } else if (!background) {
+            setBars([])
+          }
         }
       } catch {
-        if (!isCancelled) {
+        if (!isCancelled && !background) {
           setBars([])
         }
       } finally {
         if (!isCancelled) {
-          setIsLoading(false)
+          if (!background) {
+            setIsLoading(false)
+          }
         }
+        inFlight = false
+      }
+    }
+
+    if (!session?.access_token) {
+      setBars([])
+      setIsLoading(false)
+      return () => {
+        isCancelled = true
       }
     }
 
     void load()
+    const refreshIntervalMs = selectedTimeframe === '1m' ? 30_000 : 60_000
+    const refreshId = window.setInterval(() => {
+      void load({ background: true })
+    }, refreshIntervalMs)
 
     return () => {
       isCancelled = true
+      window.clearInterval(refreshId)
     }
   }, [selectedTimeframe, session?.access_token])
+
+  useEffect(() => {
+    if (!latestMicrobar || selectedTimeframe !== '1m') return
+
+    setBars((prev) => {
+      const merged = mergeRealtimeMicrobarIntoBars(prev, selectedTimeframe, latestMicrobar)
+      return merged.changed ? merged.bars : prev
+    })
+  }, [latestMicrobar, selectedTimeframe])
 
   useEffect(() => {
     if (!spxTickTimestamp || !Number.isFinite(spxPrice) || spxPrice <= 0) return

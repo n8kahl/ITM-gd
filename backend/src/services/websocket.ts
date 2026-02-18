@@ -41,6 +41,16 @@ import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { formatMassiveTicker, isValidSymbol, normalizeSymbol } from '../lib/symbols';
 import { getMarketStatus, toEasternTime } from './marketHours';
 import { AuthTokenError, extractBearerToken, verifyAuthToken } from '../lib/tokenAuth';
+import { subscribeMassiveTickUpdates, isMassiveTickStreamConnected } from './massiveTickStream';
+import { getLatestTick, type NormalizedMarketTick } from './tickCache';
+import { ingestTickMicrobars, resetMicrobarAggregator } from './spx/microbarAggregator';
+import {
+  applyTickStateToSetups,
+  evaluateTickSetupTransitions,
+  resetTickEvaluatorState,
+  syncTickEvaluatorSetups,
+  type SetupTransitionEvent,
+} from './spx/tickEvaluator';
 import {
   subscribeSetupPushEvents,
   type SetupDetectedUpdate,
@@ -72,6 +82,25 @@ interface PriceUpdate {
   changePct: number;
   volume: number;
   timestamp: string;
+  source?: 'poll' | 'tick';
+  seq?: number;
+}
+
+interface MicrobarUpdate {
+  type: 'microbar';
+  symbol: string;
+  interval: '1s' | '5s';
+  bucketStartMs: number;
+  bucketEndMs: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  trades: number;
+  finalized: boolean;
+  timestamp: string;
+  source: 'tick';
 }
 
 // ============================================
@@ -86,6 +115,8 @@ const POLL_INTERVALS = {
   regular: 30_000,   // 30s during regular hours
   extended: 60_000,  // 60s during extended hours
   closed: 300_000,   // 5 min when closed
+  degradedRegular: 5_000,   // 5s when market is open but tick feed is degraded
+  degradedExtended: 15_000, // 15s in pre/after hours when tick feed is degraded
 };
 const SETUP_CHANNEL_PREFIX = 'setups:';
 const SETUP_CHANNEL_PATTERN = /^setups:[a-zA-Z0-9_-]{3,64}$/;
@@ -112,6 +143,18 @@ const BASIS_BROADCAST_INTERVAL_MS = 30_000;
 const FLOW_ALERT_PREMIUM_THRESHOLD = 100_000;
 const FLOW_ALERT_SIZE_THRESHOLD = 500;
 const PRICE_CACHE_STALE_MS = 15_000;
+const TICK_FANOUT_THROTTLE_MS = (() => {
+  const parsed = Number.parseInt(process.env.MASSIVE_TICK_FANOUT_THROTTLE_MS || '150', 10);
+  return Number.isFinite(parsed) ? Math.max(parsed, 25) : 150;
+})();
+const TICK_STALE_MS = (() => {
+  const parsed = Number.parseInt(process.env.MASSIVE_TICK_STALE_MS || '5000', 10);
+  return Number.isFinite(parsed) ? Math.max(parsed, 1000) : 5000;
+})();
+const MICROBAR_FANOUT_THROTTLE_MS = (() => {
+  const parsed = Number.parseInt(process.env.MASSIVE_MICROBAR_FANOUT_THROTTLE_MS || '250', 10);
+  return Number.isFinite(parsed) ? Math.max(parsed, 25) : 250;
+})();
 
 function formatTicker(symbol: string): string {
   return formatMassiveTicker(symbol);
@@ -214,7 +257,10 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let initialPollTimeout: ReturnType<typeof setTimeout> | null = null;
 let unsubscribeSetupEvents: (() => void) | null = null;
 let unsubscribePositionEvents: (() => void) | null = null;
+let unsubscribeTickEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
+const lastTickBroadcastAtBySymbol = new Map<string, number>();
+const lastMicrobarBroadcastAtBySymbolInterval = new Map<string, number>();
 
 function isSymbolSubscription(value: string): boolean {
   return isValidSymbol(value);
@@ -494,6 +540,127 @@ function broadcastPrice(update: PriceUpdate): void {
   }
 }
 
+async function broadcastTickPrice(tick: NormalizedMarketTick): Promise<void> {
+  const symbol = normalizeSymbol(tick.symbol);
+  const priceChannel = toPriceChannel(symbol);
+  if (!hasSubscribersForChannel(symbol) && !hasSubscribersForChannel(priceChannel)) {
+    return;
+  }
+
+  const now = Date.now();
+  const lastBroadcast = lastTickBroadcastAtBySymbol.get(symbol) || 0;
+  if (now - lastBroadcast < TICK_FANOUT_THROTTLE_MS) {
+    return;
+  }
+  lastTickBroadcastAtBySymbol.set(symbol, now);
+
+  const cached = priceCache.get(symbol);
+  let prevClose = cached?.prevClose;
+  let volume = cached?.volume || 0;
+
+  if (!prevClose || prevClose <= 0) {
+    const latest = await getLatestPriceSnapshot(symbol);
+    if (latest) {
+      prevClose = latest.prevClose;
+      volume = latest.volume;
+    }
+  }
+
+  const resolvedPrevClose = prevClose && prevClose > 0 ? prevClose : tick.price;
+  volume = Math.max(volume, tick.size);
+  priceCache.set(symbol, {
+    price: tick.price,
+    prevClose: resolvedPrevClose,
+    volume,
+    fetchedAt: Date.now(),
+  });
+
+  const change = tick.price - resolvedPrevClose;
+  const changePct = resolvedPrevClose !== 0 ? (change / resolvedPrevClose) * 100 : 0;
+
+  broadcastPrice({
+    type: 'price',
+    symbol,
+    price: Number(tick.price.toFixed(2)),
+    change: Number(change.toFixed(2)),
+    changePct: Number(changePct.toFixed(2)),
+    volume,
+    timestamp: new Date(tick.timestamp).toISOString(),
+    source: 'tick',
+    seq: tick.sequence === null ? undefined : tick.sequence,
+  });
+}
+
+function broadcastMicrobar(update: MicrobarUpdate): void {
+  const priceChannel = toPriceChannel(update.symbol);
+  const message = JSON.stringify({
+    ...update,
+    channel: priceChannel,
+  });
+
+  for (const [ws, state] of clients) {
+    if (
+      ws.readyState === WebSocket.OPEN
+      && (state.subscriptions.has(update.symbol) || state.subscriptions.has(priceChannel))
+    ) {
+      ws.send(message);
+    }
+  }
+}
+
+function broadcastTickMicrobars(tick: NormalizedMarketTick): void {
+  const symbol = normalizeSymbol(tick.symbol);
+  const priceChannel = toPriceChannel(symbol);
+  if (!hasSubscribersForChannel(symbol) && !hasSubscribersForChannel(priceChannel)) {
+    return;
+  }
+
+  const microbars = ingestTickMicrobars(tick);
+  for (const microbar of microbars) {
+    const throttleKey = `${microbar.symbol}:${microbar.interval}`;
+    const now = Date.now();
+    const lastBroadcast = lastMicrobarBroadcastAtBySymbolInterval.get(throttleKey) || 0;
+    if (!microbar.finalized && now - lastBroadcast < MICROBAR_FANOUT_THROTTLE_MS) {
+      continue;
+    }
+    lastMicrobarBroadcastAtBySymbolInterval.set(throttleKey, now);
+
+    broadcastMicrobar({
+      type: 'microbar',
+      symbol: microbar.symbol,
+      interval: microbar.interval,
+      bucketStartMs: microbar.bucketStartMs,
+      bucketEndMs: microbar.bucketEndMs,
+      open: Number(microbar.open.toFixed(2)),
+      high: Number(microbar.high.toFixed(2)),
+      low: Number(microbar.low.toFixed(2)),
+      close: Number(microbar.close.toFixed(2)),
+      volume: microbar.volume,
+      trades: microbar.trades,
+      finalized: microbar.finalized,
+      timestamp: new Date(microbar.updatedAtMs).toISOString(),
+      source: 'tick',
+    });
+  }
+}
+
+function broadcastSetupTransition(event: SetupTransitionEvent): void {
+  if (!hasSubscribersForChannel('setups:update')) return;
+
+  broadcastChannelMessage('setups:update', 'spx_setup', {
+    setup: event.setup,
+    action: 'updated',
+    transition: {
+      id: event.id,
+      fromPhase: event.fromPhase,
+      toPhase: event.toPhase,
+      reason: event.reason,
+      price: event.price,
+      timestamp: event.timestamp,
+    },
+  });
+}
+
 function broadcastSetupUpdate(update: SetupStatusUpdate): void {
   const channel = toSetupChannel(update.userId);
   const message = JSON.stringify({
@@ -594,6 +761,7 @@ async function sendLatestSymbolPriceToClient(
     changePct: Number(changePct.toFixed(2)),
     volume: latest.volume,
     timestamp: new Date().toISOString(),
+    source: 'poll',
   });
 }
 
@@ -605,6 +773,8 @@ async function sendInitialSPXChannelSnapshot(
   if (requestedPublicChannels.length === 0) return;
 
   const snapshot = await getSPXSnapshot({ forceRefresh: false });
+  const snapshotSetups = applyTickStateToSetups(snapshot.setups);
+  syncTickEvaluatorSetups(snapshotSetups);
 
   if (channels.has('gex:SPX')) {
     sendChannelPayloadToClient(ws, 'gex:SPX', 'spx_gex', {
@@ -659,7 +829,7 @@ async function sendInitialSPXChannelSnapshot(
   }
 
   if (channels.has('setups:update')) {
-    for (const setup of snapshot.setups) {
+    for (const setup of snapshotSetups) {
       sendChannelPayloadToClient(ws, 'setups:update', 'spx_setup', {
         setup,
         action: 'created',
@@ -823,7 +993,17 @@ async function pollPrices(): Promise<void> {
   const hasSPXSubscribers = hasSubscribersForAnyChannel(spxChannels);
   if (symbols.size === 0 && !hasSPXSubscribers) return;
 
+  const tickFeedConnected = isMassiveTickStreamConnected();
+  const now = Date.now();
+
   for (const symbol of symbols) {
+    if (tickFeedConnected) {
+      const liveTick = getLatestTick(symbol);
+      if (liveTick && now - liveTick.timestamp <= TICK_STALE_MS) {
+        continue;
+      }
+    }
+
     const data = await fetchLatestPrice(symbol);
     if (!data) continue;
 
@@ -840,6 +1020,7 @@ async function pollPrices(): Promise<void> {
       changePct: Number(changePct.toFixed(2)),
       volume: data.volume,
       timestamp: new Date().toISOString(),
+      source: 'poll',
     });
   }
 
@@ -861,69 +1042,74 @@ async function broadcastSPXChannels(): Promise<void> {
   const now = Date.now();
 
   const snapshot = await getSPXSnapshot({ forceRefresh: false });
+  const snapshotWithTickSetups: SPXSnapshot = {
+    ...snapshot,
+    setups: applyTickStateToSetups(snapshot.setups),
+  };
+  syncTickEvaluatorSetups(snapshotWithTickSetups.setups);
   const previousSnapshot = lastSPXSnapshot;
-  lastSPXSnapshot = snapshot;
+  lastSPXSnapshot = snapshotWithTickSetups;
 
   if (hasSubscribersForChannel('gex:SPX') && now - lastGexBroadcastAtBySymbol.SPX >= GEX_BROADCAST_INTERVAL_MS) {
     broadcastChannelMessage('gex:SPX', 'spx_gex', {
-      netGex: snapshot.gex.spx.netGex,
-      flipPoint: snapshot.gex.spx.flipPoint,
-      callWall: snapshot.gex.spx.callWall,
-      putWall: snapshot.gex.spx.putWall,
-      topLevels: snapshot.gex.spx.keyLevels.slice(0, 5),
+      netGex: snapshotWithTickSetups.gex.spx.netGex,
+      flipPoint: snapshotWithTickSetups.gex.spx.flipPoint,
+      callWall: snapshotWithTickSetups.gex.spx.callWall,
+      putWall: snapshotWithTickSetups.gex.spx.putWall,
+      topLevels: snapshotWithTickSetups.gex.spx.keyLevels.slice(0, 5),
     });
     lastGexBroadcastAtBySymbol.SPX = now;
   }
 
   if (hasSubscribersForChannel('gex:SPY') && now - lastGexBroadcastAtBySymbol.SPY >= GEX_BROADCAST_INTERVAL_MS) {
     broadcastChannelMessage('gex:SPY', 'spx_gex', {
-      netGex: snapshot.gex.spy.netGex,
-      flipPoint: snapshot.gex.spy.flipPoint,
-      callWall: snapshot.gex.spy.callWall,
-      putWall: snapshot.gex.spy.putWall,
-      topLevels: snapshot.gex.spy.keyLevels.slice(0, 5),
+      netGex: snapshotWithTickSetups.gex.spy.netGex,
+      flipPoint: snapshotWithTickSetups.gex.spy.flipPoint,
+      callWall: snapshotWithTickSetups.gex.spy.callWall,
+      putWall: snapshotWithTickSetups.gex.spy.putWall,
+      topLevels: snapshotWithTickSetups.gex.spy.keyLevels.slice(0, 5),
     });
     lastGexBroadcastAtBySymbol.SPY = now;
   }
 
   if (hasSubscribersForChannel('regime:update') && now - lastRegimeBroadcastAt >= REGIME_BROADCAST_INTERVAL_MS) {
     broadcastChannelMessage('regime:update', 'spx_regime', {
-      regime: snapshot.regime.regime,
-      direction: snapshot.regime.direction,
-      probability: snapshot.regime.probability,
-      magnitude: snapshot.regime.magnitude,
+      regime: snapshotWithTickSetups.regime.regime,
+      direction: snapshotWithTickSetups.regime.direction,
+      probability: snapshotWithTickSetups.regime.probability,
+      magnitude: snapshotWithTickSetups.regime.magnitude,
     });
     lastRegimeBroadcastAt = now;
   }
 
   if (hasSubscribersForChannel('basis:update') && now - lastBasisBroadcastAt >= BASIS_BROADCAST_INTERVAL_MS) {
     broadcastChannelMessage('basis:update', 'spx_basis', {
-      basis: snapshot.basis.current,
-      trend: snapshot.basis.trend,
-      leading: snapshot.basis.leading,
-      timestamp: snapshot.basis.timestamp,
+      basis: snapshotWithTickSetups.basis.current,
+      trend: snapshotWithTickSetups.basis.trend,
+      leading: snapshotWithTickSetups.basis.leading,
+      timestamp: snapshotWithTickSetups.basis.timestamp,
     });
     lastBasisBroadcastAt = now;
   }
 
-  const nextLevelsSignature = levelsSignature(snapshot.levels);
+  const nextLevelsSignature = levelsSignature(snapshotWithTickSetups.levels);
   if (hasSubscribersForChannel('levels:update') && nextLevelsSignature !== lastLevelsSignature) {
-    const delta = diffLevels(previousSnapshot?.levels || [], snapshot.levels);
+    const delta = diffLevels(previousSnapshot?.levels || [], snapshotWithTickSetups.levels);
     broadcastChannelMessage('levels:update', 'spx_levels', delta as unknown as Record<string, unknown>);
     lastLevelsSignature = nextLevelsSignature;
   }
 
-  const nextClustersSignature = clustersSignature(snapshot.clusters);
+  const nextClustersSignature = clustersSignature(snapshotWithTickSetups.clusters);
   if (hasSubscribersForChannel('clusters:update') && nextClustersSignature !== lastClustersSignature) {
     broadcastChannelMessage('clusters:update', 'spx_clusters', {
-      zones: snapshot.clusters,
+      zones: snapshotWithTickSetups.clusters,
     });
     lastClustersSignature = nextClustersSignature;
   }
 
-  const nextSetupsSignature = setupsSignature(snapshot.setups);
+  const nextSetupsSignature = setupsSignature(snapshotWithTickSetups.setups);
   if (hasSubscribersForChannel('setups:update') && nextSetupsSignature !== lastSetupsSignature) {
-    const setupChanges = diffSetups(previousSnapshot?.setups || [], snapshot.setups);
+    const setupChanges = diffSetups(previousSnapshot?.setups || [], snapshotWithTickSetups.setups);
     for (const change of setupChanges) {
       broadcastChannelMessage('setups:update', 'spx_setup', {
         setup: change.setup,
@@ -933,9 +1119,9 @@ async function broadcastSPXChannels(): Promise<void> {
     lastSetupsSignature = nextSetupsSignature;
   }
 
-  const nextFlowSignature = flowAlertSignature(snapshot.flow);
+  const nextFlowSignature = flowAlertSignature(snapshotWithTickSetups.flow);
   if (hasSubscribersForChannel('flow:alert') && nextFlowSignature !== lastFlowAlertSignature) {
-    for (const event of snapshot.flow) {
+    for (const event of snapshotWithTickSetups.flow) {
       if (event.premium < FLOW_ALERT_PREMIUM_THRESHOLD && event.size < FLOW_ALERT_SIZE_THRESHOLD) {
         continue;
       }
@@ -952,9 +1138,9 @@ async function broadcastSPXChannels(): Promise<void> {
     lastFlowAlertSignature = nextFlowSignature;
   }
 
-  const nextCoachSignature = coachMessageSignature(snapshot.coachMessages);
+  const nextCoachSignature = coachMessageSignature(snapshotWithTickSetups.coachMessages);
   if (hasSubscribersForChannel('coach:message') && nextCoachSignature !== lastCoachMessageSignature) {
-    const latest = snapshot.coachMessages[0];
+    const latest = snapshotWithTickSetups.coachMessages[0];
     if (latest) {
       broadcastChannelMessage('coach:message', 'spx_coach', {
         type: latest.type,
@@ -969,8 +1155,14 @@ async function broadcastSPXChannels(): Promise<void> {
 
 function getCurrentPollInterval(): number {
   const status = getMarketStatus();
-  if (status.status === 'open') return POLL_INTERVALS.regular;
-  if (status.status === 'pre-market' || status.status === 'after-hours') return POLL_INTERVALS.extended;
+  const tickFeedConnected = isMassiveTickStreamConnected();
+
+  if (status.status === 'open') {
+    return tickFeedConnected ? POLL_INTERVALS.regular : POLL_INTERVALS.degradedRegular;
+  }
+  if (status.status === 'pre-market' || status.status === 'after-hours') {
+    return tickFeedConnected ? POLL_INTERVALS.extended : POLL_INTERVALS.degradedExtended;
+  }
   return POLL_INTERVALS.closed;
 }
 
@@ -988,11 +1180,8 @@ function startPolling(): void {
     pollTimer = setInterval(poll, getCurrentPollInterval());
   };
 
-  // Start first poll after 5 seconds
-  initialPollTimeout = setTimeout(async () => {
-    initialPollTimeout = null;
-    await poll();
-  }, 5_000);
+  // Run immediately so command-center surfaces do not hang on skeletons.
+  void poll();
 }
 
 function startHeartbeat(): void {
@@ -1115,6 +1304,19 @@ export function initWebSocket(server: HTTPServer): void {
       broadcastPositionAdvice(event.payload);
     }
   });
+  unsubscribeTickEvents = subscribeMassiveTickUpdates((tick) => {
+    void broadcastTickPrice(tick).catch((error) => {
+      logger.warn('Failed to broadcast Massive tick price', {
+        symbol: tick.symbol,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    broadcastTickMicrobars(tick);
+    const transitions = evaluateTickSetupTransitions(tick);
+    for (const transition of transitions) {
+      broadcastSetupTransition(transition);
+    }
+  });
 
   logger.info('WebSocket price server initialized at /ws/prices');
 }
@@ -1152,6 +1354,14 @@ export function shutdownWebSocket(): void {
     unsubscribePositionEvents();
     unsubscribePositionEvents = null;
   }
+  if (unsubscribeTickEvents) {
+    unsubscribeTickEvents();
+    unsubscribeTickEvents = null;
+  }
+  lastTickBroadcastAtBySymbol.clear();
+  lastMicrobarBroadcastAtBySymbolInterval.clear();
+  resetMicrobarAggregator();
+  resetTickEvaluatorState();
   logger.info('WebSocket server shut down');
 }
 

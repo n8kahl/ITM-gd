@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ChartBar } from '@/lib/api/ai-coach'
-import { bucketStartUnixSeconds, mergeRealtimePriceIntoBars } from '../chart-realtime'
+import { bucketStartUnixSeconds, mergeRealtimeMicrobarIntoBars, mergeRealtimePriceIntoBars } from '../chart-realtime'
 
 const BASE_BARS: ChartBar[] = [
   { time: 1_699_999_800, open: 100, high: 101, low: 99, close: 100.5, volume: 1000 },
@@ -44,7 +44,7 @@ describe('chart-realtime', () => {
     })
   })
 
-  it('ignores stale ticks that predate the latest bar', () => {
+  it('applies slightly out-of-order ticks when the bucket still exists', () => {
     const result = mergeRealtimePriceIntoBars(
       BASE_BARS,
       '5m',
@@ -52,8 +52,11 @@ describe('chart-realtime', () => {
       new Date((1_699_999_800 + 10) * 1000).toISOString(),
     )
 
-    expect(result.changed).toBe(false)
-    expect(result.bars).toBe(BASE_BARS)
+    expect(result.changed).toBe(true)
+    expect(result.bars).toHaveLength(2)
+    expect(result.bars[0].time).toBe(1_699_999_800)
+    expect(result.bars[0].low).toBe(99)
+    expect(result.bars[0].close).toBe(99.5)
   })
 
   it('updates the latest daily bar in place', () => {
@@ -87,5 +90,51 @@ describe('chart-realtime', () => {
     expect(result.bars[0].time).toBe(expectedBucket)
     expect(result.bars[0].close).toBe(101)
     vi.useRealTimers()
+  })
+
+  it('merges realtime microbars into the active 1m candle', () => {
+    const result = mergeRealtimeMicrobarIntoBars(
+      BASE_BARS,
+      '1m',
+      {
+        bucketStartMs: 1_700_000_100_000,
+        open: 101.5,
+        high: 102.25,
+        low: 101.2,
+        close: 102.1,
+      },
+    )
+
+    expect(result.changed).toBe(true)
+    expect(result.bars).toHaveLength(2)
+    expect(result.bars[1].time).toBe(1_700_000_100)
+    expect(result.bars[1].high).toBe(102.25)
+    expect(result.bars[1].low).toBe(100)
+    expect(result.bars[1].close).toBe(102.1)
+  })
+
+  it('appends a new 1m candle when microbar enters next bucket', () => {
+    const result = mergeRealtimeMicrobarIntoBars(
+      BASE_BARS,
+      '1m',
+      {
+        bucketStartMs: 1_700_000_160_000,
+        open: 101.7,
+        high: 102.4,
+        low: 101.6,
+        close: 102.2,
+      },
+    )
+
+    expect(result.changed).toBe(true)
+    expect(result.bars).toHaveLength(3)
+    expect(result.bars[2]).toEqual({
+      time: 1_700_000_160,
+      open: 101.5,
+      high: 102.4,
+      low: 101.5,
+      close: 102.2,
+      volume: 0,
+    })
   })
 })
