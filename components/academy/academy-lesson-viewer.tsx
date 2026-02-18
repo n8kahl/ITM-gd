@@ -7,7 +7,12 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { AcademyMarkdown } from '@/components/academy-v3/shared/academy-markdown'
 import { AcademyCard, AcademyShell } from '@/components/academy/academy-shell'
-import { getBlockMarkdown, resolveBlockImage, resolveLessonImage } from '@/components/academy/academy-media'
+import {
+  ACADEMY_DEFAULT_MEDIA_IMAGE,
+  getBlockMarkdown,
+  resolveBlockImage,
+  resolveLessonImage,
+} from '@/components/academy/academy-media'
 import {
   completeLessonBlock,
   fetchAcademyLesson,
@@ -47,6 +52,7 @@ export function AcademyLessonViewer({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [mediaError, setMediaError] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -118,6 +124,14 @@ export function AcademyLessonViewer({
   const activeBlock = lesson?.blocks[currentBlockIndex] || null
   const completedCount = lesson?.blocks.filter((block) => completedBlockIds.has(block.id)).length || 0
   const allBlocksComplete = lesson?.blocks.length ? completedCount >= lesson.blocks.length : false
+  const lessonFallbackImage = lesson ? resolveLessonImage(lesson) : ACADEMY_DEFAULT_MEDIA_IMAGE
+  const activeBlockImage = activeBlock
+    ? resolveBlockImage(activeBlock, lessonFallbackImage)
+    : ACADEMY_DEFAULT_MEDIA_IMAGE
+
+  useEffect(() => {
+    setMediaError(false)
+  }, [lessonId, activeBlock?.id])
 
   async function handleCompleteAndContinue() {
     if (!lesson || !activeBlock) return
@@ -182,7 +196,7 @@ export function AcademyLessonViewer({
             </p>
           </div>
 
-          <AcademyCard className="space-y-4 p-5">
+          <AcademyCard className="academy-card-readable space-y-4 p-5">
             <div>
               <h2 className="text-xl font-semibold text-white">{lesson.title}</h2>
               <p className="mt-2 text-sm text-zinc-300">{lesson.learningObjective}</p>
@@ -201,26 +215,25 @@ export function AcademyLessonViewer({
 
                 {activeBlock.title ? <h3 className="text-lg font-semibold text-white">{activeBlock.title}</h3> : null}
 
-                <div className="relative h-52 overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
+                <div className="relative aspect-[16/9] overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
                   <Image
-                    src={resolveBlockImage(activeBlock, resolveLessonImage(lesson))}
+                    src={mediaError ? ACADEMY_DEFAULT_MEDIA_IMAGE : activeBlockImage}
                     alt={activeBlock.title || lesson.title}
                     fill
-                    className="object-cover"
+                    className="object-contain p-2"
                     sizes="(max-width: 1024px) 100vw, 768px"
+                    onError={() => setMediaError(true)}
                   />
                 </div>
 
-                <div className="prose prose-invert max-w-none text-zinc-100">
-                  <AcademyMarkdown>{getBlockMarkdown(activeBlock.contentJson)}</AcademyMarkdown>
-                </div>
+                <AcademyMarkdown className="academy-markdown-readable">{getBlockMarkdown(activeBlock.contentJson)}</AcademyMarkdown>
               </div>
             ) : (
               <p className="text-sm text-zinc-400">No lesson blocks are available yet.</p>
             )}
           </AcademyCard>
 
-          <AcademyCard>
+          <AcademyCard className="academy-card-readable">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-zinc-400">
                 Block Progress: {completedCount} of {lesson.blocks.length} completed

@@ -32,14 +32,14 @@ const CALLOUT_META: Record<string, { label: string; tone: CalloutTone }> = {
 
 const PROSE_BASE =
   'prose prose-invert prose-emerald max-w-none ' +
-  'prose-headings:font-semibold prose-headings:text-white ' +
-  'prose-p:text-white/70 prose-p:leading-relaxed ' +
+  'prose-headings:font-semibold prose-headings:leading-tight prose-headings:text-white ' +
+  'prose-p:font-normal prose-p:text-white/85 prose-p:leading-relaxed ' +
   'prose-strong:text-white ' +
   'prose-a:text-emerald-300 prose-a:no-underline hover:prose-a:underline ' +
   'prose-code:text-emerald-200 prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[0.85em] ' +
   'prose-pre:bg-[#0E0E10] prose-pre:border prose-pre:border-white/10 ' +
   'prose-blockquote:border-emerald-500/50 prose-blockquote:text-white/60 ' +
-  'prose-li:text-white/70 ' +
+  'prose-li:font-normal prose-li:text-white/80 ' +
   'prose-th:text-white/80 prose-td:text-white/65 ' +
   'prose-hr:border-white/10 ' +
   'prose-img:rounded-xl prose-img:border prose-img:border-white/10 prose-img:bg-black/20'
@@ -47,13 +47,15 @@ const PROSE_BASE =
 const PROSE_VARIANTS: Record<MarkdownVariant, string> = {
   lesson:
     PROSE_BASE +
-    ' prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 ' +
-    ' prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2',
+    ' prose-h1:text-3xl prose-h1:mt-1 prose-h1:mb-4 prose-h1:font-semibold ' +
+    ' prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3 ' +
+    ' prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-2',
   chunk:
     PROSE_BASE +
     ' text-sm ' +
-    ' prose-h2:text-base prose-h2:mt-5 prose-h2:mb-2 ' +
-    ' prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-1.5',
+    ' prose-h1:text-xl prose-h1:mt-1 prose-h1:mb-3 prose-h1:font-semibold ' +
+    ' prose-h2:text-lg prose-h2:mt-5 prose-h2:mb-2 ' +
+    ' prose-h3:text-base prose-h3:mt-4 prose-h3:mb-1.5',
 }
 
 interface AcademyMarkdownProps {

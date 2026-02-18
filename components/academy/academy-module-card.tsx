@@ -2,8 +2,9 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 
-import { resolveModuleImage } from '@/components/academy/academy-media'
+import { ACADEMY_DEFAULT_MEDIA_IMAGE, resolveModuleImage } from '@/components/academy/academy-media'
 
 export function AcademyModuleCard({
   moduleItem,
@@ -22,6 +23,12 @@ export function AcademyModuleCard({
   progressPercent?: number
 }) {
   const safeProgress = typeof progressPercent === 'number' ? Math.max(0, Math.min(100, progressPercent)) : null
+  const resolvedImage = useMemo(() => resolveModuleImage(moduleItem), [moduleItem])
+  const [imageSrc, setImageSrc] = useState(resolvedImage)
+
+  useEffect(() => {
+    setImageSrc(resolvedImage)
+  }, [resolvedImage])
 
   return (
     <Link
@@ -30,11 +37,12 @@ export function AcademyModuleCard({
     >
       <div className="relative h-40 overflow-hidden border-b border-white/10 bg-[#0f1117]">
         <Image
-          src={resolveModuleImage(moduleItem)}
+          src={imageSrc}
           alt={`${moduleItem.title} cover`}
           fill
           className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          onError={() => setImageSrc(ACADEMY_DEFAULT_MEDIA_IMAGE)}
         />
       </div>
 

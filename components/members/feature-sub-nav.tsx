@@ -4,6 +4,7 @@ import type { ComponentType } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { Analytics } from '@/lib/analytics'
 
 export interface FeatureSubNavItem {
   id: string
@@ -45,11 +46,12 @@ export function FeatureSubNav({
               <Link
                 key={item.id}
                 href={item.href}
+                onClick={() => Analytics.trackMemberNavItem(item.label)}
                 className={cn(
                   'group shrink-0 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors',
                   active
                     ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/35'
-                    : 'text-white/55 border border-transparent hover:text-white/85 hover:bg-white/[0.04]',
+                    : 'text-white/70 border border-transparent hover:text-white/95 hover:bg-white/[0.06]',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
