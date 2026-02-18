@@ -23,6 +23,7 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
     exitTrade,
   } = useSPXCommandCenter()
   const [showWatchlist, setShowWatchlist] = useState(false)
+  const [showMoreActionable, setShowMoreActionable] = useState(false)
 
   const policy = useMemo(
     () => buildSetupDisplayPolicy({
@@ -35,6 +36,7 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
     [activeSetups, regime, prediction, selectedSetup],
   )
   const actionable = inTradeSetup ? [inTradeSetup] : policy.actionablePrimary
+  const secondaryActionable = inTradeSetup ? [] : policy.actionableSecondary
   const hiddenByTradeFocusCount = inTradeSetup ? Math.max(policy.actionableVisibleCount - 1, 0) : 0
   const forming = inTradeSetup ? [] : policy.forming
   const selectedEnterable = Boolean(selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
@@ -110,16 +112,48 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                   : 'No trade-valid setups yet.'}
               </p>
             ) : (
-              actionable.map((setup) => (
-                <SetupCard
-                  key={setup.id}
-                  setup={setup}
-                  currentPrice={spxPrice}
-                  selected={selectedSetup?.id === setup.id}
-                  readOnly={readOnly}
-                  onSelect={() => selectSetup(setup)}
-                />
-              ))
+              <>
+                {actionable.map((setup) => (
+                  <SetupCard
+                    key={setup.id}
+                    setup={setup}
+                    currentPrice={spxPrice}
+                    selected={selectedSetup?.id === setup.id}
+                    readOnly={readOnly}
+                    onSelect={() => selectSetup(setup)}
+                  />
+                ))}
+
+                {secondaryActionable.length > 0 && !readOnly && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreActionable((p) => !p)
+                        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                          surface: 'setup_feed_secondary_actionable',
+                          action: showMoreActionable ? 'collapse' : 'expand',
+                          count: secondaryActionable.length,
+                        })
+                      }}
+                      className="w-full rounded-lg border border-white/12 bg-white/[0.02] px-2 py-1 text-left text-[9px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70"
+                    >
+                      {showMoreActionable ? 'Hide' : 'Show'} other actionable ({secondaryActionable.length})
+                    </button>
+                  </div>
+                )}
+
+                {showMoreActionable && secondaryActionable.map((setup) => (
+                  <SetupCard
+                    key={setup.id}
+                    setup={setup}
+                    currentPrice={spxPrice}
+                    selected={selectedSetup?.id === setup.id}
+                    readOnly={readOnly}
+                    onSelect={() => selectSetup(setup)}
+                  />
+                ))}
+              </>
             )}
 
             {policy.hiddenOppositeCount > 0 && (

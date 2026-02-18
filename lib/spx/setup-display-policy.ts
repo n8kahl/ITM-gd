@@ -15,6 +15,7 @@ interface BuildSetupDisplayPolicyInput {
 interface BuildSetupDisplayPolicyResult {
   actionableAll: Setup[]
   actionablePrimary: Setup[]
+  actionableSecondary: Setup[]
   forming: Setup[]
   hiddenOppositeCount: number
   directionalBias: Setup['direction'] | null
@@ -74,6 +75,7 @@ export function buildSetupDisplayPolicy(input: BuildSetupDisplayPolicyInput): Bu
   return {
     actionableAll,
     actionablePrimary,
+    actionableSecondary: actionableFiltered.slice(primaryLimit),
     forming: formingFiltered,
     hiddenOppositeCount,
     directionalBias,
