@@ -14,6 +14,7 @@ export interface PriceUpdate {
   volume: number
   timestamp: string
   source?: 'tick' | 'poll' | 'snapshot'
+  feedAgeMs?: number
 }
 
 export interface MarketStatusUpdate {
@@ -316,16 +317,25 @@ function handleSocketMessage(event: MessageEvent<string>): void {
     const message = JSON.parse(event.data) as RealtimeSocketMessage
 
     if (message.type === 'price' && typeof message.symbol === 'string') {
+      const timestamp = typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString()
+      const feedAgeFromPayload = typeof message.feedAgeMs === 'number' && Number.isFinite(message.feedAgeMs)
+        ? Math.max(0, Math.floor(message.feedAgeMs))
+        : null
+      const parsedTimestamp = Date.parse(timestamp)
+      const computedFeedAgeMs = Number.isFinite(parsedTimestamp)
+        ? Math.max(0, Date.now() - parsedTimestamp)
+        : undefined
       sharedState.prices.set(message.symbol, {
         symbol: message.symbol,
         price: Number(message.price || 0),
         change: Number(message.change || 0),
         changePct: Number(message.changePct || 0),
         volume: Number(message.volume || 0),
-        timestamp: typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString(),
+        timestamp,
         source: message.source === 'tick' || message.source === 'poll' || message.source === 'snapshot'
           ? message.source
           : undefined,
+        feedAgeMs: feedAgeFromPayload ?? computedFeedAgeMs,
       })
       notifyConsumers()
       notifyChannelConsumers(message)

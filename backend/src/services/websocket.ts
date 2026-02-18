@@ -83,6 +83,7 @@ interface PriceUpdate {
   volume: number;
   timestamp: string;
   source?: 'poll' | 'tick';
+  feedAgeMs?: number;
   seq?: number;
 }
 
@@ -164,8 +165,8 @@ function formatTicker(symbol: string): string {
 // PRICE CACHE
 // ============================================
 
-const priceCache = new Map<string, { price: number; prevClose: number; volume: number; fetchedAt: number }>();
-const inFlightPriceFetch = new Map<string, Promise<{ price: number; prevClose: number; volume: number } | null>>();
+const priceCache = new Map<string, { price: number; prevClose: number; volume: number; asOfMs: number; fetchedAt: number }>();
+const inFlightPriceFetch = new Map<string, Promise<{ price: number; prevClose: number; volume: number; asOfMs: number } | null>>();
 let lastSPXSnapshot: SPXSnapshot | null = null;
 let lastLevelsSignature = '';
 let lastClustersSignature = '';
@@ -179,7 +180,13 @@ const lastGexBroadcastAtBySymbol: Record<'SPX' | 'SPY', number> = {
 let lastRegimeBroadcastAt = 0;
 let lastBasisBroadcastAt = 0;
 
-async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevClose: number; volume: number } | null> {
+function toAsOfMs(value: unknown): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : NaN;
+  if (Number.isFinite(numeric) && numeric > 0) return Math.floor(numeric);
+  return Date.now();
+}
+
+async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevClose: number; volume: number; asOfMs: number } | null> {
   try {
     const ticker = formatTicker(symbol);
     const now = new Date();
@@ -200,14 +207,24 @@ async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevCl
     if (minuteData.length > 0) {
       const lastBar = minuteData[minuteData.length - 1];
       const prevClose = previousClose ?? minuteData[0].o;
-      return { price: lastBar.c, prevClose: prevClose, volume: lastBar.v };
+      return {
+        price: lastBar.c,
+        prevClose: prevClose,
+        volume: lastBar.v,
+        asOfMs: toAsOfMs((lastBar as { t?: number }).t),
+      };
     }
 
     // Fallback to daily
     if (dailyData.length >= 1) {
       const lastBar = dailyData[dailyData.length - 1];
       const prevBar = dailyData.length >= 2 ? dailyData[dailyData.length - 2] : lastBar;
-      return { price: lastBar.c, prevClose: prevBar.c, volume: lastBar.v };
+      return {
+        price: lastBar.c,
+        prevClose: prevBar.c,
+        volume: lastBar.v,
+        asOfMs: toAsOfMs((lastBar as { t?: number }).t),
+      };
     }
 
     return null;
@@ -216,13 +233,14 @@ async function fetchLatestPrice(symbol: string): Promise<{ price: number; prevCl
   }
 }
 
-async function getLatestPriceSnapshot(symbol: string): Promise<{ price: number; prevClose: number; volume: number } | null> {
+async function getLatestPriceSnapshot(symbol: string): Promise<{ price: number; prevClose: number; volume: number; asOfMs: number } | null> {
   const cached = priceCache.get(symbol);
   if (cached && Date.now() - cached.fetchedAt <= PRICE_CACHE_STALE_MS) {
     return {
       price: cached.price,
       prevClose: cached.prevClose,
       volume: cached.volume,
+      asOfMs: cached.asOfMs,
     };
   }
 
@@ -366,6 +384,23 @@ function getActiveSymbols(): Set<string> {
     }
   }
   return symbols;
+}
+
+function isSymbolTickFresh(symbol: string, nowMs: number = Date.now()): boolean {
+  const latest = getLatestTick(symbol);
+  if (!latest) return false;
+  return nowMs - latest.timestamp <= TICK_STALE_MS;
+}
+
+function areSymbolTicksFresh(symbols: Iterable<string>, nowMs: number = Date.now()): boolean {
+  const normalized = Array.from(new Set(
+    Array.from(symbols)
+      .map((symbol) => normalizeSymbol(symbol))
+      .filter((symbol) => symbol.length > 0),
+  ));
+
+  if (normalized.length === 0) return false;
+  return normalized.every((symbol) => isSymbolTickFresh(symbol, nowMs));
 }
 
 function hasSubscribersForChannel(channel: string): boolean {
@@ -583,6 +618,7 @@ async function broadcastTickPrice(tick: NormalizedMarketTick): Promise<void> {
     price: tick.price,
     prevClose: resolvedPrevClose,
     volume,
+    asOfMs: tick.timestamp,
     fetchedAt: Date.now(),
   });
 
@@ -598,6 +634,7 @@ async function broadcastTickPrice(tick: NormalizedMarketTick): Promise<void> {
     volume,
     timestamp: new Date(tick.timestamp).toISOString(),
     source: 'tick',
+    feedAgeMs: Math.max(0, now - tick.timestamp),
     seq: tick.sequence === null ? undefined : tick.sequence,
   });
 }
@@ -757,6 +794,49 @@ async function sendLatestSymbolPriceToClient(
   symbol: string,
   channel?: string,
 ): Promise<void> {
+  const now = Date.now();
+  const liveTick = getLatestTick(symbol);
+  if (liveTick && now - liveTick.timestamp <= TICK_STALE_MS) {
+    const cached = priceCache.get(symbol);
+    let prevClose = cached?.prevClose;
+    let volume = Math.max(cached?.volume || 0, liveTick.size);
+
+    if (!prevClose || prevClose <= 0) {
+      const latest = await getLatestPriceSnapshot(symbol);
+      if (latest) {
+        prevClose = latest.prevClose;
+        volume = Math.max(volume, latest.volume);
+      }
+    }
+
+    const resolvedPrevClose = prevClose && prevClose > 0 ? prevClose : liveTick.price;
+    const change = liveTick.price - resolvedPrevClose;
+    const changePct = resolvedPrevClose !== 0 ? (change / resolvedPrevClose) * 100 : 0;
+
+    priceCache.set(symbol, {
+      price: liveTick.price,
+      prevClose: resolvedPrevClose,
+      volume,
+      asOfMs: liveTick.timestamp,
+      fetchedAt: now,
+    });
+
+    sendToClient(ws, {
+      type: 'price',
+      ...(channel ? { channel } : {}),
+      symbol,
+      price: Number(liveTick.price.toFixed(2)),
+      change: Number(change.toFixed(2)),
+      changePct: Number(changePct.toFixed(2)),
+      volume,
+      timestamp: new Date(liveTick.timestamp).toISOString(),
+      source: 'tick',
+      feedAgeMs: Math.max(0, now - liveTick.timestamp),
+      seq: liveTick.sequence === null ? undefined : liveTick.sequence,
+    });
+    return;
+  }
+
   const latest = await getLatestPriceSnapshot(symbol);
   if (!latest) return;
 
@@ -771,8 +851,9 @@ async function sendLatestSymbolPriceToClient(
     change: Number(change.toFixed(2)),
     changePct: Number(changePct.toFixed(2)),
     volume: latest.volume,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(latest.asOfMs).toISOString(),
     source: 'poll',
+    feedAgeMs: Math.max(0, now - latest.asOfMs),
   });
 }
 
@@ -1030,8 +1111,9 @@ async function pollPrices(): Promise<void> {
       change: Number(change.toFixed(2)),
       changePct: Number(changePct.toFixed(2)),
       volume: data.volume,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(data.asOfMs).toISOString(),
       source: 'poll',
+      feedAgeMs: Math.max(0, now - data.asOfMs),
     });
   }
 
@@ -1167,12 +1249,17 @@ async function broadcastSPXChannels(): Promise<void> {
 function getCurrentPollInterval(): number {
   const status = getMarketStatus();
   const tickFeedConnected = isMassiveTickStreamConnected();
+  const activeSymbols = getActiveSymbols();
+  const symbolsToCheck = activeSymbols.size > 0
+    ? activeSymbols
+    : new Set<string>(['SPX', 'SPY']);
+  const tickFeedFresh = tickFeedConnected && areSymbolTicksFresh(symbolsToCheck);
 
   if (status.status === 'open') {
-    return tickFeedConnected ? POLL_INTERVALS.regular : POLL_INTERVALS.degradedRegular;
+    return tickFeedFresh ? POLL_INTERVALS.regular : POLL_INTERVALS.degradedRegular;
   }
   if (status.status === 'pre-market' || status.status === 'after-hours') {
-    return tickFeedConnected ? POLL_INTERVALS.extended : POLL_INTERVALS.degradedExtended;
+    return tickFeedFresh ? POLL_INTERVALS.extended : POLL_INTERVALS.degradedExtended;
   }
   return POLL_INTERVALS.closed;
 }
@@ -1389,4 +1476,6 @@ export const __testables = {
   toPositionChannel,
   toPriceChannel,
   extractWsToken,
+  isSymbolTickFresh,
+  areSymbolTicksFresh,
 };

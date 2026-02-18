@@ -45,6 +45,8 @@ export function SPXChart() {
     chartAnnotations,
     spxPrice,
     spxTickTimestamp,
+    spxPriceAgeMs,
+    spxPriceSource,
     latestMicrobar,
     selectedTimeframe,
     setChartTimeframe,
@@ -53,6 +55,11 @@ export function SPXChart() {
   const [bars, setBars] = useState<ChartBar[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAllRelevantLevels, setShowAllRelevantLevels] = useState(false)
+
+  useEffect(() => {
+    // Always reset to 1m on page entry for command-center first-action consistency.
+    setChartTimeframe('1m')
+  }, [setChartTimeframe])
 
   useEffect(() => {
     let isCancelled = false
@@ -127,12 +134,14 @@ export function SPXChart() {
 
   useEffect(() => {
     if (!spxTickTimestamp || !Number.isFinite(spxPrice) || spxPrice <= 0) return
+    const maxAgeMs = spxPriceSource === 'tick' ? 10_000 : 90_000
+    if (spxPriceAgeMs != null && spxPriceAgeMs > maxAgeMs) return
 
     setBars((prev) => {
       const merged = mergeRealtimePriceIntoBars(prev, selectedTimeframe, spxPrice, spxTickTimestamp)
       return merged.changed ? merged.bars : prev
     })
-  }, [selectedTimeframe, spxPrice, spxTickTimestamp])
+  }, [selectedTimeframe, spxPrice, spxPriceAgeMs, spxPriceSource, spxTickTimestamp])
 
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({

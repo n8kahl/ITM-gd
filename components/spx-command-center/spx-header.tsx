@@ -40,6 +40,7 @@ export function SPXHeader() {
   const {
     spxPrice,
     spxTickTimestamp,
+    spxPriceAgeMs,
     spxPriceSource,
     basis,
     regime,
@@ -57,10 +58,12 @@ export function SPXHeader() {
 
   const snapshotAgeMs = getAgeMs(snapshotGeneratedAt)
   const snapshotFreshness = formatFreshness(snapshotAgeMs)
-  const tickAgeMs = getAgeMs(spxTickTimestamp)
+  const tickAgeMs = spxPriceAgeMs ?? getAgeMs(spxTickTimestamp)
   const wsTickLive = priceStreamConnected && spxPriceSource === 'tick' && (tickAgeMs == null || tickAgeMs <= 5_000)
+  const wsTickLagging = priceStreamConnected && spxPriceSource === 'tick' && tickAgeMs != null && tickAgeMs > 5_000
   const wsPollFallback = priceStreamConnected && spxPriceSource === 'poll'
-  const wsConnectedUnknownSource = priceStreamConnected && !wsTickLive && !wsPollFallback
+  const wsConnectedUnknownSource = priceStreamConnected && !wsTickLive && !wsTickLagging && !wsPollFallback
+  const wsLagLabel = tickAgeMs != null ? `${Math.floor(tickAgeMs / 1000)}s` : '--'
 
   const actionableCount = useMemo(
     () => buildSetupDisplayPolicy({
@@ -112,6 +115,8 @@ export function SPXHeader() {
                 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em]',
                 wsTickLive
                   ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200/85'
+                  : wsTickLagging
+                    ? 'border-amber-300/35 bg-amber-500/12 text-amber-100/85'
                   : wsPollFallback
                     ? 'border-amber-300/35 bg-amber-500/12 text-amber-100/85'
                     : wsConnectedUnknownSource
@@ -121,6 +126,8 @@ export function SPXHeader() {
               title={
                 wsTickLive
                   ? 'WebSocket connected with tick-level updates'
+                  : wsTickLagging
+                    ? `WebSocket connected but tick feed is lagging (${wsLagLabel})`
                   : wsPollFallback
                     ? 'WebSocket connected; using slower poll fallback prices'
                     : wsConnectedUnknownSource
@@ -128,7 +135,15 @@ export function SPXHeader() {
                       : (priceStreamError || 'WebSocket reconnecting')
               }
             >
-              {wsTickLive ? 'WS Tick' : wsPollFallback ? 'WS Poll' : wsConnectedUnknownSource ? 'WS Link' : 'WS Retry'}
+              {wsTickLive
+                ? 'WS Tick'
+                : wsTickLagging
+                  ? `WS Lag ${wsLagLabel}`
+                  : wsPollFallback
+                    ? 'WS Poll'
+                    : wsConnectedUnknownSource
+                      ? 'WS Link'
+                      : 'WS Retry'}
             </span>
             <span
               className={cn(

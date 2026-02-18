@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'http';
 import { __testables } from '../websocket';
+import { ingestTick, resetTickCache } from '../tickCache';
 
 describe('websocket service helpers', () => {
   const {
@@ -12,7 +13,13 @@ describe('websocket service helpers', () => {
     toSetupChannel,
     toPositionChannel,
     extractWsToken,
+    isSymbolTickFresh,
+    areSymbolTicksFresh,
   } = __testables;
+
+  beforeEach(() => {
+    resetTickCache();
+  });
 
   it('normalizes realtime channels and rejects invalid formats', () => {
     expect(normalizeSetupChannel('SETUPS:User_123')).toBe('setups:user_123');
@@ -58,5 +65,43 @@ describe('websocket service helpers', () => {
     expect(isSymbolSubscription('SPX')).toBe(true);
     expect(isSymbolSubscription('BRK.B')).toBe(true);
     expect(isSymbolSubscription('AAPL$')).toBe(false);
+  });
+
+  it('marks symbol ticks fresh only within configured stale threshold window', () => {
+    const now = Date.now();
+    ingestTick({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 6100,
+      size: 1,
+      timestamp: now - 500,
+      sequence: 1,
+    });
+    ingestTick({
+      symbol: 'SPY',
+      rawSymbol: 'SPY',
+      price: 610,
+      size: 1,
+      timestamp: now - 8000,
+      sequence: 1,
+    });
+
+    expect(isSymbolTickFresh('SPX', now)).toBe(true);
+    expect(isSymbolTickFresh('SPY', now)).toBe(false);
+  });
+
+  it('requires all subscribed symbols to have fresh ticks', () => {
+    const now = Date.now();
+    ingestTick({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 6102,
+      size: 1,
+      timestamp: now - 700,
+      sequence: 2,
+    });
+
+    expect(areSymbolTicksFresh(['SPX'], now)).toBe(true);
+    expect(areSymbolTicksFresh(['SPX', 'SPY'], now)).toBe(false);
   });
 });

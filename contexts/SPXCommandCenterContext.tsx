@@ -54,6 +54,7 @@ interface SPXCommandCenterState {
   dataHealthMessage: string | null
   spxPrice: number
   spxTickTimestamp: string | null
+  spxPriceAgeMs: number | null
   spxPriceSource: 'tick' | 'poll' | 'snapshot' | null
   spyPrice: number
   snapshotGeneratedAt: string | null
@@ -109,6 +110,8 @@ const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['formin
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const ENTERABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
+const TICK_FRESHNESS_STALE_MS = 7_500
+const POLL_FRESHNESS_STALE_MS = 90_000
 const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
 const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
 const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
@@ -230,6 +233,13 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed
   }
   return null
+}
+
+function calculateAgeMs(timestamp: string | null | undefined): number | null {
+  if (!timestamp) return null
+  const parsed = Date.parse(timestamp)
+  if (!Number.isFinite(parsed)) return null
+  return Math.max(Date.now() - parsed, 0)
 }
 
 interface PersistedTradeFocusState {
@@ -517,10 +527,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }, { level: 'warning', persist: true })
   }, [activeSetups, inTradeSetupId])
 
-  const spxPrice = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
-  const spxTickTimestamp = stream.prices.get('SPX')?.timestamp ?? null
-  const spxPriceSource = stream.prices.get('SPX')?.source ?? (snapshotData?.basis?.spxPrice ? 'snapshot' : null)
-  const spyPrice = stream.prices.get('SPY')?.price ?? snapshotData?.basis?.spyPrice ?? 0
+  const spxStreamPrice = stream.prices.get('SPX')
+  const spyStreamPrice = stream.prices.get('SPY')
+  const spxPrice = spxStreamPrice?.price ?? snapshotData?.basis?.spxPrice ?? 0
+  const spxTickTimestamp = spxStreamPrice?.timestamp ?? null
+  const spxPriceSource = spxStreamPrice?.source ?? (snapshotData?.basis?.spxPrice ? 'snapshot' : null)
+  const spxPriceAgeMs = spxStreamPrice?.feedAgeMs ?? calculateAgeMs(spxTickTimestamp)
+  const spyPrice = spyStreamPrice?.price ?? snapshotData?.basis?.spyPrice ?? 0
   const tradePnlPoints = useMemo(() => {
     if (!inTradeSetup || tradeEntryPrice == null || !Number.isFinite(spxPrice) || spxPrice <= 0) return null
     const move = spxPrice - tradeEntryPrice
@@ -923,12 +936,27 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [accessToken, mutateSnapshot])
 
   const error = snapshotError || null
+  const tickSourceStale = spxPriceSource === 'tick'
+    && spxPriceAgeMs != null
+    && spxPriceAgeMs > TICK_FRESHNESS_STALE_MS
+  const pollSourceStale = spxPriceSource === 'poll'
+    && spxPriceAgeMs != null
+    && spxPriceAgeMs > POLL_FRESHNESS_STALE_MS
   const dataHealth = useMemo<'healthy' | 'degraded' | 'stale'>(() => {
     if (snapshotIsDegraded || error || snapshotRequestLate) return 'degraded'
-    if (stream.isConnected && spxPriceSource === 'poll') return 'stale'
+    if (stream.isConnected && (spxPriceSource === 'poll' || tickSourceStale || pollSourceStale)) return 'stale'
     if (!stream.isConnected && Boolean(snapshotData?.generatedAt)) return 'stale'
     return 'healthy'
-  }, [error, snapshotData?.generatedAt, snapshotIsDegraded, snapshotRequestLate, spxPriceSource, stream.isConnected])
+  }, [
+    error,
+    pollSourceStale,
+    snapshotData?.generatedAt,
+    snapshotIsDegraded,
+    snapshotRequestLate,
+    spxPriceSource,
+    stream.isConnected,
+    tickSourceStale,
+  ])
 
   const dataHealthMessage = useMemo(() => {
     if (snapshotIsDegraded) {
@@ -940,14 +968,33 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     if (snapshotRequestLate && !snapshotData) {
       return 'SPX snapshot request is delayed. Core chart stream is still active while analytics recover.'
     }
+    if (tickSourceStale) {
+      const seconds = spxPriceAgeMs != null ? Math.floor(spxPriceAgeMs / 1000) : null
+      return `Tick stream lag detected (${seconds != null ? `${seconds}s` : 'unknown'} behind). Falling back to last known price until feed recovers.`
+    }
     if (spxPriceSource === 'poll' && stream.isConnected) {
       return 'Live tick feed unavailable. Streaming over poll fallback, so chart and price updates may lag.'
+    }
+    if (pollSourceStale) {
+      return 'Poll fallback data is stale. Waiting for fresher provider bars or tick feed recovery.'
     }
     if (dataHealth === 'stale') {
       return 'Live stream disconnected and snapshot is stale. Reconnecting in background.'
     }
     return null
-  }, [dataHealth, error, snapshotData, snapshotDegradedMessage, snapshotIsDegraded, snapshotRequestLate, spxPriceSource, stream.isConnected])
+  }, [
+    dataHealth,
+    error,
+    pollSourceStale,
+    snapshotData,
+    snapshotDegradedMessage,
+    snapshotIsDegraded,
+    snapshotRequestLate,
+    spxPriceAgeMs,
+    spxPriceSource,
+    stream.isConnected,
+    tickSourceStale,
+  ])
 
   useEffect(() => {
     if (lastDataHealthRef.current === dataHealth) return
@@ -966,6 +1013,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     dataHealthMessage,
     spxPrice,
     spxTickTimestamp,
+    spxPriceAgeMs,
     spxPriceSource,
     spyPrice,
     snapshotGeneratedAt: snapshotData?.generatedAt || null,
@@ -1033,6 +1081,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     stream.error,
     stream.isConnected,
     spxPrice,
+    spxPriceAgeMs,
     spxTickTimestamp,
     spxPriceSource,
     spyPrice,
