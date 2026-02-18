@@ -68,12 +68,6 @@ export default function Home() {
     setIsContactModalOpen(true);
   };
 
-  // Initialize analytics tracking
-  useEffect(() => {
-    Analytics.initialize()
-    Analytics.trackPageView()
-  }, []);
-
   // Fetch pricing tiers from database
   useEffect(() => {
     getPricingTiers()

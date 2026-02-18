@@ -41,6 +41,7 @@ import { usePanelAttentionPulse } from '@/hooks/use-panel-attention-pulse'
 import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
+import { Analytics } from '@/lib/analytics'
 
 const CHAT_QUICK_PROMPTS = [
   {
@@ -553,11 +554,14 @@ function ChatArea({
 
     if (stagedImage) {
       // Send image for analysis through the chat
+      Analytics.trackAICoachAction('analyze_uploaded_screenshot')
       void handleImageAnalysis(text)
     } else if (stagedCsv) {
       // Send CSV for analysis through chat
+      Analytics.trackAICoachAction('analyze_uploaded_csv')
       void handleCsvAnalysis(text)
     } else {
+      Analytics.trackAICoachAction('send_message')
       onSendMessage(text)
     }
     setInputValue('')
@@ -658,6 +662,7 @@ function ChatArea({
   }
 
   const handleImageReady = useCallback((base64: string, mimeType: string) => {
+    Analytics.trackAICoachAction('upload_screenshot')
     const preview = `data:${mimeType};base64,${base64}`
     setStagedCsv(null)
     setScreenshotActions(null)
@@ -665,6 +670,7 @@ function ChatArea({
   }, [])
 
   const handleCsvReady = useCallback((csvText: string, fileName: string) => {
+    Analytics.trackAICoachAction('upload_csv')
     setStagedImage(null)
     setScreenshotActions(null)
     setStagedCsv({ fileName, content: csvText })
@@ -771,6 +777,7 @@ function ChatArea({
 
   const handleScreenshotAction = useCallback((actionId: ScreenshotActionId) => {
     if (!screenshotActions) return
+    Analytics.trackAICoachAction(`action_chip_${actionId}`)
     const summary = compactPositionSummary(screenshotActions.positions)
 
     switch (actionId) {
@@ -824,7 +831,10 @@ function ChatArea({
             <div className="p-3 border-b border-white/5 flex items-center justify-between">
               <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Sessions</span>
               <button
-                onClick={onNewSession}
+                onClick={() => {
+                  Analytics.trackAICoachAction('new_session')
+                  onNewSession()
+                }}
                 className="p-1 rounded hover:bg-white/5 text-white/40 hover:text-emerald-500 transition-colors"
                 title="New session"
               >
@@ -854,7 +864,10 @@ function ChatArea({
                         ? 'bg-emerald-500/10 border border-emerald-500/20 text-white'
                         : 'hover:bg-white/5 text-white/50 hover:text-white border border-transparent'
                     )}
-                    onClick={() => onSelectSession(s.id)}
+                    onClick={() => {
+                      Analytics.trackAICoachAction('open_session')
+                      onSelectSession(s.id)
+                    }}
                   >
                     <MessageSquare className={cn('w-3.5 h-3.5 shrink-0', s.id === currentSessionId ? 'text-emerald-500' : 'text-white/30')} />
                     <div className="flex-1 min-w-0">
@@ -862,7 +875,11 @@ function ChatArea({
                       <p className="text-[10px] text-white/25">{s.message_count} msg{s.message_count !== 1 ? 's' : ''}</p>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onDeleteSession(s.id) }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        Analytics.trackAICoachAction('delete_session')
+                        onDeleteSession(s.id)
+                      }}
                       className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-white/20 hover:text-red-400 transition-all"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -885,7 +902,10 @@ function ChatArea({
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <button
-                onClick={toggleSessions}
+                onClick={() => {
+                  Analytics.trackAICoachAction('toggle_sessions')
+                  toggleSessions()
+                }}
                 className="shrink-0 p-1.5 rounded-lg text-white/40 transition-colors hover:bg-white/5 hover:text-white"
                 title="Toggle sessions (Ctrl/Cmd+/)"
               >
@@ -899,7 +919,10 @@ function ChatArea({
 
             <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
               <button
-                onClick={() => onSendMessage('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')}
+                onClick={() => {
+                  Analytics.trackAICoachAction('spx_game_plan_refresh')
+                  onSendMessage('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')
+                }}
                 className="hidden xl:flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 transition-colors hover:bg-emerald-500/15"
                 title="Refresh SPX game plan"
               >
@@ -925,7 +948,10 @@ function ChatArea({
                 Ctrl/Cmd+K focus | Ctrl/Cmd+/ sessions | Ctrl/Cmd+B collapse
               </p>
               <Button
-                onClick={onNewSession}
+                onClick={() => {
+                  Analytics.trackAICoachAction('new_session')
+                  onNewSession()
+                }}
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2 text-white/40 hover:text-emerald-500"
@@ -1129,7 +1155,10 @@ function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }
           {CHAT_QUICK_PROMPTS.map((item) => (
             <motion.button
               key={item.text}
-              onClick={() => onSendPrompt(item.prompt)}
+              onClick={() => {
+                Analytics.trackAICoachAction(`quick_prompt_${item.text.toLowerCase().replace(/\s+/g, '_')}`)
+                onSendPrompt(item.prompt)
+              }}
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.98 }}
               className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:text-white hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-left"

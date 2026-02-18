@@ -118,7 +118,7 @@ export async function uploadScreenshot(
 
 /**
  * Request a signed URL from our server-side API route.
- * The server uses the service role to generate a long-lived signed URL.
+ * The server uses the service role to generate a short-lived signed URL.
  */
 async function getSignedUrl(storagePath: string): Promise<string> {
   const res = await fetch('/api/members/journal/screenshot-url', {

@@ -2,15 +2,24 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { ZodTypeAny } from 'zod'
 
 let createSchema: ZodTypeAny
+let importRowSchema: ZodTypeAny
 
 beforeAll(async () => {
   const loadedModule = await import('@/lib/validation/journal-entry')
-  const loaded = loadedModule as unknown as { journalEntryCreateSchema?: ZodTypeAny; journalEntrySchema?: ZodTypeAny }
+  const loaded = loadedModule as unknown as {
+    journalEntryCreateSchema?: ZodTypeAny
+    journalEntrySchema?: ZodTypeAny
+    importTradeRowSchema?: ZodTypeAny
+  }
   const schema = loaded.journalEntryCreateSchema ?? loaded.journalEntrySchema
   if (!schema) {
     throw new Error('Journal entry schema export is missing')
   }
+  if (!loaded.importTradeRowSchema) {
+    throw new Error('Import row schema export is missing')
+  }
   createSchema = schema
+  importRowSchema = loaded.importTradeRowSchema
 })
 
 describe('journalEntryCreateSchema', () => {
@@ -64,5 +73,28 @@ describe('journalEntryCreateSchema', () => {
       symbol: 'TSLA',
       setup_notes: 'x'.repeat(10_001),
     })).toThrow()
+  })
+})
+
+describe('importTradeRowSchema', () => {
+  it('accepts symbol aliases used by broker exports', () => {
+    const parsed = importRowSchema.safeParse({
+      'Underlying Symbol': 'SPY',
+      Date: '2026-02-14',
+      Quantity: '2',
+      'Entry Price': '602.25',
+    })
+
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects rows that contain no recognizable symbol field', () => {
+    const parsed = importRowSchema.safeParse({
+      Date: '2026-02-14',
+      Quantity: '2',
+      'Entry Price': '602.25',
+    })
+
+    expect(parsed.success).toBe(false)
   })
 })

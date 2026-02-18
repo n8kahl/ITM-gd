@@ -47,6 +47,9 @@ export function SPXHeader() {
     activeSetups,
     flowEvents,
     gexProfile,
+    tradeMode,
+    inTradeSetup,
+    tradePnlPoints,
     snapshotGeneratedAt,
     priceStreamConnected,
     priceStreamError,
@@ -146,7 +149,14 @@ export function SPXHeader() {
           </div>
 
           <p className="mt-0.5 truncate text-[11px] text-white/58">
-            <span className="text-white/75">{actionableCount.actionableVisibleCount} setups actionable</span>
+            {tradeMode === 'in_trade' && inTradeSetup ? (
+              <span className="text-champagne">
+                In trade focus: {inTradeSetup.direction} {inTradeSetup.regime}
+                {tradePnlPoints != null ? ` · ${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts` : ''}
+              </span>
+            ) : (
+              <span className="text-white/75">{actionableCount.actionableVisibleCount} setups actionable</span>
+            )}
             {actionableCount.hiddenOppositeCount > 0 && (
               <>
                 <Dot className="inline h-3.5 w-3.5 align-text-bottom text-white/30" />

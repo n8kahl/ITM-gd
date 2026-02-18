@@ -109,7 +109,7 @@ export default defineConfig({
     // All other tests
     {
       name: 'chromium',
-      testIgnore: [/auth-health-check\.spec\.ts/, /ai-coach.*\.spec\.ts/],
+      testIgnore: [/auth-health-check\.spec\.ts/, /ai-coach.*\.spec\.ts/, /journal-mobile\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
     },
     // Mobile testing for responsive auth
@@ -124,6 +124,20 @@ export default defineConfig({
       testMatch: /academy-layout\.spec\.ts/,
       use: {
         ...devices['Pixel 7'],
+        extraHTTPHeaders: {
+          'x-e2e-bypass-auth': '1',
+        },
+      },
+    },
+    // Mobile regression coverage for journal interactions.
+    {
+      name: 'mobile-journal',
+      testMatch: /journal-mobile\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
         extraHTTPHeaders: {
           'x-e2e-bypass-auth': '1',
         },

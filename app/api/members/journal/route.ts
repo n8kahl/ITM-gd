@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { z, ZodError } from 'zod'
 import { errorResponse, successResponse } from '@/lib/api/response'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
@@ -19,13 +20,90 @@ const listQuerySchema = z.object({
   tags: z.string().optional(),
   sortBy: z.enum(['trade_date', 'created_at', 'pnl', 'symbol']).default('trade_date'),
   sortDir: z.enum(['asc', 'desc']).default('desc'),
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+  limit: z.coerce.number().int().min(1).max(500).default(500),
   offset: z.coerce.number().int().min(0).default(0),
 })
 
 const deleteQuerySchema = z.object({
   id: z.string().uuid(),
 })
+const SCREENSHOT_SIGN_TTL_SECONDS = 60 * 60 * 24
+
+function getStorageAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceRoleKey) return null
+  return createClient(supabaseUrl, serviceRoleKey)
+}
+
+async function attachSignedScreenshotUrls(
+  rows: Array<Record<string, unknown>>,
+  userId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const admin = getStorageAdminClient()
+  if (!admin || rows.length === 0) return rows
+
+  const storagePaths = Array.from(
+    new Set(
+      rows
+        .map((row) => (typeof row.screenshot_storage_path === 'string' ? row.screenshot_storage_path : null))
+        .filter((path): path is string => path != null && path.startsWith(`${userId}/`)),
+    ),
+  )
+  const storagePathSet = new Set(storagePaths)
+
+  if (storagePaths.length === 0) return rows
+
+  const bucket = admin.storage.from('journal-screenshots')
+  const signedUrlByPath = new Map<string, string | null>()
+
+  const createSignedUrlsMaybe = (
+    bucket as unknown as {
+      createSignedUrls?: (paths: string[], expiresIn: number) => Promise<{
+        data?: Array<{ path?: string | null, signedUrl?: string | null }> | null,
+        error?: unknown,
+      }>
+    }
+  ).createSignedUrls
+
+  if (typeof createSignedUrlsMaybe === 'function') {
+    const { data, error } = await createSignedUrlsMaybe.call(bucket, storagePaths, SCREENSHOT_SIGN_TTL_SECONDS)
+    if (!error && Array.isArray(data)) {
+      for (const item of data) {
+        if (item?.path && storagePathSet.has(item.path)) {
+          signedUrlByPath.set(item.path, item.signedUrl ?? null)
+        }
+      }
+    }
+  }
+
+  if (signedUrlByPath.size === 0) {
+    const signedEntries = await Promise.all(storagePaths.map(async (path) => {
+      const { data, error } = await bucket.createSignedUrl(path, SCREENSHOT_SIGN_TTL_SECONDS)
+      return [path, error || !data?.signedUrl ? null : data.signedUrl] as const
+    }))
+
+    for (const [path, signedUrl] of signedEntries) {
+      signedUrlByPath.set(path, signedUrl)
+    }
+  }
+
+  return rows.map((row) => {
+    const storagePath = typeof row.screenshot_storage_path === 'string'
+      ? row.screenshot_storage_path
+      : null
+
+    if (!storagePath || !storagePath.startsWith(`${userId}/`)) {
+      return row
+    }
+
+    const signedUrl = signedUrlByPath.get(storagePath)
+    return {
+      ...row,
+      screenshot_url: signedUrl ?? null,
+    }
+  })
+}
 
 function toNumber(value: unknown): number | null {
   const parsed = parseNumericInput(value)
@@ -227,13 +305,15 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to load journal entries', 500)
     }
 
+    const withSignedUrls = await attachSignedScreenshotUrls((data ?? []) as Array<Record<string, unknown>>, user.id)
+
     const { data: streak } = await supabase
       .from('journal_streaks')
       .select('current_streak,longest_streak')
       .eq('user_id', user.id)
       .maybeSingle()
 
-    return successResponse(sanitizeJournalEntries(data), {
+    return successResponse(sanitizeJournalEntries(withSignedUrls), {
       total: count ?? 0,
       streaks: {
         current_streak: streak?.current_streak ?? 0,
@@ -258,6 +338,10 @@ export async function POST(request: NextRequest) {
     const validated = journalEntryCreateSchema.parse(rawBody)
 
     const payload = sanitizeJournalWriteInput(validated as unknown as Record<string, unknown>)
+
+    if (typeof payload.screenshot_storage_path === 'string' && payload.screenshot_storage_path.length > 0) {
+      payload.screenshot_url = null
+    }
 
     payload.user_id = user.id
     payload.trade_date = payload.trade_date ?? new Date().toISOString()
@@ -288,7 +372,8 @@ export async function POST(request: NextRequest) {
 
     await recalculateStreaks(supabase, user.id)
 
-    return successResponse(sanitizeJournalEntry(data))
+    const [withSignedUrl] = await attachSignedScreenshotUrls([data as unknown as Record<string, unknown>], user.id)
+    return successResponse(sanitizeJournalEntry(withSignedUrl))
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
 
@@ -319,6 +404,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updatePayload = sanitizeJournalWriteInput(validated as unknown as Record<string, unknown>)
+    if (typeof updatePayload.screenshot_storage_path === 'string' && updatePayload.screenshot_storage_path.length > 0) {
+      updatePayload.screenshot_url = null
+    }
 
     const nextDirection = (updatePayload.direction as 'long' | 'short' | undefined) ?? existing.direction
     const nextEntryPrice = toNumber(updatePayload.entry_price ?? existing.entry_price)
@@ -370,6 +458,28 @@ export async function PATCH(request: NextRequest) {
       return errorResponse('Failed to update journal entry', 500)
     }
 
+    const previousScreenshotPath = typeof existing.screenshot_storage_path === 'string'
+      ? existing.screenshot_storage_path
+      : null
+    const nextScreenshotPath = typeof data.screenshot_storage_path === 'string'
+      ? data.screenshot_storage_path
+      : null
+
+    if (
+      previousScreenshotPath
+      && previousScreenshotPath.startsWith(`${user.id}/`)
+      && previousScreenshotPath !== nextScreenshotPath
+    ) {
+      const { error: storageCleanupError } = await supabase
+        .storage
+        .from('journal-screenshots')
+        .remove([previousScreenshotPath])
+
+      if (storageCleanupError) {
+        console.error('Failed to cleanup replaced journal screenshot:', storageCleanupError)
+      }
+    }
+
     if (
       Object.prototype.hasOwnProperty.call(updatePayload, 'trade_date')
       || Object.prototype.hasOwnProperty.call(updatePayload, 'pnl')
@@ -377,7 +487,8 @@ export async function PATCH(request: NextRequest) {
       await recalculateStreaks(supabase, user.id)
     }
 
-    return successResponse(sanitizeJournalEntry(data))
+    const [withSignedUrl] = await attachSignedScreenshotUrls([data as unknown as Record<string, unknown>], user.id)
+    return successResponse(sanitizeJournalEntry(withSignedUrl))
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
 

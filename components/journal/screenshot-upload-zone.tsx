@@ -12,6 +12,18 @@ import {
   type ScreenshotAnalysisResponse,
 } from '@/lib/api/ai-coach'
 
+async function resolveCurrentUserId(supabase: ReturnType<typeof createBrowserSupabase>): Promise<string | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (session?.user?.id) return session.user.id
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return user?.id ?? null
+}
+
 interface ScreenshotUploadZoneProps {
   currentScreenshotUrl?: string | null
   onUploadComplete: (url: string, storagePath: string) => void
@@ -105,17 +117,15 @@ export function ScreenshotUploadZone({
 
       try {
         const supabase = createBrowserSupabase()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+        const userId = await resolveCurrentUserId(supabase)
 
-        if (!user) {
+        if (!userId) {
           setError('You must be logged in to upload screenshots')
           setUploading(false)
           return
         }
 
-        const result = await uploadScreenshot(file, user.id, undefined, (progressUpdate: UploadProgress) => {
+        const result = await uploadScreenshot(file, userId, undefined, (progressUpdate: UploadProgress) => {
           if (progressUpdate.status === 'uploading' && progressUpdate.percent != null) {
             setProgress(progressUpdate.percent)
           }
@@ -140,16 +150,21 @@ export function ScreenshotUploadZone({
           }
 
           setAnalyzing(true)
-          const base64 = await fileToBase64(file)
-          const extracted = await analyzeScreenshot(base64, file.type, session.access_token)
-          setAnalysis(extracted)
+          try {
+            const base64 = await fileToBase64(file)
+            const extracted = await analyzeScreenshot(base64, file.type, session.access_token)
+            setAnalysis(extracted)
+          } catch (analysisErr) {
+            setAnalysisError(analysisErr instanceof Error ? analysisErr.message : 'Screenshot uploaded, but AI extraction failed.')
+          } finally {
+            setAnalyzing(false)
+          }
         }
       } catch (err) {
         console.error('Screenshot upload failed:', err)
         setError(err instanceof Error ? err.message : 'Upload failed')
       } finally {
         setUploading(false)
-        setAnalyzing(false)
         setProgress(0)
       }
     },
@@ -199,7 +214,7 @@ export function ScreenshotUploadZone({
 
   if (currentScreenshotUrl) {
     return (
-      <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="relative space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
         <div className="relative aspect-video w-full overflow-hidden rounded-md">
           <Image src={currentScreenshotUrl} alt="Trade screenshot" fill className="object-contain" />
         </div>

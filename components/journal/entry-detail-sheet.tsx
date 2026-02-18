@@ -8,6 +8,7 @@ import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { AIGradeDisplay } from '@/components/journal/ai-grade-display'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { ShareTradeSheet } from '@/components/social/share-trade-sheet'
+import { Analytics } from '@/lib/analytics'
 
 interface EntryDetailSheetProps {
   entry: JournalEntry | null
@@ -209,7 +210,10 @@ export function EntryDetailSheet({
           {!displayEntry.is_open && displayEntry.pnl != null && (
             <button
               type="button"
-              onClick={() => setShareOpen(true)}
+              onClick={() => {
+                Analytics.trackMembersSocialAction('share_trade')
+                setShareOpen(true)
+              }}
               disabled={disableActions || alreadyShared}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-500/40 px-4 text-sm text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -219,7 +223,10 @@ export function EntryDetailSheet({
           )}
           <button
             type="button"
-            onClick={handleGrade}
+            onClick={() => {
+              Analytics.trackJournalAction('grade_trade')
+              void handleGrade()
+            }}
             disabled={disableActions || grading || Boolean(displayEntry.ai_analysis)}
             className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
           >

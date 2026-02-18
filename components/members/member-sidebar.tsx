@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
+import { Analytics } from '@/lib/analytics'
 import {
   getMemberTabHref,
   getMemberTabIcon,
@@ -131,6 +132,7 @@ export function MemberSidebar() {
             <Link
               key={tab.tab_id}
               href={href}
+              onClick={() => Analytics.trackMemberNavItem(tabLabel)}
               className={cn(
                 'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-500 ease-out group overflow-hidden',
                 isActive

@@ -16,6 +16,10 @@ import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sani
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_JOURNAL_FILTERS } from '@/lib/types/journal'
 import { JournalSubNav } from '@/components/journal/journal-sub-nav'
+import { Analytics } from '@/lib/analytics'
+
+const JOURNAL_VIEW_PREF_KEY = 'journal-view-preference-v1'
+const MOBILE_VIEW_MEDIA_QUERY = '(max-width: 767px)'
 
 type FilterAction =
   | { type: 'replace', value: JournalFilters }
@@ -41,7 +45,7 @@ function filterReducer(state: JournalFilters, action: FilterAction): JournalFilt
         tags: [],
         sortBy: 'trade_date',
         sortDir: 'desc',
-        limit: 100,
+        limit: 500,
         offset: 0,
       }
     default:
@@ -92,6 +96,44 @@ export default function JournalPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<JournalEntry | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const storedView = window.localStorage.getItem(JOURNAL_VIEW_PREF_KEY)
+    const preferredView = storedView === 'table' || storedView === 'cards'
+      ? storedView
+      : DEFAULT_JOURNAL_FILTERS.view
+    const isMobileViewport = window.matchMedia(MOBILE_VIEW_MEDIA_QUERY).matches
+    const resolvedView = isMobileViewport && preferredView === 'table' ? 'cards' : preferredView
+
+    if (resolvedView !== DEFAULT_JOURNAL_FILTERS.view) {
+      dispatchFilters({ type: 'patch', value: { view: resolvedView } })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(JOURNAL_VIEW_PREF_KEY, filters.view)
+  }, [filters.view])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mediaQuery = window.matchMedia(MOBILE_VIEW_MEDIA_QUERY)
+
+    const enforceMobileCards = () => {
+      if (mediaQuery.matches && filters.view === 'table') {
+        dispatchFilters({ type: 'patch', value: { view: 'cards' } })
+      }
+    }
+
+    enforceMobileCards()
+    mediaQuery.addEventListener('change', enforceMobileCards)
+
+    return () => {
+      mediaQuery.removeEventListener('change', enforceMobileCards)
+    }
+  }, [filters.view])
 
   useEffect(() => {
     if (typeof navigator === 'undefined') return
@@ -188,7 +230,7 @@ export default function JournalPage() {
     }
 
     if (payload.meta?.queued) {
-      setError('Offline mode: this trade was queued and will sync automatically when your connection returns.')
+      setError('This update was queued by the server and will sync automatically.')
       setEditEntry(null)
       void loadEntries()
       return {} as JournalEntry
@@ -263,7 +305,7 @@ export default function JournalPage() {
     }
 
     if (payload.meta?.queued) {
-      setError('Offline mode: favorite update queued and will sync automatically.')
+      setError('Favorite update queued by the server and will sync automatically.')
       return
     }
 
@@ -271,7 +313,7 @@ export default function JournalPage() {
     setEntries((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
   }, [])
 
-  const disableActions = false
+  const disableActions = !isOnline
 
   return (
     <div className="space-y-4">
@@ -286,8 +328,12 @@ export default function JournalPage() {
           <>
             <button
               type="button"
-              onClick={() => setShowImportWizard((prev) => !prev)}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5"
+              onClick={() => {
+                Analytics.trackJournalAction('import')
+                setShowImportWizard((prev) => !prev)
+              }}
+              disabled={disableActions}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Upload className="h-4 w-4" />
               Import
@@ -296,6 +342,7 @@ export default function JournalPage() {
             <button
               type="button"
               onClick={() => {
+                Analytics.trackJournalAction('upload_screenshot')
                 setShowImportWizard(false)
                 setScreenshotQuickAddOpen(true)
               }}
@@ -309,6 +356,7 @@ export default function JournalPage() {
             <button
               type="button"
               onClick={() => {
+                Analytics.trackJournalAction('new_entry')
                 setEditEntry(null)
                 setSheetOpen(true)
               }}
@@ -326,11 +374,11 @@ export default function JournalPage() {
 
       {!isOnline ? (
         <div className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
-          You&apos;re offline. Journal mutations will be queued and synced automatically when your connection returns.
+          You&apos;re offline. Journal is in read-only cache mode until your connection returns.
         </div>
       ) : null}
 
-      {showImportWizard ? (
+      {showImportWizard && isOnline ? (
         <ImportWizard onImported={() => void loadEntries()} />
       ) : null}
 

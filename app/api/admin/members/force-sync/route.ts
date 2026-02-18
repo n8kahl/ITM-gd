@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
 const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
@@ -252,6 +253,18 @@ export async function POST(request: NextRequest) {
       console.warn('[Admin Force Sync] Failed to update auth app_metadata:', metadataError.message)
     }
 
+    await logAdminActivity({
+      action: 'member_force_synced',
+      targetType: 'member',
+      targetId: userId,
+      details: {
+        discord_user_id: discordUserId,
+        discord_roles: discordRoles,
+        is_admin: hasAdminPermission,
+        is_member: hasMemberPermission,
+      },
+    })
+
     return NextResponse.json({
       success: true,
       user_id: userId,
@@ -287,4 +300,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: message, code: code || ERROR_CODES.SYNC_FAILED }, { status: 500 })
   }
 }
-

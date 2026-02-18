@@ -32,6 +32,12 @@ export function parseNumericInput(input: unknown): ParsedNumericInput {
   let normalized = trimmed
     .replace(/\s+/g, '')
     .replace(/[$€£¥]/g, '')
+    .replace(/[%]/g, '')
+
+  const isParenthesizedNegative = normalized.startsWith('(') && normalized.endsWith(')')
+  if (isParenthesizedNegative) {
+    normalized = normalized.slice(1, -1)
+  }
 
   // If both separators exist, assume commas are thousands separators.
   if (normalized.includes(',') && normalized.includes('.')) {
@@ -55,7 +61,7 @@ export function parseNumericInput(input: unknown): ParsedNumericInput {
     return { value: null, valid: false }
   }
 
-  const parsed = Number(normalized)
+  const parsed = Number(normalized) * (isParenthesizedNegative ? -1 : 1)
   return Number.isFinite(parsed)
     ? { value: parsed, valid: true }
     : { value: null, valid: false }

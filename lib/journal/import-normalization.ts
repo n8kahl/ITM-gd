@@ -1,6 +1,7 @@
 import { parseNumericInput } from '@/lib/journal/number-parsing'
 
 export type ImportBroker =
+  | 'generic'
   | 'interactive_brokers'
   | 'schwab'
   | 'robinhood'
@@ -70,10 +71,38 @@ function toDateKey(value: string): string {
   return parsed.toISOString().split('T')[0]
 }
 
-function normalizeDirection(value: string | undefined): 'long' | 'short' {
+function normalizeDirection(value: string | undefined): 'long' | 'short' | null {
   const normalized = (value ?? '').trim().toLowerCase()
-  if (['sell', 's', 'short', 'put', 'stc', 'sto', 'btc'].includes(normalized)) return 'short'
-  return 'long'
+  if (!normalized) return null
+
+  // Collapse whitespace/punctuation so values like "Sell To Open" and
+  // "sell_to_open" map to the same token.
+  const token = normalized.replace(/[^a-z]/g, '')
+
+  if ([
+    'short',
+    'sellshort',
+    'sto',
+    'selltoopen',
+    'closeshort',
+    'buytoclose',
+    'btc',
+    'buytocover',
+    'cover',
+  ].includes(token)) return 'short'
+
+  if ([
+    'long',
+    'buy',
+    'b',
+    'bto',
+    'buytoopen',
+    'selltoclose',
+    'stc',
+    'closelong',
+  ].includes(token)) return 'long'
+
+  return null
 }
 
 function normalizeContractType(value: string | undefined): 'stock' | 'call' | 'put' {
@@ -147,7 +176,18 @@ function deriveOptionMeta(row: Record<string, unknown>): { strike: number | null
 }
 
 export function normalizeImportedRow(row: Record<string, unknown>, broker: ImportBroker): NormalizedImportedRow {
-  const symbolCandidate = getTextValue(row, ['symbol', 'Symbol', 'Ticker', 'underlying', 'Name', 'Instrument'])
+  const symbolCandidate = getTextValue(row, [
+    'symbol',
+    'Symbol',
+    'Ticker',
+    'Ticker Symbol',
+    'underlying',
+    'Underlying',
+    'Underlying Symbol',
+    'Instrument',
+    'Security Symbol',
+    'Name',
+  ])
   const symbol = extractSymbolFromCandidate(symbolCandidate)
 
   const tradeDate = toDateString(
@@ -162,12 +202,22 @@ export function normalizeImportedRow(row: Record<string, unknown>, broker: Impor
       'Placed Time',
       'Order Time',
       'Execution Time',
+      'Execution Date',
+      'Executed At',
+      'Timestamp',
     ]),
   )
 
-  const direction = normalizeDirection(
-    getTextValue(row, ['direction', 'Direction', 'side', 'Side', 'action', 'Action', 'type', 'Type']),
-  )
+  const directionSignal = getTextValue(row, [
+    'direction',
+    'Direction',
+    'side',
+    'Side',
+    'action',
+    'Action',
+    'Buy/Sell',
+    'Transaction Type',
+  ])
 
   const optionMeta = deriveOptionMeta(row)
 
@@ -203,7 +253,7 @@ export function normalizeImportedRow(row: Record<string, unknown>, broker: Impor
     ]),
   )
 
-  const positionSize = toNumber(
+  const quantityValue = toNumber(
     getTextValue(row, [
       'position_size',
       'positionSize',
@@ -214,8 +264,18 @@ export function normalizeImportedRow(row: Record<string, unknown>, broker: Impor
       'Filled Qty',
       'Total Qty',
       'total_quantity',
+      'Qty.',
+      'Shares',
+      'Executed Quantity',
     ]),
-  ) ?? 1
+  )
+
+  const directionFromSignal = normalizeDirection(directionSignal)
+  const direction = quantityValue != null && quantityValue !== 0
+    ? (quantityValue < 0 ? 'short' : 'long')
+    : (directionFromSignal ?? 'long')
+
+  const positionSize = Math.abs(quantityValue ?? 1)
 
   const pnl = toNumber(getTextValue(row, ['pnl', 'P/L', 'Realized P/L', 'Realized PnL']))
   const pnlPercentage = toNumber(getTextValue(row, ['pnl_percentage', 'P/L %', 'pnlPct', 'Return %']))

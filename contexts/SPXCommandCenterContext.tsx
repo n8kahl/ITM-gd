@@ -46,6 +46,8 @@ interface RealtimeMicrobar {
   timestamp: string
 }
 
+type TradeMode = 'scan' | 'in_trade'
+
 interface SPXCommandCenterState {
   dataHealth: 'healthy' | 'degraded' | 'stale'
   dataHealthMessage: string | null
@@ -66,6 +68,12 @@ interface SPXCommandCenterState {
   activeSetups: Setup[]
   coachMessages: CoachMessage[]
   selectedSetup: Setup | null
+  tradeMode: TradeMode
+  inTradeSetup: Setup | null
+  inTradeSetupId: string | null
+  tradeEntryPrice: number | null
+  tradeEnteredAt: string | null
+  tradePnlPoints: number | null
   selectedTimeframe: ChartTimeframe
   setChartTimeframe: (timeframe: ChartTimeframe) => void
   visibleLevelCategories: Set<LevelCategory>
@@ -86,6 +94,8 @@ interface SPXCommandCenterState {
   isLoading: boolean
   error: Error | null
   selectSetup: (setup: Setup | null) => void
+  enterTrade: (setup?: Setup | null) => void
+  exitTrade: () => void
   toggleLevelCategory: (category: LevelCategory) => void
   toggleSPYDerived: () => void
   requestContractRecommendation: (setup: Setup) => Promise<ContractRecommendation | null>
@@ -95,8 +105,10 @@ interface SPXCommandCenterState {
 const ALL_CATEGORIES: LevelCategory[] = ['structural', 'tactical', 'intraday', 'options', 'spy_derived', 'fibonacci']
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['forming', 'ready', 'triggered'])
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
+const ENTERABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
 const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
+const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
 const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
@@ -203,6 +215,45 @@ function toFiniteNumber(value: unknown): number | null {
   return null
 }
 
+interface PersistedTradeFocusState {
+  setupId: string
+  entryPrice: number | null
+  enteredAt: string
+}
+
+function loadPersistedTradeFocus(): PersistedTradeFocusState | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(TRADE_FOCUS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<PersistedTradeFocusState>
+    if (!parsed || typeof parsed.setupId !== 'string' || parsed.setupId.length === 0) return null
+    if (typeof parsed.enteredAt !== 'string' || parsed.enteredAt.length === 0) return null
+    return {
+      setupId: parsed.setupId,
+      entryPrice: typeof parsed.entryPrice === 'number' && Number.isFinite(parsed.entryPrice)
+        ? parsed.entryPrice
+        : null,
+      enteredAt: parsed.enteredAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+function persistTradeFocusState(state: PersistedTradeFocusState | null): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (!state) {
+      window.localStorage.removeItem(TRADE_FOCUS_STORAGE_KEY)
+      return
+    }
+    window.localStorage.setItem(TRADE_FOCUS_STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    // Ignore localStorage failures.
+  }
+}
+
 function parseRealtimeMicrobar(message: RealtimeSocketMessage): RealtimeMicrobar | null {
   if (message.type !== 'microbar') return null
   if (typeof message.symbol !== 'string' || message.symbol.toUpperCase() !== 'SPX') return null
@@ -270,6 +321,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   } = useSPXSnapshot()
   const accessToken = session?.access_token || null
   const [selectedSetupId, setSelectedSetupId] = useState<string | null>(null)
+  const [inTradeSetupId, setInTradeSetupId] = useState<string | null>(null)
+  const [tradeEntryPrice, setTradeEntryPrice] = useState<number | null>(null)
+  const [tradeEnteredAt, setTradeEnteredAt] = useState<string | null>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('1m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
   const [showSPYDerived, setShowSPYDerived] = useState(true)
@@ -283,6 +337,15 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const hasTrackedFirstSetupSelectRef = useRef(false)
   const hasTrackedPageViewRef = useRef(false)
   const lastDataHealthRef = useRef<'healthy' | 'degraded' | 'stale' | null>(null)
+
+  useEffect(() => {
+    const persisted = loadPersistedTradeFocus()
+    if (!persisted) return
+    setInTradeSetupId(persisted.setupId)
+    setTradeEntryPrice(persisted.entryPrice)
+    setTradeEnteredAt(persisted.enteredAt)
+    setSelectedSetupId((current) => current || persisted.setupId)
+  }, [])
 
   const handleRealtimeMessage = useCallback((message: RealtimeSocketMessage) => {
     const microbar = parseRealtimeMicrobar(message)
@@ -373,20 +436,52 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   const activeSetups = useMemo(() => rankSetups(realtimeSetups), [realtimeSetups])
   const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
+  const inTradeSetup = useMemo(
+    () => (inTradeSetupId ? activeSetups.find((setup) => setup.id === inTradeSetupId) || null : null),
+    [activeSetups, inTradeSetupId],
+  )
+  const tradeMode: TradeMode = inTradeSetupId ? 'in_trade' : 'scan'
 
   const selectedSetup = useMemo(() => {
+    if (inTradeSetupId) {
+      const lockedSetup = activeSetups.find((setup) => setup.id === inTradeSetupId)
+      if (lockedSetup) return lockedSetup
+    }
+
     const defaultSetup =
       activeSetups.find((setup) => IMMEDIATELY_ACTIONABLE_STATUSES.has(setup.status)) ||
       activeSetups[0] ||
       null
     if (!selectedSetupId) return defaultSetup
     return activeSetups.find((setup) => setup.id === selectedSetupId) || defaultSetup
-  }, [activeSetups, selectedSetupId])
+  }, [activeSetups, inTradeSetupId, selectedSetupId])
+
+  useEffect(() => {
+    if (!inTradeSetupId) return
+    const exists = activeSetups.some((setup) => setup.id === inTradeSetupId)
+    if (exists) return
+
+    setInTradeSetupId(null)
+    setTradeEntryPrice(null)
+    setTradeEnteredAt(null)
+    persistTradeFocusState(null)
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+      surface: 'trade_focus',
+      action: 'auto_exit_missing_setup',
+      setupId: inTradeSetupId,
+    }, { level: 'warning', persist: true })
+  }, [activeSetups, inTradeSetupId])
 
   const spxPrice = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
   const spxTickTimestamp = stream.prices.get('SPX')?.timestamp ?? null
   const spxPriceSource = stream.prices.get('SPX')?.source ?? (snapshotData?.basis?.spxPrice ? 'snapshot' : null)
   const spyPrice = stream.prices.get('SPY')?.price ?? snapshotData?.basis?.spyPrice ?? 0
+  const tradePnlPoints = useMemo(() => {
+    if (!inTradeSetup || tradeEntryPrice == null || !Number.isFinite(spxPrice) || spxPrice <= 0) return null
+    const move = spxPrice - tradeEntryPrice
+    return inTradeSetup.direction === 'bullish' ? move : -move
+  }, [inTradeSetup, spxPrice, tradeEntryPrice])
 
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
     if (!selectedSetup) return []
@@ -518,6 +613,16 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [])
 
   const selectSetup = useCallback((setup: Setup | null) => {
+    if (inTradeSetupId && setup?.id && setup.id !== inTradeSetupId) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'trade_focus',
+        action: 'blocked_select_during_focus',
+        setupId: setup.id,
+        focusedSetupId: inTradeSetupId,
+      })
+      return
+    }
+
     if (setup) {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SETUP_SELECTED, {
         setupId: setup.id,
@@ -541,7 +646,59 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
 
     setSelectedSetupId(setup?.id || null)
-  }, [])
+  }, [inTradeSetupId])
+
+  const enterTrade = useCallback((setup?: Setup | null) => {
+    const target = setup || selectedSetup
+    if (!target) return
+    if (!ENTERABLE_SETUP_STATUSES.has(target.status)) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'trade_focus',
+        action: 'enter_rejected_non_actionable',
+        setupId: target.id,
+        setupStatus: target.status,
+      }, { level: 'warning' })
+      return
+    }
+
+    const entryPrice = Number.isFinite(spxPrice) && spxPrice > 0
+      ? spxPrice
+      : (target.entryZone.low + target.entryZone.high) / 2
+    const enteredAt = new Date().toISOString()
+
+    setSelectedSetupId(target.id)
+    setInTradeSetupId(target.id)
+    setTradeEntryPrice(entryPrice)
+    setTradeEnteredAt(enteredAt)
+    persistTradeFocusState({
+      setupId: target.id,
+      entryPrice,
+      enteredAt,
+    })
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+      surface: 'trade_focus',
+      action: 'enter',
+      setupId: target.id,
+      setupStatus: target.status,
+      setupDirection: target.direction,
+      entryPrice,
+    }, { persist: true })
+  }, [selectedSetup, spxPrice])
+
+  const exitTrade = useCallback(() => {
+    const exitingSetupId = inTradeSetupId
+    setInTradeSetupId(null)
+    setTradeEntryPrice(null)
+    setTradeEnteredAt(null)
+    persistTradeFocusState(null)
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+      surface: 'trade_focus',
+      action: 'exit',
+      setupId: exitingSetupId,
+    }, { persist: true })
+  }, [inTradeSetupId])
 
   const setChartTimeframe = useCallback((timeframe: ChartTimeframe) => {
     setSelectedTimeframe(timeframe)
@@ -780,6 +937,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     activeSetups,
     coachMessages,
     selectedSetup,
+    tradeMode,
+    inTradeSetup,
+    inTradeSetupId,
+    tradeEntryPrice,
+    tradeEnteredAt,
+    tradePnlPoints,
     selectedTimeframe,
     setChartTimeframe,
     visibleLevelCategories,
@@ -790,6 +953,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     isLoading,
     error,
     selectSetup,
+    enterTrade,
+    exitTrade,
     toggleLevelCategory,
     toggleSPYDerived,
     requestContractRecommendation,
@@ -803,8 +968,16 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     filteredLevels,
     isLoading,
     latestMicrobar,
+    tradeMode,
+    inTradeSetup,
+    inTradeSetupId,
+    tradeEntryPrice,
+    tradeEnteredAt,
+    tradePnlPoints,
     requestContractRecommendation,
     selectSetup,
+    enterTrade,
+    exitTrade,
     sendCoachMessage,
     selectedSetup,
     selectedTimeframe,

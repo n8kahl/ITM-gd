@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 import {
   resolveTargetSubscriptions,
   sendBatchNotifications,
@@ -133,6 +134,16 @@ export async function POST(request: NextRequest) {
 
     // If scheduled for later, just return the record
     if (isScheduled) {
+      await logAdminActivity({
+        action: 'notification_broadcast',
+        targetType: 'notification_broadcast',
+        targetId: broadcast.id,
+        details: {
+          status: 'scheduled',
+          target_type: body.targetType,
+          scheduled_at: body.scheduleAt,
+        },
+      })
       return NextResponse.json({ success: true, data: broadcast })
     }
 
@@ -154,6 +165,18 @@ export async function POST(request: NextRequest) {
         .from('notification_broadcasts')
         .update({ status: 'sent', sent_at: new Date().toISOString(), total_targeted: 0 })
         .eq('id', broadcast.id)
+
+      await logAdminActivity({
+        action: 'notification_broadcast',
+        targetType: 'notification_broadcast',
+        targetId: broadcast.id,
+        details: {
+          status: 'sent',
+          targeted: 0,
+          delivered: 0,
+          failed: 0,
+        },
+      })
 
       return NextResponse.json({
         success: true,
@@ -188,6 +211,18 @@ export async function POST(request: NextRequest) {
       .eq('id', broadcast.id)
       .select()
       .single()
+
+    await logAdminActivity({
+      action: 'notification_broadcast',
+      targetType: 'notification_broadcast',
+      targetId: broadcast.id,
+      details: {
+        status: finalStatus,
+        targeted: stats.targeted,
+        delivered: stats.delivered,
+        failed: stats.failed,
+      },
+    })
 
     return NextResponse.json({
       success: true,

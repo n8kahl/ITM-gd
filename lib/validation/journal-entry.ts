@@ -111,25 +111,32 @@ export const importTradeRowSchema = z.object({
   strike_price: z.union([z.number(), z.string()]).optional(),
   expiration_date: z.string().optional(),
 }).passthrough().superRefine((row, ctx) => {
+  const rawRow = row as Record<string, unknown>
   const symbolCandidates = [
-    row.symbol,
-    row.Symbol,
-    row.Ticker,
-    row.underlying,
-    row.Name,
-    row.name,
+    rawRow.symbol,
+    rawRow.Symbol,
+    rawRow.Ticker,
+    rawRow['Ticker Symbol'],
+    rawRow.underlying,
+    rawRow.Underlying,
+    rawRow['Underlying Symbol'],
+    rawRow['Security Symbol'],
+    rawRow.Name,
+    rawRow.name,
+    rawRow.Instrument,
   ]
   const hasSymbolSignal = symbolCandidates.some((value) => typeof value === 'string' && value.trim().length > 0)
   if (!hasSymbolSignal) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'Missing symbol field (symbol/Symbol/Ticker/Name)',
+      message: 'Missing symbol field (symbol/Symbol/Ticker/Name/Instrument)',
       path: ['symbol'],
     })
   }
 })
 
 export const importBrokerSchema = z.enum([
+  'generic',
   'interactive_brokers',
   'schwab',
   'robinhood',
@@ -141,7 +148,9 @@ export const importBrokerSchema = z.enum([
 export const importRequestSchema = z.object({
   broker: importBrokerSchema,
   fileName: z.string().min(1).max(255),
-  rows: z.array(importTradeRowSchema).min(1).max(500),
+  // Route-level row validation is intentionally tolerant and handled per-row
+  // so one malformed line does not fail an entire import.
+  rows: z.array(z.record(z.unknown())).min(1).max(500),
 })
 
 export const analyticsPeriodSchema = z.enum(['7d', '30d', '90d', '1y', 'all']).default('30d')

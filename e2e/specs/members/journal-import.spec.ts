@@ -71,6 +71,24 @@ test.describe('Trade Journal Import', () => {
     await expect(page.getByText('Valid', { exact: true })).toBeVisible()
   })
 
+  test('accepts broker symbol aliases such as Underlying Symbol', async ({ page }) => {
+    const state = await setupJournalCrudMocks(page, [])
+    await setupJournalImportMock(page, state)
+
+    await openImportWizard(page)
+
+    await page.locator('input[type="file"]').setInputFiles(csvFile('underlying-symbol.csv', [
+      'Underlying Symbol,Date,Entry Price,Quantity',
+      'SPY,2026-01-15,610.25,1',
+    ].join('\n')))
+
+    await expect(page.getByText('1 rows parsed. 0 rows currently invalid.')).toBeVisible()
+    await page.getByRole('button', { name: 'Confirm Import' }).click()
+
+    await expect(page.getByText('Inserted: 1')).toBeVisible()
+    await expect(page.getByText('Errors: 0')).toBeVisible()
+  })
+
   test('detects and reports duplicates on re-import', async ({ page }) => {
     const state = await setupJournalCrudMocks(page, [])
     await setupJournalImportMock(page, state)

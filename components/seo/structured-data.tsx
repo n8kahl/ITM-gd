@@ -6,7 +6,14 @@ interface StructuredDataProps {
   nonce?: string;
 }
 
-export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.app", nonce }: StructuredDataProps) {
+export function StructuredData({ baseUrl, nonce }: StructuredDataProps) {
+  const resolvedBaseUrl = (
+    baseUrl
+    || process.env.NEXT_PUBLIC_APP_URL
+    || process.env.NEXT_PUBLIC_SITE_URL
+    || 'https://tradeitm.com'
+  ).replace(/\/+$/, '')
+
   // In development, middleware/header timing can cause nonce hydration drift.
   const scriptNonce = process.env.NODE_ENV === 'production'
     ? (nonce?.trim() || undefined)
@@ -22,7 +29,7 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     },
     "offers": {
       "@type": "Offer",
-      "url": `${baseUrl}/#pricing`,
+      "url": `${resolvedBaseUrl}/#pricing`,
       "priceCurrency": "USD",
       "price": "199.00",
       "priceValidUntil": "2026-12-31",
@@ -37,16 +44,16 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
       "ratingCount": "124",
       "reviewCount": "124"
     },
-    "image": `${baseUrl}/og-image.png`,
-    "url": `${baseUrl}/#pricing`
+    "image": `${resolvedBaseUrl}/og-image.png`,
+    "url": `${resolvedBaseUrl}/#pricing`
   };
 
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "Trade In The Money",
-    "url": baseUrl,
-    "logo": `${baseUrl}${BRAND_LOGO_SRC}`,
+    "url": resolvedBaseUrl,
+    "logo": `${resolvedBaseUrl}${BRAND_LOGO_SRC}`,
     "description": "Premium trade alerts and education platform for serious traders.",
     "sameAs": []
   };
@@ -55,11 +62,11 @@ export function StructuredData({ baseUrl = "https://trade-itm-prod.up.railway.ap
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Trade In The Money",
-    "url": baseUrl,
+    "url": resolvedBaseUrl,
     "description": "Premium Trade Alerts & Education - Quality Setups Alerted Daily",
     "potentialAction": {
       "@type": "SearchAction",
-      "target": `${baseUrl}/?q={search_term_string}`,
+      "target": `${resolvedBaseUrl}/?q={search_term_string}`,
       "query-input": "required name=search_term_string"
     }
   };

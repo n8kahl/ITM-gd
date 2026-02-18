@@ -21,17 +21,26 @@ const QUICK_ACTIONS = [
   { label: 'Size guidance', icon: Scale, prompt: 'What position size is appropriate for this setup given current conditions?' },
 ] as const
 
+const IN_TRADE_ACTIONS = [
+  { label: 'Risk check', icon: ShieldCheck, prompt: 'I am in this trade now. Reassess stop risk and invalidation conditions using current flow/regime.' },
+  { label: 'Exit strategy', icon: DoorOpen, prompt: 'I am in this trade now. Give precise scaling/exit rules for T1/T2 and trailing stop logic.' },
+  { label: 'Hold or trim?', icon: Target, prompt: 'I am in this trade now. Should I hold, trim, or fully exit based on current conditions?' },
+  { label: 'Size adjustment', icon: Scale, prompt: 'I am in this trade now. Should I keep size, reduce risk, or add only on confirmation?' },
+] as const
+
 export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
-  const { coachMessages, selectedSetup, activeSetups, sendCoachMessage } = useSPXCommandCenter()
+  const { coachMessages, selectedSetup, activeSetups, sendCoachMessage, tradeMode, inTradeSetup } = useSPXCommandCenter()
   const [prompt, setPrompt] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [showAllMessages, setShowAllMessages] = useState(false)
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(() => loadDismissedCoachAlertIds())
 
+  const scopedSetup = inTradeSetup || selectedSetup
+
   useEffect(() => {
     setShowAllMessages(false)
-  }, [selectedSetup?.id])
+  }, [scopedSetup?.id])
 
   useEffect(() => {
     const handleDismissSync = (event: Event) => {
@@ -52,11 +61,11 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   }, [activeSetups])
 
   const scopedMessages = useMemo(() => {
-    if (selectedSetup && !showAllMessages) {
-      return coachMessages.filter((message) => !message.setupId || message.setupId === selectedSetup.id)
+    if (scopedSetup && !showAllMessages) {
+      return coachMessages.filter((message) => !message.setupId || message.setupId === scopedSetup.id)
     }
     return coachMessages
-  }, [coachMessages, selectedSetup, showAllMessages])
+  }, [coachMessages, scopedSetup, showAllMessages])
 
   const pinnedAlert = useMemo(
     () => findTopCoachAlert(scopedMessages, dismissedAlertIds),
@@ -85,7 +94,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       if (groupId === '__global__') {
         return { id: groupId, label: 'General Guidance', messages }
       }
-      if (selectedSetup && groupId === selectedSetup.id) {
+      if (scopedSetup && groupId === scopedSetup.id) {
         return { id: groupId, label: 'Selected Setup', messages }
       }
       const setupType = setupTypeById.get(groupId)
@@ -95,7 +104,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         messages,
       }
     })
-  }, [selectedSetup, setupTypeById, visibleMessages])
+  }, [scopedSetup, setupTypeById, visibleMessages])
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -107,7 +116,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     setSendError(null)
     setIsSending(true)
     try {
-      await sendCoachMessage(text, selectedSetup?.id)
+      await sendCoachMessage(text, scopedSetup?.id)
       setPrompt('')
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Coach request failed. Please try again.')
@@ -134,7 +143,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     >
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">AI Coach</h3>
-        {selectedSetup ? (
+        {scopedSetup ? (
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -164,6 +173,14 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         ) : null}
       </div>
 
+      {tradeMode === 'in_trade' && inTradeSetup && (
+        <div className="rounded-md border border-emerald-400/25 bg-emerald-500/10 px-2 py-1">
+          <p className="text-[9px] uppercase tracking-[0.1em] text-emerald-200/85">
+            In-Trade Guidance Active · {inTradeSetup.direction} {inTradeSetup.regime}
+          </p>
+        </div>
+      )}
+
       {pinnedAlert && (
         <div
           className="rounded-lg border border-rose-400/35 bg-rose-500/12 px-3 py-2"
@@ -189,14 +206,14 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
 
       {!readOnly && (
         <div className="flex flex-wrap gap-1">
-          {QUICK_ACTIONS.map((action) => (
+          {(tradeMode === 'in_trade' ? IN_TRADE_ACTIONS : QUICK_ACTIONS).map((action) => (
             <button
               key={action.label}
               type="button"
               disabled={isSending}
               onClick={() => sendMessage(
-                selectedSetup
-                  ? `${action.prompt}\nSetup ID: ${selectedSetup.id}`
+                scopedSetup
+                  ? `${action.prompt}\nSetup ID: ${scopedSetup.id}`
                   : action.prompt,
               )}
               className={cn(
@@ -221,7 +238,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       <div className="flex-1 space-y-1.5 max-h-[240px] overflow-auto pr-0.5">
         {groupedMessages.length === 0 ? (
           <p className="text-[11px] text-white/45">
-            {selectedSetup ? 'No coaching messages in this scope yet.' : 'No coaching messages yet. Ask coach a question below.'}
+            {scopedSetup ? 'No coaching messages in this scope yet.' : 'No coaching messages yet. Ask coach a question below.'}
           </p>
         ) : (
           groupedMessages.map((group) => (
@@ -250,7 +267,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
             <input
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder={selectedSetup ? 'Ask about this setup...' : 'Ask coach...'}
+              placeholder={tradeMode === 'in_trade' ? 'Ask about this live trade...' : (scopedSetup ? 'Ask about this setup...' : 'Ask coach...')}
               disabled={isSending}
               className="flex-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-ivory placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-emerald-300/50"
             />

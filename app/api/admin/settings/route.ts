@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -138,8 +139,28 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: insertError.message }, { status: 500 })
       }
 
+      await logAdminActivity({
+        action: 'setting_updated',
+        targetType: 'app_setting',
+        targetId: key,
+        details: {
+          created: true,
+          value,
+        },
+      })
+
       return NextResponse.json({ success: true, data: newData, created: true })
     }
+
+    await logAdminActivity({
+      action: 'setting_updated',
+      targetType: 'app_setting',
+      targetId: key,
+      details: {
+        created: false,
+        value,
+      },
+    })
 
     return NextResponse.json({ success: true, data: data[0] })
   } catch (error) {

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -129,15 +130,12 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Log admin activity
-    if (userId) {
-      await supabase.from('admin_activity_log').insert({
-        admin_user_id: userId,
-        action: 'update_tab_configurations',
-        target_type: 'tab_config',
-        details: { tabs_updated: tabs.map((t: { tab_id: string }) => t.tab_id) },
-      })
-    }
+    await logAdminActivity({
+      action: 'tabs_updated',
+      targetType: 'tab_config',
+      targetId: userId,
+      details: { tabs_updated: tabs.map((t: { tab_id: string }) => t.tab_id) },
+    })
 
     // Return updated tabs
     const { data: updatedTabs } = await supabase

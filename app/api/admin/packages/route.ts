@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 
 // Create admin client lazily to avoid build-time errors
 function getSupabaseAdmin() {
@@ -95,6 +96,13 @@ export async function PATCH(request: NextRequest) {
     if (!data || data.length === 0) {
       return NextResponse.json({ error: `Tier '${id}' not found` }, { status: 404 })
     }
+
+    await logAdminActivity({
+      action: 'pricing_tier_updated',
+      targetType: 'pricing_tier',
+      targetId: id,
+      details: updates,
+    })
 
     return NextResponse.json({ success: true, data: data[0] })
   } catch (error) {

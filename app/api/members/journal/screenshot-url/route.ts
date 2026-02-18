@@ -11,6 +11,7 @@ const CONTENT_TYPE_TO_EXTENSION: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
 }
+const SIGNED_READ_TTL_SECONDS = 60 * 60 * 24
 
 function sanitizeFileName(fileName: string): string {
   return sanitizeString(fileName, 255).replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await admin
         .storage
         .from('journal-screenshots')
-        .createSignedUrl(storagePath, 60 * 60 * 24 * 30)
+        .createSignedUrl(storagePath, SIGNED_READ_TTL_SECONDS)
 
       if (error || !data) {
         console.error('Failed to create signed read URL:', error)

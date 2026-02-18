@@ -482,7 +482,7 @@ export default function RolesPage() {
         <CardContent>
           <div className="grid sm:grid-cols-3 gap-4">
             <TemplateCard
-              name="Core Sniper"
+              name="Core Tier"
               permissions={[
                 'access_core_content',
                 'access_trading_journal',
@@ -493,7 +493,7 @@ export default function RolesPage() {
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
                   discord_role_id: '',
-                  discord_role_name: 'Core Sniper',
+                  discord_role_name: 'Core Tier',
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,
@@ -503,7 +503,7 @@ export default function RolesPage() {
               }}
             />
             <TemplateCard
-              name="Pro Sniper"
+              name="Pro Tier"
               permissions={[
                 'access_core_content',
                 'access_pro_content',
@@ -518,7 +518,7 @@ export default function RolesPage() {
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
                   discord_role_id: '',
-                  discord_role_name: 'Pro Sniper',
+                  discord_role_name: 'Pro Tier',
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,
@@ -528,7 +528,7 @@ export default function RolesPage() {
               }}
             />
             <TemplateCard
-              name="Executive Sniper"
+              name="Executive Tier"
               permissions={[
                 'access_core_content',
                 'access_pro_content',
@@ -546,7 +546,7 @@ export default function RolesPage() {
               onApply={(permIds) => {
                 const newRole: RoleMapping = {
                   discord_role_id: '',
-                  discord_role_name: 'Executive Sniper',
+                  discord_role_name: 'Executive Tier',
                   permission_ids: permIds,
                   mapping_ids: [],
                   isNew: true,

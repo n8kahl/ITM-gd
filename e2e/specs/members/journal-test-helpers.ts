@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test'
-import { authenticateAsMember, mockSupabaseSession } from '../../helpers/member-auth'
+import { authenticateAsMember } from '../../helpers/member-auth'
 
 export const E2E_USER_ID = '00000000-0000-4000-8000-000000000001'
 
@@ -169,16 +169,6 @@ export function createMockEntry(partial: Partial<MockJournalEntry>): MockJournal
 
 export async function enableMemberBypass(page: Page): Promise<void> {
   await authenticateAsMember(page, { bypassMiddleware: true })
-  await page.evaluate((session) => {
-    const keys = ['sb-localhost-auth-token', 'sb-127.0.0.1-auth-token']
-    keys.forEach((key) => {
-      localStorage.setItem(key, JSON.stringify(session))
-    })
-    localStorage.setItem('supabase.auth.token', JSON.stringify({
-      currentSession: session,
-      expiresAt: session.expires_at,
-    }))
-  }, mockSupabaseSession)
   await page.context().addCookies([
     {
       name: 'e2e_bypass_auth',
@@ -196,7 +186,7 @@ export async function enableMemberBypass(page: Page): Promise<void> {
 }
 
 export async function setupMemberShellMocks(page: Page): Promise<void> {
-  await page.route('**/api/config/roles', async (route: Route) => {
+  await page.route('**/api/config/roles*', async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -204,7 +194,7 @@ export async function setupMemberShellMocks(page: Page): Promise<void> {
     })
   })
 
-  await page.route('**/api/config/tabs', async (route: Route) => {
+  await page.route('**/api/config/tabs*', async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -370,6 +360,12 @@ export async function setupJournalCrudMocks(
         setup_notes: typeof body.setup_notes === 'string' && body.setup_notes.trim().length > 0 ? body.setup_notes.trim() : null,
         execution_notes: typeof body.execution_notes === 'string' && body.execution_notes.trim().length > 0 ? body.execution_notes.trim() : null,
         lessons_learned: typeof body.lessons_learned === 'string' && body.lessons_learned.trim().length > 0 ? body.lessons_learned.trim() : null,
+        screenshot_url: typeof body.screenshot_url === 'string' && body.screenshot_url.trim().length > 0
+          ? body.screenshot_url.trim()
+          : null,
+        screenshot_storage_path: typeof body.screenshot_storage_path === 'string' && body.screenshot_storage_path.trim().length > 0
+          ? body.screenshot_storage_path.trim()
+          : null,
         tags: Array.isArray(body.tags) ? body.tags.map((tag) => String(tag)).filter(Boolean) : [],
         created_at: timestamp,
         updated_at: timestamp,
@@ -485,7 +481,20 @@ export async function setupJournalImportMock(page: Page, state: JournalMockState
     let errors = 0
 
     for (const row of rows) {
-      const symbol = String(row.symbol ?? row.Symbol ?? '').trim().toUpperCase()
+      const symbol = String(
+        row.symbol
+        ?? row.Symbol
+        ?? row.Ticker
+        ?? row['Ticker Symbol']
+        ?? row.underlying
+        ?? row.Underlying
+        ?? row['Underlying Symbol']
+        ?? row['Security Symbol']
+        ?? row.Name
+        ?? row.name
+        ?? row.Instrument
+        ?? '',
+      ).trim().toUpperCase()
       const date = String(row.trade_date ?? row.entry_date ?? row.Date ?? '').trim() || nowIso().slice(0, 10)
       const entryPriceRaw = row.entry_price ?? row.entryPrice ?? row['Entry Price'] ?? ''
       const entryPrice = Number(entryPriceRaw)

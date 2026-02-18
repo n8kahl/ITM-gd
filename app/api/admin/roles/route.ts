@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -122,6 +123,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    await logAdminActivity({
+      action: 'role_permissions_changed',
+      targetType: 'discord_role',
+      targetId: discord_role_id,
+      details: {
+        operation: 'create',
+        discord_role_name: discord_role_name || null,
+        permission_ids,
+      },
+    })
+
     return NextResponse.json({ success: true, data })
   } catch (error) {
     return NextResponse.json({
@@ -158,6 +170,16 @@ export async function PUT(request: NextRequest) {
 
     // If no permissions, we're done (role removed)
     if (!permission_ids || permission_ids.length === 0) {
+      await logAdminActivity({
+        action: 'role_permissions_changed',
+        targetType: 'discord_role',
+        targetId: discord_role_id,
+        details: {
+          operation: 'replace',
+          discord_role_name: discord_role_name || null,
+          permission_ids: [],
+        },
+      })
       return NextResponse.json({ success: true, data: [] })
     }
 
@@ -176,6 +198,17 @@ export async function PUT(request: NextRequest) {
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
+
+    await logAdminActivity({
+      action: 'role_permissions_changed',
+      targetType: 'discord_role',
+      targetId: discord_role_id,
+      details: {
+        operation: 'replace',
+        discord_role_name: discord_role_name || null,
+        permission_ids,
+      },
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
@@ -209,6 +242,15 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    await logAdminActivity({
+      action: 'role_permissions_changed',
+      targetType: 'discord_role',
+      targetId: discordRoleId,
+      details: {
+        operation: 'delete',
+      },
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

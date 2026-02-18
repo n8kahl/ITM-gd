@@ -66,6 +66,10 @@ export async function createEntry(input: unknown): Promise<ActionResult<JournalE
 
     const payload = sanitizeJournalWriteInput(validated.data as unknown as Record<string, unknown>)
 
+    if (typeof payload.screenshot_storage_path === 'string' && payload.screenshot_storage_path.length > 0) {
+      payload.screenshot_url = null
+    }
+
     payload.user_id = user.id
     payload.trade_date = payload.trade_date ?? new Date().toISOString()
 
@@ -136,6 +140,10 @@ export async function updateEntry(input: unknown): Promise<ActionResult<JournalE
     const payload = sanitizeJournalWriteInput(validated.data as unknown as Record<string, unknown>)
     delete payload.id
 
+    if (typeof payload.screenshot_storage_path === 'string' && payload.screenshot_storage_path.length > 0) {
+      payload.screenshot_url = null
+    }
+
     const direction = (payload.direction as JournalDirection | undefined) ?? existing.direction
     const nextEntryPrice = toNumber(payload.entry_price ?? existing.entry_price)
     const nextExitPrice = toNumber(payload.exit_price ?? existing.exit_price)
@@ -184,6 +192,28 @@ export async function updateEntry(input: unknown): Promise<ActionResult<JournalE
     if (error || !data) {
       console.error('updateEntry failed:', error)
       return { success: false, error: 'Failed to update entry' }
+    }
+
+    const previousScreenshotPath = typeof existing.screenshot_storage_path === 'string'
+      ? existing.screenshot_storage_path
+      : null
+    const nextScreenshotPath = typeof data.screenshot_storage_path === 'string'
+      ? data.screenshot_storage_path
+      : null
+
+    if (
+      previousScreenshotPath
+      && previousScreenshotPath.startsWith(`${user.id}/`)
+      && previousScreenshotPath !== nextScreenshotPath
+    ) {
+      const { error: storageCleanupError } = await supabase
+        .storage
+        .from('journal-screenshots')
+        .remove([previousScreenshotPath])
+
+      if (storageCleanupError) {
+        console.error('updateEntry screenshot cleanup failed:', storageCleanupError)
+      }
     }
 
     revalidatePath('/members/journal')

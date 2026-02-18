@@ -6,6 +6,7 @@ import { FileSpreadsheet, Loader2, Upload } from 'lucide-react'
 import { importTradeRowSchema } from '@/lib/validation/journal-entry'
 
 const BROKERS = [
+  { label: 'Generic CSV (Other Broker)', value: 'generic' },
   { label: 'Interactive Brokers', value: 'interactive_brokers' },
   { label: 'Schwab', value: 'schwab' },
   { label: 'Robinhood', value: 'robinhood' },
@@ -13,6 +14,8 @@ const BROKERS = [
   { label: 'Fidelity', value: 'fidelity' },
   { label: 'Webull', value: 'webull' },
 ] as const
+const IMPORT_CHUNK_SIZE = 500
+const CLIENT_VALIDATION_SAMPLE_LIMIT = 2_000
 
 interface ImportWizardProps {
   onImported?: () => void
@@ -50,7 +53,7 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
   }, [rows])
 
   const errorCount = useMemo(() => {
-    return rows.reduce((count, row) => {
+    return rows.slice(0, CLIENT_VALIDATION_SAMPLE_LIMIT).reduce((count, row) => {
       const parsed = importTradeRowSchema.safeParse(row)
       return count + (parsed.success ? 0 : 1)
     }, 0)
@@ -68,21 +71,23 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
 
     Papa.parse<Record<string, string>>(file, {
       header: true,
-      skipEmptyLines: true,
+      skipEmptyLines: 'greedy',
+      transformHeader: (header) => header.replace(/^\uFEFF/, '').trim(),
       complete: (results: Papa.ParseResult<Record<string, string>>) => {
         setParsing(false)
         const parsedRows = (results.data ?? []).filter(
-          (row: Record<string, string>) => Object.keys(row).length > 0,
+          (row: Record<string, string>) => (
+            Object.keys(row).length > 0
+            && Object.values(row).some((value) => (
+              typeof value === 'string'
+                ? value.trim().length > 0
+                : value != null
+            ))
+          ),
         )
 
         if (parsedRows.length === 0) {
           setParseError('No CSV rows found in the selected file.')
-          setRows([])
-          return
-        }
-
-        if (parsedRows.length > 500) {
-          setParseError('CSV has more than 500 rows. Split the file and retry.')
           setRows([])
           return
         }
@@ -102,27 +107,43 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
     if (rows.length === 0 || importing) return
 
     setImporting(true)
+    setParseError(null)
 
     try {
-      const response = await fetch('/api/members/journal/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          broker,
-          fileName: fileName || 'journal-import.csv',
-          rows,
-        }),
-      })
+      let inserted = 0
+      let duplicates = 0
+      let errors = 0
 
-      const payload = await response.json()
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || 'Import failed')
+      const totalChunks = Math.ceil(rows.length / IMPORT_CHUNK_SIZE)
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+        const chunkStart = chunkIndex * IMPORT_CHUNK_SIZE
+        const chunkRows = rows.slice(chunkStart, chunkStart + IMPORT_CHUNK_SIZE)
+
+        const response = await fetch('/api/members/journal/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            broker,
+            fileName: fileName || 'journal-import.csv',
+            rows: chunkRows,
+          }),
+        })
+
+        const payload = await response.json()
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || `Import failed on chunk ${chunkIndex + 1}/${totalChunks}`)
+        }
+
+        inserted += payload.data?.inserted ?? 0
+        duplicates += payload.data?.duplicates ?? 0
+        errors += payload.data?.errors ?? 0
       }
 
       setResult({
-        inserted: payload.data?.inserted ?? 0,
-        duplicates: payload.data?.duplicates ?? 0,
-        errors: payload.data?.errors ?? 0,
+        inserted,
+        duplicates,
+        errors,
       })
       setStep(4)
       onImported?.()
@@ -209,7 +230,9 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
       {step === 3 ? (
         <div className="space-y-3">
           <div className="text-xs text-muted-foreground">
-            {rows.length} rows parsed. {errorCount} rows currently invalid.
+            {rows.length} rows parsed. {errorCount} rows currently invalid
+            {rows.length > CLIENT_VALIDATION_SAMPLE_LIMIT ? ` (sampled from first ${CLIENT_VALIDATION_SAMPLE_LIMIT.toLocaleString()} rows).` : '.'}
+            {rows.length > IMPORT_CHUNK_SIZE ? ` Import will run in ${Math.ceil(rows.length / IMPORT_CHUNK_SIZE)} batches.` : ''}
           </div>
 
           <div className="max-h-64 overflow-auto rounded-md border border-white/10">

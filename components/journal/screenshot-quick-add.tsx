@@ -9,6 +9,40 @@ import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { analyzeScreenshot, type ScreenshotAnalysisResponse } from '@/lib/api/ai-coach'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 
+const ALLOWED_SCREENSHOT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const AMBIGUOUS_SCREENSHOT_SYMBOLS = new Set([
+  'MULTIPLE',
+  'MULTI',
+  'PORTFOLIO',
+  'VARIOUS',
+  'MIXED',
+  'ACCOUNT',
+  'POSITIONS',
+  'POSITION',
+  'HOLDINGS',
+  'TOTAL',
+])
+
+function normalizeSymbol(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9./]/g, '')
+}
+
+function isAmbiguousSymbol(value: string): boolean {
+  return AMBIGUOUS_SCREENSHOT_SYMBOLS.has(normalizeSymbol(value))
+}
+
+async function resolveCurrentUserId(supabase: ReturnType<typeof createBrowserSupabase>): Promise<string | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (session?.user?.id) return session.user.id
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return user?.id ?? null
+}
+
 interface ScreenshotQuickAddProps {
   open: boolean
   onClose: () => void
@@ -83,8 +117,8 @@ function ScreenshotQuickAddDialog({
       setAnalysis(result)
 
       const top = result.positions[0]
-      if (top?.symbol && !symbol.trim()) {
-        setSymbol(top.symbol)
+      if (result.positionCount === 1 && top?.symbol && !symbol.trim() && !isAmbiguousSymbol(top.symbol)) {
+        setSymbol(normalizeSymbol(top.symbol))
       }
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : 'Failed to analyze screenshot')
@@ -94,8 +128,8 @@ function ScreenshotQuickAddDialog({
   }, [symbol])
 
   const handleFileSelect = useCallback((selectedFile: File) => {
-    if (!selectedFile.type.startsWith('image/')) {
-      setError('Please select an image file')
+    if (!ALLOWED_SCREENSHOT_TYPES.has(selectedFile.type)) {
+      setError('Please select a PNG, JPEG, or WebP image')
       return
     }
 
@@ -152,10 +186,26 @@ function ScreenshotQuickAddDialog({
       return
     }
 
-    const fallbackSymbol = analysis?.positions?.[0]?.symbol || ''
-    const normalizedSymbol = symbol.trim().toUpperCase() || fallbackSymbol
+    const fallbackSymbol = (
+      analysis?.positionCount === 1
+      && analysis?.positions?.[0]?.symbol
+      && !isAmbiguousSymbol(analysis.positions[0].symbol)
+    )
+      ? normalizeSymbol(analysis.positions[0].symbol)
+      : ''
+    const typedSymbol = normalizeSymbol(symbol)
+    const normalizedSymbol = typedSymbol || fallbackSymbol
     if (!normalizedSymbol) {
-      setError('Please enter a symbol before creating the entry')
+      setError(
+        analysis?.positionCount && analysis.positionCount > 1
+          ? 'Multiple positions detected. Enter one symbol to log a specific trade.'
+          : 'Please enter a symbol before creating the entry',
+      )
+      return
+    }
+
+    if (isAmbiguousSymbol(normalizedSymbol)) {
+      setError('Detected symbol is ambiguous. Enter a specific ticker symbol to continue.')
       return
     }
 
@@ -165,18 +215,16 @@ function ScreenshotQuickAddDialog({
 
     try {
       const supabase = createBrowserSupabase()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const userId = await resolveCurrentUserId(supabase)
 
-      if (!user) {
+      if (!userId) {
         setError('You must be logged in')
         setUploading(false)
         return
       }
 
       // Upload screenshot
-      const result = await uploadScreenshot(file, user.id, undefined, (progress: UploadProgress) => {
+      const result = await uploadScreenshot(file, userId, undefined, (progress: UploadProgress) => {
         if (progress.status === 'uploading' && progress.percent != null) {
           setUploadProgress(progress.percent)
         }
@@ -194,38 +242,44 @@ function ScreenshotQuickAddDialog({
         return
       }
 
-      // Create journal entry with screenshot
-      const { data: entry, error: createError } = await supabase
-        .from('journal_entries')
-        .insert({
-          user_id: user.id,
+      const topPosition = analysis?.positions?.[0]
+      const createResponse = await fetch('/api/members/journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           symbol: normalizedSymbol,
           trade_date: new Date().toISOString(),
-          direction: 'long',
-          contract_type: 'stock',
-          is_open: false,
+          direction: topPosition && topPosition.quantity < 0 ? 'short' : 'long',
+          contract_type: topPosition?.type === 'call' || topPosition?.type === 'put' ? topPosition.type : 'stock',
+          entry_price: topPosition?.entryPrice && topPosition.entryPrice > 0 ? topPosition.entryPrice : null,
+          position_size: topPosition?.quantity ? Math.abs(topPosition.quantity) : 1,
+          strike_price: typeof topPosition?.strike === 'number' ? topPosition.strike : null,
+          expiration_date: typeof topPosition?.expiry === 'string' ? topPosition.expiry.slice(0, 10) : null,
+          // Quick screenshot flow doesn't capture an explicit exit fill, so we
+          // persist as open by default to avoid falsely marking trades closed.
+          is_open: true,
           screenshot_url: result.url,
           screenshot_storage_path: result.storagePath,
           setup_notes: notes.trim() || null,
-        })
-        .select()
-        .single()
+        }),
+      })
 
-      if (createError) {
-        console.error('Failed to create journal entry:', createError)
-        setError('Failed to create entry')
+      const createPayload = await createResponse.json().catch(() => null)
+      if (!createResponse.ok || !createPayload?.success || !createPayload?.data?.id) {
+        const message = createPayload?.error || 'Failed to create entry'
+        setError(message)
         setUploading(false)
         return
       }
 
       // Success! Call parent callback
-      onEntryCreated(entry.id)
+      onEntryCreated(createPayload.data.id as string)
     } catch (err) {
       console.error('Quick screenshot save failed:', err)
       setError(err instanceof Error ? err.message : 'Save failed')
       setUploading(false)
     }
-  }, [analysis?.positions, file, symbol, notes, onEntryCreated])
+  }, [analysis?.positionCount, analysis?.positions, file, symbol, notes, onEntryCreated])
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">

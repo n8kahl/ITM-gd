@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import { ZodError } from 'zod'
 import { errorResponse, successResponse } from '@/lib/api/response'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { importRequestSchema, sanitizeString } from '@/lib/validation/journal-entry'
+import { importRequestSchema, importTradeRowSchema, sanitizeString } from '@/lib/validation/journal-entry'
 import { sanitizeJournalWriteInput } from '@/lib/journal/sanitize-entry'
 import { normalizeImportedRow } from '@/lib/journal/import-normalization'
 
@@ -18,9 +18,52 @@ function toDateKey(value: string): string {
   return parsed.toISOString().split('T')[0]
 }
 
+function toTimestampKey(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return 'na'
+  return parsed.toISOString().slice(0, 19)
+}
+
 function numberBucket(value: number | null, precision = 4): string {
   if (value == null || !Number.isFinite(value)) return 'na'
   return value.toFixed(precision)
+}
+
+function normalizeFieldKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function toReferenceToken(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value))
+  }
+  if (typeof value !== 'string') return null
+  const next = value.trim()
+  if (!next) return null
+  return next.replace(/\s+/g, '').slice(0, 80)
+}
+
+function extractBrokerReference(row: Record<string, unknown>): string | null {
+  const candidateKeys = new Set([
+    'orderid',
+    'tradeid',
+    'executionid',
+    'execid',
+    'fillid',
+    'activityid',
+    'transactionid',
+    'referencenumber',
+    'confirmationnumber',
+    'ordernumber',
+  ])
+
+  for (const [key, value] of Object.entries(row)) {
+    if (!candidateKeys.has(normalizeFieldKey(key))) continue
+    const token = toReferenceToken(value)
+    if (token) return token
+  }
+
+  return null
 }
 
 function calculatePnl(
@@ -79,17 +122,26 @@ export async function POST(request: NextRequest) {
     const rowsToUpsert: Array<Record<string, unknown>> = []
 
     for (const rawRow of validated.rows) {
-      const normalized = normalizeImportedRow(rawRow, validated.broker)
+      const parsedRow = importTradeRowSchema.safeParse(rawRow)
+      if (!parsedRow.success) {
+        parseErrors += 1
+        continue
+      }
+
+      const normalized = normalizeImportedRow(parsedRow.data, validated.broker)
 
       if (!normalized.symbol || normalized.symbol.length < 1) {
         parseErrors += 1
         continue
       }
 
+      const brokerReference = extractBrokerReference(parsedRow.data)
       const dedupeKey = [
         user.id,
+        validated.broker,
         normalized.symbol,
         toDateKey(normalized.tradeDate),
+        toTimestampKey(normalized.tradeDate),
         normalized.direction,
         normalized.contractType,
         numberBucket(normalized.entryPrice),
@@ -97,6 +149,7 @@ export async function POST(request: NextRequest) {
         numberBucket(normalized.positionSize),
         numberBucket(normalized.strikePrice),
         normalized.expirationDate ?? 'na',
+        brokerReference ?? 'na',
       ].join(':')
       const id = buildDeterministicUuid(dedupeKey)
 

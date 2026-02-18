@@ -32,6 +32,11 @@ interface TeamMember {
 }
 
 export default function TeamMembersPage() {
+  const appUrl = (
+    process.env.NEXT_PUBLIC_APP_URL
+    || process.env.NEXT_PUBLIC_SITE_URL
+    || (typeof window !== 'undefined' ? window.location.origin : '')
+  ).replace(/\/+$/, '')
   const [members, setMembers] = useState<TeamMember[]>([])
   const [isInviting, setIsInviting] = useState(false)
   const [inviteForm, setInviteForm] = useState({
@@ -148,7 +153,7 @@ export default function TeamMembersPage() {
               type: 2,
               style: 5,
               label: 'View & Respond',
-              url: 'https://trade-itm-prod.up.railway.app/admin/chat'
+              url: `${appUrl}/admin/chat`
             }]
           }]
         })
@@ -358,7 +363,7 @@ export default function TeamMembersPage() {
                 <label className="text-sm text-platinum/60 block mb-1">Display Name</label>
                 <Input
                   type="text"
-                  placeholder="John Doe"
+                  placeholder="Team Member"
                   value={inviteForm.displayName}
                   onChange={(e) => setInviteForm({ ...inviteForm, displayName: e.target.value })}
                   className="bg-background/50 border-border/40"

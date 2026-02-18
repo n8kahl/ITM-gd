@@ -37,7 +37,7 @@ function summarizeFlowBias(flowEvents: Array<{ direction: 'bullish' | 'bearish';
 }
 
 export function ActionStrip() {
-  const { activeSetups, coachMessages, regime, prediction, flowEvents, gexProfile, selectedSetup } = useSPXCommandCenter()
+  const { activeSetups, coachMessages, regime, prediction, flowEvents, gexProfile, selectedSetup, tradeMode, inTradeSetup, tradePnlPoints } = useSPXCommandCenter()
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(() => loadDismissedCoachAlertIds())
 
   useEffect(() => {
@@ -117,6 +117,13 @@ export function ActionStrip() {
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
+        {tradeMode === 'in_trade' && inTradeSetup && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-champagne/35 bg-champagne/12 px-2 py-0.5 text-[10px] text-champagne">
+            In Trade: {inTradeSetup.direction.toUpperCase()}
+            {tradePnlPoints != null ? ` · ${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts` : ''}
+          </span>
+        )}
+
         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200" title="Number of trade setups currently in 'ready' or 'triggered' status">
           <Sparkles className="h-3 w-3" />
           Setups: {setupPolicy.actionableVisibleCount} actionable

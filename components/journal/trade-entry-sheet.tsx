@@ -8,6 +8,7 @@ import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { QuickEntryForm } from '@/components/journal/quick-entry-form'
 import { FullEntryForm } from '@/components/journal/full-entry-form'
 import { parseNumericInput } from '@/lib/journal/number-parsing'
+import { deleteScreenshot } from '@/lib/uploads/supabaseStorage'
 
 interface TradeEntrySheetProps {
   open: boolean
@@ -151,17 +152,40 @@ export function TradeEntrySheet({
   disabled = false,
 }: TradeEntrySheetProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const initialScreenshotPathRef = useRef('')
+  const transientScreenshotPathsRef = useRef<Set<string>>(new Set())
   const [values, setValues] = useState<EntryFormValues>(EMPTY_VALUES)
   const [mode, setMode] = useState<'quick' | 'full'>('quick')
   const [saving, setSaving] = useState(false)
   const [symbolError, setSymbolError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const cleanupTransientScreenshots = async () => {
+    const pendingPaths = Array.from(transientScreenshotPathsRef.current)
+    transientScreenshotPathsRef.current.clear()
+
+    if (pendingPaths.length === 0) return
+
+    await Promise.all(pendingPaths.map(async (path) => {
+      try {
+        await deleteScreenshot(path)
+      } catch {
+        // Best-effort cleanup; failures should not block user flow.
+      }
+    }))
+  }
+
+  const closeWithoutSave = () => {
+    if (saving) return
+    void cleanupTransientScreenshots()
+    onClose()
+  }
+
   useFocusTrap({
     active: open,
     containerRef,
     onEscape: () => {
-      if (!saving) onClose()
+      closeWithoutSave()
     },
   })
 
@@ -172,6 +196,8 @@ export function TradeEntrySheet({
     setMode(editEntry ? 'full' : 'quick')
     setSymbolError(null)
     setSaveError(null)
+    initialScreenshotPathRef.current = editEntry?.screenshot_storage_path ?? ''
+    transientScreenshotPathsRef.current = new Set()
   }, [editEntry, open])
 
   useEffect(() => {
@@ -188,7 +214,16 @@ export function TradeEntrySheet({
   const canSave = useMemo(() => !disabled && !saving, [disabled, saving])
 
   const updateValue = (key: keyof EntryFormValues, value: string | boolean) => {
-    setValues((prev) => ({ ...prev, [key]: value }))
+    setValues((prev) => {
+      if (key === 'screenshot_storage_path' && typeof value === 'string') {
+        const nextPath = value.trim()
+        if (nextPath && nextPath !== initialScreenshotPathRef.current) {
+          transientScreenshotPathsRef.current.add(nextPath)
+        }
+      }
+
+      return { ...prev, [key]: value }
+    })
 
     if (key === 'symbol' && typeof value === 'string' && value.trim().length > 0) {
       setSymbolError(null)
@@ -264,6 +299,13 @@ export function TradeEntrySheet({
         return
       }
 
+      const persistedScreenshotPath = typeof result.screenshot_storage_path === 'string'
+        ? result.screenshot_storage_path
+        : ''
+      if (persistedScreenshotPath) {
+        transientScreenshotPathsRef.current.delete(persistedScreenshotPath)
+      }
+      void cleanupTransientScreenshots()
       onClose()
     } catch (error) {
       console.error('Trade entry save failed:', error)
@@ -280,7 +322,7 @@ export function TradeEntrySheet({
       <div
         className="absolute inset-0"
         onClick={() => {
-          if (!saving) onClose()
+          closeWithoutSave()
         }}
       />
 
@@ -297,7 +339,7 @@ export function TradeEntrySheet({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeWithoutSave}
             disabled={saving}
             className="rounded-md border border-white/10 p-2 text-muted-foreground hover:text-ivory"
             aria-label="Close"
@@ -357,7 +399,7 @@ export function TradeEntrySheet({
           <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end gap-2 border-t border-white/10 bg-[#101315] p-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={closeWithoutSave}
               disabled={saving}
               className="h-10 rounded-md border border-white/10 px-4 text-sm text-muted-foreground hover:text-ivory"
             >

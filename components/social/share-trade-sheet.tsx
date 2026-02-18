@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import type { FeedVisibility } from '@/lib/types/social'
 import { Share2, Loader2, Check, Globe, Users, Lock } from 'lucide-react'
+import { Analytics } from '@/lib/analytics'
 
 interface ShareTradeSheetProps {
   journalEntryId: string
@@ -108,6 +109,7 @@ export function ShareTradeSheet({
   const [error, setError] = useState<string | null>(null)
 
   const handleShare = async () => {
+    Analytics.trackMembersSocialAction('share_trade_submit')
     setSharing(true)
     setError(null)
 
@@ -190,6 +192,7 @@ export function ShareTradeSheet({
                     key={template.id}
                     type="button"
                     onClick={() => {
+                      Analytics.trackMembersSocialAction(`share_template_${template.id}`)
                       setSelectedTemplate(template.id)
                       if (template.id === 'story') {
                         setFormat('story')
@@ -225,7 +228,10 @@ export function ShareTradeSheet({
               </label>
               <Select
                 value={visibility}
-                onValueChange={(val) => setVisibility(val as FeedVisibility)}
+                onValueChange={(val) => {
+                  Analytics.trackMembersSocialAction(`share_visibility_${val}`)
+                  setVisibility(val as FeedVisibility)
+                }}
               >
                 <SelectTrigger className="h-10">
                   <SelectValue />
@@ -254,7 +260,10 @@ export function ShareTradeSheet({
               </label>
               <Select
                 value={format}
-                onValueChange={(val) => setFormat(val as ShareFormat)}
+                onValueChange={(val) => {
+                  Analytics.trackMembersSocialAction(`share_format_${val}`)
+                  setFormat(val as ShareFormat)
+                }}
               >
                 <SelectTrigger className="h-10">
                   <SelectValue />
@@ -274,7 +283,10 @@ export function ShareTradeSheet({
 
             <button
               type="button"
-              onClick={() => setShareToDiscord((prev) => !prev)}
+              onClick={() => {
+                Analytics.trackMembersSocialAction('share_to_discord_toggle')
+                setShareToDiscord((prev) => !prev)
+              }}
               className={cn(
                 'w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors',
                 shareToDiscord

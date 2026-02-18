@@ -51,15 +51,20 @@ interface CannedResponse {
   text: string
 }
 
+interface PricingTierApiRow {
+  id: string
+  monthly_price: string
+}
+
 const DEFAULT_CANNED_RESPONSES: CannedResponse[] = [
   {
     label: 'Pricing Overview',
     shortcut: '/pricing',
     text: `Our membership tiers:
 
-• **Core Sniper ($199/mo)**: SPX day trades, morning watchlist, high-volume alerts
-• **Pro Sniper ($299/mo)**: Everything in Core + LEAPS, advanced swing trades
-• **Executive Sniper ($499/mo)**: Everything in Pro + NDX alerts, high-conviction LEAPS
+• **Core Tier ({{core_price}}/mo)**: SPX day trades, morning watchlist, high-volume alerts
+• **Pro Tier ({{pro_price}}/mo)**: Everything in Core + LEAPS, advanced swing trades
+• **Executive Tier ({{exec_price}}/mo)**: Everything in Pro + NDX alerts, high-conviction LEAPS
 
 All sales are final. Refunds are not required under our Refund Policy.`
   },
@@ -95,7 +100,7 @@ Any exception is discretionary and does not create an entitlement to a refund.`
   {
     label: 'Executive Tier Details',
     shortcut: '/executive',
-    text: `Executive Sniper ($499/mo) is our premium tier for serious traders:
+    text: `Executive Tier ({{exec_price}}/mo) is our premium tier for serious traders:
 
 • Real-time NDX alerts (our highest-conviction setups)
 • High-conviction LEAPS positions
@@ -105,6 +110,36 @@ Any exception is discretionary and does not create an entitlement to a refund.`
 This tier is designed for traders with larger accounts looking to maximize returns.`
   }
 ]
+
+const DEFAULT_PRICE_MAP = {
+  core_price: '$199',
+  pro_price: '$299',
+  exec_price: '$499',
+}
+
+function normalizePrice(rawPrice: string | null | undefined): string | null {
+  if (!rawPrice) return null
+  return rawPrice.startsWith('$') ? rawPrice : `$${rawPrice}`
+}
+
+function resolveCannedResponseTemplates(
+  templates: CannedResponse[],
+  priceMap: Record<'core_price' | 'pro_price' | 'exec_price', string>
+): CannedResponse[] {
+  return templates.map((template) => ({
+    ...template,
+    text: template.text
+      .replaceAll('$199/mo', '{{core_price}}/mo')
+      .replaceAll('$299/mo', '{{pro_price}}/mo')
+      .replaceAll('$499/mo', '{{exec_price}}/mo')
+      .replaceAll('$199', '{{core_price}}')
+      .replaceAll('$299', '{{pro_price}}')
+      .replaceAll('$499', '{{exec_price}}')
+      .replaceAll('{{core_price}}', priceMap.core_price)
+      .replaceAll('{{pro_price}}', priceMap.pro_price)
+      .replaceAll('{{exec_price}}', priceMap.exec_price),
+  }))
+}
 
 interface Conversation {
   id: string
@@ -179,9 +214,12 @@ function ChatManagementContent() {
   const previousMessageCount = useRef(0)
   const adminSessionId = useRef<string>(getAdminSessionId())
 
-  // Fetch canned responses from app_settings (if configured)
+  // Fetch canned responses from app_settings and resolve live pricing from /api/admin/packages
   useEffect(() => {
     const fetchCannedResponses = async () => {
+      let templates = DEFAULT_CANNED_RESPONSES
+      let priceMap = { ...DEFAULT_PRICE_MAP }
+
       try {
         const { data, error } = await supabase
           .from('app_settings')
@@ -193,7 +231,7 @@ function ChatManagementContent() {
           try {
             const parsed = JSON.parse(data.value)
             if (Array.isArray(parsed) && parsed.length > 0) {
-              setCannedResponses(parsed)
+              templates = parsed
             }
           } catch {
             // Invalid JSON, use defaults
@@ -202,6 +240,29 @@ function ChatManagementContent() {
       } catch {
         // Use default canned responses on error
       }
+
+      try {
+        const response = await fetch('/api/admin/packages')
+        if (response.ok) {
+          const payload = await response.json()
+          const tiers = (payload.tiers || []) as PricingTierApiRow[]
+          const tierById = new Map<string, PricingTierApiRow>()
+
+          tiers.forEach((tier) => {
+            tierById.set(tier.id.toLowerCase(), tier)
+          })
+
+          priceMap = {
+            core_price: normalizePrice(tierById.get('core')?.monthly_price) || DEFAULT_PRICE_MAP.core_price,
+            pro_price: normalizePrice(tierById.get('pro')?.monthly_price) || DEFAULT_PRICE_MAP.pro_price,
+            exec_price: normalizePrice(tierById.get('executive')?.monthly_price) || DEFAULT_PRICE_MAP.exec_price,
+          }
+        }
+      } catch {
+        // Keep default fallback prices
+      }
+
+      setCannedResponses(resolveCannedResponseTemplates(templates, priceMap))
     }
 
     fetchCannedResponses()

@@ -67,7 +67,7 @@ export function JournalFilterBar({ filters, onChange, availableTags }: JournalFi
       tags: [],
       sortBy: 'trade_date',
       sortDir: 'desc',
-      limit: 100,
+      limit: 500,
       offset: 0,
     })
   }, [filters, onChange])

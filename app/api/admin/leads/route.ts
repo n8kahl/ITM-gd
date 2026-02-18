@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
+import { logAdminActivity } from '@/lib/admin/audit-log'
 
 // Create admin client lazily to avoid build-time errors
 function getSupabaseAdmin() {
@@ -110,6 +111,17 @@ export async function PATCH(request: NextRequest) {
     if (!data || data.length === 0) {
       return NextResponse.json({ error: `Application '${id}' not found` }, { status: 404 })
     }
+
+    await logAdminActivity({
+      action: 'lead_status_changed',
+      targetType: 'cohort_application',
+      targetId: id,
+      details: {
+        status,
+        notes: notes || null,
+        reviewed_by: reviewed_by || null,
+      },
+    })
 
     return NextResponse.json({ success: true, data: data[0] })
   } catch (error) {

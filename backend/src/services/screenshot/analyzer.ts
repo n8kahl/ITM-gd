@@ -170,6 +170,68 @@ function normalizeActions(
   }));
 }
 
+function normalizePosition(value: unknown): ExtractedPosition | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+
+  const symbol = String(raw.symbol ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9./]/g, '')
+    .slice(0, 16);
+
+  if (!symbol) return null;
+
+  const typeCandidate = typeof raw.type === 'string' ? raw.type.trim().toLowerCase() : '';
+  const type: ExtractedPosition['type'] = (typeCandidate === 'call' || typeCandidate === 'put' || typeCandidate === 'stock')
+    ? typeCandidate
+    : 'stock';
+
+  const quantityParsed = Number(raw.quantity);
+  const quantity = Number.isFinite(quantityParsed) && quantityParsed !== 0
+    ? quantityParsed
+    : 1;
+
+  const entryPriceParsed = Number(raw.entryPrice);
+  const entryPrice = Number.isFinite(entryPriceParsed) && entryPriceParsed >= 0
+    ? entryPriceParsed
+    : 0;
+
+  const strikeParsed = Number(raw.strike);
+  const strike = Number.isFinite(strikeParsed) && strikeParsed > 0
+    ? strikeParsed
+    : undefined;
+
+  const currentPriceParsed = Number(raw.currentPrice);
+  const currentPrice = Number.isFinite(currentPriceParsed)
+    ? currentPriceParsed
+    : undefined;
+
+  const pnlParsed = Number(raw.pnl);
+  const pnl = Number.isFinite(pnlParsed)
+    ? pnlParsed
+    : undefined;
+
+  const confidenceParsed = Number(raw.confidence);
+  const confidence = Number.isFinite(confidenceParsed)
+    ? Math.max(0, Math.min(1, confidenceParsed))
+    : 0.35;
+
+  const expiryRaw = typeof raw.expiry === 'string' ? raw.expiry.trim() : '';
+  const expiry = expiryRaw.length > 0 ? expiryRaw.slice(0, 10) : undefined;
+
+  return {
+    symbol,
+    type,
+    strike,
+    expiry,
+    quantity,
+    entryPrice,
+    currentPrice,
+    pnl,
+    confidence,
+  };
+}
+
 /**
  * Analyze a broker screenshot to extract positions
  */
@@ -219,28 +281,32 @@ export async function analyzeScreenshot(
     const parsed = JSON.parse(jsonStr);
 
     // Validate and sanitize
-    const positions: ExtractedPosition[] = (parsed.positions || []).map((p: any) => ({
-      symbol: String(p.symbol || '').toUpperCase(),
-      type: ['call', 'put', 'stock'].includes(p.type)
-        ? p.type
-        : 'call',
-      strike: p.strike ? Number(p.strike) : undefined,
-      expiry: p.expiry || undefined,
-      quantity: Number(p.quantity) || 1,
-      entryPrice: Number(p.entryPrice) || 0,
-      currentPrice: p.currentPrice ? Number(p.currentPrice) : undefined,
-      pnl: p.pnl != null ? Number(p.pnl) : undefined,
-      confidence: Math.max(0, Math.min(1, Number(p.confidence) || 0.5)),
-    }));
+    const rawPositions: unknown[] = Array.isArray(parsed.positions) ? parsed.positions : [];
+    const positions = rawPositions
+      .map((position: unknown) => normalizePosition(position))
+      .filter((position: ExtractedPosition | null): position is ExtractedPosition => Boolean(position));
     const intent = inferIntent(parsed.intent, positions);
+    const warnings = Array.isArray(parsed.warnings)
+      ? (parsed.warnings as unknown[])
+        .map((warning: unknown) => String(warning).trim())
+        .filter((warning: string) => warning.length > 0)
+        .slice(0, 10)
+      : [];
+
+    if (rawPositions.length > 0 && positions.length === 0) {
+      warnings.push('Positions were detected but could not be normalized safely.');
+    }
+
+    const accountValueParsed = Number(parsed.accountValue);
+    const accountValue = Number.isFinite(accountValueParsed) ? accountValueParsed : undefined;
 
     return {
       positions,
       broker: parsed.broker || undefined,
-      accountValue: parsed.accountValue ? Number(parsed.accountValue) : undefined,
+      accountValue,
       intent,
       suggestedActions: normalizeActions(parsed.suggestedActions, intent, positions),
-      warnings: parsed.warnings || [],
+      warnings,
     };
   } catch (error: any) {
     // Handle JSON parse errors

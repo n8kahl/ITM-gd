@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Academy Redesign Mockup — TradeITM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --emerald: #10B981;
+    --emerald-deep: #064E3B;
+    --emerald-glow: rgba(16, 185, 129, 0.15);
+    --champagne: #F5EDCC;
+    --void: #0A0A0B;
+    --surface: rgba(255,255,255,0.02);
+    --surface-hover: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --border-hover: rgba(255,255,255,0.14);
+    --text-primary: #F5F5F0;
+    --text-secondary: rgba(255,255,255,0.60);
+    --text-tertiary: rgba(255,255,255,0.40);
+    --radius: 12px;
+  }
+
+  body {
+    background: var(--void);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Nav Controls ─── */
+  .mockup-nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: rgba(10,10,11,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .mockup-nav__label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-tertiary); font-weight: 600; white-space: nowrap;
+  }
+  .mockup-nav__buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mockup-nav__btn {
+    padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-secondary); cursor: pointer; transition: all 0.2s;
+    font-family: inherit;
+  }
+  .mockup-nav__btn:hover { background: var(--surface-hover); border-color: var(--border-hover); color: var(--text-primary); }
+  .mockup-nav__btn.active {
+    background: var(--emerald-glow); border-color: rgba(16,185,129,0.35);
+    color: #6EE7B7;
+  }
+  .mockup-nav__device {
+    margin-left: auto; display: flex; gap: 6px;
+  }
+  .mockup-nav__device-btn {
+    padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-tertiary); cursor: pointer; font-family: inherit; transition: all 0.2s;
+  }
+  .mockup-nav__device-btn:hover { color: var(--text-secondary); }
+  .mockup-nav__device-btn.active { background: rgba(245,237,204,0.08); border-color: rgba(245,237,204,0.25); color: var(--champagne); }
+
+  /* ─── Frame ─── */
+  .frame {
+    margin-top: 56px;
+    transition: all 0.4s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .frame.mobile {
+    max-width: 390px; margin-left: auto; margin-right: auto;
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    min-height: calc(100vh - 56px);
+  }
+  .frame.desktop { max-width: 100%; }
+
+  /* ─── Pages ─── */
+  .page { display: none; padding: 20px; }
+  .page.active { display: block; }
+  .frame.desktop .page { padding: 32px 48px; }
+
+  /* ─── Sub Nav ─── */
+  .sub-nav {
+    display: flex; gap: 2px; padding: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; margin-bottom: 24px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    backdrop-filter: blur(60px) saturate(120%);
+  }
+  .sub-nav__item {
+    padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); cursor: pointer; transition: all 0.2s;
+    white-space: nowrap; display: flex; align-items: center; gap: 6px;
+    border: 1px solid transparent;
+  }
+  .sub-nav__item:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
+  .sub-nav__item.active {
+    background: var(--emerald-glow); border-color: rgba(16,185,129,0.35);
+    color: #6EE7B7;
+  }
+  .sub-nav__icon { width: 14px; height: 14px; opacity: 0.7; }
+
+  /* ─── Glass Card ─── */
+  .glass-card {
+    background: var(--surface);
+    backdrop-filter: blur(60px) saturate(120%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02);
+    transition: all 0.5s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .glass-card.interactive:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  /* ─── Track Section ─── */
+  .track-section { margin-bottom: 32px; }
+  .track-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .track-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--emerald);
+    box-shadow: 0 0 8px rgba(16,185,129,0.4);
+  }
+  .track-name {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--text-secondary);
+  }
+  .track-count {
+    font-size: 11px; color: var(--text-tertiary); margin-left: auto;
+  }
+
+  /* ─── Module Grid ─── */
+  .module-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: 1fr;
+  }
+  .frame.desktop .module-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* ─── Module Card ─── */
+  .module-card { cursor: pointer; overflow: hidden; }
+  .module-card__thumb {
+    height: 120px; position: relative; overflow: hidden;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .module-card__gradient {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(6,78,59,0.25) 100%);
+  }
+  .module-card__thumb-label {
+    position: absolute; bottom: 10px; left: 12px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: rgba(255,255,255,0.5);
+  }
+  .module-card__body { padding: 16px; }
+  .module-card__title {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 6px; line-height: 1.3;
+  }
+  .module-card__desc {
+    font-size: 13px; color: var(--text-secondary);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; margin-bottom: 12px; line-height: 1.5;
+  }
+  .module-card__meta {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-tertiary);
+  }
+  .module-card__meta-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-tertiary); }
+  .module-card__progress {
+    margin-top: 12px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }
+  .module-card__progress-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--emerald-deep), var(--emerald));
+    transition: width 0.6s ease;
+  }
+
+  /* ─── Module Detail ─── */
+  .module-detail__header { margin-bottom: 28px; }
+  .module-detail__back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text-secondary); cursor: pointer;
+    margin-bottom: 16px; transition: color 0.2s;
+  }
+  .module-detail__back:hover { color: var(--emerald); }
+  .module-detail__title {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px; font-weight: 600; margin-bottom: 8px;
+  }
+  .module-detail__desc { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; }
+  .module-detail__stats {
+    display: flex; gap: 16px; font-size: 13px; color: var(--text-tertiary);
+  }
+  .module-detail__stat { display: flex; align-items: center; gap: 5px; }
+
+  /* ─── Lesson Row ─── */
+  .lesson-list { display: flex; flex-direction: column; gap: 2px; }
+  .lesson-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px; cursor: pointer;
+    border: 1px solid transparent; border-radius: 10px;
+    transition: all 0.2s;
+  }
+  .lesson-row:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+  }
+  .lesson-row__number {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; flex-shrink: 0;
+    border: 1px solid var(--border); color: var(--text-tertiary);
+  }
+  .lesson-row__number.completed {
+    background: var(--emerald-glow); border-color: rgba(16,185,129,0.3);
+    color: var(--emerald);
+  }
+  .lesson-row__number.next {
+    background: rgba(245,237,204,0.06); border-color: rgba(245,237,204,0.2);
+    color: var(--champagne);
+  }
+  .lesson-row__content { flex: 1; min-width: 0; }
+  .lesson-row__title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+  .lesson-row__objective {
+    font-size: 12px; color: var(--text-tertiary); margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lesson-row__right {
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .lesson-row__duration { font-size: 12px; color: var(--text-tertiary); }
+  .lesson-row__status { font-size: 14px; }
+
+  /* ─── Lesson Viewer ─── */
+  .lesson-viewer { max-width: 720px; margin: 0 auto; }
+  .lesson-viewer__nav {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .lesson-viewer__back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text-secondary); cursor: pointer;
+    transition: color 0.2s;
+  }
+  .lesson-viewer__back:hover { color: var(--emerald); }
+  .lesson-viewer__position { font-size: 12px; color: var(--text-tertiary); }
+  .lesson-viewer__title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px; font-weight: 600; margin-bottom: 24px;
+  }
+
+  .block-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; padding: 5px 12px; border-radius: 6px;
+    margin-bottom: 20px;
+  }
+  .block-label.concept {
+    background: var(--emerald-glow); color: #6EE7B7;
+    border: 1px solid rgba(16,185,129,0.25);
+  }
+  .block-label.example {
+    background: rgba(245,237,204,0.06); color: var(--champagne);
+    border: 1px solid rgba(245,237,204,0.2);
+  }
+  .block-label.practice {
+    background: rgba(99,102,241,0.1); color: #A5B4FC;
+    border: 1px solid rgba(99,102,241,0.2);
+  }
+
+  .lesson-content {
+    font-size: 15px; line-height: 1.75; color: rgba(255,255,255,0.72);
+  }
+  .lesson-content h3 {
+    font-size: 17px; font-weight: 600; color: var(--text-primary);
+    margin: 28px 0 12px;
+  }
+  .lesson-content p { margin-bottom: 16px; }
+  .lesson-content strong { color: var(--text-primary); font-weight: 600; }
+
+  .lesson-content .callout {
+    padding: 16px 20px; border-radius: 10px; margin: 20px 0;
+    background: var(--surface); border: 1px solid rgba(16,185,129,0.2);
+  }
+  .callout__label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #6EE7B7; margin-bottom: 8px;
+  }
+  .callout__body { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+  /* ─── Block Progress ─── */
+  .block-progress {
+    display: flex; flex-direction: column; align-items: center;
+    margin-top: 40px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .block-dots { display: flex; gap: 8px; margin-bottom: 20px; }
+  .block-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1.5px solid var(--border); transition: all 0.3s;
+  }
+  .block-dot.completed { background: var(--emerald); border-color: var(--emerald); }
+  .block-dot.current { border-color: var(--emerald); box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+  .block-dot.upcoming { opacity: 0.4; }
+
+  .block-nav { display: flex; gap: 12px; width: 100%; }
+  .block-nav__btn {
+    flex: 1; padding: 12px 20px; border-radius: 10px;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .block-nav__btn.secondary {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .block-nav__btn.secondary:hover {
+    background: var(--surface-hover); border-color: var(--border-hover);
+    color: var(--text-primary);
+  }
+  .block-nav__btn.primary {
+    background: var(--emerald); border: 1px solid transparent;
+    color: var(--void); font-weight: 600;
+  }
+  .block-nav__btn.primary:hover { background: #0D9668; }
+
+  /* ─── Dashboard ─── */
+  .dashboard-welcome {
+    padding: 28px; margin-bottom: 24px;
+    border: 1px solid rgba(16,185,129,0.15);
+    background: linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(6,78,59,0.08) 100%);
+  }
+  .dashboard-welcome__eyebrow {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #6EE7B7; margin-bottom: 8px;
+  }
+  .dashboard-welcome__title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px; font-weight: 600; margin-bottom: 6px;
+  }
+  .dashboard-welcome__subtitle { font-size: 14px; color: var(--text-secondary); }
+  .dashboard-welcome__stats {
+    display: flex; gap: 24px; margin-top: 20px;
+  }
+  .dashboard-stat__value {
+    font-size: 24px; font-weight: 700; color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .dashboard-stat__label { font-size: 12px; color: var(--text-tertiary); }
+
+  .continue-card {
+    display: flex; gap: 16px; padding: 20px; margin-bottom: 24px;
+    align-items: center;
+  }
+  .continue-card__icon {
+    width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+    background: var(--emerald-glow); border: 1px solid rgba(16,185,129,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .continue-card__content { flex: 1; min-width: 0; }
+  .continue-card__eyebrow {
+    font-size: 11px; font-weight: 500; color: var(--emerald);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
+  }
+  .continue-card__title { font-size: 15px; font-weight: 500; }
+  .continue-card__module { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+  .continue-card__btn {
+    padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    background: var(--emerald); color: var(--void); border: none;
+    cursor: pointer; flex-shrink: 0; font-family: inherit;
+  }
+
+  .quick-actions {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-bottom: 24px;
+  }
+  .frame:not(.desktop) .quick-actions { grid-template-columns: 1fr; }
+  .quick-action {
+    padding: 16px; text-align: center; cursor: pointer;
+  }
+  .quick-action__icon {
+    font-size: 22px; margin-bottom: 8px;
+  }
+  .quick-action__label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+
+  .section-title {
+    font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-tertiary);
+    margin-bottom: 12px;
+  }
+
+  .rec-card {
+    display: flex; gap: 14px; padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer; transition: background 0.2s;
+  }
+  .rec-card:last-child { border-bottom: none; }
+  .rec-card:hover { background: var(--surface-hover); }
+  .rec-card__dot {
+    width: 8px; height: 8px; border-radius: 50%; margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .rec-card__dot.emerald { background: var(--emerald); }
+  .rec-card__dot.champagne { background: var(--champagne); }
+  .rec-card__dot.amber { background: #F59E0B; }
+  .rec-card__title { font-size: 14px; font-weight: 500; }
+  .rec-card__reason { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ─── Mockup Navigation ─── -->
+<nav class="mockup-nav">
+  <span class="mockup-nav__label">View:</span>
+  <div class="mockup-nav__buttons">
+    <button class="mockup-nav__btn active" onclick="showPage('dashboard')">Dashboard</button>
+    <button class="mockup-nav__btn" onclick="showPage('catalog')">Module Catalog</button>
+    <button class="mockup-nav__btn" onclick="showPage('detail')">Module Detail</button>
+    <button class="mockup-nav__btn" onclick="showPage('lesson')">Lesson Viewer</button>
+  </div>
+  <div class="mockup-nav__device">
+    <button class="mockup-nav__device-btn" onclick="setDevice('mobile')">Mobile</button>
+    <button class="mockup-nav__device-btn active" onclick="setDevice('desktop')">Desktop</button>
+  </div>
+</nav>
+
+<!-- ─── Frame ─── -->
+<div class="frame desktop" id="frame">
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- PAGE: Dashboard                          -->
+  <!-- ════════════════════════════════════════ -->
+  <div class="page active" id="page-dashboard">
+    <div class="sub-nav">
+      <div class="sub-nav__item active">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Dashboard
+      </div>
+      <div class="sub-nav__item" onclick="showPage('catalog')">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Modules
+      </div>
+      <div class="sub-nav__item">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        Review
+      </div>
+      <div class="sub-nav__item">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+        Progress
+      </div>
+    </div>
+
+    <!-- Welcome Banner -->
+    <div class="glass-card dashboard-welcome" style="border-radius: var(--radius);">
+      <div class="dashboard-welcome__eyebrow">Your Learning Plan</div>
+      <div class="dashboard-welcome__title">TITM Core Program</div>
+      <div class="dashboard-welcome__subtitle">4 tracks · 10 modules · 55 lessons</div>
+      <div class="dashboard-welcome__stats">
+        <div>
+          <div class="dashboard-stat__value">0</div>
+          <div class="dashboard-stat__label">Lessons completed</div>
+        </div>
+        <div>
+          <div class="dashboard-stat__value">0<span style="font-size:14px;color:var(--text-tertiary)">%</span></div>
+          <div class="dashboard-stat__label">Overall progress</div>
+        </div>
+        <div>
+          <div class="dashboard-stat__value">—</div>
+          <div class="dashboard-stat__label">Current streak</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Continue Learning -->
+    <div class="glass-card continue-card interactive">
+      <div class="continue-card__icon">▶</div>
+      <div class="continue-card__content">
+        <div class="continue-card__eyebrow">Continue Learning</div>
+        <div class="continue-card__title">Platform Navigation & Setup</div>
+        <div class="continue-card__module">Welcome to TradeITM · Lesson 1 of 5</div>
+      </div>
+      <button class="continue-card__btn">Resume</button>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+      <div class="glass-card quick-action interactive" onclick="showPage('catalog')">
+        <div class="quick-action__icon">📚</div>
+        <div class="quick-action__label">Browse Modules</div>
+      </div>
+      <div class="glass-card quick-action interactive">
+        <div class="quick-action__icon">🔄</div>
+        <div class="quick-action__label">Review Queue</div>
+      </div>
+      <div class="glass-card quick-action interactive">
+        <div class="quick-action__icon">📊</div>
+        <div class="quick-action__label">View Progress</div>
+      </div>
+    </div>
+
+    <!-- Recommended Next -->
+    <div class="section-title">Recommended Next</div>
+    <div class="glass-card" style="border-radius: var(--radius); overflow: hidden;">
+      <div class="rec-card">
+        <div class="rec-card__dot emerald"></div>
+        <div>
+          <div class="rec-card__title">Start "What Are Options?"</div>
+          <div class="rec-card__reason">Foundation skill — prerequisite for 4 other modules</div>
+        </div>
+      </div>
+      <div class="rec-card">
+        <div class="rec-card__dot champagne"></div>
+        <div>
+          <div class="rec-card__title">Complete Platform Navigation</div>
+          <div class="rec-card__reason">Almost done — 1 block remaining</div>
+        </div>
+      </div>
+      <div class="rec-card">
+        <div class="rec-card__dot amber"></div>
+        <div>
+          <div class="rec-card__title">Review: Position Sizing basics</div>
+          <div class="rec-card__reason">Due for spaced repetition review</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- PAGE: Module Catalog                     -->
+  <!-- ════════════════════════════════════════ -->
+  <div class="page" id="page-catalog">
+    <div class="sub-nav">
+      <div class="sub-nav__item" onclick="showPage('dashboard')">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Dashboard
+      </div>
+      <div class="sub-nav__item active">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Modules
+      </div>
+      <div class="sub-nav__item">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        Review
+      </div>
+      <div class="sub-nav__item">
+        <svg class="sub-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+        Progress
+      </div>
+    </div>
+
+    <!-- Track 1: Foundations -->
+    <div class="track-section">
+      <div class="track-header">
+        <div class="track-dot"></div>
+        <span class="track-name">Foundations</span>
+        <span class="track-count">Track 1 of 4 · 3 modules</span>
+      </div>
+      <div class="module-grid">
+        <div class="glass-card module-card interactive" onclick="showPage('detail')">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient"></div>
+            <span class="module-card__thumb-label">5 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">Welcome to TradeITM</div>
+            <div class="module-card__desc">Get fully oriented with platform navigation, account setup, AI coaching, journaling, and your learning path.</div>
+            <div class="module-card__meta">
+              <span>5 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~25 min</span>
+            </div>
+            <div class="module-card__progress">
+              <div class="module-card__progress-fill" style="width: 20%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(99,102,241,0.15) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">Options 101: Understanding the Basics</div>
+            <div class="module-card__desc">Master calls, puts, strikes, expiration, chain reading, and order execution with risk-aware paper practice.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+            <div class="module-card__progress">
+              <div class="module-card__progress-fill" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(6,78,59,0.2) 0%, rgba(16,185,129,0.1) 100%);"></div>
+            <span class="module-card__thumb-label">2 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">Market Context Fundamentals</div>
+            <div class="module-card__desc">Learn to identify session context before entering risk.</div>
+            <div class="module-card__meta">
+              <span>2 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~12 min</span>
+            </div>
+            <div class="module-card__progress">
+              <div class="module-card__progress-fill" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Track 2: Strategy & Execution -->
+    <div class="track-section">
+      <div class="track-header">
+        <div class="track-dot" style="background: var(--champagne); box-shadow: 0 0 8px rgba(245,237,204,0.3);"></div>
+        <span class="track-name">Strategy & Execution</span>
+        <span class="track-count">Track 2 of 4 · 3 modules</span>
+      </div>
+      <div class="module-grid">
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(245,237,204,0.08) 0%, rgba(212,175,55,0.1) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">TITM Day Trading Methodology</div>
+            <div class="module-card__desc">Apply the TITM framework from market structure read to disciplined entry, management, and exit.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(245,237,204,0.06) 0%, rgba(200,180,120,0.1) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">Reading the Alerts</div>
+            <div class="module-card__desc">Translate TITM alerts into actionable, risk-adjusted entries with context, conviction, and timing discipline.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(245,237,204,0.1) 0%, rgba(6,78,59,0.1) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">SPX Execution Mastery</div>
+            <div class="module-card__desc">Sharpen SPX contract selection, timeframe choice, spread logic, scaling, and weekly process review.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Track 3: Risk & Analytics -->
+    <div class="track-section">
+      <div class="track-header">
+        <div class="track-dot" style="background: #6366F1; box-shadow: 0 0 8px rgba(99,102,241,0.3);"></div>
+        <span class="track-name">Risk & Analytics</span>
+        <span class="track-count">Track 3 of 4 · 3 modules</span>
+      </div>
+      <div class="module-grid">
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(16,185,129,0.08) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">The Greeks Decoded</div>
+            <div class="module-card__desc">Understand delta, gamma, theta, and vega behavior in real SPX/NDX workflows and risk decisions.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(239,68,68,0.06) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">Risk Management Fundamentals</div>
+            <div class="module-card__desc">Build position sizing rules, daily risk limits, stop logic, and checklist discipline for consistent execution.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(16,185,129,0.1) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">LEAPS and Long-Term Positioning</div>
+            <div class="module-card__desc">Construct durable LEAPS positions with strike/expiry logic, portfolio allocation, and rolling plans.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Track 4: Performance & Mastery -->
+    <div class="track-section">
+      <div class="track-header">
+        <div class="track-dot" style="background: #F59E0B; box-shadow: 0 0 8px rgba(245,158,11,0.3);"></div>
+        <span class="track-name">Performance & Mastery</span>
+        <span class="track-count">Track 4 of 4 · 1 module</span>
+      </div>
+      <div class="module-grid">
+        <div class="glass-card module-card interactive">
+          <div class="module-card__thumb">
+            <div class="module-card__gradient" style="background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(239,68,68,0.06) 100%);"></div>
+            <span class="module-card__thumb-label">6 Lessons</span>
+          </div>
+          <div class="module-card__body">
+            <div class="module-card__title">Trading Psychology and Performance</div>
+            <div class="module-card__desc">Train emotional control, routine consistency, and reflective review to compound execution quality.</div>
+            <div class="module-card__meta">
+              <span>6 lessons</span>
+              <div class="module-card__meta-dot"></div>
+              <span>~36 min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- PAGE: Module Detail                      -->
+  <!-- ════════════════════════════════════════ -->
+  <div class="page" id="page-detail">
+    <div class="sub-nav">
+      <div class="sub-nav__item" onclick="showPage('dashboard')">Dashboard</div>
+      <div class="sub-nav__item active" onclick="showPage('catalog')">Modules</div>
+      <div class="sub-nav__item">Review</div>
+      <div class="sub-nav__item">Progress</div>
+    </div>
+
+    <div style="max-width: 720px; margin: 0 auto;">
+      <div class="module-detail__header">
+        <div class="module-detail__back" onclick="showPage('catalog')">← Back to Modules</div>
+        <div class="module-detail__title">Options 101: Understanding the Basics</div>
+        <div class="module-detail__desc">Master calls, puts, strikes, expiration, chain reading, and order execution with risk-aware paper practice.</div>
+        <div class="module-detail__stats">
+          <div class="module-detail__stat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+            6 lessons
+          </div>
+          <div class="module-detail__stat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            ~36 min
+          </div>
+          <div class="module-detail__stat">
+            <span style="color: #6EE7B7;">Foundations</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card" style="border-radius: var(--radius); overflow: hidden;">
+        <div class="lesson-list">
+          <div class="lesson-row" onclick="showPage('lesson')">
+            <div class="lesson-row__number completed">✓</div>
+            <div class="lesson-row__content">
+              <div class="lesson-row__title">What Are Options?</div>
+              <div class="lesson-row__objective">Learn the fundamentals of calls, puts, and how options derive value</div>
+            </div>
+            <div class="lesson-row__right">
+              <span class="lesson-row__duration">6 min</span>
+            </div>
+          </div>
+          <div class="lesson-row" onclick="showPage('lesson')">
+            <div class="lesson-row__number next">2</div>
+            <div class="lesson-row__content">
+              <div class="lesson-row__title">Calls vs Puts: When to Use Each</div>
+              <div class="lesson-row__objective">Understand the directional logic behind buying calls and puts</div>
+            </div>
+            <div class="lesson-row__right">
+              <span class="lesson-row__duration">6 min</span>
+              <span class="lesson-row__status" style="color: var(--champagne);">→</span>
+            </div>
+          </div>
+          <div class="lesson-row">
+            <div class="lesson-row__number">3</div>
+            <div class="lesson-row__content">
+              <div class="lesson-row__title">Strike Prices and Expiration Logic</div>
+              <div class="lesson-row__objective">How strike selection and time affect option pricing and probability</div>
+            </div>
+            <div class="lesson-row__right">
+              <span class="lesson-row__duration">6 min</span>
+              <span class="lesson-row__status" style="opacity:0.3">🔒</span>
+            </div>
+          </div>
+          <div class="lesson-row">
+            <div class="lesson-row__number">4</div>
+            <div class="lesson-row__content">
+              <div class="lesson-row__title">Reading the Options Chain</div>
+              <div class="lesson-row__objective">Navigate a real options chain to evaluate contracts and spreads</div>
+            </div>
+            <div class="lesson-row__right">
+              <span class="lesson-row__duration">6 min</span>
+              <span class="lesson-row__status" style="opacity:0.3">🔒</span>
+            </div>
+          </div>
+          <div class="lesson-row">
+            <div class="lesson-row__number">5</div>
+            <div class="lesson-row__content">
+              <div class="lesson-row__title">Placing Your First Options Order</div>
+              <div class="lesson-row__objective">Paper trade workflow — from thesis to execution to fill</div>
+            </div>
+            <div class="lesson-row__right">
+              <span class="lesson-row__duration">6 min</span>
+              <span class="lesson-row__status" style="opacity:0.3">🔒</span>
+            </div>
+          </div>
+          <div class="lesson-row">
+            <div class="lesson-row__number">6</div>
+            <div class="lesson-row__content">
+              <div class="lesson-row__title">Risk-Aware Practice Protocol</div>
+              <div class="lesson-row__objective">Apply position sizing and risk rules to simulated trades</div>
+            </div>
+            <div class="lesson-row__right">
+              <span class="lesson-row__duration">6 min</span>
+              <span class="lesson-row__status" style="opacity:0.3">🔒</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- PAGE: Lesson Viewer                      -->
+  <!-- ════════════════════════════════════════ -->
+  <div class="page" id="page-lesson">
+    <div class="lesson-viewer">
+      <div class="lesson-viewer__nav">
+        <div class="lesson-viewer__back" onclick="showPage('detail')">← Options 101</div>
+        <div class="lesson-viewer__position">Lesson 2 of 6</div>
+      </div>
+
+      <div class="lesson-viewer__title">Calls vs Puts: When to Use Each</div>
+
+      <div class="block-label concept">Concept</div>
+
+      <div class="lesson-content">
+        <p>A <strong>call option</strong> gives you the right to buy 100 shares of a stock at a specific price (the strike price) before a specific date (the expiration). You buy calls when you believe the underlying will move <strong>higher</strong>.</p>
+
+        <p>A <strong>put option</strong> gives you the right to sell 100 shares at the strike price before expiration. You buy puts when you believe the underlying will move <strong>lower</strong>.</p>
+
+        <h3>The Key Decision Framework</h3>
+
+        <p>Before choosing calls or puts, ask yourself three questions:</p>
+
+        <p><strong>1. What is my directional thesis?</strong> If bullish, you're looking at calls. If bearish, puts. If neutral, neither — consider spreads or stay flat.</p>
+
+        <p><strong>2. What is my time horizon?</strong> Options decay over time (theta). The further out your expiration, the more time you buy, but the more you pay. Match your expiration to your thesis timeline.</p>
+
+        <p><strong>3. What is my risk budget?</strong> The maximum you can lose on a long call or put is the premium you paid. Size accordingly — never risk more than 1-2% of your account on a single options trade.</p>
+
+        <div class="callout">
+          <div class="callout__label">Rule</div>
+          <div class="callout__body">Never buy an option without a clear directional thesis <em>and</em> a defined exit. "It might go up" is not a thesis. "SPX is holding above the 50-day moving average with rising volume, targeting 4,200 by Friday expiration" — that's a thesis.</div>
+        </div>
+
+        <p>In the next block, we'll walk through a real example comparing a call and put on the same underlying, so you can see how the risk/reward profile differs in practice.</p>
+      </div>
+
+      <div class="block-progress">
+        <div class="block-dots">
+          <div class="block-dot completed" title="Hook"></div>
+          <div class="block-dot current" title="Concept"></div>
+          <div class="block-dot upcoming" title="Worked Example"></div>
+          <div class="block-dot upcoming" title="Guided Practice"></div>
+          <div class="block-dot upcoming" title="Independent Practice"></div>
+        </div>
+        <div class="block-nav">
+          <button class="block-nav__btn secondary">← Hook</button>
+          <button class="block-nav__btn primary">Worked Example →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + pageId).classList.add('active');
+  document.querySelectorAll('.mockup-nav__btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  // Also highlight from sub-nav clicks
+  document.querySelectorAll('.mockup-nav__btn').forEach(b => {
+    if (b.textContent.trim().toLowerCase().includes(pageId === 'catalog' ? 'module catalog' : pageId === 'detail' ? 'module detail' : pageId === 'lesson' ? 'lesson' : pageId)) {
+      b.classList.add('active');
+    }
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setDevice(device) {
+  const frame = document.getElementById('frame');
+  frame.classList.remove('mobile', 'desktop');
+  frame.classList.add(device);
+  document.querySelectorAll('.mockup-nav__device-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
