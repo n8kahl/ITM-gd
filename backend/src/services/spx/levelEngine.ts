@@ -12,6 +12,7 @@ import {
   classifyZoneType,
   nowIso,
   round,
+  stableId,
   uuid,
 } from './utils';
 
@@ -206,6 +207,20 @@ function dedupeSources(sources: ClusterZone['sources']): ClusterZone['sources'] 
   return deduped;
 }
 
+function clusterSourceSignature(sources: ClusterZone['sources']): string {
+  return dedupeSources(sources)
+    .map((source) => `${source.instrument}:${source.category}:${source.source}:${round(source.price, 2)}`)
+    .sort()
+    .join('|');
+}
+
+function buildClusterId(priceLow: number, priceHigh: number, sources: ClusterZone['sources']): string {
+  return stableId(
+    'cluster',
+    `${round(priceLow, 2)}|${round(priceHigh, 2)}|${clusterSourceSignature(sources)}`,
+  );
+}
+
 function mergeOverlappingZones(zones: ClusterZone[]): ClusterZone[] {
   if (zones.length <= 1) return zones;
 
@@ -221,16 +236,19 @@ function mergeOverlappingZones(zones: ClusterZone[]): ClusterZone[] {
 
     const dominant = zone.clusterScore >= previous.clusterScore ? zone : previous;
     const mergedScore = round(Math.max(zone.clusterScore, previous.clusterScore), 2);
+    const mergedSources = dedupeSources([...previous.sources, ...zone.sources]);
+    const mergedLow = round(Math.min(previous.priceLow, zone.priceLow), 2);
+    const mergedHigh = round(Math.max(previous.priceHigh, zone.priceHigh), 2);
 
     merged[merged.length - 1] = {
       ...dominant,
-      id: uuid('cluster'),
-      priceLow: round(Math.min(previous.priceLow, zone.priceLow), 2),
-      priceHigh: round(Math.max(previous.priceHigh, zone.priceHigh), 2),
+      id: buildClusterId(mergedLow, mergedHigh, mergedSources),
+      priceLow: mergedLow,
+      priceHigh: mergedHigh,
       clusterScore: mergedScore,
       type: classifyZoneType(mergedScore),
       testCount: previous.testCount + zone.testCount,
-      sources: dedupeSources([...previous.sources, ...zone.sources]),
+      sources: mergedSources,
       holdRate: previous.holdRate == null && zone.holdRate == null
         ? null
         : round(((previous.holdRate || 0) + (zone.holdRate || 0)) / ((previous.holdRate != null ? 1 : 0) + (zone.holdRate != null ? 1 : 0)), 2),
@@ -282,18 +300,22 @@ export function buildClusterZones(levels: SPXLevel[]): ClusterZone[] {
       .sort()
       .pop() || null;
 
+    const priceLow = round(min - 0.25, 2);
+    const priceHigh = round(max + 0.25, 2);
+    const sources = dedupeSources(bucketLevels.map((level) => ({
+      source: level.source,
+      category: level.category,
+      price: round(level.price, 2),
+      instrument: level.symbol,
+    })));
+
     return {
-      id: uuid('cluster'),
-      priceLow: round(min - 0.25, 2),
-      priceHigh: round(max + 0.25, 2),
+      id: buildClusterId(priceLow, priceHigh, sources),
+      priceLow,
+      priceHigh,
       clusterScore: score,
       type: classifyZoneType(score),
-      sources: bucketLevels.map((level) => ({
-        source: level.source,
-        category: level.category,
-        price: round(level.price, 2),
-        instrument: level.symbol,
-      })),
+      sources,
       testCount,
       lastTestAt,
       held: holdRates.length > 0 ? holdRates.reduce((sum, value) => sum + value, 0) / holdRates.length >= 60 : null,

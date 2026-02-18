@@ -163,6 +163,38 @@ function setupRecencyEpoch(setup: Setup): number {
   return Math.max(toEpoch(setup.triggeredAt), toEpoch(setup.createdAt))
 }
 
+function roundTo(value: number, decimals = 2): number {
+  return Number(value.toFixed(decimals))
+}
+
+function setupSemanticKey(setup: Setup): string {
+  return [
+    setup.type,
+    setup.direction,
+    roundTo(setup.entryZone.low, 2),
+    roundTo(setup.entryZone.high, 2),
+    roundTo(setup.stop, 2),
+    roundTo(setup.target1.price, 2),
+    roundTo(setup.target2.price, 2),
+    setup.regime,
+  ].join('|')
+}
+
+function dedupeSetupsBySemanticKey(setups: Setup[]): Setup[] {
+  const ranked = rankSetups(setups)
+  const deduped: Setup[] = []
+  const seen = new Set<string>()
+
+  for (const setup of ranked) {
+    const key = setupSemanticKey(setup)
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(setup)
+  }
+
+  return rankSetups(deduped)
+}
+
 function shouldKeepExistingSetup(existing: Setup, incoming: Setup): boolean {
   const existingPriority = SETUP_STATUS_PRIORITY[existing.status]
   const incomingPriority = SETUP_STATUS_PRIORITY[incoming.status]
@@ -223,7 +255,7 @@ function mergeActionableSetups(existingSetups: Setup[], incomingSetups: Setup[])
     }
   }
 
-  return rankSetups(Array.from(merged.values()))
+  return dedupeSetupsBySemanticKey(Array.from(merged.values()))
 }
 
 function toFiniteNumber(value: unknown): number | null {

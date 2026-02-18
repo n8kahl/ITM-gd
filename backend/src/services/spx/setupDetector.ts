@@ -621,6 +621,49 @@ function deriveSetupTier(input: {
   return input.score >= 60 ? 'watchlist' : 'hidden';
 }
 
+function setupSemanticKey(setup: Setup): string {
+  return [
+    setup.type,
+    setup.direction,
+    round(setup.entryZone.low, 2),
+    round(setup.entryZone.high, 2),
+    round(setup.stop, 2),
+    round(setup.target1.price, 2),
+    round(setup.target2.price, 2),
+    setup.regime,
+  ].join('|');
+}
+
+function shouldReplaceSemanticDuplicate(existing: Setup, incoming: Setup): boolean {
+  const statusDelta = SETUP_STATUS_SORT_ORDER[incoming.status] - SETUP_STATUS_SORT_ORDER[existing.status];
+  if (statusDelta !== 0) return statusDelta < 0;
+
+  const incomingTier = incoming.tier || 'hidden';
+  const existingTier = existing.tier || 'hidden';
+  const tierDelta = SETUP_TIER_SORT_ORDER[incomingTier] - SETUP_TIER_SORT_ORDER[existingTier];
+  if (tierDelta !== 0) return tierDelta < 0;
+
+  if ((incoming.evR || 0) !== (existing.evR || 0)) return (incoming.evR || 0) > (existing.evR || 0);
+  if ((incoming.score || 0) !== (existing.score || 0)) return (incoming.score || 0) > (existing.score || 0);
+  if (incoming.probability !== existing.probability) return incoming.probability > existing.probability;
+
+  return toEpochMs(incoming.statusUpdatedAt || incoming.createdAt) > toEpochMs(existing.statusUpdatedAt || existing.createdAt);
+}
+
+function dedupeSetupsBySemanticKey(setups: Setup[]): Setup[] {
+  const deduped = new Map<string, Setup>();
+
+  for (const setup of setups) {
+    const key = setupSemanticKey(setup);
+    const existing = deduped.get(key);
+    if (!existing || shouldReplaceSemanticDuplicate(existing, setup)) {
+      deduped.set(key, setup);
+    }
+  }
+
+  return Array.from(deduped.values());
+}
+
 const SETUP_STATUS_SORT_ORDER: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -944,7 +987,9 @@ export async function detectActiveSetups(options?: {
   );
   pruneSetupContextState(activeContextIds, nowMs);
 
-  const rankedSetups = [...setups]
+  const dedupedSetups = dedupeSetupsBySemanticKey(setups);
+
+  const rankedSetups = [...dedupedSetups]
     .sort((a, b) => {
       const statusDelta = SETUP_STATUS_SORT_ORDER[a.status] - SETUP_STATUS_SORT_ORDER[b.status];
       if (statusDelta !== 0) return statusDelta;
