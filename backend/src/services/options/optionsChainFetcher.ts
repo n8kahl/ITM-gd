@@ -7,7 +7,7 @@ import {
   OptionsContract as MassiveOptionsContract,
   OptionsSnapshot
 } from '../../config/massive';
-import { getDailyAggregates } from '../../config/massive';
+import { getDailyAggregates, getMinuteAggregates } from '../../config/massive';
 import { getRiskFreeRate, getDividendYield } from '../../services/marketConstants';
 import { cacheGet, cacheSet } from '../../config/redis';
 import { toEasternTime } from '../marketHours';
@@ -71,13 +71,18 @@ async function getCurrentPrice(symbol: string): Promise<number> {
     const rtPrice = await getRealTimePrice(ticker);
     return rtPrice.price;
   } catch (error) {
-    logger.warn(`Real-time price failed for ${symbol}, falling back to daily aggregates`, { error: error instanceof Error ? error.message : String(error) });
+    logger.warn(`Real-time price failed for ${symbol}, falling back to intraday aggregates`, { error: error instanceof Error ? error.message : String(error) });
 
-    // Fallback: use daily aggregates
     const today = getCurrentEasternDate();
+    const minuteData = await getMinuteAggregates(ticker, today);
+    if (minuteData.length > 0) {
+      return minuteData[minuteData.length - 1].c;
+    }
+
+    logger.warn(`No intraday aggregate bars for ${symbol}, falling back to daily aggregates`);
+
     // 7-day lookback covers weekends + holidays
     const weekAgo = getCurrentEasternDate(new Date(Date.now() - 7 * 86400000));
-
     const data = await getDailyAggregates(ticker, weekAgo, today);
 
     if (data.length === 0) {

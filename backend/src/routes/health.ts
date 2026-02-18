@@ -6,6 +6,8 @@ import { testOpenAIConnection, openaiClient, CHAT_MODEL } from '../config/openai
 import { logger } from '../lib/logger';
 import { getWorkerHealthSnapshot } from '../services/workerHealth';
 import { getMassiveTickStreamStatus } from '../services/massiveTickStream';
+import { getLatestTick } from '../services/tickCache';
+import { getMarketStatus } from '../services/marketHours';
 
 const router = Router();
 
@@ -77,16 +79,26 @@ async function runReadinessChecks(): Promise<ReadinessResult> {
 
   const tickStream = getMassiveTickStreamStatus();
   const tickConnected = tickStream.enabled && tickStream.connected;
+  const latestSpxTick = getLatestTick('SPX');
+  const latestSpyTick = getLatestTick('SPY');
+  const latestTick = latestSpxTick || latestSpyTick;
+  const latestTickAgeMs = latestTick ? Math.max(0, Date.now() - latestTick.timestamp) : null;
+  const marketStatus = getMarketStatus();
+  const marketActive = marketStatus.status === 'open' || marketStatus.status === 'pre-market' || marketStatus.status === 'after-hours';
+  const tickFresh = latestTickAgeMs != null && latestTickAgeMs <= 15_000;
+  const tickHealthy = tickConnected && (!marketActive || tickFresh);
   checks.massive_tick_stream = {
-    status: tickConnected ? 'pass' : 'fail',
+    status: tickHealthy ? 'pass' : 'fail',
     latency: 0,
-    message: tickConnected
-      ? `connected (${tickStream.subscribedSymbols.join(', ') || 'no symbols'})`
+    message: tickHealthy
+      ? `connected (${tickStream.subscribedSymbols.join(', ') || 'no symbols'})${latestTickAgeMs != null ? ` · tick age ${Math.floor(latestTickAgeMs / 1000)}s` : ''}`
+      : tickConnected
+        ? `connected but stale ticks${latestTickAgeMs != null ? ` (${Math.floor(latestTickAgeMs / 1000)}s old)` : ''}`
       : tickStream.enabled
         ? 'enabled but disconnected'
         : 'disabled',
   };
-  if (process.env.NODE_ENV === 'production' && !tickConnected) {
+  if (process.env.NODE_ENV === 'production' && !tickHealthy) {
     overallHealthy = false;
   }
 
@@ -97,7 +109,7 @@ async function runReadinessChecks(): Promise<ReadinessResult> {
       database: checks.database?.status === 'pass',
       redis: checks.redis?.status === 'pass',
       massive: checks.massive?.status === 'pass',
-      massiveTick: tickConnected,
+      massiveTick: tickHealthy,
       openai: checks.openai?.status === 'pass',
     },
   };

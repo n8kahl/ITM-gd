@@ -126,7 +126,8 @@ export function ActionStrip() {
 
         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200" title="Number of trade setups currently in 'ready' or 'triggered' status">
           <Sparkles className="h-3 w-3" />
-          Setups: {setupPolicy.actionableVisibleCount} actionable
+          Setups: {setupPolicy.actionablePrimaryCount} sniper actionable
+          {setupPolicy.actionableSecondaryCount > 0 ? ` · ${setupPolicy.actionableSecondaryCount} queued` : ''}
           {setupPolicy.hiddenOppositeCount > 0 ? ` · ${setupPolicy.hiddenOppositeCount} hidden` : ''}
         </span>
 

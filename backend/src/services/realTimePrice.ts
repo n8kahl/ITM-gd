@@ -1,5 +1,5 @@
-
-import { getLastTrade, getLastQuote } from '../config/massive';
+import { getDailyAggregates, getLastQuote, getLastTrade, getMinuteAggregates } from '../config/massive';
+import { toEasternTime } from './marketHours';
 import { logger } from '../lib/logger';
 import { cacheGet, cacheSet } from '../config/redis';
 
@@ -18,6 +18,61 @@ export interface RealTimePrice {
 }
 
 const PRICE_CACHE_TTL = 5; // 5 seconds cache for real-time prices
+
+function getCurrentEasternDate(now: Date = new Date()): string {
+    return toEasternTime(now).dateStr;
+}
+
+function toMillisecondTimestamp(raw: unknown): number {
+    const numeric = typeof raw === 'number' && Number.isFinite(raw) ? raw : NaN;
+    if (!Number.isFinite(numeric) || numeric <= 0) return Date.now();
+    if (numeric >= 1e15) return Math.floor(numeric / 1_000_000); // ns -> ms
+    if (numeric >= 1e12) return Math.floor(numeric); // already ms
+    if (numeric >= 1e10) return Math.floor(numeric); // ms-scale
+    return Math.floor(numeric * 1000); // sec -> ms
+}
+
+async function getAggregateFallbackPrice(symbol: string): Promise<RealTimePrice | null> {
+    const today = getCurrentEasternDate();
+    const minuteData = await getMinuteAggregates(symbol, today);
+    if (minuteData.length > 0) {
+        const lastBar = minuteData[minuteData.length - 1];
+
+        return {
+            symbol,
+            price: lastBar.c,
+            bid: lastBar.c,
+            ask: lastBar.c,
+            mid: lastBar.c,
+            spread: 0,
+            spreadPct: 0,
+            size: 0,
+            timestamp: toMillisecondTimestamp((lastBar as { t?: number }).t),
+            exchange: 0,
+            source: 'aggregate_fallback',
+        };
+    }
+
+    const weekAgo = getCurrentEasternDate(new Date(Date.now() - 7 * 86400000));
+    const dailyData = await getDailyAggregates(symbol, weekAgo, today);
+    if (dailyData.length === 0) return null;
+
+    const lastBar = dailyData[dailyData.length - 1];
+
+    return {
+        symbol,
+        price: lastBar.c,
+        bid: lastBar.c,
+        ask: lastBar.c,
+        mid: lastBar.c,
+        spread: 0,
+        spreadPct: 0,
+        size: 0,
+        timestamp: toMillisecondTimestamp((lastBar as { t?: number }).t),
+        exchange: 0,
+        source: 'aggregate_fallback',
+    };
+}
 
 export async function getRealTimePrice(symbol: string): Promise<RealTimePrice> {
     const cacheKey = `price:realtime:${symbol}`;
@@ -59,7 +114,7 @@ export async function getRealTimePrice(symbol: string): Promise<RealTimePrice> {
             spread,
             spreadPct,
             size: trade?.s || 0,
-            timestamp: (trade?.t || Date.now()) / 1000000, // Massive uses nanoseconds
+            timestamp: toMillisecondTimestamp(trade?.t),
             exchange: trade?.x || 0,
             source: trade ? 'last_trade' : 'last_quote',
         };
@@ -69,8 +124,14 @@ export async function getRealTimePrice(symbol: string): Promise<RealTimePrice> {
 
     } catch (error: any) {
         logger.error(`Failed to fetch real-time price for ${symbol}`, { error: error.message });
-        // Fallback to simpler aggregation if needed, or propagate error
-        throw error;
+
+        const fallback = await getAggregateFallbackPrice(symbol);
+        if (!fallback) {
+            throw error;
+        }
+
+        await cacheSet(cacheKey, fallback, PRICE_CACHE_TTL);
+        return fallback;
     }
 }
 

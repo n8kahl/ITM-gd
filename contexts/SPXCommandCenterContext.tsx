@@ -529,8 +529,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   const spxStreamPrice = stream.prices.get('SPX')
   const spyStreamPrice = stream.prices.get('SPY')
+  const snapshotPriceTimestamp = snapshotData?.basis?.timestamp || snapshotData?.generatedAt || null
   const spxPrice = spxStreamPrice?.price ?? snapshotData?.basis?.spxPrice ?? 0
-  const spxTickTimestamp = spxStreamPrice?.timestamp ?? null
+  const spxTickTimestamp = spxStreamPrice?.timestamp ?? snapshotPriceTimestamp
   const spxPriceSource = spxStreamPrice?.source ?? (snapshotData?.basis?.spxPrice ? 'snapshot' : null)
   const spxPriceAgeMs = spxStreamPrice?.feedAgeMs ?? calculateAgeMs(spxTickTimestamp)
   const spyPrice = spyStreamPrice?.price ?? snapshotData?.basis?.spyPrice ?? 0
@@ -944,7 +945,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     && spxPriceAgeMs > POLL_FRESHNESS_STALE_MS
   const dataHealth = useMemo<'healthy' | 'degraded' | 'stale'>(() => {
     if (snapshotIsDegraded || error || snapshotRequestLate) return 'degraded'
-    if (stream.isConnected && (spxPriceSource === 'poll' || tickSourceStale || pollSourceStale)) return 'stale'
+    if (stream.isConnected && (spxPriceSource === 'poll' || spxPriceSource === 'snapshot' || tickSourceStale || pollSourceStale)) return 'stale'
     if (!stream.isConnected && Boolean(snapshotData?.generatedAt)) return 'stale'
     return 'healthy'
   }, [
@@ -974,6 +975,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
     if (spxPriceSource === 'poll' && stream.isConnected) {
       return 'Live tick feed unavailable. Streaming over poll fallback, so chart and price updates may lag.'
+    }
+    if (spxPriceSource === 'snapshot' && stream.isConnected) {
+      return 'WebSocket connected but no live price packets received yet. Running on snapshot fallback.'
     }
     if (pollSourceStale) {
       return 'Poll fallback data is stale. Waiting for fresher provider bars or tick feed recovery.'

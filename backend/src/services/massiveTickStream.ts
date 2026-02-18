@@ -56,6 +56,23 @@ function parseSymbols(symbolsCsv: string): string[] {
   return Array.from(new Set(symbols));
 }
 
+function filterStreamCompatibleSymbols(symbols: string[], wsUrl: string): string[] {
+  const isIndexSocket = /\/indices(?:$|[/?#])/i.test(wsUrl);
+  if (!isIndexSocket) return symbols;
+
+  const compatible = symbols.filter((symbol) => formatMassiveTicker(symbol).startsWith('I:'));
+  const dropped = symbols.filter((symbol) => !compatible.includes(symbol));
+
+  if (dropped.length > 0) {
+    logger.warn('Massive tick stream dropped non-index symbols for indices socket', {
+      droppedSymbols: dropped,
+      wsUrl,
+    });
+  }
+
+  return compatible;
+}
+
 function toSubscriptionParams(symbols: string[], eventPrefix: string): string {
   const prefix = eventPrefix.trim();
   const channels = symbols.map((symbol) => `${prefix}${formatMassiveTicker(symbol)}`);
@@ -280,7 +297,10 @@ export function startMassiveTickStream(): void {
     return;
   }
 
-  subscribedSymbols = parseSymbols(env.MASSIVE_TICK_SYMBOLS);
+  subscribedSymbols = filterStreamCompatibleSymbols(
+    parseSymbols(env.MASSIVE_TICK_SYMBOLS),
+    env.MASSIVE_TICK_WS_URL,
+  );
   if (subscribedSymbols.length === 0) {
     logger.warn('Massive tick stream disabled: no symbols configured');
     return;

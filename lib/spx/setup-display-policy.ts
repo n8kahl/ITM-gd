@@ -20,6 +20,9 @@ interface BuildSetupDisplayPolicyResult {
   hiddenOppositeCount: number
   directionalBias: Setup['direction'] | null
   compressionFilterActive: boolean
+  actionablePrimaryCount: number
+  actionableSecondaryCount: number
+  actionableTotalCount: number
   actionableVisibleCount: number
 }
 
@@ -80,6 +83,9 @@ export function buildSetupDisplayPolicy(input: BuildSetupDisplayPolicyInput): Bu
     hiddenOppositeCount,
     directionalBias,
     compressionFilterActive,
+    actionablePrimaryCount: actionablePrimary.length,
+    actionableSecondaryCount: Math.max(actionableFiltered.length - actionablePrimary.length, 0),
+    actionableTotalCount: actionableFiltered.length,
     actionableVisibleCount: actionableFiltered.length,
   }
 }

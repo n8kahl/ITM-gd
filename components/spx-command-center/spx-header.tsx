@@ -170,7 +170,10 @@ export function SPXHeader() {
                 {tradePnlPoints != null ? ` · ${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts` : ''}
               </span>
             ) : (
-              <span className="text-white/75">{actionableCount.actionableVisibleCount} setups actionable</span>
+              <span className="text-white/75">
+                {actionableCount.actionablePrimaryCount} sniper actionable
+                {actionableCount.actionableSecondaryCount > 0 ? ` · ${actionableCount.actionableSecondaryCount} queued` : ''}
+              </span>
             )}
             {actionableCount.hiddenOppositeCount > 0 && (
               <>

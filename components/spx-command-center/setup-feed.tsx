@@ -50,7 +50,10 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
       <div className="relative z-10 flex items-center justify-between">
         <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">Setup Feed</h3>
         <span className="text-[10px] font-mono text-emerald-200/80">
-          {policy.actionableVisibleCount} actionable
+          {policy.actionablePrimaryCount} sniper
+          {policy.actionableTotalCount > policy.actionablePrimaryCount
+            ? ` · ${policy.actionableTotalCount} total`
+            : ''}
         </span>
       </div>
 
