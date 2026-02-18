@@ -59,6 +59,73 @@ export function resolveBlockImage(block: LessonBlockLike, lessonImageUrl: string
   return BLOCK_IMAGE_BY_TYPE[block.blockType] || lessonImageUrl
 }
 
+function toMarkdownFromStructuredRecord(content: Record<string, unknown>): string | null {
+  const title = typeof content.title === 'string' ? content.title.trim() : ''
+  const description = typeof content.description === 'string' ? content.description.trim() : ''
+  const componentId = typeof content.component_id === 'string' ? content.component_id.trim() : ''
+
+  const lines: string[] = []
+
+  if (title.length > 0) {
+    lines.push(`### ${title}`)
+  }
+
+  if (description.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push(description)
+  }
+
+  if (componentId.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push(`**Interactive component:** \`${componentId}\``)
+  }
+
+  const annotations = Array.isArray(content.annotations)
+    ? content.annotations.filter(
+        (item): item is { label?: unknown; value?: unknown } => typeof item === 'object' && item !== null
+      )
+    : []
+
+  if (annotations.length > 0) {
+    const annotationLines = annotations
+      .map((annotation) => {
+        const label = typeof annotation.label === 'string' ? annotation.label.trim() : ''
+        if (!label) return null
+        const value = typeof annotation.value === 'number' ? String(annotation.value) : null
+        return value ? `- ${label}: ${value}` : `- ${label}`
+      })
+      .filter((line): line is string => Boolean(line))
+
+    if (annotationLines.length > 0) {
+      if (lines.length > 0) lines.push('')
+      lines.push('**Key levels:**')
+      lines.push(...annotationLines)
+    }
+  }
+
+  return lines.length > 0 ? lines.join('\n') : '_Interactive content available for this block._'
+}
+
+function toMarkdownFromStructuredString(rawContent: string): string | null {
+  const trimmed = rawContent.trim()
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null
+  }
+
+  return toMarkdownFromStructuredRecord(parsed as Record<string, unknown>)
+}
+
 export function getBlockMarkdown(contentJson: Record<string, unknown>): string {
   const markdown = contentJson.markdown
   if (typeof markdown === 'string' && markdown.trim().length > 0) {
@@ -67,7 +134,13 @@ export function getBlockMarkdown(contentJson: Record<string, unknown>): string {
 
   const content = contentJson.content
   if (typeof content === 'string' && content.trim().length > 0) {
-    return content
+    const structuredContent = toMarkdownFromStructuredString(content)
+    return structuredContent ?? content
+  }
+
+  if (typeof content === 'object' && content !== null && !Array.isArray(content)) {
+    const structuredContent = toMarkdownFromStructuredRecord(content as Record<string, unknown>)
+    if (structuredContent) return structuredContent
   }
 
   return '_No block content available for this lesson step yet._'
