@@ -1,4 +1,4 @@
-import { convertSpyPriceToSpx, convertSpxPriceToSpy, getBasisState } from '../crossReference';
+import { convertSpyPriceToSpx, convertSpxPriceToSpy, getBasisState, getSpyImpactState } from '../crossReference';
 import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { cacheGet, cacheSet } from '../../../config/redis';
 
@@ -84,5 +84,26 @@ describe('spx/crossReference', () => {
     expect(['expanding', 'contracting', 'stable']).toContain(basis.trend);
     expect(['SPX', 'SPY', 'neutral']).toContain(basis.leading);
     expect(mockCacheSet).toHaveBeenCalled();
+  });
+
+  it('builds SPY impact projection state from basis and gex levels', async () => {
+    const basis = await getBasisState({ forceRefresh: true });
+    const impact = await getSpyImpactState({ forceRefresh: true, basisState: basis });
+
+    expect(impact.beta).toBeGreaterThan(0);
+    expect(impact.spot.spx).toBeCloseTo(basis.spxPrice, 2);
+    expect(impact.spot.spy).toBeCloseTo(basis.spyPrice, 2);
+    expect(impact.levels.length).toBeGreaterThan(0);
+    expect(impact.levels[0]).toEqual(expect.objectContaining({
+      source: expect.any(String),
+      spyLevel: expect.any(Number),
+      projectedSpx: expect.any(Number),
+      impactSpxPoints: expect.any(Number),
+      confidence: expect.any(Number),
+      confidenceBand: expect.objectContaining({
+        low: expect.any(Number),
+        high: expect.any(Number),
+      }),
+    }));
   });
 });

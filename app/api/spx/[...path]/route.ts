@@ -174,6 +174,17 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
         ema20: 0,
         zscore: 0,
       },
+      spyImpact: {
+        beta: 10,
+        correlation: 0,
+        basisUsed: 0,
+        spot: {
+          spx: 0,
+          spy: 0,
+        },
+        levels: [],
+        timestamp: new Date().toISOString(),
+      },
       regime: {
         regime: 'compression',
         direction: 'neutral',

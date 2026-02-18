@@ -9,6 +9,7 @@ import type {
   GEXProfile,
   PredictionState,
   Regime,
+  SpyImpactState,
   Setup,
   SPXLevel,
 } from '@/lib/types/spx-command-center'
@@ -46,6 +47,7 @@ interface SPXSnapshotResponse {
     combined: GEXProfile
   }
   basis: BasisState
+  spyImpact: SpyImpactState
   setups: Setup[]
   regime: SPXSnapshotRegimeState
   prediction: PredictionState

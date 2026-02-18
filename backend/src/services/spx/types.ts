@@ -86,6 +86,24 @@ export interface BasisState {
   timestamp: string;
 }
 
+export interface SpyImpactLevel {
+  source: string;
+  spyLevel: number;
+  projectedSpx: number;
+  impactSpxPoints: number;
+  confidence: number;
+  confidenceBand: { low: number; high: number };
+}
+
+export interface SpyImpactState {
+  beta: number;
+  correlation: number;
+  basisUsed: number;
+  spot: { spx: number; spy: number };
+  levels: SpyImpactLevel[];
+  timestamp: string;
+}
+
 export interface ContractRecommendation {
   description: string;
   strike: number;
@@ -226,6 +244,7 @@ export interface SPXSnapshot {
   fibLevels: FibLevel[];
   gex: UnifiedGEXLandscape;
   basis: BasisState;
+  spyImpact: SpyImpactState;
   setups: Setup[];
   regime: RegimeState;
   prediction: PredictionState;

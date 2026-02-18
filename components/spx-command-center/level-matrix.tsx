@@ -12,7 +12,7 @@ const CATEGORIES: Array<{ value: LevelCategory; label: string }> = [
   { value: 'tactical', label: 'Tactical' },
   { value: 'intraday', label: 'Intraday' },
   { value: 'options', label: 'Options' },
-  { value: 'spy_derived', label: 'SPY' },
+  { value: 'spy_derived', label: 'SPY Impact' },
   { value: 'fibonacci', label: 'Fib' },
 ]
 
@@ -104,7 +104,7 @@ export function LevelMatrix() {
               : 'border-white/20 bg-white/[0.03] text-white/50',
           )}
         >
-          SPY Overlay
+          SPY Impact Overlay
         </button>
       </div>
 
@@ -127,7 +127,9 @@ export function LevelMatrix() {
             {simplified.map((level) => (
               <tr key={level.id} className="border-t border-white/5 text-white/80 hover:bg-white/[0.03]">
                 <td className="px-2 py-1.5 truncate max-w-[160px]">{level.source}</td>
-                <td className="px-2 py-1.5 uppercase text-[10px] text-white/55">{level.category.replace('_', ' ')}</td>
+                <td className="px-2 py-1.5 uppercase text-[10px] text-white/55">
+                  {level.category === 'spy_derived' ? 'spy impact' : level.category.replace('_', ' ')}
+                </td>
                 <td className="px-2 py-1.5 text-right font-mono">{level.price.toFixed(2)}</td>
               </tr>
             ))}

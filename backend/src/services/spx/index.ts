@@ -1,7 +1,7 @@
 import { getPredictionState } from './aiPredictor';
 import { getCoachState } from './aiCoach';
 import { getContractRecommendation } from './contractSelector';
-import { getBasisState } from './crossReference';
+import { getBasisState, getSpyImpactState } from './crossReference';
 import { getFibLevels } from './fibEngine';
 import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
@@ -14,6 +14,7 @@ import type {
   CoachMessage,
   PredictionState,
   RegimeState,
+  SpyImpactState,
   SPXSnapshot,
   UnifiedGEXLandscape,
 } from './types';
@@ -27,6 +28,7 @@ const SNAPSHOT_STAGE_TIMEOUTS_MS = {
   gex: 12_000,
   flow: 4_000,
   basis: 4_000,
+  spyImpact: 4_000,
   fib: 5_000,
   levels: 5_000,
   regime: 4_000,
@@ -101,6 +103,24 @@ function createNeutralBasisState(gex: UnifiedGEXLandscape, snapshot: SPXSnapshot
     zscore: 0,
     spxPrice: gex.spx.spotPrice,
     spyPrice: gex.spy.spotPrice,
+    timestamp: nowIso(),
+  };
+}
+
+function createNeutralSpyImpactState(basis: BasisState, snapshot: SPXSnapshot | null): SpyImpactState {
+  if (snapshot?.spyImpact) {
+    return snapshot.spyImpact;
+  }
+
+  return {
+    beta: 10,
+    correlation: 0,
+    basisUsed: basis.current,
+    spot: {
+      spx: basis.spxPrice,
+      spy: basis.spyPrice,
+    },
+    levels: [],
     timestamp: nowIso(),
   };
 }
@@ -190,6 +210,13 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     forceRefresh,
     run: () => getBasisState({ forceRefresh, gexLandscape: gex }),
     fallback: () => createNeutralBasisState(gex, fallbackSnapshot),
+  });
+
+  const spyImpact = await withStageFallback({
+    stage: 'spyImpact',
+    forceRefresh,
+    run: () => getSpyImpactState({ forceRefresh, basisState: basis, gexLandscape: gex }),
+    fallback: () => createNeutralSpyImpactState(basis, fallbackSnapshot),
   });
 
   const fibLevels = await withStageFallback({
@@ -289,6 +316,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     fibLevels,
     gex,
     basis,
+    spyImpact,
     setups,
     regime,
     prediction,

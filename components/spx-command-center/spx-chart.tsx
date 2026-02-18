@@ -146,7 +146,7 @@ export function SPXChart() {
       strength: level.strength,
       description: typeof level.metadata.description === 'string'
         ? level.metadata.description
-        : `${chartLevelLabel(level)}${isSpyDerivedLevel(level) ? ' (SPY-derived conversion)' : ''}`,
+        : `${chartLevelLabel(level)}${isSpyDerivedLevel(level) ? ' (SPY impact projection)' : ''}`,
       testsToday: typeof level.metadata.testsToday === 'number' ? level.metadata.testsToday : undefined,
       lastTest: typeof level.metadata.lastTestAt === 'string' ? level.metadata.lastTestAt : null,
       holdRate: typeof level.metadata.holdRate === 'number' ? level.metadata.holdRate : null,

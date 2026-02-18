@@ -17,6 +17,7 @@ import type {
   PredictionState,
   Regime,
   Setup,
+  SpyImpactState,
   SPXLevel,
 } from '@/lib/types/spx-command-center'
 
@@ -59,6 +60,7 @@ interface SPXCommandCenterState {
   priceStreamConnected: boolean
   priceStreamError: string | null
   basis: BasisState | null
+  spyImpact: SpyImpactState | null
   regime: Regime | null
   prediction: PredictionState | null
   levels: SPXLevel[]
@@ -970,6 +972,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     priceStreamConnected: stream.isConnected,
     priceStreamError: stream.error,
     basis: snapshotData?.basis || null,
+    spyImpact: snapshotData?.spyImpact || null,
     regime: snapshotData?.regime?.regime || null,
     prediction: snapshotData?.prediction || null,
     levels: filteredLevels,
