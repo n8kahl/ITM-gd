@@ -56,7 +56,8 @@ interface SPXSnapshotResponse {
   generatedAt: string
 }
 
-const SNAPSHOT_BASE_REFRESH_MS = 5_000
+// Price/mini-bars stream over websocket; slower snapshot cadence reduces UI churn.
+const SNAPSHOT_BASE_REFRESH_MS = 8_000
 const SNAPSHOT_MAX_REFRESH_MS = 120_000
 const SNAPSHOT_TRANSIENT_ERROR_PATTERN = /(502|503|unavailable|degraded|timeout)/i
 

@@ -5,6 +5,18 @@ import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { SetupCard } from '@/components/spx-command-center/setup-card'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
+import type { Setup } from '@/lib/types/spx-command-center'
+
+function prioritizeSelected(setups: Setup[], selectedSetupId: string | null): Setup[] {
+  if (!selectedSetupId) return setups
+  const selectedIndex = setups.findIndex((setup) => setup.id === selectedSetupId)
+  if (selectedIndex <= 0) return setups
+  const next = [...setups]
+  const [selected] = next.splice(selectedIndex, 1)
+  if (!selected) return setups
+  next.unshift(selected)
+  return next
+}
 
 export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
   const {
@@ -16,9 +28,13 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
     prediction,
     tradeMode,
     inTradeSetup,
+    inTradeContract,
     tradeEntryPrice,
+    tradeEntryContractMid,
+    tradeCurrentContractMid,
     tradeEnteredAt,
     tradePnlPoints,
+    tradePnlDollars,
     enterTrade,
     exitTrade,
   } = useSPXCommandCenter()
@@ -35,8 +51,15 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
     }),
     [activeSetups, regime, prediction, selectedSetup],
   )
-  const actionable = inTradeSetup ? [inTradeSetup] : policy.actionablePrimary
-  const secondaryActionable = inTradeSetup ? [] : policy.actionableSecondary
+  const actionable = useMemo(
+    () => prioritizeSelected(inTradeSetup ? [inTradeSetup] : policy.actionablePrimary, selectedSetup?.id || null),
+    [inTradeSetup, policy.actionablePrimary, selectedSetup?.id],
+  )
+  const secondaryActionable = useMemo(() => {
+    if (inTradeSetup) return []
+    const prioritized = prioritizeSelected(policy.actionableSecondary, selectedSetup?.id || null)
+    return prioritized.filter((setup) => !actionable.some((primary) => primary.id === setup.id))
+  }, [actionable, inTradeSetup, policy.actionableSecondary, selectedSetup?.id])
   const hiddenByTradeFocusCount = inTradeSetup ? Math.max(policy.actionableVisibleCount - 1, 0) : 0
   const forming = inTradeSetup ? [] : policy.forming
   const selectedEnterable = Boolean(selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
@@ -82,7 +105,16 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                 {' · '}
                 P&L {tradePnlPoints == null ? '--' : `${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts`}
                 {' · '}
+                Contract {tradePnlDollars == null ? '--' : `${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}`}
+                {' · '}
                 Started {tradeEnteredAt ? new Date(tradeEnteredAt).toLocaleTimeString() : '--'}
+              </p>
+              <p className="text-[9px] text-white/45">
+                {inTradeContract?.description || 'No contract locked'}
+                {' · '}
+                Entry mid {tradeEntryContractMid != null ? tradeEntryContractMid.toFixed(2) : '--'}
+                {' · '}
+                Mark {tradeCurrentContractMid != null ? tradeCurrentContractMid.toFixed(2) : '--'}
               </p>
             </div>
           ) : (

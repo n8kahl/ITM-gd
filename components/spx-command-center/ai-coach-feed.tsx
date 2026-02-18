@@ -29,7 +29,18 @@ const IN_TRADE_ACTIONS = [
 ] as const
 
 export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
-  const { coachMessages, selectedSetup, activeSetups, sendCoachMessage, tradeMode, inTradeSetup } = useSPXCommandCenter()
+  const {
+    coachMessages,
+    selectedSetup,
+    activeSetups,
+    sendCoachMessage,
+    tradeMode,
+    inTradeSetup,
+    inTradeContract,
+    tradeEntryContractMid,
+    tradeCurrentContractMid,
+    tradePnlDollars,
+  } = useSPXCommandCenter()
   const [prompt, setPrompt] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -116,7 +127,10 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     setSendError(null)
     setIsSending(true)
     try {
-      await sendCoachMessage(text, scopedSetup?.id)
+      const contractContext = tradeMode === 'in_trade' && inTradeContract
+        ? `\nContract: ${inTradeContract.description}\nEntry mid: ${tradeEntryContractMid?.toFixed(2) ?? '--'}\nCurrent mid: ${tradeCurrentContractMid?.toFixed(2) ?? '--'}\nContract P&L: ${tradePnlDollars == null ? '--' : `${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}`}`
+        : ''
+      await sendCoachMessage(`${text}${contractContext}`, scopedSetup?.id)
       setPrompt('')
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Coach request failed. Please try again.')

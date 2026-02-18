@@ -34,11 +34,48 @@ function costBandTone(costBand: ContractRecommendation['costBand']): string {
   return 'text-champagne'
 }
 
-export function ContractCard({ contract }: { contract: ContractRecommendation }) {
+function contractSignature(contract: ContractRecommendation): string {
+  return [contract.type, contract.strike, contract.expiry, contract.description].join('|')
+}
+
+function alternativeToContract(
+  primary: ContractRecommendation,
+  alternative: NonNullable<ContractRecommendation['alternatives']>[number],
+): ContractRecommendation {
+  const primaryMid = ((primary.bid + primary.ask) / 2) || 0.01
+  const alternativeMid = ((alternative.bid + alternative.ask) / 2) || 0.01
+  const pnlScale = alternativeMid / primaryMid
+
+  return {
+    ...primary,
+    ...alternative,
+    gamma: primary.gamma,
+    theta: primary.theta,
+    vega: primary.vega,
+    riskReward: primary.riskReward,
+    expectedPnlAtTarget1: Number((primary.expectedPnlAtTarget1 * pnlScale).toFixed(2)),
+    expectedPnlAtTarget2: Number((primary.expectedPnlAtTarget2 * pnlScale).toFixed(2)),
+    reasoning: alternative.tradeoff || primary.reasoning,
+    premiumMid: alternativeMid * 100,
+    premiumAsk: alternative.ask * 100,
+  }
+}
+
+export function ContractCard({
+  contract,
+  selectedContractSignature,
+  onSelectContract,
+}: {
+  contract: ContractRecommendation
+  selectedContractSignature?: string | null
+  onSelectContract?: (contract: ContractRecommendation) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const spread = spreadPct(contract)
   const health = spreadHealth(spread)
   const contractHealth = healthTone(contract.healthTier)
+  const currentSignature = contractSignature(contract)
+  const isPrimarySelected = !selectedContractSignature || selectedContractSignature === currentSignature
 
   // R:R visual bar — loss zone (red) | profit zone (green) with T1/T2 markers
   const maxLossAbs = Math.abs(contract.maxLoss)
@@ -57,6 +94,11 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
           <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.1em] text-emerald-200">
             AI Pick
           </span>
+          {isPrimarySelected && (
+            <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-emerald-100">
+              Selected
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {typeof contract.healthScore === 'number' && (
@@ -69,6 +111,18 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
           <span className="text-[9px] text-white/50">{health.label}</span>
         </div>
       </div>
+
+      {onSelectContract && !isPrimarySelected && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => onSelectContract(contract)}
+            className="rounded border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 hover:bg-emerald-500/22"
+          >
+            Use AI Pick
+          </button>
+        </div>
+      )}
 
       {/* Visual R:R bar */}
       <div className="mt-2.5">
@@ -214,28 +268,49 @@ export function ContractCard({ contract }: { contract: ContractRecommendation })
           {Array.isArray(contract.alternatives) && contract.alternatives.length > 0 && (
             <div className="space-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-2">
               <p className="text-[9px] uppercase tracking-[0.1em] text-white/45">Alternative Contracts</p>
-              {contract.alternatives.map((alternative) => (
-                <div key={`${alternative.description}-${alternative.score}`} className="grid grid-cols-5 gap-2 text-[9px]">
-                  <span className="font-mono text-white/70">
-                    {alternative.description}
-                    {alternative.tag && (
-                      <span className="ml-1 rounded border border-emerald-300/25 bg-emerald-500/10 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-200">
-                        {alternative.tag.replace('_', ' ')}
-                      </span>
+              {contract.alternatives.map((alternative) => {
+                const alternativeContract = alternativeToContract(contract, alternative)
+                const alternativeSignature = contractSignature(alternativeContract)
+                const isAlternativeSelected = selectedContractSignature === alternativeSignature
+
+                return (
+                  <button
+                    key={`${alternative.description}-${alternative.score}`}
+                    type="button"
+                    onClick={() => onSelectContract?.(alternativeContract)}
+                    className={cn(
+                      'grid w-full grid-cols-5 gap-2 rounded border px-1.5 py-1 text-left text-[9px] transition-colors',
+                      isAlternativeSelected
+                        ? 'border-emerald-300/40 bg-emerald-500/12'
+                        : 'border-transparent hover:border-white/15 hover:bg-white/[0.03]',
                     )}
-                  </span>
-                  <span className="font-mono text-white/50">Δ {alternative.delta.toFixed(2)}</span>
-                  <span className="font-mono text-white/50">${alternative.ask.toFixed(2)} ask</span>
-                  <span className="font-mono text-white/45">{alternative.spreadPct.toFixed(1)}% sprd</span>
-                  <span className="font-mono text-white/45">
-                    {alternative.liquidityScore.toFixed(0)} liq
-                    {typeof alternative.healthScore === 'number' ? ` · H${alternative.healthScore.toFixed(0)}` : ''}
-                  </span>
-                  {alternative.tradeoff && (
-                    <span className="col-span-5 text-[8px] text-white/45">{alternative.tradeoff}</span>
-                  )}
-                </div>
-              ))}
+                  >
+                    <span className="font-mono text-white/70">
+                      {alternative.description}
+                      {isAlternativeSelected && (
+                        <span className="ml-1 rounded border border-emerald-300/35 bg-emerald-500/15 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-100">
+                          selected
+                        </span>
+                      )}
+                      {alternative.tag && (
+                        <span className="ml-1 rounded border border-emerald-300/25 bg-emerald-500/10 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-200">
+                          {alternative.tag.replace('_', ' ')}
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-mono text-white/50">Δ {alternative.delta.toFixed(2)}</span>
+                    <span className="font-mono text-white/50">${alternative.ask.toFixed(2)} ask</span>
+                    <span className="font-mono text-white/45">{alternative.spreadPct.toFixed(1)}% sprd</span>
+                    <span className="font-mono text-white/45">
+                      {alternative.liquidityScore.toFixed(0)} liq
+                      {typeof alternative.healthScore === 'number' ? ` · H${alternative.healthScore.toFixed(0)}` : ''}
+                    </span>
+                    {alternative.tradeoff && (
+                      <span className="col-span-5 text-[8px] text-white/45">{alternative.tradeoff}</span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           )}
           <p className="text-[10px] text-white/55 leading-relaxed">{contract.reasoning}</p>

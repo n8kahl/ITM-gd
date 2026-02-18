@@ -74,9 +74,14 @@ interface SPXCommandCenterState {
   tradeMode: TradeMode
   inTradeSetup: Setup | null
   inTradeSetupId: string | null
+  selectedSetupContract: ContractRecommendation | null
+  inTradeContract: ContractRecommendation | null
   tradeEntryPrice: number | null
   tradeEnteredAt: string | null
   tradePnlPoints: number | null
+  tradeEntryContractMid: number | null
+  tradeCurrentContractMid: number | null
+  tradePnlDollars: number | null
   selectedTimeframe: ChartTimeframe
   setChartTimeframe: (timeframe: ChartTimeframe) => void
   visibleLevelCategories: Set<LevelCategory>
@@ -97,6 +102,7 @@ interface SPXCommandCenterState {
   isLoading: boolean
   error: Error | null
   selectSetup: (setup: Setup | null) => void
+  setSetupContractChoice: (setup: Setup | null, contract: ContractRecommendation | null) => void
   enterTrade: (setup?: Setup | null) => void
   exitTrade: () => void
   toggleLevelCategory: (category: LevelCategory) => void
@@ -274,10 +280,56 @@ function calculateAgeMs(timestamp: string | null | undefined): number | null {
   return Math.max(Date.now() - parsed, 0)
 }
 
+function contractSignature(contract: ContractRecommendation | null | undefined): string | null {
+  if (!contract) return null
+  return [
+    contract.type,
+    contract.strike,
+    contract.expiry,
+    contract.description,
+  ].join('|')
+}
+
+function contractMid(contract: ContractRecommendation | null | undefined): number | null {
+  if (!contract) return null
+  if (typeof contract.premiumMid === 'number' && Number.isFinite(contract.premiumMid)) {
+    return contract.premiumMid / 100
+  }
+  if (Number.isFinite(contract.bid) && Number.isFinite(contract.ask) && contract.bid > 0 && contract.ask > 0) {
+    return (contract.bid + contract.ask) / 2
+  }
+  if (Number.isFinite(contract.ask) && contract.ask > 0) return contract.ask
+  if (Number.isFinite(contract.bid) && contract.bid > 0) return contract.bid
+  return null
+}
+
+function findContractBySignature(setup: Setup | null, signature: string | null): ContractRecommendation | null {
+  if (!setup || !signature) return null
+  const primary = setup.recommendedContract ? [setup.recommendedContract] : []
+  const alternatives = Array.isArray(setup.recommendedContract?.alternatives)
+    ? setup.recommendedContract.alternatives
+    : []
+  const candidates = [...primary, ...alternatives.map((alt) => ({
+    ...alt,
+    gamma: setup.recommendedContract?.gamma ?? 0,
+    theta: setup.recommendedContract?.theta ?? 0,
+    vega: setup.recommendedContract?.vega ?? 0,
+    riskReward: setup.recommendedContract?.riskReward ?? 0,
+    expectedPnlAtTarget1: setup.recommendedContract?.expectedPnlAtTarget1 ?? 0,
+    expectedPnlAtTarget2: setup.recommendedContract?.expectedPnlAtTarget2 ?? 0,
+    reasoning: setup.recommendedContract?.reasoning ?? 'Alternative candidate',
+    premiumMid: typeof alt.ask === 'number' && typeof alt.bid === 'number' ? ((alt.ask + alt.bid) / 2) * 100 : undefined,
+    premiumAsk: typeof alt.ask === 'number' ? alt.ask * 100 : undefined,
+  } as ContractRecommendation))]
+  return candidates.find((candidate) => contractSignature(candidate) === signature) || null
+}
+
 interface PersistedTradeFocusState {
   setupId: string
   entryPrice: number | null
   enteredAt: string
+  contract: ContractRecommendation | null
+  entryContractMid: number | null
 }
 
 function loadPersistedTradeFocus(): PersistedTradeFocusState | null {
@@ -294,6 +346,12 @@ function loadPersistedTradeFocus(): PersistedTradeFocusState | null {
         ? parsed.entryPrice
         : null,
       enteredAt: parsed.enteredAt,
+      contract: parsed.contract && typeof parsed.contract === 'object'
+        ? parsed.contract as ContractRecommendation
+        : null,
+      entryContractMid: typeof parsed.entryContractMid === 'number' && Number.isFinite(parsed.entryContractMid)
+        ? parsed.entryContractMid
+        : null,
     }
   } catch {
     return null
@@ -381,7 +439,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const accessToken = session?.access_token || null
   const [selectedSetupId, setSelectedSetupId] = useState<string | null>(null)
   const [inTradeSetupId, setInTradeSetupId] = useState<string | null>(null)
+  const [selectedContractBySetupId, setSelectedContractBySetupId] = useState<Record<string, ContractRecommendation>>({})
+  const [inTradeContract, setInTradeContract] = useState<ContractRecommendation | null>(null)
   const [tradeEntryPrice, setTradeEntryPrice] = useState<number | null>(null)
+  const [tradeEntryContractMid, setTradeEntryContractMid] = useState<number | null>(null)
   const [tradeEnteredAt, setTradeEnteredAt] = useState<string | null>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>('1m')
   const [visibleLevelCategories, setVisibleLevelCategories] = useState<Set<LevelCategory>>(new Set(ALL_CATEGORIES))
@@ -390,6 +451,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [ephemeralCoachMessages, setEphemeralCoachMessages] = useState<CoachMessage[]>([])
   const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
   const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
+  const inTradeSetupRef = useRef<Setup | null>(null)
   const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const hasTrackedFirstActionableRef = useRef(false)
@@ -402,6 +464,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     if (!persisted) return
     setInTradeSetupId(persisted.setupId)
     setTradeEntryPrice(persisted.entryPrice)
+    setTradeEntryContractMid(persisted.entryContractMid)
+    setInTradeContract(persisted.contract || null)
     setTradeEnteredAt(persisted.enteredAt)
     setSelectedSetupId((current) => current || persisted.setupId)
   }, [])
@@ -528,6 +592,27 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   )
   const tradeMode: TradeMode = inTradeSetupId ? 'in_trade' : 'scan'
 
+  useEffect(() => {
+    inTradeSetupRef.current = inTradeSetup
+  }, [inTradeSetup])
+
+  useEffect(() => {
+    if (inTradeSetupId) return
+
+    const selectedStillExists = selectedSetupId
+      ? activeSetups.some((setup) => setup.id === selectedSetupId)
+      : false
+    if (selectedStillExists) return
+
+    const fallback =
+      activeSetups.find((setup) => IMMEDIATELY_ACTIONABLE_STATUSES.has(setup.status))
+      || activeSetups[0]
+      || null
+    const nextSelectedId = fallback?.id || null
+    if (nextSelectedId === selectedSetupId) return
+    setSelectedSetupId(nextSelectedId)
+  }, [activeSetups, inTradeSetupId, selectedSetupId])
+
   const selectedSetup = useMemo(() => {
     if (inTradeSetupId) {
       const lockedSetup = activeSetups.find((setup) => setup.id === inTradeSetupId)
@@ -542,13 +627,48 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     return activeSetups.find((setup) => setup.id === selectedSetupId) || defaultSetup
   }, [activeSetups, inTradeSetupId, selectedSetupId])
 
+  const selectedSetupContract = useMemo<ContractRecommendation | null>(() => {
+    if (!selectedSetup) return null
+    const selectedByUser = selectedContractBySetupId[selectedSetup.id]
+    if (selectedByUser) {
+      const signature = contractSignature(selectedByUser)
+      const refreshed = findContractBySignature(selectedSetup, signature)
+      return refreshed || selectedByUser
+    }
+    return selectedSetup.recommendedContract || null
+  }, [selectedContractBySetupId, selectedSetup])
+
+  useEffect(() => {
+    if (!inTradeSetupId) return
+    const setup = activeSetups.find((item) => item.id === inTradeSetupId) || null
+    if (!setup) return
+
+    setInTradeContract((previous) => {
+      const previousSignature = contractSignature(previous)
+      const nextCandidate = findContractBySignature(setup, previousSignature)
+        || previous
+        || selectedContractBySetupId[setup.id]
+        || setup.recommendedContract
+        || null
+      if (!nextCandidate) return null
+      if (!previous) return nextCandidate
+      if (contractSignature(previous) !== contractSignature(nextCandidate)) return nextCandidate
+      if (previous.bid !== nextCandidate.bid || previous.ask !== nextCandidate.ask || previous.premiumMid !== nextCandidate.premiumMid) {
+        return nextCandidate
+      }
+      return previous
+    })
+  }, [activeSetups, inTradeSetupId, selectedContractBySetupId])
+
   useEffect(() => {
     if (!inTradeSetupId) return
     const exists = activeSetups.some((setup) => setup.id === inTradeSetupId)
     if (exists) return
 
     setInTradeSetupId(null)
+    setInTradeContract(null)
     setTradeEntryPrice(null)
+    setTradeEntryContractMid(null)
     setTradeEnteredAt(null)
     persistTradeFocusState(null)
 
@@ -558,6 +678,15 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       setupId: inTradeSetupId,
     }, { level: 'warning', persist: true })
   }, [activeSetups, inTradeSetupId])
+
+  useEffect(() => {
+    const activeIds = new Set(activeSetups.map((setup) => setup.id))
+    setSelectedContractBySetupId((previous) => {
+      const entries = Object.entries(previous).filter(([setupId]) => activeIds.has(setupId))
+      if (entries.length === Object.keys(previous).length) return previous
+      return Object.fromEntries(entries)
+    })
+  }, [activeSetups])
 
   const spxStreamPrice = stream.prices.get('SPX')
   const spyStreamPrice = stream.prices.get('SPY')
@@ -572,6 +701,20 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     const move = spxPrice - tradeEntryPrice
     return inTradeSetup.direction === 'bullish' ? move : -move
   }, [inTradeSetup, spxPrice, tradeEntryPrice])
+  const tradeCurrentContractMid = useMemo(() => contractMid(inTradeContract), [inTradeContract])
+  const tradePnlDollars = useMemo(() => {
+    if (tradeEntryContractMid == null || tradeCurrentContractMid == null) return null
+    return (tradeCurrentContractMid - tradeEntryContractMid) * 100
+  }, [tradeCurrentContractMid, tradeEntryContractMid])
+  const lockedTradeContractSignature = useMemo(
+    () => contractSignature(
+      inTradeContract
+      || (inTradeSetupId ? selectedContractBySetupId[inTradeSetupId] : null)
+      || inTradeSetup?.recommendedContract
+      || null,
+    ),
+    [inTradeContract, inTradeSetup?.recommendedContract, inTradeSetupId, selectedContractBySetupId],
+  )
 
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
     if (!selectedSetup) return []
@@ -738,6 +881,24 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     setSelectedSetupId(setup?.id || null)
   }, [inTradeSetupId])
 
+  const setSetupContractChoice = useCallback((setup: Setup | null, contract: ContractRecommendation | null) => {
+    if (!setup) return
+    setSelectedContractBySetupId((previous) => {
+      const current = previous[setup.id] || null
+      const currentSignature = contractSignature(current)
+      const nextSignature = contractSignature(contract)
+      if (currentSignature === nextSignature) return previous
+
+      const next = { ...previous }
+      if (!contract) {
+        delete next[setup.id]
+      } else {
+        next[setup.id] = contract
+      }
+      return next
+    })
+  }, [])
+
   const enterTrade = useCallback((setup?: Setup | null) => {
     const target = setup || selectedSetup
     if (!target) return
@@ -754,15 +915,26 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     const entryPrice = Number.isFinite(spxPrice) && spxPrice > 0
       ? spxPrice
       : (target.entryZone.low + target.entryZone.high) / 2
+    const chosenContract = (
+      (target.id === selectedSetup?.id ? selectedSetupContract : null)
+      || selectedContractBySetupId[target.id]
+      || target.recommendedContract
+      || null
+    )
+    const entryContractMid = contractMid(chosenContract)
     const enteredAt = new Date().toISOString()
 
     setSelectedSetupId(target.id)
     setInTradeSetupId(target.id)
+    setInTradeContract(chosenContract)
     setTradeEntryPrice(entryPrice)
+    setTradeEntryContractMid(entryContractMid)
     setTradeEnteredAt(enteredAt)
     persistTradeFocusState({
       setupId: target.id,
       entryPrice,
+      contract: chosenContract,
+      entryContractMid,
       enteredAt,
     })
 
@@ -773,13 +945,17 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       setupStatus: target.status,
       setupDirection: target.direction,
       entryPrice,
+      contract: chosenContract?.description || null,
+      contractMid: entryContractMid,
     }, { persist: true })
-  }, [selectedSetup, spxPrice])
+  }, [selectedContractBySetupId, selectedSetup, selectedSetupContract, spxPrice])
 
   const exitTrade = useCallback(() => {
     const exitingSetupId = inTradeSetupId
     setInTradeSetupId(null)
+    setInTradeContract(null)
     setTradeEntryPrice(null)
+    setTradeEntryContractMid(null)
     setTradeEnteredAt(null)
     persistTradeFocusState(null)
 
@@ -870,6 +1046,60 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return null
     }
   }, [accessToken])
+
+  useEffect(() => {
+    if (!inTradeSetupId) return
+    let isCancelled = false
+
+    const toCandidates = (recommendation: ContractRecommendation): ContractRecommendation[] => {
+      const alternatives = Array.isArray(recommendation.alternatives)
+        ? recommendation.alternatives.map((alternative) => ({
+          ...alternative,
+          gamma: recommendation.gamma,
+          theta: recommendation.theta,
+          vega: recommendation.vega,
+          riskReward: recommendation.riskReward,
+          expectedPnlAtTarget1: recommendation.expectedPnlAtTarget1,
+          expectedPnlAtTarget2: recommendation.expectedPnlAtTarget2,
+          reasoning: recommendation.reasoning,
+          premiumMid: ((alternative.bid + alternative.ask) / 2) * 100,
+          premiumAsk: alternative.ask * 100,
+        } as ContractRecommendation))
+        : []
+      return [recommendation, ...alternatives]
+    }
+
+    const refresh = async () => {
+      const setup = inTradeSetupRef.current
+      if (!setup) return
+      const recommendation = await requestContractRecommendation(setup)
+      if (isCancelled || !recommendation) return
+      const candidates = toCandidates(recommendation)
+      const matched = lockedTradeContractSignature
+        ? candidates.find((candidate) => contractSignature(candidate) === lockedTradeContractSignature) || null
+        : null
+
+      const nextContract = matched || recommendation
+      setInTradeContract((previous) => {
+        if (!previous) return nextContract
+        if (contractSignature(previous) !== contractSignature(nextContract)) return nextContract
+        if (previous.bid !== nextContract.bid || previous.ask !== nextContract.ask || previous.premiumMid !== nextContract.premiumMid) {
+          return nextContract
+        }
+        return previous
+      })
+    }
+
+    void refresh()
+    const intervalId = window.setInterval(() => {
+      void refresh()
+    }, 15_000)
+
+    return () => {
+      isCancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [inTradeSetupId, lockedTradeContractSignature, requestContractRecommendation])
 
   const sendCoachMessage = useCallback(async (prompt: string, setupId?: string | null) => {
     const stopTimer = startSPXPerfTimer('coach_message_roundtrip')
@@ -1069,9 +1299,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     tradeMode,
     inTradeSetup,
     inTradeSetupId,
+    selectedSetupContract,
+    inTradeContract,
     tradeEntryPrice,
     tradeEnteredAt,
     tradePnlPoints,
+    tradeEntryContractMid,
+    tradeCurrentContractMid,
+    tradePnlDollars,
     selectedTimeframe,
     setChartTimeframe,
     visibleLevelCategories,
@@ -1082,6 +1317,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     isLoading,
     error,
     selectSetup,
+    setSetupContractChoice,
     enterTrade,
     exitTrade,
     toggleLevelCategory,
@@ -1100,11 +1336,17 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     tradeMode,
     inTradeSetup,
     inTradeSetupId,
+    selectedSetupContract,
+    inTradeContract,
     tradeEntryPrice,
     tradeEnteredAt,
     tradePnlPoints,
+    tradeEntryContractMid,
+    tradeCurrentContractMid,
+    tradePnlDollars,
     requestContractRecommendation,
     selectSetup,
+    setSetupContractChoice,
     enterTrade,
     exitTrade,
     sendCoachMessage,

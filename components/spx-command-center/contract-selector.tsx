@@ -1,70 +1,216 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { InfoTip } from '@/components/ui/info-tip'
 import type { ContractRecommendation } from '@/lib/types/spx-command-center'
 import { ContractCard } from '@/components/spx-command-center/contract-card'
 
+const CONTRACT_RECOMMENDATION_COOLDOWN_MS = 12_000
+const CONTRACT_RECOMMENDATION_DEBOUNCE_MS = 250
+
+function contractSignature(contract: ContractRecommendation | null | undefined): string | null {
+  if (!contract) return null
+  return [contract.type, contract.strike, contract.expiry, contract.description].join('|')
+}
+
+function toRecommendationCandidates(recommendation: ContractRecommendation): ContractRecommendation[] {
+  const alternatives = Array.isArray(recommendation.alternatives)
+    ? recommendation.alternatives.map((alternative) => ({
+      ...alternative,
+      gamma: recommendation.gamma,
+      theta: recommendation.theta,
+      vega: recommendation.vega,
+      riskReward: recommendation.riskReward,
+      expectedPnlAtTarget1: recommendation.expectedPnlAtTarget1,
+      expectedPnlAtTarget2: recommendation.expectedPnlAtTarget2,
+      reasoning: alternative.tradeoff || recommendation.reasoning,
+      premiumMid: ((alternative.bid + alternative.ask) / 2) * 100,
+      premiumAsk: alternative.ask * 100,
+    } as ContractRecommendation))
+    : []
+  return [recommendation, ...alternatives]
+}
+
 export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
-  const { selectedSetup, requestContractRecommendation } = useSPXCommandCenter()
+  const {
+    selectedSetup,
+    selectedSetupContract,
+    requestContractRecommendation,
+    setSetupContractChoice,
+  } = useSPXCommandCenter()
   const [contract, setContract] = useState<ContractRecommendation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const requestSequenceRef = useRef(0)
+  const recommendationCacheRef = useRef<Map<string, { recommendation: ContractRecommendation; fetchedAt: number }>>(new Map())
+  const selectedSetupRef = useRef(selectedSetup)
+  const selectedSetupContractRef = useRef<ContractRecommendation | null>(selectedSetupContract || null)
+  const selectedRecommendedContractRef = useRef<ContractRecommendation | null>(selectedSetup?.recommendedContract || null)
+
+  const selectedSetupId = selectedSetup?.id || null
+  const selectedSetupStatus = selectedSetup?.status || null
+  const selectedSetupVersion = selectedSetup?.statusUpdatedAt || selectedSetup?.triggeredAt || selectedSetup?.createdAt || null
+  const selectedSetupContractSignature = contractSignature(selectedSetupContract)
+  const selectedRecommendedContract = selectedSetup?.recommendedContract || null
+  const selectedRecommendedSignature = useMemo(() => {
+    if (!selectedRecommendedContract) return null
+    return [
+      selectedRecommendedContract.description,
+      selectedRecommendedContract.expiry,
+      selectedRecommendedContract.strike,
+      selectedRecommendedContract.bid,
+      selectedRecommendedContract.ask,
+      selectedRecommendedContract.riskReward,
+      selectedRecommendedContract.maxLoss,
+    ].join('|')
+  }, [selectedRecommendedContract])
+
+  useEffect(() => {
+    selectedSetupRef.current = selectedSetup
+    selectedSetupContractRef.current = selectedSetupContract || null
+    selectedRecommendedContractRef.current = selectedSetup?.recommendedContract || null
+  }, [selectedSetup, selectedSetupContract])
 
   useEffect(() => {
     let isCancelled = false
+    const requestSequence = ++requestSequenceRef.current
+    const setupId = selectedSetupId
+    let requestTimer: number | null = null
 
-    async function run() {
-      if (!selectedSetup) {
+    function run() {
+      const setupForRequest = selectedSetupRef.current
+      const selectedContract = selectedSetupContractRef.current
+      const recommendedFromSnapshot = selectedRecommendedContractRef.current
+
+      if (!setupId || !setupForRequest) {
         setContract(null)
+        setIsLoading(false)
+        setIsRefreshing(false)
         setErrorMessage(null)
         return
       }
       if (readOnly) {
         setContract(null)
+        setIsLoading(false)
+        setIsRefreshing(false)
         setErrorMessage(null)
         return
       }
-      if (selectedSetup.status !== 'ready' && selectedSetup.status !== 'triggered') {
+      if (selectedSetupStatus !== 'ready' && selectedSetupStatus !== 'triggered') {
         setContract(null)
-        setErrorMessage(null)
-        return
-      }
-      if (selectedSetup.recommendedContract) {
-        setContract(selectedSetup.recommendedContract)
+        setIsLoading(false)
+        setIsRefreshing(false)
         setErrorMessage(null)
         return
       }
 
-      setIsLoading(true)
-      setErrorMessage(null)
-      try {
-        const rec = await requestContractRecommendation(selectedSetup)
-        if (!isCancelled) {
-          setContract(rec)
-          if (!rec) {
-            setErrorMessage('Recommendation service unavailable. Try again in a moment.')
-          }
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setContract(null)
-          setErrorMessage(error instanceof Error ? error.message : 'Recommendation request failed.')
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false)
-        }
+      if (selectedContract) {
+        recommendationCacheRef.current.set(setupId, {
+          recommendation: selectedContract,
+          fetchedAt: Date.now(),
+        })
+        setContract(selectedContract)
+        setIsLoading(false)
+        setIsRefreshing(false)
+        setErrorMessage(null)
+        return
       }
+      if (recommendedFromSnapshot) {
+        recommendationCacheRef.current.set(setupId, {
+          recommendation: recommendedFromSnapshot,
+          fetchedAt: Date.now(),
+        })
+        setContract(recommendedFromSnapshot)
+        setSetupContractChoice(setupForRequest, recommendedFromSnapshot)
+        setIsLoading(false)
+        setIsRefreshing(false)
+        setErrorMessage(null)
+        return
+      }
+
+      const cached = recommendationCacheRef.current.get(setupId)
+      if (cached) {
+        setContract(cached.recommendation)
+      } else {
+        setContract(null)
+      }
+
+      const shouldRefresh = !cached || (Date.now() - cached.fetchedAt) > CONTRACT_RECOMMENDATION_COOLDOWN_MS
+      if (!shouldRefresh) {
+        setIsLoading(false)
+        setIsRefreshing(false)
+        setErrorMessage(null)
+        return
+      }
+
+      if (cached) {
+        setIsRefreshing(true)
+        setIsLoading(false)
+      } else {
+        setIsLoading(true)
+        setIsRefreshing(false)
+      }
+      setErrorMessage(null)
+      requestTimer = window.setTimeout(async () => {
+        try {
+          const rec = await requestContractRecommendation(setupForRequest)
+          if (isCancelled || requestSequence !== requestSequenceRef.current) return
+
+          if (rec) {
+            const preferredSignature = contractSignature(selectedSetupContractRef.current)
+            const matched = preferredSignature
+              ? toRecommendationCandidates(rec).find((candidate) => contractSignature(candidate) === preferredSignature) || rec
+              : rec
+            recommendationCacheRef.current.set(setupId, {
+              recommendation: matched,
+              fetchedAt: Date.now(),
+            })
+            setContract(matched)
+            setSetupContractChoice(setupForRequest, matched)
+            setErrorMessage(null)
+          } else if (!cached) {
+            setContract(null)
+            setErrorMessage('Recommendation service unavailable. Try again in a moment.')
+          } else {
+            setErrorMessage('Recommendation service slow. Showing last known contract.')
+          }
+        } catch (error) {
+          if (isCancelled || requestSequence !== requestSequenceRef.current) return
+          if (!cached) {
+            setContract(null)
+            setErrorMessage(error instanceof Error ? error.message : 'Recommendation request failed.')
+          } else {
+            setErrorMessage('Live refresh failed. Showing last known contract.')
+          }
+        } finally {
+          if (isCancelled || requestSequence !== requestSequenceRef.current) return
+          setIsLoading(false)
+          setIsRefreshing(false)
+        }
+      }, CONTRACT_RECOMMENDATION_DEBOUNCE_MS)
     }
 
-    void run()
+    run()
 
     return () => {
       isCancelled = true
+      if (requestTimer != null) {
+        window.clearTimeout(requestTimer)
+      }
     }
-  }, [readOnly, requestContractRecommendation, selectedSetup])
+  }, [
+    readOnly,
+    requestContractRecommendation,
+    selectedSetupContract,
+    selectedSetupContractSignature,
+    selectedRecommendedSignature,
+    selectedSetupId,
+    selectedSetupStatus,
+    selectedSetupVersion,
+    setSetupContractChoice,
+  ])
 
   return (
     <section className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.02] to-champagne/5 p-3 md:p-4">
@@ -75,21 +221,35 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
         </InfoTip>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3 min-h-[180px]">
         {readOnly ? (
           <p className="text-xs text-white/55">
             Mobile read-only mode: contract execution analytics are available on desktop.
           </p>
         ) : !selectedSetup ? (
           <p className="text-xs text-white/55">Select a setup to generate a contract recommendation.</p>
-        ) : isLoading ? (
+        ) : isLoading && !contract ? (
           <p className="text-xs text-white/55">Computing recommendation...</p>
-        ) : errorMessage ? (
-          <p className="text-xs text-rose-200">{errorMessage}</p>
         ) : !contract ? (
-          <p className="text-xs text-white/55">No recommendation available for this setup yet.</p>
+          <p className="text-xs text-white/55">{errorMessage || 'No recommendation available for this setup yet.'}</p>
         ) : (
-          <ContractCard contract={contract} />
+          <div className="space-y-2">
+            <ContractCard
+              contract={contract}
+              selectedContractSignature={selectedSetupContractSignature}
+              onSelectContract={(nextContract) => {
+                if (!selectedSetup) return
+                setContract(nextContract)
+                setSetupContractChoice(selectedSetup, nextContract)
+              }}
+            />
+            {isRefreshing && (
+              <p className="text-[10px] text-white/45">Refreshing contract against latest levels...</p>
+            )}
+            {errorMessage && (
+              <p className="text-[10px] text-amber-200">{errorMessage}</p>
+            )}
+          </div>
         )}
       </div>
     </section>
