@@ -8,6 +8,14 @@ import { ContractCard } from '@/components/spx-command-center/contract-card'
 
 const CONTRACT_RECOMMENDATION_COOLDOWN_MS = 12_000
 const CONTRACT_RECOMMENDATION_DEBOUNCE_MS = 250
+const CONTRACT_EMPTY_RESULT_COOLDOWN_MS = 30_000
+const CONTRACT_ERROR_RESULT_COOLDOWN_MS = 15_000
+
+type RecommendationCacheEntry = {
+  recommendation: ContractRecommendation | null
+  fetchedAt: number
+  status: 'success' | 'empty' | 'error'
+}
 
 function contractSignature(contract: ContractRecommendation | null | undefined): string | null {
   if (!contract) return null
@@ -44,7 +52,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const requestSequenceRef = useRef(0)
-  const recommendationCacheRef = useRef<Map<string, { recommendation: ContractRecommendation; fetchedAt: number }>>(new Map())
+  const recommendationCacheRef = useRef<Map<string, RecommendationCacheEntry>>(new Map())
   const selectedSetupRef = useRef(selectedSetup)
   const selectedSetupContractRef = useRef<ContractRecommendation | null>(selectedSetupContract || null)
   const selectedRecommendedContractRef = useRef<ContractRecommendation | null>(selectedSetup?.recommendedContract || null)
@@ -111,6 +119,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
         recommendationCacheRef.current.set(setupId, {
           recommendation: recommendedFromSnapshot,
           fetchedAt: Date.now(),
+          status: 'success',
         })
         setContract(recommendedFromSnapshot)
         if (!selectedContract) {
@@ -122,15 +131,14 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
         return
       }
       if (selectedContract) {
-        if (cached) {
-          setContract(cached.recommendation)
-        } else {
+        if (!cached) {
           recommendationCacheRef.current.set(setupId, {
             recommendation: selectedContract,
             fetchedAt: Date.now(),
+            status: 'success',
           })
-          setContract(selectedContract)
         }
+        setContract(selectedContract)
         setIsLoading(false)
         setIsRefreshing(false)
         setErrorMessage(null)
@@ -143,11 +151,18 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
         setContract(null)
       }
 
-      const shouldRefresh = !cached || (Date.now() - cached.fetchedAt) > CONTRACT_RECOMMENDATION_COOLDOWN_MS
+      const refreshCooldownMs = !cached
+        ? 0
+        : cached.status === 'success'
+          ? CONTRACT_RECOMMENDATION_COOLDOWN_MS
+          : cached.status === 'empty'
+            ? CONTRACT_EMPTY_RESULT_COOLDOWN_MS
+            : CONTRACT_ERROR_RESULT_COOLDOWN_MS
+      const shouldRefresh = !cached || (Date.now() - cached.fetchedAt) > refreshCooldownMs
       if (!shouldRefresh) {
         setIsLoading(false)
         setIsRefreshing(false)
-        setErrorMessage(null)
+        setErrorMessage(cached.status === 'empty' ? 'No recommendation available for this setup yet.' : null)
         return
       }
 
@@ -173,18 +188,29 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
             recommendationCacheRef.current.set(setupId, {
               recommendation: rec,
               fetchedAt: Date.now(),
+              status: 'success',
             })
             setContract(rec)
             setSetupContractChoice(setupForRequest, nextSelectedContract)
             setErrorMessage(null)
-          } else if (!cached) {
+          } else if (!cached || cached.status !== 'empty') {
+            recommendationCacheRef.current.set(setupId, {
+              recommendation: null,
+              fetchedAt: Date.now(),
+              status: 'empty',
+            })
             setContract(null)
-            setErrorMessage('Recommendation service unavailable. Try again in a moment.')
+            setErrorMessage('No recommendation available for this setup yet.')
           } else {
             setErrorMessage('Recommendation service slow. Showing last known contract.')
           }
         } catch (error) {
           if (isCancelled || requestSequence !== requestSequenceRef.current) return
+          recommendationCacheRef.current.set(setupId, {
+            recommendation: cached?.recommendation || null,
+            fetchedAt: Date.now(),
+            status: 'error',
+          })
           if (!cached) {
             setContract(null)
             setErrorMessage(error instanceof Error ? error.message : 'Recommendation request failed.')

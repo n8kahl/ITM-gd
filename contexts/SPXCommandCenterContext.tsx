@@ -129,6 +129,9 @@ const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as c
 const PROACTIVE_COACH_COOLDOWN_MS = 45_000
 const PROACTIVE_FLOW_DIVERGENCE_THRESHOLD = 42
 const PROACTIVE_STOP_DISTANCE_THRESHOLD = 3
+const CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS = 60_000
+const COACH_DECISION_FAILURE_BACKOFF_BASE_MS = 4_000
+const COACH_DECISION_FAILURE_BACKOFF_MAX_MS = 60_000
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -472,6 +475,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const lastDataHealthRef = useRef<'healthy' | 'degraded' | 'stale' | null>(null)
   const proactiveCooldownByKeyRef = useRef<Record<string, number>>({})
   const previousSetupStatusByIdRef = useRef<Record<string, Setup['status']>>({})
+  const contractEndpointModeRef = useRef<'unknown' | 'get' | 'post' | 'unavailable'>('unknown')
+  const contractEndpointUnavailableUntilRef = useRef(0)
+  const coachDecisionFailureCountRef = useRef(0)
+  const coachDecisionBackoffUntilRef = useRef(0)
   const legacyPriceStateRef = useRef<SPXPriceContextState | null>(null)
   const legacyAnalyticsStateRef = useRef<SPXAnalyticsContextState | null>(null)
   const legacyCoachStateRef = useRef<SPXCoachContextState | null>(null)
@@ -673,6 +680,11 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     surface?: string
   }): Promise<CoachDecisionBrief | null> => {
     const requestSequence = ++coachDecisionRequestSequenceRef.current
+    const forced = Boolean(input?.forceRefresh)
+    const now = Date.now()
+    if (!forced && now < coachDecisionBackoffUntilRef.current) {
+      return coachDecision
+    }
     const requestSetupId = input?.setupId || inTradeSetup?.id || selectedSetup?.id || null
     const requestTradeMode = tradeMode === 'in_trade'
       ? 'in_trade'
@@ -715,6 +727,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       setCoachDecision(decision)
       setCoachDecisionStatus('ready')
       setCoachDecisionError(null)
+      coachDecisionFailureCountRef.current = 0
+      coachDecisionBackoffUntilRef.current = 0
 
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_GENERATED, {
         decisionId: decision.decisionId,
@@ -742,6 +756,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       const message = error instanceof Error ? error.message : 'Coach decision request failed.'
       setCoachDecisionStatus('error')
       setCoachDecisionError(message)
+      coachDecisionFailureCountRef.current = Math.min(coachDecisionFailureCountRef.current + 1, 6)
+      const backoffMs = Math.min(
+        COACH_DECISION_FAILURE_BACKOFF_BASE_MS * (2 ** Math.max(coachDecisionFailureCountRef.current - 1, 0)),
+        COACH_DECISION_FAILURE_BACKOFF_MAX_MS,
+      )
+      coachDecisionBackoffUntilRef.current = Date.now() + backoffMs
 
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_FALLBACK_USED, {
         setupId: requestSetupId,
@@ -749,11 +769,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         source: 'client_error',
         tradeMode: requestTradeMode,
         message,
+        backoffMs,
       }, { level: 'warning', persist: true })
 
       return null
     }
   }, [
+    coachDecision,
     accessToken,
     inTradeContract,
     inTradeSetup?.id,
@@ -1291,6 +1313,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const requestContractRecommendation = useCallback(async (setup: Setup) => {
     const setupId = setup.id
     const stopTimer = startSPXPerfTimer('contract_recommendation_latency')
+    const now = Date.now()
 
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_REQUESTED, {
       setupId,
@@ -1306,32 +1329,69 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return null
     }
 
+    if (contractEndpointModeRef.current === 'unavailable') {
+      if (now < contractEndpointUnavailableUntilRef.current) {
+        const durationMs = stopTimer({
+          setupId,
+          result: 'endpoint_backoff',
+        })
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+          setupId,
+          result: 'endpoint_backoff',
+          durationMs,
+        }, { level: 'warning', persist: true })
+        return setup.recommendedContract || null
+      }
+      contractEndpointModeRef.current = 'unknown'
+    }
+
     try {
       const requestHeaders = {
         Authorization: `Bearer ${accessToken}`,
       }
       const setupParams = new URLSearchParams({ setupId })
-      let response = await fetch(`/api/spx/contract-select?${setupParams.toString()}`, {
+      const getRequest = () => fetch(`/api/spx/contract-select?${setupParams.toString()}`, {
         method: 'GET',
         headers: requestHeaders,
         cache: 'no-store',
       })
+      const postRequest = () => fetch('/api/spx/contract-select', {
+        method: 'POST',
+        headers: {
+          ...requestHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          setupId,
+          setup,
+        }),
+        cache: 'no-store',
+      })
 
-      // Compatibility fallback: older/newer upstream deployments may differ
-      // on whether contract-select expects GET or POST.
-      if (response.status === 404 || response.status === 405) {
-        response = await fetch('/api/spx/contract-select', {
-          method: 'POST',
-          headers: {
-            ...requestHeaders,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            setupId,
-            setup,
-          }),
-          cache: 'no-store',
-        })
+      let response: Response
+      const endpointMode = contractEndpointModeRef.current
+      if (endpointMode === 'post') {
+        response = await postRequest()
+        if (response.status === 404 || response.status === 405) {
+          const fallback = await getRequest()
+          if (fallback.ok) {
+            contractEndpointModeRef.current = 'get'
+            response = fallback
+          } else {
+            response = fallback
+          }
+        }
+      } else {
+        response = await getRequest()
+        if (response.status === 404 || response.status === 405) {
+          const fallback = await postRequest()
+          if (fallback.ok) {
+            contractEndpointModeRef.current = 'post'
+            response = fallback
+          } else {
+            response = fallback
+          }
+        }
       }
 
       if (!response.ok) {
@@ -1346,6 +1406,24 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
             result: 'no_recommendation',
             status: response.status,
             durationMs,
+          }, { level: 'warning', persist: true })
+          return setup.recommendedContract || null
+        }
+
+        if (response.status === 405) {
+          contractEndpointModeRef.current = 'unavailable'
+          contractEndpointUnavailableUntilRef.current = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
+          const durationMs = stopTimer({
+            setupId,
+            result: 'method_not_allowed',
+            status: response.status,
+          })
+          trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+            setupId,
+            result: 'method_not_allowed',
+            status: response.status,
+            durationMs,
+            backoffMs: CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS,
           }, { level: 'warning', persist: true })
           return setup.recommendedContract || null
         }
@@ -1365,6 +1443,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       }
 
       const recommendation = await response.json() as ContractRecommendation
+      contractEndpointUnavailableUntilRef.current = 0
       const durationMs = stopTimer({
         setupId,
         result: 'success',
