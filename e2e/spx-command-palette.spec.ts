@@ -15,7 +15,7 @@ test.describe('SPX command palette', () => {
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
     await page.getByTestId('spx-command-palette-trigger').click()
-    const paletteInput = page.getByPlaceholder('Search commands (enter trade, exit focus, ask coach...)')
+    const paletteInput = page.getByPlaceholder('Search commands (enter trade, exit trade, ask coach...)')
     await expect(paletteInput).toBeVisible()
 
     await paletteInput.fill('enter trade focus')

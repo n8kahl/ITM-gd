@@ -57,7 +57,13 @@ function extractActionChips(message: CoachMessage): string[] {
   return [...new Set(chips.map((chip) => chip.trim()).filter(Boolean))].slice(0, 4)
 }
 
-export function CoachMessageCard({ message }: { message: CoachMessage }) {
+export function CoachMessageCard({
+  message,
+  onActionChipClick,
+}: {
+  message: CoachMessage
+  onActionChipClick?: (action: string, message: CoachMessage) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const isExpandable = message.content.length > 180
   const actionChips = useMemo(() => extractActionChips(message), [message])
@@ -76,12 +82,23 @@ export function CoachMessageCard({ message }: { message: CoachMessage }) {
       {actionChips.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">
           {actionChips.map((chip) => (
-            <span
-              key={`${message.id}-${chip}`}
-              className="rounded-full border border-emerald-400/30 bg-emerald-500/12 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200"
-            >
-              {chip}
-            </span>
+            onActionChipClick ? (
+              <button
+                key={`${message.id}-${chip}`}
+                type="button"
+                onClick={() => onActionChipClick(chip, message)}
+                className="rounded-full border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-emerald-200 transition-colors hover:bg-emerald-500/22 hover:text-emerald-100"
+              >
+                {chip}
+              </button>
+            ) : (
+              <span
+                key={`${message.id}-${chip}`}
+                className="rounded-full border border-emerald-400/30 bg-emerald-500/12 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200"
+              >
+                {chip}
+              </span>
+            )
           ))}
         </div>
       )}

@@ -117,7 +117,7 @@ export function SPXCommandPalette({ open, commands, onOpenChange }: SPXCommandPa
                 setQuery(event.target.value)
                 setActiveIndex(0)
               }}
-              placeholder="Search commands (enter trade, exit focus, ask coach...)"
+              placeholder="Search commands (enter trade, exit trade, ask coach...)"
               className="w-full bg-transparent text-sm text-ivory placeholder:text-white/45 focus:outline-none"
             />
           </div>

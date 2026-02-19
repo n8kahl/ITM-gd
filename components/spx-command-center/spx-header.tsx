@@ -43,7 +43,7 @@ export function SPXHeader() {
     prediction,
     gexProfile,
   } = useSPXAnalyticsContext()
-  const { tradeMode, inTradeSetup, tradePnlPoints } = useSPXSetupContext()
+  const { tradeMode, inTradeSetup, tradePnlPoints, exitTrade } = useSPXSetupContext()
   const {
     spxPrice,
     spxTickTimestamp,
@@ -143,10 +143,20 @@ export function SPXHeader() {
 
       <div className="relative z-10 mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-white/70">
         {tradeMode === 'in_trade' && inTradeSetup ? (
-          <span className="inline-flex items-center rounded-md border border-emerald-400/20 bg-emerald-500/[0.08] px-2 py-1 text-emerald-100">
-            In Trade {inTradeSetup.direction.toUpperCase()} {inTradeSetup.regime.toUpperCase()}
-            {tradePnlPoints != null ? ` · ${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts` : ''}
-          </span>
+          <>
+            <span className="inline-flex items-center rounded-md border border-emerald-400/20 bg-emerald-500/[0.08] px-2 py-1 text-emerald-100">
+              In Trade {inTradeSetup.direction.toUpperCase()} {inTradeSetup.regime.toUpperCase()}
+              {tradePnlPoints != null ? ` · ${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts` : ''}
+            </span>
+            <button
+              type="button"
+              data-testid="spx-header-exit-trade"
+              onClick={() => exitTrade()}
+              className="inline-flex items-center rounded-md border border-rose-300/35 bg-rose-500/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-rose-100 hover:bg-rose-500/22"
+            >
+              Exit Trade
+            </button>
+          </>
         ) : (
           <span>Snapshot {snapshotFreshness}</span>
         )}

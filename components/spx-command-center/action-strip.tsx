@@ -1,43 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Gauge } from 'lucide-react'
+import { Gauge } from 'lucide-react'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
-import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { cn } from '@/lib/utils'
-import {
-  COACH_ALERT_DISMISS_EVENT,
-  acknowledgeCoachAlert,
-  findTopCoachAlert,
-  loadDismissedCoachAlertIds,
-} from '@/lib/spx/coach-alert-state'
-import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
 export function ActionStrip() {
   const { regime, prediction } = useSPXAnalyticsContext()
   const { selectedSetup, tradeMode, inTradeSetup, tradePnlPoints } = useSPXSetupContext()
-  const { coachMessages } = useSPXCoachContext()
-  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(() => loadDismissedCoachAlertIds())
-
-  useEffect(() => {
-    const handleDismissSync = (event: Event) => {
-      const custom = event as CustomEvent<{ ids?: string[] }>
-      const ids = custom.detail?.ids
-      if (!Array.isArray(ids)) return
-      setDismissedAlertIds(new Set(ids))
-    }
-
-    window.addEventListener(COACH_ALERT_DISMISS_EVENT, handleDismissSync as EventListener)
-    return () => {
-      window.removeEventListener(COACH_ALERT_DISMISS_EVENT, handleDismissSync as EventListener)
-    }
-  }, [])
-
-  const topAlert = useMemo(
-    () => findTopCoachAlert(coachMessages, dismissedAlertIds),
-    [coachMessages, dismissedAlertIds],
-  )
 
   const postureDir = prediction
     ? prediction.direction.bullish >= prediction.direction.bearish ? 'bullish' : 'bearish'
@@ -50,35 +20,6 @@ export function ActionStrip() {
       className="rounded-2xl border border-white/8 bg-gradient-to-r from-white/[0.02] via-emerald-500/[0.02] to-champagne/[0.04] px-3 py-2.5"
       data-testid="spx-action-strip"
     >
-      {topAlert && (
-        <div
-          className="mb-2 flex items-start gap-2 rounded-lg border border-rose-400/30 bg-rose-500/8 px-3 py-2"
-          data-testid="spx-action-strip-alert"
-        >
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-200" />
-          <div className="min-w-0">
-            <p className="text-[9px] uppercase tracking-[0.1em] text-rose-200/80">Top Coach Alert</p>
-            <p className="text-[13px] leading-snug text-rose-50">{topAlert.content}</p>
-          </div>
-          <button
-            type="button"
-            data-testid="spx-action-strip-alert-ack"
-            onClick={() => {
-              setDismissedAlertIds((previous) => acknowledgeCoachAlert(previous, topAlert.id))
-              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_ALERT_ACK, {
-                messageId: topAlert.id,
-                priority: topAlert.priority,
-                setupId: topAlert.setupId,
-                surface: 'action_strip',
-              }, { persist: true })
-            }}
-            className="shrink-0 rounded border border-rose-300/30 bg-rose-400/15 px-2 py-0.5 text-[8px] uppercase tracking-[0.08em] text-rose-100 hover:bg-rose-400/25"
-          >
-            Ack
-          </button>
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center gap-1.5">
         {tradeMode === 'in_trade' && inTradeSetup && (
           <span className="inline-flex items-center gap-1 rounded-full border border-champagne/35 bg-champagne/12 px-2 py-0.5 text-[10px] text-champagne">

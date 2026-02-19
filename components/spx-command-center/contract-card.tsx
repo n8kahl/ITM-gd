@@ -92,7 +92,7 @@ export function ContractCard({
         <div className="flex items-center gap-2">
           <h4 className="font-mono text-sm font-semibold text-ivory">{contract.description}</h4>
           <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.1em] text-emerald-200">
-            AI Pick
+            AI Recommendation
           </span>
           {isPrimarySelected && (
             <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-emerald-100">
@@ -119,7 +119,7 @@ export function ContractCard({
             onClick={() => onSelectContract(contract)}
             className="rounded border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 hover:bg-emerald-500/22"
           >
-            Use AI Pick
+            Use AI Recommendation
           </button>
         </div>
       )}

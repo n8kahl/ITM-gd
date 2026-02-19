@@ -14,6 +14,7 @@ test.describe('SPX layout state machine', () => {
         mobileSmartStack: true,
         mobileFullTradeFocus: true,
         oneClickEntry: true,
+        coachDockV1: true,
       }
     })
 
@@ -25,7 +26,11 @@ test.describe('SPX layout state machine', () => {
 
     await expect(page.getByRole('heading', { name: 'Setup Feed' })).toBeVisible()
     await expect(page.getByText('Price + Levels')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'AI Coach' })).toBeVisible()
+    await expect(page.getByTestId('spx-coach-dock-mobile')).toBeVisible()
+    await page.getByTestId('spx-coach-dock-toggle-mobile').click()
+    await expect(page.getByTestId('spx-coach-bottom-sheet')).toBeVisible()
+    await page.getByTestId('spx-coach-bottom-sheet-close').click()
+    await expect(page.getByTestId('spx-coach-bottom-sheet')).toHaveCount(0)
     await expect(smartStack.getByText(/^evaluate$/i)).toBeVisible()
 
     await page.getByRole('button', { name: 'Enter Trade' }).first().click()

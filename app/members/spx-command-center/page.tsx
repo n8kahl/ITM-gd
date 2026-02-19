@@ -23,10 +23,13 @@ import { SPXPanelSkeleton, SPXSkeleton } from '@/components/spx-command-center/s
 import { DecisionContext } from '@/components/spx-command-center/decision-context'
 import { MobileBriefPanel } from '@/components/spx-command-center/mobile-brief-panel'
 import { SPXCommandPalette, type SPXPaletteCommand } from '@/components/spx-command-center/command-palette'
+import { CoachDock } from '@/components/spx-command-center/coach-dock'
+import { CoachBottomSheet } from '@/components/spx-command-center/coach-bottom-sheet'
 import { FADE_UP_VARIANT, STAGGER_CHILDREN } from '@/lib/motion-primitives'
 import { resolveSPXLayoutMode } from '@/lib/spx/layout-mode'
 import { SPX_SHORTCUT_EVENT } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
+import { cn } from '@/lib/utils'
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -86,6 +89,8 @@ function SPXCommandCenterContent() {
   const [initialSkeletonExpired, setInitialSkeletonExpired] = useState(false)
   const [showShortcutHelp, setShowShortcutHelp] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [showMobileCoachSheet, setShowMobileCoachSheet] = useState(false)
+  const [showDesktopCoachPanel, setShowDesktopCoachPanel] = useState(false)
   const mobileReadOnly = !uxFlags.mobileFullTradeFocus
   const layoutMode = useMemo(() => resolveSPXLayoutMode({
     enabled: uxFlags.layoutStateMachine,
@@ -94,6 +99,7 @@ function SPXCommandCenterContent() {
   }), [selectedSetup, tradeMode, uxFlags.layoutStateMachine])
   const stateDrivenLayoutEnabled = layoutMode !== 'legacy'
   const mobileSmartStackEnabled = stateDrivenLayoutEnabled && uxFlags.mobileSmartStack
+  const desktopCoachPanelOpen = layoutMode === 'scan' ? showDesktopCoachPanel : false
   const lastLayoutModeRef = useRef<string | null>(null)
   const rootVariants = prefersReducedMotion ? undefined : STAGGER_CHILDREN
   const itemVariants = prefersReducedMotion ? undefined : FADE_UP_VARIANT
@@ -265,6 +271,37 @@ function SPXCommandCenterContent() {
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
       surface: 'mobile_tabs',
       tab: next,
+    })
+  }
+
+  const handleMobileCoachSheetChange = (nextOpen: boolean) => {
+    setShowMobileCoachSheet(nextOpen)
+    trackSPXTelemetryEvent(
+      nextOpen ? SPX_TELEMETRY_EVENT.COACH_DOCK_OPENED : SPX_TELEMETRY_EVENT.COACH_DOCK_COLLAPSED,
+      {
+        surface: 'mobile',
+        layoutMode,
+        tradeMode,
+        selectedSetupId: selectedSetup?.id || null,
+      },
+      { persist: true },
+    )
+  }
+
+  const handleDesktopCoachDockToggle = () => {
+    setShowDesktopCoachPanel((previous) => {
+      const nextOpen = !previous
+      trackSPXTelemetryEvent(
+        nextOpen ? SPX_TELEMETRY_EVENT.COACH_DOCK_OPENED : SPX_TELEMETRY_EVENT.COACH_DOCK_COLLAPSED,
+        {
+          surface: 'desktop',
+          layoutMode,
+          tradeMode,
+          selectedSetupId: selectedSetup?.id || null,
+        },
+        { persist: true },
+      )
+      return nextOpen
     })
   }
 
@@ -468,7 +505,10 @@ function SPXCommandCenterContent() {
       {isMobile ? (
         <motion.div variants={itemVariants} className="space-y-2.5">
           {mobileSmartStackEnabled ? (
-            <div className="space-y-2.5" data-testid="spx-mobile-smart-stack">
+            <div
+              className={cn('space-y-2.5', uxFlags.coachDockV1 && 'pb-24')}
+              data-testid="spx-mobile-smart-stack"
+            >
               <div className="sticky top-1 z-10 flex items-center justify-between rounded-lg border border-white/10 bg-[#0A0C10]/90 px-3 py-2 backdrop-blur">
                 <p className="text-[10px] uppercase tracking-[0.1em] text-white/65">Mobile Smart Stack</p>
                 <span className="rounded border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200">
@@ -477,13 +517,13 @@ function SPXCommandCenterContent() {
               </div>
               <MobileBriefPanel readOnly={mobileReadOnly} />
               <SetupFeed readOnly={mobileReadOnly} />
+              {!uxFlags.coachDockV1 && <AICoachFeed readOnly={mobileReadOnly} />}
               {(layoutMode === 'evaluate' || layoutMode === 'in_trade') && (
                 <ContractSelector readOnly={mobileReadOnly} />
               )}
               <SPXChart />
               <FlowTicker />
               {layoutMode !== 'in_trade' && <DecisionContext />}
-              <AICoachFeed readOnly={mobileReadOnly} />
               <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
                 <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/55 hover:text-white/75">
                   Deep Analytics
@@ -529,6 +569,26 @@ function SPXCommandCenterContent() {
                   <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
                 </div>
               )}
+            </>
+          )}
+
+          {mobileSmartStackEnabled && uxFlags.coachDockV1 && (
+            <>
+              <div className="pointer-events-none fixed inset-x-2 bottom-2 z-[68]">
+                <div className="pointer-events-auto">
+                  <CoachDock
+                    surface="mobile"
+                    isOpen={showMobileCoachSheet}
+                    onToggle={() => handleMobileCoachSheetChange(!showMobileCoachSheet)}
+                  />
+                </div>
+              </div>
+              <CoachBottomSheet
+                open={showMobileCoachSheet}
+                onOpenChange={handleMobileCoachSheetChange}
+              >
+                <AICoachFeed readOnly={mobileReadOnly} />
+              </CoachBottomSheet>
             </>
           )}
         </motion.div>
@@ -578,8 +638,30 @@ function SPXCommandCenterContent() {
               <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
                 <div className="h-full space-y-2.5 overflow-auto pl-1">
                   <SetupFeed />
-                  {(!stateDrivenLayoutEnabled || layoutMode === 'evaluate' || layoutMode === 'in_trade') && <ContractSelector />}
-                  {stateDrivenLayoutEnabled && layoutMode === 'scan' ? <CoachPreviewCard /> : <AICoachFeed />}
+                  {!stateDrivenLayoutEnabled ? (
+                    <>
+                      <ContractSelector />
+                      <AICoachFeed />
+                    </>
+                  ) : layoutMode === 'scan' ? (
+                    uxFlags.coachDockV1 ? (
+                      <>
+                        <CoachDock
+                          surface="desktop"
+                          isOpen={desktopCoachPanelOpen}
+                          onToggle={handleDesktopCoachDockToggle}
+                        />
+                        {desktopCoachPanelOpen ? <AICoachFeed /> : null}
+                      </>
+                    ) : (
+                      <CoachPreviewCard />
+                    )
+                  ) : (
+                    <>
+                      <AICoachFeed />
+                      <ContractSelector />
+                    </>
+                  )}
 
                   {(!stateDrivenLayoutEnabled || layoutMode === 'evaluate') && (
                     <details

@@ -85,6 +85,25 @@ const contractBySetupId: Record<string, Record<string, unknown>> = {
     expectedPnlAtTarget2: 336,
     maxLoss: 2460,
     reasoning: 'Bullish fade setup with positive gamma support.',
+    alternatives: [
+      {
+        description: '6035C 2026-03-20',
+        strike: 6035,
+        expiry: '2026-03-20',
+        type: 'call',
+        delta: 0.29,
+        bid: 20.4,
+        ask: 20.9,
+        spreadPct: 2.4,
+        liquidityScore: 78,
+        maxLoss: 2090,
+        healthScore: 76,
+        healthTier: 'green',
+        tag: 'safer',
+        tradeoff: 'Lower delta for less directional sensitivity.',
+        score: 87,
+      },
+    ],
   },
   'setup-2': {
     description: '6020P 2026-03-20',
@@ -102,6 +121,42 @@ const contractBySetupId: Record<string, Record<string, unknown>> = {
     expectedPnlAtTarget2: 392,
     maxLoss: 2700,
     reasoning: 'Breakout continuation aligned with bearish flow and vacuum.',
+    alternatives: [
+      {
+        description: '6015P 2026-03-20',
+        strike: 6015,
+        expiry: '2026-03-20',
+        type: 'put',
+        delta: -0.31,
+        bid: 22.2,
+        ask: 22.8,
+        spreadPct: 2.6,
+        liquidityScore: 73,
+        maxLoss: 2280,
+        healthScore: 71,
+        healthTier: 'amber',
+        tag: 'safer',
+        tradeoff: 'Cheaper premium with slightly less participation.',
+        score: 85,
+      },
+      {
+        description: '6025P 2026-03-20',
+        strike: 6025,
+        expiry: '2026-03-20',
+        type: 'put',
+        delta: -0.41,
+        bid: 30.8,
+        ask: 31.4,
+        spreadPct: 1.9,
+        liquidityScore: 82,
+        maxLoss: 3140,
+        healthScore: 79,
+        healthTier: 'green',
+        tag: 'higher_conviction',
+        tradeoff: 'Higher delta conviction but increased premium outlay.',
+        score: 90,
+      },
+    ],
   },
 }
 
@@ -403,6 +458,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 
 export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOptions = {}): Promise<void> {
   const { delayMs = 0 } = options
+  let coachMessageSequence = 0
 
   await page.route('**/api/chart/SPX*', async (route) => {
     await delay(delayMs)
@@ -418,23 +474,43 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
     const endpoint = path.split('/api/spx/')[1] || ''
 
     if (req.method() === 'POST' && endpoint === 'coach/message') {
+      coachMessageSequence += 1
+      const sequence = coachMessageSequence
+      let requestSetupId = 'setup-1'
+      const rawBody = req.postData()
+      if (rawBody) {
+        try {
+          const parsed = JSON.parse(rawBody) as { setupId?: string }
+          if (typeof parsed.setupId === 'string' && parsed.setupId.trim()) {
+            requestSetupId = parsed.setupId
+          }
+        } catch {
+          requestSetupId = 'setup-1'
+        }
+      }
       const eventOne = {
-        id: 'coach-live-1',
+        id: `coach-live-1-${sequence}`,
         type: 'in_trade',
         priority: 'alert',
-        setupId: 'setup-1',
+        setupId: requestSetupId,
         content: coachLongMessage,
-        structuredData: { setupId: 'setup-1' },
-        timestamp: nowIso,
+        structuredData: {
+          setupId: requestSetupId,
+          recommendedActions: ['Consider Entry', 'Adjust Stop', 'Take Partial'],
+        },
+        timestamp: new Date(Date.parse(nowIso) + sequence * 1_000).toISOString(),
       }
       const eventTwo = {
-        id: 'coach-live-2',
+        id: `coach-live-2-${sequence}`,
         type: 'behavioral',
         priority: 'behavioral',
-        setupId: 'setup-1',
+        setupId: requestSetupId,
         content: 'Execution quality is stable. Keep entries rules-based.',
-        structuredData: { discipline: 'good' },
-        timestamp: nowIso,
+        structuredData: {
+          discipline: 'good',
+          recommendedActions: ['Hold / Wait', 'Reduce Size'],
+        },
+        timestamp: new Date(Date.parse(nowIso) + sequence * 1_000 + 250).toISOString(),
       }
 
       const sseBody = [

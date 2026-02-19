@@ -113,7 +113,7 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                   onClick={() => exitTrade()}
                   className="rounded border border-rose-300/35 bg-rose-500/12 px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-rose-100 hover:bg-rose-500/22"
                 >
-                  Exit Focus
+                  Exit Trade
                 </button>
               </div>
               <p className="text-[10px] text-white/55">

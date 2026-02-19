@@ -83,6 +83,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
       const setupForRequest = selectedSetupRef.current
       const selectedContract = selectedSetupContractRef.current
       const recommendedFromSnapshot = selectedRecommendedContractRef.current
+      const cached = recommendationCacheRef.current.get(setupId || '')
 
       if (!setupId || !setupForRequest) {
         setContract(null)
@@ -106,31 +107,36 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
         return
       }
 
-      if (selectedContract) {
-        recommendationCacheRef.current.set(setupId, {
-          recommendation: selectedContract,
-          fetchedAt: Date.now(),
-        })
-        setContract(selectedContract)
-        setIsLoading(false)
-        setIsRefreshing(false)
-        setErrorMessage(null)
-        return
-      }
       if (recommendedFromSnapshot) {
         recommendationCacheRef.current.set(setupId, {
           recommendation: recommendedFromSnapshot,
           fetchedAt: Date.now(),
         })
         setContract(recommendedFromSnapshot)
-        setSetupContractChoice(setupForRequest, recommendedFromSnapshot)
+        if (!selectedContract) {
+          setSetupContractChoice(setupForRequest, recommendedFromSnapshot)
+        }
+        setIsLoading(false)
+        setIsRefreshing(false)
+        setErrorMessage(null)
+        return
+      }
+      if (selectedContract) {
+        if (cached) {
+          setContract(cached.recommendation)
+        } else {
+          recommendationCacheRef.current.set(setupId, {
+            recommendation: selectedContract,
+            fetchedAt: Date.now(),
+          })
+          setContract(selectedContract)
+        }
         setIsLoading(false)
         setIsRefreshing(false)
         setErrorMessage(null)
         return
       }
 
-      const cached = recommendationCacheRef.current.get(setupId)
       if (cached) {
         setContract(cached.recommendation)
       } else {
@@ -161,14 +167,15 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
           if (rec) {
             const preferredSignature = contractSignature(selectedSetupContractRef.current)
             const matched = preferredSignature
-              ? toRecommendationCandidates(rec).find((candidate) => contractSignature(candidate) === preferredSignature) || rec
-              : rec
+              ? toRecommendationCandidates(rec).find((candidate) => contractSignature(candidate) === preferredSignature) || null
+              : null
+            const nextSelectedContract = matched || rec
             recommendationCacheRef.current.set(setupId, {
-              recommendation: matched,
+              recommendation: rec,
               fetchedAt: Date.now(),
             })
-            setContract(matched)
-            setSetupContractChoice(setupForRequest, matched)
+            setContract(rec)
+            setSetupContractChoice(setupForRequest, nextSelectedContract)
             setErrorMessage(null)
           } else if (!cached) {
             setContract(null)
@@ -239,7 +246,6 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
               selectedContractSignature={selectedSetupContractSignature}
               onSelectContract={(nextContract) => {
                 if (!selectedSetup) return
-                setContract(nextContract)
                 setSetupContractChoice(selectedSetup, nextContract)
               }}
             />
