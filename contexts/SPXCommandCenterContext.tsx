@@ -1307,20 +1307,49 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
 
     try {
-      const response = await fetch('/api/spx/contract-select', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          setupId,
-          setup,
-        }),
+      const requestHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+      }
+      const setupParams = new URLSearchParams({ setupId })
+      let response = await fetch(`/api/spx/contract-select?${setupParams.toString()}`, {
+        method: 'GET',
+        headers: requestHeaders,
         cache: 'no-store',
       })
 
+      // Compatibility fallback: older/newer upstream deployments may differ
+      // on whether contract-select expects GET or POST.
+      if (response.status === 404 || response.status === 405) {
+        response = await fetch('/api/spx/contract-select', {
+          method: 'POST',
+          headers: {
+            ...requestHeaders,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            setupId,
+            setup,
+          }),
+          cache: 'no-store',
+        })
+      }
+
       if (!response.ok) {
+        if (response.status === 404) {
+          const durationMs = stopTimer({
+            setupId,
+            result: 'no_recommendation',
+            status: response.status,
+          })
+          trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+            setupId,
+            result: 'no_recommendation',
+            status: response.status,
+            durationMs,
+          }, { level: 'warning', persist: true })
+          return setup.recommendedContract || null
+        }
+
         const durationMs = stopTimer({
           setupId,
           result: 'http_error',

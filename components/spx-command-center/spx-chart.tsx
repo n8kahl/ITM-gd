@@ -23,8 +23,13 @@ function isSpyDerivedLevel(level: SPXLevel): boolean {
     || level.source.startsWith('spy_')
 }
 
+function isVWAPLevel(level: SPXLevel): boolean {
+  return /(^|_)vwap($|_)/i.test(level.source) || level.source.toUpperCase() === 'VWAP'
+}
+
 function labelFromSource(source: string): string {
   const normalized = source.toLowerCase()
+  if (normalized === 'vwap' || normalized.endsWith('_vwap') || normalized.includes('vwap')) return 'VWAP'
   if (normalized.includes('call_wall')) return 'Call Wall'
   if (normalized.includes('put_wall')) return 'Put Wall'
   if (normalized.includes('flip_point')) return 'Flip'
@@ -147,13 +152,23 @@ export function SPXChart() {
 
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({
+      ...(isVWAPLevel(level)
+        ? {
+          label: 'VWAP',
+          color: 'rgba(234, 179, 8, 0.88)',
+          lineStyle: 'dashed' as const,
+          lineWidth: Math.max(2, level.chartStyle.lineWidth),
+          type: 'vwap',
+        }
+        : {
+          label: chartLevelLabel(level),
+          color: isSpyDerivedLevel(level) ? 'rgba(245, 237, 204, 0.72)' : level.chartStyle.color,
+          lineStyle: toLineStyle(isSpyDerivedLevel(level) ? 'dot-dash' : level.chartStyle.lineStyle),
+          lineWidth: level.chartStyle.lineWidth,
+          type: level.category,
+        }),
       price: level.price,
-      label: chartLevelLabel(level),
-      color: isSpyDerivedLevel(level) ? 'rgba(245, 237, 204, 0.72)' : level.chartStyle.color,
-      lineStyle: toLineStyle(isSpyDerivedLevel(level) ? 'dot-dash' : level.chartStyle.lineStyle),
-      lineWidth: level.chartStyle.lineWidth,
       axisLabelVisible: true,
-      type: level.category,
       strength: level.strength,
       description: typeof level.metadata.description === 'string'
         ? level.metadata.description
@@ -197,9 +212,12 @@ export function SPXChart() {
       .filter((item) => item.annotation.type === 'spy_derived')
       .slice(0, 2)
       .map((item) => item.annotation)
+    const vwapLevel = ranked
+      .find((item) => item.annotation.type === 'vwap')
+      ?.annotation
 
     const merged = new Map<string, LevelAnnotation>()
-    for (const annotation of [...baseFocused, ...nearestSpyDerived]) {
+    for (const annotation of [...baseFocused, ...nearestSpyDerived, ...(vwapLevel ? [vwapLevel] : [])]) {
       const key = `${annotation.label}:${annotation.price}:${annotation.type || 'unknown'}`
       if (!merged.has(key)) merged.set(key, annotation)
     }
