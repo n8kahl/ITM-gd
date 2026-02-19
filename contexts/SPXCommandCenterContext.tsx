@@ -133,6 +133,8 @@ const PROACTIVE_STOP_DISTANCE_THRESHOLD = 3
 const CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS = 60_000
 const COACH_DECISION_FAILURE_BACKOFF_BASE_MS = 4_000
 const COACH_DECISION_FAILURE_BACKOFF_MAX_MS = 60_000
+const COACH_DECISION_RATE_LIMIT_BACKOFF_MS = 15_000
+const COACH_DECISION_AUTO_MIN_REFRESH_MS = 2_500
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -466,8 +468,17 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [coachDecisionError, setCoachDecisionError] = useState<string | null>(null)
   const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
   const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
+  const selectedSetupIdRef = useRef<string | null>(null)
+  const inTradeSetupIdRef = useRef<string | null>(null)
+  const tradeModeRef = useRef<TradeMode>('scan')
+  const selectedSetupContractRef = useRef<ContractRecommendation | null>(null)
+  const inTradeContractRef = useRef<ContractRecommendation | null>(null)
+  const coachDecisionRef = useRef<CoachDecisionBrief | null>(null)
+  const coachDecisionStatusRef = useRef<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const inTradeSetupRef = useRef<Setup | null>(null)
   const coachDecisionRequestSequenceRef = useRef(0)
+  const coachDecisionLastRequestAtRef = useRef(0)
+  const coachDecisionLastRequestKeyRef = useRef<string | null>(null)
   const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const hasTrackedFirstActionableRef = useRef(false)
@@ -478,6 +489,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const previousSetupStatusByIdRef = useRef<Record<string, Setup['status']>>({})
   const contractEndpointModeRef = useRef<'unknown' | 'get' | 'post' | 'unavailable'>('unknown')
   const contractEndpointUnavailableUntilRef = useRef(0)
+  const contractSetupUnavailableUntilRef = useRef<Record<string, number>>({})
   const coachDecisionFailureCountRef = useRef(0)
   const coachDecisionBackoffUntilRef = useRef(0)
   const legacyPriceStateRef = useRef<SPXPriceContextState | null>(null)
@@ -621,6 +633,24 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const tradeMode: TradeMode = inTradeSetupId ? 'in_trade' : 'scan'
 
   useEffect(() => {
+    coachDecisionRef.current = coachDecision
+  }, [coachDecision])
+
+  useEffect(() => {
+    coachDecisionStatusRef.current = coachDecisionStatus
+  }, [coachDecisionStatus])
+
+  useEffect(() => {
+    selectedSetupIdRef.current = selectedSetupId || null
+    inTradeSetupIdRef.current = inTradeSetupId || null
+    tradeModeRef.current = tradeMode
+  }, [
+    inTradeSetupId,
+    selectedSetupId,
+    tradeMode,
+  ])
+
+  useEffect(() => {
     inTradeSetupRef.current = inTradeSetup
   }, [inTradeSetup])
 
@@ -674,6 +704,11 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     [inTradeContract],
   )
 
+  useEffect(() => {
+    selectedSetupContractRef.current = selectedSetupContract
+    inTradeContractRef.current = inTradeContract
+  }, [inTradeContract, selectedSetupContract])
+
   const requestCoachDecision = useCallback(async (input?: {
     setupId?: string | null
     question?: string
@@ -684,15 +719,36 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     const forced = Boolean(input?.forceRefresh)
     const now = Date.now()
     if (!forced && now < coachDecisionBackoffUntilRef.current) {
-      return coachDecision
+      return coachDecisionRef.current
     }
-    const requestSetupId = input?.setupId || inTradeSetup?.id || selectedSetup?.id || null
-    const requestTradeMode = tradeMode === 'in_trade'
+    const resolvedTradeMode = tradeModeRef.current
+    const requestSetupId = input?.setupId || inTradeSetupIdRef.current || selectedSetupIdRef.current || null
+    const requestTradeMode = resolvedTradeMode === 'in_trade'
       ? 'in_trade'
       : requestSetupId
         ? 'evaluate'
         : 'scan'
-    const activeContract = tradeMode === 'in_trade' ? inTradeContract : selectedSetupContract
+    const activeContract = resolvedTradeMode === 'in_trade'
+      ? inTradeContractRef.current
+      : selectedSetupContractRef.current
+    const activeContractSignature = contractSignature(activeContract)
+    const requestKey = [
+      requestSetupId || 'none',
+      requestTradeMode,
+      activeContractSignature || 'none',
+      input?.question || '',
+      input?.surface || 'spx_coach_feed',
+    ].join('|')
+    const isPassiveAutoRequest = !forced && !input?.question && input?.surface === 'spx_coach_auto'
+    if (
+      isPassiveAutoRequest
+      && coachDecisionLastRequestKeyRef.current === requestKey
+      && (now - coachDecisionLastRequestAtRef.current) < COACH_DECISION_AUTO_MIN_REFRESH_MS
+    ) {
+      return coachDecisionRef.current
+    }
+    coachDecisionLastRequestKeyRef.current = requestKey
+    coachDecisionLastRequestAtRef.current = now
 
     if (!accessToken) {
       if (requestSequence !== coachDecisionRequestSequenceRef.current) return null
@@ -701,7 +757,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return null
     }
 
-    setCoachDecisionStatus('loading')
+    if (forced || !coachDecisionRef.current || coachDecisionStatusRef.current === 'error') {
+      setCoachDecisionStatus('loading')
+    }
     setCoachDecisionError(null)
 
     try {
@@ -758,10 +816,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       setCoachDecisionStatus('error')
       setCoachDecisionError(message)
       coachDecisionFailureCountRef.current = Math.min(coachDecisionFailureCountRef.current + 1, 6)
-      const backoffMs = Math.min(
+      const isRateLimited = /(^|\\b)429(\\b|$)|too many requests/i.test(message)
+      const exponentialBackoffMs = Math.min(
         COACH_DECISION_FAILURE_BACKOFF_BASE_MS * (2 ** Math.max(coachDecisionFailureCountRef.current - 1, 0)),
         COACH_DECISION_FAILURE_BACKOFF_MAX_MS,
       )
+      const backoffMs = isRateLimited
+        ? Math.max(COACH_DECISION_RATE_LIMIT_BACKOFF_MS, exponentialBackoffMs)
+        : exponentialBackoffMs
       coachDecisionBackoffUntilRef.current = Date.now() + backoffMs
 
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_FALLBACK_USED, {
@@ -776,13 +838,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return null
     }
   }, [
-    coachDecision,
     accessToken,
-    inTradeContract,
-    inTradeSetup?.id,
-    selectedSetup?.id,
-    selectedSetupContract,
-    tradeMode,
   ])
 
   useEffect(() => {
@@ -1394,6 +1450,22 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return null
     }
 
+    const setupUnavailableUntil = contractSetupUnavailableUntilRef.current[setupId] || 0
+    if (setupUnavailableUntil > now) {
+      const durationMs = stopTimer({
+        setupId,
+        result: 'setup_backoff',
+        backoffUntil: setupUnavailableUntil,
+      })
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+        setupId,
+        result: 'setup_backoff',
+        durationMs,
+        backoffMs: setupUnavailableUntil - now,
+      }, { level: 'warning', persist: true })
+      return setup.recommendedContract || null
+    }
+
     if (contractEndpointModeRef.current === 'unavailable') {
       if (now < contractEndpointUnavailableUntilRef.current) {
         const durationMs = stopTimer({
@@ -1437,7 +1509,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       const endpointMode = contractEndpointModeRef.current
       if (endpointMode === 'post') {
         response = await postRequest()
-        if (response.status === 404 || response.status === 405) {
+        if (response.status === 405) {
           const fallback = await getRequest()
           if (fallback.ok) {
             contractEndpointModeRef.current = 'get'
@@ -1448,7 +1520,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         }
       } else {
         response = await getRequest()
-        if (response.status === 404 || response.status === 405) {
+        if (response.status === 405) {
           const fallback = await postRequest()
           if (fallback.ok) {
             contractEndpointModeRef.current = 'post'
@@ -1461,6 +1533,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
       if (!response.ok) {
         if (response.status === 404) {
+          contractSetupUnavailableUntilRef.current[setupId] = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
           const durationMs = stopTimer({
             setupId,
             result: 'no_recommendation',
@@ -1471,6 +1544,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
             result: 'no_recommendation',
             status: response.status,
             durationMs,
+            backoffMs: CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS,
           }, { level: 'warning', persist: true })
           return setup.recommendedContract || null
         }
@@ -1509,6 +1583,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
       const recommendation = await response.json() as ContractRecommendation
       contractEndpointUnavailableUntilRef.current = 0
+      delete contractSetupUnavailableUntilRef.current[setupId]
       const durationMs = stopTimer({
         setupId,
         result: 'success',

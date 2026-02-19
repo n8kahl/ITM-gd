@@ -321,27 +321,16 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
 
       await sendCoachMessage(`${text}${contractContext}`, scopedId)
       setPrompt('')
-
-      if (uxFlags.coachSurfaceV2) {
-        await requestCoachDecision({
-          setupId: scopedId,
-          question: text,
-          forceRefresh: options?.forceRefresh ?? true,
-          surface: 'spx_coach_feed',
-        })
-      }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Coach request failed. Please try again.')
     } finally {
       setIsSending(false)
     }
   }, [
-    requestCoachDecision,
     scopedSetup?.id,
     sendCoachMessage,
     tradeMode,
     activeTradePlan,
-    uxFlags.coachSurfaceV2,
   ])
 
   const handleDecisionAction = useCallback(async (action: CoachDecisionAction) => {
@@ -551,6 +540,9 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
 
   const latestMessage = scopedMessages[0] || null
   const decisionAge = staleAgeLabel(effectiveCoachDecision)
+  const coachDecisionDisplayStatus = coachDecisionStatus === 'loading' && effectiveCoachDecision
+    ? 'ready'
+    : coachDecisionStatus
 
   return (
     <section
@@ -562,15 +554,15 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
           <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">AI Coach</h3>
           <span className={cn(
             'rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]',
-            coachDecisionStatus === 'ready'
+            coachDecisionDisplayStatus === 'ready'
               ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
-              : coachDecisionStatus === 'loading'
+              : coachDecisionDisplayStatus === 'loading'
                 ? 'border-champagne/35 bg-champagne/12 text-champagne'
-                : coachDecisionStatus === 'error'
+                : coachDecisionDisplayStatus === 'error'
                   ? 'border-rose-300/35 bg-rose-500/12 text-rose-100'
                   : 'border-white/18 bg-white/[0.05] text-white/70',
           )}>
-            {decisionStatusLabel(coachDecisionStatus)}
+            {decisionStatusLabel(coachDecisionDisplayStatus)}
           </span>
         </div>
 
@@ -615,7 +607,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       {uxFlags.coachSurfaceV2 && (
         <AnimatePresence initial={false} mode="wait">
           <motion.div
-            key={effectiveCoachDecision?.decisionId || coachDecisionStatus}
+            key={effectiveCoachDecision?.decisionId || scopedSetup?.id || 'coach-brief'}
             data-testid="spx-coach-decision-brief"
             initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 6 } : undefined}
             animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}
