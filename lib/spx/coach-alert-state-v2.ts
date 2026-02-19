@@ -199,9 +199,10 @@ function upsertRecord(
     id: message.id,
     setupId: message.setupId || null,
     severity: resolveCoachAlertSeverity(message),
-    status: existing?.status || 'new',
-    ...existing,
-    ...patch,
+    status: patch.status ?? existing?.status ?? 'new',
+    seenAt: patch.seenAt ?? existing?.seenAt,
+    snoozedUntil: patch.snoozedUntil ?? existing?.snoozedUntil,
+    mutedUntil: patch.mutedUntil ?? existing?.mutedUntil,
     updatedAt: nowIso,
   }
 

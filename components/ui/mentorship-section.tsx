@@ -24,7 +24,7 @@ export function MentorshipSection() {
 
   const handleApplyClick = () => {
     Analytics.trackCTAClick('Mentorship Join Now');
-    window.location.href = 'https://whop.com/checkout/plan_W5Jebtb1V478b';
+    window.location.href = 'https://whop.com/checkout/plan_HFwzNjeWmthq2';
   };
 
   return (
