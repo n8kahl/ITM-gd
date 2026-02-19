@@ -14,12 +14,37 @@ export interface SPXChartAnnotation {
   label: string
 }
 
+export interface SPXActiveTradePlan {
+  setupId: string
+  direction: Setup['direction']
+  regime: Setup['regime']
+  status: Setup['status']
+  entryLow: number
+  entryHigh: number
+  entryAnchor: number | null
+  stop: number
+  target1Price: number
+  target1Label: string
+  target2Price: number
+  target2Label: string
+  probability: number
+  confluenceScore: number
+  contract: ContractRecommendation | null
+  contractSignature: string | null
+  entryContractMid: number | null
+  currentContractMid: number | null
+  pnlPoints: number | null
+  pnlDollars: number | null
+  enteredAt: string | null
+}
+
 export interface SPXSetupContextState {
   activeSetups: Setup[]
   selectedSetup: Setup | null
   tradeMode: TradeMode
   inTradeSetup: Setup | null
   inTradeSetupId: string | null
+  activeTradePlan: SPXActiveTradePlan | null
   selectedSetupContract: ContractRecommendation | null
   inTradeContract: ContractRecommendation | null
   tradeEntryPrice: number | null

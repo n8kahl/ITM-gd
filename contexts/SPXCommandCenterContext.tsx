@@ -8,6 +8,7 @@ import { SPXFlowProvider, type SPXFlowContextState } from '@/contexts/spx/SPXFlo
 import { SPXPriceProvider, type SPXPriceContextState } from '@/contexts/spx/SPXPriceContext'
 import {
   SPXSetupProvider,
+  type SPXActiveTradePlan,
   type SPXChartAnnotation,
   type SPXSetupContextState,
 } from '@/contexts/spx/SPXSetupContext'
@@ -893,6 +894,70 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     ),
     [inTradeContract, inTradeSetup?.recommendedContract, inTradeSetupId, selectedContractBySetupId],
   )
+  const activeTradePlan = useMemo<SPXActiveTradePlan | null>(() => {
+    const planSetup = tradeMode === 'in_trade' ? inTradeSetup : selectedSetup
+    if (!planSetup) return null
+
+    const planContract = tradeMode === 'in_trade'
+      ? (
+        inTradeContract
+        || selectedContractBySetupId[planSetup.id]
+        || planSetup.recommendedContract
+        || null
+      )
+      : (
+        (selectedSetup?.id === planSetup.id ? selectedSetupContract : null)
+        || selectedContractBySetupId[planSetup.id]
+        || planSetup.recommendedContract
+        || null
+      )
+    const planEntryAnchor = tradeMode === 'in_trade'
+      ? (tradeEntryPrice ?? ((planSetup.entryZone.low + planSetup.entryZone.high) / 2))
+      : ((planSetup.entryZone.low + planSetup.entryZone.high) / 2)
+    const planCurrentContractMid = tradeMode === 'in_trade'
+      ? tradeCurrentContractMid
+      : contractMid(planContract)
+    const planEntryContractMid = tradeMode === 'in_trade'
+      ? tradeEntryContractMid
+      : contractMid(planContract)
+
+    return {
+      setupId: planSetup.id,
+      direction: planSetup.direction,
+      regime: planSetup.regime,
+      status: planSetup.status,
+      entryLow: planSetup.entryZone.low,
+      entryHigh: planSetup.entryZone.high,
+      entryAnchor: planEntryAnchor,
+      stop: planSetup.stop,
+      target1Price: planSetup.target1.price,
+      target1Label: planSetup.target1.label,
+      target2Price: planSetup.target2.price,
+      target2Label: planSetup.target2.label,
+      probability: planSetup.probability,
+      confluenceScore: planSetup.confluenceScore,
+      contract: planContract,
+      contractSignature: contractSignature(planContract),
+      entryContractMid: planEntryContractMid,
+      currentContractMid: planCurrentContractMid,
+      pnlPoints: tradeMode === 'in_trade' ? tradePnlPoints : null,
+      pnlDollars: tradeMode === 'in_trade' ? tradePnlDollars : null,
+      enteredAt: tradeMode === 'in_trade' ? tradeEnteredAt : null,
+    }
+  }, [
+    inTradeContract,
+    inTradeSetup,
+    selectedContractBySetupId,
+    selectedSetup,
+    selectedSetupContract,
+    tradeCurrentContractMid,
+    tradeEntryContractMid,
+    tradeEntryPrice,
+    tradeEnteredAt,
+    tradeMode,
+    tradePnlDollars,
+    tradePnlPoints,
+  ])
 
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
     if (!selectedSetup) return []
@@ -1764,6 +1829,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     tradeMode,
     inTradeSetup,
     inTradeSetupId,
+    activeTradePlan,
     selectedSetupContract,
     inTradeContract,
     tradeEntryPrice,
@@ -1784,6 +1850,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     toggleSPYDerived,
   }), [
     activeSetups,
+    activeTradePlan,
     chartAnnotations,
     enterTrade,
     exitTrade,

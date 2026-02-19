@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { Dot } from 'lucide-react'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
@@ -36,6 +37,73 @@ function formatFreshness(ageMs: number | null): string {
   return `${Math.floor(seconds / 60)}m ago`
 }
 
+const ET_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
+function toEasternDate(nowEpochMs: number): Date {
+  return new Date(new Date(nowEpochMs).toLocaleString('en-US', { timeZone: 'America/New_York' }))
+}
+
+function resolveMarketClock(nowEpochMs: number): {
+  timeLabel: string
+  sessionLabel: string
+  className: string
+  title: string
+} {
+  const etNow = toEasternDate(nowEpochMs)
+  const day = etNow.getDay()
+  const minuteOfDay = (etNow.getHours() * 60) + etNow.getMinutes()
+  const isWeekday = day >= 1 && day <= 5
+
+  if (!isWeekday) {
+    return {
+      timeLabel: ET_CLOCK_FORMATTER.format(new Date(nowEpochMs)),
+      sessionLabel: 'Closed',
+      className: 'border-white/20 bg-white/[0.06] text-white/75',
+      title: 'US market closed (weekend)',
+    }
+  }
+
+  if (minuteOfDay >= 570 && minuteOfDay < 960) {
+    return {
+      timeLabel: ET_CLOCK_FORMATTER.format(new Date(nowEpochMs)),
+      sessionLabel: 'RTH Open',
+      className: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
+      title: 'Regular trading session is open (09:30-16:00 ET)',
+    }
+  }
+
+  if (minuteOfDay >= 240 && minuteOfDay < 570) {
+    return {
+      timeLabel: ET_CLOCK_FORMATTER.format(new Date(nowEpochMs)),
+      sessionLabel: 'Pre-Mkt',
+      className: 'border-amber-300/35 bg-amber-500/12 text-amber-100',
+      title: 'Pre-market session (04:00-09:30 ET)',
+    }
+  }
+
+  if (minuteOfDay >= 960 && minuteOfDay < 1200) {
+    return {
+      timeLabel: ET_CLOCK_FORMATTER.format(new Date(nowEpochMs)),
+      sessionLabel: 'After Hours',
+      className: 'border-blue-300/35 bg-blue-500/12 text-blue-100',
+      title: 'After-hours session (16:00-20:00 ET)',
+    }
+  }
+
+  return {
+    timeLabel: ET_CLOCK_FORMATTER.format(new Date(nowEpochMs)),
+    sessionLabel: 'Closed',
+    className: 'border-white/20 bg-white/[0.06] text-white/75',
+    title: 'US market closed',
+  }
+}
+
 export function SPXHeader() {
   const {
     basis,
@@ -53,6 +121,17 @@ export function SPXHeader() {
     priceStreamConnected,
     priceStreamError,
   } = useSPXPriceContext()
+  const [clockEpochMs, setClockEpochMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setClockEpochMs(Date.now())
+    }, 1000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   const snapshotAgeMs = getAgeMs(snapshotGeneratedAt)
   const snapshotFreshness = formatFreshness(snapshotAgeMs)
@@ -101,6 +180,7 @@ export function SPXHeader() {
   const gexNet = gexProfile?.combined?.netGex ?? null
   const gexPosture = gexNet == null ? '--' : gexNet >= 0 ? 'Supportive' : 'Unstable'
   const flipPoint = gexProfile?.combined?.flipPoint ?? null
+  const marketClock = useMemo(() => resolveMarketClock(clockEpochMs), [clockEpochMs])
 
   return (
     <header className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.03] via-white/[0.015] to-emerald-500/[0.04] px-3 py-2.5 md:px-4">
@@ -109,6 +189,16 @@ export function SPXHeader() {
       <div className="relative z-10 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex min-h-[32px] items-center rounded-lg border border-white/20 bg-black/25 px-2.5 py-1 font-serif text-[1.2rem] leading-none text-ivory md:text-[1.35rem]">
           SPX {formatPrice(spxPrice)}
+        </span>
+
+        <span
+          className={cn(
+            'inline-flex min-h-[30px] items-center rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.08em]',
+            marketClock.className,
+          )}
+          title={marketClock.title}
+        >
+          ET {marketClock.timeLabel} · {marketClock.sessionLabel}
         </span>
 
         <span

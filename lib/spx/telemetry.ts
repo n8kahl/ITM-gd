@@ -27,6 +27,8 @@ export const SPX_TELEMETRY_EVENT = {
   COACH_MESSAGE_SENT: 'spx_coach_message_sent',
   FLOW_MODE_TOGGLED: 'spx_flow_mode_toggled',
   LEVEL_MAP_INTERACTION: 'spx_level_map_interaction',
+  CHART_LEVEL_SET_CHANGED: 'spx_chart_level_set_changed',
+  CHART_PRICE_COMMIT: 'spx_chart_price_commit',
   PAGE_VIEW: 'spx_page_view',
   PERF_MEASURED: 'spx_perf_measured',
   FIRST_ACTIONABLE_RENDER: 'spx_first_actionable_render',

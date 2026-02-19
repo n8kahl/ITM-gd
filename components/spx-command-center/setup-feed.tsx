@@ -31,13 +31,7 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
     selectSetup,
     tradeMode,
     inTradeSetup,
-    inTradeContract,
-    tradeEntryPrice,
-    tradeEntryContractMid,
-    tradeCurrentContractMid,
-    tradeEnteredAt,
-    tradePnlPoints,
-    tradePnlDollars,
+    activeTradePlan,
     enterTrade,
     exitTrade,
   } = useSPXSetupContext()
@@ -128,20 +122,20 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                 </button>
               </div>
               <p className="text-[10px] text-white/55">
-                Entry {tradeEntryPrice != null ? tradeEntryPrice.toFixed(2) : '--'}
+                Entry {activeTradePlan?.entryAnchor != null ? activeTradePlan.entryAnchor.toFixed(2) : '--'}
                 {' · '}
-                P&L {tradePnlPoints == null ? '--' : `${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts`}
+                P&L {activeTradePlan?.pnlPoints == null ? '--' : `${activeTradePlan.pnlPoints >= 0 ? '+' : ''}${activeTradePlan.pnlPoints.toFixed(2)} pts`}
                 {' · '}
-                Contract {tradePnlDollars == null ? '--' : `${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}`}
+                Contract {activeTradePlan?.pnlDollars == null ? '--' : `${activeTradePlan.pnlDollars >= 0 ? '+' : ''}$${activeTradePlan.pnlDollars.toFixed(0)}`}
                 {' · '}
-                Started {tradeEnteredAt ? new Date(tradeEnteredAt).toLocaleTimeString() : '--'}
+                Started {activeTradePlan?.enteredAt ? new Date(activeTradePlan.enteredAt).toLocaleTimeString() : '--'}
               </p>
               <p className="text-[9px] text-white/45">
-                {inTradeContract?.description || 'No contract locked'}
+                {activeTradePlan?.contract?.description || 'No contract locked'}
                 {' · '}
-                Entry mid {tradeEntryContractMid != null ? tradeEntryContractMid.toFixed(2) : '--'}
+                Entry mid {activeTradePlan?.entryContractMid != null ? activeTradePlan.entryContractMid.toFixed(2) : '--'}
                 {' · '}
-                Mark {tradeCurrentContractMid != null ? tradeCurrentContractMid.toFixed(2) : '--'}
+                Mark {activeTradePlan?.currentContractMid != null ? activeTradePlan.currentContractMid.toFixed(2) : '--'}
               </p>
             </div>
           ) : (

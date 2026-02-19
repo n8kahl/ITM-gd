@@ -23,6 +23,7 @@ import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXFlowContext } from '@/contexts/spx/SPXFlowContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { CoachMessageCard } from '@/components/spx-command-center/coach-message'
+import { normalizeCoachDecisionForMode } from '@/lib/spx/coach-decision-policy'
 import { cn } from '@/lib/utils'
 import type {
   CoachDecisionAction,
@@ -119,10 +120,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     activeSetups,
     tradeMode,
     inTradeSetup,
-    inTradeContract,
-    tradeEntryContractMid,
-    tradeCurrentContractMid,
-    tradePnlDollars,
+    activeTradePlan,
     selectSetup,
     enterTrade,
     exitTrade,
@@ -152,6 +150,15 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   const lastVisibleMessageIdRef = useRef<string | null>(null)
 
   const scopedSetup = inTradeSetup || selectedSetup
+  const coachDecisionMode = tradeMode === 'in_trade' ? 'in_trade' : (scopedSetup ? 'evaluate' : 'scan')
+  const effectiveCoachDecision = useMemo(
+    () => normalizeCoachDecisionForMode(
+      coachDecision,
+      coachDecisionMode,
+      { scopedSetupId: scopedSetup?.id || null },
+    ),
+    [coachDecision, coachDecisionMode, scopedSetup?.id],
+  )
 
   useEffect(() => {
     setShowAllMessages(false)
@@ -237,7 +244,8 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
           }
         }
         if (action.id === 'hold_or_trim') {
-          const pnlHint = tradePnlDollars == null ? 'P&L is flat.' : `Contract P&L is ${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}.`
+          const planPnl = activeTradePlan?.pnlDollars
+          const pnlHint = planPnl == null ? 'P&L is flat.' : `Contract P&L is ${planPnl >= 0 ? '+' : ''}$${planPnl.toFixed(0)}.`
           return {
             ...action,
             prompt: `I am in this trade now. Should I hold, trim, or fully exit right now? ${pnlHint} Use current flow/regime and stop proximity.`,
@@ -299,7 +307,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         prompt: `Give position sizing guidance for this setup. Probability ${scopedSetup.probability.toFixed(0)}%, confluence ${scopedSetup.confluenceScore}/5, direction ${scopedSetup.direction}.`,
       }
     })
-  }, [flowSummary, regime, scopedSetup, tradeMode, tradePnlDollars, uxFlags.coachProactive])
+  }, [activeTradePlan?.pnlDollars, flowSummary, regime, scopedSetup, tradeMode, uxFlags.coachProactive])
 
   const sendMessage = useCallback(async (text: string, options?: { setupId?: string | null; forceRefresh?: boolean }) => {
     setSendError(null)
@@ -307,8 +315,8 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
 
     try {
       const scopedId = options?.setupId ?? scopedSetup?.id
-      const contractContext = tradeMode === 'in_trade' && inTradeContract
-        ? `\nContract: ${inTradeContract.description}\nEntry mid: ${tradeEntryContractMid?.toFixed(2) ?? '--'}\nCurrent mid: ${tradeCurrentContractMid?.toFixed(2) ?? '--'}\nContract P&L: ${tradePnlDollars == null ? '--' : `${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}`}`
+      const contractContext = tradeMode === 'in_trade' && activeTradePlan?.contract
+        ? `\nContract: ${activeTradePlan.contract.description}\nEntry mid: ${activeTradePlan.entryContractMid?.toFixed(2) ?? '--'}\nCurrent mid: ${activeTradePlan.currentContractMid?.toFixed(2) ?? '--'}\nContract P&L: ${activeTradePlan.pnlDollars == null ? '--' : `${activeTradePlan.pnlDollars >= 0 ? '+' : ''}$${activeTradePlan.pnlDollars.toFixed(0)}`}`
         : ''
 
       await sendCoachMessage(`${text}${contractContext}`, scopedId)
@@ -328,14 +336,11 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       setIsSending(false)
     }
   }, [
-    inTradeContract,
     requestCoachDecision,
     scopedSetup?.id,
     sendCoachMessage,
-    tradeCurrentContractMid,
-    tradeEntryContractMid,
     tradeMode,
-    tradePnlDollars,
+    activeTradePlan,
     uxFlags.coachSurfaceV2,
   ])
 
@@ -348,15 +353,22 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         actionId: action.id,
         setupId: actionSetupId,
         tradeMode,
-        decisionId: coachDecision?.decisionId || null,
+        decisionId: effectiveCoachDecision?.decisionId || null,
       }, { persist: true })
     } else {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_SECONDARY_ACTION_CLICKED, {
         actionId: action.id,
         setupId: actionSetupId,
         tradeMode,
-        decisionId: coachDecision?.decisionId || null,
+        decisionId: effectiveCoachDecision?.decisionId || null,
       }, { persist: true })
+    }
+
+    if (tradeMode === 'in_trade' && action.id === 'ENTER_TRADE_FOCUS') {
+      return
+    }
+    if (tradeMode !== 'in_trade' && action.id === 'EXIT_TRADE_FOCUS') {
+      return
     }
 
     if (action.id === 'ENTER_TRADE_FOCUS' && actionSetup) {
@@ -397,7 +409,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_HISTORY_OPENED, {
         setupId: actionSetupId,
         tradeMode,
-        decisionId: coachDecision?.decisionId || null,
+        decisionId: effectiveCoachDecision?.decisionId || null,
       }, { persist: true })
       return
     }
@@ -423,7 +435,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     }
   }, [
     activeSetups,
-    coachDecision?.decisionId,
+    effectiveCoachDecision?.decisionId,
     enterTrade,
     exitTrade,
     requestCoachDecision,
@@ -538,7 +550,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   }, [scopedSetup?.id, sendMessage, tradeMode])
 
   const latestMessage = scopedMessages[0] || null
-  const decisionAge = staleAgeLabel(coachDecision)
+  const decisionAge = staleAgeLabel(effectiveCoachDecision)
 
   return (
     <section
@@ -603,7 +615,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       {uxFlags.coachSurfaceV2 && (
         <AnimatePresence initial={false} mode="wait">
           <motion.div
-            key={coachDecision?.decisionId || coachDecisionStatus}
+            key={effectiveCoachDecision?.decisionId || coachDecisionStatus}
             data-testid="spx-coach-decision-brief"
             initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 6 } : undefined}
             animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}
@@ -611,7 +623,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className={cn(
               'rounded-xl border px-3 py-2.5',
-              toDecisionTone(coachDecision?.severity || 'routine'),
+              toDecisionTone(effectiveCoachDecision?.severity || 'routine'),
             )}
           >
             <div className="flex items-start justify-between gap-2">
@@ -626,15 +638,15 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                     </span>
                   )}
                 </p>
-                {coachDecision ? (
+                {effectiveCoachDecision ? (
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span className={cn('rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]', verdictPill(coachDecision.verdict))}>
-                      {coachDecision.verdict}
+                    <span className={cn('rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]', verdictPill(effectiveCoachDecision.verdict))}>
+                      {effectiveCoachDecision.verdict}
                     </span>
                     <span className="rounded border border-white/15 bg-white/[0.05] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/75">
-                      Confidence {coachDecision.confidence}%
+                      Confidence {effectiveCoachDecision.confidence}%
                     </span>
-                    {coachDecision.freshness.stale && (
+                    {effectiveCoachDecision.freshness.stale && (
                       <span className="rounded border border-rose-300/30 bg-rose-500/12 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-rose-100">
                         Stale
                       </span>
@@ -660,14 +672,14 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               </button>
             </div>
 
-            {coachDecision ? (
+            {effectiveCoachDecision ? (
               <>
-                <p className="mt-2 text-[12px] leading-snug text-ivory">{coachDecision.primaryText}</p>
+                <p className="mt-2 text-[12px] leading-snug text-ivory">{effectiveCoachDecision.primaryText}</p>
 
-                {coachDecision.why.length > 0 && (
+                {effectiveCoachDecision.why.length > 0 && (
                   <ul className="mt-2 space-y-1 text-[11px] text-white/78">
-                    {coachDecision.why.slice(0, 3).map((line, index) => (
-                      <li key={`${coachDecision.decisionId}-why-${index}`} className="flex items-start gap-1.5">
+                    {effectiveCoachDecision.why.slice(0, 3).map((line, index) => (
+                      <li key={`${effectiveCoachDecision.decisionId}-why-${index}`} className="flex items-start gap-1.5">
                         <CheckCircle2 className="mt-0.5 h-3 w-3 text-emerald-200/85" />
                         <span>{line}</span>
                       </li>
@@ -675,25 +687,25 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                   </ul>
                 )}
 
-                {(coachDecision.riskPlan?.invalidation || coachDecision.riskPlan?.positionGuidance || coachDecision.riskPlan?.stop || coachDecision.riskPlan?.maxRiskDollars) && (
+                {(effectiveCoachDecision.riskPlan?.invalidation || effectiveCoachDecision.riskPlan?.positionGuidance || effectiveCoachDecision.riskPlan?.stop || effectiveCoachDecision.riskPlan?.maxRiskDollars) && (
                   <div className="mt-2.5 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2">
                     <p className="text-[9px] uppercase tracking-[0.1em] text-white/50">Risk Plan</p>
                     <div className="mt-1 grid gap-1 text-[10px] text-white/75">
-                      {coachDecision.riskPlan?.invalidation && <p>Invalidation: {coachDecision.riskPlan.invalidation}</p>}
-                      {typeof coachDecision.riskPlan?.stop === 'number' && <p>Stop: {coachDecision.riskPlan.stop.toFixed(1)}</p>}
-                      {typeof coachDecision.riskPlan?.maxRiskDollars === 'number' && (
-                        <p>Max risk: ${coachDecision.riskPlan.maxRiskDollars.toFixed(0)}</p>
+                      {effectiveCoachDecision.riskPlan?.invalidation && <p>Invalidation: {effectiveCoachDecision.riskPlan.invalidation}</p>}
+                      {typeof effectiveCoachDecision.riskPlan?.stop === 'number' && <p>Stop: {effectiveCoachDecision.riskPlan.stop.toFixed(1)}</p>}
+                      {typeof effectiveCoachDecision.riskPlan?.maxRiskDollars === 'number' && (
+                        <p>Max risk: ${effectiveCoachDecision.riskPlan.maxRiskDollars.toFixed(0)}</p>
                       )}
-                      {coachDecision.riskPlan?.positionGuidance && <p>Size: {coachDecision.riskPlan.positionGuidance}</p>}
+                      {effectiveCoachDecision.riskPlan?.positionGuidance && <p>Size: {effectiveCoachDecision.riskPlan.positionGuidance}</p>}
                     </div>
                   </div>
                 )}
 
-                {coachDecision.actions.length > 0 && !readOnly && (
+                {effectiveCoachDecision.actions.length > 0 && !readOnly && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5" data-testid="spx-coach-decision-actions">
-                    {coachDecision.actions.map((action) => (
+                    {effectiveCoachDecision.actions.map((action) => (
                       <button
-                        key={`${coachDecision.decisionId}-${action.id}`}
+                        key={`${effectiveCoachDecision.decisionId}-${action.id}`}
                         type="button"
                         onClick={() => {
                           void handleDecisionAction(action)
@@ -774,7 +786,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                 trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_HISTORY_OPENED, {
                   setupId: scopedSetup?.id || null,
                   tradeMode,
-                  decisionId: coachDecision?.decisionId || null,
+                  decisionId: effectiveCoachDecision?.decisionId || null,
                 }, { persist: true })
               }
               return next

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { mergeRealtimeMicrobarIntoBars, mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
 import { TradingChart, type LevelAnnotation } from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -8,9 +8,16 @@ import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { getChartData, type ChartBar, type ChartTimeframe } from '@/lib/api/ai-coach'
+import { arraysEqual, stabilizeLevelKeys } from '@/lib/spx/level-stability'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { SPXLevel } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
+
+const PRICE_COMMIT_THROTTLE_MS = 300
+const PRICE_COMMIT_REPORT_MS = 30_000
+const FOCUSED_LEVEL_REFRESH_MS = 1_000
+const FOCUSED_LEVEL_MIN_PROMOTE_STREAK = 2
+const LEVEL_CHURN_WINDOW_MS = 60_000
 
 function toLineStyle(style: 'solid' | 'dashed' | 'dotted' | 'dot-dash'): 'solid' | 'dashed' | 'dotted' {
   if (style === 'dot-dash') return 'dashed'
@@ -62,6 +69,23 @@ export function SPXChart() {
   const [bars, setBars] = useState<ChartBar[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAllRelevantLevels, setShowAllRelevantLevels] = useState(false)
+  const [stableFocusedLevelKeys, setStableFocusedLevelKeys] = useState<string[]>([])
+  const pendingPriceUpdateRef = useRef<{
+    price: number
+    timestampIso: string
+    maxAgeMs: number
+    receivedAtEpochMs: number
+  } | null>(null)
+  const latestFocusedCandidatesRef = useRef<LevelAnnotation[]>([])
+  const focusedLevelStreakByKeyRef = useRef<Record<string, number>>({})
+  const levelMutationEpochsRef = useRef<number[]>([])
+  const lastLevelMutationEpochRef = useRef<number | null>(null)
+  const priceCommitStatsRef = useRef({
+    enqueued: 0,
+    committed: 0,
+    noChange: 0,
+    staleDropped: 0,
+  })
 
   useEffect(() => {
     // Always reset to 1m on page entry for command-center first-action consistency.
@@ -144,11 +168,79 @@ export function SPXChart() {
     const maxAgeMs = spxPriceSource === 'tick' ? 10_000 : 90_000
     if (spxPriceAgeMs != null && spxPriceAgeMs > maxAgeMs) return
 
+    pendingPriceUpdateRef.current = {
+      price: spxPrice,
+      timestampIso: spxTickTimestamp,
+      maxAgeMs,
+      receivedAtEpochMs: Date.now(),
+    }
+    priceCommitStatsRef.current.enqueued += 1
+  }, [spxPrice, spxPriceAgeMs, spxPriceSource, spxTickTimestamp])
+
+  const flushPriceCommitStats = useCallback((reason: 'interval' | 'teardown') => {
+    const stats = priceCommitStatsRef.current
+    const total = stats.committed + stats.noChange + stats.staleDropped
+    if (total === 0) return
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CHART_PRICE_COMMIT, {
+      reason,
+      timeframe: selectedTimeframe,
+      throttleMs: PRICE_COMMIT_THROTTLE_MS,
+      enqueued: stats.enqueued,
+      committed: stats.committed,
+      noChange: stats.noChange,
+      staleDropped: stats.staleDropped,
+      commitRatio: Number((stats.committed / Math.max(total, 1)).toFixed(3)),
+    })
+
+    priceCommitStatsRef.current = {
+      enqueued: 0,
+      committed: 0,
+      noChange: 0,
+      staleDropped: 0,
+    }
+  }, [selectedTimeframe])
+
+  const flushPendingPriceUpdate = useCallback(() => {
+    const pending = pendingPriceUpdateRef.current
+    if (!pending) return
+
+    if ((Date.now() - pending.receivedAtEpochMs) > pending.maxAgeMs) {
+      priceCommitStatsRef.current.staleDropped += 1
+      pendingPriceUpdateRef.current = null
+      return
+    }
+
+    let changed = false
     setBars((prev) => {
-      const merged = mergeRealtimePriceIntoBars(prev, selectedTimeframe, spxPrice, spxTickTimestamp)
+      const merged = mergeRealtimePriceIntoBars(prev, selectedTimeframe, pending.price, pending.timestampIso)
+      changed = merged.changed
       return merged.changed ? merged.bars : prev
     })
-  }, [selectedTimeframe, spxPrice, spxPriceAgeMs, spxPriceSource, spxTickTimestamp])
+    if (changed) {
+      priceCommitStatsRef.current.committed += 1
+    } else {
+      priceCommitStatsRef.current.noChange += 1
+    }
+    pendingPriceUpdateRef.current = null
+  }, [selectedTimeframe])
+
+  useEffect(() => {
+    flushPendingPriceUpdate()
+    const intervalId = window.setInterval(() => {
+      flushPendingPriceUpdate()
+    }, PRICE_COMMIT_THROTTLE_MS)
+
+    const reportId = window.setInterval(() => {
+      flushPriceCommitStats('interval')
+    }, PRICE_COMMIT_REPORT_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.clearInterval(reportId)
+      flushPriceCommitStats('teardown')
+    }
+  }, [flushPendingPriceUpdate, flushPriceCommitStats])
 
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({
@@ -180,7 +272,9 @@ export function SPXChart() {
     }))
   }, [levels])
 
-  const focusedLevelAnnotations = useMemo<LevelAnnotation[]>(() => {
+  const targetFocusedLevelCount = selectedSetup ? 8 : 6
+
+  const focusedLevelCandidates = useMemo<LevelAnnotation[]>(() => {
     if (levelAnnotations.length === 0) return []
     const livePrice = bars[bars.length - 1]?.close || (spxPrice > 0 ? spxPrice : null)
 
@@ -207,7 +301,7 @@ export function SPXChart() {
       })
       .sort((a, b) => a.score - b.score)
 
-    const baseFocused = ranked.slice(0, selectedSetup ? 8 : 6).map((item) => item.annotation)
+    const baseFocused = ranked.slice(0, targetFocusedLevelCount).map((item) => item.annotation)
     const nearestSpyDerived = ranked
       .filter((item) => item.annotation.type === 'spy_derived')
       .slice(0, 2)
@@ -223,7 +317,97 @@ export function SPXChart() {
     }
 
     return Array.from(merged.values())
-  }, [bars, levelAnnotations, selectedSetup, spxPrice])
+  }, [bars, levelAnnotations, spxPrice, targetFocusedLevelCount])
+
+  const toLevelKey = useCallback((annotation: LevelAnnotation): string => (
+    `${annotation.label}:${annotation.price}:${annotation.type || 'unknown'}`
+  ), [])
+
+  useEffect(() => {
+    latestFocusedCandidatesRef.current = focusedLevelCandidates
+  }, [focusedLevelCandidates])
+
+  const refreshStableFocusedLevels = useCallback(() => {
+    const candidates = latestFocusedCandidatesRef.current
+    const candidateKeys = candidates.map(toLevelKey)
+
+    const next = stabilizeLevelKeys({
+      previousStableKeys: stableFocusedLevelKeys,
+      previousStreakByKey: focusedLevelStreakByKeyRef.current,
+      candidateKeys,
+      targetCount: targetFocusedLevelCount,
+      minPromoteStreak: FOCUSED_LEVEL_MIN_PROMOTE_STREAK,
+    })
+
+    focusedLevelStreakByKeyRef.current = next.streakByKey
+    if (!arraysEqual(next.stableKeys, stableFocusedLevelKeys)) {
+      const nowEpochMs = Date.now()
+      const previousStableSet = new Set(stableFocusedLevelKeys)
+      const nextStableSet = new Set(next.stableKeys)
+      const added = next.stableKeys.filter((key) => !previousStableSet.has(key)).length
+      const removed = stableFocusedLevelKeys.filter((key) => !nextStableSet.has(key)).length
+      const windowEpochs = levelMutationEpochsRef.current
+        .filter((epoch) => (nowEpochMs - epoch) <= LEVEL_CHURN_WINDOW_MS)
+      windowEpochs.push(nowEpochMs)
+      levelMutationEpochsRef.current = windowEpochs
+
+      const previousMutationEpoch = lastLevelMutationEpochRef.current
+      lastLevelMutationEpochRef.current = nowEpochMs
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CHART_LEVEL_SET_CHANGED, {
+        timeframe: selectedTimeframe,
+        refreshMs: FOCUSED_LEVEL_REFRESH_MS,
+        minPromoteStreak: FOCUSED_LEVEL_MIN_PROMOTE_STREAK,
+        shownCount: next.stableKeys.length,
+        candidateCount: candidateKeys.length,
+        added,
+        removed,
+        churnPerMinute: windowEpochs.length,
+        secondsSincePreviousMutation: previousMutationEpoch == null
+          ? null
+          : Number(((nowEpochMs - previousMutationEpoch) / 1000).toFixed(2)),
+      })
+
+      setStableFocusedLevelKeys(next.stableKeys)
+    }
+  }, [stableFocusedLevelKeys, targetFocusedLevelCount, toLevelKey, selectedTimeframe])
+
+  useEffect(() => {
+    refreshStableFocusedLevels()
+    const intervalId = window.setInterval(() => {
+      refreshStableFocusedLevels()
+    }, FOCUSED_LEVEL_REFRESH_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [refreshStableFocusedLevels])
+
+  const focusedLevelAnnotations = useMemo<LevelAnnotation[]>(() => {
+    if (focusedLevelCandidates.length === 0) return []
+    if (stableFocusedLevelKeys.length === 0) return focusedLevelCandidates.slice(0, targetFocusedLevelCount)
+
+    const candidateByKey = new Map(
+      focusedLevelCandidates.map((annotation) => [toLevelKey(annotation), annotation] as const),
+    )
+    const resolved = stableFocusedLevelKeys
+      .map((key) => candidateByKey.get(key) || null)
+      .filter((annotation): annotation is LevelAnnotation => annotation != null)
+
+    if (resolved.length >= targetFocusedLevelCount) {
+      return resolved.slice(0, targetFocusedLevelCount)
+    }
+
+    const merged = [...resolved]
+    for (const annotation of focusedLevelCandidates) {
+      const key = toLevelKey(annotation)
+      if (stableFocusedLevelKeys.includes(key)) continue
+      merged.push(annotation)
+      if (merged.length >= targetFocusedLevelCount) break
+    }
+
+    return merged
+  }, [focusedLevelCandidates, stableFocusedLevelKeys, targetFocusedLevelCount, toLevelKey])
 
   const setupAnnotations = useMemo<LevelAnnotation[]>(() => {
     if (!selectedSetup) return []
