@@ -70,7 +70,7 @@ export function CoachDock({
           type="button"
           onClick={onToggle}
           data-testid={`spx-coach-dock-toggle-${surface}`}
-          className="inline-flex min-h-[38px] items-center gap-1 rounded-lg border border-white/20 bg-white/[0.06] px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-white/80 hover:bg-white/[0.12]"
+          className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-white/20 bg-white/[0.06] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-white/80 hover:bg-white/[0.12]"
         >
           <MessageSquare className="h-3 w-3" />
           {isOpen ? 'Hide' : 'Open'}

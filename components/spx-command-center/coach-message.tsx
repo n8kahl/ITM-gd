@@ -87,7 +87,7 @@ export function CoachMessageCard({
                 key={`${message.id}-${chip}`}
                 type="button"
                 onClick={() => onActionChipClick(chip, message)}
-                className="rounded-full border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-emerald-200 transition-colors hover:bg-emerald-500/22 hover:text-emerald-100"
+                className="min-h-[32px] rounded-full border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-emerald-200 transition-colors hover:bg-emerald-500/22 hover:text-emerald-100"
               >
                 {chip}
               </button>
@@ -108,7 +108,7 @@ export function CoachMessageCard({
         <button
           type="button"
           onClick={() => setExpanded((prev) => !prev)}
-          className="mt-2 text-[11px] uppercase tracking-[0.12em] text-emerald-200 hover:text-emerald-100"
+          className="mt-2 inline-flex min-h-[32px] items-center text-[11px] uppercase tracking-[0.12em] text-emerald-200 hover:text-emerald-100"
         >
           {expanded ? 'Collapse' : 'Expand'}
         </button>

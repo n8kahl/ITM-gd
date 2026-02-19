@@ -230,15 +230,15 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
 
       <div className="mt-3 min-h-[180px]">
         {readOnly ? (
-          <p className="text-xs text-white/55">
-            Mobile read-only mode: contract execution analytics are available on desktop.
+          <p className="rounded-md border border-white/12 bg-white/[0.03] px-2.5 py-2 text-xs text-white/65">
+            Contract analytics are optimized for desktop and tablet execution surfaces.
           </p>
         ) : !selectedSetup ? (
-          <p className="text-xs text-white/55">Select a setup to generate a contract recommendation.</p>
+          <p className="rounded-md border border-white/12 bg-white/[0.03] px-2.5 py-2 text-xs text-white/65">Select a setup to generate a contract recommendation.</p>
         ) : isLoading && !contract ? (
-          <p className="text-xs text-white/55">Computing recommendation...</p>
+          <p className="rounded-md border border-white/12 bg-white/[0.03] px-2.5 py-2 text-xs text-white/65">Computing recommendation...</p>
         ) : !contract ? (
-          <p className="text-xs text-white/55">{errorMessage || 'No recommendation available for this setup yet.'}</p>
+          <p className="rounded-md border border-white/12 bg-white/[0.03] px-2.5 py-2 text-xs text-white/65">{errorMessage || 'No recommendation available for this setup yet.'}</p>
         ) : (
           <div className="space-y-2">
             <ContractCard

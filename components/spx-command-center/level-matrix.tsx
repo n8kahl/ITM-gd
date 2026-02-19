@@ -52,7 +52,7 @@ export function LevelMatrix() {
   return (
     <section className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.025] to-emerald-500/[0.02] p-3 md:p-4">
       <div className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl" />
-      <div className="relative z-10 flex items-center justify-between">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm uppercase tracking-[0.14em] text-white/70">Level Matrix</h3>
           <InfoTip label="How to use Level Matrix">
@@ -64,7 +64,7 @@ export function LevelMatrix() {
             type="button"
             onClick={() => setShowAll((prev) => !prev)}
             className={cn(
-              'rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+              'rounded-md border px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60',
               showAll
                 ? 'border-champagne/45 bg-champagne/10 text-champagne'
                 : 'border-white/20 bg-white/[0.03] text-white/65',
@@ -85,7 +85,7 @@ export function LevelMatrix() {
               type="button"
               onClick={() => toggleLevelCategory(category.value)}
               className={cn(
-                'rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em] transition-colors',
+                'rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60',
                 active
                   ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
                   : 'border-white/20 bg-white/[0.03] text-white/50 hover:text-white/75',
@@ -100,7 +100,7 @@ export function LevelMatrix() {
           type="button"
           onClick={toggleSPYDerived}
           className={cn(
-            'rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em] transition-colors',
+            'rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60',
             showSPYDerived
               ? 'border-champagne/45 bg-champagne/10 text-champagne'
               : 'border-white/20 bg-white/[0.03] text-white/50',
@@ -118,7 +118,7 @@ export function LevelMatrix() {
 
       <div className="relative z-10 mt-3 max-h-[260px] overflow-auto rounded-xl border border-white/10">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-[#0A0A0B]/90 backdrop-blur-md">
+          <thead className="sticky top-0 bg-[#0A0A0B]/95 backdrop-blur-md">
             <tr className="text-white/60">
               <th className="px-2 py-2 text-left font-medium">Source</th>
               <th className="px-2 py-2 text-left font-medium">Cat</th>
@@ -127,7 +127,7 @@ export function LevelMatrix() {
           </thead>
           <tbody>
             {simplified.map((level) => (
-              <tr key={level.id} className="border-t border-white/5 text-white/80 hover:bg-white/[0.03]">
+              <tr key={level.id} className="border-t border-white/8 text-white/85 transition-colors hover:bg-white/[0.04]">
                 <td className="px-2 py-1.5 truncate max-w-[160px]">{level.source}</td>
                 <td className="px-2 py-1.5 uppercase text-[10px] text-white/55">
                   {level.category === 'spy_derived' ? 'spy impact' : level.category.replace('_', ' ')}

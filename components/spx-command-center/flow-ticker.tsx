@@ -107,19 +107,19 @@ export function FlowTicker() {
 
   if (flowEvents.length === 0) {
     return (
-      <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-[11px] text-white/45">
+      <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/55">
         Flow warming up…
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2" data-testid="spx-flow-ticker">
-      <div className="flex items-center gap-2">
+    <div className="rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.025] to-white/[0.01] px-3 py-2.5" data-testid="spx-flow-ticker">
+      <div className="flex items-center gap-2.5">
         <span className="shrink-0 text-[10px] uppercase tracking-[0.1em] text-white/45">Flow</span>
         <div className="flex-1">
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(5, Math.min(95, bullishShare))}%` }} />
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-emerald-400/75 transition-[width] duration-500" style={{ width: `${Math.max(5, Math.min(95, bullishShare))}%` }} />
           </div>
         </div>
 
@@ -145,11 +145,11 @@ export function FlowTicker() {
         )}
       </div>
 
-      <div className="mt-1.5 flex items-center justify-between gap-2">
+      <div className="mt-2 flex items-center justify-between gap-2">
         {topEvent ? (
           <div
             className={cn(
-              'inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-mono',
+              'inline-flex min-w-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-mono',
               topEvent.direction === 'bullish'
                 ? 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-100'
                 : 'border-rose-400/20 bg-rose-500/[0.06] text-rose-100',
@@ -181,14 +181,14 @@ export function FlowTicker() {
               hasSelectedSetup: Boolean(selectedSetup),
             })
           }}
-          className="shrink-0 rounded border border-white/15 bg-white/[0.03] px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/60 hover:text-white/80"
+          className="shrink-0 min-h-[36px] rounded border border-white/15 bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] text-white/65 transition-colors hover:bg-white/[0.07] hover:text-white/85 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/65"
         >
           {expanded ? 'Compact' : `Expand (${Math.max(0, ranked.length - 1)})`}
         </button>
       </div>
 
       {expanded && (
-        <div className="mt-1.5 space-y-1" data-testid="spx-flow-expanded">
+        <div className="mt-2 space-y-1.5" data-testid="spx-flow-expanded">
           {ranked.slice(1).map((event) => {
             const nearEntry = entryMid != null && spxPrice > 0 && event.symbol === 'SPX'
               ? Math.abs(event.strike - entryMid) <= 20
@@ -198,7 +198,7 @@ export function FlowTicker() {
               <div
                 key={event.id}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-mono',
+                  'flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[10px] font-mono',
                   event.direction === 'bullish'
                     ? 'border-emerald-400/20 bg-emerald-500/[0.05] text-emerald-100'
                     : 'border-rose-400/20 bg-rose-500/[0.05] text-rose-100',

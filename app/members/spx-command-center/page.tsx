@@ -477,7 +477,7 @@ function SPXCommandCenterContent() {
       variants={rootVariants}
       initial={prefersReducedMotion ? false : 'initial'}
       animate={prefersReducedMotion ? false : 'animate'}
-      className="space-y-2.5"
+      className="space-y-3"
     >
       {/* ─── TIER 1: Sniper Briefing ─── */}
       <motion.div variants={itemVariants}>
@@ -503,14 +503,14 @@ function SPXCommandCenterContent() {
 
       {/* ─── TIER 2: Battlefield ─── */}
       {isMobile ? (
-        <motion.div variants={itemVariants} className="space-y-2.5">
+        <motion.div variants={itemVariants} className="space-y-3">
           {mobileSmartStackEnabled ? (
             <div
               className={cn('space-y-2.5', uxFlags.coachDockV1 && 'pb-24')}
               data-testid="spx-mobile-smart-stack"
             >
-              <div className="sticky top-1 z-10 flex items-center justify-between rounded-lg border border-white/10 bg-[#0A0C10]/90 px-3 py-2 backdrop-blur">
-                <p className="text-[10px] uppercase tracking-[0.1em] text-white/65">Mobile Smart Stack</p>
+              <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border border-white/10 bg-[#0A0C10]/90 px-3.5 py-2.5 backdrop-blur">
+                <p className="text-[11px] uppercase tracking-[0.1em] text-white/68">Mobile Command Stack</p>
                 <span className="rounded border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200">
                   {layoutMode.replace('_', ' ')}
                 </span>
@@ -524,8 +524,8 @@ function SPXCommandCenterContent() {
               <SPXChart />
               <FlowTicker />
               {layoutMode !== 'in_trade' && <DecisionContext />}
-              <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/55 hover:text-white/75">
+              <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
+                <summary className="flex min-h-[40px] cursor-pointer list-none items-center text-[10px] uppercase tracking-[0.1em] text-white/55 hover:text-white/75">
                   Deep Analytics
                 </summary>
                 <div className="mt-2.5 space-y-2.5">
@@ -632,7 +632,7 @@ function SPXCommandCenterContent() {
                 </div>
               </Panel>
 
-              <PanelResizeHandle className="w-2 bg-transparent hover:bg-emerald-500/15 active:bg-emerald-500/25 transition-colors cursor-col-resize" />
+              <PanelResizeHandle className="w-2 bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25 cursor-col-resize" />
 
               {/* ─── RIGHT: Setups + Contract + Coach ─── */}
               <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
@@ -731,7 +731,7 @@ function SPXCommandCenterContent() {
             type="button"
             data-testid="spx-command-palette-trigger"
             onClick={() => setShowCommandPalette(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.06] hover:text-white"
+            className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.06] hover:text-white"
           >
             <span className="rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-[9px]">⌘K</span>
             Command Palette

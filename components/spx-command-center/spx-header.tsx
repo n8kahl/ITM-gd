@@ -63,6 +63,36 @@ export function SPXHeader() {
   const wsConnectedUnknownSource = priceStreamConnected && !wsTickLive && !wsTickLagging && !wsPollFallback
   const wsLagLabel = tickAgeMs != null ? `${Math.floor(tickAgeMs / 1000)}s` : '--'
 
+  const wsStatus = wsTickLive
+    ? {
+      label: 'WS Tick',
+      className: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
+      title: 'WebSocket connected with tick-level updates',
+    }
+    : wsTickLagging
+      ? {
+        label: `WS Lag ${wsLagLabel}`,
+        className: 'border-amber-300/35 bg-amber-500/12 text-amber-100',
+        title: `WebSocket connected but tick feed is lagging (${wsLagLabel})`,
+      }
+      : wsPollFallback
+        ? {
+          label: 'WS Poll',
+          className: 'border-amber-300/35 bg-amber-500/12 text-amber-100',
+          title: 'WebSocket connected; using slower poll fallback prices',
+        }
+        : wsConnectedUnknownSource
+          ? {
+            label: 'WS Link',
+            className: 'border-white/20 bg-white/[0.06] text-white/75',
+            title: 'WebSocket connected; awaiting fresh price source',
+          }
+          : {
+            label: 'WS Retry',
+            className: 'border-rose-400/30 bg-rose-500/10 text-rose-100',
+            title: priceStreamError || 'WebSocket reconnecting',
+          }
+
   const postureDirection = prediction
     ? prediction.direction.bullish >= prediction.direction.bearish ? 'bullish' : 'bearish'
     : 'neutral'
@@ -73,54 +103,31 @@ export function SPXHeader() {
   const flipPoint = gexProfile?.combined?.flipPoint ?? null
 
   return (
-    <header className="glass-card-heavy relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.025] via-white/[0.01] to-emerald-500/[0.03] px-3 py-2">
-      <div className="pointer-events-none absolute -right-24 -top-24 h-44 w-44 rounded-full bg-emerald-500/8 blur-3xl" />
+    <header className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.03] via-white/[0.015] to-emerald-500/[0.04] px-3 py-2.5 md:px-4">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-44 w-44 rounded-full bg-emerald-500/10 blur-3xl" />
+
       <div className="relative z-10 flex flex-wrap items-center gap-1.5">
-        <span className="inline-flex items-center rounded-md border border-white/20 bg-black/25 px-2 py-1 font-serif text-[1.2rem] leading-none text-ivory md:text-[1.35rem]">
+        <span className="inline-flex min-h-[32px] items-center rounded-lg border border-white/20 bg-black/25 px-2.5 py-1 font-serif text-[1.2rem] leading-none text-ivory md:text-[1.35rem]">
           SPX {formatPrice(spxPrice)}
         </span>
 
         <span
           className={cn(
-            'inline-flex items-center rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.08em]',
-            wsTickLive
-              ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100'
-              : wsTickLagging || wsPollFallback
-                ? 'border-amber-300/35 bg-amber-500/12 text-amber-100'
-                : wsConnectedUnknownSource
-                  ? 'border-white/20 bg-white/[0.06] text-white/75'
-                  : 'border-amber-400/30 bg-amber-500/10 text-amber-200',
+            'inline-flex min-h-[30px] items-center rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.08em]',
+            wsStatus.className,
           )}
-          title={
-            wsTickLive
-              ? 'WebSocket connected with tick-level updates'
-              : wsTickLagging
-                ? `WebSocket connected but tick feed is lagging (${wsLagLabel})`
-              : wsPollFallback
-                ? 'WebSocket connected; using slower poll fallback prices'
-                : wsConnectedUnknownSource
-                  ? 'WebSocket connected; awaiting fresh price source'
-                  : (priceStreamError || 'WebSocket reconnecting')
-          }
+          title={wsStatus.title}
         >
-          {wsTickLive
-            ? 'WS Tick'
-            : wsTickLagging
-              ? `WS Lag ${wsLagLabel}`
-              : wsPollFallback
-                ? 'WS Poll'
-                : wsConnectedUnknownSource
-                  ? 'WS Link'
-                  : 'WS Retry'}
+          {wsStatus.label}
         </span>
 
-        <span className="inline-flex items-center rounded-md border border-champagne/25 bg-champagne/[0.08] px-2 py-1 text-[10px] text-champagne">
+        <span className="inline-flex min-h-[30px] items-center rounded-md border border-champagne/25 bg-champagne/[0.08] px-2 py-1 text-[10px] text-champagne">
           {postureLabel}
         </span>
 
         <span
           className={cn(
-            'inline-flex items-center rounded-md border px-2 py-1 text-[10px]',
+            'inline-flex min-h-[30px] items-center rounded-md border px-2 py-1 text-[10px]',
             gexNet != null && gexNet >= 0
               ? 'border-emerald-400/20 bg-emerald-500/8 text-emerald-100'
               : 'border-rose-400/20 bg-rose-500/8 text-rose-100',
@@ -131,7 +138,7 @@ export function SPXHeader() {
 
         <span
           className={cn(
-            'inline-flex items-center rounded-md border px-2 py-1 text-[10px]',
+            'inline-flex min-h-[30px] items-center rounded-md border px-2 py-1 text-[10px]',
             basis && basis.current >= 0
               ? 'border-emerald-300/20 bg-emerald-500/[0.07] text-emerald-100'
               : 'border-rose-300/20 bg-rose-500/[0.07] text-rose-100',
@@ -141,10 +148,10 @@ export function SPXHeader() {
         </span>
       </div>
 
-      <div className="relative z-10 mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-white/70">
+      <div className="relative z-10 mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-white/70">
         {tradeMode === 'in_trade' && inTradeSetup ? (
           <>
-            <span className="inline-flex items-center rounded-md border border-emerald-400/20 bg-emerald-500/[0.08] px-2 py-1 text-emerald-100">
+            <span className="inline-flex min-h-[30px] items-center rounded-md border border-emerald-400/20 bg-emerald-500/[0.08] px-2 py-1 text-emerald-100">
               In Trade {inTradeSetup.direction.toUpperCase()} {inTradeSetup.regime.toUpperCase()}
               {tradePnlPoints != null ? ` · ${tradePnlPoints >= 0 ? '+' : ''}${tradePnlPoints.toFixed(2)} pts` : ''}
             </span>
@@ -152,14 +159,20 @@ export function SPXHeader() {
               type="button"
               data-testid="spx-header-exit-trade"
               onClick={() => exitTrade()}
-              className="inline-flex items-center rounded-md border border-rose-300/35 bg-rose-500/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-rose-100 hover:bg-rose-500/22"
+              className="inline-flex min-h-[32px] items-center rounded-md border border-rose-300/35 bg-rose-500/12 px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100 transition-colors hover:bg-rose-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-300/60"
             >
               Exit Trade
             </button>
           </>
         ) : (
-          <span>Snapshot {snapshotFreshness}</span>
+          <span className="inline-flex min-h-[28px] items-center rounded-md border border-white/15 bg-white/[0.03] px-2 py-1 text-white/75">
+            Snapshot {snapshotFreshness}
+          </span>
         )}
+
+        <span className="inline-flex min-h-[28px] items-center rounded-md border border-white/15 bg-white/[0.03] px-2 py-1 text-white/70">
+          Source {spxPriceSource || '--'}
+        </span>
         <Dot className="h-3.5 w-3.5 text-white/40" />
         <span>Flip {flipPoint != null ? flipPoint.toFixed(0) : '--'}</span>
       </div>

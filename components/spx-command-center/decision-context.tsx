@@ -17,13 +17,13 @@ function ClusterPanel({ zones, spxPrice }: { zones: ClusterZone[]; spxPrice: num
   const visible = expanded ? zones.slice(0, 8) : zones.slice(0, 3)
 
   return (
-    <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
       <button
         type="button"
         onClick={() => setExpanded((p) => !p)}
         className="flex w-full items-center justify-between"
       >
-        <span className="text-[10px] uppercase tracking-[0.12em] text-white/45">Cluster Zones</span>
+        <span className="text-[10px] uppercase tracking-[0.1em] text-white/55">Cluster Zones</span>
         <ChevronDown className={cn('h-3 w-3 text-white/40 transition-transform', expanded && 'rotate-180')} />
       </button>
 
@@ -46,11 +46,11 @@ function ClusterPanel({ zones, spxPrice }: { zones: ClusterZone[]; spxPrice: num
                     style={{ width: `${width}%` }}
                   />
                 </div>
-                <span className="font-mono text-[10px] text-white/55 min-w-[100px] text-right">
+                <span className="font-mono text-[10px] text-white/65 min-w-[100px] text-right">
                   {zone.priceLow.toFixed(0)}–{zone.priceHigh.toFixed(0)}
                 </span>
                 <span className={cn(
-                  'text-[8px] uppercase tracking-[0.06em] min-w-[52px] text-right',
+                  'text-[9px] uppercase tracking-[0.06em] min-w-[56px] text-right',
                   zone.type === 'fortress' ? 'text-emerald-300' :
                   zone.type === 'defended' ? 'text-emerald-200/70' :
                   'text-white/35',
@@ -62,10 +62,10 @@ function ClusterPanel({ zones, spxPrice }: { zones: ClusterZone[]; spxPrice: num
 
               {/* Expanded detail: sources, hold rate, test count */}
               {expanded && (
-                <div className="mt-0.5 ml-2 flex flex-wrap gap-2 text-[9px] text-white/40">
+                <div className="mt-0.5 ml-2 flex flex-wrap gap-2 text-[9px] text-white/55">
                   <span>{zone.sources.length} sources</span>
                   {zone.testCount > 0 && <span>{zone.testCount} tests</span>}
-                  {zone.holdRate != null && <span>Hold {(zone.holdRate * 100).toFixed(0)}%</span>}
+                  {zone.holdRate != null && <span>Hold {zone.holdRate.toFixed(0)}%</span>}
                   {zone.held != null && (
                     <span className={zone.held ? 'text-emerald-300/60' : 'text-rose-300/60'}>
                       {zone.held ? 'Held last' : 'Broke last'}
@@ -86,7 +86,7 @@ function ClusterPanel({ zones, spxPrice }: { zones: ClusterZone[]; spxPrice: num
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-1 text-[9px] text-white/35 hover:text-white/55"
+          className="mt-1 text-[10px] text-white/50 transition-colors hover:text-white/75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/55"
         >
           +{zones.length - 3} more zones
         </button>
@@ -116,13 +116,13 @@ function ConePanel({ prediction, selectedSetup }: {
   ) : null
 
   return (
-    <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
       <button
         type="button"
         onClick={() => setExpanded((p) => !p)}
         className="flex w-full items-center justify-between"
       >
-        <span className="text-[10px] uppercase tracking-[0.12em] text-white/45">Probability Cone</span>
+        <span className="text-[10px] uppercase tracking-[0.1em] text-white/55">Probability Cone</span>
         <ChevronDown className={cn('h-3 w-3 text-white/40 transition-transform', expanded && 'rotate-180')} />
       </button>
 
@@ -133,11 +133,11 @@ function ConePanel({ prediction, selectedSetup }: {
 
           return (
             <div key={point.minutesForward} className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-white/40 min-w-[24px]">{point.minutesForward}m</span>
+              <span className="font-mono text-[10px] text-white/50 min-w-[24px]">{point.minutesForward}m</span>
               <div className="flex-1 h-[5px] rounded-full bg-white/[0.04] overflow-hidden">
                 <div className="h-full rounded-full bg-emerald-400/30" style={{ width: `${w}%` }} />
               </div>
-              <span className="font-mono text-[9px] text-white/45 min-w-[100px] text-right">
+              <span className="font-mono text-[10px] text-white/60 min-w-[100px] text-right">
                 {point.low.toFixed(0)} – {point.high.toFixed(0)}
               </span>
             </div>
@@ -147,7 +147,7 @@ function ConePanel({ prediction, selectedSetup }: {
 
       {/* Setup target markers */}
       {selectedSetup && (t1InCone || t2InCone) && (
-        <div className="mt-1.5 flex gap-3 text-[9px] font-mono">
+        <div className="mt-1.5 flex gap-3 text-[10px] font-mono">
           {t1InCone && (
             <span className="text-emerald-300/70">▲ T1 in {t1InCone.minutesForward}m cone</span>
           )}
@@ -161,7 +161,7 @@ function ConePanel({ prediction, selectedSetup }: {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-1 text-[9px] text-white/35 hover:text-white/55"
+          className="mt-1 text-[10px] text-white/50 transition-colors hover:text-white/75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/55"
         >
           +{cone.length - 3} more windows
         </button>
@@ -181,13 +181,13 @@ function FibPanel({ fibLevels, spxPrice }: { fibLevels: FibLevel[]; spxPrice: nu
   const visible = expanded ? sorted.slice(0, 10) : sorted.slice(0, 4)
 
   return (
-    <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
       <button
         type="button"
         onClick={() => setExpanded((p) => !p)}
         className="flex w-full items-center justify-between"
       >
-        <span className="text-[10px] uppercase tracking-[0.12em] text-white/45">Fib Levels Near Spot</span>
+        <span className="text-[10px] uppercase tracking-[0.1em] text-white/55">Fib Levels Near Spot</span>
         <ChevronDown className={cn('h-3 w-3 text-white/40 transition-transform', expanded && 'rotate-180')} />
       </button>
 
@@ -220,7 +220,7 @@ function FibPanel({ fibLevels, spxPrice }: { fibLevels: FibLevel[]; spxPrice: nu
       </div>
 
       {expanded && (
-        <p className="mt-1 text-[9px] text-white/30">
+        <p className="mt-1 text-[9px] text-white/45">
           ✦ = Cross-validated with SPY equivalent fib level
         </p>
       )}
@@ -229,7 +229,7 @@ function FibPanel({ fibLevels, spxPrice }: { fibLevels: FibLevel[]; spxPrice: nu
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-1 text-[9px] text-white/35 hover:text-white/55"
+          className="mt-1 text-[10px] text-white/50 transition-colors hover:text-white/75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/55"
         >
           +{fibLevels.length - 4} more levels
         </button>
@@ -289,44 +289,44 @@ function SPYImpact({
   })()
 
   return (
-    <div className="rounded-xl border border-champagne/15 bg-champagne/[0.03] px-3 py-2">
-      <span className="text-[9px] uppercase tracking-[0.1em] text-champagne/60">SPY → SPX Impact</span>
+    <div className="rounded-xl border border-champagne/15 bg-champagne/[0.03] px-3 py-2.5">
+      <span className="text-[10px] uppercase tracking-[0.1em] text-champagne/70">SPY → SPX Impact</span>
       <div className="mt-1.5 grid grid-cols-3 gap-1.5 text-[10px]">
         <div className="rounded-md border border-white/10 bg-white/[0.02] px-2 py-1">
-          <p className="text-[8px] uppercase tracking-[0.08em] text-white/45">Beta</p>
+          <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Beta</p>
           <p className="font-mono text-white/80">{spyImpact.beta.toFixed(2)}</p>
         </div>
         <div className="rounded-md border border-white/10 bg-white/[0.02] px-2 py-1">
-          <p className="text-[8px] uppercase tracking-[0.08em] text-white/45">Corr</p>
+          <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Corr</p>
           <p className="font-mono text-white/80">{spyImpact.correlation.toFixed(2)}</p>
         </div>
         <div className="rounded-md border border-white/10 bg-white/[0.02] px-2 py-1">
-          <p className="text-[8px] uppercase tracking-[0.08em] text-white/45">Basis</p>
+          <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Basis</p>
           <p className="font-mono text-white/80">{spyImpact.basisUsed.toFixed(2)}</p>
         </div>
       </div>
       <div className="mt-1.5 grid grid-cols-1 gap-1.5 text-[10px] md:grid-cols-2">
         <div className="rounded-md border border-emerald-400/20 bg-emerald-500/8 px-2 py-1">
-          <p className="text-[8px] uppercase tracking-[0.08em] text-emerald-200/70">Nearest Support</p>
+          <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-200/75">Nearest Support</p>
           <p className="font-mono text-emerald-100">
             {below ? `${below.projectedSpx.toFixed(0)} (${below.impactSpxPoints > 0 ? '+' : ''}${below.impactSpxPoints.toFixed(1)})` : '--'}
             {below ? ` · ${formatSpySource(below.source)}` : ''}
           </p>
         </div>
         <div className="rounded-md border border-rose-400/20 bg-rose-500/8 px-2 py-1">
-          <p className="text-[8px] uppercase tracking-[0.08em] text-rose-200/70">Nearest Resistance</p>
+          <p className="text-[9px] uppercase tracking-[0.08em] text-rose-200/75">Nearest Resistance</p>
           <p className="font-mono text-rose-100">
             {above ? `${above.projectedSpx.toFixed(0)} (${above.impactSpxPoints > 0 ? '+' : ''}${above.impactSpxPoints.toFixed(1)})` : '--'}
             {above ? ` · ${formatSpySource(above.source)}` : ''}
           </p>
         </div>
       </div>
-      <p className="mt-1.5 text-[9px] text-white/45">
+      <p className="mt-1.5 text-[10px] text-white/55">
         Converted using dynamic beta formula <span className="font-mono text-white/60">SPX ≈ (SPY × β) + basis</span>
         {`, β ${spyImpact.beta.toFixed(2)}, basis ${spyImpact.basisUsed.toFixed(2)}.`}
       </p>
-      <p className="mt-0.5 text-[9px] text-champagne/75">{directionalNote}</p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[9px] font-mono text-white/45">
+      <p className="mt-0.5 text-[10px] text-champagne/80">{directionalNote}</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[9px] font-mono text-white/50">
         {nearest.map((level) => (
           <span key={`${level.source}-${level.projectedSpx}`} className="rounded border border-white/12 bg-white/[0.03] px-1.5 py-0.5">
             {formatSpySource(level.source)} {level.projectedSpx.toFixed(0)} ({level.impactSpxPoints > 0 ? '+' : ''}{level.impactSpxPoints.toFixed(1)})

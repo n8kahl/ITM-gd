@@ -568,7 +568,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               type="button"
               onClick={() => setShowAllMessages(false)}
               className={cn(
-                'rounded border px-2 py-1 text-[9px] uppercase tracking-[0.08em]',
+                'min-h-[36px] rounded border px-2.5 py-1 text-[9px] uppercase tracking-[0.08em]',
                 !showAllMessages
                   ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-200'
                   : 'border-white/15 bg-white/[0.03] text-white/50',
@@ -580,7 +580,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               type="button"
               onClick={() => setShowAllMessages(true)}
               className={cn(
-                'rounded border px-2 py-1 text-[9px] uppercase tracking-[0.08em]',
+                'min-h-[36px] rounded border px-2.5 py-1 text-[9px] uppercase tracking-[0.08em]',
                 showAllMessages
                   ? 'border-champagne/35 bg-champagne/12 text-champagne'
                   : 'border-white/15 bg-white/[0.03] text-white/50',
@@ -653,7 +653,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                     surface: 'spx_coach_manual_refresh',
                   })
                 }}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-white/[0.05] text-white/70 hover:bg-white/[0.12] disabled:opacity-40"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-white/[0.05] text-white/70 hover:bg-white/[0.12] disabled:opacity-40"
                 aria-label="Refresh coach decision"
               >
                 {coachDecisionStatus === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -699,7 +699,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                           void handleDecisionAction(action)
                         }}
                         className={cn(
-                          'rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.07em] transition-colors',
+                          'min-h-[40px] rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.07em] transition-colors',
                           actionClasses(action),
                         )}
                       >
@@ -734,7 +734,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                 })
               }}
               className={cn(
-                'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.06em] transition-colors',
+                'inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.06em] transition-colors',
                 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-200/80 hover:bg-emerald-500/15 hover:text-emerald-200',
                 'disabled:opacity-40',
               )}
@@ -755,7 +755,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                   surface: 'spx_coach_quick_exit',
                 })
               }}
-              className="inline-flex items-center gap-1 rounded-lg border border-rose-300/35 bg-rose-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.06em] text-rose-100 hover:bg-rose-500/22"
+              className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-rose-300/35 bg-rose-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.06em] text-rose-100 hover:bg-rose-500/22"
             >
               <TriangleAlert className="h-3 w-3" />
               Exit Trade Focus
@@ -780,7 +780,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               return next
             })
           }}
-          className="inline-flex items-center gap-1.5 rounded border border-white/15 bg-white/[0.04] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-white/70 hover:bg-white/[0.1]"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded border border-white/15 bg-white/[0.04] px-2.5 py-1.5 text-[9px] uppercase tracking-[0.08em] text-white/70 hover:bg-white/[0.1]"
         >
           <History className="h-3 w-3" />
           {historyOpen ? 'Hide history' : 'Open history'}
@@ -795,7 +795,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               setShowJumpToLatest(false)
               setIsTimelineAtBottom(true)
             }}
-            className="rounded-full border border-emerald-300/35 bg-emerald-500/12 px-2.5 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 hover:bg-emerald-500/20"
+            className="min-h-[36px] rounded-full border border-emerald-300/35 bg-emerald-500/12 px-2.5 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 hover:bg-emerald-500/20"
           >
             New messages
           </button>
@@ -883,12 +883,12 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={tradeMode === 'in_trade' ? 'Ask about this live trade...' : (scopedSetup ? 'Ask about this setup...' : 'Ask coach...')}
               disabled={isSending}
-              className="flex-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2 text-[12px] text-ivory placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-emerald-300/50"
+              className="min-h-[40px] flex-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2.5 text-[12px] text-ivory placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-emerald-300/50"
             />
             <button
               type="submit"
               disabled={isSending || !prompt.trim()}
-              className="inline-flex items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-500/12 p-2 text-emerald-200 disabled:opacity-40"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-500/12 text-emerald-200 disabled:opacity-40"
               aria-label="Send coach message"
             >
               {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}

@@ -86,29 +86,29 @@ export function ContractCard({
   const t1Pct = totalRange > 0 ? ((maxLossAbs + t1Abs) / totalRange) * 100 : 70
 
   return (
-    <article className="rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 to-emerald-500/[0.03] p-3">
+    <article className="rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 to-emerald-500/[0.03] p-3.5">
       {/* Header row */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <h4 className="font-mono text-sm font-semibold text-ivory">{contract.description}</h4>
-          <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.1em] text-emerald-200">
+          <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200">
             AI Recommendation
           </span>
           {isPrimarySelected && (
-            <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-emerald-100">
+            <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-100">
               Selected
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-right">
           {typeof contract.healthScore === 'number' && (
-            <span className={cn('text-[9px] font-mono', contractHealth.text)}>
+            <span className={cn('text-[10px] font-mono', contractHealth.text)}>
               {contractHealth.label} {contract.healthScore.toFixed(0)}
             </span>
           )}
           {/* Spread health traffic light */}
           <span className={cn('h-2 w-2 rounded-full', health.color)} title={`Spread: ${health.label}`} />
-          <span className="text-[9px] text-white/50">{health.label}</span>
+          <span className="text-[10px] text-white/60">{health.label}</span>
         </div>
       </div>
 
@@ -117,7 +117,7 @@ export function ContractCard({
           <button
             type="button"
             onClick={() => onSelectContract(contract)}
-            className="rounded border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 hover:bg-emerald-500/22"
+            className="min-h-[40px] rounded border border-emerald-400/35 bg-emerald-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
           >
             Use AI Recommendation
           </button>
@@ -156,7 +156,7 @@ export function ContractCard({
             title="Break-even"
           />
         </div>
-      <div className="mt-1 flex justify-between text-[9px] font-mono">
+      <div className="mt-1 flex justify-between text-[10px] font-mono">
           <span className="text-rose-300/70">Risk ${maxLossAbs.toFixed(0)} /1c</span>
           <span className="text-emerald-300/70">T1 +${t1Abs.toFixed(0)}</span>
           <span className="text-champagne/70">T2 +${t2Abs.toFixed(0)}</span>
@@ -164,7 +164,7 @@ export function ContractCard({
       </div>
 
       {/* Key metrics row */}
-      <div className="mt-2 flex items-center gap-3 text-[10px]">
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px]">
         <span className="font-mono text-emerald-200">
           R:R {contract.riskReward.toFixed(2)}
         </span>
@@ -182,21 +182,21 @@ export function ContractCard({
         </span>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-1.5 text-[9px] md:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px] md:grid-cols-4">
         <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-          <p className="text-white/35">Premium</p>
+          <p className="text-white/45">Premium</p>
           <p className="font-mono text-white/75">
             ${Math.round(contract.premiumAsk ?? contract.ask * 100)}
           </p>
         </div>
         <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-          <p className="text-white/35">Liquidity</p>
+          <p className="text-white/45">Liquidity</p>
           <p className="font-mono text-white/75">
             {typeof contract.liquidityScore === 'number' ? `${contract.liquidityScore.toFixed(0)}%` : '--'}
           </p>
         </div>
         <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-          <p className="text-white/35">OI / Vol</p>
+          <p className="text-white/45">OI / Vol</p>
           <p className="font-mono text-white/75">
             {typeof contract.openInterest === 'number' ? contract.openInterest.toLocaleString() : '--'}
             {' / '}
@@ -204,18 +204,18 @@ export function ContractCard({
           </p>
         </div>
         <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-          <p className="text-white/35">Cost/Health</p>
+          <p className="text-white/45">Cost/Health</p>
           <p className={cn('font-mono uppercase', costBandTone(contract.costBand))}>
             {contract.costBand || 'balanced'}
           </p>
-          <p className={cn('font-mono text-[8px]', contractHealth.text)}>
+          <p className={cn('font-mono text-[9px]', contractHealth.text)}>
             {contract.healthTier || 'unknown'}
           </p>
         </div>
       </div>
 
       {(typeof contract.thetaRiskPer15m === 'number' || typeof contract.ivVsRealized === 'number') && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[9px] text-white/45">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-white/55">
           {typeof contract.thetaRiskPer15m === 'number' && (
             <span className="font-mono">Theta burn ~${contract.thetaRiskPer15m.toFixed(2)}/15m</span>
           )}
@@ -229,9 +229,9 @@ export function ContractCard({
       <button
         type="button"
         onClick={() => setExpanded((p) => !p)}
-        className="mt-2 flex w-full items-center justify-between rounded-lg border border-white/8 bg-white/[0.02] px-2 py-1"
+        className="mt-2 flex min-h-[40px] w-full items-center justify-between rounded-lg border border-white/8 bg-white/[0.02] px-2.5 py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
       >
-        <span className="text-[9px] uppercase tracking-[0.1em] text-white/45">Full analytics</span>
+        <span className="text-[10px] uppercase tracking-[0.09em] text-white/55">Full analytics</span>
         <ChevronDown className={cn('h-3 w-3 text-white/40 transition-transform', expanded && 'rotate-180')} />
       </button>
 
@@ -266,8 +266,8 @@ export function ContractCard({
             </div>
           </div>
           {Array.isArray(contract.alternatives) && contract.alternatives.length > 0 && (
-            <div className="space-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-2">
-              <p className="text-[9px] uppercase tracking-[0.1em] text-white/45">Alternative Contracts</p>
+            <div className="space-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-2.5">
+              <p className="text-[10px] uppercase tracking-[0.09em] text-white/55">Alternative Contracts</p>
               {contract.alternatives.map((alternative) => {
                 const alternativeContract = alternativeToContract(contract, alternative)
                 const alternativeSignature = contractSignature(alternativeContract)
@@ -279,7 +279,7 @@ export function ContractCard({
                     type="button"
                     onClick={() => onSelectContract?.(alternativeContract)}
                     className={cn(
-                      'grid w-full grid-cols-5 gap-2 rounded border px-1.5 py-1 text-left text-[9px] transition-colors',
+                      'grid min-h-[40px] w-full grid-cols-5 gap-2 rounded border px-1.5 py-1.5 text-left text-[10px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60',
                       isAlternativeSelected
                         ? 'border-emerald-300/40 bg-emerald-500/12'
                         : 'border-transparent hover:border-white/15 hover:bg-white/[0.03]',
@@ -288,10 +288,10 @@ export function ContractCard({
                     <span className="font-mono text-white/70">
                       {alternative.description}
                       {isAlternativeSelected && (
-                        <span className="ml-1 rounded border border-emerald-300/35 bg-emerald-500/15 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-100">
-                          selected
-                        </span>
-                      )}
+                          <span className="ml-1 rounded border border-emerald-300/35 bg-emerald-500/15 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-100">
+                            selected
+                          </span>
+                        )}
                       {alternative.tag && (
                         <span className="ml-1 rounded border border-emerald-300/25 bg-emerald-500/10 px-1 py-[1px] text-[8px] uppercase tracking-[0.06em] text-emerald-200">
                           {alternative.tag.replace('_', ' ')}
@@ -306,14 +306,14 @@ export function ContractCard({
                       {typeof alternative.healthScore === 'number' ? ` · H${alternative.healthScore.toFixed(0)}` : ''}
                     </span>
                     {alternative.tradeoff && (
-                      <span className="col-span-5 text-[8px] text-white/45">{alternative.tradeoff}</span>
+                      <span className="col-span-5 text-[9px] text-white/55">{alternative.tradeoff}</span>
                     )}
                   </button>
                 )
               })}
             </div>
           )}
-          <p className="text-[10px] text-white/55 leading-relaxed">{contract.reasoning}</p>
+          <p className="text-[11px] text-white/65 leading-relaxed">{contract.reasoning}</p>
         </div>
       )}
     </article>

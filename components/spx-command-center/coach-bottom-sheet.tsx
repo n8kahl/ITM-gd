@@ -37,14 +37,14 @@ export function CoachBottomSheet({
         className="absolute inset-0 bg-black/60"
         onClick={() => onOpenChange(false)}
       />
-      <div className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-hidden rounded-t-2xl border border-white/15 bg-[#090B0F] p-3 shadow-2xl">
+      <div className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-hidden rounded-t-2xl border border-white/15 bg-[#090B0F] p-3.5 shadow-2xl">
         <div className="mb-2.5 flex items-center justify-between">
           <h2 className="text-xs uppercase tracking-[0.12em] text-white/70">AI Coach</h2>
           <button
             type="button"
             data-testid="spx-coach-bottom-sheet-close"
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] text-white/70 hover:bg-white/[0.1] hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] text-white/70 hover:bg-white/[0.1] hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>

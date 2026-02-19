@@ -94,10 +94,10 @@ export function SetupCard({
   return (
     <div
       className={cn(
-        'w-full rounded-xl border p-3 transition-all duration-200',
+        'w-full rounded-xl border p-3.5 transition-all duration-200',
         borderClass(setup.status),
-        onSelect ? 'cursor-pointer hover:border-emerald-300/50 hover:bg-emerald-500/[0.08]' : 'cursor-default',
-        selected && 'ring-1 ring-emerald-300/60 bg-emerald-500/[0.1]',
+        onSelect ? 'cursor-pointer hover:-translate-y-[1px] hover:border-emerald-300/50 hover:bg-emerald-500/[0.08]' : 'cursor-default',
+        selected && 'ring-1 ring-emerald-300/60 bg-emerald-500/[0.1] shadow-[0_8px_26px_rgba(16,185,129,0.12)]',
       )}
     >
       <button
@@ -111,17 +111,17 @@ export function SetupCard({
       >
         {/* ── Row 1: Direction headline + Status badge ── */}
         <div className="flex items-center justify-between gap-2">
-          <h4 className="text-base font-semibold tracking-tight text-ivory uppercase">
+          <h4 className="text-[15px] font-semibold tracking-tight text-ivory uppercase">
             {setup.direction} {setup.regime}
           </h4>
-          <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]', badge.cls)}>
+          <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]', badge.cls)}>
             {badge.label}
           </span>
         </div>
 
         {/* ── Row 2: Setup type + Confluence score ── */}
         <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-white/55">
+          <span className="text-[10px] uppercase tracking-[0.1em] text-white/60">
             {setup.type.replace(/_/g, ' ')}
           </span>
           <div className="flex items-center gap-1.5">
@@ -151,7 +151,7 @@ export function SetupCard({
             {setup.confluenceSources.slice(0, 4).map((source) => (
               <div
                 key={source}
-                className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-200"
+                className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.07em] text-emerald-200"
               >
                 {source.replace(/_/g, ' ')}
               </div>
@@ -161,7 +161,7 @@ export function SetupCard({
 
         {/* ── Row 4: Entry proximity thermometer ── */}
         {thermo && (
-          <div className="mt-2.5 rounded-lg border border-white/10 bg-black/30 px-2 py-2">
+          <div className="mt-2.5 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2.5">
             <div className="relative h-3 rounded-full bg-white/[0.06] overflow-hidden">
               {/* Stop zone (red) */}
               <div
@@ -215,21 +215,21 @@ export function SetupCard({
         )}
 
         {/* ── Row 5: Key decision metrics (compact) ── */}
-        <div className="mt-2 grid grid-cols-4 gap-1.5 text-[10px]">
+        <div className="mt-2.5 grid grid-cols-4 gap-1.5 text-[10px]">
           <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
-            <p className="text-white/40">R:R</p>
+            <p className="text-white/55">R:R</p>
             <p className="font-mono text-emerald-200 font-medium">{rr.toFixed(1)}</p>
           </div>
           <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
-            <p className="text-white/40">Win%</p>
+            <p className="text-white/55">Win%</p>
             <p className="font-mono text-ivory font-medium">{calibratedWin.toFixed(0)}%</p>
           </div>
           <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
-            <p className="text-white/40">Score</p>
+            <p className="text-white/55">Score</p>
             <p className="font-mono text-ivory font-medium">{setupScore.toFixed(0)}</p>
           </div>
           <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1 text-center">
-            <p className="text-white/40">EV(R)</p>
+            <p className="text-white/55">EV(R)</p>
             <p className={cn('font-mono font-medium', (setupEv ?? 0) >= 0 ? 'text-emerald-200' : 'text-rose-200')}>
               {setupEv != null ? `${setupEv >= 0 ? '+' : ''}${setupEv.toFixed(2)}` : '--'}
             </p>
@@ -251,7 +251,7 @@ export function SetupCard({
             onEnterTrade?.()
           }}
           className={cn(
-            'mt-2.5 inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em]',
+            'mt-2.5 inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60',
             setup.status === 'triggered'
               ? 'border-emerald-300/55 bg-emerald-500/25 text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
               : 'border-emerald-400/35 bg-emerald-500/14 text-emerald-100 hover:bg-emerald-500/22',
