@@ -45,6 +45,7 @@ export type WidgetType =
   | 'alert_status'
   | 'market_overview'
   | 'macro_context'
+  | 'economic_calendar'
   | 'options_chain'
   | 'gex_profile'
   | 'scan_results'
@@ -296,6 +297,9 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
       break
     case 'macro_context':
       content = <MacroContextCard data={widget.data} />
+      break
+    case 'economic_calendar':
+      content = <EconomicCalendarCard data={widget.data} />
       break
     case 'options_chain':
       content = <OptionsChainCard data={widget.data} />
@@ -866,7 +870,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   const calendar = (data.economicCalendar as Array<{ event: string; date: string; impact: string; actual?: string; forecast?: string }>) || []
   const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
   const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
-  const highImpactCount = calendar.filter((event) => event.impact === 'High' || event.impact === 'high').length
+  const highImpactCount = calendar.filter((event) => String(event.impact || '').toUpperCase() === 'HIGH').length
   const openCard = () => {
     if (symbolImpact?.symbol) {
       chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context').action()
@@ -947,8 +951,8 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
                 <span className="text-white/60 truncate flex-1">{event.event}</span>
                 <span className={cn(
                   'px-1 py-0.5 rounded text-[9px] font-medium shrink-0',
-                  event.impact === 'High' || event.impact === 'high' ? 'bg-red-500/10 text-red-400' :
-                  event.impact === 'Medium' || event.impact === 'medium' ? 'bg-amber-500/10 text-amber-400' :
+                  String(event.impact || '').toUpperCase() === 'HIGH' ? 'bg-red-500/10 text-red-400' :
+                  String(event.impact || '').toUpperCase() === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400' :
                   'bg-white/5 text-white/40'
                 )}>
                   {event.impact}
@@ -1718,6 +1722,78 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
   )
 }
 
+function EconomicCalendarCard({ data }: { data: Record<string, unknown> }) {
+  const daysAhead = parseNumeric(data.daysAhead || 7)
+  const impactFilter = String(data.impactFilter || 'HIGH')
+  const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
+  const openCard = () => {
+    viewAction('macro', 'Open Macro').action()
+  }
+  const cardActions: WidgetAction[] = normalizeActions([
+    viewAction('macro', 'Open Macro'),
+    chatAction('Summarize this week\'s economic events and likely IV/volatility impact.'),
+    copyAction(`Economic events (${impactFilter}): ${events.slice(0, 5).map((event) => String(event.event || '')).join(', ')}`),
+  ])
+
+  return (
+    <div
+      className={premiumCardClass('border-sky-500/15 max-w-sm cursor-pointer hover:border-sky-500/30 transition-colors')}
+      onClick={(event) => handleCardClick(event, openCard)}
+      onKeyDown={(event) => handleCardKeyDown(event, openCard)}
+      role="button"
+      tabIndex={0}
+      aria-label="Open economic calendar"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Calendar className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-xs font-medium text-white">Economic Calendar</span>
+        </div>
+        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium', pillClass('info'))}>
+          {Math.round(daysAhead)}d / {impactFilter}
+        </span>
+      </div>
+
+      {events.length === 0 && (
+        <p className="text-[11px] text-white/55">No upcoming events in this filter window.</p>
+      )}
+
+      {events.length > 0 && (
+        <div className="space-y-1 text-[11px]">
+          {events.slice(0, 5).map((event, idx) => {
+            const impact = String(event.impact || '').toUpperCase()
+            return (
+              <WidgetRowActions
+                key={`${String(event.event)}-${String(event.date)}-${idx}`}
+                actions={normalizeActions([
+                  viewAction('macro', 'Open Macro'),
+                  chatAction(`How should I position around ${String(event.event)} on ${String(event.date)}?`, 'Ask AI'),
+                  copyAction(`${String(event.event)} | ${String(event.date)} | ${impact}`, 'Copy Event'),
+                ])}
+              >
+                <button type="button" className="w-full flex items-center justify-between rounded border border-white/10 bg-black/20 px-2 py-1 hover:bg-white/10 cursor-pointer text-left">
+                  <span className="font-medium text-white/85 truncate">{String(event.event)}</span>
+                  <span className="text-white/50">{String(event.date)}</span>
+                  <span className={cn(
+                    'ml-2 rounded px-1 py-0.5 text-[9px]',
+                    impact === 'HIGH' ? 'bg-red-500/10 text-red-400' :
+                    impact === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400' :
+                    'bg-white/5 text-white/40',
+                  )}>
+                    {impact}
+                  </span>
+                </button>
+              </WidgetRowActions>
+            )
+          })}
+        </div>
+      )}
+
+      <WidgetActionBar actions={cardActions} compact />
+    </div>
+  )
+}
+
 function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
   const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
   const watchlist = Array.isArray(data.watchlist) ? data.watchlist as string[] : []
@@ -2241,6 +2317,11 @@ export function extractWidgets(functionCalls?: Array<{
       case 'get_macro_context': {
         if (result.error) break
         widgets.push({ type: 'macro_context', data: result })
+        break
+      }
+      case 'get_economic_calendar': {
+        if (result.error) break
+        widgets.push({ type: 'economic_calendar', data: result })
         break
       }
       case 'get_options_chain': {

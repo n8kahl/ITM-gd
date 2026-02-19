@@ -14,6 +14,7 @@ export type CoachIntentId =
   | 'scan_opportunities'
   | 'earnings_calendar'
   | 'earnings_analysis'
+  | 'economic_calendar'
   | 'macro_context'
   | 'journal_insights'
   | 'trade_history'
@@ -164,6 +165,21 @@ const INTENT_SPECS: IntentSpec[] = [
     requiresDisclaimer: true,
     requiresScenarioProbabilities: true,
     requiresLiquidityWatchouts: true,
+  },
+  {
+    id: 'economic_calendar',
+    phrases: [
+      'economic events',
+      'economic calendar',
+      'macro events',
+      'data releases',
+      'what might move the market this week',
+      'upcoming cpi',
+      'upcoming nfp',
+      'upcoming fomc',
+    ],
+    requiredFunctions: ['get_economic_calendar'],
+    recommendedFunctions: ['get_macro_context'],
   },
   {
     id: 'macro_context',

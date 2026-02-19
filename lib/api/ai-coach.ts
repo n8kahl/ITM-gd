@@ -364,7 +364,7 @@ export interface EarningsCalendarEvent {
   name?: string | null
   epsEstimate?: number | null
   revenueEstimate?: number | null
-  source?: 'massive_reference' | 'alpha_vantage' | 'tmx_corporate_events'
+  source?: 'massive_reference' | 'alpha_vantage' | 'tmx_corporate_events' | 'fmp'
 }
 
 export interface EarningsCalendarResponse {
@@ -372,6 +372,23 @@ export interface EarningsCalendarResponse {
   daysAhead: number
   count: number
   events: EarningsCalendarEvent[]
+}
+
+export interface EconomicCalendarEvent {
+  date: string
+  event: string
+  expected: string | null
+  previous: string | null
+  actual: string | null
+  impact: 'HIGH' | 'MEDIUM' | 'LOW'
+  relevance: string
+}
+
+export interface EconomicCalendarResponse {
+  daysAhead: number
+  impactFilter: string
+  count: number
+  events: EconomicCalendarEvent[]
 }
 
 export interface EarningsHistoricalMove {
@@ -1015,6 +1032,34 @@ export async function getEarningsCalendar(
 
   const response = await fetch(
     `${API_BASE}/api/earnings/calendar?${params.toString()}`,
+    { headers: { 'Authorization': `Bearer ${token}` } },
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get upcoming economic calendar events.
+ */
+export async function getEconomicCalendar(
+  token: string,
+  daysAhead: number = 7,
+  impactFilter: 'HIGH' | 'MEDIUM' | 'ALL' = 'HIGH',
+): Promise<EconomicCalendarResponse> {
+  const params = new URLSearchParams()
+  params.set('days', String(daysAhead))
+  params.set('impact', impactFilter)
+
+  const response = await fetch(
+    `${API_BASE}/api/economic/calendar?${params.toString()}`,
     { headers: { 'Authorization': `Bearer ${token}` } },
   )
 

@@ -8,6 +8,8 @@
  */
 
 import { isTradingDay } from '../marketHours';
+import { getEconomicCalendar as getFREDEconomicCalendar, getCurrentFedFundsRate } from '../economic';
+import { logger } from '../../lib/logger';
 
 // ============================================
 // TYPES
@@ -309,12 +311,37 @@ function getEarningsSeason(): MacroContext['earningsSeason'] {
 // ============================================
 
 /**
- * Get comprehensive macro context for LEAPS analysis
+ * Get comprehensive macro context for LEAPS analysis.
+ * Uses FRED API for real economic calendar data when available,
+ * falls back to procedural generation otherwise.
  */
-export function getMacroContext(): MacroContext {
-  const economicCalendar = generateEconomicCalendar();
+export async function getMacroContext(): Promise<MacroContext> {
+  // Try FRED-powered economic calendar first, fall back to procedural
+  let economicCalendar: EconomicEvent[];
+  try {
+    const fredEvents = await getFREDEconomicCalendar(30);
+    economicCalendar = fredEvents.length > 0 ? fredEvents : generateEconomicCalendar();
+    if (fredEvents.length > 0) {
+      logger.debug('Macro context using FRED economic calendar', { eventCount: fredEvents.length });
+    }
+  } catch {
+    economicCalendar = generateEconomicCalendar();
+    logger.debug('Macro context falling back to procedural economic calendar');
+  }
+
+  // Try to get real Fed Funds rate from FRED, fall back to hardcoded
+  let currentRate = '4.25-4.50%';
+  try {
+    const fredRate = await getCurrentFedFundsRate();
+    if (fredRate) {
+      currentRate = fredRate;
+    }
+  } catch {
+    // Use hardcoded fallback
+  }
+
   const fedPolicy: FedPolicy = {
-    currentRate: '4.25-4.50%',
+    currentRate,
     nextMeetingDate: getNextFOMCDate(),
     marketImpliedProbabilities: {
       hold: 0.65,
@@ -340,15 +367,15 @@ export function getMacroContext(): MacroContext {
 /**
  * Assess macro impact on a specific symbol/position
  */
-export function assessMacroImpact(symbol: string): {
+export async function assessMacroImpact(symbol: string): Promise<{
   upcomingCatalysts: Array<{ date: string; event: string; expectedImpact: string }>;
   bullishFactors: string[];
   bearishFactors: string[];
   riskFactors: string[];
   overallOutlook: 'bullish' | 'bearish' | 'neutral';
   adviceForLEAPS: string;
-} {
-  const macro = getMacroContext();
+}> {
+  const macro = await getMacroContext();
   const istech = symbol === 'NDX';
 
   const upcomingCatalysts = macro.economicCalendar

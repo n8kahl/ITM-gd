@@ -109,6 +109,10 @@ function getTimeoutMs(method: string, segments: string[]): number {
     return COACH_STREAM_TIMEOUT_MS
   }
 
+  if (method === 'POST' && endpoint === 'coach' && segments[1] === 'decision') {
+    return COACH_STREAM_TIMEOUT_MS
+  }
+
   const configured = Number.parseInt(process.env.SPX_PROXY_TIMEOUT_MS || '', 10)
   if (Number.isFinite(configured) && configured > 0) {
     return configured

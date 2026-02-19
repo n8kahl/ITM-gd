@@ -13,6 +13,11 @@ export interface SPXUXFlags {
   coachAlertLifecycleV2: boolean
   coachTimelineV2: boolean
   coachMotionV1: boolean
+  coachDecisionV2: boolean
+  coachSurfaceV2: boolean
+  coachHistoryDrawerV1: boolean
+  coachMemoryV1: boolean
+  coachTrustSignalsV1: boolean
 }
 
 export const DEFAULT_SPX_UX_FLAGS: Readonly<SPXUXFlags> = Object.freeze({
@@ -28,6 +33,11 @@ export const DEFAULT_SPX_UX_FLAGS: Readonly<SPXUXFlags> = Object.freeze({
   coachAlertLifecycleV2: true,
   coachTimelineV2: true,
   coachMotionV1: true,
+  coachDecisionV2: false,
+  coachSurfaceV2: true,
+  coachHistoryDrawerV1: false,
+  coachMemoryV1: false,
+  coachTrustSignalsV1: false,
 })
 
 const FLAG_ENV_KEYS: Record<keyof SPXUXFlags, string[]> = {
@@ -43,6 +53,11 @@ const FLAG_ENV_KEYS: Record<keyof SPXUXFlags, string[]> = {
   coachAlertLifecycleV2: ['NEXT_PUBLIC_SPX_UX_COACH_ALERT_LIFECYCLE_V2', 'SPX_UX_COACH_ALERT_LIFECYCLE_V2'],
   coachTimelineV2: ['NEXT_PUBLIC_SPX_UX_COACH_TIMELINE_V2', 'SPX_UX_COACH_TIMELINE_V2'],
   coachMotionV1: ['NEXT_PUBLIC_SPX_UX_COACH_MOTION_V1', 'SPX_UX_COACH_MOTION_V1'],
+  coachDecisionV2: ['NEXT_PUBLIC_SPX_UX_COACH_DECISION_V2', 'SPX_UX_COACH_DECISION_V2'],
+  coachSurfaceV2: ['NEXT_PUBLIC_SPX_UX_COACH_SURFACE_V2', 'SPX_UX_COACH_SURFACE_V2'],
+  coachHistoryDrawerV1: ['NEXT_PUBLIC_SPX_UX_COACH_HISTORY_DRAWER_V1', 'SPX_UX_COACH_HISTORY_DRAWER_V1'],
+  coachMemoryV1: ['NEXT_PUBLIC_SPX_UX_COACH_MEMORY_V1', 'SPX_UX_COACH_MEMORY_V1'],
+  coachTrustSignalsV1: ['NEXT_PUBLIC_SPX_UX_COACH_TRUST_SIGNALS_V1', 'SPX_UX_COACH_TRUST_SIGNALS_V1'],
 }
 
 function parseBooleanFlag(value: string | undefined): boolean | null {
@@ -83,6 +98,11 @@ export function getSPXUXFlags(overrides?: Partial<SPXUXFlags>): SPXUXFlags {
     coachAlertLifecycleV2: resolveFlagFromEnv('coachAlertLifecycleV2') ?? DEFAULT_SPX_UX_FLAGS.coachAlertLifecycleV2,
     coachTimelineV2: resolveFlagFromEnv('coachTimelineV2') ?? DEFAULT_SPX_UX_FLAGS.coachTimelineV2,
     coachMotionV1: resolveFlagFromEnv('coachMotionV1') ?? DEFAULT_SPX_UX_FLAGS.coachMotionV1,
+    coachDecisionV2: resolveFlagFromEnv('coachDecisionV2') ?? DEFAULT_SPX_UX_FLAGS.coachDecisionV2,
+    coachSurfaceV2: resolveFlagFromEnv('coachSurfaceV2') ?? DEFAULT_SPX_UX_FLAGS.coachSurfaceV2,
+    coachHistoryDrawerV1: resolveFlagFromEnv('coachHistoryDrawerV1') ?? DEFAULT_SPX_UX_FLAGS.coachHistoryDrawerV1,
+    coachMemoryV1: resolveFlagFromEnv('coachMemoryV1') ?? DEFAULT_SPX_UX_FLAGS.coachMemoryV1,
+    coachTrustSignalsV1: resolveFlagFromEnv('coachTrustSignalsV1') ?? DEFAULT_SPX_UX_FLAGS.coachTrustSignalsV1,
   }
 
   return {

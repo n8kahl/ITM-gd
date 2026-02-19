@@ -12,7 +12,7 @@ const router = Router();
  */
 router.get('/', authenticateToken, async (_req: Request, res: Response) => {
   try {
-    const context = getMacroContext();
+    const context = await getMacroContext();
     res.json(context);
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch macro context', message: error.message });
@@ -26,7 +26,7 @@ router.get('/', authenticateToken, async (_req: Request, res: Response) => {
 router.get('/impact/:symbol', authenticateToken, validateParams(macroImpactParamSchema), async (req: Request, res: Response) => {
   try {
     const { symbol } = (req as any).validatedParams as { symbol: string };
-    const impact = assessMacroImpact(symbol);
+    const impact = await assessMacroImpact(symbol);
     return res.json({ symbol, ...impact });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to assess macro impact', message: error.message });

@@ -16,7 +16,7 @@ describe('Market Indices Service', () => {
   it('returns cached snapshot when available', async () => {
     (cacheGet as jest.Mock).mockResolvedValue({
       quotes: [{ symbol: 'SPX', price: 6000, change: 0, changePercent: 0 }],
-      metrics: { vwap: null },
+      metrics: { vwap: null, vixLevel: null, vixChange: null },
       source: 'massive',
     });
 
@@ -29,7 +29,10 @@ describe('Market Indices Service', () => {
   it('builds quotes using previous session candles', async () => {
     (massiveClient.get as jest.Mock)
       .mockResolvedValueOnce({ data: { results: [{ c: 6000, o: 5950, vw: 6020 }] } })
-      .mockResolvedValueOnce({ data: { results: [{ c: 21000, o: 20900, vw: 0 }] } });
+      .mockResolvedValueOnce({ data: { results: [{ c: 21000, o: 20900, vw: 0 }] } })
+      .mockRejectedValueOnce(new Error('VIX unavailable'))
+      .mockRejectedValueOnce(new Error('DXY unavailable'))
+      .mockRejectedValueOnce(new Error('TNX unavailable'));
 
     const snapshot = await getMarketIndicesSnapshot();
 
@@ -44,7 +47,10 @@ describe('Market Indices Service', () => {
   it('returns only available index results when one payload is missing', async () => {
     (massiveClient.get as jest.Mock)
       .mockResolvedValueOnce({ data: { results: [{ c: 6000, o: 5950, vw: 6020 }] } })
-      .mockResolvedValueOnce({ data: { results: [] } });
+      .mockResolvedValueOnce({ data: { results: [] } })
+      .mockRejectedValueOnce(new Error('VIX unavailable'))
+      .mockRejectedValueOnce(new Error('DXY unavailable'))
+      .mockRejectedValueOnce(new Error('TNX unavailable'));
 
     const snapshot = await getMarketIndicesSnapshot();
 

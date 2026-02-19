@@ -24,6 +24,7 @@ import { scanOpportunities } from '../services/scanner';
 import { analyzeLongTermTrend } from '../services/charts/chartDataService';
 import { generateGreeksProjection, assessGreeksTrend } from '../services/leaps/greeksProjection';
 import { calculateRoll } from '../services/leaps/rollCalculator';
+import { getEconomicCalendar } from '../services/economic';
 import { getMacroContext, assessMacroImpact } from '../services/macro/macroContext';
 import { daysToExpiry as calcDaysToExpiry } from '../services/options/blackScholes';
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
@@ -231,6 +232,9 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
 
     case 'get_macro_context':
       return await handleGetMacroContext(typedArgs);
+
+    case 'get_economic_calendar':
+      return await handleGetEconomicCalendar(typedArgs);
 
     default:
       throw new Error(`Unknown function: ${name}`);
@@ -1291,6 +1295,46 @@ async function handleGetEarningsCalendar(args: {
 }
 
 /**
+ * Handler: get_economic_calendar
+ * Returns upcoming high-impact economic releases from FRED.
+ */
+async function handleGetEconomicCalendar(args: {
+  days_ahead?: number;
+  impact_filter?: string;
+}) {
+  const daysAheadRaw = typeof args.days_ahead === 'number' ? args.days_ahead : 7;
+  const daysAhead = Math.max(1, Math.min(60, Math.round(daysAheadRaw)));
+  const impactFilter = (['HIGH', 'MEDIUM', 'ALL'].includes(args.impact_filter || '')
+    ? args.impact_filter
+    : 'HIGH') as 'HIGH' | 'MEDIUM' | 'ALL';
+
+  try {
+    const events = await withTimeout(
+      () => getEconomicCalendar(daysAhead, impactFilter),
+      FUNCTION_TIMEOUT_MS,
+      'get_economic_calendar',
+    );
+
+    return withFreshness({
+      daysAhead,
+      impactFilter,
+      count: events.length,
+      events,
+    }, {
+      asOf: new Date().toISOString(),
+      source: 'economic_calendar',
+      delayed: false,
+      staleAfterSeconds: 2 * 60 * 60,
+    });
+  } catch (error: any) {
+    return {
+      error: 'Failed to fetch economic calendar',
+      message: error.message,
+    };
+  }
+}
+
+/**
  * Handler: get_earnings_analysis
  * Returns expected move + historical earnings move context for one symbol.
  */
@@ -2033,7 +2077,7 @@ async function handleAnalyzeLeapsPosition(args: {
     const pnlPct = entry_price > 0 ? ((currentValue - entry_price) / entry_price * 100) : 0;
 
     // Macro context
-    const macroImpact = assessMacroImpact(symbol);
+    const macroImpact = await assessMacroImpact(symbol);
 
     // Roll recommendation
     let rollRecommendation: 'yes' | 'no' | 'optional' = 'no';
@@ -2262,7 +2306,7 @@ async function handleGetMacroContext(args: { symbol?: string }) {
   const { symbol } = args;
 
   try {
-    const macro = getMacroContext();
+    const macro = await getMacroContext();
 
     const result: any = {
       economicCalendar: macro.economicCalendar.slice(0, 5),
@@ -2292,7 +2336,7 @@ async function handleGetMacroContext(args: { symbol?: string }) {
 
     // Add symbol-specific impact if requested
     if (symbol) {
-      const impact = assessMacroImpact(symbol);
+      const impact = await assessMacroImpact(symbol);
       result.symbolImpact = {
         symbol,
         outlook: impact.overallOutlook,

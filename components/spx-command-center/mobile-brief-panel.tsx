@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, Dot, Target } from 'lucide-react'
+import { Dot, Target } from 'lucide-react'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
@@ -15,7 +15,7 @@ function formatPoints(value: number): string {
 export function MobileBriefPanel({ readOnly = true }: { readOnly?: boolean }) {
   const { prediction, regime } = useSPXAnalyticsContext()
   const { activeSetups, selectedSetup } = useSPXSetupContext()
-  const { coachMessages } = useSPXCoachContext()
+  const { coachDecision, coachDecisionStatus } = useSPXCoachContext()
   const { spxPrice } = useSPXPriceContext()
 
   const setupPolicy = buildSetupDisplayPolicy({
@@ -30,14 +30,6 @@ export function MobileBriefPanel({ readOnly = true }: { readOnly?: boolean }) {
     setupPolicy.actionablePrimary[0] ||
     setupPolicy.forming[0] ||
     null
-
-  const topAlert =
-    [...coachMessages]
-      .sort((a, b) => {
-        const priority = { alert: 0, setup: 1, guidance: 2, behavioral: 3 } as const
-        return (priority[a.priority] ?? 3) - (priority[b.priority] ?? 3) || Date.parse(b.timestamp) - Date.parse(a.timestamp)
-      })
-      .find((message) => message.priority === 'alert' || message.priority === 'setup') || null
 
   return (
     <section className="space-y-2.5">
@@ -106,12 +98,17 @@ export function MobileBriefPanel({ readOnly = true }: { readOnly?: boolean }) {
       <div className="grid grid-cols-1 gap-2">
         <div className="glass-card-heavy rounded-xl border border-white/10 p-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] uppercase tracking-[0.12em] text-white/60">Coach Alert</h3>
-            <AlertTriangle className="h-3.5 w-3.5 text-rose-200/80" />
+            <h3 className="text-[11px] uppercase tracking-[0.12em] text-white/60">Coach Decision</h3>
+            <span className="text-[9px] uppercase tracking-[0.08em] text-white/50">{coachDecisionStatus}</span>
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-white/75">
-            {topAlert?.content || 'No alert currently. Continue monitoring setup posture and flow.'}
+            {coachDecision?.primaryText || 'No active decision yet. Select a setup to generate execution guidance.'}
           </p>
+          {coachDecision?.verdict && (
+            <p className="mt-1 text-[9px] uppercase tracking-[0.08em] text-emerald-200/85">
+              Verdict: {coachDecision.verdict} · Confidence {coachDecision.confidence}%
+            </p>
+          )}
         </div>
       </div>
 

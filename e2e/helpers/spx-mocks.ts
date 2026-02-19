@@ -537,6 +537,76 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
       return
     }
 
+    if (req.method() === 'POST' && endpoint === 'coach/decision') {
+      let setupId: string | null = 'setup-1'
+      let tradeMode: 'scan' | 'evaluate' | 'in_trade' = 'evaluate'
+
+      const rawBody = req.postData()
+      if (rawBody) {
+        try {
+          const parsed = JSON.parse(rawBody) as {
+            setupId?: string
+            tradeMode?: 'scan' | 'evaluate' | 'in_trade'
+          }
+          if (typeof parsed.setupId === 'string' && parsed.setupId.trim()) {
+            setupId = parsed.setupId
+          }
+          if (parsed.tradeMode === 'scan' || parsed.tradeMode === 'evaluate' || parsed.tradeMode === 'in_trade') {
+            tradeMode = parsed.tradeMode
+          }
+        } catch {
+          setupId = 'setup-1'
+        }
+      }
+
+      const setup = mockSetups.find((item) => item.id === setupId) || null
+      const verdict = tradeMode === 'in_trade' ? 'REDUCE' : (setup?.status === 'triggered' ? 'ENTER' : 'WAIT')
+      const confidence = verdict === 'ENTER' ? 78 : verdict === 'REDUCE' ? 71 : 63
+
+      await fulfillJson(route, {
+        decisionId: `coach-decision-${Date.now()}`,
+        setupId: setup?.id || setupId || null,
+        verdict,
+        confidence,
+        primaryText: verdict === 'ENTER'
+          ? `Entry window is open for ${setup?.direction || 'the selected'} setup. Execute with strict risk controls.`
+          : verdict === 'REDUCE'
+            ? 'Risk is elevated for this active trade. Tighten stop and reduce size if confirmation weakens.'
+            : 'Wait for cleaner confirmation before executing this setup.',
+        why: verdict === 'ENTER'
+          ? ['Confluence is elevated with supportive setup structure.', 'Flow remains aligned with the setup direction.']
+          : verdict === 'REDUCE'
+            ? ['Flow opposition has increased against your position.', 'Stop proximity has tightened risk tolerance.']
+            : ['Current context does not justify immediate entry.'],
+        riskPlan: {
+          stop: setup?.stop ?? null,
+          maxRiskDollars: setup ? 340 : 280,
+          positionGuidance: verdict === 'ENTER'
+            ? 'Start controlled and add only on confirmation.'
+            : 'Preserve risk budget while waiting for confirmation.',
+        },
+        actions: tradeMode === 'in_trade'
+          ? [
+            { id: 'EXIT_TRADE_FOCUS', label: 'Exit Trade Focus', style: 'secondary', payload: { setupId: setup?.id || setupId } },
+            { id: 'OPEN_HISTORY', label: 'Open Coach History', style: 'ghost' },
+          ]
+          : [
+            { id: 'ENTER_TRADE_FOCUS', label: 'Enter Trade Focus', style: 'primary', payload: { setupId: setup?.id || setupId } },
+            { id: 'REVERT_AI_CONTRACT', label: 'Use AI Contract', style: 'secondary', payload: { setupId: setup?.id || setupId } },
+            { id: 'OPEN_HISTORY', label: 'Open Coach History', style: 'ghost' },
+          ],
+        severity: verdict === 'REDUCE' ? 'warning' : 'routine',
+        freshness: {
+          generatedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          stale: false,
+        },
+        contextHash: 'sha256:e2e-mock',
+        source: 'fallback_v1',
+      })
+      return
+    }
+
     if (endpoint === 'levels') {
       await fulfillJson(route, levelsResponse)
       return

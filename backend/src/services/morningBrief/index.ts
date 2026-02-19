@@ -339,7 +339,7 @@ export class MorningBriefService {
     const symbols = watchlist.length > 0 ? watchlist : await this.getDefaultWatchlist(userId);
     const marketStatus = getMarketStatus();
     const keyLevelsToday = await this.getKeyLevelsForWatchlist(symbols);
-    const macro = getMacroContext();
+    const macro = await getMacroContext();
     const openPositionStatus = await this.getOpenPositions(userId);
     const overnightSummary = this.buildOvernightSummary(keyLevelsToday);
     const watchItems = this.buildWatchItems(symbols, keyLevelsToday, openPositionStatus);

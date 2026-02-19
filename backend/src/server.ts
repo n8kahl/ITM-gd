@@ -27,6 +27,7 @@ import briefRouter from './routes/brief';
 import trackedSetupsRouter from './routes/trackedSetups';
 import symbolsRouter from './routes/symbols';
 import earningsRouter from './routes/earnings';
+import economicRouter from './routes/economic';
 import fibonacciRouter from './routes/fibonacci';
 import spxRouter from './routes/spx';
 import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
@@ -133,6 +134,7 @@ app.use('/api/brief', briefRouter);
 app.use('/api/tracked-setups', trackedSetupsRouter);
 app.use('/api/symbols', symbolsRouter);
 app.use('/api/earnings', earningsRouter);
+app.use('/api/economic', economicRouter);
 app.use('/api/fibonacci', fibonacciRouter);
 app.use('/api/spx', spxRouter);
 // Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
@@ -155,6 +157,7 @@ app.get('/', (_req: Request, res: Response) => {
       optionsChain: '/api/options/:symbol/chain', optionsExpirations: '/api/options/:symbol/expirations',
       optionsGex: '/api/options/:symbol/gex', optionsZeroDte: '/api/options/:symbol/0dte', optionsIv: '/api/options/:symbol/iv',
       earningsCalendar: '/api/earnings/calendar', earningsAnalysis: '/api/earnings/:symbol/analysis',
+      economicCalendar: '/api/economic/calendar', economicUpcoming: '/api/economic/calendar/upcoming',
       positionsAnalyze: '/api/positions/analyze', positionsLive: '/api/positions/live', positionsAdvice: '/api/positions/advice',
       chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',

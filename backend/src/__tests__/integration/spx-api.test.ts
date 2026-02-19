@@ -297,6 +297,14 @@ describe('SPX API integration schema', () => {
         spyPrice: 603,
         timestamp: '2026-02-15T15:00:00.000Z',
       },
+      spyImpact: {
+        beta: 10.2,
+        correlation: 0.95,
+        basisUsed: 1.9,
+        spot: { spx: 6032, spy: 603 },
+        levels: [],
+        timestamp: '2026-02-15T15:00:00.000Z',
+      },
       setups: [],
       regime: {
         regime: 'ranging',

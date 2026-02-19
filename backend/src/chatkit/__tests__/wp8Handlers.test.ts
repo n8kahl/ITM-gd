@@ -67,7 +67,7 @@ jest.mock('../../services/leaps/rollCalculator', () => ({
 }));
 
 jest.mock('../../services/macro/macroContext', () => ({
-  getMacroContext: jest.fn().mockReturnValue({
+  getMacroContext: jest.fn().mockResolvedValue({
     economicCalendar: [
       { date: '2026-02-10', event: 'CPI', expected: null, previous: null, actual: null, impact: 'HIGH', relevance: 'Key inflation' },
     ],
@@ -93,7 +93,7 @@ jest.mock('../../services/macro/macroContext', () => ({
     },
     timestamp: new Date().toISOString(),
   }),
-  assessMacroImpact: jest.fn().mockReturnValue({
+  assessMacroImpact: jest.fn().mockResolvedValue({
     upcomingCatalysts: [{ date: '2026-03-18', event: 'FOMC Meeting', expectedImpact: 'Rate decision' }],
     bullishFactors: ['Rate cuts possible'],
     bearishFactors: ['Hawkish rhetoric'],

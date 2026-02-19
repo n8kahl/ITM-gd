@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { massiveClient, getDailyAggregates, getEarnings } from '../../config/massive';
+import { getFMPEarningsCalendar } from '../../config/fmp';
+import type { FMPEarningsEvent } from '../../config/fmp';
 import { supabase } from '../../config/database';
 import { POPULAR_SYMBOLS, formatMassiveTicker, sanitizeSymbols } from '../../lib/symbols';
 import { logger } from '../../lib/logger';
@@ -18,7 +20,7 @@ export interface EarningsCalendarEvent {
   name?: string | null;
   epsEstimate?: number | null;
   revenueEstimate?: number | null;
-  source?: 'massive_reference' | 'alpha_vantage' | 'tmx_corporate_events';
+  source?: 'massive_reference' | 'alpha_vantage' | 'tmx_corporate_events' | 'fmp';
 }
 
 export interface EarningsHistoricalMove {
@@ -169,6 +171,8 @@ function classifyBenzingaTiming(timeOfDay: unknown): EarningsTiming {
   if (normalized === 'amc' || normalized.includes('after')) return 'AMC';
   return 'DURING';
 }
+
+const FMP_ENABLED = process.env.FMP_ENABLED === 'true';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -340,6 +344,46 @@ function markPrice(contract: OptionContract | null): number {
   const mid = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0;
   if (mid > 0) return mid;
   return Number.isFinite(contract.last) && contract.last > 0 ? contract.last : 0;
+}
+
+/**
+ * Fetch earnings calendar from FMP (Financial Modeling Prep).
+ * FMP returns events for ALL symbols in the date range, so we filter client-side.
+ * Note: FMP free tier does NOT provide BMO/AMC timing — defaults to 'DURING'.
+ */
+async function fetchFMPCalendar(options: CalendarFetchOptions): Promise<EarningsCalendarEvent[]> {
+  if (!FMP_ENABLED) return [];
+
+  try {
+    const fmpEvents = await getFMPEarningsCalendar(options.fromDate, options.toDate);
+    if (fmpEvents.length === 0) return [];
+
+    // Build lookup set for fast filtering
+    const symbolSet = new Set(options.symbols.map((s) => s.toUpperCase()));
+
+    return fmpEvents
+      .filter((event: FMPEarningsEvent) => symbolSet.has(event.symbol?.toUpperCase()))
+      .map((event: FMPEarningsEvent) => ({
+        symbol: event.symbol.toUpperCase(),
+        date: event.date,
+        time: 'DURING' as EarningsTiming, // FMP doesn't provide BMO/AMC
+        confirmed: true,
+        epsEstimate: event.epsEstimated ?? null,
+        revenueEstimate: event.revenueEstimated ?? null,
+        source: 'fmp' as const,
+      }))
+      .filter((event) => (
+        /^\d{4}-\d{2}-\d{2}$/.test(event.date)
+        && event.date >= options.fromDate
+        && event.date <= options.toDate
+      ))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+  } catch (error: any) {
+    logger.warn('FMP earnings calendar fetch failed', {
+      error: error?.message || String(error),
+    });
+    return [];
+  }
 }
 
 async function fetchAlphaVantageCalendar(options: CalendarFetchOptions): Promise<EarningsCalendarEvent[]> {
@@ -780,71 +824,80 @@ export class EarningsService {
     const fromDate = formatDate(today);
     const toDate = formatDate(addDays(today, safeDaysAhead));
 
-    const benzingaEvents = await fetchBenzingaReferenceEarningsCalendar({
-      symbols,
-      fromDate,
-      toDate,
-    });
+    const fetchOptions: CalendarFetchOptions = { symbols, fromDate, toDate };
 
+    // --- Primary source waterfall: Benzinga → Alpha Vantage → TMX ---
+    let primaryEvents: EarningsCalendarEvent[] = [];
+
+    const benzingaEvents = await fetchBenzingaReferenceEarningsCalendar(fetchOptions);
     if (benzingaEvents.length > 0) {
-      const deduped = Array.from(new Map(
-        benzingaEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
-      ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
-      await cacheSet(redisCacheKey, deduped, EARNINGS_REDIS_CACHE_TTL_SECONDS);
-      return deduped;
+      primaryEvents = benzingaEvents;
     }
 
-    const alphaEvents = await fetchAlphaVantageCalendar({
-      symbols,
-      fromDate,
-      toDate,
-    });
-
-    if (alphaEvents.length > 0) {
-      const deduped = Array.from(new Map(
-        alphaEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
-      ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
-      await cacheSet(redisCacheKey, deduped, EARNINGS_REDIS_CACHE_TTL_SECONDS);
-      return deduped;
+    if (primaryEvents.length === 0) {
+      const alphaEvents = await fetchAlphaVantageCalendar(fetchOptions);
+      if (alphaEvents.length > 0) {
+        primaryEvents = alphaEvents;
+      }
     }
 
-    if (!ENABLE_TMX_CORPORATE_EVENTS) {
-      await cacheSet(redisCacheKey, [], EARNINGS_REDIS_CACHE_TTL_SECONDS);
-      return [];
+    if (primaryEvents.length === 0 && ENABLE_TMX_CORPORATE_EVENTS) {
+      const rawEvents = await fetchCorporateEvents(fetchOptions);
+      primaryEvents = rawEvents
+        .map((event) => {
+          const sym = String(event.ticker || event.symbol || '').toUpperCase();
+          const date = getEventDate(event);
+          if (!sym || !date || !symbols.includes(sym)) return null;
+          if (date < fromDate || date > toDate) return null;
+
+          return {
+            symbol: sym,
+            date,
+            time: classifyEarningsTiming(event),
+            confirmed: Boolean(event.confirmed ?? true),
+            epsEstimate: parseMaybeNumber(event.eps_estimate),
+            source: 'tmx_corporate_events' as const,
+          } as EarningsCalendarEvent;
+        })
+        .filter((event): event is EarningsCalendarEvent => event != null);
     }
 
-    const rawEvents = await fetchCorporateEvents({
-      symbols,
-      fromDate,
-      toDate,
-    });
+    // --- FMP merge: enrich primary events + add any symbols FMP has that primary missed ---
+    const fmpEvents = await fetchFMPCalendar(fetchOptions);
 
-    const parsedEvents = rawEvents
-      .map((event) => {
-        const symbol = String(event.ticker || event.symbol || '').toUpperCase();
-        const date = getEventDate(event);
-        if (!symbol || !date || !symbols.includes(symbol)) return null;
-        if (date < fromDate || date > toDate) return null;
+    if (fmpEvents.length > 0) {
+      const primaryMap = new Map(
+        primaryEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
+      );
 
-        return {
-          symbol,
-          date,
-          time: classifyEarningsTiming(event),
-          confirmed: Boolean(event.confirmed ?? true),
-          epsEstimate: parseMaybeNumber(event.eps_estimate),
-          source: 'tmx_corporate_events' as const,
-        } as EarningsCalendarEvent;
-      })
-      .filter((event): event is EarningsCalendarEvent => event != null)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+      for (const fmpEvent of fmpEvents) {
+        const key = `${fmpEvent.symbol}:${fmpEvent.date}`;
+        const existing = primaryMap.get(key);
 
-    if (parsedEvents.length > 0) {
-      await cacheSet(redisCacheKey, parsedEvents, EARNINGS_REDIS_CACHE_TTL_SECONDS);
-      return parsedEvents;
+        if (existing) {
+          // Enrich: fill in missing estimates from FMP
+          if (existing.epsEstimate == null && fmpEvent.epsEstimate != null) {
+            existing.epsEstimate = fmpEvent.epsEstimate;
+          }
+          if (existing.revenueEstimate == null && fmpEvent.revenueEstimate != null) {
+            existing.revenueEstimate = fmpEvent.revenueEstimate;
+          }
+        } else {
+          // FMP has an event primary sources missed — add it
+          primaryMap.set(key, fmpEvent);
+        }
+      }
+
+      primaryEvents = Array.from(primaryMap.values());
     }
 
-    await cacheSet(redisCacheKey, [], EARNINGS_REDIS_CACHE_TTL_SECONDS);
-    return [];
+    // Deduplicate, sort, cache
+    const deduped = Array.from(new Map(
+      primaryEvents.map((event) => [`${event.symbol}:${event.date}`, event]),
+    ).values()).sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
+
+    await cacheSet(redisCacheKey, deduped, EARNINGS_REDIS_CACHE_TTL_SECONDS);
+    return deduped;
   }
 
   async getEarningsAnalysis(symbolInput: string): Promise<EarningsAnalysis> {

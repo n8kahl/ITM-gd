@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import { requireTier } from '../middleware/requireTier';
 import { getPredictionState } from '../services/spx/aiPredictor';
 import { generateCoachStream, getCoachState } from '../services/spx/aiCoach';
+import { generateCoachDecision } from '../services/spx/coachDecisionEngine';
 import { getContractRecommendation } from '../services/spx/contractSelector';
 import { getBasisState } from '../services/spx/crossReference';
 import { getFibLevels } from '../services/spx/fibEngine';
@@ -14,7 +15,7 @@ import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { classifyCurrentRegime } from '../services/spx/regimeClassifier';
 import { detectActiveSetups, getSetupById } from '../services/spx/setupDetector';
-import type { Setup } from '../services/spx/types';
+import type { CoachDecisionRequest, Setup } from '../services/spx/types';
 
 const router = Router();
 
@@ -406,6 +407,116 @@ router.post('/coach/message', async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ message: 'AI coach unavailable' })}\n\n`);
     res.end();
     return;
+  }
+});
+
+router.post('/coach/decision', async (req: Request, res: Response) => {
+  try {
+    const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
+    const forceRefresh = parseBoolean(req.body?.forceRefresh);
+    const userId = req.user?.id;
+    const coachTimeoutMs = 20_000;
+
+    const tradeModeRaw = req.body?.tradeMode;
+    const tradeMode = tradeModeRaw === 'scan' || tradeModeRaw === 'evaluate' || tradeModeRaw === 'in_trade'
+      ? tradeModeRaw
+      : undefined;
+
+    const question = typeof req.body?.question === 'string'
+      ? req.body.question
+      : (typeof req.body?.prompt === 'string' ? req.body.prompt : undefined);
+
+    const selectedContractRaw = req.body?.selectedContract;
+    const selectedContract = selectedContractRaw
+      && typeof selectedContractRaw === 'object'
+      && typeof selectedContractRaw.description === 'string'
+      && typeof selectedContractRaw.bid === 'number'
+      && typeof selectedContractRaw.ask === 'number'
+      && typeof selectedContractRaw.riskReward === 'number'
+      ? {
+        description: selectedContractRaw.description,
+        bid: selectedContractRaw.bid,
+        ask: selectedContractRaw.ask,
+        riskReward: selectedContractRaw.riskReward,
+      }
+      : undefined;
+
+    const clientContextRaw = req.body?.clientContext;
+    const layoutModeRaw = clientContextRaw?.layoutMode;
+    const layoutMode = layoutModeRaw === 'legacy'
+      || layoutModeRaw === 'scan'
+      || layoutModeRaw === 'evaluate'
+      || layoutModeRaw === 'in_trade'
+      ? layoutModeRaw
+      : undefined;
+
+    const clientContext = clientContextRaw
+      && typeof clientContextRaw === 'object'
+      ? {
+        layoutMode,
+        surface: typeof clientContextRaw.surface === 'string'
+          ? clientContextRaw.surface
+          : undefined,
+      }
+      : undefined;
+
+    const decisionRequest: CoachDecisionRequest = {
+      setupId,
+      tradeMode,
+      question,
+      selectedContract,
+      clientContext,
+    };
+
+    const decision = await Promise.race([
+      generateCoachDecision({
+        ...decisionRequest,
+        forceRefresh,
+        userId,
+      }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Coach decision timed out after ${coachTimeoutMs}ms`)), coachTimeoutMs);
+      }),
+    ]).catch((error) => {
+      logger.error('SPX coach decision generation failed; returning fallback decision', {
+        error: error instanceof Error ? error.message : String(error),
+        setupId,
+      });
+
+      return {
+        decisionId: `coach_decision_route_fallback_${Date.now()}`,
+        setupId: setupId || null,
+        verdict: 'WAIT',
+        confidence: 0,
+        primaryText: 'Coach decision is temporarily delayed. Use risk-first execution rules and retry shortly.',
+        why: ['Fallback decision engaged while coach service recovers.'],
+        actions: [
+          {
+            id: 'OPEN_HISTORY',
+            label: 'Open Coach History',
+            style: 'secondary',
+          },
+        ],
+        severity: 'warning',
+        freshness: {
+          generatedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          stale: true,
+        },
+        source: 'fallback_v1',
+      };
+    });
+
+    return res.json(decision);
+  } catch (error) {
+    logger.error('SPX coach decision endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Coach unavailable',
+      message: 'AI coach decision service is temporarily unavailable.',
+      retryAfter: 10,
+    });
   }
 });
 

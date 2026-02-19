@@ -637,6 +637,25 @@ function SPXCommandCenterContent() {
               {/* ─── RIGHT: Setups + Contract + Coach ─── */}
               <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
                 <div className="h-full space-y-2.5 overflow-auto pl-1">
+                  {stateDrivenLayoutEnabled && layoutMode === 'scan' && (
+                    uxFlags.coachDockV1 ? (
+                      <div className="sticky top-0 z-10 bg-[#07090D]/90 pb-2 backdrop-blur">
+                        <CoachDock
+                          surface="desktop"
+                          isOpen={desktopCoachPanelOpen}
+                          onToggle={handleDesktopCoachDockToggle}
+                        />
+                        {desktopCoachPanelOpen ? (
+                          <div className="mt-2">
+                            <AICoachFeed />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <CoachPreviewCard />
+                    )
+                  )}
+
                   <SetupFeed />
                   {!stateDrivenLayoutEnabled ? (
                     <>
@@ -644,18 +663,7 @@ function SPXCommandCenterContent() {
                       <AICoachFeed />
                     </>
                   ) : layoutMode === 'scan' ? (
-                    uxFlags.coachDockV1 ? (
-                      <>
-                        <CoachDock
-                          surface="desktop"
-                          isOpen={desktopCoachPanelOpen}
-                          onToggle={handleDesktopCoachDockToggle}
-                        />
-                        {desktopCoachPanelOpen ? <AICoachFeed /> : null}
-                      </>
-                    ) : (
-                      <CoachPreviewCard />
-                    )
+                    null
                   ) : (
                     <>
                       <AICoachFeed />

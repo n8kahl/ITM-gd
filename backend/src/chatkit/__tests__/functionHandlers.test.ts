@@ -65,6 +65,10 @@ jest.mock('../../services/earnings', () => ({
   getEarningsAnalysis: jest.fn(),
 }));
 
+jest.mock('../../services/economic', () => ({
+  getEconomicCalendar: jest.fn(),
+}));
+
 jest.mock('../../services/options/positionAnalyzer', () => ({
   analyzePosition: jest.fn(),
   analyzePortfolio: jest.fn(),
@@ -85,6 +89,7 @@ import { calculateGEXProfile } from '../../services/options/gexCalculator';
 import { analyzeZeroDTE } from '../../services/options/zeroDTE';
 import { analyzeIVProfile } from '../../services/options/ivAnalysis';
 import { getEarningsAnalysis, getEarningsCalendar } from '../../services/earnings';
+import { getEconomicCalendar } from '../../services/economic';
 import {
   analyzePosition,
   analyzePortfolio,
@@ -101,6 +106,7 @@ const mockAnalyzeZeroDTE = analyzeZeroDTE as jest.MockedFunction<typeof analyzeZ
 const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
 const mockGetEarningsCalendar = getEarningsCalendar as jest.MockedFunction<typeof getEarningsCalendar>;
 const mockGetEarningsAnalysis = getEarningsAnalysis as jest.MockedFunction<typeof getEarningsAnalysis>;
+const mockGetEconomicCalendar = getEconomicCalendar as jest.MockedFunction<typeof getEconomicCalendar>;
 const mockAnalyzePosition = analyzePosition as jest.MockedFunction<typeof analyzePosition>;
 const mockAnalyzePortfolio = analyzePortfolio as jest.MockedFunction<typeof analyzePortfolio>;
 const mockGetPositionById = getPositionById as jest.MockedFunction<typeof getPositionById>;
@@ -639,6 +645,33 @@ describe('Function Handlers', () => {
 
       expect(result).toHaveProperty('error', 'Invalid symbol');
       expect(mockGetEarningsAnalysis).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('get_economic_calendar', () => {
+    it('should return economic calendar events with freshness metadata', async () => {
+      mockGetEconomicCalendar.mockResolvedValue([
+        {
+          date: '2026-02-20',
+          event: 'Consumer Price Index (CPI)',
+          expected: null,
+          previous: '3.2',
+          actual: null,
+          impact: 'HIGH',
+          relevance: 'Key inflation print for rates and IV',
+        },
+      ] as any);
+
+      const result = await executeFunctionCall({
+        name: 'get_economic_calendar',
+        arguments: JSON.stringify({ days_ahead: 14, impact_filter: 'HIGH' }),
+      });
+
+      expect(result).toHaveProperty('count', 1);
+      expect(result).toHaveProperty('daysAhead', 14);
+      expect(result).toHaveProperty('impactFilter', 'HIGH');
+      expect(result).toHaveProperty('freshness.source', 'economic_calendar');
+      expect(mockGetEconomicCalendar).toHaveBeenCalledWith(14, 'HIGH');
     });
   });
 

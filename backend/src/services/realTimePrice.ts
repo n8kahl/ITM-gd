@@ -35,8 +35,9 @@ function toMillisecondTimestamp(raw: unknown): number {
 async function getAggregateFallbackPrice(symbol: string): Promise<RealTimePrice | null> {
     const today = getCurrentEasternDate();
     const minuteData = await getMinuteAggregates(symbol, today);
-    if (minuteData.length > 0) {
-        const lastBar = minuteData[minuteData.length - 1];
+    const minuteBars = Array.isArray(minuteData) ? minuteData : [];
+    if (minuteBars.length > 0) {
+        const lastBar = minuteBars[minuteBars.length - 1];
 
         return {
             symbol,
@@ -55,9 +56,10 @@ async function getAggregateFallbackPrice(symbol: string): Promise<RealTimePrice 
 
     const weekAgo = getCurrentEasternDate(new Date(Date.now() - 7 * 86400000));
     const dailyData = await getDailyAggregates(symbol, weekAgo, today);
-    if (dailyData.length === 0) return null;
+    const dailyBars = Array.isArray(dailyData) ? dailyData : [];
+    if (dailyBars.length === 0) return null;
 
-    const lastBar = dailyData[dailyData.length - 1];
+    const lastBar = dailyBars[dailyBars.length - 1];
 
     return {
         symbol,

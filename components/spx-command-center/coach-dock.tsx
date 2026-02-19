@@ -1,22 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Bot, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
+import { useMemo } from 'react'
+import { Bot, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { cn } from '@/lib/utils'
-import {
-  COACH_ALERT_LIFECYCLE_EVENT,
-  findTopCoachAlertV2,
-  loadCoachAlertLifecycleState,
-  resolveCoachAlertSeverity,
-  type CoachAlertLifecycleState,
-} from '@/lib/spx/coach-alert-state-v2'
 
-function isUnreadAlert(
-  status: CoachAlertLifecycleState[string]['status'] | undefined,
-): boolean {
-  return status !== 'seen' && status !== 'snoozed' && status !== 'muted'
+function verdictTone(verdict: string | null | undefined): string {
+  if (verdict === 'ENTER') return 'text-emerald-200'
+  if (verdict === 'EXIT') return 'text-rose-200'
+  if (verdict === 'REDUCE') return 'text-amber-200'
+  return 'text-white/60'
 }
 
 export function CoachDock({
@@ -30,40 +24,13 @@ export function CoachDock({
   onToggle: () => void
   className?: string
 }) {
-  const { coachMessages } = useSPXCoachContext()
+  const { coachMessages, coachDecision, coachDecisionStatus } = useSPXCoachContext()
   const { tradeMode, inTradeSetup } = useSPXSetupContext()
-  const [alertLifecycleState, setAlertLifecycleState] = useState<CoachAlertLifecycleState>(() => loadCoachAlertLifecycleState())
 
-  useEffect(() => {
-    const handleLifecycleSync = (event: Event) => {
-      const custom = event as CustomEvent<{ state?: CoachAlertLifecycleState }>
-      if (custom.detail?.state) {
-        setAlertLifecycleState(custom.detail.state)
-        return
-      }
-      setAlertLifecycleState(loadCoachAlertLifecycleState())
-    }
-
-    window.addEventListener(COACH_ALERT_LIFECYCLE_EVENT, handleLifecycleSync as EventListener)
-    return () => {
-      window.removeEventListener(COACH_ALERT_LIFECYCLE_EVENT, handleLifecycleSync as EventListener)
-    }
-  }, [])
-
-  const topAlert = useMemo(
-    () => findTopCoachAlertV2(coachMessages, alertLifecycleState),
-    [alertLifecycleState, coachMessages],
-  )
-
-  const alertSeverity = topAlert ? resolveCoachAlertSeverity(topAlert) : null
-  const previewMessage = topAlert || coachMessages[0] || null
-
-  const unreadAlertCount = useMemo(() => {
-    return coachMessages
-      .filter((message) => message.priority === 'alert' || message.priority === 'setup')
-      .filter((message) => isUnreadAlert(alertLifecycleState[message.id]?.status))
-      .length
-  }, [alertLifecycleState, coachMessages])
+  const previewMessage = useMemo(() => {
+    if (coachDecision?.primaryText) return coachDecision.primaryText
+    return coachMessages[0]?.content || 'Coach standing by. Open for setup-scoped guidance.'
+  }, [coachDecision?.primaryText, coachMessages])
 
   return (
     <section
@@ -78,33 +45,23 @@ export function CoachDock({
           <div className="flex items-center gap-1.5">
             <Bot className="h-3.5 w-3.5 text-emerald-300" />
             <p className="text-[10px] uppercase tracking-[0.1em] text-white/65">Coach Dock</p>
-            {unreadAlertCount > 0 && (
-              <span className="rounded-full border border-emerald-300/35 bg-emerald-500/18 px-1.5 py-0.5 text-[9px] text-emerald-100">
-                {unreadAlertCount}
+            <span className="rounded-full border border-white/18 bg-white/[0.05] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/65">
+              {coachDecisionStatus}
+            </span>
+            {coachDecision?.verdict && (
+              <span className={cn('text-[9px] uppercase tracking-[0.08em]', verdictTone(coachDecision.verdict))}>
+                {coachDecision.verdict}
               </span>
             )}
           </div>
           <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/80">
-            {previewMessage?.content || 'Coach standing by. Open for setup-scoped guidance.'}
+            {previewMessage}
           </p>
           <div className="mt-1.5 flex items-center gap-2 text-[9px] uppercase tracking-[0.08em] text-white/50">
             {tradeMode === 'in_trade' && inTradeSetup ? (
               <span>In Trade · {inTradeSetup.direction} {inTradeSetup.regime}</span>
             ) : (
               <span>Scan Mode</span>
-            )}
-            {alertSeverity && (
-              <span className={cn(
-                'inline-flex items-center gap-1',
-                alertSeverity === 'critical'
-                  ? 'text-rose-200'
-                  : alertSeverity === 'warning'
-                    ? 'text-amber-200'
-                    : 'text-emerald-200',
-              )}>
-                <AlertTriangle className="h-3 w-3" />
-                {alertSeverity}
-              </span>
             )}
           </div>
         </div>

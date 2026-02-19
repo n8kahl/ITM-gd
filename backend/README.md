@@ -43,6 +43,12 @@ Backend server for the TITM AI Coach trading platform, providing real-time marke
    MASSIVE_API_KEY=your_massive_api_key
    # Optional free earnings calendar source (used by AI Coach earnings module)
    ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key
+   # Optional: FMP earnings supplement
+   FMP_API_KEY=your_fmp_api_key
+   FMP_ENABLED=true
+   # Optional: FRED economic calendar + Fed Funds series
+   FRED_API_KEY=your_fred_api_key
+   FRED_ENABLED=true
 
    # Supabase (from existing TITM project)
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co

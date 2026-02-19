@@ -2,7 +2,21 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, BellOff, Clock3, DoorOpen, Scale, Send, ShieldCheck, Target } from 'lucide-react'
+import {
+  Bot,
+  CheckCircle2,
+  Clock3,
+  History,
+  Loader2,
+  RefreshCw,
+  Send,
+  ShieldAlert,
+  ShieldCheck,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+} from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
@@ -10,45 +24,91 @@ import { useSPXFlowContext } from '@/contexts/spx/SPXFlowContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { CoachMessageCard } from '@/components/spx-command-center/coach-message'
 import { cn } from '@/lib/utils'
-import type { CoachMessage } from '@/lib/types/spx-command-center'
+import type {
+  CoachDecisionAction,
+  CoachDecisionBrief,
+  CoachDecisionSeverity,
+  CoachDecisionVerdict,
+  CoachMessage,
+  Setup,
+} from '@/lib/types/spx-command-center'
 import { summarizeFlowAlignment } from '@/lib/spx/coach-context'
 import { SPX_SHORTCUT_EVENT, type SPXCoachQuickActionEventDetail } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
-import {
-  COACH_ALERT_LIFECYCLE_EVENT,
-  acknowledgeCoachAlertCritical,
-  findTopCoachAlertV2,
-  loadCoachAlertLifecycleState,
-  markCoachAlertSeen,
-  muteCoachAlert,
-  resolveCoachAlertSeverity,
-  snoozeCoachAlert,
-  shouldAutoMarkAlertSeen,
-  type CoachAlertLifecycleState,
-} from '@/lib/spx/coach-alert-state-v2'
 
 const PRE_TRADE_ACTIONS = [
   { id: 'confirm_entry', label: 'Confirm entry?', icon: Target },
   { id: 'risk_check', label: 'Risk check', icon: ShieldCheck },
-  { id: 'exit_strategy', label: 'Exit strategy', icon: DoorOpen },
-  { id: 'size_guidance', label: 'Size guidance', icon: Scale },
+  { id: 'exit_strategy', label: 'Exit strategy', icon: TrendingDown },
+  { id: 'size_guidance', label: 'Size guidance', icon: ShieldAlert },
 ] as const
 
 const ACTIVE_TRADE_ACTIONS = [
   { id: 'risk_check', label: 'Risk check', icon: ShieldCheck },
-  { id: 'exit_strategy', label: 'Exit strategy', icon: DoorOpen },
-  { id: 'hold_or_trim', label: 'Hold or trim?', icon: Target },
-  { id: 'size_adjustment', label: 'Size adjustment', icon: Scale },
+  { id: 'exit_strategy', label: 'Exit strategy', icon: TrendingDown },
+  { id: 'hold_or_trim', label: 'Hold or trim?', icon: TrendingUp },
+  { id: 'size_adjustment', label: 'Size adjustment', icon: ShieldAlert },
 ] as const
 
-const ALERT_AUTO_SEEN_DELAY_MS = 2_000
-const ALERT_SNOOZE_DURATION_MS = 5 * 60 * 1000
-const ALERT_MUTE_DURATION_MS = 30 * 60 * 1000
 const TIMELINE_BOTTOM_THRESHOLD_PX = 28
 
 function toScopedPrompt(prompt: string, setupId?: string | null): string {
   if (!setupId) return prompt
   return `${prompt}\nSetup ID: ${setupId}`
+}
+
+function toDecisionTone(severity: CoachDecisionSeverity): string {
+  if (severity === 'critical') return 'border-rose-300/45 bg-rose-500/12'
+  if (severity === 'warning') return 'border-amber-300/35 bg-amber-500/10'
+  return 'border-emerald-300/35 bg-emerald-500/10'
+}
+
+function verdictPill(verdict: CoachDecisionVerdict): string {
+  if (verdict === 'ENTER') return 'border-emerald-300/45 bg-emerald-500/16 text-emerald-100'
+  if (verdict === 'EXIT') return 'border-rose-300/45 bg-rose-500/16 text-rose-100'
+  if (verdict === 'REDUCE') return 'border-amber-300/45 bg-amber-500/16 text-amber-100'
+  return 'border-white/20 bg-white/[0.06] text-white/80'
+}
+
+function actionClasses(action: CoachDecisionAction): string {
+  if (action.style === 'primary') {
+    return 'border-emerald-300/45 bg-emerald-500/16 text-emerald-100 hover:bg-emerald-500/28'
+  }
+  if (action.style === 'secondary') {
+    return 'border-champagne/35 bg-champagne/12 text-champagne hover:bg-champagne/18'
+  }
+  return 'border-white/18 bg-white/[0.05] text-white/80 hover:bg-white/[0.12]'
+}
+
+function resolveActionLabel(action: CoachDecisionAction): string {
+  if (action.id === 'REVERT_AI_CONTRACT') return 'Use AI Contract'
+  if (action.id === 'EXIT_TRADE_FOCUS') return 'Exit Trade Focus'
+  return action.label
+}
+
+function staleAgeLabel(decision: CoachDecisionBrief | null): string | null {
+  if (!decision) return null
+  const generatedEpoch = Date.parse(decision.freshness.generatedAt)
+  if (!Number.isFinite(generatedEpoch)) return null
+  const elapsedMs = Math.max(Date.now() - generatedEpoch, 0)
+  const seconds = Math.floor(elapsedMs / 1000)
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
+function findSetupById(setups: Setup[], setupId?: string | null): Setup | null {
+  if (!setupId) return null
+  return setups.find((setup) => setup.id === setupId) || null
+}
+
+function decisionStatusLabel(status: 'idle' | 'loading' | 'ready' | 'error'): string {
+  if (status === 'loading') return 'Refreshing'
+  if (status === 'error') return 'Delayed'
+  if (status === 'ready') return 'Live'
+  return 'Idle'
 }
 
 export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
@@ -63,8 +123,19 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     tradeEntryContractMid,
     tradeCurrentContractMid,
     tradePnlDollars,
+    selectSetup,
+    enterTrade,
+    exitTrade,
+    setSetupContractChoice,
   } = useSPXSetupContext()
-  const { coachMessages, sendCoachMessage } = useSPXCoachContext()
+  const {
+    coachMessages,
+    sendCoachMessage,
+    coachDecision,
+    coachDecisionStatus,
+    coachDecisionError,
+    requestCoachDecision,
+  } = useSPXCoachContext()
   const { flowEvents } = useSPXFlowContext()
   const prefersReducedMotion = useReducedMotion()
 
@@ -72,35 +143,20 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [showAllMessages, setShowAllMessages] = useState(false)
-  const [alertLifecycleState, setAlertLifecycleState] = useState<CoachAlertLifecycleState>(() => loadCoachAlertLifecycleState())
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [isTimelineAtBottom, setIsTimelineAtBottom] = useState(true)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const timelineRef = useRef<HTMLDivElement | null>(null)
-  const autoSeenTimeoutRef = useRef<number | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const lastVisibleMessageIdRef = useRef<string | null>(null)
 
   const scopedSetup = inTradeSetup || selectedSetup
 
   useEffect(() => {
     setShowAllMessages(false)
+    setHistoryOpen(false)
   }, [scopedSetup?.id])
-
-  useEffect(() => {
-    const handleLifecycleSync = (event: Event) => {
-      const custom = event as CustomEvent<{ state?: CoachAlertLifecycleState }>
-      if (custom.detail?.state) {
-        setAlertLifecycleState(custom.detail.state)
-        return
-      }
-      setAlertLifecycleState(loadCoachAlertLifecycleState())
-    }
-
-    window.addEventListener(COACH_ALERT_LIFECYCLE_EVENT, handleLifecycleSync as EventListener)
-    return () => {
-      window.removeEventListener(COACH_ALERT_LIFECYCLE_EVENT, handleLifecycleSync as EventListener)
-    }
-  }, [])
 
   const setupTypeById = useMemo(() => {
     return new Map(activeSetups.map((setup) => [setup.id, setup.type.replace(/_/g, ' ')]))
@@ -113,25 +169,10 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     return coachMessages
   }, [coachMessages, scopedSetup, showAllMessages])
 
-  const pinnedAlert = useMemo(
-    () => findTopCoachAlertV2(scopedMessages, alertLifecycleState),
-    [alertLifecycleState, scopedMessages],
-  )
-
-  const pinnedAlertSeverity = useMemo(
-    () => (pinnedAlert ? resolveCoachAlertSeverity(pinnedAlert) : null),
-    [pinnedAlert],
-  )
-
-  const visibleMessages = useMemo(
-    () => scopedMessages.filter((message) => message.id !== pinnedAlert?.id),
-    [pinnedAlert?.id, scopedMessages],
-  )
-
   const groupedMessages = useMemo(() => {
     const groups = new Map<string, CoachMessage[]>()
 
-    visibleMessages.forEach((message) => {
+    scopedMessages.forEach((message) => {
       const key = message.setupId || '__global__'
       const existing = groups.get(key)
       if (existing) {
@@ -155,7 +196,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         messages,
       }
     })
-  }, [scopedSetup, setupTypeById, visibleMessages])
+  }, [scopedMessages, scopedSetup, setupTypeById])
 
   const flowSummary = useMemo(() => {
     if (!scopedSetup) return null
@@ -260,21 +301,27 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     })
   }, [flowSummary, regime, scopedSetup, tradeMode, tradePnlDollars, uxFlags.coachProactive])
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!prompt.trim() || isSending) return
-    await sendMessage(prompt.trim())
-  }
-
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, options?: { setupId?: string | null; forceRefresh?: boolean }) => {
     setSendError(null)
     setIsSending(true)
+
     try {
+      const scopedId = options?.setupId ?? scopedSetup?.id
       const contractContext = tradeMode === 'in_trade' && inTradeContract
         ? `\nContract: ${inTradeContract.description}\nEntry mid: ${tradeEntryContractMid?.toFixed(2) ?? '--'}\nCurrent mid: ${tradeCurrentContractMid?.toFixed(2) ?? '--'}\nContract P&L: ${tradePnlDollars == null ? '--' : `${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}`}`
         : ''
-      await sendCoachMessage(`${text}${contractContext}`, scopedSetup?.id)
+
+      await sendCoachMessage(`${text}${contractContext}`, scopedId)
       setPrompt('')
+
+      if (uxFlags.coachSurfaceV2) {
+        await requestCoachDecision({
+          setupId: scopedId,
+          question: text,
+          forceRefresh: options?.forceRefresh ?? true,
+          surface: 'spx_coach_feed',
+        })
+      }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Coach request failed. Please try again.')
     } finally {
@@ -282,13 +329,116 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     }
   }, [
     inTradeContract,
+    requestCoachDecision,
     scopedSetup?.id,
     sendCoachMessage,
     tradeCurrentContractMid,
     tradeEntryContractMid,
     tradeMode,
     tradePnlDollars,
+    uxFlags.coachSurfaceV2,
   ])
+
+  const handleDecisionAction = useCallback(async (action: CoachDecisionAction) => {
+    const actionSetupId = typeof action.payload?.setupId === 'string' ? action.payload.setupId : scopedSetup?.id || null
+    const actionSetup = findSetupById(activeSetups, actionSetupId) || scopedSetup
+
+    if (action.style === 'primary') {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_PRIMARY_ACTION_CLICKED, {
+        actionId: action.id,
+        setupId: actionSetupId,
+        tradeMode,
+        decisionId: coachDecision?.decisionId || null,
+      }, { persist: true })
+    } else {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_SECONDARY_ACTION_CLICKED, {
+        actionId: action.id,
+        setupId: actionSetupId,
+        tradeMode,
+        decisionId: coachDecision?.decisionId || null,
+      }, { persist: true })
+    }
+
+    if (action.id === 'ENTER_TRADE_FOCUS' && actionSetup) {
+      selectSetup(actionSetup)
+      enterTrade(actionSetup)
+      void requestCoachDecision({
+        setupId: actionSetup.id,
+        forceRefresh: true,
+        surface: 'spx_coach_action_enter',
+      })
+      return
+    }
+
+    if (action.id === 'EXIT_TRADE_FOCUS') {
+      exitTrade()
+      void requestCoachDecision({
+        setupId: actionSetupId,
+        forceRefresh: true,
+        surface: 'spx_coach_action_exit',
+      })
+      return
+    }
+
+    if (action.id === 'REVERT_AI_CONTRACT') {
+      if (actionSetup?.recommendedContract) {
+        setSetupContractChoice(actionSetup, actionSetup.recommendedContract)
+      }
+      void requestCoachDecision({
+        setupId: actionSetup?.id || actionSetupId,
+        forceRefresh: true,
+        surface: 'spx_coach_action_revert_contract',
+      })
+      return
+    }
+
+    if (action.id === 'OPEN_HISTORY') {
+      setHistoryOpen(true)
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_HISTORY_OPENED, {
+        setupId: actionSetupId,
+        tradeMode,
+        decisionId: coachDecision?.decisionId || null,
+      }, { persist: true })
+      return
+    }
+
+    if (action.id === 'ASK_FOLLOW_UP') {
+      inputRef.current?.focus()
+      return
+    }
+
+    if (action.id === 'TIGHTEN_STOP_GUIDANCE') {
+      await sendMessage('Give precise stop-tightening guidance now based on this exact setup and live flow.', {
+        setupId: actionSetupId,
+        forceRefresh: true,
+      })
+      return
+    }
+
+    if (action.id === 'REDUCE_SIZE_GUIDANCE') {
+      await sendMessage('Should I reduce size now? Quantify urgency, trigger conditions, and specific risk actions.', {
+        setupId: actionSetupId,
+        forceRefresh: true,
+      })
+    }
+  }, [
+    activeSetups,
+    coachDecision?.decisionId,
+    enterTrade,
+    exitTrade,
+    requestCoachDecision,
+    scopedSetup,
+    selectSetup,
+    sendMessage,
+    setSetupContractChoice,
+    tradeMode,
+  ])
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!prompt.trim() || isSending) return
+    await sendMessage(prompt.trim())
+  }
 
   useEffect(() => {
     if (readOnly) return
@@ -321,29 +471,6 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     }
   }, [isSending, quickActions, readOnly, scopedSetup?.id, sendMessage, tradeMode])
 
-  useEffect(() => {
-    if (!uxFlags.coachAlertLifecycleV2) return
-    if (!pinnedAlert) return
-    if (!shouldAutoMarkAlertSeen(pinnedAlert, alertLifecycleState)) return
-
-    autoSeenTimeoutRef.current = window.setTimeout(() => {
-      setAlertLifecycleState((previous) => markCoachAlertSeen(previous, pinnedAlert))
-      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_ALERT_SEEN, {
-        messageId: pinnedAlert.id,
-        setupId: pinnedAlert.setupId,
-        severity: resolveCoachAlertSeverity(pinnedAlert),
-        tradeMode,
-        surface: 'ai_coach_feed',
-      }, { persist: true })
-    }, ALERT_AUTO_SEEN_DELAY_MS)
-
-    return () => {
-      if (autoSeenTimeoutRef.current != null) {
-        window.clearTimeout(autoSeenTimeoutRef.current)
-      }
-    }
-  }, [alertLifecycleState, pinnedAlert, tradeMode, uxFlags.coachAlertLifecycleV2])
-
   const scrollTimelineToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const node = timelineRef.current
     if (!node) return
@@ -369,7 +496,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   useEffect(() => {
     if (!uxFlags.coachTimelineV2) return
 
-    const latestMessageId = visibleMessages[0]?.id || null
+    const latestMessageId = scopedMessages[0]?.id || null
     if (!latestMessageId) {
       lastVisibleMessageIdRef.current = null
       return
@@ -382,7 +509,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     }
 
     if (lastVisibleMessageIdRef.current !== latestMessageId) {
-      if (isTimelineAtBottom) {
+      if (isTimelineAtBottom || !historyOpen) {
         scrollTimelineToBottom(prefersReducedMotion ? 'auto' : 'smooth')
       } else {
         setShowJumpToLatest(true)
@@ -390,45 +517,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     }
 
     lastVisibleMessageIdRef.current = latestMessageId
-  }, [isTimelineAtBottom, prefersReducedMotion, scrollTimelineToBottom, uxFlags.coachTimelineV2, visibleMessages])
-
-  const dismissPinnedAlert = (message: CoachMessage) => {
-    setAlertLifecycleState((previous) => acknowledgeCoachAlertCritical(previous, message))
-
-    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_ALERT_ACK, {
-      messageId: message.id,
-      priority: message.priority,
-      setupId: message.setupId,
-      severity: resolveCoachAlertSeverity(message),
-      surface: 'ai_coach_feed',
-    }, { persist: true })
-  }
-
-  const snoozePinnedAlert = (message: CoachMessage) => {
-    setAlertLifecycleState((previous) => snoozeCoachAlert(previous, message, ALERT_SNOOZE_DURATION_MS))
-
-    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_ALERT_SNOOZED, {
-      messageId: message.id,
-      setupId: message.setupId,
-      severity: resolveCoachAlertSeverity(message),
-      durationMs: ALERT_SNOOZE_DURATION_MS,
-      tradeMode,
-      surface: 'ai_coach_feed',
-    }, { persist: true })
-  }
-
-  const mutePinnedAlert = (message: CoachMessage) => {
-    setAlertLifecycleState((previous) => muteCoachAlert(previous, message, ALERT_MUTE_DURATION_MS))
-
-    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_ALERT_MUTED, {
-      messageId: message.id,
-      setupId: message.setupId,
-      severity: resolveCoachAlertSeverity(message),
-      durationMs: ALERT_MUTE_DURATION_MS,
-      tradeMode,
-      surface: 'ai_coach_feed',
-    }, { persist: true })
-  }
+  }, [historyOpen, isTimelineAtBottom, prefersReducedMotion, scopedMessages, scrollTimelineToBottom, uxFlags.coachTimelineV2])
 
   const handleMessageActionChip = useCallback((action: string, message: CoachMessage) => {
     const setupId = message.setupId || scopedSetup?.id || null
@@ -442,8 +531,14 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       surface: 'ai_coach_feed',
     }, { persist: true })
 
-    void sendMessage(toScopedPrompt(actionPrompt, setupId))
+    void sendMessage(toScopedPrompt(actionPrompt, setupId), {
+      setupId,
+      forceRefresh: true,
+    })
   }, [scopedSetup?.id, sendMessage, tradeMode])
+
+  const latestMessage = scopedMessages[0] || null
+  const decisionAge = staleAgeLabel(coachDecision)
 
   return (
     <section
@@ -451,7 +546,22 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       data-testid="spx-ai-coach-feed"
     >
       <div className="flex items-center justify-between">
-        <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">AI Coach</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-[11px] uppercase tracking-[0.14em] text-white/60">AI Coach</h3>
+          <span className={cn(
+            'rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]',
+            coachDecisionStatus === 'ready'
+              ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+              : coachDecisionStatus === 'loading'
+                ? 'border-champagne/35 bg-champagne/12 text-champagne'
+                : coachDecisionStatus === 'error'
+                  ? 'border-rose-300/35 bg-rose-500/12 text-rose-100'
+                  : 'border-white/18 bg-white/[0.05] text-white/70',
+          )}>
+            {decisionStatusLabel(coachDecisionStatus)}
+          </span>
+        </div>
+
         {scopedSetup ? (
           <div className="flex items-center gap-1.5">
             <button
@@ -490,78 +600,125 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
         </div>
       )}
 
-      <AnimatePresence initial={false}>
-        {pinnedAlert && (
+      {uxFlags.coachSurfaceV2 && (
+        <AnimatePresence initial={false} mode="wait">
           <motion.div
-            key={pinnedAlert.id}
-            initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: -6 } : undefined}
+            key={coachDecision?.decisionId || coachDecisionStatus}
+            data-testid="spx-coach-decision-brief"
+            initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 6 } : undefined}
             animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}
             exit={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: -6 } : undefined}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             className={cn(
-              'rounded-lg border px-3 py-2',
-              pinnedAlertSeverity === 'critical'
-                ? 'border-rose-300/45 bg-rose-500/14'
-                : pinnedAlertSeverity === 'warning'
-                  ? 'border-amber-300/35 bg-amber-500/12'
-                  : 'border-emerald-400/25 bg-emerald-500/10',
+              'rounded-xl border px-3 py-2.5',
+              toDecisionTone(coachDecision?.severity || 'routine'),
             )}
-            data-testid="spx-ai-coach-pinned-alert"
           >
-            <div className="flex items-center justify-between gap-2">
-              <p className={cn(
-                'inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.1em]',
-                pinnedAlertSeverity === 'critical'
-                  ? 'text-rose-100'
-                  : pinnedAlertSeverity === 'warning'
-                    ? 'text-amber-100'
-                    : 'text-emerald-100',
-              )}>
-                <AlertTriangle className="h-3 w-3" />
-                {pinnedAlertSeverity === 'critical'
-                  ? 'Critical Alert'
-                  : pinnedAlertSeverity === 'warning'
-                    ? 'Warning Alert'
-                    : 'Coach Insight'}
-              </p>
-              <div className="flex items-center gap-1">
-                {pinnedAlertSeverity === 'critical' ? (
-                  <button
-                    type="button"
-                    data-testid="spx-ai-coach-alert-ack"
-                    onClick={() => dismissPinnedAlert(pinnedAlert)}
-                    className="rounded border border-rose-300/35 bg-rose-400/15 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-rose-100 hover:bg-rose-400/25"
-                  >
-                    Acknowledge
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      data-testid="spx-ai-coach-alert-snooze"
-                      onClick={() => snoozePinnedAlert(pinnedAlert)}
-                      className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/[0.06] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-white/80 hover:bg-white/[0.12]"
-                    >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.1em] text-white/70">
+                  <Bot className="h-3 w-3 text-emerald-200" />
+                  Decision Brief
+                  {decisionAge && (
+                    <span className="inline-flex items-center gap-1 text-white/45">
                       <Clock3 className="h-3 w-3" />
-                      Snooze 5m
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="spx-ai-coach-alert-mute"
-                      onClick={() => mutePinnedAlert(pinnedAlert)}
-                      className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/[0.06] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-white/80 hover:bg-white/[0.12]"
-                    >
-                      <BellOff className="h-3 w-3" />
-                      Mute 30m
-                    </button>
-                  </>
-                )}
+                      {decisionAge}
+                    </span>
+                  )}
+                </p>
+                {coachDecision ? (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className={cn('rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]', verdictPill(coachDecision.verdict))}>
+                      {coachDecision.verdict}
+                    </span>
+                    <span className="rounded border border-white/15 bg-white/[0.05] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/75">
+                      Confidence {coachDecision.confidence}%
+                    </span>
+                    {coachDecision.freshness.stale && (
+                      <span className="rounded border border-rose-300/30 bg-rose-500/12 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-rose-100">
+                        Stale
+                      </span>
+                    )}
+                  </div>
+                ) : null}
               </div>
+
+              <button
+                type="button"
+                disabled={coachDecisionStatus === 'loading'}
+                onClick={() => {
+                  void requestCoachDecision({
+                    setupId: scopedSetup?.id || null,
+                    forceRefresh: true,
+                    surface: 'spx_coach_manual_refresh',
+                  })
+                }}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-white/[0.05] text-white/70 hover:bg-white/[0.12] disabled:opacity-40"
+                aria-label="Refresh coach decision"
+              >
+                {coachDecisionStatus === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              </button>
             </div>
-            <p className="mt-1 text-[12px] leading-snug text-ivory">{pinnedAlert.content}</p>
+
+            {coachDecision ? (
+              <>
+                <p className="mt-2 text-[12px] leading-snug text-ivory">{coachDecision.primaryText}</p>
+
+                {coachDecision.why.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-[11px] text-white/78">
+                    {coachDecision.why.slice(0, 3).map((line, index) => (
+                      <li key={`${coachDecision.decisionId}-why-${index}`} className="flex items-start gap-1.5">
+                        <CheckCircle2 className="mt-0.5 h-3 w-3 text-emerald-200/85" />
+                        <span>{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {(coachDecision.riskPlan?.invalidation || coachDecision.riskPlan?.positionGuidance || coachDecision.riskPlan?.stop || coachDecision.riskPlan?.maxRiskDollars) && (
+                  <div className="mt-2.5 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2">
+                    <p className="text-[9px] uppercase tracking-[0.1em] text-white/50">Risk Plan</p>
+                    <div className="mt-1 grid gap-1 text-[10px] text-white/75">
+                      {coachDecision.riskPlan?.invalidation && <p>Invalidation: {coachDecision.riskPlan.invalidation}</p>}
+                      {typeof coachDecision.riskPlan?.stop === 'number' && <p>Stop: {coachDecision.riskPlan.stop.toFixed(1)}</p>}
+                      {typeof coachDecision.riskPlan?.maxRiskDollars === 'number' && (
+                        <p>Max risk: ${coachDecision.riskPlan.maxRiskDollars.toFixed(0)}</p>
+                      )}
+                      {coachDecision.riskPlan?.positionGuidance && <p>Size: {coachDecision.riskPlan.positionGuidance}</p>}
+                    </div>
+                  </div>
+                )}
+
+                {coachDecision.actions.length > 0 && !readOnly && (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5" data-testid="spx-coach-decision-actions">
+                    {coachDecision.actions.map((action) => (
+                      <button
+                        key={`${coachDecision.decisionId}-${action.id}`}
+                        type="button"
+                        onClick={() => {
+                          void handleDecisionAction(action)
+                        }}
+                        className={cn(
+                          'rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.07em] transition-colors',
+                          actionClasses(action),
+                        )}
+                      >
+                        {resolveActionLabel(action)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="mt-2 text-[12px] text-white/75">
+                {coachDecisionStatus === 'loading'
+                  ? 'Building an execution-focused decision brief...'
+                  : coachDecisionError || 'Select a setup for contextual decision guidance.'}
+              </p>
+            )}
           </motion.div>
-        )}
-      </AnimatePresence>
+        </AnimatePresence>
+      )}
 
       {!readOnly && (
         <div className="flex flex-wrap gap-1.5">
@@ -570,7 +727,12 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               key={action.label}
               type="button"
               disabled={isSending}
-              onClick={() => sendMessage(toScopedPrompt(action.prompt, scopedSetup?.id))}
+              onClick={() => {
+                void sendMessage(toScopedPrompt(action.prompt, scopedSetup?.id), {
+                  setupId: scopedSetup?.id,
+                  forceRefresh: true,
+                })
+              }}
               className={cn(
                 'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.06em] transition-colors',
                 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-200/80 hover:bg-emerald-500/15 hover:text-emerald-200',
@@ -581,11 +743,50 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               {action.label}
             </button>
           ))}
+
+          {tradeMode === 'in_trade' && (
+            <button
+              type="button"
+              onClick={() => {
+                exitTrade()
+                void requestCoachDecision({
+                  setupId: scopedSetup?.id || null,
+                  forceRefresh: true,
+                  surface: 'spx_coach_quick_exit',
+                })
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-rose-300/35 bg-rose-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.06em] text-rose-100 hover:bg-rose-500/22"
+            >
+              <TriangleAlert className="h-3 w-3" />
+              Exit Trade Focus
+            </button>
+          )}
         </div>
       )}
 
-      {uxFlags.coachTimelineV2 && showJumpToLatest && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setHistoryOpen((previous) => {
+              const next = !previous
+              if (next) {
+                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_HISTORY_OPENED, {
+                  setupId: scopedSetup?.id || null,
+                  tradeMode,
+                  decisionId: coachDecision?.decisionId || null,
+                }, { persist: true })
+              }
+              return next
+            })
+          }}
+          className="inline-flex items-center gap-1.5 rounded border border-white/15 bg-white/[0.04] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-white/70 hover:bg-white/[0.1]"
+        >
+          <History className="h-3 w-3" />
+          {historyOpen ? 'Hide history' : 'Open history'}
+        </button>
+
+        {uxFlags.coachTimelineV2 && showJumpToLatest && historyOpen && (
           <button
             type="button"
             data-testid="spx-ai-coach-jump-latest"
@@ -593,74 +794,91 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               scrollTimelineToBottom(prefersReducedMotion ? 'auto' : 'smooth')
               setShowJumpToLatest(false)
               setIsTimelineAtBottom(true)
-              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_TIMELINE_JUMP_LATEST, {
-                tradeMode,
-                setupId: scopedSetup?.id || null,
-                surface: 'ai_coach_feed',
-              }, { persist: true })
             }}
             className="rounded-full border border-emerald-300/35 bg-emerald-500/12 px-2.5 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 hover:bg-emerald-500/20"
           >
-            New messages · Jump to latest
+            New messages
           </button>
-        </div>
-      )}
-
-      {isSending && (
-        <p className="text-[10px] text-emerald-200/75">
-          Coach is analyzing context...
-        </p>
-      )}
-
-      <div
-        ref={timelineRef}
-        onScroll={handleTimelineScroll}
-        data-testid="spx-ai-coach-timeline"
-        className="flex-1 space-y-1.5 max-h-[280px] overflow-auto pr-0.5"
-      >
-        {groupedMessages.length === 0 ? (
-          <p className="text-[11px] text-white/45">
-            {scopedSetup ? 'No coaching messages in this scope yet.' : 'No coaching messages yet. Ask coach a question below.'}
-          </p>
-        ) : (
-          groupedMessages.map((group) => (
-            <div key={group.id} className="space-y-1.5">
-              {showAllMessages && groupedMessages.length > 1 && (
-                <p className="px-1 text-[9px] uppercase tracking-[0.1em] text-white/40">{group.label}</p>
-              )}
-              <AnimatePresence initial={false}>
-                {[...group.messages].reverse().map((message) => (
-                  <motion.div
-                    key={message.id}
-                    layout={uxFlags.coachMotionV1 && !prefersReducedMotion}
-                    initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 6 } : undefined}
-                    animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}
-                    exit={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: -6 } : undefined}
-                    transition={{ duration: 0.16, ease: 'easeOut' }}
-                  >
-                    <CoachMessageCard
-                      message={message}
-                      onActionChipClick={readOnly ? undefined : handleMessageActionChip}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          ))
         )}
       </div>
 
+      <AnimatePresence initial={false} mode="wait">
+        {historyOpen ? (
+          <motion.div
+            key="history-open"
+            initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, height: 0 } : undefined}
+            animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, height: 'auto' } : undefined}
+            exit={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, height: 0 } : undefined}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div
+              ref={timelineRef}
+              onScroll={handleTimelineScroll}
+              data-testid="spx-ai-coach-timeline"
+              className="space-y-1.5 max-h-[260px] overflow-auto pr-0.5"
+            >
+              {groupedMessages.length === 0 ? (
+                <p className="text-[11px] text-white/45">
+                  {scopedSetup ? 'No coaching messages in this scope yet.' : 'No coaching messages yet. Ask coach a question below.'}
+                </p>
+              ) : (
+                groupedMessages.map((group) => (
+                  <div key={group.id} className="space-y-1.5">
+                    {showAllMessages && groupedMessages.length > 1 && (
+                      <p className="px-1 text-[9px] uppercase tracking-[0.1em] text-white/40">{group.label}</p>
+                    )}
+                    <AnimatePresence initial={false}>
+                      {[...group.messages].reverse().map((message) => (
+                        <motion.div
+                          key={message.id}
+                          layout={uxFlags.coachMotionV1 && !prefersReducedMotion}
+                          initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 6 } : undefined}
+                          animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}
+                          exit={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: -6 } : undefined}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                        >
+                          <CoachMessageCard
+                            message={message}
+                            onActionChipClick={readOnly ? undefined : handleMessageActionChip}
+                          />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="history-preview"
+            initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 4 } : undefined}
+            animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}
+            exit={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: -4 } : undefined}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className="rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2"
+          >
+            <p className="text-[9px] uppercase tracking-[0.1em] text-white/45">Latest message</p>
+            <p className="mt-1 text-[12px] text-white/78 leading-snug">
+              {latestMessage?.content || 'Coach ready. Select a setup for execution guidance.'}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {readOnly ? (
-        <p className="text-[10px] text-white/40">Read-only on mobile.</p>
+        <p className="text-[10px] text-white/40">Read-only on this surface.</p>
       ) : (
         <div className="space-y-1.5">
-          {sendError && (
+          {(sendError || coachDecisionError) && (
             <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-100">
-              {sendError}
+              {sendError || coachDecisionError}
             </div>
           )}
           <form onSubmit={onSubmit} className="flex items-center gap-1.5">
             <input
+              ref={inputRef}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={tradeMode === 'in_trade' ? 'Ask about this live trade...' : (scopedSetup ? 'Ask about this setup...' : 'Ask coach...')}
@@ -673,7 +891,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
               className="inline-flex items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-500/12 p-2 text-emerald-200 disabled:opacity-40"
               aria-label="Send coach message"
             >
-              <Send className="h-3.5 w-3.5" />
+              {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </button>
           </form>
         </div>

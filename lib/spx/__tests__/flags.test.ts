@@ -42,6 +42,7 @@ describe('SPX UX flags', () => {
       'coachAlertLifecycleV2',
       'coachTimelineV2',
       'coachMotionV1',
+      'coachSurfaceV2',
     ])
   })
 })

@@ -38,6 +38,7 @@ function providerLabel(source: EarningsCalendarEvent['source']): string | null {
   if (source === 'massive_reference') return 'Massive'
   if (source === 'tmx_corporate_events') return 'Corporate events'
   if (source === 'alpha_vantage') return 'Alpha Vantage'
+  if (source === 'fmp') return 'FMP'
   return null
 }
 

@@ -70,6 +70,14 @@ const envSchema = z.object({
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   ALPHA_VANTAGE_BASE_URL: z.string().url().optional(),
 
+  // FMP (Financial Modeling Prep) — earnings calendar supplement
+  FMP_API_KEY: z.string().optional(),
+  FMP_ENABLED: booleanFromEnv.default(false),
+
+  // FRED (Federal Reserve Economic Data) — economic calendar
+  FRED_API_KEY: z.string().optional(),
+  FRED_ENABLED: booleanFromEnv.default(false),
+
   // Sentry
   SENTRY_DSN: z.string().url().optional(),
 

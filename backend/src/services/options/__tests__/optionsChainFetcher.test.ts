@@ -3,6 +3,7 @@ jest.mock('../../../config/massive', () => ({
   getOptionsSnapshot: jest.fn(),
   getOptionsExpirations: jest.fn(),
   getDailyAggregates: jest.fn(),
+  getMinuteAggregates: jest.fn(),
 }));
 
 jest.mock('../../../config/redis', () => ({
@@ -12,6 +13,7 @@ jest.mock('../../../config/redis', () => ({
 
 import {
   getDailyAggregates,
+  getMinuteAggregates,
   getOptionsContracts,
   getOptionsExpirations,
   getOptionsSnapshot,
@@ -20,6 +22,7 @@ import { cacheGet, cacheSet } from '../../../config/redis';
 import { fetchExpirationDates, fetchOptionContract, fetchOptionsChain } from '../optionsChainFetcher';
 
 const mockGetDailyAggregates = getDailyAggregates as jest.MockedFunction<typeof getDailyAggregates>;
+const mockGetMinuteAggregates = getMinuteAggregates as jest.MockedFunction<typeof getMinuteAggregates>;
 const mockGetOptionsContracts = getOptionsContracts as jest.MockedFunction<typeof getOptionsContracts>;
 const mockGetOptionsExpirations = getOptionsExpirations as jest.MockedFunction<typeof getOptionsExpirations>;
 const mockGetOptionsSnapshot = getOptionsSnapshot as jest.MockedFunction<typeof getOptionsSnapshot>;
@@ -39,6 +42,16 @@ describe('optionsChainFetcher', () => {
         c: 500,
         v: 1_000_000,
         t: Date.parse('2026-02-09T20:00:00.000Z'),
+      },
+    ] as any);
+    mockGetMinuteAggregates.mockResolvedValue([
+      {
+        o: 499.5,
+        h: 500.5,
+        l: 499.2,
+        c: 500.1,
+        v: 12_000,
+        t: Date.parse('2026-02-10T15:59:00.000Z'),
       },
     ] as any);
     mockGetOptionsExpirations.mockResolvedValue(['2026-02-13']);

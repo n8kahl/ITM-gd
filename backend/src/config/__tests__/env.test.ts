@@ -332,6 +332,8 @@ describe('Environment Validation', () => {
         'RATE_LIMIT_GENERAL',
         'RATE_LIMIT_CHAT',
         'RATE_LIMIT_SCREENSHOT',
+        'FMP_ENABLED',
+        'FRED_ENABLED',
       ];
 
       for (const prop of requiredProps) {
@@ -360,6 +362,8 @@ describe('Environment Validation', () => {
         'RATE_LIMIT_GENERAL',
         'RATE_LIMIT_CHAT',
         'RATE_LIMIT_SCREENSHOT',
+        'FMP_ENABLED',
+        'FRED_ENABLED',
       ];
 
       for (const varName of optionalVars) {
@@ -381,6 +385,8 @@ describe('Environment Validation', () => {
       expect(env.RATE_LIMIT_GENERAL).toBe(100);
       expect(env.RATE_LIMIT_CHAT).toBe(20);
       expect(env.RATE_LIMIT_SCREENSHOT).toBe(5);
+      expect(env.FMP_ENABLED).toBe(false);
+      expect(env.FRED_ENABLED).toBe(false);
     });
   });
 
@@ -422,6 +428,20 @@ describe('Environment Validation', () => {
 
       expect(typeof env.TEMPERATURE).toBe('number');
       expect(env.TEMPERATURE).toBe(1.5);
+    });
+
+    it('should coerce FMP_ENABLED and FRED_ENABLED booleans from strings', () => {
+      process.env.OPENAI_API_KEY = 'sk-proj-abcdefghijklmnopqrstuvwxyz';
+      process.env.SUPABASE_URL = 'https://example.supabase.co';
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
+      process.env.FMP_ENABLED = 'true';
+      process.env.FRED_ENABLED = 'true';
+
+      const { validateEnv: validate } = require('../env');
+      const env = validate();
+
+      expect(env.FMP_ENABLED).toBe(true);
+      expect(env.FRED_ENABLED).toBe(true);
     });
   });
 });

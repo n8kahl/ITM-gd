@@ -769,5 +769,26 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
         }
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_economic_calendar',
+      description: 'Get upcoming economic data releases (CPI, NFP, GDP, FOMC, PPI, Retail Sales, PCE, ISM, Consumer Sentiment) that could impact market volatility and options pricing. Use when trader asks about upcoming macro events, economic releases, what might move the market this week, or before recommending trades near major data releases.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days_ahead: {
+            type: 'number',
+            description: 'Number of days to look ahead (default 7, max 60)',
+          },
+          impact_filter: {
+            type: 'string',
+            enum: ['HIGH', 'MEDIUM', 'ALL'],
+            description: 'Filter by impact level (default HIGH). HIGH = CPI, NFP, GDP, FOMC. MEDIUM = PPI, Retail, ISM, Sentiment.',
+          },
+        },
+      },
+    },
   }
 ];

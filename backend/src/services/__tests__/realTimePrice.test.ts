@@ -1,5 +1,5 @@
 import { getRealTimePrice } from '../realTimePrice';
-import { getLastTrade, getLastQuote } from '../../config/massive';
+import { getDailyAggregates, getLastQuote, getLastTrade, getMinuteAggregates } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 
 // Mock dependencies
@@ -18,6 +18,8 @@ describe('RealTimePrice Service', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         (cacheGet as jest.Mock).mockResolvedValue(null);
+        (getMinuteAggregates as jest.Mock).mockResolvedValue([]);
+        (getDailyAggregates as jest.Mock).mockResolvedValue([]);
     });
 
     it('should return cached price if available', async () => {

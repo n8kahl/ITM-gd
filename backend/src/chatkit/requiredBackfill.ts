@@ -48,6 +48,11 @@ function buildBackfillArgs(functionName: string, plan: IntentRoutingPlan): Recor
     case 'get_market_status':
     case 'get_market_breadth':
       return {};
+    case 'get_economic_calendar':
+      return {
+        days_ahead: 7,
+        impact_filter: 'HIGH',
+      };
     default:
       return null;
   }
@@ -66,6 +71,7 @@ const BACKFILL_ALLOWED_FUNCTIONS = new Set([
   'get_ticker_news',
   'get_company_profile',
   'get_market_breadth',
+  'get_economic_calendar',
   'get_dividend_info',
   'get_unusual_activity',
 ]);

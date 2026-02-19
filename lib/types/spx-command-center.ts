@@ -158,6 +158,71 @@ export interface CoachMessage {
   timestamp: string
 }
 
+// ─── Coach Decision Brief Types ───
+
+export type CoachDecisionVerdict = 'ENTER' | 'WAIT' | 'REDUCE' | 'EXIT'
+
+export type CoachDecisionSeverity = 'routine' | 'warning' | 'critical'
+
+export type CoachDecisionSource = 'ai_v2' | 'fallback_v1'
+
+export type CoachDecisionActionId =
+  | 'ENTER_TRADE_FOCUS'
+  | 'EXIT_TRADE_FOCUS'
+  | 'REVERT_AI_CONTRACT'
+  | 'TIGHTEN_STOP_GUIDANCE'
+  | 'REDUCE_SIZE_GUIDANCE'
+  | 'ASK_FOLLOW_UP'
+  | 'OPEN_HISTORY'
+
+export type CoachDecisionActionStyle = 'primary' | 'secondary' | 'ghost'
+
+export interface CoachDecisionAction {
+  id: CoachDecisionActionId
+  label: string
+  style: CoachDecisionActionStyle
+  payload?: Record<string, unknown>
+}
+
+export interface CoachDecisionRiskPlan {
+  invalidation?: string
+  stop?: number
+  maxRiskDollars?: number
+  positionGuidance?: string
+}
+
+export interface CoachDecisionFreshness {
+  generatedAt: string
+  expiresAt: string
+  stale: boolean
+}
+
+export interface CoachDecisionBrief {
+  decisionId: string
+  setupId: string | null
+  verdict: CoachDecisionVerdict
+  confidence: number
+  primaryText: string
+  why: string[]
+  riskPlan?: CoachDecisionRiskPlan
+  actions: CoachDecisionAction[]
+  severity: CoachDecisionSeverity
+  freshness: CoachDecisionFreshness
+  contextHash?: string
+  source: CoachDecisionSource
+}
+
+export interface CoachDecisionRequest {
+  setupId?: string
+  tradeMode?: 'scan' | 'evaluate' | 'in_trade'
+  question?: string
+  selectedContract?: Pick<ContractRecommendation, 'description' | 'bid' | 'ask' | 'riskReward'>
+  clientContext?: {
+    layoutMode?: 'legacy' | 'scan' | 'evaluate' | 'in_trade'
+    surface?: string
+  }
+}
+
 // ─── Contract Types ───
 
 export interface ContractRecommendation {

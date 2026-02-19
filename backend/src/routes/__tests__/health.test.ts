@@ -68,12 +68,13 @@ describeWithSockets('Health Routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('healthy');
-    expect(res.body.services).toEqual({
+    expect(res.body.services).toMatchObject({
       database: true,
       redis: true,
       massive: true,
       openai: true,
     });
+    expect(typeof res.body.services.massiveTick).toBe('boolean');
     expect(res.body.checks.database.status).toBe('pass');
   });
 

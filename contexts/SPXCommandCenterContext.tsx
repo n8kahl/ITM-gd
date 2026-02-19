@@ -11,7 +11,7 @@ import {
   type SPXChartAnnotation,
   type SPXSetupContextState,
 } from '@/contexts/spx/SPXSetupContext'
-import { postSPXStream } from '@/hooks/use-spx-api'
+import { postSPX, postSPXStream } from '@/hooks/use-spx-api'
 import { usePriceStream, type RealtimeSocketMessage } from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
 import { distanceToStopPoints, isFlowDivergence, summarizeFlowAlignment } from '@/lib/spx/coach-context'
@@ -20,6 +20,7 @@ import { getEnabledSPXUXFlagKeys, getSPXUXFlags, type SPXUXFlags } from '@/lib/s
 import type {
   BasisState,
   ClusterZone,
+  CoachDecisionBrief,
   CoachMessage,
   ContractRecommendation,
   FibLevel,
@@ -74,6 +75,9 @@ interface SPXCommandCenterState {
   gexProfile: { spx: GEXProfile; spy: GEXProfile; combined: GEXProfile } | null
   activeSetups: Setup[]
   coachMessages: CoachMessage[]
+  coachDecision: CoachDecisionBrief | null
+  coachDecisionStatus: 'idle' | 'loading' | 'ready' | 'error'
+  coachDecisionError: string | null
   uxFlags: SPXUXFlags
   selectedSetup: Setup | null
   tradeMode: TradeMode
@@ -104,6 +108,12 @@ interface SPXCommandCenterState {
   toggleSPYDerived: () => void
   requestContractRecommendation: (setup: Setup) => Promise<ContractRecommendation | null>
   sendCoachMessage: (prompt: string, setupId?: string | null) => Promise<CoachMessage>
+  requestCoachDecision: (input?: {
+    setupId?: string | null
+    question?: string
+    forceRefresh?: boolean
+    surface?: string
+  }) => Promise<CoachDecisionBrief | null>
 }
 
 const ALL_CATEGORIES: LevelCategory[] = ['structural', 'tactical', 'intraday', 'options', 'spy_derived', 'fibonacci']
@@ -447,9 +457,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [showSPYDerived, setShowSPYDerived] = useState(true)
   const [snapshotRequestLate, setSnapshotRequestLate] = useState(false)
   const [ephemeralCoachMessages, setEphemeralCoachMessages] = useState<CoachMessage[]>([])
+  const [coachDecision, setCoachDecision] = useState<CoachDecisionBrief | null>(null)
+  const [coachDecisionStatus, setCoachDecisionStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [coachDecisionError, setCoachDecisionError] = useState<string | null>(null)
   const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
   const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
   const inTradeSetupRef = useRef<Setup | null>(null)
+  const coachDecisionRequestSequenceRef = useRef(0)
   const pageToFirstActionableStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const pageToFirstSetupSelectStopperRef = useRef<null | ((payload?: Record<string, unknown>) => number | null)>(null)
   const hasTrackedFirstActionableRef = useRef(false)
@@ -643,6 +657,142 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
     return selectedSetup.recommendedContract || null
   }, [selectedContractBySetupId, selectedSetup])
+  const selectedSetupContractSignatureKey = useMemo(
+    () => contractSignature(selectedSetupContract),
+    [selectedSetupContract],
+  )
+  const inTradeContractSignatureKey = useMemo(
+    () => contractSignature(inTradeContract),
+    [inTradeContract],
+  )
+
+  const requestCoachDecision = useCallback(async (input?: {
+    setupId?: string | null
+    question?: string
+    forceRefresh?: boolean
+    surface?: string
+  }): Promise<CoachDecisionBrief | null> => {
+    const requestSequence = ++coachDecisionRequestSequenceRef.current
+    const requestSetupId = input?.setupId || inTradeSetup?.id || selectedSetup?.id || null
+    const requestTradeMode = tradeMode === 'in_trade'
+      ? 'in_trade'
+      : requestSetupId
+        ? 'evaluate'
+        : 'scan'
+    const activeContract = tradeMode === 'in_trade' ? inTradeContract : selectedSetupContract
+
+    if (!accessToken) {
+      if (requestSequence !== coachDecisionRequestSequenceRef.current) return null
+      setCoachDecisionStatus('error')
+      setCoachDecisionError('Missing session token for coach decision request.')
+      return null
+    }
+
+    setCoachDecisionStatus('loading')
+    setCoachDecisionError(null)
+
+    try {
+      const decision = await postSPX<CoachDecisionBrief>('/api/spx/coach/decision', accessToken, {
+        setupId: requestSetupId || undefined,
+        tradeMode: requestTradeMode,
+        question: input?.question || undefined,
+        forceRefresh: Boolean(input?.forceRefresh),
+        selectedContract: activeContract
+          ? {
+            description: activeContract.description,
+            bid: activeContract.bid,
+            ask: activeContract.ask,
+            riskReward: activeContract.riskReward,
+          }
+          : undefined,
+        clientContext: {
+          layoutMode: requestTradeMode,
+          surface: input?.surface || 'spx_coach_feed',
+        },
+      })
+
+      if (requestSequence !== coachDecisionRequestSequenceRef.current) return null
+      setCoachDecision(decision)
+      setCoachDecisionStatus('ready')
+      setCoachDecisionError(null)
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_GENERATED, {
+        decisionId: decision.decisionId,
+        setupId: decision.setupId,
+        verdict: decision.verdict,
+        confidence: decision.confidence,
+        severity: decision.severity,
+        source: decision.source,
+        tradeMode: requestTradeMode,
+      }, { persist: true })
+
+      if (decision.source === 'fallback_v1') {
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_FALLBACK_USED, {
+          decisionId: decision.decisionId,
+          setupId: decision.setupId,
+          verdict: decision.verdict,
+          source: decision.source,
+          tradeMode: requestTradeMode,
+        }, { level: 'warning', persist: true })
+      }
+
+      return decision
+    } catch (error) {
+      if (requestSequence !== coachDecisionRequestSequenceRef.current) return null
+      const message = error instanceof Error ? error.message : 'Coach decision request failed.'
+      setCoachDecisionStatus('error')
+      setCoachDecisionError(message)
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_FALLBACK_USED, {
+        setupId: requestSetupId,
+        verdict: null,
+        source: 'client_error',
+        tradeMode: requestTradeMode,
+        message,
+      }, { level: 'warning', persist: true })
+
+      return null
+    }
+  }, [
+    accessToken,
+    inTradeContract,
+    inTradeSetup?.id,
+    selectedSetup?.id,
+    selectedSetupContract,
+    tradeMode,
+  ])
+
+  useEffect(() => {
+    if (!uxFlags.coachSurfaceV2) return
+
+    const setupId = inTradeSetup?.id || selectedSetup?.id || null
+    if (!setupId && tradeMode !== 'in_trade') {
+      setCoachDecision(null)
+      setCoachDecisionStatus('idle')
+      setCoachDecisionError(null)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void requestCoachDecision({
+        setupId,
+        forceRefresh: false,
+        surface: 'spx_coach_auto',
+      })
+    }, 180)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [
+    inTradeContractSignatureKey,
+    inTradeSetup?.id,
+    requestCoachDecision,
+    selectedSetup?.id,
+    selectedSetupContractSignatureKey,
+    tradeMode,
+    uxFlags.coachSurfaceV2,
+  ])
 
   useEffect(() => {
     if (!inTradeSetupId) return
@@ -1317,6 +1467,15 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         messageCount: nextMessages.length,
       })
 
+      if (uxFlags.coachSurfaceV2) {
+        void requestCoachDecision({
+          setupId: setupId || inTradeSetup?.id || selectedSetup?.id || null,
+          question: prompt,
+          forceRefresh: true,
+          surface: 'spx_coach_message',
+        })
+      }
+
       return nextMessages[0]
     } catch (error) {
       stopTimer({
@@ -1364,7 +1523,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
       return fallbackMessage
     }
-  }, [accessToken, mutateSnapshot])
+  }, [
+    accessToken,
+    inTradeSetup?.id,
+    mutateSnapshot,
+    requestCoachDecision,
+    selectedSetup?.id,
+    uxFlags.coachSurfaceV2,
+  ])
 
   const error = snapshotError || null
   const tickSourceStale = spxPriceSource === 'tick'
@@ -1467,7 +1633,18 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const liveCoachState = useMemo<SPXCoachContextState>(() => ({
     coachMessages,
     sendCoachMessage,
-  }), [coachMessages, sendCoachMessage])
+    coachDecision,
+    coachDecisionStatus,
+    coachDecisionError,
+    requestCoachDecision,
+  }), [
+    coachDecision,
+    coachDecisionError,
+    coachDecisionStatus,
+    coachMessages,
+    requestCoachDecision,
+    sendCoachMessage,
+  ])
 
   const liveFlowState = useMemo<SPXFlowContextState>(() => ({
     flowEvents,
@@ -1616,6 +1793,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     gexProfile: legacyAnalyticsState.gexProfile,
     activeSetups: legacySetupState.activeSetups,
     coachMessages: legacyCoachState.coachMessages,
+    coachDecision: legacyCoachState.coachDecision,
+    coachDecisionStatus: legacyCoachState.coachDecisionStatus,
+    coachDecisionError: legacyCoachState.coachDecisionError,
     uxFlags,
     selectedSetup: legacySetupState.selectedSetup,
     tradeMode: legacySetupState.tradeMode,
@@ -1646,6 +1826,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     toggleSPYDerived: legacySetupState.toggleSPYDerived,
     requestContractRecommendation: legacySetupState.requestContractRecommendation,
     sendCoachMessage: legacyCoachState.sendCoachMessage,
+    requestCoachDecision: legacyCoachState.requestCoachDecision,
   }), [
     legacyAnalyticsState,
     legacyCoachState,

@@ -27,7 +27,7 @@ describeWithSockets('Macro Routes', () => {
   });
 
   it('returns macro context', async () => {
-    mockGetMacroContext.mockReturnValue({
+    mockGetMacroContext.mockResolvedValue({
       economicCalendar: [],
       fedPolicy: {
         currentRate: '4.25-4.50%',
@@ -57,7 +57,7 @@ describeWithSockets('Macro Routes', () => {
   });
 
   it('normalizes symbol and returns macro impact for any valid symbol', async () => {
-    mockAssessMacroImpact.mockReturnValue({
+    mockAssessMacroImpact.mockResolvedValue({
       upcomingCatalysts: [],
       bullishFactors: ['test'],
       bearishFactors: [],

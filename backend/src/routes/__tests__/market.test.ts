@@ -58,7 +58,7 @@ describeWithSockets('Market Routes', () => {
           changePercent: 0.2,
         },
       ],
-      metrics: { vwap: 5991 },
+      metrics: { vwap: 5991, vixLevel: 16.2, vixChange: -1.4 },
       source: 'massive',
     });
 

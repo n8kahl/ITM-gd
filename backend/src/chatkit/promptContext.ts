@@ -5,6 +5,7 @@ import { getMarketStatus } from '../services/marketHours';
 import { getMarketIndicesSnapshot } from '../services/marketIndices';
 import { massiveClient, getTickerNews } from '../config/massive';
 import { getEarningsCalendar } from '../services/earnings';
+import { getEconomicCalendar } from '../services/economic';
 
 interface PromptProfile {
   tier?: string;
@@ -225,6 +226,23 @@ export async function getNewsDigest(symbols: string[]): Promise<string | null> {
   }
 }
 
+export async function getEconomicEventWarnings(daysAhead: number = 2): Promise<string | null> {
+  try {
+    const events = await getEconomicCalendar(daysAhead, 'HIGH');
+    if (events.length === 0) return null;
+
+    const warnings = events.slice(0, 4).map((event) => (
+      `⚠ ${event.event} on ${event.date} (${event.impact}) may increase volatility and IV sensitivity.`
+    ));
+    return warnings.join('\n');
+  } catch (error) {
+    logger.warn('Failed to build economic event warnings', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 async function loadPromptProfile(userId: string): Promise<PromptProfile> {
   const cached = profileCache.get(userId);
   if (cached && cached.expiresAt > Date.now()) {
@@ -265,7 +283,7 @@ export async function buildSystemPromptForUser(
   const marketStatus = getMarketStatus();
   const symbols = options?.recentSymbols || [];
 
-  const [profile, indicesResponse, marketContextText, earningsWarnings, newsDigest] = await Promise.all([
+  const [profile, indicesResponse, marketContextText, earningsWarnings, economicWarnings, newsDigest] = await Promise.all([
     loadPromptProfile(userId),
     getMarketIndicesSnapshot().catch((err) => {
       logger.warn('Failed to fetch indices for prompt context', { error: err });
@@ -273,6 +291,7 @@ export async function buildSystemPromptForUser(
     }),
     loadMarketContext(),
     getEarningsProximityWarnings(symbols),
+    getEconomicEventWarnings(2),
     getNewsDigest(symbols),
   ]);
 
@@ -301,6 +320,7 @@ export async function buildSystemPromptForUser(
     },
     marketContextText,
     earningsWarnings,
+    economicWarnings,
     newsDigest,
   });
 }
