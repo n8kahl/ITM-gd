@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { SetupCard } from '@/components/spx-command-center/setup-card'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
@@ -19,13 +22,12 @@ function prioritizeSelected(setups: Setup[], selectedSetupId: string | null): Se
 }
 
 export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
+  const { uxFlags } = useSPXCommandCenter()
+  const { regime, prediction } = useSPXAnalyticsContext()
   const {
     activeSetups,
     selectedSetup,
     selectSetup,
-    spxPrice,
-    regime,
-    prediction,
     tradeMode,
     inTradeSetup,
     inTradeContract,
@@ -37,7 +39,8 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
     tradePnlDollars,
     enterTrade,
     exitTrade,
-  } = useSPXCommandCenter()
+  } = useSPXSetupContext()
+  const { spxPrice } = useSPXPriceContext()
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [showMoreActionable, setShowMoreActionable] = useState(false)
 
@@ -63,8 +66,21 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
   const hiddenByTradeFocusCount = inTradeSetup ? Math.max(policy.actionableVisibleCount - 1, 0) : 0
   const forming = inTradeSetup ? [] : policy.forming
   const selectedEnterable = Boolean(selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
+  const oneClickEntryEnabled = uxFlags.oneClickEntry && !readOnly
 
   const watchlistVisible = forming.length > 0 && (showWatchlist || actionable.length === 0)
+
+  const handleOneClickEntry = (setup: Setup) => {
+    selectSetup(setup)
+    enterTrade(setup)
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_ONE_CLICK_ENTRY, {
+      setupId: setup.id,
+      setupStatus: setup.status,
+      setupDirection: setup.direction,
+      source: 'setup_card_cta',
+      mobile: typeof window !== 'undefined' ? window.innerWidth < 768 : false,
+    }, { persist: true })
+  }
 
   return (
     <section className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-emerald-500/[0.02] p-3">
@@ -120,16 +136,20 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[10px] text-white/60">
-                Select a ready/triggered setup, then lock hyper focus when you enter.
+                {oneClickEntryEnabled
+                  ? 'Use the Enter Trade CTA on actionable setup cards for one-click focus.'
+                  : 'Select a ready/triggered setup, then lock hyper focus when you enter.'}
               </p>
-              <button
-                type="button"
-                disabled={!selectedEnterable}
-                onClick={() => enterTrade(selectedSetup)}
-                className="rounded border border-emerald-400/35 bg-emerald-500/14 px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-100 disabled:opacity-40"
-              >
-                Enter Trade Focus
-              </button>
+              {!oneClickEntryEnabled && (
+                <button
+                  type="button"
+                  disabled={!selectedEnterable}
+                  onClick={() => enterTrade(selectedSetup)}
+                  className="rounded border border-emerald-400/35 bg-emerald-500/14 px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-100 disabled:opacity-40"
+                >
+                  Enter Trade Focus
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -156,6 +176,8 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                     selected={selectedSetup?.id === setup.id}
                     readOnly={readOnly}
                     onSelect={() => selectSetup(setup)}
+                    showEnterTradeCta={oneClickEntryEnabled && tradeMode !== 'in_trade'}
+                    onEnterTrade={() => handleOneClickEntry(setup)}
                   />
                 ))}
 
@@ -186,6 +208,8 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                     selected={selectedSetup?.id === setup.id}
                     readOnly={readOnly}
                     onSelect={() => selectSetup(setup)}
+                    showEnterTradeCta={oneClickEntryEnabled && tradeMode !== 'in_trade'}
+                    onEnterTrade={() => handleOneClickEntry(setup)}
                   />
                 ))}
               </>
@@ -230,6 +254,7 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                 selected={selectedSetup?.id === setup.id}
                 readOnly={readOnly}
                 onSelect={() => selectSetup(setup)}
+                showEnterTradeCta={false}
               />
             ))}
           </>

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { mergeRealtimeMicrobarIntoBars, mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
 import { TradingChart, type LevelAnnotation } from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { getChartData, type ChartBar, type ChartTimeframe } from '@/lib/api/ai-coach'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { SPXLevel } from '@/lib/types/spx-command-center'
@@ -39,10 +41,9 @@ function chartLevelLabel(level: SPXLevel): string {
 
 export function SPXChart() {
   const { session } = useMemberAuth()
+  const { levels } = useSPXAnalyticsContext()
+  const { selectedSetup, chartAnnotations } = useSPXSetupContext()
   const {
-    levels,
-    selectedSetup,
-    chartAnnotations,
     spxPrice,
     spxTickTimestamp,
     spxPriceAgeMs,
@@ -50,7 +51,7 @@ export function SPXChart() {
     latestMicrobar,
     selectedTimeframe,
     setChartTimeframe,
-  } = useSPXCommandCenter()
+  } = useSPXPriceContext()
 
   const [bars, setBars] = useState<ChartBar[]>([])
   const [isLoading, setIsLoading] = useState(true)

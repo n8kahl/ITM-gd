@@ -8,23 +8,26 @@ test.describe('SPX coach messages', () => {
     await authenticateAsMember(page)
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
-    const input = page.getByPlaceholder('Ask coach for setup guidance')
+    const coachFeed = page.getByTestId('spx-ai-coach-feed')
+    const input = coachFeed.getByRole('textbox')
     await expect(input).toBeVisible()
 
     await input.fill('How should I manage this setup?')
-    await page.getByRole('button', { name: 'Send coach message' }).click()
+    await coachFeed.getByRole('button', { name: 'Send coach message' }).click()
+    await coachFeed.getByRole('button', { name: 'All' }).click()
 
     const firstSentence = coachLongMessage.split('.')[0]
     await expect(page.getByText(firstSentence, { exact: false })).toBeVisible()
+    const streamedCard = page.locator('article').filter({ hasText: firstSentence }).first()
 
     const alertTag = page.getByText('alert').first()
     await expect(alertTag).toBeVisible()
 
-    const expandButton = page.getByRole('button', { name: 'Expand' }).first()
+    const expandButton = streamedCard.getByRole('button', { name: 'Expand' })
     await expect(expandButton).toBeVisible()
 
     await expandButton.click()
-    await expect(page.getByRole('button', { name: 'Collapse' }).first()).toBeVisible()
-    await expect(page.getByText('If flow diverges for more than two prints', { exact: false })).toBeVisible()
+    await expect(streamedCard.getByRole('button', { name: 'Collapse' })).toBeVisible()
+    await expect(streamedCard.getByText('If flow diverges for more than two prints', { exact: false })).toBeVisible()
   })
 })

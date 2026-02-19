@@ -19,6 +19,11 @@ export const SPX_TELEMETRY_EVENT = {
   DATA_HEALTH_CHANGED: 'spx_data_health_changed',
   SETUP_TRANSITION_RECEIVED: 'spx_setup_transition_received',
   SETUP_INVALIDATED: 'spx_setup_invalidated',
+  UX_FLAGS_EVALUATED: 'spx_ux_flags_evaluated',
+  UX_SHORTCUT_USED: 'spx_ux_shortcut_used',
+  UX_ONE_CLICK_ENTRY: 'spx_ux_one_click_entry',
+  UX_LAYOUT_MODE_CHANGED: 'spx_ux_layout_mode_changed',
+  UX_MOBILE_FOCUS_CHANGED: 'spx_ux_mobile_focus_changed',
 } as const
 
 export type SPXTelemetryEventName = (typeof SPX_TELEMETRY_EVENT)[keyof typeof SPX_TELEMETRY_EVENT]

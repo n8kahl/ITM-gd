@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { InfoTip } from '@/components/ui/info-tip'
 import type { ContractRecommendation } from '@/lib/types/spx-command-center'
 import { ContractCard } from '@/components/spx-command-center/contract-card'
@@ -38,7 +38,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
     selectedSetupContract,
     requestContractRecommendation,
     setSetupContractChoice,
-  } = useSPXCommandCenter()
+  } = useSPXSetupContext()
   const [contract, setContract] = useState<ContractRecommendation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)

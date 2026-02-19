@@ -6,6 +6,7 @@ import type {
   ClusterZone,
   CoachMessage,
   FibLevel,
+  FlowEvent,
   GEXProfile,
   PredictionState,
   Regime,
@@ -20,18 +21,6 @@ interface SPXSnapshotRegimeState {
   probability: number
   magnitude: 'small' | 'medium' | 'large'
   confidence: number
-  timestamp: string
-}
-
-interface SPXFlowEvent {
-  id: string
-  type: 'sweep' | 'block'
-  symbol: 'SPX' | 'SPY'
-  strike: number
-  expiry: string
-  size: number
-  direction: 'bullish' | 'bearish'
-  premium: number
   timestamp: string
 }
 
@@ -51,7 +40,7 @@ interface SPXSnapshotResponse {
   setups: Setup[]
   regime: SPXSnapshotRegimeState
   prediction: PredictionState
-  flow: SPXFlowEvent[]
+  flow: FlowEvent[]
   coachMessages: CoachMessage[]
   generatedAt: string
 }

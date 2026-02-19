@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Dot, Gauge, Hexagon, Sparkles } from 'lucide-react'
-import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { AlertTriangle, Gauge } from 'lucide-react'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
+import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { cn } from '@/lib/utils'
-import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
 import {
   COACH_ALERT_DISMISS_EVENT,
   acknowledgeCoachAlert,
@@ -13,31 +14,10 @@ import {
 } from '@/lib/spx/coach-alert-state'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
-function formatGexShort(value: number): string {
-  const abs = Math.abs(value)
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}M`
-  return `${(value / 1_000).toFixed(0)}K`
-}
-
-function summarizeFlowBias(flowEvents: Array<{ direction: 'bullish' | 'bearish'; premium: number }>): {
-  label: string
-  tone: string
-} {
-  if (flowEvents.length === 0) {
-    return { label: 'Flow warming', tone: 'border-white/15 bg-white/[0.04] text-white/60' }
-  }
-  const bullish = flowEvents.filter((e) => e.direction === 'bullish').reduce((s, e) => s + e.premium, 0)
-  const bearish = flowEvents.filter((e) => e.direction === 'bearish').reduce((s, e) => s + e.premium, 0)
-  const gross = bullish + bearish
-  const pct = gross > 0 ? Math.round((bullish / gross) * 100) : 50
-  if (pct >= 60) return { label: `Bullish pressure ${pct}%`, tone: 'border-emerald-400/30 bg-emerald-500/12 text-emerald-200' }
-  if (pct <= 40) return { label: `Bearish pressure ${100 - pct}%`, tone: 'border-rose-400/30 bg-rose-500/10 text-rose-200' }
-  return { label: `Balanced ${pct}%`, tone: 'border-amber-400/25 bg-amber-500/8 text-amber-200' }
-}
-
 export function ActionStrip() {
-  const { activeSetups, coachMessages, regime, prediction, flowEvents, gexProfile, selectedSetup, tradeMode, inTradeSetup, tradePnlPoints } = useSPXCommandCenter()
+  const { regime, prediction } = useSPXAnalyticsContext()
+  const { selectedSetup, tradeMode, inTradeSetup, tradePnlPoints } = useSPXSetupContext()
+  const { coachMessages } = useSPXCoachContext()
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(() => loadDismissedCoachAlertIds())
 
   useEffect(() => {
@@ -54,18 +34,6 @@ export function ActionStrip() {
     }
   }, [])
 
-  const setupPolicy = useMemo(
-    () => buildSetupDisplayPolicy({
-      setups: activeSetups,
-      regime,
-      prediction,
-      selectedSetup,
-      primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
-    }),
-    [activeSetups, regime, prediction, selectedSetup],
-  )
-  const flowBias = summarizeFlowBias(flowEvents.slice(0, 10))
-
   const topAlert = useMemo(
     () => findTopCoachAlert(coachMessages, dismissedAlertIds),
     [coachMessages, dismissedAlertIds],
@@ -76,11 +44,6 @@ export function ActionStrip() {
     : 'neutral'
   const postureConf = prediction?.confidence ?? null
   const postureLabel = `${(regime || '--').toUpperCase()} ${postureDir.toUpperCase()}${postureConf != null ? ` ${postureConf.toFixed(0)}%` : ''}`
-
-  const gexNet = gexProfile?.combined?.netGex ?? null
-  const gexLabel = gexNet != null
-    ? `GEX ${gexNet >= 0 ? 'Supportive' : 'Unstable'} ${formatGexShort(gexNet)}`
-    : null
 
   return (
     <section
@@ -124,32 +87,39 @@ export function ActionStrip() {
           </span>
         )}
 
-        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200" title="Number of trade setups currently in 'ready' or 'triggered' status">
-          <Sparkles className="h-3 w-3" />
-          Setups: {setupPolicy.actionablePrimaryCount} sniper actionable
-          {setupPolicy.actionableSecondaryCount > 0 ? ` · ${setupPolicy.actionableSecondaryCount} queued` : ''}
-          {setupPolicy.hiddenOppositeCount > 0 ? ` · ${setupPolicy.hiddenOppositeCount} hidden` : ''}
-        </span>
-
         <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-[10px] text-white/70" title="AI-predicted market posture combining regime, direction, and confidence">
           <Gauge className="h-3 w-3 text-champagne" />
           Posture: {postureLabel}
         </span>
 
-        <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]', flowBias.tone)} title="Options order flow bias — comparing bullish vs bearish premium in recent transactions">
-          <Dot className="h-3 w-3" />
-          Flow: {flowBias.label}
-        </span>
+        {prediction ? (
+          <div className="grid grid-cols-3 gap-1 text-[10px]">
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-500/12 px-2 py-0.5 text-emerald-100">
+              Bull {prediction.direction.bullish.toFixed(0)}%
+            </span>
+            <span className="rounded-full border border-rose-400/25 bg-rose-500/10 px-2 py-0.5 text-rose-100">
+              Bear {prediction.direction.bearish.toFixed(0)}%
+            </span>
+            <span className="rounded-full border border-white/15 bg-white/[0.05] px-2 py-0.5 text-white/75">
+              Flat {prediction.direction.neutral.toFixed(0)}%
+            </span>
+          </div>
+        ) : (
+          <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/60">
+            Direction warming up
+          </span>
+        )}
 
-        {gexLabel && (
+        {selectedSetup && tradeMode !== 'in_trade' && (
           <span className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]',
-            gexNet != null && gexNet >= 0
-              ? 'border-emerald-400/20 bg-emerald-500/8 text-emerald-200/80'
-              : 'border-rose-400/20 bg-rose-500/8 text-rose-200/80',
-          )} title="Net gamma exposure posture — Supportive means dealers dampen moves, Unstable means they amplify">
-            <Hexagon className="h-3 w-3" />
-            {gexLabel}
+            'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.06em]',
+            selectedSetup.status === 'triggered'
+              ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-100'
+              : selectedSetup.status === 'ready'
+                ? 'border-emerald-400/25 bg-emerald-500/[0.08] text-emerald-100'
+                : 'border-amber-300/25 bg-amber-500/[0.08] text-amber-100',
+          )}>
+            Selected {selectedSetup.direction} {selectedSetup.regime} ({selectedSetup.status})
           </span>
         )}
       </div>

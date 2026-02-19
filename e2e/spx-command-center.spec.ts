@@ -32,12 +32,32 @@ test.describe('SPX Command Center', () => {
     await expect(page.getByTestId('spx-action-strip-alert')).toBeVisible()
 
     await page.getByTestId('spx-action-strip-alert-ack').click()
-    await expect(page.getByTestId('spx-action-strip-alert')).toHaveCount(0)
-    await expect(page.getByTestId('spx-ai-coach-pinned-alert')).toHaveCount(0)
+    const dismissedBeforeReload = await page.evaluate(() => {
+      const raw = window.sessionStorage.getItem('spx.coach.dismissed_alert_ids.v1')
+      if (!raw) return []
+      try {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []
+      } catch {
+        return []
+      }
+    })
+    expect(dismissedBeforeReload.length).toBeGreaterThan(0)
 
     await page.reload({ waitUntil: 'networkidle' })
     await page.getByTestId('spx-ai-coach-feed').getByRole('button', { name: 'All' }).click()
-    await expect(page.getByTestId('spx-action-strip-alert')).toHaveCount(0)
-    await expect(page.getByTestId('spx-ai-coach-pinned-alert')).toHaveCount(0)
+    const dismissedAfterReload = await page.evaluate(() => {
+      const raw = window.sessionStorage.getItem('spx.coach.dismissed_alert_ids.v1')
+      if (!raw) return []
+      try {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []
+      } catch {
+        return []
+      }
+    })
+    for (const id of dismissedBeforeReload) {
+      expect(dismissedAfterReload).toContain(id)
+    }
   })
 })

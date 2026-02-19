@@ -1,11 +1,17 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, DoorOpen, Scale, Send, ShieldCheck, Target } from 'lucide-react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
+import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
+import { useSPXFlowContext } from '@/contexts/spx/SPXFlowContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { CoachMessageCard } from '@/components/spx-command-center/coach-message'
 import { cn } from '@/lib/utils'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
+import { summarizeFlowAlignment } from '@/lib/spx/coach-context'
+import { SPX_SHORTCUT_EVENT, type SPXCoachQuickActionEventDetail } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import {
   COACH_ALERT_DISMISS_EVENT,
@@ -14,33 +20,40 @@ import {
   loadDismissedCoachAlertIds,
 } from '@/lib/spx/coach-alert-state'
 
-const QUICK_ACTIONS = [
-  { label: 'Confirm entry?', icon: Target, prompt: 'Should I enter this setup now? Validate confluence and timing.' },
-  { label: 'Risk check', icon: ShieldCheck, prompt: 'Run a risk check on the selected setup. What could go wrong?' },
-  { label: 'Exit strategy', icon: DoorOpen, prompt: 'What is the optimal exit strategy for this setup? When to take partials?' },
-  { label: 'Size guidance', icon: Scale, prompt: 'What position size is appropriate for this setup given current conditions?' },
+const PRE_TRADE_ACTIONS = [
+  { id: 'confirm_entry', label: 'Confirm entry?', icon: Target },
+  { id: 'risk_check', label: 'Risk check', icon: ShieldCheck },
+  { id: 'exit_strategy', label: 'Exit strategy', icon: DoorOpen },
+  { id: 'size_guidance', label: 'Size guidance', icon: Scale },
 ] as const
 
-const IN_TRADE_ACTIONS = [
-  { label: 'Risk check', icon: ShieldCheck, prompt: 'I am in this trade now. Reassess stop risk and invalidation conditions using current flow/regime.' },
-  { label: 'Exit strategy', icon: DoorOpen, prompt: 'I am in this trade now. Give precise scaling/exit rules for T1/T2 and trailing stop logic.' },
-  { label: 'Hold or trim?', icon: Target, prompt: 'I am in this trade now. Should I hold, trim, or fully exit based on current conditions?' },
-  { label: 'Size adjustment', icon: Scale, prompt: 'I am in this trade now. Should I keep size, reduce risk, or add only on confirmation?' },
+const ACTIVE_TRADE_ACTIONS = [
+  { id: 'risk_check', label: 'Risk check', icon: ShieldCheck },
+  { id: 'exit_strategy', label: 'Exit strategy', icon: DoorOpen },
+  { id: 'hold_or_trim', label: 'Hold or trim?', icon: Target },
+  { id: 'size_adjustment', label: 'Size adjustment', icon: Scale },
 ] as const
+
+function toScopedPrompt(prompt: string, setupId?: string | null): string {
+  if (!setupId) return prompt
+  return `${prompt}\nSetup ID: ${setupId}`
+}
 
 export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
+  const { uxFlags } = useSPXCommandCenter()
+  const { regime } = useSPXAnalyticsContext()
   const {
-    coachMessages,
     selectedSetup,
     activeSetups,
-    sendCoachMessage,
     tradeMode,
     inTradeSetup,
     inTradeContract,
     tradeEntryContractMid,
     tradeCurrentContractMid,
     tradePnlDollars,
-  } = useSPXCommandCenter()
+  } = useSPXSetupContext()
+  const { coachMessages, sendCoachMessage } = useSPXCoachContext()
+  const { flowEvents } = useSPXFlowContext()
   const [prompt, setPrompt] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -117,13 +130,116 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     })
   }, [scopedSetup, setupTypeById, visibleMessages])
 
+  const flowSummary = useMemo(() => {
+    if (!scopedSetup) return null
+    return summarizeFlowAlignment(flowEvents.slice(0, 12), scopedSetup.direction)
+  }, [flowEvents, scopedSetup])
+
+  const quickActions = useMemo(() => {
+    if (!uxFlags.coachProactive) {
+      if (tradeMode === 'in_trade') {
+        return [
+          { ...ACTIVE_TRADE_ACTIONS[0], prompt: 'I am in this trade now. Reassess stop risk and invalidation conditions using current flow/regime.' },
+          { ...ACTIVE_TRADE_ACTIONS[1], prompt: 'I am in this trade now. Give precise scaling/exit rules for T1/T2 and trailing stop logic.' },
+          { ...ACTIVE_TRADE_ACTIONS[2], prompt: 'I am in this trade now. Should I hold, trim, or fully exit based on current conditions?' },
+          { ...ACTIVE_TRADE_ACTIONS[3], prompt: 'I am in this trade now. Should I keep size, reduce risk, or add only on confirmation?' },
+        ]
+      }
+      return [
+        { ...PRE_TRADE_ACTIONS[0], prompt: 'Should I enter this setup now? Validate confluence and timing.' },
+        { ...PRE_TRADE_ACTIONS[1], prompt: 'Run a risk check on the selected setup. What could go wrong?' },
+        { ...PRE_TRADE_ACTIONS[2], prompt: 'What is the optimal exit strategy for this setup? When to take partials?' },
+        { ...PRE_TRADE_ACTIONS[3], prompt: 'What position size is appropriate for this setup given current conditions?' },
+      ]
+    }
+
+    if (tradeMode === 'in_trade') {
+      return ACTIVE_TRADE_ACTIONS.map((action) => {
+        if (action.id === 'risk_check') {
+          const flowHint = flowSummary ? `Flow alignment is ${flowSummary.alignmentPct}%.` : 'Flow alignment is still warming.'
+          return {
+            ...action,
+            prompt: `I am in this trade now. Reassess stop risk, invalidation, and immediate downside scenarios. ${flowHint}`,
+          }
+        }
+        if (action.id === 'exit_strategy') {
+          return {
+            ...action,
+            prompt: `I am in this trade now. Give precise scaling and exit rules for ${scopedSetup?.target1.label || 'T1'} ${scopedSetup ? scopedSetup.target1.price.toFixed(0) : '--'} and ${scopedSetup?.target2.label || 'T2'} ${scopedSetup ? scopedSetup.target2.price.toFixed(0) : '--'}.`,
+          }
+        }
+        if (action.id === 'hold_or_trim') {
+          const pnlHint = tradePnlDollars == null ? 'P&L is flat.' : `Contract P&L is ${tradePnlDollars >= 0 ? '+' : ''}$${tradePnlDollars.toFixed(0)}.`
+          return {
+            ...action,
+            prompt: `I am in this trade now. Should I hold, trim, or fully exit right now? ${pnlHint} Use current flow/regime and stop proximity.`,
+          }
+        }
+        return {
+          ...action,
+          prompt: 'I am in this trade now. Should I keep size, reduce risk, or add only on high-confidence confirmation?',
+        }
+      })
+    }
+
+    return PRE_TRADE_ACTIONS.map((action) => {
+      if (action.id === 'confirm_entry') {
+        if (!scopedSetup) {
+          return {
+            ...action,
+            prompt: 'Should I enter this setup now? Validate confluence and timing.',
+          }
+        }
+        const flowHint = flowSummary ? `Flow alignment ${flowSummary.alignmentPct}%.` : 'Flow still building.'
+        return {
+          ...action,
+          prompt: `Should I enter ${scopedSetup.direction.toUpperCase()} ${scopedSetup.regime} now at ${scopedSetup.entryZone.low.toFixed(0)}-${scopedSetup.entryZone.high.toFixed(0)}? Confluence ${scopedSetup.confluenceScore}/5. ${flowHint}`,
+        }
+      }
+      if (action.id === 'risk_check') {
+        if (!scopedSetup) {
+          return {
+            ...action,
+            prompt: 'Run a risk check on the selected setup. What could go wrong?',
+          }
+        }
+        return {
+          ...action,
+          prompt: `Run a risk check for this ${scopedSetup.direction} setup in ${regime || scopedSetup.regime}. Stop is ${scopedSetup.stop.toFixed(0)} and entry zone is ${scopedSetup.entryZone.low.toFixed(0)}-${scopedSetup.entryZone.high.toFixed(0)}.`,
+        }
+      }
+      if (action.id === 'exit_strategy') {
+        if (!scopedSetup) {
+          return {
+            ...action,
+            prompt: 'What is the optimal exit strategy for this setup? When to take partials?',
+          }
+        }
+        return {
+          ...action,
+          prompt: `Define the optimal exit plan for this setup: ${scopedSetup.target1.label} ${scopedSetup.target1.price.toFixed(0)}, ${scopedSetup.target2.label} ${scopedSetup.target2.price.toFixed(0)}, and stop ${scopedSetup.stop.toFixed(0)}.`,
+        }
+      }
+      if (!scopedSetup) {
+        return {
+          ...action,
+          prompt: 'What position size is appropriate for this setup given current conditions?',
+        }
+      }
+      return {
+        ...action,
+        prompt: `Give position sizing guidance for this setup. Probability ${scopedSetup.probability.toFixed(0)}%, confluence ${scopedSetup.confluenceScore}/5, direction ${scopedSetup.direction}.`,
+      }
+    })
+  }, [flowSummary, regime, scopedSetup, tradeMode, tradePnlDollars, uxFlags.coachProactive])
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!prompt.trim() || isSending) return
     await sendMessage(prompt.trim())
   }
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = useCallback(async (text: string) => {
     setSendError(null)
     setIsSending(true)
     try {
@@ -137,7 +253,46 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
     } finally {
       setIsSending(false)
     }
-  }
+  }, [
+    inTradeContract,
+    scopedSetup?.id,
+    sendCoachMessage,
+    tradeCurrentContractMid,
+    tradeEntryContractMid,
+    tradeMode,
+    tradePnlDollars,
+  ])
+
+  useEffect(() => {
+    if (readOnly) return
+
+    const handleShortcutQuickAction = (event: Event) => {
+      if (isSending) return
+
+      const custom = event as CustomEvent<SPXCoachQuickActionEventDetail>
+      const index = custom.detail?.index
+      if (!Number.isInteger(index) || index == null || index < 0) return
+
+      const nextAction = quickActions[index]
+      if (!nextAction) return
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_SHORTCUT_USED, {
+        action: 'coach_quick_action_dispatch',
+        quickActionIndex: index + 1,
+        quickActionLabel: nextAction.label,
+        source: custom.detail?.source || 'keyboard',
+        tradeMode,
+        selectedSetupId: scopedSetup?.id || null,
+      })
+
+      void sendMessage(toScopedPrompt(nextAction.prompt, scopedSetup?.id))
+    }
+
+    window.addEventListener(SPX_SHORTCUT_EVENT.COACH_QUICK_ACTION, handleShortcutQuickAction as EventListener)
+    return () => {
+      window.removeEventListener(SPX_SHORTCUT_EVENT.COACH_QUICK_ACTION, handleShortcutQuickAction as EventListener)
+    }
+  }, [isSending, quickActions, readOnly, scopedSetup?.id, sendMessage, tradeMode])
 
   const dismissPinnedAlert = (message: CoachMessage) => {
     setDismissedAlertIds((previous) => acknowledgeCoachAlert(previous, message.id))
@@ -220,16 +375,12 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
 
       {!readOnly && (
         <div className="flex flex-wrap gap-1">
-          {(tradeMode === 'in_trade' ? IN_TRADE_ACTIONS : QUICK_ACTIONS).map((action) => (
+          {quickActions.map((action) => (
             <button
               key={action.label}
               type="button"
               disabled={isSending}
-              onClick={() => sendMessage(
-                scopedSetup
-                  ? `${action.prompt}\nSetup ID: ${scopedSetup.id}`
-                  : action.prompt,
-              )}
+              onClick={() => sendMessage(toScopedPrompt(action.prompt, scopedSetup?.id))}
               className={cn(
                 'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[9px] uppercase tracking-[0.06em] transition-colors',
                 'border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-200/80 hover:bg-emerald-500/15 hover:text-emerald-200',

@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { Filter } from 'lucide-react'
-import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { InfoTip } from '@/components/ui/info-tip'
 import type { LevelCategory } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
@@ -17,14 +19,14 @@ const CATEGORIES: Array<{ value: LevelCategory; label: string }> = [
 ]
 
 export function LevelMatrix() {
+  const { levels } = useSPXAnalyticsContext()
   const {
-    levels,
     visibleLevelCategories,
     toggleLevelCategory,
     showSPYDerived,
     toggleSPYDerived,
-    spxPrice,
-  } = useSPXCommandCenter()
+  } = useSPXSetupContext()
+  const { spxPrice } = useSPXPriceContext()
   const [showAll, setShowAll] = useState(false)
 
   const sorted = useMemo(() => {

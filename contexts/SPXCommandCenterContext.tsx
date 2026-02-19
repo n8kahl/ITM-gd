@@ -2,16 +2,28 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { SPXAnalyticsProvider, type SPXAnalyticsContextState } from '@/contexts/spx/SPXAnalyticsContext'
+import { SPXCoachProvider, type SPXCoachContextState } from '@/contexts/spx/SPXCoachContext'
+import { SPXFlowProvider, type SPXFlowContextState } from '@/contexts/spx/SPXFlowContext'
+import { SPXPriceProvider, type SPXPriceContextState } from '@/contexts/spx/SPXPriceContext'
+import {
+  SPXSetupProvider,
+  type SPXChartAnnotation,
+  type SPXSetupContextState,
+} from '@/contexts/spx/SPXSetupContext'
 import { postSPXStream } from '@/hooks/use-spx-api'
 import { usePriceStream, type RealtimeSocketMessage } from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
+import { distanceToStopPoints, isFlowDivergence, summarizeFlowAlignment } from '@/lib/spx/coach-context'
 import { SPX_TELEMETRY_EVENT, startSPXPerfTimer, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
+import { getEnabledSPXUXFlagKeys, getSPXUXFlags, type SPXUXFlags } from '@/lib/spx/flags'
 import type {
   BasisState,
   ClusterZone,
   CoachMessage,
   ContractRecommendation,
   FibLevel,
+  FlowEvent,
   GEXProfile,
   LevelCategory,
   PredictionState,
@@ -22,15 +34,7 @@ import type {
 } from '@/lib/types/spx-command-center'
 
 type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
-
-interface ChartAnnotation {
-  id: string
-  type: 'entry_zone' | 'stop' | 'target'
-  priceLow?: number
-  priceHigh?: number
-  price?: number
-  label: string
-}
+type ChartAnnotation = SPXChartAnnotation
 
 interface RealtimeMicrobar {
   symbol: string
@@ -70,6 +74,7 @@ interface SPXCommandCenterState {
   gexProfile: { spx: GEXProfile; spy: GEXProfile; combined: GEXProfile } | null
   activeSetups: Setup[]
   coachMessages: CoachMessage[]
+  uxFlags: SPXUXFlags
   selectedSetup: Setup | null
   tradeMode: TradeMode
   inTradeSetup: Setup | null
@@ -87,17 +92,7 @@ interface SPXCommandCenterState {
   visibleLevelCategories: Set<LevelCategory>
   showSPYDerived: boolean
   chartAnnotations: ChartAnnotation[]
-  flowEvents: Array<{
-    id: string
-    type: 'sweep' | 'block'
-    symbol: 'SPX' | 'SPY'
-    strike: number
-    expiry: string
-    size: number
-    direction: 'bullish' | 'bearish'
-    premium: number
-    timestamp: string
-  }>
+  flowEvents: FlowEvent[]
   latestMicrobar: RealtimeMicrobar | null
   isLoading: boolean
   error: Error | null
@@ -121,6 +116,9 @@ const POLL_FRESHNESS_STALE_MS = 90_000
 const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
 const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
 const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
+const PROACTIVE_COACH_COOLDOWN_MS = 45_000
+const PROACTIVE_FLOW_DIVERGENCE_THRESHOLD = 42
+const PROACTIVE_STOP_DISTANCE_THRESHOLD = 3
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -458,6 +456,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const hasTrackedFirstSetupSelectRef = useRef(false)
   const hasTrackedPageViewRef = useRef(false)
   const lastDataHealthRef = useRef<'healthy' | 'degraded' | 'stale' | null>(null)
+  const proactiveCooldownByKeyRef = useRef<Record<string, number>>({})
+  const previousSetupStatusByIdRef = useRef<Record<string, Setup['status']>>({})
+  const legacyPriceStateRef = useRef<SPXPriceContextState | null>(null)
+  const legacyAnalyticsStateRef = useRef<SPXAnalyticsContextState | null>(null)
+  const legacyCoachStateRef = useRef<SPXCoachContextState | null>(null)
+  const legacyFlowStateRef = useRef<SPXFlowContextState | null>(null)
+  const legacySetupStateRef = useRef<SPXSetupContextState | null>(null)
+  const uxFlags = useMemo(() => getSPXUXFlags(), [])
 
   useEffect(() => {
     const persisted = loadPersistedTradeFocus()
@@ -767,6 +773,148 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
       .slice(0, 80)
   }, [ephemeralCoachMessages, snapshotData?.coachMessages])
+  const flowEvents = useMemo(() => snapshotData?.flow || [], [snapshotData?.flow])
+
+  const canEmitProactiveMessage = useCallback((cooldownKey: string, nowEpoch: number) => {
+    const lastEpoch = proactiveCooldownByKeyRef.current[cooldownKey] || 0
+    if (nowEpoch - lastEpoch < PROACTIVE_COACH_COOLDOWN_MS) return false
+    proactiveCooldownByKeyRef.current[cooldownKey] = nowEpoch
+    return true
+  }, [])
+
+  const pushProactiveCoachMessage = useCallback((message: CoachMessage, cooldownKey: string) => {
+    const nowEpoch = Date.now()
+    if (!canEmitProactiveMessage(cooldownKey, nowEpoch)) return
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_MESSAGE_SENT, {
+      setupId: message.setupId || null,
+      promptLength: 0,
+      result: 'proactive',
+      proactiveReason: message.structuredData?.reason || null,
+      messageId: message.id,
+    })
+
+    setEphemeralCoachMessages((previous) => {
+      const deduped = new Map<string, CoachMessage>()
+      for (const item of [message, ...previous]) {
+        if (!item?.id) continue
+        deduped.set(item.id, item)
+      }
+      return Array.from(deduped.values())
+        .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+        .slice(0, 80)
+    })
+  }, [canEmitProactiveMessage])
+
+  useEffect(() => {
+    const nextStatusById: Record<string, Setup['status']> = {}
+    for (const setup of activeSetups) {
+      nextStatusById[setup.id] = setup.status
+    }
+
+    if (!uxFlags.coachProactive) {
+      previousSetupStatusByIdRef.current = nextStatusById
+      return
+    }
+
+    for (const setup of activeSetups) {
+      const previousStatus = previousSetupStatusByIdRef.current[setup.id]
+      if (!previousStatus) continue
+      if (previousStatus === 'triggered' || setup.status !== 'triggered') continue
+
+      const flowSummary = summarizeFlowAlignment(flowEvents.slice(0, 12), setup.direction)
+      const now = new Date().toISOString()
+      const message: CoachMessage = {
+        id: `coach_proactive_triggered_${setup.id}_${setup.statusUpdatedAt || now}`,
+        type: 'pre_trade',
+        priority: 'setup',
+        setupId: setup.id,
+        content: `Entry window open for ${setup.direction.toUpperCase()} ${setup.regime}. Confluence ${setup.confluenceScore}/5${flowSummary ? `, flow confirms ${flowSummary.alignmentPct}%` : ''}. Entry zone ${setup.entryZone.low.toFixed(0)}-${setup.entryZone.high.toFixed(0)}.`,
+        structuredData: {
+          source: 'client_proactive',
+          reason: 'status_triggered',
+          setupStatus: setup.status,
+          setupDirection: setup.direction,
+        },
+        timestamp: now,
+      }
+
+      pushProactiveCoachMessage(message, `triggered:${setup.id}`)
+    }
+
+    previousSetupStatusByIdRef.current = nextStatusById
+  }, [activeSetups, flowEvents, pushProactiveCoachMessage, uxFlags.coachProactive])
+
+  useEffect(() => {
+    if (!uxFlags.coachProactive) return
+    const scopedSetup = inTradeSetup || selectedSetup
+    if (!scopedSetup) return
+
+    const flowSummary = summarizeFlowAlignment(flowEvents.slice(0, 12), scopedSetup.direction)
+    if (!flowSummary) return
+    if (!isFlowDivergence(flowSummary.alignmentPct, PROACTIVE_FLOW_DIVERGENCE_THRESHOLD)) return
+
+    const opposingShare = 100 - flowSummary.alignmentPct
+    const now = new Date().toISOString()
+    const message: CoachMessage = {
+      id: `coach_proactive_flow_divergence_${scopedSetup.id}_${Math.floor(Date.now() / 60_000)}`,
+      type: tradeMode === 'in_trade' ? 'in_trade' : 'pre_trade',
+      priority: 'alert',
+      setupId: scopedSetup.id,
+      content: `Flow divergence detected for your ${scopedSetup.direction} setup. Opposing pressure is ${opposingShare}% over recent prints. Consider waiting for re-alignment or tightening risk.`,
+      structuredData: {
+        source: 'client_proactive',
+        reason: 'flow_divergence',
+        alignmentPct: flowSummary.alignmentPct,
+        opposingShare,
+      },
+      timestamp: now,
+    }
+
+    pushProactiveCoachMessage(message, `flow_divergence:${scopedSetup.id}`)
+  }, [
+    flowEvents,
+    inTradeSetup,
+    pushProactiveCoachMessage,
+    selectedSetup,
+    tradeMode,
+    uxFlags.coachProactive,
+  ])
+
+  useEffect(() => {
+    if (!uxFlags.coachProactive) return
+    if (tradeMode !== 'in_trade' || !inTradeSetup) return
+
+    const stopDistance = distanceToStopPoints(spxPrice, inTradeSetup)
+    if (stopDistance == null) return
+    if (stopDistance < 0 || stopDistance > PROACTIVE_STOP_DISTANCE_THRESHOLD) return
+
+    const flowSummary = summarizeFlowAlignment(flowEvents.slice(0, 12), inTradeSetup.direction)
+    const now = new Date().toISOString()
+    const message: CoachMessage = {
+      id: `coach_proactive_stop_proximity_${inTradeSetup.id}_${Math.floor(Date.now() / 60_000)}`,
+      type: 'in_trade',
+      priority: 'alert',
+      setupId: inTradeSetup.id,
+      content: `Price is within ${stopDistance.toFixed(1)} points of your stop. ${flowSummary && flowSummary.alignmentPct >= 55 ? `Flow still confirms ${flowSummary.alignmentPct}%, but consider tightening.` : 'Consider reducing risk or exiting if confirmation does not improve.'}`,
+      structuredData: {
+        source: 'client_proactive',
+        reason: 'stop_proximity',
+        stopDistance,
+        flowAlignmentPct: flowSummary?.alignmentPct ?? null,
+      },
+      timestamp: now,
+    }
+
+    pushProactiveCoachMessage(message, `stop_proximity:${inTradeSetup.id}`)
+  }, [
+    flowEvents,
+    inTradeSetup,
+    pushProactiveCoachMessage,
+    spxPrice,
+    tradeMode,
+    uxFlags.coachProactive,
+  ])
 
   useEffect(() => {
     if (hasTrackedPageViewRef.current) return
@@ -776,9 +924,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       route: '/members/spx-command-center',
       hasSession: Boolean(accessToken),
     }, { persist: true })
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_FLAGS_EVALUATED, {
+      enabledFlags: getEnabledSPXUXFlagKeys(uxFlags),
+      flags: uxFlags,
+    })
     pageToFirstActionableStopperRef.current = startSPXPerfTimer('ttfa_actionable_render')
     pageToFirstSetupSelectStopperRef.current = startSPXPerfTimer('ttfa_setup_select')
-  }, [accessToken])
+  }, [accessToken, uxFlags])
 
   useEffect(() => {
     if (hasTrackedFirstActionableRef.current) return
@@ -948,7 +1100,16 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       contract: chosenContract?.description || null,
       contractMid: entryContractMid,
     }, { persist: true })
-  }, [selectedContractBySetupId, selectedSetup, selectedSetupContract, spxPrice])
+
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_MOBILE_FOCUS_CHANGED, {
+        action: 'enter',
+        setupId: target.id,
+        setupStatus: target.status,
+        mobileFullTradeFocusEnabled: uxFlags.mobileFullTradeFocus,
+      }, { persist: true })
+    }
+  }, [selectedContractBySetupId, selectedSetup, selectedSetupContract, spxPrice, uxFlags.mobileFullTradeFocus])
 
   const exitTrade = useCallback(() => {
     const exitingSetupId = inTradeSetupId
@@ -964,7 +1125,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       action: 'exit',
       setupId: exitingSetupId,
     }, { persist: true })
-  }, [inTradeSetupId])
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_MOBILE_FOCUS_CHANGED, {
+        action: 'exit',
+        setupId: exitingSetupId,
+        mobileFullTradeFocusEnabled: uxFlags.mobileFullTradeFocus,
+      }, { persist: true })
+    }
+  }, [inTradeSetupId, uxFlags.mobileFullTradeFocus])
 
   const setChartTimeframe = useCallback((timeframe: ChartTimeframe) => {
     setSelectedTimeframe(timeframe)
@@ -1274,17 +1442,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
   }, [dataHealth, dataHealthMessage])
 
-  const value = useMemo<SPXCommandCenterState>(() => ({
+  const liveAnalyticsState = useMemo<SPXAnalyticsContextState>(() => ({
     dataHealth,
     dataHealthMessage,
-    spxPrice,
-    spxTickTimestamp,
-    spxPriceAgeMs,
-    spxPriceSource,
-    spyPrice,
-    snapshotGeneratedAt: snapshotData?.generatedAt || null,
-    priceStreamConnected: stream.isConnected,
-    priceStreamError: stream.error,
     basis: snapshotData?.basis || null,
     spyImpact: snapshotData?.spyImpact || null,
     regime: snapshotData?.regime?.regime || null,
@@ -1293,46 +1453,29 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     clusterZones: snapshotData?.clusters || [],
     fibLevels: snapshotData?.fibLevels || [],
     gexProfile: snapshotData?.gex || null,
-    activeSetups,
-    coachMessages,
-    selectedSetup,
-    tradeMode,
-    inTradeSetup,
-    inTradeSetupId,
-    selectedSetupContract,
-    inTradeContract,
-    tradeEntryPrice,
-    tradeEnteredAt,
-    tradePnlPoints,
-    tradeEntryContractMid,
-    tradeCurrentContractMid,
-    tradePnlDollars,
-    selectedTimeframe,
-    setChartTimeframe,
-    visibleLevelCategories,
-    showSPYDerived,
-    chartAnnotations,
-    flowEvents: snapshotData?.flow || [],
-    latestMicrobar,
     isLoading,
     error,
-    selectSetup,
-    setSetupContractChoice,
-    enterTrade,
-    exitTrade,
-    toggleLevelCategory,
-    toggleSPYDerived,
-    requestContractRecommendation,
-    sendCoachMessage,
   }), [
-    activeSetups,
-    chartAnnotations,
     dataHealth,
     dataHealthMessage,
     error,
     filteredLevels,
     isLoading,
-    latestMicrobar,
+    snapshotData,
+  ])
+
+  const liveCoachState = useMemo<SPXCoachContextState>(() => ({
+    coachMessages,
+    sendCoachMessage,
+  }), [coachMessages, sendCoachMessage])
+
+  const liveFlowState = useMemo<SPXFlowContextState>(() => ({
+    flowEvents,
+  }), [flowEvents])
+
+  const liveSetupState = useMemo<SPXSetupContextState>(() => ({
+    activeSetups,
+    selectedSetup,
     tradeMode,
     inTradeSetup,
     inTradeSetupId,
@@ -1344,33 +1487,187 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     tradeEntryContractMid,
     tradeCurrentContractMid,
     tradePnlDollars,
-    requestContractRecommendation,
+    chartAnnotations,
     selectSetup,
     setSetupContractChoice,
     enterTrade,
     exitTrade,
-    sendCoachMessage,
-    selectedSetup,
-    selectedTimeframe,
-    setChartTimeframe,
+    requestContractRecommendation,
+    visibleLevelCategories,
     showSPYDerived,
-    snapshotData,
-    coachMessages,
-    stream.error,
-    stream.isConnected,
-    spxPrice,
-    spxPriceAgeMs,
-    spxTickTimestamp,
-    spxPriceSource,
-    spyPrice,
     toggleLevelCategory,
     toggleSPYDerived,
+  }), [
+    activeSetups,
+    chartAnnotations,
+    enterTrade,
+    exitTrade,
+    inTradeContract,
+    inTradeSetup,
+    inTradeSetupId,
+    requestContractRecommendation,
+    selectSetup,
+    selectedSetup,
+    selectedSetupContract,
+    setSetupContractChoice,
+    showSPYDerived,
+    toggleLevelCategory,
+    toggleSPYDerived,
+    tradeCurrentContractMid,
+    tradeEntryContractMid,
+    tradeEntryPrice,
+    tradeEnteredAt,
+    tradeMode,
+    tradePnlDollars,
+    tradePnlPoints,
     visibleLevelCategories,
+  ])
+
+  const livePriceState = useMemo<SPXPriceContextState>(() => ({
+    spxPrice,
+    spxTickTimestamp,
+    spxPriceAgeMs,
+    spxPriceSource,
+    spyPrice,
+    snapshotGeneratedAt: snapshotData?.generatedAt || null,
+    priceStreamConnected: stream.isConnected,
+    priceStreamError: stream.error,
+    selectedTimeframe,
+    setChartTimeframe,
+    latestMicrobar,
+  }), [
+    latestMicrobar,
+    selectedTimeframe,
+    setChartTimeframe,
+    snapshotData?.generatedAt,
+    spxPrice,
+    spxPriceAgeMs,
+    spxPriceSource,
+    spxTickTimestamp,
+    spyPrice,
+    stream.error,
+    stream.isConnected,
+  ])
+
+  useEffect(() => {
+    if (!uxFlags.contextSplitV1 || !legacyPriceStateRef.current) {
+      legacyPriceStateRef.current = livePriceState
+    }
+  }, [livePriceState, uxFlags.contextSplitV1])
+
+  useEffect(() => {
+    if (!uxFlags.contextSplitV1 || !legacyAnalyticsStateRef.current) {
+      legacyAnalyticsStateRef.current = liveAnalyticsState
+    }
+  }, [liveAnalyticsState, uxFlags.contextSplitV1])
+
+  useEffect(() => {
+    if (!uxFlags.contextSplitV1 || !legacyCoachStateRef.current) {
+      legacyCoachStateRef.current = liveCoachState
+    }
+  }, [liveCoachState, uxFlags.contextSplitV1])
+
+  useEffect(() => {
+    if (!uxFlags.contextSplitV1 || !legacyFlowStateRef.current) {
+      legacyFlowStateRef.current = liveFlowState
+    }
+  }, [liveFlowState, uxFlags.contextSplitV1])
+
+  useEffect(() => {
+    if (!uxFlags.contextSplitV1 || !legacySetupStateRef.current) {
+      legacySetupStateRef.current = liveSetupState
+    }
+  }, [liveSetupState, uxFlags.contextSplitV1])
+
+  const legacyPriceState = uxFlags.contextSplitV1 && legacyPriceStateRef.current
+    ? legacyPriceStateRef.current
+    : livePriceState
+  const legacyAnalyticsState = uxFlags.contextSplitV1 && legacyAnalyticsStateRef.current
+    ? legacyAnalyticsStateRef.current
+    : liveAnalyticsState
+  const legacyCoachState = uxFlags.contextSplitV1 && legacyCoachStateRef.current
+    ? legacyCoachStateRef.current
+    : liveCoachState
+  const legacyFlowState = uxFlags.contextSplitV1 && legacyFlowStateRef.current
+    ? legacyFlowStateRef.current
+    : liveFlowState
+  const legacySetupState = uxFlags.contextSplitV1 && legacySetupStateRef.current
+    ? legacySetupStateRef.current
+    : liveSetupState
+
+  const value = useMemo<SPXCommandCenterState>(() => ({
+    dataHealth: legacyAnalyticsState.dataHealth,
+    dataHealthMessage: legacyAnalyticsState.dataHealthMessage,
+    spxPrice: legacyPriceState.spxPrice,
+    spxTickTimestamp: legacyPriceState.spxTickTimestamp,
+    spxPriceAgeMs: legacyPriceState.spxPriceAgeMs,
+    spxPriceSource: legacyPriceState.spxPriceSource,
+    spyPrice: legacyPriceState.spyPrice,
+    snapshotGeneratedAt: legacyPriceState.snapshotGeneratedAt,
+    priceStreamConnected: legacyPriceState.priceStreamConnected,
+    priceStreamError: legacyPriceState.priceStreamError,
+    basis: legacyAnalyticsState.basis,
+    spyImpact: legacyAnalyticsState.spyImpact,
+    regime: legacyAnalyticsState.regime,
+    prediction: legacyAnalyticsState.prediction,
+    levels: legacyAnalyticsState.levels,
+    clusterZones: legacyAnalyticsState.clusterZones,
+    fibLevels: legacyAnalyticsState.fibLevels,
+    gexProfile: legacyAnalyticsState.gexProfile,
+    activeSetups: legacySetupState.activeSetups,
+    coachMessages: legacyCoachState.coachMessages,
+    uxFlags,
+    selectedSetup: legacySetupState.selectedSetup,
+    tradeMode: legacySetupState.tradeMode,
+    inTradeSetup: legacySetupState.inTradeSetup,
+    inTradeSetupId: legacySetupState.inTradeSetupId,
+    selectedSetupContract: legacySetupState.selectedSetupContract,
+    inTradeContract: legacySetupState.inTradeContract,
+    tradeEntryPrice: legacySetupState.tradeEntryPrice,
+    tradeEnteredAt: legacySetupState.tradeEnteredAt,
+    tradePnlPoints: legacySetupState.tradePnlPoints,
+    tradeEntryContractMid: legacySetupState.tradeEntryContractMid,
+    tradeCurrentContractMid: legacySetupState.tradeCurrentContractMid,
+    tradePnlDollars: legacySetupState.tradePnlDollars,
+    selectedTimeframe: legacyPriceState.selectedTimeframe,
+    setChartTimeframe: legacyPriceState.setChartTimeframe,
+    visibleLevelCategories: legacySetupState.visibleLevelCategories,
+    showSPYDerived: legacySetupState.showSPYDerived,
+    chartAnnotations: legacySetupState.chartAnnotations,
+    flowEvents: legacyFlowState.flowEvents,
+    latestMicrobar: legacyPriceState.latestMicrobar,
+    isLoading: legacyAnalyticsState.isLoading,
+    error: legacyAnalyticsState.error,
+    selectSetup: legacySetupState.selectSetup,
+    setSetupContractChoice: legacySetupState.setSetupContractChoice,
+    enterTrade: legacySetupState.enterTrade,
+    exitTrade: legacySetupState.exitTrade,
+    toggleLevelCategory: legacySetupState.toggleLevelCategory,
+    toggleSPYDerived: legacySetupState.toggleSPYDerived,
+    requestContractRecommendation: legacySetupState.requestContractRecommendation,
+    sendCoachMessage: legacyCoachState.sendCoachMessage,
+  }), [
+    legacyAnalyticsState,
+    legacyCoachState,
+    legacyFlowState,
+    legacyPriceState,
+    legacySetupState,
+    uxFlags,
   ])
 
   return (
     <SPXCommandCenterContext.Provider value={value}>
-      {children}
+      <SPXPriceProvider value={livePriceState}>
+        <SPXAnalyticsProvider value={liveAnalyticsState}>
+          <SPXSetupProvider value={liveSetupState}>
+            <SPXFlowProvider value={liveFlowState}>
+              <SPXCoachProvider value={liveCoachState}>
+                {children}
+              </SPXCoachProvider>
+            </SPXFlowProvider>
+          </SPXSetupProvider>
+        </SPXAnalyticsProvider>
+      </SPXPriceProvider>
     </SPXCommandCenterContext.Provider>
   )
 }

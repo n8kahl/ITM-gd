@@ -1,8 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXFlowContext } from '@/contexts/spx/SPXFlowContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { SPX_SHORTCUT_EVENT } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
 function ageSeconds(timestamp: string): number {
@@ -26,8 +29,30 @@ function relativeAge(timestamp: string): string {
 }
 
 export function FlowTicker() {
-  const { flowEvents, spxPrice, selectedSetup } = useSPXCommandCenter()
+  const { selectedSetup } = useSPXSetupContext()
+  const { flowEvents } = useSPXFlowContext()
+  const { spxPrice } = useSPXPriceContext()
   const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    const handleShortcutToggle = () => {
+      setExpanded((previous) => {
+        const next = !previous
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.FLOW_MODE_TOGGLED, {
+          mode: next ? 'expanded' : 'compact',
+          rankedCount: flowEvents.length,
+          hasSelectedSetup: Boolean(selectedSetup),
+          source: 'keyboard_shortcut',
+        })
+        return next
+      })
+    }
+
+    window.addEventListener(SPX_SHORTCUT_EVENT.FLOW_TOGGLE, handleShortcutToggle as EventListener)
+    return () => {
+      window.removeEventListener(SPX_SHORTCUT_EVENT.FLOW_TOGGLE, handleShortcutToggle as EventListener)
+    }
+  }, [flowEvents.length, selectedSetup])
 
   const ranked = useMemo(() => {
     return [...flowEvents]

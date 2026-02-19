@@ -527,7 +527,18 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
     }
 
     if (endpoint === 'contract-select') {
-      const setupId = url.searchParams.get('setupId') || ''
+      let setupId = url.searchParams.get('setupId') || ''
+      if (!setupId && req.method() === 'POST') {
+        const rawBody = req.postData()
+        if (rawBody) {
+          try {
+            const parsed = JSON.parse(rawBody) as { setupId?: string; setup?: { id?: string } }
+            setupId = parsed.setupId || parsed.setup?.id || ''
+          } catch {
+            setupId = ''
+          }
+        }
+      }
       const contract = contractBySetupId[setupId]
       if (!contract) {
         await fulfillJson(route, { error: 'No recommendation' }, 404)

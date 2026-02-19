@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { cn } from '@/lib/utils'
 import type { ClusterZone, FibLevel, PredictionState, SpyImpactState } from '@/lib/types/spx-command-center'
 
@@ -338,7 +340,9 @@ function SPYImpact({
 
 // ─── Main DecisionContext container ───
 export function DecisionContext() {
-  const { clusterZones, prediction, fibLevels, spxPrice, selectedSetup, spyImpact } = useSPXCommandCenter()
+  const { clusterZones, prediction, fibLevels, spyImpact } = useSPXAnalyticsContext()
+  const { selectedSetup } = useSPXSetupContext()
+  const { spxPrice } = useSPXPriceContext()
 
   return (
     <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">

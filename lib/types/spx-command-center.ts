@@ -62,6 +62,20 @@ export interface GEXProfile {
   timestamp: string
 }
 
+// ─── Flow Types ───
+
+export interface FlowEvent {
+  id: string
+  type: 'sweep' | 'block'
+  symbol: 'SPX' | 'SPY'
+  strike: number
+  expiry: string
+  size: number
+  direction: 'bullish' | 'bearish'
+  premium: number
+  timestamp: string
+}
+
 // ─── Setup Types ───
 
 export type SetupType = 'fade_at_wall' | 'breakout_vacuum' | 'mean_reversion' | 'trend_continuation'
