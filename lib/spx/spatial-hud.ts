@@ -1,4 +1,4 @@
-import type { LevelStrength, Setup } from '@/lib/types/spx-command-center'
+import type { ContractRecommendation, LevelStrength, Setup, SetupStatus } from '@/lib/types/spx-command-center'
 
 export interface ProbabilityConeWindow {
   high: number
@@ -439,5 +439,84 @@ export function buildSetupLockGeometry(setup: Setup | null): SetupLockGeometry |
     centerPrice,
     confluenceRings: Math.max(0, Math.min(5, Math.round(setup.confluenceScore))),
     bands,
+  }
+}
+
+export type SetupLockState = 'idle' | 'ready' | 'triggered' | 'in_trade'
+
+export function resolveSetupLockState(
+  tradeMode: 'scan' | 'in_trade',
+  setupStatus?: SetupStatus | null,
+): SetupLockState {
+  if (tradeMode === 'in_trade') return 'in_trade'
+  if (setupStatus === 'triggered') return 'triggered'
+  if (setupStatus === 'ready') return 'ready'
+  return 'idle'
+}
+
+export interface RiskRewardShadowGeometry {
+  direction: Setup['direction']
+  entryLow: number
+  entryHigh: number
+  entryAnchor: number
+  stop: number
+  target1: number
+  target2: number
+  riskPoints: number
+  rewardPointsToT1: number
+  rewardPointsToT2: number
+  rrToT1: number | null
+  rrToT2: number | null
+  contractMid: number | null
+}
+
+function deriveContractMid(contract: ContractRecommendation | null | undefined): number | null {
+  if (!contract) return null
+  if (Number.isFinite(contract.bid) && Number.isFinite(contract.ask)) {
+    return (contract.bid + contract.ask) / 2
+  }
+  return null
+}
+
+export function buildRiskRewardShadowGeometry(
+  setup: Setup | null,
+  contract?: ContractRecommendation | null,
+): RiskRewardShadowGeometry | null {
+  if (!setup) return null
+  if (!Number.isFinite(setup.entryZone.low) || !Number.isFinite(setup.entryZone.high)) return null
+  if (!Number.isFinite(setup.stop) || !Number.isFinite(setup.target1.price) || !Number.isFinite(setup.target2.price)) {
+    return null
+  }
+
+  const entryLow = Math.min(setup.entryZone.low, setup.entryZone.high)
+  const entryHigh = Math.max(setup.entryZone.low, setup.entryZone.high)
+  const entryAnchor = (entryLow + entryHigh) / 2
+  const riskPoints = Math.abs(entryAnchor - setup.stop)
+  if (riskPoints <= 0) return null
+
+  const rewardPointsToT1 = Math.abs(setup.target1.price - entryAnchor)
+  const rewardPointsToT2 = Math.abs(setup.target2.price - entryAnchor)
+  const rrFromContract = Number.isFinite(contract?.riskReward) && (contract?.riskReward || 0) > 0
+    ? Number(contract?.riskReward)
+    : null
+  const rrToT1 = rrFromContract != null
+    ? rrFromContract
+    : (rewardPointsToT1 / riskPoints)
+  const rrToT2 = rewardPointsToT2 / riskPoints
+
+  return {
+    direction: setup.direction,
+    entryLow,
+    entryHigh,
+    entryAnchor,
+    stop: setup.stop,
+    target1: setup.target1.price,
+    target2: setup.target2.price,
+    riskPoints,
+    rewardPointsToT1,
+    rewardPointsToT2,
+    rrToT1: Number.isFinite(rrToT1) ? rrToT1 : null,
+    rrToT2: Number.isFinite(rrToT2) ? rrToT2 : null,
+    contractMid: deriveContractMid(contract),
   }
 }

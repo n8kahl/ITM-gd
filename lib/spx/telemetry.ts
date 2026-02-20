@@ -50,6 +50,10 @@ export const SPX_TELEMETRY_EVENT = {
   SIDEBAR_TOGGLED: 'spx_sidebar_toggled',
   CONE_INTERACTION: 'spx_cone_interaction',
   GEX_GLOW_TOGGLED: 'spx_gex_glow_toggled',
+  RR_SHADOW_RENDERED: 'spx_rr_shadow_rendered',
+  SPATIAL_GHOST_INTERACTION: 'spx_spatial_ghost_interaction',
+  SETUP_LOCK_STATE_CHANGED: 'spx_setup_lock_state_changed',
+  SETUP_LOCK_PULSE_PLAYED: 'spx_setup_lock_pulse_played',
 } as const
 
 export type SPXTelemetryEventName = (typeof SPX_TELEMETRY_EVENT)[keyof typeof SPX_TELEMETRY_EVENT]

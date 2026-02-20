@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   buildProbabilityConeGeometry,
   buildGammaTopographyEntries,
+  buildRiskRewardShadowGeometry,
   buildSetupLockGeometry,
   buildTopographicLadderEntries,
   extractSpatialCoachAnchors,
+  resolveSetupLockState,
 } from '@/lib/spx/spatial-hud'
 import type { Setup } from '@/lib/types/spx-command-center'
 
@@ -166,6 +168,84 @@ describe('spatial-hud helpers', () => {
       expect(bearish).not.toBeNull()
       expect(bearish?.centerPrice).toBeCloseTo(6002)
       expect(buildSetupLockGeometry(null)).toBeNull()
+    })
+  })
+
+  describe('resolveSetupLockState', () => {
+    it('maps trade mode and setup status to lock states', () => {
+      expect(resolveSetupLockState('scan', 'forming')).toBe('idle')
+      expect(resolveSetupLockState('scan', 'ready')).toBe('ready')
+      expect(resolveSetupLockState('scan', 'triggered')).toBe('triggered')
+      expect(resolveSetupLockState('in_trade', 'ready')).toBe('in_trade')
+      expect(resolveSetupLockState('in_trade', null)).toBe('in_trade')
+    })
+  })
+
+  describe('buildRiskRewardShadowGeometry', () => {
+    const setup: Setup = {
+      id: 'setup-rr-1',
+      type: 'fade_at_wall',
+      direction: 'bullish',
+      entryZone: { low: 6000, high: 6004 },
+      stop: 5992,
+      target1: { price: 6012, label: 'T1' },
+      target2: { price: 6024, label: 'T2' },
+      confluenceScore: 5,
+      confluenceSources: ['flow'],
+      clusterZone: {
+        id: 'cluster-rr-1',
+        priceLow: 6000,
+        priceHigh: 6005,
+        clusterScore: 4.5,
+        type: 'defended',
+        sources: [{ source: 'spx_call_wall', category: 'options', price: 6002, instrument: 'SPX' }],
+        testCount: 1,
+        lastTestAt: null,
+        held: null,
+        holdRate: null,
+      },
+      regime: 'ranging',
+      status: 'triggered',
+      probability: 70,
+      recommendedContract: null,
+      createdAt: '2026-02-20T15:00:00.000Z',
+      triggeredAt: '2026-02-20T15:05:00.000Z',
+    }
+
+    it('computes rr geometry from setup structure', () => {
+      const rr = buildRiskRewardShadowGeometry(setup)
+      expect(rr).not.toBeNull()
+      expect(rr?.riskPoints).toBeGreaterThan(0)
+      expect(rr?.rrToT1).toBeCloseTo(1, 2)
+      expect(rr?.rrToT2).toBeCloseTo(2.2, 2)
+    })
+
+    it('uses contract risk/reward when provided', () => {
+      const rr = buildRiskRewardShadowGeometry(setup, {
+        description: '6005C',
+        strike: 6005,
+        expiry: '2026-03-20',
+        type: 'call',
+        delta: 0.3,
+        gamma: 0.02,
+        theta: -0.03,
+        vega: 0.05,
+        bid: 10.2,
+        ask: 10.8,
+        riskReward: 2.4,
+        expectedPnlAtTarget1: 100,
+        expectedPnlAtTarget2: 220,
+        maxLoss: 1080,
+        reasoning: 'test',
+      })
+      expect(rr).not.toBeNull()
+      expect(rr?.rrToT1).toBeCloseTo(2.4, 4)
+      expect(rr?.contractMid).toBeCloseTo(10.5, 4)
+    })
+
+    it('returns null for invalid setup', () => {
+      expect(buildRiskRewardShadowGeometry(null)).toBeNull()
+      expect(buildRiskRewardShadowGeometry({ ...setup, stop: (setup.entryZone.low + setup.entryZone.high) / 2 })).toBeNull()
     })
   })
 })

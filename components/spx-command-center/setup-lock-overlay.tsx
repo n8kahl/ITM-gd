@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
-import { buildSetupLockGeometry } from '@/lib/spx/spatial-hud'
+import { buildSetupLockGeometry, resolveSetupLockState, type SetupLockState } from '@/lib/spx/spatial-hud'
 
 interface SetupLockOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
@@ -57,9 +58,14 @@ function renderStateEquals(left: SetupLockRenderState | null, right: SetupLockRe
 export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
   const { selectedSetup, tradeMode } = useSPXSetupContext()
   const [renderState, setRenderState] = useState<SetupLockRenderState | null>(null)
+  const [showPulse, setShowPulse] = useState(false)
+  const [pulseTick, setPulseTick] = useState(0)
+  const pulseTimeoutRef = useRef<number | null>(null)
+  const previousStateRef = useRef<SetupLockState>('idle')
 
   const shouldRender = Boolean(selectedSetup && (tradeMode === 'in_trade' || selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
   const lockGeometry = useMemo(() => (shouldRender ? buildSetupLockGeometry(selectedSetup) : null), [selectedSetup, shouldRender])
+  const lockState = resolveSetupLockState(tradeMode, selectedSetup?.status)
 
   const refreshRenderState = useCallback(() => {
     const coordinates = coordinatesRef.current
@@ -123,6 +129,50 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
     }
   }, [refreshRenderState])
 
+  useEffect(() => {
+    const previous = previousStateRef.current
+    if (previous === lockState) return
+    previousStateRef.current = lockState
+
+    if (lockState === 'idle') return
+
+    if (pulseTimeoutRef.current != null) {
+      window.clearTimeout(pulseTimeoutRef.current)
+    }
+    let rafId = 0
+    rafId = window.requestAnimationFrame(() => {
+      setPulseTick((previousTick) => previousTick + 1)
+      setShowPulse(true)
+      pulseTimeoutRef.current = window.setTimeout(() => {
+        setShowPulse(false)
+        pulseTimeoutRef.current = null
+      }, 900)
+    })
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SETUP_LOCK_STATE_CHANGED, {
+      setupId: selectedSetup?.id || null,
+      previousState: previous,
+      nextState: lockState,
+      tradeMode,
+      setupStatus: selectedSetup?.status || null,
+    })
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SETUP_LOCK_PULSE_PLAYED, {
+      setupId: selectedSetup?.id || null,
+      nextState: lockState,
+    })
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [lockState, selectedSetup?.id, selectedSetup?.status, tradeMode])
+
+  useEffect(() => {
+    return () => {
+      if (pulseTimeoutRef.current != null) {
+        window.clearTimeout(pulseTimeoutRef.current)
+      }
+    }
+  }, [])
+
   if (!renderState || renderState.bands.length === 0) return null
 
   const reticleX = renderState.width * 0.52
@@ -162,6 +212,21 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
           boxShadow: `0 0 14px ${crosshairColor}44`,
         }}
       />
+
+      {showPulse && (
+        <div
+          key={`setup-lock-pulse-${pulseTick}`}
+          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-champagne/60"
+          style={{
+            left: reticleX,
+            top: renderState.centerY,
+            width: 28,
+            height: 28,
+            animation: 'spatial-lock-burst 850ms ease-out forwards',
+          }}
+          data-testid="spx-setup-lock-pulse"
+        />
+      )}
 
       {Array.from({ length: renderState.confluenceRings }).map((_, index) => {
         const size = 8 + (index * 8)

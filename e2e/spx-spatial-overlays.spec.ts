@@ -25,6 +25,14 @@ test.describe('SPX spatial overlays', () => {
 
     await page.keyboard.press('j')
     await expect(page.getByTestId('spx-setup-lock-overlay')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('spx-rr-shadow-overlay')).toBeVisible({ timeout: 8_000 })
+
+    await page.keyboard.press('a')
+    await expect(page.getByTestId('spx-spatial-ghost-layer')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('spx-coach-ghost-card').first()).toBeVisible()
+
+    await page.keyboard.press('a')
+    await expect(page.getByTestId('spx-spatial-ghost-layer')).toHaveCount(0)
 
     await page.keyboard.press('c')
     await expect(page.getByTestId('spx-probability-cone-svg')).toHaveCount(0)
