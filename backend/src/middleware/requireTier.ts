@@ -33,7 +33,7 @@ const PRO_PERMISSION_NAMES = new Set([
 ]);
 
 const EXECUTIVE_PERMISSION_NAMES = new Set([
-  'access_execute_content',
+  'access_executive_content',
 ]);
 
 const CORE_PERMISSION_NAMES = new Set([

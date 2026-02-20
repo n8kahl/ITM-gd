@@ -35,7 +35,7 @@ interface RoleMapping {
 
 function getRoleTitle(role: Pick<RoleMapping, 'discord_role_name'>): string {
   const explicitName = role.discord_role_name?.trim()
-  return explicitName && explicitName.length > 0 ? explicitName : 'Unnamed Discord Role'
+  return explicitName && explicitName.length > 0 ? explicitName : 'Discord Role'
 }
 
 export default function RolesPage() {

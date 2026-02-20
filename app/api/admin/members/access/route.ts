@@ -23,21 +23,27 @@ function isUuid(value: string): boolean {
 }
 
 function parseRoleTierMapping(raw: unknown): Record<string, MembershipTier> {
-  if (typeof raw !== 'string') return {}
-  try {
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-
-    const result: Record<string, MembershipTier> = {}
-    for (const [roleId, tier] of Object.entries(parsed as Record<string, unknown>)) {
-      if (tier === 'core' || tier === 'pro' || tier === 'executive') {
-        result[String(roleId)] = tier
-      }
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return {}
     }
-    return result
-  } catch {
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {}
   }
+
+  const result: Record<string, MembershipTier> = {}
+  for (const [roleId, tier] of Object.entries(parsed as Record<string, unknown>)) {
+    if (tier === 'core' || tier === 'pro' || tier === 'executive') {
+      result[String(roleId)] = tier
+    }
+  }
+
+  return result
 }
 
 function resolveTierFromRoles(roleIds: string[], mapping: Record<string, MembershipTier>): MembershipTier | null {
@@ -253,7 +259,34 @@ export async function GET(request: NextRequest) {
     const expectedMissing = expectedPermissionNames.filter((name) => !uniquePermissionNames.includes(name))
     const unexpectedExtra = uniquePermissionNames.filter((name) => !expectedPermissionNames.includes(name))
 
+    const membersAllowedRoleIdSet = new Set<string>(MEMBERS_ALLOWED_ROLE_IDS)
     const membersAllowedRoleTitlesById: Record<string, string> = {}
+    const roleIdsForCatalog = Array.from(new Set([
+      ...effectiveRoleIds,
+      ...MEMBERS_ALLOWED_ROLE_IDS,
+    ]))
+
+    if (roleIdsForCatalog.length > 0) {
+      const { data: guildRoleRows } = await supabaseAdmin
+        .from('discord_guild_roles')
+        .select('discord_role_id, discord_role_name')
+        .in('discord_role_id', roleIdsForCatalog)
+
+      for (const row of Array.isArray(guildRoleRows) ? guildRoleRows : []) {
+        const roleId = typeof row?.discord_role_id === 'string' ? row.discord_role_id : null
+        const roleName = typeof row?.discord_role_name === 'string' ? row.discord_role_name : null
+        if (!roleId || !roleName) continue
+
+        if (!roleTitlesById[roleId]) {
+          roleTitlesById[roleId] = roleName
+        }
+
+        if (membersAllowedRoleIdSet.has(roleId) && !membersAllowedRoleTitlesById[roleId]) {
+          membersAllowedRoleTitlesById[roleId] = roleName
+        }
+      }
+    }
+
     const { data: membersAllowedRoleMappings } = await supabaseAdmin
       .from('discord_role_permissions')
       .select('discord_role_id, discord_role_name')

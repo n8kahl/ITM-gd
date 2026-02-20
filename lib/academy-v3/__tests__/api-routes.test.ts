@@ -19,12 +19,19 @@ const {
   mockSubmitReview,
   mockGetMastery,
   mockGetRecommendations,
+  mockAssertMembersAreaRoleAccess,
+  mockEnsureProgramEnrollment,
+  mockEnsureEnrollmentForProgramCode,
+  mockAssertModuleContentAccess,
+  mockAssertLessonContentAccess,
+  mockAssertAssessmentAccess,
   MockPlanNotFoundError,
   MockModuleNotFoundError,
   MockLessonNotFoundError,
   MockBlockNotFoundError,
   MockAssessmentNotFoundError,
   MockReviewQueueItemNotFoundError,
+  MockAcademyAccessError,
 } = vi.hoisted(() => {
   class PlanNotFoundError extends Error {}
   class ModuleNotFoundError extends Error {}
@@ -32,6 +39,18 @@ const {
   class BlockNotFoundError extends Error {}
   class AssessmentNotFoundError extends Error {}
   class ReviewQueueItemNotFoundError extends Error {}
+  class AcademyAccessError extends Error {
+    status: number
+    code: string
+    details?: unknown
+
+    constructor(status: number, code: string, message: string, details?: unknown) {
+      super(message)
+      this.status = status
+      this.code = code
+      this.details = details
+    }
+  }
 
   return {
     mockGetAuthenticatedUserFromRequest: vi.fn(),
@@ -45,12 +64,19 @@ const {
     mockSubmitReview: vi.fn(),
     mockGetMastery: vi.fn(),
     mockGetRecommendations: vi.fn(),
+    mockAssertMembersAreaRoleAccess: vi.fn(),
+    mockEnsureProgramEnrollment: vi.fn(),
+    mockEnsureEnrollmentForProgramCode: vi.fn(),
+    mockAssertModuleContentAccess: vi.fn(),
+    mockAssertLessonContentAccess: vi.fn(),
+    mockAssertAssessmentAccess: vi.fn(),
     MockPlanNotFoundError: PlanNotFoundError,
     MockModuleNotFoundError: ModuleNotFoundError,
     MockLessonNotFoundError: LessonNotFoundError,
     MockBlockNotFoundError: BlockNotFoundError,
     MockAssessmentNotFoundError: AssessmentNotFoundError,
     MockReviewQueueItemNotFoundError: ReviewQueueItemNotFoundError,
+    MockAcademyAccessError: AcademyAccessError,
   }
 })
 
@@ -116,6 +142,22 @@ vi.mock('@/lib/academy-v3/services', () => ({
   AcademyReviewQueueItemNotFoundError: MockReviewQueueItemNotFoundError,
 }))
 
+vi.mock('@/lib/academy-v3/access-control', () => ({
+  AcademyAccessError: MockAcademyAccessError,
+  assertMembersAreaRoleAccess: (...args: unknown[]) =>
+    mockAssertMembersAreaRoleAccess(...args),
+  ensureProgramEnrollment: (...args: unknown[]) =>
+    mockEnsureProgramEnrollment(...args),
+  ensureEnrollmentForProgramCode: (...args: unknown[]) =>
+    mockEnsureEnrollmentForProgramCode(...args),
+  assertModuleContentAccess: (...args: unknown[]) =>
+    mockAssertModuleContentAccess(...args),
+  assertLessonContentAccess: (...args: unknown[]) =>
+    mockAssertLessonContentAccess(...args),
+  assertAssessmentAccess: (...args: unknown[]) =>
+    mockAssertAssessmentAccess(...args),
+}))
+
 import { GET as getPlanRoute } from '@/app/api/academy-v3/plan/route'
 import { GET as getModuleRoute } from '@/app/api/academy-v3/modules/[slug]/route'
 import { GET as getLessonRoute } from '@/app/api/academy-v3/lessons/[id]/route'
@@ -140,6 +182,12 @@ beforeEach(() => {
     user: { id: USER_ID },
     supabase: {},
   })
+  mockAssertMembersAreaRoleAccess.mockResolvedValue(['1465515598640447662'])
+  mockEnsureProgramEnrollment.mockResolvedValue(undefined)
+  mockEnsureEnrollmentForProgramCode.mockResolvedValue({ programId: '40000000-0000-4000-8000-000000000001' })
+  mockAssertModuleContentAccess.mockResolvedValue(undefined)
+  mockAssertLessonContentAccess.mockResolvedValue(undefined)
+  mockAssertAssessmentAccess.mockResolvedValue(undefined)
 })
 
 describe('academy-v3 api route contracts', () => {

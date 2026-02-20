@@ -7,6 +7,12 @@ const corsHeaders = {
 }
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
+const DISCORD_PRIVILEGED_ROLE_ID = '1465515598640447662'
+const DISCORD_MEMBERS_ROLE_ID = '1471195516070264863'
+const MEMBERS_ALLOWED_ROLE_IDS = new Set([
+  DISCORD_MEMBERS_ROLE_ID,
+  DISCORD_PRIVILEGED_ROLE_ID,
+])
 
 // Error codes for specific error handling on frontend
 const ERROR_CODES = {
@@ -28,6 +34,15 @@ interface DiscordMember {
   roles: string[]
   nick: string | null
   joined_at: string
+}
+
+interface DiscordGuildRole {
+  id: string
+  name: string
+  color: number
+  position: number
+  managed: boolean
+  mentionable: boolean
 }
 
 interface AppPermission {
@@ -58,6 +73,143 @@ interface SyncError {
   success: false
   error: string
   code: string
+}
+
+function hasMembersAreaAccess(roleIds: string[]): boolean {
+  return roleIds.some((roleId) => MEMBERS_ALLOWED_ROLE_IDS.has(roleId))
+}
+
+function getBestEffortDiscordUsername(user: any): string {
+  if (typeof user?.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim().length > 0) {
+    return user.user_metadata.full_name.trim()
+  }
+
+  if (typeof user?.email === 'string' && user.email.includes('@')) {
+    return user.email.split('@')[0]
+  }
+
+  return 'Unknown'
+}
+
+async function revokeAccessForNonMember(params: {
+  supabaseAdmin: any
+  user: any
+  discordUserId: string
+}): Promise<void> {
+  const { supabaseAdmin, user, discordUserId } = params
+  const nowIso = new Date().toISOString()
+
+  try {
+    const { error: permissionsError } = await supabaseAdmin
+      .from('user_permissions')
+      .delete()
+      .eq('user_id', user.id)
+    if (permissionsError) {
+      console.error('[sync-discord-roles] Failed to clear user_permissions on NOT_MEMBER:', permissionsError)
+    }
+
+    const { error: profileError } = await supabaseAdmin
+      .from('user_discord_profiles')
+      .upsert({
+        user_id: user.id,
+        discord_user_id: discordUserId,
+        discord_username: getBestEffortDiscordUsername(user),
+        discord_discriminator: '0',
+        discord_avatar: null,
+        discord_roles: [],
+        last_synced_at: nowIso,
+        updated_at: nowIso,
+      }, {
+        onConflict: 'user_id',
+      })
+    if (profileError) {
+      console.error('[sync-discord-roles] Failed to clear user_discord_profiles roles on NOT_MEMBER:', profileError)
+    }
+
+    const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
+      user.id,
+      {
+        app_metadata: {
+          ...(user.app_metadata || {}),
+          is_admin: false,
+          is_member: false,
+          discord_roles: [],
+        },
+      }
+    )
+    if (metadataError) {
+      console.error('[sync-discord-roles] Failed to clear auth metadata on NOT_MEMBER:', metadataError)
+    }
+  } catch (error) {
+    console.error('[sync-discord-roles] Unexpected error while revoking NOT_MEMBER access:', error)
+  }
+}
+
+async function fetchGuildRoles(
+  guildId: string,
+  botToken: string,
+): Promise<DiscordGuildRole[]> {
+  try {
+    const response = await fetch(`${DISCORD_API_BASE}/guilds/${guildId}/roles`, {
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      console.error('[sync-discord-roles] Failed to fetch guild roles:', response.status, body)
+      return []
+    }
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return []
+
+    return data
+      .map((row: any) => ({
+        id: String(row?.id || ''),
+        name: String(row?.name || ''),
+        color: Number(row?.color || 0),
+        position: Number(row?.position || 0),
+        managed: row?.managed === true,
+        mentionable: row?.mentionable === true,
+      }))
+      .filter((role: DiscordGuildRole) => role.id.length > 0)
+  } catch (error) {
+    console.error('[sync-discord-roles] Exception fetching guild roles:', error)
+    return []
+  }
+}
+
+async function upsertGuildRoleCatalog(
+  supabaseAdmin: any,
+  roles: DiscordGuildRole[],
+): Promise<void> {
+  if (roles.length === 0) return
+
+  try {
+    const nowIso = new Date().toISOString()
+    const payload = roles.map((role) => ({
+      discord_role_id: role.id,
+      discord_role_name: role.name,
+      role_color: role.color || null,
+      position: role.position,
+      managed: role.managed,
+      mentionable: role.mentionable,
+      last_synced_at: nowIso,
+      updated_at: nowIso,
+    }))
+
+    const { error } = await supabaseAdmin
+      .from('discord_guild_roles')
+      .upsert(payload, { onConflict: 'discord_role_id' })
+
+    if (error) {
+      console.warn('[sync-discord-roles] Unable to upsert discord_guild_roles (continuing):', error.message || error)
+    }
+  } catch (error) {
+    console.warn('[sync-discord-roles] Exception while upserting discord_guild_roles (continuing):', error)
+  }
 }
 
 serve(async (req) => {
@@ -141,6 +293,11 @@ serve(async (req) => {
     }
 
     console.log('Using discord_guild_id and bot token from app_settings')
+    const guildRoles = await fetchGuildRoles(guildId, botToken)
+    await upsertGuildRoleCatalog(supabaseAdmin, guildRoles)
+    const guildRoleNameById = new Map<string, string>(
+      guildRoles.map((role) => [role.id, role.name])
+    )
 
     // Call Discord API using Bot token to get user's guild member info
     const discordResponse = await fetch(
@@ -166,6 +323,11 @@ serve(async (req) => {
 
       if (discordResponse.status === 404) {
         // User is NOT a member of the Discord server
+        await revokeAccessForNonMember({
+          supabaseAdmin,
+          user,
+          discordUserId,
+        })
         return errorResponse(
           'You must be a member of the TradeITM Discord server to access this area.',
           ERROR_CODES.NOT_MEMBER,
@@ -222,7 +384,7 @@ serve(async (req) => {
         permissionMap.set(permission.id, {
           permission,
           grantedByRoleId: rp.discord_role_id,
-          grantedByRoleName: rp.discord_role_name,
+          grantedByRoleName: rp.discord_role_name || guildRoleNameById.get(rp.discord_role_id) || null,
         })
       }
     }
@@ -312,7 +474,7 @@ serve(async (req) => {
     const hasAdminPermission = Array.from(permissionMap.values()).some(
       ({ permission }) => permission.name === 'admin_dashboard'
     )
-    const hasMemberPermission = permissionMap.size > 0 // Any permission = member
+    const hasMemberPermission = hasMembersAreaAccess(discordRoles)
 
     console.log(`Updating auth claims: is_admin=${hasAdminPermission}, is_member=${hasMemberPermission}`)
 
@@ -346,7 +508,7 @@ serve(async (req) => {
       const rp = (rolePermissions || []).find(r => r.discord_role_id === roleId)
       return {
         id: roleId,
-        name: rp?.discord_role_name || null,
+        name: guildRoleNameById.get(roleId) || rp?.discord_role_name || null,
       }
     })
 

@@ -8,6 +8,11 @@ import {
   AcademyModuleNotFoundError,
   AcademyModuleService,
 } from '@/lib/academy-v3/services'
+import {
+  AcademyAccessError,
+  assertMembersAreaRoleAccess,
+  assertModuleContentAccess,
+} from '@/lib/academy-v3/access-control'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { toSafeErrorMessage } from '@/lib/academy/api-utils'
 import { academyV3ErrorResponse } from '@/app/api/academy-v3/_shared'
@@ -35,11 +40,21 @@ export async function GET(
     if (!auth) {
       return academyV3ErrorResponse(401, 'UNAUTHORIZED', 'Unauthorized')
     }
+    const roleIds = await assertMembersAreaRoleAccess({
+      user: auth.user,
+      supabase: auth.supabase,
+    })
 
     const parsedParams = getAcademyModuleParamsSchema.safeParse(await params)
     if (!parsedParams.success) {
       return academyV3ErrorResponse(400, 'INVALID_PARAMS', 'Invalid route parameters', parsedParams.error.flatten())
     }
+    await assertModuleContentAccess({
+      supabase: auth.supabase,
+      userId: auth.user.id,
+      roleIds,
+      moduleSlug: parsedParams.data.slug,
+    })
 
     const moduleData = await new AcademyModuleService(auth.supabase).getModuleBySlug(parsedParams.data.slug)
     const lessonIds = moduleData.lessons.map((lesson) => lesson.id)
@@ -79,6 +94,10 @@ export async function GET(
 
     return NextResponse.json(payload)
   } catch (error) {
+    if (error instanceof AcademyAccessError) {
+      return academyV3ErrorResponse(error.status, error.code, error.message, error.details)
+    }
+
     if (error instanceof AcademyModuleNotFoundError) {
       return academyV3ErrorResponse(404, 'MODULE_NOT_FOUND', error.message)
     }

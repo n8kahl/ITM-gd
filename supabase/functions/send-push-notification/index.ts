@@ -30,10 +30,25 @@ async function verifyTeamMember(req: Request, supabase: any): Promise<{ user: an
     return { user: null, error: 'Invalid or expired token' }
   }
 
-  // Must be admin or team member
+  // Must be admin or explicit team member.
   const isAdmin = user.app_metadata?.is_admin === true
-  const isMember = user.app_metadata?.is_member === true
-  if (!isAdmin && !isMember) {
+
+  let isTeamMember = false
+  if (!isAdmin) {
+    const { data: teamMember, error: teamError } = await supabase
+      .from('team_members')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (teamError) {
+      console.warn('[send-push-notification] Team member lookup failed:', teamError.message)
+    } else {
+      isTeamMember = Boolean(teamMember?.id)
+    }
+  }
+
+  if (!isAdmin && !isTeamMember) {
     return { user: null, error: 'Forbidden: team member access required' }
   }
 

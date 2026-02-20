@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
 import {
@@ -130,41 +131,89 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
+    const normalizedTabs = tabs.map((tab: any) => ({
+      tab_id: String(tab.tab_id || '').trim(),
+      label: String(tab.label || '').trim(),
+      icon: String(tab.icon || 'LayoutDashboard').trim(),
+      path: String(tab.path || '').trim(),
+      required_tier: tab.required_tier,
+      badge_text: tab.badge_text ? String(tab.badge_text).trim() : null,
+      badge_variant: tab.badge_variant || null,
+      description: tab.description ? String(tab.description).trim() : null,
+      mobile_visible: tab.mobile_visible ?? true,
+      sort_order: Number(tab.sort_order || 0),
+      is_required: tab.is_required ?? false,
+      is_active: tab.is_active ?? true,
+      updated_at: new Date().toISOString(),
+    }))
 
-    // Upsert each tab configuration
-    for (const tab of tabs) {
-      const { error } = await supabase
+    const incomingIds = normalizedTabs.map((tab) => tab.tab_id).filter(Boolean)
+    if (incomingIds.length !== normalizedTabs.length) {
+      return NextResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Each tab must have a non-empty tab_id' } },
+        { status: 400 }
+      )
+    }
+
+    const incomingIdSet = new Set(incomingIds)
+    if (incomingIdSet.size !== incomingIds.length) {
+      return NextResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Duplicate tab_id values are not allowed' } },
+        { status: 400 }
+      )
+    }
+
+    const { data: existingRows, error: existingRowsError } = await supabase
+      .from('tab_configurations')
+      .select('tab_id')
+
+    if (existingRowsError) {
+      return NextResponse.json(
+        { success: false, error: { code: 'DB_ERROR', message: `Failed to load existing tab IDs: ${existingRowsError.message}` } },
+        { status: 500 }
+      )
+    }
+
+    const existingIds = (existingRows || []).map((row) => String((row as any).tab_id || '')).filter(Boolean)
+    const tabIdsToDelete = existingIds.filter((tabId) => !incomingIdSet.has(tabId))
+
+    if (tabIdsToDelete.length > 0) {
+      const { error: deleteError } = await supabase
         .from('tab_configurations')
-        .upsert({
-          tab_id: tab.tab_id,
-          label: tab.label,
-          icon: tab.icon,
-          path: tab.path,
-          required_tier: tab.required_tier,
-          badge_text: tab.badge_text || null,
-          badge_variant: tab.badge_variant || null,
-          description: tab.description || null,
-          mobile_visible: tab.mobile_visible ?? true,
-          sort_order: tab.sort_order,
-          is_required: tab.is_required ?? false,
-          is_active: tab.is_active ?? true,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'tab_id' })
+        .delete()
+        .in('tab_id', tabIdsToDelete)
 
-      if (error) {
+      if (deleteError) {
         return NextResponse.json(
-          { success: false, error: { code: 'DB_ERROR', message: `Failed to update tab ${tab.tab_id}: ${error.message}` } },
+          { success: false, error: { code: 'DB_ERROR', message: `Failed to remove deleted tabs: ${deleteError.message}` } },
           { status: 500 }
         )
       }
+    }
+
+    const { error: upsertError } = await supabase
+      .from('tab_configurations')
+      .upsert(normalizedTabs, { onConflict: 'tab_id' })
+
+    if (upsertError) {
+      return NextResponse.json(
+        { success: false, error: { code: 'DB_ERROR', message: `Failed to update tab configurations: ${upsertError.message}` } },
+        { status: 500 }
+      )
     }
 
     await logAdminActivity({
       action: 'tabs_updated',
       targetType: 'tab_config',
       targetId: userId,
-      details: { tabs_updated: tabs.map((t: { tab_id: string }) => t.tab_id) },
+      details: {
+        tabs_updated: incomingIds,
+        tabs_deleted: tabIdsToDelete,
+      },
     })
+
+    revalidatePath('/members')
+    revalidatePath('/api/config/tabs')
 
     // Return updated tabs
     const { data: updatedTabs } = await supabase

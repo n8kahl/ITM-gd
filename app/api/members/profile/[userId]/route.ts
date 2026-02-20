@@ -129,6 +129,11 @@ export async function GET(
       ? socialMeta?.discord_roles ?? []
       : []
   )
+  responseProfile.discord_role_titles = (
+    isOwner || privacySettings.show_discord_roles
+      ? socialMeta?.discord_role_titles ?? {}
+      : {}
+  )
 
   return successResponse(responseProfile)
 }

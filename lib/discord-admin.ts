@@ -12,6 +12,33 @@ export interface DiscordRole {
   mentionable: boolean
 }
 
+async function upsertDiscordRoleCatalog(
+  supabase: ReturnType<typeof createClient>,
+  roles: DiscordRole[],
+): Promise<void> {
+  if (roles.length === 0) return
+
+  const nowIso = new Date().toISOString()
+  const payload = roles.map((role) => ({
+    discord_role_id: role.id,
+    discord_role_name: role.name,
+    role_color: role.color || null,
+    position: role.position,
+    managed: role.managed,
+    mentionable: role.mentionable,
+    last_synced_at: nowIso,
+    updated_at: nowIso,
+  }))
+
+  const { error } = await supabase
+    .from('discord_guild_roles')
+    .upsert(payload, { onConflict: 'discord_role_id' })
+
+  if (error) {
+    console.warn('[discord-admin] Failed to upsert discord role catalog:', error.message)
+  }
+}
+
 export async function getDiscordGuildRoles(): Promise<DiscordRole[]> {
   // 1. Initialize Supabase Admin to get secrets
   const supabase = createClient(
@@ -46,6 +73,7 @@ export async function getDiscordGuildRoles(): Promise<DiscordRole[]> {
   }
 
   const roles: DiscordRole[] = await response.json()
+  await upsertDiscordRoleCatalog(supabase, roles)
 
   // Filter out the @everyone role and managed roles (bots) if desired
   return roles

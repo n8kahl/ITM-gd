@@ -89,6 +89,7 @@ const AUTH_PREFIXES = [
   '/admin',
   '/api/members',
   '/api/social',
+  '/api/academy-v3',
   '/members',
   '/join-discord',
   '/login',
@@ -112,7 +113,8 @@ function isAdminRoute(pathname: string): boolean {
 function isMembersAreaRoute(pathname: string): boolean {
   return pathname === '/members' || pathname.startsWith('/members/') ||
     pathname === '/api/members' || pathname.startsWith('/api/members/') ||
-    pathname === '/api/social' || pathname.startsWith('/api/social/')
+    pathname === '/api/social' || pathname.startsWith('/api/social/') ||
+    pathname === '/api/academy-v3' || pathname.startsWith('/api/academy-v3/')
 }
 
 async function resolveDiscordRoleIds(

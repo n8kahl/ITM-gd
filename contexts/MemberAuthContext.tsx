@@ -212,7 +212,7 @@ function buildRoleTitleMapFromSyncResult(result: any): Record<string, string> {
     const roleId = typeof role?.id === 'string' ? role.id : null
     const roleName = typeof role?.name === 'string' ? role.name : null
     if (!roleId) continue
-    roleTitleMap[roleId] = roleName && roleName.trim().length > 0 ? roleName : 'Unnamed Discord Role'
+    roleTitleMap[roleId] = roleName && roleName.trim().length > 0 ? roleName : 'Discord Role'
   }
 
   return roleTitleMap
@@ -604,9 +604,25 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
         const permissionRows = Array.isArray(userPermissions) ? userPermissions : []
         const roleTitleMap = buildRoleTitleMapFromPermissions(permissionRows)
+
+        if (roleIds.length > 0) {
+          const { data: guildRoleRows } = await supabase
+            .from('discord_guild_roles')
+            .select('discord_role_id, discord_role_name')
+            .in('discord_role_id', roleIds)
+
+          for (const row of guildRoleRows || []) {
+            const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
+            const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
+            if (roleId && roleName && !roleTitleMap[roleId]) {
+              roleTitleMap[roleId] = roleName
+            }
+          }
+        }
+
         for (const roleId of roleIds) {
           if (!roleTitleMap[roleId]) {
-            roleTitleMap[roleId] = 'Unnamed Discord Role'
+            roleTitleMap[roleId] = 'Discord Role'
           }
         }
 
