@@ -110,33 +110,45 @@ export default function RolesPage() {
   // Save role
   const handleSaveRole = async (index: number) => {
     const role = roles[index]
+    const discordRoleId = role.discord_role_id.trim()
 
-    if (!role.discord_role_id.trim()) {
+    if (!discordRoleId) {
       setError('Discord role is required')
       return
     }
 
     if (role.permission_ids.length === 0) {
-      setError('At least one permission must be selected')
+      setError('At least one app permission must be selected. Tab access is configured in Member Tabs.')
       return
     }
 
-    setSaving(role.discord_role_id)
+    const requestBody = {
+      discord_role_id: discordRoleId,
+      discord_role_name: role.discord_role_name?.trim() || null,
+      permission_ids: role.permission_ids,
+    }
+
+    setSaving(discordRoleId)
     setError(null)
 
     try {
-      const method = role.isNew ? 'POST' : 'PUT'
-      const response = await fetch('/api/admin/roles', {
-        method,
+      const initialMethod: 'POST' | 'PUT' = role.isNew ? 'POST' : 'PUT'
+      let response = await fetch('/api/admin/roles', {
+        method: initialMethod,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          discord_role_id: role.discord_role_id.trim(),
-          discord_role_name: role.discord_role_name?.trim() || null,
-          permission_ids: role.permission_ids,
-        }),
+        body: JSON.stringify(requestBody),
       })
+      let data = await response.json()
 
-      const data = await response.json()
+      // If the role already exists but UI still marked it as "new", retry as replace/update.
+      if (response.status === 409 && initialMethod === 'POST') {
+        response = await fetch('/api/admin/roles', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        })
+        data = await response.json()
+      }
 
       if (data.success) {
         setSuccess(`Role "${getRoleTitle(role)}" saved successfully`)
@@ -286,6 +298,8 @@ export default function RolesPage() {
             <li>Click &quot;Add New Mapping&quot; and pick a Discord role title</li>
             <li>Select one or more app permissions for that role</li>
             <li>Save the mapping to apply access rules immediately</li>
+            <li>Configure tab visibility in <a href="/admin/tabs" className="text-emerald-500 hover:underline">Member Tabs</a></li>
+            <li>Map Discord roles to tier levels in <a href="/admin/settings#membership-tier-mapping" className="text-emerald-500 hover:underline">Admin Settings</a></li>
             <li>Use Reload if you recently changed Discord roles</li>
           </ol>
           <a
