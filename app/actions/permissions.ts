@@ -1,6 +1,6 @@
 'use server'
 
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient, isAdminUser } from '@/lib/supabase-server'
 import { getDiscordGuildRoles } from '@/lib/discord-admin'
 import { RolePermission, MemberTab } from '@/lib/types_db'
 import { revalidatePath } from 'next/cache'
@@ -18,8 +18,7 @@ export async function syncDiscordRoles(): Promise<{
     const supabase = await createServerSupabaseClient()
 
     // Verify admin access
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.app_metadata?.is_admin) {
+    if (!await isAdminUser()) {
       return { success: false, error: 'Unauthorized' }
     }
 
@@ -76,8 +75,7 @@ export async function updateRolePermissions(
     const supabase = await createServerSupabaseClient()
 
     // Verify admin access
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.app_metadata?.is_admin) {
+    if (!await isAdminUser()) {
       return { success: false, error: 'Unauthorized' }
     }
 
@@ -117,8 +115,7 @@ export async function getRolePermissions(): Promise<{
     const supabase = await createServerSupabaseClient()
 
     // Verify admin access
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.app_metadata?.is_admin) {
+    if (!await isAdminUser()) {
       return { success: false, error: 'Unauthorized' }
     }
 

@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { testDiscordConnection } from '@/app/actions/test-discord'
+import { DiscordRolePicker } from '@/components/admin/discord-role-picker'
 
 interface DiscordConfig {
   discord_client_id: string
@@ -39,6 +40,11 @@ interface AppSetting {
   description: string | null
   created_at: string
   updated_at: string
+}
+
+interface DiscordRole {
+  id: string
+  name: string
 }
 
 const DISCORD_FIELDS = [
@@ -102,6 +108,7 @@ export default function SettingsPage() {
   const [newRoleId, setNewRoleId] = useState('')
   const [newTier, setNewTier] = useState<MembershipTier>('core')
   const [savingTiers, setSavingTiers] = useState(false)
+  const [discordRoleMap, setDiscordRoleMap] = useState<Record<string, string>>({})
 
   // AI Prompt state
   const [aiPrompt, setAiPrompt] = useState('')
@@ -111,6 +118,7 @@ export default function SettingsPage() {
     loadSettings()
     loadTierMapping()
     loadAIPrompt()
+    loadDiscordRoles()
   }, [])
 
   const loadSettings = async () => {
@@ -164,6 +172,31 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Failed to load AI prompt:', err)
     }
+  }
+
+  const loadDiscordRoles = async () => {
+    try {
+      const response = await fetch('/api/admin/discord/roles')
+      const data = await response.json()
+      if (data.success && Array.isArray(data.roles)) {
+        const roleMap: Record<string, string> = {}
+        for (const role of data.roles as DiscordRole[]) {
+          const roleId = String(role.id || '').trim()
+          const roleName = String(role.name || '').trim()
+          if (roleId && roleName) {
+            roleMap[roleId] = roleName
+          }
+        }
+        setDiscordRoleMap(roleMap)
+      }
+    } catch (err) {
+      console.error('Failed to load Discord roles:', err)
+    }
+  }
+
+  const resolveRoleTitle = (roleId: string): string => {
+    const title = discordRoleMap[roleId]
+    return title && title.length > 0 ? title : 'Unnamed Discord Role'
   }
 
   const saveAIPrompt = async () => {
@@ -222,11 +255,11 @@ export default function SettingsPage() {
 
   const addTierMapping = () => {
     if (!newRoleId.trim()) {
-      setError('Role ID is required')
+      setError('Discord role is required')
       return
     }
     if (tierMapping[newRoleId.trim()]) {
-      setError('This role ID is already mapped')
+      setError('This role is already mapped')
       return
     }
     setTierMapping(prev => ({
@@ -546,7 +579,7 @@ export default function SettingsPage() {
             Membership Tier Mapping
           </CardTitle>
           <p className="text-sm text-white/60">
-            Map Discord role IDs to membership tiers. Copy role IDs from Discord (Developer Mode → Right-click role → Copy ID).
+            Map Discord role titles to membership tiers.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -565,9 +598,9 @@ export default function SettingsPage() {
                   className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
                 >
                   <div className="flex items-center gap-4">
-                    <code className="text-sm text-white/80 font-mono bg-white/5 px-2 py-1 rounded">
-                      {roleId}
-                    </code>
+                    <span className="text-sm text-white/80 bg-white/5 px-2 py-1 rounded">
+                      {resolveRoleTitle(roleId)}
+                    </span>
                     <span className="text-white/40">→</span>
                     <span className={cn(
                       'px-3 py-1 rounded-full text-sm font-medium capitalize',
@@ -594,13 +627,12 @@ export default function SettingsPage() {
           <div className="p-4 rounded-lg bg-white/5 border border-white/10">
             <h4 className="text-sm font-medium text-white mb-3">Add New Mapping</h4>
             <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={newRoleId}
-                onChange={(e) => setNewRoleId(e.target.value)}
-                placeholder="Discord Role ID (e.g., 1234567890123456789)"
-                className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:border-emerald-500 focus:outline-none font-mono text-sm"
-              />
+              <div className="flex-1">
+                <DiscordRolePicker
+                  value={newRoleId}
+                  onChange={(id) => setNewRoleId(id)}
+                />
+              </div>
               <select
                 value={newTier}
                 onChange={(e) => setNewTier(e.target.value as MembershipTier)}

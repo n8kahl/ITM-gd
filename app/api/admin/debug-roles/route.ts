@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { isAdminUser } from '@/lib/supabase-server'
+import { DISCORD_PRIVILEGED_ROLE_ID } from '@/lib/discord-role-access'
 
 /**
  * Admin Debug Endpoint - Diagnose Discord role sync issues
@@ -11,10 +13,10 @@ import { cookies } from 'next/headers'
  * - Current JWT claims
  * - What the sync would return
  *
- * Access: Must be authenticated AND have is_admin claim
+ * Access: Must be authenticated AND pass admin access checks.
  * URL: /api/admin/debug-roles
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const cookieStore = await cookies()
 
@@ -47,13 +49,13 @@ export async function GET(request: NextRequest) {
     }
 
     // SECURITY: Require admin role — this endpoint exposes sensitive role mappings
-    const appMetadata = user.app_metadata || {}
-    if (appMetadata.is_admin !== true) {
+    if (!await isAdminUser()) {
       return NextResponse.json({
         error: 'Forbidden',
         message: 'Admin access required'
       }, { status: 403 })
     }
+    const appMetadata = user.app_metadata || {}
 
     const userId = user.id
     const email = user.email
@@ -144,16 +146,16 @@ export async function GET(request: NextRequest) {
       database_mappings: {
         all_role_mappings: roleMappings,
         admin_role_mapping: roleMappings?.find(
-          (m: any) => m.discord_role_id === '1465515598640447662'
+          (m: any) => m.discord_role_id === DISCORD_PRIVILEGED_ROLE_ID
         ),
-        user_has_admin_role: discordProfile?.discord_roles?.includes('1465515598640447662'),
+        user_has_admin_role: discordProfile?.discord_roles?.includes(DISCORD_PRIVILEGED_ROLE_ID),
       },
       user_permissions: userPermissions,
       diagnosis: {
         has_discord_profile: !!discordProfile,
         discord_roles_count: discordProfile?.discord_roles?.length || 0,
-        has_admin_role_in_discord: discordProfile?.discord_roles?.includes('1465515598640447662') || false,
-        admin_role_mapped_in_db: !!roleMappings?.find((m: any) => m.discord_role_id === '1465515598640447662'),
+        has_admin_role_in_discord: discordProfile?.discord_roles?.includes(DISCORD_PRIVILEGED_ROLE_ID) || false,
+        admin_role_mapped_in_db: !!roleMappings?.find((m: any) => m.discord_role_id === DISCORD_PRIVILEGED_ROLE_ID),
         has_admin_permission_in_db: !!userPermissions?.find((p: any) => p.app_permissions?.name === 'admin_dashboard'),
         jwt_has_admin_claim: appMetadata.is_admin === true,
         should_have_admin_access: false, // Will be computed below

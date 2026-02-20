@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
-
-// Only this Discord role ID may access the Members area (UI + APIs).
-const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
+import {
+  extractDiscordRoleIdsFromUser,
+  hasAdminRoleAccess,
+  hasMembersAreaAccess,
+  normalizeDiscordRoleIds,
+} from '@/lib/discord-role-access'
 
 /**
  * Validate redirect path to prevent open redirect attacks.
@@ -112,18 +115,34 @@ function isMembersAreaRoute(pathname: string): boolean {
     pathname === '/api/social' || pathname.startsWith('/api/social/')
 }
 
-function extractDiscordRoleIds(user: any): string[] {
-  const fromAppMeta = (user?.app_metadata as { discord_roles?: unknown } | undefined)?.discord_roles
-  if (Array.isArray(fromAppMeta)) {
-    return fromAppMeta.map((id) => String(id)).filter(Boolean)
+async function resolveDiscordRoleIds(
+  supabase: any,
+  user: any,
+  forceProfileLookup = false,
+): Promise<string[]> {
+  let roleIds = extractDiscordRoleIdsFromUser(user)
+  if (!forceProfileLookup && roleIds.length > 0) return roleIds
+
+  // Fallback: query cached Discord profile roles if JWT metadata does not include them.
+  try {
+    const rolesResult = await Promise.race([
+      supabase
+        .from('user_discord_profiles')
+        .select('discord_roles')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('roles lookup timeout')), 2000)),
+    ]) as any
+
+    const profileRoleIds = normalizeDiscordRoleIds(rolesResult?.data?.discord_roles)
+    if (profileRoleIds.length > 0) {
+      roleIds = Array.from(new Set([...roleIds, ...profileRoleIds]))
+    }
+  } catch (err) {
+    console.warn('[Middleware] Failed to lookup user_discord_profiles.discord_roles:', err)
   }
 
-  const fromUserMeta = (user?.user_metadata as { discord_roles?: unknown } | undefined)?.discord_roles
-  if (Array.isArray(fromUserMeta)) {
-    return fromUserMeta.map((id) => String(id)).filter(Boolean)
-  }
-
-  return []
+  return roleIds
 }
 
 function jsonError(message: string, status: number): NextResponse {
@@ -201,17 +220,13 @@ export async function proxy(request: NextRequest) {
   }
 
   let user = null
-  let authError = null
-
   try {
     const result = await getUserWithTimeout()
     user = result.data.user
-    authError = result.error
   } catch (err) {
     console.error('[Middleware] getUser() failed or timed out:', err)
     // On timeout/error, allow page to load but mark as unauthenticated
     user = null
-    authError = err
   }
 
   // Extract app_metadata from user (contains RBAC claims)
@@ -223,8 +238,6 @@ export async function proxy(request: NextRequest) {
   // ADMIN ROUTES PROTECTION
   // ============================================
   if (isAdminRoute(pathname)) {
-    // Strict Discord-only authentication
-    // Only users with is_admin claim (from Discord roles) can access
     if (!isAuthenticated) {
       if (isApiRoute(pathname)) {
         return addSecurityHeaders(jsonError('Unauthorized', 401), nonce)
@@ -235,7 +248,17 @@ export async function proxy(request: NextRequest) {
       return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
-    if (!isAdmin) {
+    let hasAdminAccess = isAdmin
+    if (!hasAdminAccess) {
+      let roleIds = await resolveDiscordRoleIds(supabase, user)
+      hasAdminAccess = hasAdminRoleAccess(roleIds)
+      if (!hasAdminAccess) {
+        roleIds = await resolveDiscordRoleIds(supabase, user, true)
+        hasAdminAccess = hasAdminRoleAccess(roleIds)
+      }
+    }
+
+    if (!hasAdminAccess) {
       if (isApiRoute(pathname)) {
         return addSecurityHeaders(jsonError('Forbidden', 403), nonce)
       }
@@ -263,30 +286,12 @@ export async function proxy(request: NextRequest) {
       return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
-    let roleIds = extractDiscordRoleIds(user)
-
-    // Fallback: query cached Discord profile roles if JWT metadata does not include them.
-    if (roleIds.length === 0) {
-      try {
-        const rolesResult = await Promise.race([
-          supabase
-            .from('user_discord_profiles')
-            .select('discord_roles')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('roles lookup timeout')), 2000)),
-        ]) as any
-
-        const discordRoles = rolesResult?.data?.discord_roles
-        if (Array.isArray(discordRoles)) {
-          roleIds = discordRoles.map((id: unknown) => String(id)).filter(Boolean)
-        }
-      } catch (err) {
-        console.warn('[Middleware] Failed to lookup user_discord_profiles.discord_roles:', err)
-      }
+    let roleIds = await resolveDiscordRoleIds(supabase, user)
+    let hasMembersRole = hasMembersAreaAccess(roleIds)
+    if (!hasMembersRole) {
+      roleIds = await resolveDiscordRoleIds(supabase, user, true)
+      hasMembersRole = hasMembersAreaAccess(roleIds)
     }
-
-    const hasMembersRole = roleIds.includes(MEMBERS_REQUIRED_ROLE_ID)
 
     if (!hasMembersRole) {
       if (isApiRoute(pathname)) {
@@ -332,7 +337,17 @@ export async function proxy(request: NextRequest) {
       }
 
       // Default: send admins to /admin, members to /members
-      const defaultRedirect = isAdmin ? '/admin' : '/members'
+      let shouldRedirectToAdmin = isAdmin
+      if (!shouldRedirectToAdmin) {
+        let roleIds = await resolveDiscordRoleIds(supabase, user)
+        shouldRedirectToAdmin = hasAdminRoleAccess(roleIds)
+        if (!shouldRedirectToAdmin) {
+          roleIds = await resolveDiscordRoleIds(supabase, user, true)
+          shouldRedirectToAdmin = hasAdminRoleAccess(roleIds)
+        }
+      }
+
+      const defaultRedirect = shouldRedirectToAdmin ? '/admin' : '/members'
       return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(defaultRedirect, request)), nonce)
     }
 

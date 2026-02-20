@@ -11,7 +11,8 @@ import { AdminLayoutShell } from '@/components/admin/admin-layout-shell'
  * admin access, they will see a 404 page.
  *
  * Access is granted if:
- * 1. User has is_admin=true in their JWT app_metadata (set by Discord role sync)
+ * 1. User has is_admin=true in JWT claims, OR
+ * 2. User has the privileged Discord admin role ID used by access middleware.
  */
 export default async function AdminLayout({
   children,

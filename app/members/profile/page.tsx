@@ -178,6 +178,7 @@ export default function ProfilePage() {
         discordUsername={authProfile?.discord_username}
         discordAvatar={authProfile?.discord_avatar}
         discordRoles={authProfile?.discord_roles}
+        discordRoleTitles={authProfile?.discord_role_titles}
         onSyncRoles={syncDiscordRoles}
       />
 

@@ -91,6 +91,23 @@ export default function AdminMembersAccessPage() {
   const hasMembersRole = result?.access?.has_members_required_role === true
   const resolvedTier = result?.access?.resolved_tier || null
   const effectiveRoles = Array.isArray(result?.access?.effective_role_ids) ? result.access.effective_role_ids : []
+  const roleTitlesById: Record<string, string> = (
+    result?.access?.role_titles_by_id && typeof result.access.role_titles_by_id === 'object'
+  )
+    ? result.access.role_titles_by_id
+    : {}
+  const membersAllowedRoleIds = Array.isArray(result?.constants?.members_allowed_role_ids)
+    ? result.constants.members_allowed_role_ids
+    : []
+  const membersAllowedRoleTitlesById: Record<string, string> = (
+    result?.constants?.members_allowed_role_titles_by_id
+    && typeof result.constants.members_allowed_role_titles_by_id === 'object'
+  )
+    ? result.constants.members_allowed_role_titles_by_id
+    : {}
+  const membersAllowedRoleTitles = membersAllowedRoleIds.map((roleId: string) => (
+    membersAllowedRoleTitlesById[roleId] || roleTitlesById[roleId] || 'Configured member role'
+  ))
   const lastSyncedAt = result?.discord_profile?.last_synced_at || null
   const expectedMissing = Array.isArray(result?.permissions?.expected_missing) ? result.permissions.expected_missing : []
 
@@ -250,6 +267,20 @@ export default function AdminMembersAccessPage() {
                 </div>
               </div>
 
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <p className="text-white text-sm font-medium">Effective Discord roles</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {effectiveRoles.map((roleId: string) => (
+                    <span key={roleId} className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-white/80">
+                      {roleTitlesById[roleId] || 'Unnamed Discord Role'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               {expectedMissing.length > 0 && (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <p className="text-amber-200 text-sm font-medium mb-2">Missing permissions (expected from mappings)</p>
@@ -267,7 +298,7 @@ export default function AdminMembersAccessPage() {
                 <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                   <p className="text-red-200 text-sm font-medium">Members gate failed</p>
                   <p className="text-xs text-red-200/70 mt-1">
-                    The user is missing the required Discord role ID shown in `constants.members_required_role_id`.
+                    The user is missing all allowed members roles ({membersAllowedRoleTitles.join(', ') || 'none configured'}).
                   </p>
                 </div>
               )}
@@ -278,4 +309,3 @@ export default function AdminMembersAccessPage() {
     </div>
   )
 }
-

@@ -1,5 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies, headers } from 'next/headers'
+import {
+  extractDiscordRoleIdsFromUser,
+  hasAdminRoleAccess,
+  normalizeDiscordRoleIds,
+} from '@/lib/discord-role-access'
 
 /**
  * Creates a Supabase client for use in Server Components, Server Actions, and Route Handlers.
@@ -61,7 +66,9 @@ export async function getServerUser() {
 
 /**
  * Checks if the current user has admin access.
- * Returns true if user has is_admin=true in app_metadata (set by Discord role sync).
+ * Returns true when either:
+ * 1) is_admin=true exists in app_metadata, or
+ * 2) the user has the privileged Discord admin role.
  */
 export async function isAdminUser(): Promise<boolean> {
   const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
@@ -73,7 +80,34 @@ export async function isAdminUser(): Promise<boolean> {
     }
   }
 
-  // Check RBAC claim from Discord OAuth
-  const user = await getServerUser()
-  return user?.appMetadata?.is_admin === true
+  const supabase = await createServerSupabaseClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) {
+    return false
+  }
+
+  if ((user.app_metadata as AppMetadata | undefined)?.is_admin === true) {
+    return true
+  }
+
+  let roleIds = extractDiscordRoleIdsFromUser(user)
+  if (hasAdminRoleAccess(roleIds)) {
+    return true
+  }
+
+  try {
+    const { data: profile } = await supabase
+      .from('user_discord_profiles')
+      .select('discord_roles')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const profileRoleIds = normalizeDiscordRoleIds(profile?.discord_roles)
+    if (profileRoleIds.length > 0) {
+      roleIds = Array.from(new Set([...roleIds, ...profileRoleIds]))
+    }
+  } catch {
+    return false
+  }
+
+  return hasAdminRoleAccess(roleIds)
 }

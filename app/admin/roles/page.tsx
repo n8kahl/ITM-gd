@@ -11,7 +11,6 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  Copy,
   ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +31,11 @@ interface RoleMapping {
   mapping_ids: string[]
   isNew?: boolean
   hasChanges?: boolean
+}
+
+function getRoleTitle(role: Pick<RoleMapping, 'discord_role_name'>): string {
+  const explicitName = role.discord_role_name?.trim()
+  return explicitName && explicitName.length > 0 ? explicitName : 'Unnamed Discord Role'
 }
 
 export default function RolesPage() {
@@ -108,7 +112,7 @@ export default function RolesPage() {
     const role = roles[index]
 
     if (!role.discord_role_id.trim()) {
-      setError('Discord Role ID is required')
+      setError('Discord role is required')
       return
     }
 
@@ -135,7 +139,7 @@ export default function RolesPage() {
       const data = await response.json()
 
       if (data.success) {
-        setSuccess(`Role "${role.discord_role_name || role.discord_role_id}" saved successfully`)
+        setSuccess(`Role "${getRoleTitle(role)}" saved successfully`)
         setTimeout(() => setSuccess(null), 3000)
 
         // Update role state
@@ -168,7 +172,7 @@ export default function RolesPage() {
       return
     }
 
-    if (!confirm(`Delete all permission mappings for "${role.discord_role_name || role.discord_role_id}"?`)) {
+    if (!confirm(`Delete all permission mappings for "${getRoleTitle(role)}"?`)) {
       return
     }
 
@@ -208,13 +212,6 @@ export default function RolesPage() {
       // Reload data to reset changes
       loadData()
     }
-  }
-
-  // Copy role ID to clipboard
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setSuccess('Copied to clipboard')
-    setTimeout(() => setSuccess(null), 2000)
   }
 
   if (loading) {
@@ -284,12 +281,12 @@ export default function RolesPage() {
       {/* Instructions Card */}
       <Card className="bg-gradient-to-br from-emerald-500/10 to-transparent border-emerald-500/20">
         <CardContent className="pt-6">
-          <h3 className="font-medium text-white mb-2">How to Get Discord Role IDs</h3>
+          <h3 className="font-medium text-white mb-2">How Role Mapping Works</h3>
           <ol className="text-sm text-white/70 space-y-1 list-decimal list-inside">
-            <li>Open Discord and go to Server Settings → Roles</li>
-            <li>Enable Developer Mode in User Settings → Advanced</li>
-            <li>Right-click any role and select &quot;Copy Role ID&quot;</li>
-            <li>Paste the ID below and assign permissions</li>
+            <li>Click &quot;Add New Mapping&quot; and pick a Discord role title</li>
+            <li>Select one or more app permissions for that role</li>
+            <li>Save the mapping to apply access rules immediately</li>
+            <li>Use Reload if you recently changed Discord roles</li>
           </ol>
           <a
             href="https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID"
@@ -297,7 +294,7 @@ export default function RolesPage() {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-emerald-500 text-sm mt-3 hover:underline"
           >
-            Learn more about Discord IDs
+            Learn more about Discord roles
             <ExternalLink className="w-3 h-3" />
           </a>
         </CardContent>
@@ -369,25 +366,11 @@ export default function RolesPage() {
                           // Update both fields at once to avoid race condition
                           updateRole(index, {
                             discord_role_id: id,
-                            discord_role_name: name,
+                            discord_role_name: name || null,
                           })
                         }}
                         disabled={!role.isNew}
                       />
-                      {!role.isNew && role.discord_role_id && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <code className="text-xs text-white/40 font-mono">
-                            ID: {role.discord_role_id}
-                          </code>
-                          <button
-                            onClick={() => copyToClipboard(role.discord_role_id)}
-                            className="p-1 text-white/40 hover:text-white"
-                            title="Copy Role ID"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
                     </div>
 
                     {/* Actions */}
@@ -427,11 +410,10 @@ export default function RolesPage() {
                   </div>
 
                   {/* Selected Role Display */}
-                  {role.discord_role_id && role.discord_role_name && (
+                  {role.discord_role_id && (
                     <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
                       <span className="text-sm text-white/60">Selected: </span>
-                      <span className="text-sm text-white font-medium">{role.discord_role_name}</span>
-                      <span className="text-xs text-white/40 ml-2">({role.discord_role_id})</span>
+                      <span className="text-sm text-white font-medium">{getRoleTitle(role)}</span>
                     </div>
                   )}
 

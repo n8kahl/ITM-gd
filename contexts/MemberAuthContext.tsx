@@ -34,6 +34,7 @@ export interface MemberProfile {
   discord_username: string | null
   discord_avatar: string | null
   discord_roles: string[]
+  discord_role_titles: Record<string, string>
   membership_tier: 'core' | 'pro' | 'executive' | null
 }
 
@@ -134,6 +135,10 @@ function createE2EBypassAuthState(): MemberAuthState {
       discord_username: 'E2E Member',
       discord_avatar: null,
       discord_roles: ['role-member', 'role-pro'],
+      discord_role_titles: {
+        'role-member': 'Member',
+        'role-pro': 'Pro',
+      },
       membership_tier: 'pro',
     },
     permissions: [{
@@ -197,6 +202,33 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeoutId)
   }
+}
+
+function buildRoleTitleMapFromSyncResult(result: any): Record<string, string> {
+  const roleTitleMap: Record<string, string> = {}
+  const roles = Array.isArray(result?.roles) ? result.roles : []
+
+  for (const role of roles) {
+    const roleId = typeof role?.id === 'string' ? role.id : null
+    const roleName = typeof role?.name === 'string' ? role.name : null
+    if (!roleId) continue
+    roleTitleMap[roleId] = roleName && roleName.trim().length > 0 ? roleName : 'Unnamed Discord Role'
+  }
+
+  return roleTitleMap
+}
+
+function buildRoleTitleMapFromPermissions(rows: any[]): Record<string, string> {
+  const roleTitleMap: Record<string, string> = {}
+  for (const row of rows) {
+    const roleId = typeof row?.granted_by_role_id === 'string' ? row.granted_by_role_id : null
+    const roleName = typeof row?.granted_by_role_name === 'string' ? row.granted_by_role_name : null
+    if (!roleId || !roleName) continue
+    if (!roleTitleMap[roleId]) {
+      roleTitleMap[roleId] = roleName
+    }
+  }
+  return roleTitleMap
 }
 
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
@@ -397,6 +429,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
       // Extract role IDs for tier determination (not names)
       const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
+      const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
 
       // Update state with sync results
       const profile: MemberProfile = {
@@ -406,6 +439,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         discord_username: result.discord_username,
         discord_avatar: result.discord_avatar || null, // Store avatar from sync result
         discord_roles: roleIds,
+        discord_role_titles: roleTitleMap,
         membership_tier: getMembershipTierRef.current(roleIds),
       }
 
@@ -551,21 +585,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
 
       if (discordProfile) {
-        const profile: MemberProfile = {
-          id: user.id,
-          email: user.email || null,
-          discord_user_id: discordProfile.discord_user_id,
-          discord_username: discordProfile.discord_username,
-          discord_avatar: discordProfile.discord_avatar,
-          discord_roles: discordProfile.discord_roles || [],
-          membership_tier: getMembershipTierRef.current(discordProfile.discord_roles || []),
-        }
+        const roleIds = Array.isArray(discordProfile.discord_roles) ? discordProfile.discord_roles : []
 
         // Get cached permissions
         const { data: userPermissions } = await supabase
           .from('user_permissions')
           .select(`
             permission_id,
+            granted_by_role_id,
             granted_by_role_name,
             app_permissions (
               id,
@@ -575,7 +602,26 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           `)
           .eq('user_id', user.id)
 
-        const permissions: MemberPermission[] = (userPermissions || []).map((up: any) => ({
+        const permissionRows = Array.isArray(userPermissions) ? userPermissions : []
+        const roleTitleMap = buildRoleTitleMapFromPermissions(permissionRows)
+        for (const roleId of roleIds) {
+          if (!roleTitleMap[roleId]) {
+            roleTitleMap[roleId] = 'Unnamed Discord Role'
+          }
+        }
+
+        const profile: MemberProfile = {
+          id: user.id,
+          email: user.email || null,
+          discord_user_id: discordProfile.discord_user_id,
+          discord_username: discordProfile.discord_username,
+          discord_avatar: discordProfile.discord_avatar,
+          discord_roles: roleIds,
+          discord_role_titles: roleTitleMap,
+          membership_tier: getMembershipTierRef.current(roleIds),
+        }
+
+        const permissions: MemberPermission[] = permissionRows.map((up: any) => ({
           id: up.app_permissions?.id || up.permission_id,
           name: up.app_permissions?.name || '',
           description: up.app_permissions?.description || null,
@@ -627,6 +673,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         if (result.success) {
           // Use role IDs for tier determination
           const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
+          const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
 
           const profile: MemberProfile = {
             id: user.id,
@@ -635,6 +682,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_username: result.discord_username,
             discord_avatar: result.discord_avatar || null,
             discord_roles: roleIds,
+            discord_role_titles: roleTitleMap,
             membership_tier: getMembershipTierRef.current(roleIds),
           }
 
@@ -665,6 +713,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
             discord_avatar: user.user_metadata?.avatar_url || null,
             discord_roles: [],
+            discord_role_titles: {},
             membership_tier: null,
           }
 
@@ -693,6 +742,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
             discord_avatar: user.user_metadata?.avatar_url || null,
             discord_roles: [],
+            discord_role_titles: {},
             membership_tier: null,
           }
 

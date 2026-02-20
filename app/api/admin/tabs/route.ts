@@ -2,6 +2,11 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
+import {
+  extractDiscordRoleIdsFromUser,
+  hasAdminRoleAccess,
+  normalizeDiscordRoleIds,
+} from '@/lib/discord-role-access'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -23,11 +28,35 @@ async function requireAdmin(): Promise<{ authorized: boolean; userId?: string; r
       console.error('[Admin Tabs API] No user in session')
       return { authorized: false, reason: 'no_session' }
     }
-    const isAdmin = user.app_metadata?.is_admin === true
-    if (!isAdmin) {
+
+    if (user.app_metadata?.is_admin === true) {
+      return { authorized: true, userId: user.id }
+    }
+
+    let roleIds = extractDiscordRoleIdsFromUser(user)
+    let hasRoleAccess = hasAdminRoleAccess(roleIds)
+    if (!hasRoleAccess) {
+      try {
+        const { data: profile } = await supabase
+          .from('user_discord_profiles')
+          .select('discord_roles')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        const profileRoleIds = normalizeDiscordRoleIds(profile?.discord_roles)
+        if (profileRoleIds.length > 0) {
+          roleIds = Array.from(new Set([...roleIds, ...profileRoleIds]))
+        }
+        hasRoleAccess = hasAdminRoleAccess(roleIds)
+      } catch (lookupErr) {
+        console.warn('[Admin Tabs API] Discord role lookup failed:', lookupErr)
+      }
+    }
+
+    if (!hasRoleAccess) {
       console.error('[Admin Tabs API] User is not admin:', user.id)
       return { authorized: false, reason: 'not_admin' }
     }
+
     return { authorized: true, userId: user.id }
   } catch (err) {
     console.error('[Admin Tabs API] requireAdmin exception:', err)
