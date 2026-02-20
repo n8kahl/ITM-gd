@@ -120,7 +120,7 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
     { id: null, name: 'Public (No Role Required)' },
     ...discordRoles.map(role => ({
       id: role.discord_role_id,
-      name: role.discord_role_name || role.discord_role_id
+      name: role.discord_role_name || 'Unnamed Role'
     }))
   ]
 
@@ -255,23 +255,6 @@ export function CourseEditorSheet({ open, onClose, course, onSave }: CourseEdito
                   No Discord roles configured. Add roles in Settings → Role Mapping.
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                {discordRoles.map((role) => (
-                  <button
-                    key={role.discord_role_id || 'public'}
-                    type="button"
-                    onClick={() => setForm({ ...form, discord_role_required: role.discord_role_id })}
-                    className={cn(
-                      'p-3 rounded-lg border text-left text-sm transition-colors',
-                      form.discord_role_required === role.discord_role_id
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
-                        : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/20'
-                    )}
-                  >
-                    {role.discord_role_name || role.discord_role_id}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Published Toggle */}

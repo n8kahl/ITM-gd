@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
+import { hasMembersAreaAccess } from '@/lib/discord-role-access'
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
-const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
 
 const ERROR_CODES = {
   NOT_MEMBER: 'NOT_MEMBER',
@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
       discord_user_id: discordUserId,
       discord_username: username,
       discord_roles: discordRoles,
-      has_members_required_role: discordRoles.includes(MEMBERS_REQUIRED_ROLE_ID),
+      has_members_required_role: hasMembersAreaAccess(discordRoles),
       permissions: Array.from(permissionMap.values()).map(({ permission, grantedByRoleName }) => ({
         id: permission.id,
         name: permission.name,

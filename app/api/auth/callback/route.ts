@@ -3,16 +3,11 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getSafeRedirect } from '@/lib/safe-redirect'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
-
-// Only this Discord role ID may access the Members area.
-const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
-
-function extractDiscordRoleIds(meta: unknown): string[] {
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return []
-  const roles = (meta as { discord_roles?: unknown }).discord_roles
-  if (!Array.isArray(roles)) return []
-  return roles.map((id) => String(id)).filter(Boolean)
-}
+import {
+  hasAdminRoleAccess,
+  hasMembersAreaAccess,
+  normalizeDiscordRoleIds,
+} from '@/lib/discord-role-access'
 
 /**
  * Server-side OAuth callback handler
@@ -212,34 +207,40 @@ export async function GET(request: NextRequest) {
       redirectUrl = '/join-discord'
     }
     else {
-      // Members area access is restricted to a single Discord role ID.
+      // Members and admin-area fallback checks are role-gated.
       let hasMembersRole = false
+      let hasAdminRole = false
 
       // 1) Prefer JWT app_metadata (best case: edge function stored discord_roles).
-      const rolesFromJwt = extractDiscordRoleIds(currentSession.user.app_metadata)
-      hasMembersRole = rolesFromJwt.includes(MEMBERS_REQUIRED_ROLE_ID)
+      const rolesFromJwt = normalizeDiscordRoleIds(
+        (currentSession.user.app_metadata as { discord_roles?: unknown } | undefined)?.discord_roles,
+      )
+      hasMembersRole = hasMembersAreaAccess(rolesFromJwt)
+      hasAdminRole = hasAdminRoleAccess(rolesFromJwt)
 
       // 2) Fall back to edge function response.
-      if (!hasMembersRole && syncResult?.success) {
-        const rolesFromSync = Array.isArray((syncResult as any).roles)
-          ? (syncResult as any).roles.map((r: any) => String(r?.id)).filter(Boolean)
-          : []
-        hasMembersRole = rolesFromSync.includes(MEMBERS_REQUIRED_ROLE_ID)
+      if ((!hasMembersRole || !hasAdminRole) && syncResult?.success) {
+        const rolesFromSync = normalizeDiscordRoleIds(
+          Array.isArray((syncResult as any).roles)
+            ? (syncResult as any).roles.map((r: any) => r?.id)
+            : [],
+        )
+        if (!hasMembersRole) hasMembersRole = hasMembersAreaAccess(rolesFromSync)
+        if (!hasAdminRole) hasAdminRole = hasAdminRoleAccess(rolesFromSync)
       }
 
       // 3) Final fallback: cached DB profile (works even if claims didn't propagate yet).
-      if (!hasMembersRole) {
+      if (!hasMembersRole || !hasAdminRole) {
         try {
           const { data: discordProfile } = await supabase
             .from('user_discord_profiles')
             .select('discord_roles')
             .eq('user_id', currentSession.user.id)
             .maybeSingle()
-          if (Array.isArray(discordProfile?.discord_roles)) {
-            hasMembersRole = discordProfile.discord_roles
-              .map((id: unknown) => String(id))
-              .includes(MEMBERS_REQUIRED_ROLE_ID)
-          }
+
+          const rolesFromProfile = normalizeDiscordRoleIds(discordProfile?.discord_roles)
+          if (!hasMembersRole) hasMembersRole = hasMembersAreaAccess(rolesFromProfile)
+          if (!hasAdminRole) hasAdminRole = hasAdminRoleAccess(rolesFromProfile)
         } catch (err) {
           console.warn('Role lookup failed during callback (non-fatal):', err)
         }
@@ -264,7 +265,7 @@ export async function GET(request: NextRequest) {
         }
       }
       // Admin users go to admin dashboard
-      else if (isAdmin) {
+      else if (isAdmin || hasAdminRole) {
         console.log('→ Redirecting to /admin (admin user)')
         redirectUrl = '/admin'
       }

@@ -397,8 +397,10 @@ export default function PackagesPage() {
                         />
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-mono text-white/60">
-                            {tier.discord_role_name || tier.discord_role_id || 'No role linked'}
+                          <span className="text-sm text-white/60">
+                            {tier.discord_role_id
+                              ? (tier.discord_role_name || 'Unnamed Discord Role')
+                              : 'No role linked'}
                           </span>
                         </div>
                       )}

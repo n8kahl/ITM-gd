@@ -16,6 +16,7 @@ interface DiscordCommunityCardProps {
   discordUsername?: string | null
   discordAvatar?: string | null
   discordRoles?: string[]
+  discordRoleTitles?: Record<string, string>
   onSyncRoles?: () => void
   className?: string
 }
@@ -28,6 +29,7 @@ export function DiscordCommunityCard({
   discordUsername,
   discordAvatar,
   discordRoles = [],
+  discordRoleTitles = {},
   onSyncRoles,
   className,
 }: DiscordCommunityCardProps) {
@@ -99,7 +101,7 @@ export function DiscordCommunityCard({
                       variant="outline"
                       className="text-[10px] bg-[#5865F2]/10 text-[#5865F2] border-[#5865F2]/20"
                     >
-                      {role}
+                      {discordRoleTitles[role] || 'Unnamed Discord Role'}
                     </Badge>
                   ))}
                 </div>

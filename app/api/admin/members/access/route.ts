@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
-
-const MEMBERS_REQUIRED_ROLE_ID = '1471195516070264863'
+import {
+  MEMBERS_ALLOWED_ROLE_IDS,
+  hasMembersAreaAccess,
+} from '@/lib/discord-role-access'
 
 type MembershipTier = 'core' | 'pro' | 'executive'
 
@@ -197,7 +199,7 @@ export async function GET(request: NextRequest) {
       : []
 
     const effectiveRoleIds = rolesFromJwt.length > 0 ? rolesFromJwt : rolesFromProfile
-    const hasMembersRole = effectiveRoleIds.includes(MEMBERS_REQUIRED_ROLE_ID)
+    const hasMembersRole = hasMembersAreaAccess(effectiveRoleIds)
 
     const roleTierMapping = parseRoleTierMapping(roleTierSetting?.value)
     const resolvedTier = resolveTierFromRoles(effectiveRoleIds, roleTierMapping)
@@ -211,11 +213,21 @@ export async function GET(request: NextRequest) {
 
     // Expected permissions based on current role → permission mappings
     let expectedPermissionNames: string[] = []
+    const roleTitlesById: Record<string, string> = {}
+    for (const row of permissionRows) {
+      const roleId = typeof row?.granted_by_role_id === 'string' ? row.granted_by_role_id : null
+      const roleName = typeof row?.granted_by_role_name === 'string' ? row.granted_by_role_name : null
+      if (roleId && roleName && !roleTitlesById[roleId]) {
+        roleTitlesById[roleId] = roleName
+      }
+    }
+
     if (effectiveRoleIds.length > 0) {
       const { data: rolePermissionMappings } = await supabaseAdmin
         .from('discord_role_permissions')
         .select(`
           discord_role_id,
+          discord_role_name,
           app_permissions (
             name
           )
@@ -228,10 +240,32 @@ export async function GET(request: NextRequest) {
           .map((row: any) => row?.app_permissions?.name)
           .filter((name: any) => typeof name === 'string')
       )).sort()
+
+      for (const row of mappingRows) {
+        const roleId = typeof row?.discord_role_id === 'string' ? row.discord_role_id : null
+        const roleName = typeof row?.discord_role_name === 'string' ? row.discord_role_name : null
+        if (roleId && roleName && !roleTitlesById[roleId]) {
+          roleTitlesById[roleId] = roleName
+        }
+      }
     }
 
     const expectedMissing = expectedPermissionNames.filter((name) => !uniquePermissionNames.includes(name))
     const unexpectedExtra = uniquePermissionNames.filter((name) => !expectedPermissionNames.includes(name))
+
+    const membersAllowedRoleTitlesById: Record<string, string> = {}
+    const { data: membersAllowedRoleMappings } = await supabaseAdmin
+      .from('discord_role_permissions')
+      .select('discord_role_id, discord_role_name')
+      .in('discord_role_id', [...MEMBERS_ALLOWED_ROLE_IDS])
+
+    for (const row of Array.isArray(membersAllowedRoleMappings) ? membersAllowedRoleMappings : []) {
+      const roleId = typeof row?.discord_role_id === 'string' ? row.discord_role_id : null
+      const roleName = typeof row?.discord_role_name === 'string' ? row.discord_role_name : null
+      if (roleId && roleName && !membersAllowedRoleTitlesById[roleId]) {
+        membersAllowedRoleTitlesById[roleId] = roleName
+      }
+    }
 
     const tierHierarchy: Record<MembershipTier, number> = { core: 1, pro: 2, executive: 3 }
     const userTierLevel = resolvedTier ? tierHierarchy[resolvedTier] : 0
@@ -250,7 +284,8 @@ export async function GET(request: NextRequest) {
       success: true,
       resolution,
       constants: {
-        members_required_role_id: MEMBERS_REQUIRED_ROLE_ID,
+        members_allowed_role_ids: MEMBERS_ALLOWED_ROLE_IDS,
+        members_allowed_role_titles_by_id: membersAllowedRoleTitlesById,
       },
       user: {
         id: authUser.id,
@@ -273,6 +308,7 @@ export async function GET(request: NextRequest) {
       } : null,
       access: {
         effective_role_ids: effectiveRoleIds,
+        role_titles_by_id: roleTitlesById,
         has_members_required_role: hasMembersRole,
         resolved_tier: resolvedTier,
         allowed_tabs: allowedTabs,
@@ -289,7 +325,7 @@ export async function GET(request: NextRequest) {
         has_cached_discord_profile: !!discordProfile,
         effective_roles_source: rolesFromJwt.length > 0 ? 'jwt' : (rolesFromProfile.length > 0 ? 'user_discord_profiles' : 'none'),
         likely_members_access_issue: !hasMembersRole
-          ? `Missing required Discord role ID ${MEMBERS_REQUIRED_ROLE_ID}`
+          ? 'Missing required members role'
           : null,
       },
     })
