@@ -3,6 +3,7 @@ import type { Page, Route } from '@playwright/test'
 interface SPXMockOptions {
   delayMs?: number
   omitPrediction?: boolean
+  alignCoachMessagesToChart?: boolean
 }
 
 const nowIso = '2026-02-15T15:12:00.000Z'
@@ -189,6 +190,28 @@ const coachState = {
     },
   ],
   generatedAt: nowIso,
+}
+
+function buildCoachMessagesPayload(options?: { alignToChart?: boolean }) {
+  if (!options?.alignToChart) {
+    return coachState.messages
+  }
+
+  const bars = chartResponse.bars
+  const alignedTimes = [
+    bars[Math.max(0, bars.length - 10)]?.time,
+    bars[Math.max(0, bars.length - 6)]?.time,
+    bars[Math.max(0, bars.length - 3)]?.time,
+  ].filter((time): time is number => Number.isFinite(time))
+
+  return coachState.messages.map((message, index) => {
+    const alignedTime = alignedTimes[index % alignedTimes.length]
+    if (!alignedTime) return message
+    return {
+      ...message,
+      timestamp: new Date(alignedTime * 1000).toISOString(),
+    }
+  })
 }
 
 function buildChartBars() {
@@ -467,8 +490,13 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOptions = {}): Promise<void> {
-  const { delayMs = 0, omitPrediction = false } = options
+  const { delayMs = 0, omitPrediction = false, alignCoachMessagesToChart = false } = options
   let coachMessageSequence = 0
+  const coachMessagesPayload = buildCoachMessagesPayload({ alignToChart: alignCoachMessagesToChart })
+  const coachStatePayload = {
+    ...coachState,
+    messages: coachMessagesPayload,
+  }
   const regimePayload = omitPrediction
     ? {
       ...regimeResponse,
@@ -485,8 +513,12 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
         ...(snapshotResponse.prediction || {}),
         probabilityCone: [],
       },
+      coachMessages: coachMessagesPayload,
     }
-    : snapshotResponse
+    : {
+      ...snapshotResponse,
+      coachMessages: coachMessagesPayload,
+    }
 
   await page.route('**/api/chart/SPX*', async (route) => {
     await delay(delayMs)
@@ -696,7 +728,7 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
     }
 
     if (endpoint === 'coach/state') {
-      await fulfillJson(route, coachState)
+      await fulfillJson(route, coachStatePayload)
       return
     }
 

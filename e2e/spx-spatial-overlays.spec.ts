@@ -30,6 +30,8 @@ test.describe('SPX spatial overlays', () => {
     await page.keyboard.press('a')
     await expect(page.getByTestId('spx-spatial-ghost-layer')).toBeVisible({ timeout: 8_000 })
     await expect(page.getByTestId('spx-coach-ghost-card').first()).toBeVisible()
+    await expect(page.getByTestId('spx-coach-ghost-card').first()).toHaveAttribute('data-lifecycle-state', /entering|active|fading/)
+    await expect(page.getByTestId('spx-coach-ghost-card').first()).toHaveAttribute('data-anchor-mode', /time|fallback/)
 
     await page.keyboard.press('a')
     await expect(page.getByTestId('spx-spatial-ghost-layer')).toHaveCount(0)
@@ -70,5 +72,23 @@ test.describe('SPX spatial overlays', () => {
     await expect(cone).toBeVisible({ timeout: 12_000 })
     await expect(cone).toHaveAttribute('data-fallback', 'true')
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
+  })
+
+  test('time-anchors ghost cards when coach timestamps align to chart window', async ({ page }) => {
+    await setupSPXCommandCenterMocks(page, { alignCoachMessagesToChart: true })
+    await authenticateAsMember(page)
+    await page.addInitScript(() => {
+      window.__spxUxFlags = {
+        spatialHudV1: true,
+        layoutStateMachine: true,
+      }
+    })
+
+    await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
+    await page.getByTestId('spx-view-mode-spatial').click()
+
+    await page.keyboard.press('a')
+    await expect(page.getByTestId('spx-spatial-ghost-layer')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('[data-testid=\"spx-coach-ghost-card\"][data-anchor-mode=\"time\"]').first()).toBeVisible({ timeout: 10_000 })
   })
 })

@@ -5,7 +5,10 @@ import {
   buildRiskRewardShadowGeometry,
   buildSetupLockGeometry,
   buildTopographicLadderEntries,
+  evolveSpatialGhostLifecycle,
   extractSpatialCoachAnchors,
+  parseIsoToUnixSeconds,
+  resolveSpatialAnchorX,
   resolveSetupLockState,
 } from '@/lib/spx/spatial-hud'
 import type { Setup } from '@/lib/types/spx-command-center'
@@ -246,6 +249,77 @@ describe('spatial-hud helpers', () => {
     it('returns null for invalid setup', () => {
       expect(buildRiskRewardShadowGeometry(null)).toBeNull()
       expect(buildRiskRewardShadowGeometry({ ...setup, stop: (setup.entryZone.low + setup.entryZone.high) / 2 })).toBeNull()
+    })
+  })
+
+  describe('time-anchor helpers', () => {
+    it('parses iso timestamps to unix seconds', () => {
+      expect(parseIsoToUnixSeconds('2026-02-20T15:05:12.000Z')).toBe(1771599912)
+      expect(parseIsoToUnixSeconds('bad-date')).toBeNull()
+      expect(parseIsoToUnixSeconds(null)).toBeNull()
+    })
+
+    it('resolves time anchor x and falls back when out of range', () => {
+      const timeAnchored = resolveSpatialAnchorX({
+        width: 1000,
+        fallbackIndex: 0,
+        anchorTimeSec: 100,
+        timeToPixel: (timestamp) => (timestamp === 100 ? 740 : null),
+      })
+      expect(timeAnchored.mode).toBe('time')
+      expect(timeAnchored.x).toBe(740)
+
+      const fallback = resolveSpatialAnchorX({
+        width: 1000,
+        fallbackIndex: 1,
+        anchorTimeSec: 100,
+        timeToPixel: () => null,
+      })
+      expect(fallback.mode).toBe('fallback')
+      expect(fallback.x).toBeGreaterThan(0)
+    })
+  })
+
+  describe('ghost lifecycle evolution', () => {
+    it('advances entering -> active -> fading -> removed', () => {
+      const start = 1_000
+      let lifecycle = evolveSpatialGhostLifecycle({}, ['m1'], start, {
+        enterDurationMs: 100,
+        activeDurationMs: 250,
+        fadeDurationMs: 100,
+      })
+      expect(lifecycle.m1?.state).toBe('entering')
+
+      lifecycle = evolveSpatialGhostLifecycle(lifecycle, ['m1'], start + 120, {
+        enterDurationMs: 100,
+        activeDurationMs: 250,
+        fadeDurationMs: 100,
+      })
+      expect(lifecycle.m1?.state).toBe('active')
+
+      lifecycle = evolveSpatialGhostLifecycle(lifecycle, ['m1'], start + 290, {
+        enterDurationMs: 100,
+        activeDurationMs: 250,
+        fadeDurationMs: 100,
+      })
+      expect(lifecycle.m1?.state).toBe('fading')
+
+      lifecycle = evolveSpatialGhostLifecycle(lifecycle, [], start + 420, {
+        enterDurationMs: 100,
+        activeDurationMs: 250,
+        fadeDurationMs: 100,
+      })
+      expect(lifecycle.m1).toBeUndefined()
+    })
+
+    it('re-activates fading node when it reappears', () => {
+      const start = 10_000
+      let lifecycle = evolveSpatialGhostLifecycle({}, ['m1'], start)
+      lifecycle = evolveSpatialGhostLifecycle(lifecycle, [], start + 50)
+      expect(lifecycle.m1?.state).toBe('fading')
+
+      lifecycle = evolveSpatialGhostLifecycle(lifecycle, ['m1'], start + 80)
+      expect(lifecycle.m1?.state).toBe('active')
     })
   })
 })

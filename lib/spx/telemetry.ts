@@ -52,6 +52,8 @@ export const SPX_TELEMETRY_EVENT = {
   GEX_GLOW_TOGGLED: 'spx_gex_glow_toggled',
   RR_SHADOW_RENDERED: 'spx_rr_shadow_rendered',
   SPATIAL_GHOST_INTERACTION: 'spx_spatial_ghost_interaction',
+  SPATIAL_GHOST_STATE_CHANGED: 'spx_spatial_ghost_state_changed',
+  SPATIAL_GHOST_ANCHOR_MODE: 'spx_spatial_ghost_anchor_mode',
   SETUP_LOCK_STATE_CHANGED: 'spx_setup_lock_state_changed',
   SETUP_LOCK_PULSE_PLAYED: 'spx_setup_lock_pulse_played',
 } as const

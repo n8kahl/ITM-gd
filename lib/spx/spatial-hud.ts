@@ -520,3 +520,159 @@ export function buildRiskRewardShadowGeometry(
     contractMid: deriveContractMid(contract),
   }
 }
+
+export function parseIsoToUnixSeconds(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return null
+  return Math.floor(parsed / 1000)
+}
+
+export type SpatialAnchorMode = 'time' | 'fallback'
+
+export interface ResolveSpatialAnchorXInput {
+  width: number
+  fallbackIndex: number
+  anchorTimeSec: number | null
+  timeToPixel: (timestamp: number) => number | null
+  minX?: number
+  maxX?: number
+}
+
+export interface ResolvedSpatialAnchorX {
+  x: number
+  mode: SpatialAnchorMode
+}
+
+export function resolveSpatialAnchorX(input: ResolveSpatialAnchorXInput): ResolvedSpatialAnchorX {
+  const minX = input.minX ?? 8
+  const maxX = input.maxX ?? Math.max(minX, input.width - 8)
+  const fromTime = input.anchorTimeSec != null ? input.timeToPixel(input.anchorTimeSec) : null
+  if (fromTime != null && Number.isFinite(fromTime)) {
+    return { x: clamp(fromTime, minX, maxX), mode: 'time' }
+  }
+  const fallbackX = input.width * (0.64 + (input.fallbackIndex * 0.05))
+  return { x: clamp(fallbackX, minX, maxX), mode: 'fallback' }
+}
+
+export type SpatialGhostLifecycleState = 'entering' | 'active' | 'fading'
+
+export interface SpatialGhostLifecycleNode {
+  state: SpatialGhostLifecycleState
+  firstSeenMs: number
+  stateSinceMs: number
+}
+
+export type SpatialGhostLifecycleMap = Record<string, SpatialGhostLifecycleNode>
+
+export interface SpatialGhostLifecycleOptions {
+  enterDurationMs?: number
+  activeDurationMs?: number
+  fadeDurationMs?: number
+}
+
+const DEFAULT_GHOST_ENTER_DURATION_MS = 1200
+const DEFAULT_GHOST_ACTIVE_DURATION_MS = 10_000
+const DEFAULT_GHOST_FADE_DURATION_MS = 1500
+
+function normalizeVisibleIds(ids: string[]): string[] {
+  const seen = new Set<string>()
+  const ordered: string[] = []
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    ordered.push(id)
+  }
+  return ordered
+}
+
+export function evolveSpatialGhostLifecycle(
+  previous: SpatialGhostLifecycleMap,
+  visibleIdsInput: string[],
+  nowMs: number,
+  options?: SpatialGhostLifecycleOptions,
+): SpatialGhostLifecycleMap {
+  const enterDurationMs = options?.enterDurationMs ?? DEFAULT_GHOST_ENTER_DURATION_MS
+  const activeDurationMs = options?.activeDurationMs ?? DEFAULT_GHOST_ACTIVE_DURATION_MS
+  const fadeDurationMs = options?.fadeDurationMs ?? DEFAULT_GHOST_FADE_DURATION_MS
+  const visibleIds = normalizeVisibleIds(visibleIdsInput)
+  const visibleSet = new Set(visibleIds)
+
+  const next: SpatialGhostLifecycleMap = {}
+  for (const [id, node] of Object.entries(previous)) {
+    next[id] = { ...node }
+  }
+
+  for (const id of visibleIds) {
+    const node = next[id]
+    if (!node) {
+      next[id] = {
+        state: 'entering',
+        firstSeenMs: nowMs,
+        stateSinceMs: nowMs,
+      }
+      continue
+    }
+    if (node.state === 'fading') {
+      next[id] = {
+        ...node,
+        state: 'active',
+        stateSinceMs: nowMs,
+      }
+    }
+  }
+
+  for (const [id, node] of Object.entries(next)) {
+    if (!visibleSet.has(id) && node.state !== 'fading') {
+      next[id] = {
+        ...node,
+        state: 'fading',
+        stateSinceMs: nowMs,
+      }
+    }
+  }
+
+  for (const [id, node] of Object.entries(next)) {
+    if (node.state === 'entering' && nowMs - node.stateSinceMs >= enterDurationMs) {
+      next[id] = {
+        ...node,
+        state: 'active',
+        stateSinceMs: nowMs,
+      }
+      continue
+    }
+
+    if (node.state === 'active' && nowMs - node.firstSeenMs >= activeDurationMs) {
+      next[id] = {
+        ...node,
+        state: 'fading',
+        stateSinceMs: nowMs,
+      }
+      continue
+    }
+
+    if (node.state === 'fading' && nowMs - node.stateSinceMs >= fadeDurationMs) {
+      delete next[id]
+    }
+  }
+
+  return next
+}
+
+export function spatialGhostLifecycleEquals(
+  left: SpatialGhostLifecycleMap,
+  right: SpatialGhostLifecycleMap,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const id of leftKeys) {
+    const l = left[id]
+    const r = right[id]
+    if (!l || !r) return false
+    if (l.state !== r.state || l.firstSeenMs !== r.firstSeenMs || l.stateSinceMs !== r.stateSinceMs) {
+      return false
+    }
+  }
+  return true
+}
