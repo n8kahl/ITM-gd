@@ -42,6 +42,14 @@ export const SPX_TELEMETRY_EVENT = {
   UX_LAYOUT_MODE_CHANGED: 'spx_ux_layout_mode_changed',
   UX_VIEW_MODE_CHANGED: 'spx_ux_view_mode_changed',
   UX_MOBILE_FOCUS_CHANGED: 'spx_ux_mobile_focus_changed',
+  SPATIAL_OVERLAY_TOGGLED: 'spx_spatial_overlay_toggled',
+  SPATIAL_NODE_EXPANDED: 'spx_spatial_node_expanded',
+  SPATIAL_NODE_DISMISSED: 'spx_spatial_node_dismissed',
+  SPATIAL_NODE_ACTION: 'spx_spatial_node_action',
+  IMMERSIVE_MODE_TOGGLED: 'spx_immersive_mode_toggled',
+  SIDEBAR_TOGGLED: 'spx_sidebar_toggled',
+  CONE_INTERACTION: 'spx_cone_interaction',
+  GEX_GLOW_TOGGLED: 'spx_gex_glow_toggled',
 } as const
 
 export type SPXTelemetryEventName = (typeof SPX_TELEMETRY_EVENT)[keyof typeof SPX_TELEMETRY_EVENT]

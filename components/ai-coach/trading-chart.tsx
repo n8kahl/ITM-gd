@@ -62,6 +62,7 @@ interface TradingChartProps {
   timeframe: string
   isLoading?: boolean
   onHoverPrice?: (price: number | null) => void
+  onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
 }
 
 export interface PositionOverlay {
@@ -181,6 +182,7 @@ export function TradingChart({
   timeframe,
   isLoading,
   onHoverPrice,
+  onChartReady,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const rsiContainerRef = useRef<HTMLDivElement>(null)
@@ -465,21 +467,31 @@ export function TradingChart({
     ema8SeriesRef.current = ema8Series
     ema21SeriesRef.current = ema21Series
     vwapSeriesRef.current = vwapSeries
+    onChartReady?.(chart, candlestickSeries)
 
     // Handle resize
+    let resizeTimeoutId: number | null = null
     const resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
-      try {
-        chart.applyOptions({ width, height })
-      } catch (error) {
-        if (!isDisposedError(error)) {
-          console.warn('[TradingChart] Failed to resize main chart', error)
-        }
+      if (resizeTimeoutId != null) {
+        window.clearTimeout(resizeTimeoutId)
       }
+      resizeTimeoutId = window.setTimeout(() => {
+        try {
+          chart.applyOptions({ width, height })
+        } catch (error) {
+          if (!isDisposedError(error)) {
+            console.warn('[TradingChart] Failed to resize main chart', error)
+          }
+        }
+      }, 50)
     })
     resizeObserver.observe(containerRef.current)
 
     return () => {
+      if (resizeTimeoutId != null) {
+        window.clearTimeout(resizeTimeoutId)
+      }
       resizeObserver.disconnect()
       containerRef.current?.removeEventListener('pointerdown', markUserViewportAdjusted)
       containerRef.current?.removeEventListener('wheel', markUserViewportAdjusted)
@@ -497,7 +509,7 @@ export function TradingChart({
         chartRef.current = null
       }
     }
-  }, [timeframe, clearLevelPriceLines, resetMainChartRefs])
+  }, [timeframe, clearLevelPriceLines, resetMainChartRefs, onChartReady])
 
   // Initialize chart on mount
   useEffect(() => {

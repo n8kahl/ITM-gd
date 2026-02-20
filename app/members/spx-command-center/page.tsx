@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { motion, useReducedMotion } from 'framer-motion'
+import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import { SPXCommandCenterProvider, useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { useIsMobile } from '@/hooks/use-is-mobile'
+import { useChartCoordinates } from '@/hooks/use-chart-coordinates'
 import { SPXHeader } from '@/components/spx-command-center/spx-header'
 import { ActionStrip } from '@/components/spx-command-center/action-strip'
 import { SetupFeed } from '@/components/spx-command-center/setup-feed'
@@ -18,6 +20,10 @@ import { AICoachFeed } from '@/components/spx-command-center/ai-coach-feed'
 import { ContractSelector } from '@/components/spx-command-center/contract-selector'
 import { GEXLandscape } from '@/components/spx-command-center/gex-landscape'
 import { GEXHeatmap } from '@/components/spx-command-center/gex-heatmap'
+import { GEXAmbientGlow } from '@/components/spx-command-center/gex-ambient-glow'
+import { ProbabilityConeSVG } from '@/components/spx-command-center/probability-cone-svg'
+import { SpatialCoachLayer } from '@/components/spx-command-center/spatial-coach-layer'
+import { SidebarPanel } from '@/components/spx-command-center/sidebar-panel'
 import { MobilePanelTabs, type MobilePanelTab } from '@/components/spx-command-center/mobile-panel-tabs'
 import { SPXPanelSkeleton, SPXSkeleton } from '@/components/spx-command-center/spx-skeleton'
 import { DecisionContext } from '@/components/spx-command-center/decision-context'
@@ -94,6 +100,15 @@ function SPXCommandCenterContent() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showMobileCoachSheet, setShowMobileCoachSheet] = useState(false)
   const [showDesktopCoachPanel, setShowDesktopCoachPanel] = useState(false)
+  const [showAllRelevantLevels, setShowAllRelevantLevels] = useState(false)
+  const [displayedLevelsCount, setDisplayedLevelsCount] = useState(0)
+  const [totalLevelsCount, setTotalLevelsCount] = useState(0)
+  const [immersiveMode, setImmersiveMode] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showCone, setShowCone] = useState(true)
+  const [showSpatialCoach, setShowSpatialCoach] = useState(false)
+  const [showGEXGlow, setShowGEXGlow] = useState(true)
+  const [spatialThrottled, setSpatialThrottled] = useState(false)
   const [viewMode, setViewMode] = useState<SPXViewMode>(() => {
     if (typeof window === 'undefined') return 'classic'
     const stored = window.localStorage.getItem(SPX_VIEW_MODE_STORAGE_KEY)
@@ -109,8 +124,18 @@ function SPXCommandCenterContent() {
   const mobileSmartStackEnabled = stateDrivenLayoutEnabled && uxFlags.mobileSmartStack
   const desktopCoachPanelOpen = layoutMode === 'scan' ? showDesktopCoachPanel : false
   const lastLayoutModeRef = useRef<string | null>(null)
+  const frameTimesRef = useRef<number[]>([])
+  const recoverOverlayTimeoutRef = useRef<number | null>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const chartCanvasRef = useRef<HTMLDivElement | null>(null)
   const rootVariants = prefersReducedMotion ? undefined : STAGGER_CHILDREN
   const itemVariants = prefersReducedMotion ? undefined : FADE_UP_VARIANT
+  const { coordinatesRef, invalidate: invalidateChartCoordinates } = useChartCoordinates(
+    chartRef,
+    candlestickSeriesRef,
+    chartCanvasRef,
+  )
   const actionableSetups = useMemo(
     () => activeSetups.filter((setup) => setup.status === 'ready' || setup.status === 'triggered'),
     [activeSetups],
@@ -119,6 +144,13 @@ function SPXCommandCenterContent() {
     () => (selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered') ? selectedSetup : null),
     [selectedSetup],
   )
+  const sidebarWidth = useMemo(() => {
+    if (immersiveMode || (isMobile && mobileSmartStackEnabled)) return 0
+    if (sidebarCollapsed) return 0
+    if (layoutMode === 'scan') return 360
+    return 320
+  }, [immersiveMode, isMobile, mobileSmartStackEnabled, sidebarCollapsed, layoutMode])
+  const sidebarOpen = sidebarWidth > 0
   const handleViewModeChange = useCallback((nextMode: SPXViewMode, source: 'toggle' | 'command' | 'shortcut' = 'toggle') => {
     setViewMode((previousMode) => {
       if (!uxFlags.spatialHudV1 && nextMode === 'spatial') return 'classic'
@@ -246,6 +278,81 @@ function SPXCommandCenterContent() {
       },
     })
 
+    commands.push({
+      id: 'toggle-immersive',
+      label: immersiveMode ? 'Exit immersive mode' : 'Enter immersive mode',
+      keywords: ['immersive', 'fullscreen', 'hud', 'spatial'],
+      shortcut: 'I',
+      group: 'View',
+      run: () => {
+        setImmersiveMode((previous) => {
+          const next = !previous
+          trackCommand('toggle_immersive', { nextState: next })
+          return next
+        })
+      },
+    })
+
+    commands.push({
+      id: 'toggle-sidebar',
+      label: sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar',
+      keywords: ['sidebar', 'panel', 'show', 'hide'],
+      shortcut: 'S',
+      group: 'View',
+      run: () => {
+        setSidebarCollapsed((previous) => {
+          const next = !previous
+          trackCommand('toggle_sidebar', { nextState: next })
+          return next
+        })
+      },
+    })
+
+    commands.push({
+      id: 'toggle-spatial-coach',
+      label: showSpatialCoach ? 'Disable spatial coach' : 'Enable spatial coach',
+      keywords: ['spatial', 'coach', 'anchor', 'nodes'],
+      shortcut: 'A',
+      group: 'Overlays',
+      run: () => {
+        setShowSpatialCoach((previous) => {
+          const next = !previous
+          trackCommand('toggle_spatial_coach', { nextState: next })
+          return next
+        })
+      },
+    })
+
+    commands.push({
+      id: 'toggle-probability-cone',
+      label: showCone ? 'Hide probability cone' : 'Show probability cone',
+      keywords: ['cone', 'probability', 'expected', 'move'],
+      shortcut: 'C',
+      group: 'Overlays',
+      run: () => {
+        setShowCone((previous) => {
+          const next = !previous
+          trackCommand('toggle_cone', { nextState: next })
+          return next
+        })
+      },
+    })
+
+    commands.push({
+      id: 'toggle-gex-glow',
+      label: showGEXGlow ? 'Disable GEX glow' : 'Enable GEX glow',
+      keywords: ['gex', 'ambient', 'glow'],
+      shortcut: 'G',
+      group: 'Overlays',
+      run: () => {
+        setShowGEXGlow((previous) => {
+          const next = !previous
+          trackCommand('toggle_gex_glow', { nextState: next })
+          return next
+        })
+      },
+    })
+
     if (!isMobile && uxFlags.spatialHudV1) {
       commands.push({
         id: 'toggle-view-mode',
@@ -311,13 +418,41 @@ function SPXCommandCenterContent() {
     selectedActionableSetup,
     selectedSetup,
     showLevelOverlay,
+    showCone,
+    showGEXGlow,
+    showSpatialCoach,
+    sidebarCollapsed,
     tradeMode,
     uxFlags.commandPalette,
     uxFlags.spatialHudV1,
     handleViewModeChange,
+    immersiveMode,
     isMobile,
     viewMode,
   ])
+
+  const handleChartReady = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
+    chartRef.current = chart
+    candlestickSeriesRef.current = series
+    invalidateChartCoordinates()
+  }, [invalidateChartCoordinates])
+
+  const handleDisplayedLevelsChange = useCallback((displayed: number, total: number) => {
+    setDisplayedLevelsCount(displayed)
+    setTotalLevelsCount(total)
+  }, [])
+
+  const handleToggleAllLevels = useCallback(() => {
+    setShowAllRelevantLevels((previous) => {
+      const next = !previous
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+        surface: 'action_strip_levels_toggle',
+        mode: next ? 'all_relevant' : 'focused',
+      })
+      return next
+    })
+  }, [])
+
   const handleMobileTabChange = (next: MobilePanelTab) => {
     setMobileTab(next)
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
@@ -366,6 +501,46 @@ function SPXCommandCenterContent() {
       window.clearTimeout(timeoutId)
     }
   }, [])
+
+  useEffect(() => {
+    let rafId = 0
+    let lastFrame = performance.now()
+
+    const measureFrame = () => {
+      const now = performance.now()
+      const frameTime = now - lastFrame
+      lastFrame = now
+
+      frameTimesRef.current.push(frameTime)
+      if (frameTimesRef.current.length > 10) {
+        frameTimesRef.current.shift()
+      }
+
+      const avgFrameTime = frameTimesRef.current.reduce((acc, value) => acc + value, 0) / frameTimesRef.current.length
+      if (avgFrameTime > 20) {
+        if (!spatialThrottled) {
+          setSpatialThrottled(true)
+        }
+        if (recoverOverlayTimeoutRef.current != null) {
+          window.clearTimeout(recoverOverlayTimeoutRef.current)
+        }
+        recoverOverlayTimeoutRef.current = window.setTimeout(() => {
+          setSpatialThrottled(false)
+          recoverOverlayTimeoutRef.current = null
+        }, 200)
+      }
+
+      rafId = window.requestAnimationFrame(measureFrame)
+    }
+
+    rafId = window.requestAnimationFrame(measureFrame)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      if (recoverOverlayTimeoutRef.current != null) {
+        window.clearTimeout(recoverOverlayTimeoutRef.current)
+      }
+    }
+  }, [spatialThrottled])
 
   useEffect(() => {
     if (!uxFlags.keyboardShortcuts && !uxFlags.commandPalette) return
@@ -465,8 +640,11 @@ function SPXCommandCenterContent() {
 
       if (key === 'l') {
         event.preventDefault()
-        setShowLevelOverlay((previous) => !previous)
-        trackShortcut('toggle_level_overlay', { nextState: !showLevelOverlay })
+        setShowLevelOverlay((previous) => {
+          const next = !previous
+          trackShortcut('toggle_level_overlay', { nextState: next })
+          return next
+        })
         return
       }
 
@@ -474,6 +652,56 @@ function SPXCommandCenterContent() {
         event.preventDefault()
         window.dispatchEvent(new CustomEvent(SPX_SHORTCUT_EVENT.FLOW_TOGGLE))
         trackShortcut('toggle_flow_panel')
+        return
+      }
+
+      if (key === 'i') {
+        event.preventDefault()
+        setImmersiveMode((previous) => {
+          const next = !previous
+          trackShortcut('toggle_immersive', { nextState: next })
+          return next
+        })
+        return
+      }
+
+      if (key === 's') {
+        event.preventDefault()
+        setSidebarCollapsed((previous) => {
+          const next = !previous
+          trackShortcut('toggle_sidebar', { nextState: next })
+          return next
+        })
+        return
+      }
+
+      if (key === 'a') {
+        event.preventDefault()
+        setShowSpatialCoach((previous) => {
+          const next = !previous
+          trackShortcut('toggle_spatial_coach', { nextState: next })
+          return next
+        })
+        return
+      }
+
+      if (key === 'c') {
+        event.preventDefault()
+        setShowCone((previous) => {
+          const next = !previous
+          trackShortcut('toggle_cone', { nextState: next })
+          return next
+        })
+        return
+      }
+
+      if (key === 'g') {
+        event.preventDefault()
+        setShowGEXGlow((previous) => {
+          const next = !previous
+          trackShortcut('toggle_gex_glow', { nextState: next })
+          return next
+        })
         return
       }
 
@@ -531,9 +759,16 @@ function SPXCommandCenterContent() {
     tradeMode,
   ])
 
+  useEffect(() => {
+    invalidateChartCoordinates()
+  }, [invalidateChartCoordinates, sidebarWidth, immersiveMode, viewMode, uxFlags.spatialHudV1])
+
   const renderDesktopMainSurface = (className?: string) => (
     <div className={cn('relative h-full space-y-2.5', className)}>
-      <SPXChart />
+      <SPXChart
+        showAllRelevantLevels={showAllRelevantLevels}
+        onDisplayedLevelsChange={handleDisplayedLevelsChange}
+      />
       <FlowTicker />
       {(!stateDrivenLayoutEnabled || layoutMode !== 'in_trade') && <DecisionContext />}
 
@@ -623,6 +858,87 @@ function SPXCommandCenterContent() {
     </div>
   )
 
+  const renderSpatialSidebarContent = () => {
+    if (layoutMode === 'legacy') {
+      return (
+        <>
+          <SetupFeed />
+          <ContractSelector />
+          <AICoachFeed />
+          <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+            <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70">
+              Advanced Analytics
+            </summary>
+            <div className="mt-2.5 space-y-2.5">
+              <LevelMatrix />
+              <DecisionContext />
+              <GEXLandscape profile={gexProfile?.combined || null} />
+              <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+            </div>
+          </details>
+        </>
+      )
+    }
+
+    if (layoutMode === 'scan') {
+      return (
+        <>
+          {uxFlags.coachDockV1 && (
+            <CoachDock
+              surface="desktop"
+              isOpen={desktopCoachPanelOpen}
+              onToggle={handleDesktopCoachDockToggle}
+            />
+          )}
+          {desktopCoachPanelOpen && <AICoachFeed />}
+          <SetupFeed />
+          <FlowTicker />
+          <details
+            className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+            onToggle={(event) => {
+              const expanded = (event.currentTarget as HTMLDetailsElement).open
+              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                surface: 'advanced_analytics',
+                action: expanded ? 'expand' : 'collapse',
+                layoutMode,
+              })
+            }}
+          >
+            <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70">
+              Advanced Analytics
+            </summary>
+            <div className="mt-2.5 space-y-2.5">
+              <LevelMatrix />
+              <DecisionContext />
+              <GEXLandscape profile={gexProfile?.combined || null} />
+              <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+            </div>
+          </details>
+        </>
+      )
+    }
+
+    if (layoutMode === 'evaluate') {
+      return (
+        <>
+          <AICoachFeed />
+          <SetupFeed />
+          <ContractSelector />
+          <DecisionContext />
+        </>
+      )
+    }
+
+    return (
+      <>
+        <AICoachFeed />
+        <ContractSelector />
+        <SetupFeed />
+        <FlowTicker />
+      </>
+    )
+  }
+
   const desktopViewMode: SPXViewMode = uxFlags.spatialHudV1 ? viewMode : 'classic'
   const shouldShowInitialSkeleton = !initialSkeletonExpired && isLoading && activeSetups.length === 0 && levels.length === 0
 
@@ -637,31 +953,20 @@ function SPXCommandCenterContent() {
       animate={prefersReducedMotion ? false : 'animate'}
       className="space-y-3"
     >
-      {/* ─── TIER 1: Sniper Briefing ─── */}
-      <motion.div variants={itemVariants}>
-        <SPXHeader />
-      </motion.div>
-
-      {dataHealth !== 'healthy' && (
-        <motion.div
-          variants={itemVariants}
-          className={
-            dataHealth === 'degraded'
-              ? 'rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-100'
-              : 'rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-100'
-          }
-        >
-          SPX data health: {dataHealth}. {dataHealthMessage || 'Recovering feeds.'}
-        </motion.div>
-      )}
-
-      <motion.div variants={itemVariants}>
-        <ActionStrip />
-      </motion.div>
-
-      {/* ─── TIER 2: Battlefield ─── */}
       {isMobile ? (
-        <motion.div variants={itemVariants} className="space-y-3">
+        <motion.div variants={itemVariants} className="space-y-3 pb-2">
+          {dataHealth !== 'healthy' && (
+            <div
+              className={
+                dataHealth === 'degraded'
+                  ? 'rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-100'
+                  : 'rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-100'
+              }
+            >
+              SPX data health: {dataHealth}. {dataHealthMessage || 'Recovering feeds.'}
+            </div>
+          )}
+
           {mobileSmartStackEnabled ? (
             <div
               className={cn('space-y-2.5', uxFlags.coachDockV1 && 'pb-24')}
@@ -679,7 +984,14 @@ function SPXCommandCenterContent() {
               {(layoutMode === 'evaluate' || layoutMode === 'in_trade') && (
                 <ContractSelector readOnly={mobileReadOnly} />
               )}
-              <SPXChart />
+              <div className="relative">
+                {showGEXGlow && <GEXAmbientGlow />}
+                <SPXChart
+                  showAllRelevantLevels={showAllRelevantLevels}
+                  mobileExpanded
+                  onDisplayedLevelsChange={handleDisplayedLevelsChange}
+                />
+              </div>
               <FlowTicker />
               {layoutMode !== 'in_trade' && <DecisionContext />}
               <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
@@ -701,7 +1013,14 @@ function SPXCommandCenterContent() {
 
               {mobileTab === 'chart' && (
                 <>
-                  <SPXChart />
+                  <div className="relative">
+                    {showGEXGlow && <GEXAmbientGlow />}
+                    <SPXChart
+                      showAllRelevantLevels={showAllRelevantLevels}
+                      mobileExpanded
+                      onDisplayedLevelsChange={handleDisplayedLevelsChange}
+                    />
+                  </div>
                   <FlowTicker />
                   <DecisionContext />
                 </>
@@ -751,36 +1070,138 @@ function SPXCommandCenterContent() {
           )}
         </motion.div>
       ) : (
-        <motion.div variants={itemVariants}>
-          {!initialSkeletonExpired && isLoading && levels.length === 0 ? (
-            <SPXPanelSkeleton />
-          ) : (
-            desktopViewMode === 'classic' ? (
-              <PanelGroup direction="horizontal" className="min-h-[68vh]" data-testid={stateDrivenLayoutEnabled ? 'spx-desktop-state-driven' : undefined}>
-                <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 64 : 60} minSize={45}>
-                  {renderDesktopMainSurface('pr-1')}
-                </Panel>
+        <motion.div variants={itemVariants} className="relative h-[calc(100vh-56px)] overflow-hidden">
+          {desktopViewMode === 'classic' ? (
+            <>
+              <SPXHeader
+                onOpenCommandPalette={() => setShowCommandPalette(true)}
+                showAllLevels={showAllRelevantLevels}
+                displayedLevelsCount={displayedLevelsCount}
+                totalLevelsCount={totalLevelsCount}
+              />
+              <ActionStrip
+                showLevels={showLevelOverlay}
+                onToggleLevels={() => setShowLevelOverlay((previous) => !previous)}
+                showCone={showCone}
+                onToggleCone={() => setShowCone((previous) => !previous)}
+                showSpatialCoach={showSpatialCoach}
+                onToggleSpatialCoach={() => setShowSpatialCoach((previous) => !previous)}
+                showGEXGlow={showGEXGlow}
+                onToggleGEXGlow={() => setShowGEXGlow((previous) => !previous)}
+                sidebarOpen={!sidebarCollapsed}
+                onToggleSidebar={() => setSidebarCollapsed((previous) => !previous)}
+                immersiveMode={immersiveMode}
+                onToggleImmersive={() => setImmersiveMode((previous) => !previous)}
+                showAllLevels={showAllRelevantLevels}
+                onToggleAllLevels={handleToggleAllLevels}
+                showViewModeToggle={uxFlags.spatialHudV1}
+                viewModeLabel="Spatial HUD"
+                onToggleViewMode={() => handleViewModeChange('spatial')}
+              />
+              <div className="h-full pb-16 pt-16">
+                {!initialSkeletonExpired && isLoading && levels.length === 0 ? (
+                  <SPXPanelSkeleton />
+                ) : (
+                  <PanelGroup direction="horizontal" className="h-full" data-testid={stateDrivenLayoutEnabled ? 'spx-desktop-state-driven' : undefined}>
+                    <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 64 : 60} minSize={45}>
+                      {renderDesktopMainSurface('pr-1')}
+                    </Panel>
 
-                <PanelResizeHandle className="w-2 bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25 cursor-col-resize" />
+                    <PanelResizeHandle className="w-2 cursor-col-resize bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25" />
 
-                <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
-                  {renderDesktopSidebarSurface('pl-1')}
-                </Panel>
-              </PanelGroup>
-            ) : (
-              <div
-                className={cn(
-                  'grid min-h-[68vh] gap-2.5',
-                  stateDrivenLayoutEnabled && layoutMode === 'scan'
-                    ? 'grid-cols-[minmax(0,1fr)_360px]'
-                    : 'grid-cols-[minmax(0,1fr)_320px]',
+                    <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
+                      {renderDesktopSidebarSurface('pl-1')}
+                    </Panel>
+                  </PanelGroup>
                 )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                className="absolute inset-0 transition-[right] duration-300 ease-out"
+                style={{ right: sidebarOpen ? `${sidebarWidth}px` : '0px' }}
                 data-testid="spx-desktop-spatial"
               >
-                {renderDesktopMainSurface()}
-                {renderDesktopSidebarSurface()}
+                <div ref={chartCanvasRef} className="absolute inset-0">
+                  <div
+                    className="pointer-events-none absolute inset-0 z-[1]"
+                    style={{ boxShadow: 'inset 0 0 120px rgba(0,0,0,0.7)' }}
+                  />
+                  {showGEXGlow && <GEXAmbientGlow />}
+                  <SPXChart
+                    showAllRelevantLevels={showAllRelevantLevels}
+                    onDisplayedLevelsChange={handleDisplayedLevelsChange}
+                    onChartReady={handleChartReady}
+                    className="h-full w-full"
+                  />
+                  {showCone && !spatialThrottled && (
+                    <ProbabilityConeSVG coordinatesRef={coordinatesRef} />
+                  )}
+                  {showSpatialCoach && !spatialThrottled && (
+                    <SpatialCoachLayer coordinatesRef={coordinatesRef} />
+                  )}
+
+                  {showLevelOverlay && (
+                    <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
+                      <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowLevelOverlay(false)
+                              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+                                action: 'overlay_close',
+                                surface: 'desktop',
+                              })
+                            }}
+                            className="min-h-[36px] rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <LevelMatrix />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            )
+
+              <SPXHeader
+                onOpenCommandPalette={() => setShowCommandPalette(true)}
+                showAllLevels={showAllRelevantLevels}
+                displayedLevelsCount={displayedLevelsCount}
+                totalLevelsCount={totalLevelsCount}
+              />
+              <ActionStrip
+                showLevels={showLevelOverlay}
+                onToggleLevels={() => setShowLevelOverlay((previous) => !previous)}
+                showCone={showCone}
+                onToggleCone={() => setShowCone((previous) => !previous)}
+                showSpatialCoach={showSpatialCoach}
+                onToggleSpatialCoach={() => setShowSpatialCoach((previous) => !previous)}
+                showGEXGlow={showGEXGlow}
+                onToggleGEXGlow={() => setShowGEXGlow((previous) => !previous)}
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={() => setSidebarCollapsed((previous) => !previous)}
+                immersiveMode={immersiveMode}
+                onToggleImmersive={() => setImmersiveMode((previous) => !previous)}
+                showAllLevels={showAllRelevantLevels}
+                onToggleAllLevels={handleToggleAllLevels}
+                showViewModeToggle={uxFlags.spatialHudV1}
+                viewModeLabel="Classic"
+                onToggleViewMode={() => handleViewModeChange('classic')}
+              />
+              <SidebarPanel
+                width={sidebarWidth}
+                open={sidebarOpen}
+                layoutMode={layoutMode}
+                onClose={() => setSidebarCollapsed(true)}
+              >
+                {renderSpatialSidebarContent()}
+              </SidebarPanel>
+            </>
           )}
         </motion.div>
       )}
@@ -805,6 +1226,11 @@ function SPXCommandCenterContent() {
               <p><span className="font-mono text-emerald-200">1-4</span> coach quick actions</p>
               <p><span className="font-mono text-emerald-200">L</span> toggle level overlay</p>
               <p><span className="font-mono text-emerald-200">F</span> toggle flow expansion</p>
+              <p><span className="font-mono text-emerald-200">I</span> toggle immersive mode</p>
+              <p><span className="font-mono text-emerald-200">S</span> toggle sidebar</p>
+              <p><span className="font-mono text-emerald-200">A</span> toggle spatial AI coach</p>
+              <p><span className="font-mono text-emerald-200">C</span> toggle probability cone</p>
+              <p><span className="font-mono text-emerald-200">G</span> toggle GEX ambient glow</p>
               {!isMobile && uxFlags.spatialHudV1 && (
                 <p><span className="font-mono text-emerald-200">V</span> toggle classic/spatial view</p>
               )}
@@ -814,55 +1240,41 @@ function SPXCommandCenterContent() {
         </div>
       )}
 
-      {(!isMobile || uxFlags.commandPalette) && (
-        <div className={cn('flex items-center gap-2', !isMobile && uxFlags.commandPalette ? 'justify-between' : 'justify-end')}>
-          {!isMobile && uxFlags.spatialHudV1 && (
-            <div
-              className="inline-flex items-center rounded-lg border border-white/15 bg-white/[0.03] p-1"
-              data-testid="spx-view-mode-toggle"
-            >
-              <button
-                type="button"
-                data-testid="spx-view-mode-classic"
-                aria-pressed={desktopViewMode === 'classic'}
-                onClick={() => handleViewModeChange('classic')}
-                className={cn(
-                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
-                  desktopViewMode === 'classic'
-                    ? 'bg-emerald-500/15 text-emerald-200'
-                    : 'text-white/55 hover:text-white/80',
-                )}
-              >
-                Classic
-              </button>
-              <button
-                type="button"
-                data-testid="spx-view-mode-spatial"
-                aria-pressed={desktopViewMode === 'spatial'}
-                onClick={() => handleViewModeChange('spatial')}
-                className={cn(
-                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
-                  desktopViewMode === 'spatial'
-                    ? 'bg-emerald-500/15 text-emerald-200'
-                    : 'text-white/55 hover:text-white/80',
-                )}
-              >
-                Spatial HUD
-              </button>
-            </div>
-          )}
-
-          {uxFlags.commandPalette && (
+      {!isMobile && uxFlags.spatialHudV1 && (
+        <div className="flex items-center justify-end gap-2">
+          <div
+            className="inline-flex items-center rounded-lg border border-white/15 bg-white/[0.03] p-1"
+            data-testid="spx-view-mode-toggle"
+          >
             <button
               type="button"
-              data-testid="spx-command-palette-trigger"
-              onClick={() => setShowCommandPalette(true)}
-              className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.06] hover:text-white"
+              data-testid="spx-view-mode-classic"
+              aria-pressed={desktopViewMode === 'classic'}
+              onClick={() => handleViewModeChange('classic')}
+              className={cn(
+                'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                desktopViewMode === 'classic'
+                  ? 'bg-emerald-500/15 text-emerald-200'
+                  : 'text-white/55 hover:text-white/80',
+              )}
             >
-              <span className="rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-[9px]">⌘K</span>
-              Command Palette
+              Classic
             </button>
-          )}
+            <button
+              type="button"
+              data-testid="spx-view-mode-spatial"
+              aria-pressed={desktopViewMode === 'spatial'}
+              onClick={() => handleViewModeChange('spatial')}
+              className={cn(
+                'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                desktopViewMode === 'spatial'
+                  ? 'bg-emerald-500/15 text-emerald-200'
+                  : 'text-white/55 hover:text-white/80',
+              )}
+            >
+              Spatial HUD
+            </button>
+          </div>
         </div>
       )}
 
