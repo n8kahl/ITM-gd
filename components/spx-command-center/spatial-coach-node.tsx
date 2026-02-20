@@ -128,6 +128,11 @@ export function SpatialCoachNode({
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-[8px] font-mono text-white/35">@ {anchorPrice.toFixed(0)}</span>
+                {anchorXResolution.mode === 'fallback' && (
+                  <span className="rounded border border-champagne/35 bg-champagne/12 px-1 py-0.5 text-[7px] font-mono uppercase tracking-[0.08em] text-champagne">
+                    Fallback
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => onDismiss(message.id)}

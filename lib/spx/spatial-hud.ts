@@ -38,7 +38,7 @@ interface BuildProbabilityConeGeometryInput {
 const DEFAULT_START_X_RATIO = 0.82
 const DEFAULT_CONE_WIDTH_RATIO = 0.16
 const DEFAULT_CONE_WINDOW_MINUTES = [5, 15, 30] as const
-const SPATIAL_COACH_PRICE_PATTERN = /\b(5[5-9]\d{2}|6[0-2]\d{2})\b/
+const SPATIAL_COACH_PRICE_PATTERN = /\b([3-9]\d{3}(?:\.\d{1,2})?)\b/g
 
 function isFinitePositive(value: number): boolean {
   return Number.isFinite(value) && value > 0
@@ -51,6 +51,43 @@ function isValidPriceRange(range: { min: number; max: number } | null | undefine
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function toGlobalRegex(pattern: RegExp): RegExp {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
+  return new RegExp(pattern.source, flags)
+}
+
+function resolveAnchorPriceFromContent(
+  content: string,
+  pattern: RegExp,
+  referencePrice: number | null,
+  maxDistancePoints: number,
+): number | null {
+  if (!content) return null
+  const matcher = toGlobalRegex(pattern)
+  const candidates: number[] = []
+  for (const match of content.matchAll(matcher)) {
+    const raw = match[1] ?? match[0]
+    const parsed = Number.parseFloat(raw)
+    if (Number.isFinite(parsed)) {
+      candidates.push(parsed)
+    }
+  }
+  if (candidates.length === 0) return null
+
+  if (referencePrice != null) {
+    const nearby = candidates
+      .map((price) => ({ price, distance: Math.abs(price - referencePrice) }))
+      .filter((candidate) => candidate.distance <= maxDistancePoints)
+      .sort((left, right) => left.distance - right.distance)
+    if (nearby.length > 0) {
+      return nearby[0]?.price ?? null
+    }
+    return null
+  }
+
+  return candidates[0] ?? null
 }
 
 function fallbackPixelFromPrice(price: number, height: number, visiblePriceRange?: { min: number; max: number } | null): number | null {
@@ -396,23 +433,29 @@ export interface SpatialCoachAnchorMessage<T extends SpatialCoachAnchorInput = S
   anchorPrice: number
 }
 
-interface ExtractSpatialCoachAnchorsOptions {
+interface ExtractSpatialCoachAnchorsOptions<T extends SpatialCoachAnchorInput = SpatialCoachAnchorInput> {
   dismissedIds?: Set<string>
   maxNodes?: number
   pricePattern?: RegExp
+  referencePrice?: number | null
+  maxDistancePoints?: number
+  fallbackAnchorPrice?: (message: T) => number | null
 }
 
 export const DEFAULT_MAX_SPATIAL_COACH_NODES = 5
 
 export function extractSpatialCoachAnchors<T extends SpatialCoachAnchorInput>(
   messages: T[],
-  options?: ExtractSpatialCoachAnchorsOptions,
+  options?: ExtractSpatialCoachAnchorsOptions<T>,
 ): SpatialCoachAnchorMessage<T>[] {
   const maxNodes = options?.maxNodes ?? DEFAULT_MAX_SPATIAL_COACH_NODES
   if (maxNodes <= 0) return []
 
   const dismissedIds = options?.dismissedIds ?? new Set<string>()
   const pricePattern = options?.pricePattern ?? SPATIAL_COACH_PRICE_PATTERN
+  const referencePrice = Number.isFinite(options?.referencePrice) ? Number(options?.referencePrice) : null
+  const maxDistancePoints = Number.isFinite(options?.maxDistancePoints) ? Number(options?.maxDistancePoints) : 420
+  const fallbackAnchorPrice = options?.fallbackAnchorPrice
 
   const sorted = [...messages]
     .map((message, index) => ({
@@ -428,10 +471,17 @@ export function extractSpatialCoachAnchors<T extends SpatialCoachAnchorInput>(
   const anchored: SpatialCoachAnchorMessage<T>[] = []
   for (const item of sorted) {
     if (dismissedIds.has(item.message.id)) continue
-    const match = item.message.content.match(pricePattern)
-    if (!match) continue
-    const anchorPrice = Number.parseFloat(match[0])
-    if (!Number.isFinite(anchorPrice)) continue
+    const contentAnchor = resolveAnchorPriceFromContent(
+      item.message.content,
+      pricePattern,
+      referencePrice,
+      maxDistancePoints,
+    )
+    const fallbackAnchor = contentAnchor == null
+      ? (fallbackAnchorPrice?.(item.message) ?? null)
+      : null
+    const anchorPrice = contentAnchor ?? fallbackAnchor
+    if (anchorPrice == null || !Number.isFinite(anchorPrice)) continue
     anchored.push({ message: item.message, anchorPrice })
     if (anchored.length >= maxNodes) break
   }

@@ -52,6 +52,7 @@ export const SPX_TELEMETRY_EVENT = {
   CONE_INTERACTION: 'spx_cone_interaction',
   CONE_VISIBILITY_STATE: 'spx_cone_visibility_state',
   GEX_GLOW_TOGGLED: 'spx_gex_glow_toggled',
+  OVERLAY_CONTROL_BLOCKED: 'spx_overlay_control_blocked',
   RR_SHADOW_RENDERED: 'spx_rr_shadow_rendered',
   SPATIAL_GHOST_INTERACTION: 'spx_spatial_ghost_interaction',
   SPATIAL_GHOST_STATE_CHANGED: 'spx_spatial_ghost_state_changed',

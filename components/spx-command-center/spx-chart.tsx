@@ -60,6 +60,7 @@ interface SPXChartProps {
   className?: string
   onDisplayedLevelsChange?: (displayed: number, total: number) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
+  onLatestBarTimeChange?: (timeSec: number | null) => void
 }
 
 export function SPXChart({
@@ -69,6 +70,7 @@ export function SPXChart({
   className,
   onDisplayedLevelsChange,
   onChartReady,
+  onLatestBarTimeChange,
 }: SPXChartProps) {
   const { session } = useMemberAuth()
   const { levels } = useSPXAnalyticsContext()
@@ -475,6 +477,12 @@ export function SPXChart({
   useEffect(() => {
     onDisplayedLevelsChange?.(displayedLevels.length, levelAnnotations.length)
   }, [displayedLevels.length, levelAnnotations.length, onDisplayedLevelsChange])
+
+  useEffect(() => {
+    if (!onLatestBarTimeChange) return
+    const latestBar = bars[bars.length - 1]
+    onLatestBarTimeChange(latestBar && Number.isFinite(latestBar.time) ? latestBar.time : null)
+  }, [bars, onLatestBarTimeChange])
 
   const handleLevelLayoutStats = useCallback((stats: {
     inputCount: number

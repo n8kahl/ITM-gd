@@ -98,7 +98,7 @@ describe('spatial-hud helpers', () => {
   })
 
   describe('extractSpatialCoachAnchors', () => {
-    it('extracts newest anchorable messages, skipping dismissed entries', () => {
+    it('extracts newest anchorable messages near live price, skipping dismissed entries', () => {
       const messages = [
         { id: '1', content: 'Watch 6025 for hold.', timestamp: '2026-02-20T14:00:00.000Z' },
         { id: '2', content: 'Retest around 6012 then trigger.', timestamp: '2026-02-20T14:02:00.000Z' },
@@ -110,11 +110,34 @@ describe('spatial-hud helpers', () => {
       const anchors = extractSpatialCoachAnchors(messages, {
         dismissedIds: new Set(['5']),
         maxNodes: 3,
+        referencePrice: 6020,
+        maxDistancePoints: 80,
       })
 
       expect(anchors).toHaveLength(3)
       expect(anchors.map((entry) => entry.message.id)).toEqual(['4', '2', '1'])
       expect(anchors.map((entry) => entry.anchorPrice)).toEqual([6031, 6012, 6025])
+    })
+
+    it('uses semantic fallback anchor when message does not include explicit price', () => {
+      const messages = [
+        {
+          id: 'fallback-1',
+          content: 'Price is within 3.0 points of your stop. Tighten risk now.',
+          timestamp: '2026-02-20T14:10:00.000Z',
+          structuredData: { reason: 'stop_proximity' },
+          setupId: 'setup-1',
+        },
+      ]
+
+      const anchors = extractSpatialCoachAnchors(messages, {
+        referencePrice: 6862,
+        maxDistancePoints: 20,
+        fallbackAnchorPrice: () => 6864.88,
+      })
+
+      expect(anchors).toHaveLength(1)
+      expect(anchors[0]?.anchorPrice).toBeCloseTo(6864.88, 2)
     })
   })
 

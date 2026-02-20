@@ -16,6 +16,7 @@ import { SetupFeed } from '@/components/spx-command-center/setup-feed'
 import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
 import { FlowTicker } from '@/components/spx-command-center/flow-ticker'
+import { FlowRibbon } from '@/components/spx-command-center/flow-ribbon'
 import { AICoachFeed } from '@/components/spx-command-center/ai-coach-feed'
 import { ContractSelector } from '@/components/spx-command-center/contract-selector'
 import { GEXLandscape } from '@/components/spx-command-center/gex-landscape'
@@ -113,6 +114,7 @@ function SPXCommandCenterContent() {
   const [showCone, setShowCone] = useState(true)
   const [showSpatialCoach, setShowSpatialCoach] = useState(false)
   const [showGEXGlow, setShowGEXGlow] = useState(true)
+  const [latestChartBarTimeSec, setLatestChartBarTimeSec] = useState<number | null>(null)
   const [spatialThrottled, setSpatialThrottled] = useState(false)
   const [viewMode, setViewMode] = useState<SPXViewMode>(() => {
     if (typeof window === 'undefined') return 'classic'
@@ -130,7 +132,9 @@ function SPXCommandCenterContent() {
   const desktopCoachPanelOpen = layoutMode === 'scan' ? showDesktopCoachPanel : false
   const lastLayoutModeRef = useRef<string | null>(null)
   const frameTimesRef = useRef<number[]>([])
-  const recoverOverlayTimeoutRef = useRef<number | null>(null)
+  const frameSlowStreakRef = useRef(0)
+  const frameFastStreakRef = useRef(0)
+  const frameMonitorStartedAtRef = useRef<number | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartCanvasRef = useRef<HTMLDivElement | null>(null)
@@ -189,6 +193,7 @@ function SPXCommandCenterContent() {
     const topActionableSetup = actionableSetups[0] || null
     const enterTradeTarget = selectedActionableSetup || topActionableSetup
     const commands: SPXPaletteCommand[] = []
+    const spatialOverlayControlsEnabled = !isMobile && uxFlags.spatialHudV1 && viewMode === 'spatial'
 
     const trackCommand = (action: string, payload?: Record<string, unknown>) => {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_SHORTCUT_USED, {
@@ -291,7 +296,9 @@ function SPXCommandCenterContent() {
       keywords: ['immersive', 'fullscreen', 'hud', 'spatial'],
       shortcut: 'I',
       group: 'View',
+      disabled: !spatialOverlayControlsEnabled,
       run: () => {
+        if (!spatialOverlayControlsEnabled) return
         setImmersiveMode((previous) => {
           const next = !previous
           trackCommand('toggle_immersive', { nextState: next })
@@ -306,7 +313,9 @@ function SPXCommandCenterContent() {
       keywords: ['sidebar', 'panel', 'show', 'hide'],
       shortcut: 'S',
       group: 'View',
+      disabled: !spatialOverlayControlsEnabled,
       run: () => {
+        if (!spatialOverlayControlsEnabled) return
         setSidebarCollapsed((previous) => {
           const next = !previous
           trackCommand('toggle_sidebar', { nextState: next })
@@ -321,7 +330,9 @@ function SPXCommandCenterContent() {
       keywords: ['spatial', 'coach', 'anchor', 'nodes'],
       shortcut: 'A',
       group: 'Overlays',
+      disabled: !spatialOverlayControlsEnabled,
       run: () => {
+        if (!spatialOverlayControlsEnabled) return
         setShowSpatialCoach((previous) => {
           const next = !previous
           trackCommand('toggle_spatial_coach', { nextState: next })
@@ -336,7 +347,9 @@ function SPXCommandCenterContent() {
       keywords: ['cone', 'probability', 'expected', 'move'],
       shortcut: 'C',
       group: 'Overlays',
+      disabled: !spatialOverlayControlsEnabled,
       run: () => {
+        if (!spatialOverlayControlsEnabled) return
         setShowCone((previous) => {
           const next = !previous
           trackCommand('toggle_cone', { nextState: next })
@@ -351,7 +364,9 @@ function SPXCommandCenterContent() {
       keywords: ['gex', 'ambient', 'glow'],
       shortcut: 'G',
       group: 'Overlays',
+      disabled: !spatialOverlayControlsEnabled,
       run: () => {
+        if (!spatialOverlayControlsEnabled) return
         setShowGEXGlow((previous) => {
           const next = !previous
           trackCommand('toggle_gex_glow', { nextState: next })
@@ -444,6 +459,10 @@ function SPXCommandCenterContent() {
     invalidateChartCoordinates()
   }, [invalidateChartCoordinates])
 
+  const handleLatestChartBarTimeChange = useCallback((timeSec: number | null) => {
+    setLatestChartBarTimeSec(timeSec)
+  }, [])
+
   const handleDisplayedLevelsChange = useCallback((displayed: number, total: number) => {
     setDisplayedLevelsCount(displayed)
     setTotalLevelsCount(total)
@@ -510,8 +529,32 @@ function SPXCommandCenterContent() {
   }, [])
 
   useEffect(() => {
+    if (isMobile || viewMode !== 'spatial') {
+      frameTimesRef.current = []
+      frameSlowStreakRef.current = 0
+      frameFastStreakRef.current = 0
+      frameMonitorStartedAtRef.current = null
+      if (spatialThrottled) {
+        const resetRafId = window.requestAnimationFrame(() => {
+          setSpatialThrottled(false)
+        })
+        return () => {
+          window.cancelAnimationFrame(resetRafId)
+        }
+      }
+      return
+    }
+
+    const FRAME_SAMPLE_WINDOW = 12
+    const FRAME_MONITOR_WARMUP_MS = 1500
+    const ENTER_THROTTLE_AVG_MS = 24
+    const EXIT_THROTTLE_AVG_MS = 19
+    const ENTER_THROTTLE_STREAK = 4
+    const EXIT_THROTTLE_STREAK = 8
+
     let rafId = 0
     let lastFrame = performance.now()
+    frameMonitorStartedAtRef.current = lastFrame
 
     const measureFrame = () => {
       const now = performance.now()
@@ -519,22 +562,30 @@ function SPXCommandCenterContent() {
       lastFrame = now
 
       frameTimesRef.current.push(frameTime)
-      if (frameTimesRef.current.length > 10) {
+      if (frameTimesRef.current.length > FRAME_SAMPLE_WINDOW) {
         frameTimesRef.current.shift()
       }
 
-      const avgFrameTime = frameTimesRef.current.reduce((acc, value) => acc + value, 0) / frameTimesRef.current.length
-      if (avgFrameTime > 20) {
-        if (!spatialThrottled) {
+      const warmedUp = frameMonitorStartedAtRef.current != null
+        && (now - frameMonitorStartedAtRef.current) >= FRAME_MONITOR_WARMUP_MS
+      if (warmedUp && frameTimesRef.current.length >= FRAME_SAMPLE_WINDOW) {
+        const avgFrameTime = frameTimesRef.current.reduce((acc, value) => acc + value, 0) / frameTimesRef.current.length
+        if (avgFrameTime >= ENTER_THROTTLE_AVG_MS) {
+          frameSlowStreakRef.current += 1
+          frameFastStreakRef.current = 0
+        } else if (avgFrameTime <= EXIT_THROTTLE_AVG_MS) {
+          frameFastStreakRef.current += 1
+          frameSlowStreakRef.current = 0
+        } else {
+          frameFastStreakRef.current = 0
+          frameSlowStreakRef.current = 0
+        }
+
+        if (!spatialThrottled && frameSlowStreakRef.current >= ENTER_THROTTLE_STREAK) {
           setSpatialThrottled(true)
-        }
-        if (recoverOverlayTimeoutRef.current != null) {
-          window.clearTimeout(recoverOverlayTimeoutRef.current)
-        }
-        recoverOverlayTimeoutRef.current = window.setTimeout(() => {
+        } else if (spatialThrottled && frameFastStreakRef.current >= EXIT_THROTTLE_STREAK) {
           setSpatialThrottled(false)
-          recoverOverlayTimeoutRef.current = null
-        }, 200)
+        }
       }
 
       rafId = window.requestAnimationFrame(measureFrame)
@@ -543,11 +594,8 @@ function SPXCommandCenterContent() {
     rafId = window.requestAnimationFrame(measureFrame)
     return () => {
       window.cancelAnimationFrame(rafId)
-      if (recoverOverlayTimeoutRef.current != null) {
-        window.clearTimeout(recoverOverlayTimeoutRef.current)
-      }
     }
-  }, [spatialThrottled])
+  }, [isMobile, spatialThrottled, viewMode])
 
   useEffect(() => {
     if (!uxFlags.keyboardShortcuts && !uxFlags.commandPalette) return
@@ -582,6 +630,15 @@ function SPXCommandCenterContent() {
           tradeMode,
           selectedSetupId: selectedSetup?.id || null,
           ...payload,
+        })
+      }
+      const spatialOverlayControlsEnabled = !isMobile && uxFlags.spatialHudV1 && viewMode === 'spatial'
+      const trackBlockedOverlay = (overlay: string) => {
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
+          surface: 'keyboard_shortcut',
+          overlay,
+          reason: 'view_mode_unavailable',
+          key,
         })
       }
 
@@ -664,6 +721,11 @@ function SPXCommandCenterContent() {
 
       if (key === 'i') {
         event.preventDefault()
+        if (!spatialOverlayControlsEnabled) {
+          trackBlockedOverlay('immersive')
+          trackShortcut('toggle_immersive_blocked')
+          return
+        }
         setImmersiveMode((previous) => {
           const next = !previous
           trackShortcut('toggle_immersive', { nextState: next })
@@ -674,6 +736,11 @@ function SPXCommandCenterContent() {
 
       if (key === 's') {
         event.preventDefault()
+        if (!spatialOverlayControlsEnabled) {
+          trackBlockedOverlay('sidebar')
+          trackShortcut('toggle_sidebar_blocked')
+          return
+        }
         setSidebarCollapsed((previous) => {
           const next = !previous
           trackShortcut('toggle_sidebar', { nextState: next })
@@ -684,6 +751,11 @@ function SPXCommandCenterContent() {
 
       if (key === 'a') {
         event.preventDefault()
+        if (!spatialOverlayControlsEnabled) {
+          trackBlockedOverlay('coach')
+          trackShortcut('toggle_spatial_coach_blocked')
+          return
+        }
         setShowSpatialCoach((previous) => {
           const next = !previous
           trackShortcut('toggle_spatial_coach', { nextState: next })
@@ -694,6 +766,11 @@ function SPXCommandCenterContent() {
 
       if (key === 'c') {
         event.preventDefault()
+        if (!spatialOverlayControlsEnabled) {
+          trackBlockedOverlay('cone')
+          trackShortcut('toggle_cone_blocked')
+          return
+        }
         setShowCone((previous) => {
           const next = !previous
           trackShortcut('toggle_cone', { nextState: next })
@@ -704,6 +781,11 @@ function SPXCommandCenterContent() {
 
       if (key === 'g') {
         event.preventDefault()
+        if (!spatialOverlayControlsEnabled) {
+          trackBlockedOverlay('gex')
+          trackShortcut('toggle_gex_glow_blocked')
+          return
+        }
         setShowGEXGlow((previous) => {
           const next = !previous
           trackShortcut('toggle_gex_glow', { nextState: next })
@@ -775,6 +857,7 @@ function SPXCommandCenterContent() {
       <SPXChart
         showAllRelevantLevels={showAllRelevantLevels}
         onDisplayedLevelsChange={handleDisplayedLevelsChange}
+        onLatestBarTimeChange={handleLatestChartBarTimeChange}
       />
       <FlowTicker />
       {(!stateDrivenLayoutEnabled || layoutMode !== 'in_trade') && <DecisionContext />}
@@ -992,6 +1075,7 @@ function SPXCommandCenterContent() {
                   showAllRelevantLevels={showAllRelevantLevels}
                   mobileExpanded
                   onDisplayedLevelsChange={handleDisplayedLevelsChange}
+                  onLatestBarTimeChange={handleLatestChartBarTimeChange}
                 />
               </div>
               <FlowTicker />
@@ -1021,6 +1105,7 @@ function SPXCommandCenterContent() {
                       showAllRelevantLevels={showAllRelevantLevels}
                       mobileExpanded
                       onDisplayedLevelsChange={handleDisplayedLevelsChange}
+                      onLatestBarTimeChange={handleLatestChartBarTimeChange}
                     />
                   </div>
                   <FlowTicker />
@@ -1099,6 +1184,9 @@ function SPXCommandCenterContent() {
                 showViewModeToggle={uxFlags.spatialHudV1}
                 viewModeLabel="Spatial HUD"
                 onToggleViewMode={() => handleViewModeChange('spatial')}
+                overlayCapability={{ levels: true, cone: false, coach: false, gex: false }}
+                sidebarToggleEnabled={false}
+                immersiveToggleEnabled={false}
               />
               <div className="h-full pb-16 pt-16">
                 {!initialSkeletonExpired && isLoading && levels.length === 0 ? (
@@ -1130,12 +1218,14 @@ function SPXCommandCenterContent() {
                     className="pointer-events-none absolute inset-0 z-[1]"
                     style={{ boxShadow: 'inset 0 0 120px rgba(0,0,0,0.7)' }}
                   />
-                  {showGEXGlow && <GEXAmbientGlow />}
+                  {showGEXGlow && <GEXAmbientGlow intensity="boosted" />}
                   {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
+                  <FlowRibbon className="absolute left-4 top-[74px] z-[24] w-[320px] max-w-[46vw]" />
                   <SPXChart
                     showAllRelevantLevels={showAllRelevantLevels}
                     onDisplayedLevelsChange={handleDisplayedLevelsChange}
                     onChartReady={handleChartReady}
+                    onLatestBarTimeChange={handleLatestChartBarTimeChange}
                     futureOffsetBars={showCone ? 42 : 12}
                     className="h-full w-full"
                   />
@@ -1143,7 +1233,10 @@ function SPXCommandCenterContent() {
                   {!spatialThrottled && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
                   {!spatialThrottled && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
                   {showCone && !spatialThrottled && (
-                    <ProbabilityConeSVG coordinatesRef={coordinatesRef} />
+                    <ProbabilityConeSVG
+                      coordinatesRef={coordinatesRef}
+                      anchorTimestampSec={latestChartBarTimeSec}
+                    />
                   )}
                   {showSpatialCoach && !spatialThrottled && (
                     <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
@@ -1202,6 +1295,9 @@ function SPXCommandCenterContent() {
                 showViewModeToggle={uxFlags.spatialHudV1}
                 viewModeLabel="Classic"
                 onToggleViewMode={() => handleViewModeChange('classic')}
+                overlayCapability={{ levels: true, cone: true, coach: true, gex: true }}
+                sidebarToggleEnabled
+                immersiveToggleEnabled
               />
               <SidebarPanel
                 width={sidebarWidth}

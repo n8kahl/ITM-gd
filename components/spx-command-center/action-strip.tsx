@@ -23,18 +23,57 @@ interface ActionStripProps {
   showViewModeToggle?: boolean
   viewModeLabel?: string
   onToggleViewMode?: () => void
+  overlayCapability?: {
+    levels?: boolean
+    cone?: boolean
+    coach?: boolean
+    gex?: boolean
+  }
+  sidebarToggleEnabled?: boolean
+  immersiveToggleEnabled?: boolean
 }
 
 const TIMEFRAMES: ChartTimeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D']
 
 export function ActionStrip(props: ActionStripProps) {
   const { selectedTimeframe, setChartTimeframe } = useSPXPriceContext()
+  const overlayCapability = props.overlayCapability || {}
+  const sidebarToggleEnabled = props.sidebarToggleEnabled ?? true
+  const immersiveToggleEnabled = props.immersiveToggleEnabled ?? true
 
   const overlayButtons = [
-    { label: 'Levels', key: 'L', active: props.showLevels, onClick: props.onToggleLevels, event: SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION },
-    { label: 'Cone', key: 'C', active: props.showCone, onClick: props.onToggleCone, event: SPX_TELEMETRY_EVENT.CONE_INTERACTION },
-    { label: 'Coach', key: 'A', active: props.showSpatialCoach, onClick: props.onToggleSpatialCoach, event: SPX_TELEMETRY_EVENT.SPATIAL_OVERLAY_TOGGLED },
-    { label: 'GEX', key: 'G', active: props.showGEXGlow, onClick: props.onToggleGEXGlow, event: SPX_TELEMETRY_EVENT.GEX_GLOW_TOGGLED },
+    {
+      label: 'Levels',
+      key: 'L',
+      active: props.showLevels,
+      enabled: overlayCapability.levels ?? true,
+      onClick: props.onToggleLevels,
+      event: SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION,
+    },
+    {
+      label: 'Cone',
+      key: 'C',
+      active: props.showCone,
+      enabled: overlayCapability.cone ?? true,
+      onClick: props.onToggleCone,
+      event: SPX_TELEMETRY_EVENT.CONE_INTERACTION,
+    },
+    {
+      label: 'Coach',
+      key: 'A',
+      active: props.showSpatialCoach,
+      enabled: overlayCapability.coach ?? true,
+      onClick: props.onToggleSpatialCoach,
+      event: SPX_TELEMETRY_EVENT.SPATIAL_OVERLAY_TOGGLED,
+    },
+    {
+      label: 'GEX',
+      key: 'G',
+      active: props.showGEXGlow,
+      enabled: overlayCapability.gex ?? true,
+      onClick: props.onToggleGEXGlow,
+      event: SPX_TELEMETRY_EVENT.GEX_GLOW_TOGGLED,
+    },
   ]
 
   return (
@@ -90,7 +129,17 @@ export function ActionStrip(props: ActionStripProps) {
           <button
             key={button.label}
             type="button"
+            disabled={!button.enabled}
+            title={button.enabled ? undefined : 'Available in Spatial HUD view'}
             onClick={() => {
+              if (!button.enabled) {
+                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
+                  surface: 'action_strip_overlay',
+                  overlay: button.label.toLowerCase(),
+                  reason: 'view_mode_unavailable',
+                })
+                return
+              }
               button.onClick()
               trackSPXTelemetryEvent(button.event, {
                 surface: 'action_strip_overlay',
@@ -98,11 +147,13 @@ export function ActionStrip(props: ActionStripProps) {
                 nextState: !button.active,
               })
             }}
+            data-testid={`spx-action-overlay-${button.label.toLowerCase()}`}
             className={cn(
               'flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
               button.active
                 ? 'border-champagne/30 bg-champagne/10 text-champagne'
                 : 'border-white/10 bg-white/[0.02] text-white/40 hover:text-white/70',
+              !button.enabled && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
             )}
           >
             {button.label}
@@ -116,18 +167,30 @@ export function ActionStrip(props: ActionStripProps) {
       <div className="flex items-center gap-1.5">
         <button
           type="button"
+          disabled={!sidebarToggleEnabled}
+          title={sidebarToggleEnabled ? undefined : 'Available in Spatial HUD view'}
           onClick={() => {
+            if (!sidebarToggleEnabled) {
+              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
+                surface: 'action_strip',
+                overlay: 'sidebar',
+                reason: 'view_mode_unavailable',
+              })
+              return
+            }
             props.onToggleSidebar()
             trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SIDEBAR_TOGGLED, {
               surface: 'action_strip',
               nextState: !props.sidebarOpen,
             })
           }}
+          data-testid="spx-action-sidebar-toggle"
           className={cn(
             'flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
             props.sidebarOpen
               ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
               : 'border-white/10 bg-white/[0.02] text-white/50',
+            !sidebarToggleEnabled && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
           )}
         >
           Panel
@@ -135,18 +198,30 @@ export function ActionStrip(props: ActionStripProps) {
         </button>
         <button
           type="button"
+          disabled={!immersiveToggleEnabled}
+          title={immersiveToggleEnabled ? undefined : 'Available in Spatial HUD view'}
           onClick={() => {
+            if (!immersiveToggleEnabled) {
+              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
+                surface: 'action_strip',
+                overlay: 'immersive',
+                reason: 'view_mode_unavailable',
+              })
+              return
+            }
             props.onToggleImmersive()
             trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.IMMERSIVE_MODE_TOGGLED, {
               surface: 'action_strip',
               nextState: !props.immersiveMode,
             })
           }}
+          data-testid="spx-action-immersive-toggle"
           className={cn(
             'flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
             props.immersiveMode
               ? 'border-champagne/40 bg-champagne/12 text-champagne'
               : 'border-white/10 bg-white/[0.02] text-white/50',
+            !immersiveToggleEnabled && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
           )}
         >
           Immersive
