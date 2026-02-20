@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { motion, useReducedMotion } from 'framer-motion'
 import { SPXCommandCenterProvider, useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
@@ -37,6 +37,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
   return target.isContentEditable
 }
+
+type SPXViewMode = 'classic' | 'spatial'
+const SPX_VIEW_MODE_STORAGE_KEY = 'spx.command_center:view_mode'
 
 function CoachPreviewCard() {
   const { tradeMode, inTradeSetup } = useSPXSetupContext()
@@ -91,6 +94,11 @@ function SPXCommandCenterContent() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showMobileCoachSheet, setShowMobileCoachSheet] = useState(false)
   const [showDesktopCoachPanel, setShowDesktopCoachPanel] = useState(false)
+  const [viewMode, setViewMode] = useState<SPXViewMode>(() => {
+    if (typeof window === 'undefined') return 'classic'
+    const stored = window.localStorage.getItem(SPX_VIEW_MODE_STORAGE_KEY)
+    return stored === 'spatial' ? 'spatial' : 'classic'
+  })
   const mobileReadOnly = !uxFlags.mobileFullTradeFocus
   const layoutMode = useMemo(() => resolveSPXLayoutMode({
     enabled: uxFlags.layoutStateMachine,
@@ -111,6 +119,31 @@ function SPXCommandCenterContent() {
     () => (selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered') ? selectedSetup : null),
     [selectedSetup],
   )
+  const handleViewModeChange = useCallback((nextMode: SPXViewMode, source: 'toggle' | 'command' | 'shortcut' = 'toggle') => {
+    setViewMode((previousMode) => {
+      if (!uxFlags.spatialHudV1 && nextMode === 'spatial') return 'classic'
+      if (previousMode === nextMode) return previousMode
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_VIEW_MODE_CHANGED, {
+        previousMode,
+        nextMode,
+        source,
+        mobile: isMobile,
+        layoutMode,
+        tradeMode,
+        selectedSetupId: selectedSetup?.id || null,
+      }, { persist: true })
+
+      window.localStorage.setItem(SPX_VIEW_MODE_STORAGE_KEY, nextMode)
+      return nextMode
+    })
+  }, [
+    isMobile,
+    layoutMode,
+    selectedSetup?.id,
+    tradeMode,
+    uxFlags.spatialHudV1,
+  ])
   const commandPaletteCommands = useMemo<SPXPaletteCommand[]>(() => {
     if (!uxFlags.commandPalette) return []
 
@@ -213,6 +246,21 @@ function SPXCommandCenterContent() {
       },
     })
 
+    if (!isMobile && uxFlags.spatialHudV1) {
+      commands.push({
+        id: 'toggle-view-mode',
+        label: viewMode === 'classic' ? 'Switch to spatial HUD view' : 'Switch to classic view',
+        keywords: ['view', 'layout', 'spatial', 'classic', 'hud', 'toggle'],
+        shortcut: 'V',
+        group: 'View',
+        run: () => {
+          const nextMode: SPXViewMode = viewMode === 'classic' ? 'spatial' : 'classic'
+          handleViewModeChange(nextMode, 'command')
+          trackCommand('view_mode_toggle', { nextMode })
+        },
+      })
+    }
+
     commands.push({
       id: 'coach-risk-check',
       label: 'Ask coach: Risk check',
@@ -265,6 +313,10 @@ function SPXCommandCenterContent() {
     showLevelOverlay,
     tradeMode,
     uxFlags.commandPalette,
+    uxFlags.spatialHudV1,
+    handleViewModeChange,
+    isMobile,
+    viewMode,
   ])
   const handleMobileTabChange = (next: MobilePanelTab) => {
     setMobileTab(next)
@@ -422,6 +474,15 @@ function SPXCommandCenterContent() {
         event.preventDefault()
         window.dispatchEvent(new CustomEvent(SPX_SHORTCUT_EVENT.FLOW_TOGGLE))
         trackShortcut('toggle_flow_panel')
+        return
+      }
+
+      if (key === 'v') {
+        if (isMobile || !uxFlags.spatialHudV1) return
+        event.preventDefault()
+        const nextMode: SPXViewMode = viewMode === 'classic' ? 'spatial' : 'classic'
+        handleViewModeChange(nextMode, 'shortcut')
+        trackShortcut('toggle_view_mode', { nextMode })
       }
     }
 
@@ -441,6 +502,10 @@ function SPXCommandCenterContent() {
     tradeMode,
     uxFlags.commandPalette,
     uxFlags.keyboardShortcuts,
+    uxFlags.spatialHudV1,
+    isMobile,
+    viewMode,
+    handleViewModeChange,
   ])
 
   useEffect(() => {
@@ -466,6 +531,99 @@ function SPXCommandCenterContent() {
     tradeMode,
   ])
 
+  const renderDesktopMainSurface = (className?: string) => (
+    <div className={cn('relative h-full space-y-2.5', className)}>
+      <SPXChart />
+      <FlowTicker />
+      {(!stateDrivenLayoutEnabled || layoutMode !== 'in_trade') && <DecisionContext />}
+
+      {showLevelOverlay && (
+        <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
+          <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLevelOverlay(false)
+                  trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+                    action: 'overlay_close',
+                    surface: 'desktop',
+                  })
+                }}
+                className="rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <LevelMatrix />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const renderDesktopSidebarSurface = (className?: string) => (
+    <div className={cn('h-full space-y-2.5 overflow-auto', className)}>
+      {stateDrivenLayoutEnabled && layoutMode === 'scan' && (
+        uxFlags.coachDockV1 ? (
+          <div className="sticky top-0 z-10 bg-[#07090D]/90 pb-2 backdrop-blur">
+            <CoachDock
+              surface="desktop"
+              isOpen={desktopCoachPanelOpen}
+              onToggle={handleDesktopCoachDockToggle}
+            />
+            {desktopCoachPanelOpen ? (
+              <div className="mt-2">
+                <AICoachFeed />
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <CoachPreviewCard />
+        )
+      )}
+
+      <SetupFeed />
+      {!stateDrivenLayoutEnabled ? (
+        <>
+          <ContractSelector />
+          <AICoachFeed />
+        </>
+      ) : layoutMode === 'scan' ? (
+        null
+      ) : (
+        <>
+          <AICoachFeed />
+          <ContractSelector />
+        </>
+      )}
+
+      {(!stateDrivenLayoutEnabled || layoutMode === 'evaluate') && (
+        <details
+          className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+          onToggle={(event) => {
+            const expanded = (event.currentTarget as HTMLDetailsElement).open
+            trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+              surface: 'advanced_analytics',
+              action: expanded ? 'expand' : 'collapse',
+              layoutMode,
+            })
+          }}
+        >
+          <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70">
+            Advanced GEX · Basis · Analytics
+          </summary>
+          <div className="mt-2.5 space-y-2.5">
+            <GEXLandscape profile={gexProfile?.combined || null} />
+            <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+          </div>
+        </details>
+      )}
+    </div>
+  )
+
+  const desktopViewMode: SPXViewMode = uxFlags.spatialHudV1 ? viewMode : 'classic'
   const shouldShowInitialSkeleton = !initialSkeletonExpired && isLoading && activeSetups.length === 0 && levels.length === 0
 
   if (shouldShowInitialSkeleton) {
@@ -597,104 +755,32 @@ function SPXCommandCenterContent() {
           {!initialSkeletonExpired && isLoading && levels.length === 0 ? (
             <SPXPanelSkeleton />
           ) : (
-            <PanelGroup direction="horizontal" className="min-h-[68vh]" data-testid={stateDrivenLayoutEnabled ? 'spx-desktop-state-driven' : undefined}>
-              {/* ─── LEFT: Battlefield (chart + flow + context) ─── */}
-              <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 64 : 60} minSize={45}>
-                <div className="relative h-full space-y-2.5 pr-1">
-                  <SPXChart />
-                  <FlowTicker />
-                  {(!stateDrivenLayoutEnabled || layoutMode !== 'in_trade') && <DecisionContext />}
+            desktopViewMode === 'classic' ? (
+              <PanelGroup direction="horizontal" className="min-h-[68vh]" data-testid={stateDrivenLayoutEnabled ? 'spx-desktop-state-driven' : undefined}>
+                <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 64 : 60} minSize={45}>
+                  {renderDesktopMainSurface('pr-1')}
+                </Panel>
 
-                  {/* Level matrix overlay */}
-                  {showLevelOverlay && (
-                    <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
-                      <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowLevelOverlay(false)
-                              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
-                                action: 'overlay_close',
-                                surface: 'desktop',
-                              })
-                            }}
-                            className="rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white"
-                          >
-                            Close
-                          </button>
-                        </div>
-                        <LevelMatrix />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Panel>
+                <PanelResizeHandle className="w-2 bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25 cursor-col-resize" />
 
-              <PanelResizeHandle className="w-2 bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25 cursor-col-resize" />
-
-              {/* ─── RIGHT: Setups + Contract + Coach ─── */}
-              <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
-                <div className="h-full space-y-2.5 overflow-auto pl-1">
-                  {stateDrivenLayoutEnabled && layoutMode === 'scan' && (
-                    uxFlags.coachDockV1 ? (
-                      <div className="sticky top-0 z-10 bg-[#07090D]/90 pb-2 backdrop-blur">
-                        <CoachDock
-                          surface="desktop"
-                          isOpen={desktopCoachPanelOpen}
-                          onToggle={handleDesktopCoachDockToggle}
-                        />
-                        {desktopCoachPanelOpen ? (
-                          <div className="mt-2">
-                            <AICoachFeed />
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <CoachPreviewCard />
-                    )
-                  )}
-
-                  <SetupFeed />
-                  {!stateDrivenLayoutEnabled ? (
-                    <>
-                      <ContractSelector />
-                      <AICoachFeed />
-                    </>
-                  ) : layoutMode === 'scan' ? (
-                    null
-                  ) : (
-                    <>
-                      <AICoachFeed />
-                      <ContractSelector />
-                    </>
-                  )}
-
-                  {(!stateDrivenLayoutEnabled || layoutMode === 'evaluate') && (
-                    <details
-                      className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
-                      onToggle={(event) => {
-                        const expanded = (event.currentTarget as HTMLDetailsElement).open
-                        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
-                          surface: 'advanced_analytics',
-                          action: expanded ? 'expand' : 'collapse',
-                          layoutMode,
-                        })
-                      }}
-                    >
-                      <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70">
-                        Advanced GEX · Basis · Analytics
-                      </summary>
-                      <div className="mt-2.5 space-y-2.5">
-                        <GEXLandscape profile={gexProfile?.combined || null} />
-                        <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
-                      </div>
-                    </details>
-                  )}
-                </div>
-              </Panel>
-            </PanelGroup>
+                <Panel defaultSize={stateDrivenLayoutEnabled && layoutMode === 'scan' ? 36 : 40} minSize={30}>
+                  {renderDesktopSidebarSurface('pl-1')}
+                </Panel>
+              </PanelGroup>
+            ) : (
+              <div
+                className={cn(
+                  'grid min-h-[68vh] gap-2.5',
+                  stateDrivenLayoutEnabled && layoutMode === 'scan'
+                    ? 'grid-cols-[minmax(0,1fr)_360px]'
+                    : 'grid-cols-[minmax(0,1fr)_320px]',
+                )}
+                data-testid="spx-desktop-spatial"
+              >
+                {renderDesktopMainSurface()}
+                {renderDesktopSidebarSurface()}
+              </div>
+            )
           )}
         </motion.div>
       )}
@@ -719,23 +805,64 @@ function SPXCommandCenterContent() {
               <p><span className="font-mono text-emerald-200">1-4</span> coach quick actions</p>
               <p><span className="font-mono text-emerald-200">L</span> toggle level overlay</p>
               <p><span className="font-mono text-emerald-200">F</span> toggle flow expansion</p>
+              {!isMobile && uxFlags.spatialHudV1 && (
+                <p><span className="font-mono text-emerald-200">V</span> toggle classic/spatial view</p>
+              )}
               <p><span className="font-mono text-emerald-200">?</span> open this help</p>
             </div>
           </div>
         </div>
       )}
 
-      {uxFlags.commandPalette && (
-        <div className="flex items-center justify-end">
-          <button
-            type="button"
-            data-testid="spx-command-palette-trigger"
-            onClick={() => setShowCommandPalette(true)}
-            className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.06] hover:text-white"
-          >
-            <span className="rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-[9px]">⌘K</span>
-            Command Palette
-          </button>
+      {(!isMobile || uxFlags.commandPalette) && (
+        <div className={cn('flex items-center gap-2', !isMobile && uxFlags.commandPalette ? 'justify-between' : 'justify-end')}>
+          {!isMobile && uxFlags.spatialHudV1 && (
+            <div
+              className="inline-flex items-center rounded-lg border border-white/15 bg-white/[0.03] p-1"
+              data-testid="spx-view-mode-toggle"
+            >
+              <button
+                type="button"
+                data-testid="spx-view-mode-classic"
+                aria-pressed={desktopViewMode === 'classic'}
+                onClick={() => handleViewModeChange('classic')}
+                className={cn(
+                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                  desktopViewMode === 'classic'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : 'text-white/55 hover:text-white/80',
+                )}
+              >
+                Classic
+              </button>
+              <button
+                type="button"
+                data-testid="spx-view-mode-spatial"
+                aria-pressed={desktopViewMode === 'spatial'}
+                onClick={() => handleViewModeChange('spatial')}
+                className={cn(
+                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                  desktopViewMode === 'spatial'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : 'text-white/55 hover:text-white/80',
+                )}
+              >
+                Spatial HUD
+              </button>
+            </div>
+          )}
+
+          {uxFlags.commandPalette && (
+            <button
+              type="button"
+              data-testid="spx-command-palette-trigger"
+              onClick={() => setShowCommandPalette(true)}
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.06] hover:text-white"
+            >
+              <span className="rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-[9px]">⌘K</span>
+              Command Palette
+            </button>
+          )}
         </div>
       )}
 
