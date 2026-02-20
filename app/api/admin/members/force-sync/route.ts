@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
 import { hasMembersAreaAccess } from '@/lib/discord-role-access'
+import {
+  buildSyncedAppMetadata,
+  buildSyncedUserMetadata,
+  resolveDiscordUserIdFromAuthUser,
+} from '@/lib/discord-user-sync'
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
 
@@ -137,13 +142,24 @@ async function revokeAccessForNonMember(params: {
     console.warn('[Admin Force Sync] Failed to clear user_discord_profiles on NOT_MEMBER:', profileError.message)
   }
 
+  const fallbackUsername = getBestEffortDiscordUsername(authUser)
   const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-    app_metadata: {
-      ...(authUser?.app_metadata || {}),
-      is_admin: false,
-      is_member: false,
-      discord_roles: [],
-    },
+    app_metadata: buildSyncedAppMetadata({
+      existingAppMetadata: authUser?.app_metadata,
+      discordRoles: [],
+      isAdmin: false,
+      isMember: false,
+      discordUserId,
+      discordUsername: fallbackUsername,
+      discordAvatar: null,
+    }),
+    user_metadata: buildSyncedUserMetadata({
+      existingUserMetadata: authUser?.user_metadata,
+      discordRoles: [],
+      discordUserId,
+      discordUsername: fallbackUsername,
+      discordAvatar: null,
+    }),
   })
   if (metadataError) {
     console.warn('[Admin Force Sync] Failed to clear auth metadata on NOT_MEMBER:', metadataError.message)
@@ -266,11 +282,20 @@ export async function POST(request: NextRequest) {
     }
 
     authUser = authUserResult.user
-    const discordUserId = authUser.user_metadata?.provider_id || authUser.user_metadata?.sub || null
+    const { data: cachedDiscordProfile } = await supabaseAdmin
+      .from('user_discord_profiles')
+      .select('discord_user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    const discordUserId = resolveDiscordUserIdFromAuthUser(
+      authUser,
+      typeof cachedDiscordProfile?.discord_user_id === 'string' ? cachedDiscordProfile.discord_user_id : null,
+    )
     discordUserIdForRevoke = discordUserId
     if (!discordUserId) {
       return NextResponse.json(
-        { success: false, error: 'Discord user ID not found in user metadata (provider_id/sub)' },
+        { success: false, error: 'Discord user ID could not be resolved from auth metadata, identities, or cached profile' },
         { status: 400 },
       )
     }
@@ -382,12 +407,22 @@ export async function POST(request: NextRequest) {
 
     // Persist claims + discord_roles into auth app_metadata (so middleware can read them).
     const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      app_metadata: {
-        ...(authUser.app_metadata || {}),
-        is_admin: hasAdminPermission,
-        is_member: hasMemberPermission,
-        discord_roles: discordRoles,
-      },
+      app_metadata: buildSyncedAppMetadata({
+        existingAppMetadata: authUser.app_metadata,
+        discordRoles,
+        isAdmin: hasAdminPermission,
+        isMember: hasMemberPermission,
+        discordUserId,
+        discordUsername: username,
+        discordAvatar: avatar,
+      }),
+      user_metadata: buildSyncedUserMetadata({
+        existingUserMetadata: authUser.user_metadata,
+        discordRoles,
+        discordUserId,
+        discordUsername: username,
+        discordAvatar: avatar,
+      }),
     })
 
     if (metadataError) {

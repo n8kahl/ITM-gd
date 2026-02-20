@@ -14,6 +14,30 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
+async function upsertRoleCatalogEntry(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>
+  roleId: string
+  roleName: string | null | undefined
+}): Promise<void> {
+  const roleName = typeof params.roleName === 'string' ? params.roleName.trim() : ''
+  if (!roleName) return
+
+  const nowIso = new Date().toISOString()
+  const supabaseAny = params.supabase as any
+  const { error } = await supabaseAny
+    .from('discord_guild_roles')
+    .upsert({
+      discord_role_id: params.roleId,
+      discord_role_name: roleName,
+      last_synced_at: nowIso,
+      updated_at: nowIso,
+    }, { onConflict: 'discord_role_id' })
+
+  if (error) {
+    console.warn('[Admin Roles API] Failed to upsert discord role catalog entry:', error.message)
+  }
+}
+
 // GET - Fetch all Discord role permission mappings and app permissions
 export async function GET() {
   if (!await isAdminUser()) {
@@ -49,6 +73,11 @@ export async function GET() {
       return NextResponse.json({ error: permError.message }, { status: 500 })
     }
 
+    const { data: catalogRoles } = await (supabase as any)
+      .from('discord_guild_roles')
+      .select('discord_role_id, discord_role_name')
+      .order('position', { ascending: false })
+
     // Group mappings by discord_role_id
     const roleGroups: Record<string, {
       discord_role_id: string
@@ -70,9 +99,33 @@ export async function GET() {
       roleGroups[mapping.discord_role_id].mapping_ids.push(mapping.id)
     }
 
+    for (const catalogRole of catalogRoles || []) {
+      const roleId = String((catalogRole as any)?.discord_role_id || '').trim()
+      if (!roleId) continue
+
+      const roleName = String((catalogRole as any)?.discord_role_name || '').trim() || null
+      if (!roleGroups[roleId]) {
+        roleGroups[roleId] = {
+          discord_role_id: roleId,
+          discord_role_name: roleName,
+          permission_ids: [],
+          mapping_ids: [],
+        }
+      } else if (!roleGroups[roleId].discord_role_name && roleName) {
+        roleGroups[roleId].discord_role_name = roleName
+      }
+    }
+
+    const roles = Object.values(roleGroups).sort((a, b) => {
+      const aName = (a.discord_role_name || '').toLowerCase()
+      const bName = (b.discord_role_name || '').toLowerCase()
+      if (aName !== bName) return aName.localeCompare(bName)
+      return a.discord_role_id.localeCompare(b.discord_role_id)
+    })
+
     return NextResponse.json({
       success: true,
-      roles: Object.values(roleGroups),
+      roles,
       permissions: permissions || [],
     })
   } catch (error) {
@@ -91,20 +144,55 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { discord_role_id, discord_role_name, permission_ids } = body
+    const normalizedRoleId = String(discord_role_id || '').trim()
 
-    if (!discord_role_id) {
+    if (!normalizedRoleId) {
       return NextResponse.json({ error: 'Discord Role ID is required' }, { status: 400 })
     }
 
-    if (!permission_ids || !Array.isArray(permission_ids) || permission_ids.length === 0) {
-      return NextResponse.json({ error: 'At least one permission is required' }, { status: 400 })
+    if (permission_ids !== undefined && !Array.isArray(permission_ids)) {
+      return NextResponse.json({ error: 'permission_ids must be an array' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
+    const normalizedPermissionIds = Array.isArray(permission_ids)
+      ? permission_ids.map((permissionId: unknown) => String(permissionId).trim()).filter(Boolean)
+      : []
+
+    await upsertRoleCatalogEntry({
+      supabase,
+      roleId: normalizedRoleId,
+      roleName: discord_role_name || null,
+    })
+
+    if (normalizedPermissionIds.length === 0) {
+      await logAdminActivity({
+        action: 'role_permissions_changed',
+        targetType: 'discord_role',
+        targetId: normalizedRoleId,
+        details: {
+          operation: 'create',
+          discord_role_name: discord_role_name || null,
+          permission_ids: [],
+          note: 'Role saved without app permissions',
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: [],
+        propagation: {
+          processed: 0,
+          failed: 0,
+          affectedUserIds: [],
+          errors: [],
+        },
+      })
+    }
 
     // Insert all permission mappings for this role
-    const mappings = permission_ids.map((permId: string) => ({
-      discord_role_id,
+    const mappings = normalizedPermissionIds.map((permId: string) => ({
+      discord_role_id: normalizedRoleId,
       discord_role_name: discord_role_name || null,
       permission_id: permId,
     }))
@@ -127,17 +215,17 @@ export async function POST(request: NextRequest) {
     await logAdminActivity({
       action: 'role_permissions_changed',
       targetType: 'discord_role',
-      targetId: discord_role_id,
+      targetId: normalizedRoleId,
       details: {
         operation: 'create',
         discord_role_name: discord_role_name || null,
-        permission_ids,
+        permission_ids: normalizedPermissionIds,
       },
     })
 
     const propagation = await recomputeUsersForRoleIds({
       supabaseAdmin: supabase,
-      roleIds: [discord_role_id],
+      roleIds: [normalizedRoleId],
     }).catch((error) => ({
       processed: 0,
       failed: 0,
@@ -166,29 +254,43 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
     const { discord_role_id, discord_role_name, permission_ids } = body
+    const normalizedRoleId = String(discord_role_id || '').trim()
 
-    if (!discord_role_id) {
+    if (!normalizedRoleId) {
       return NextResponse.json({ error: 'Discord Role ID is required' }, { status: 400 })
     }
 
+    if (permission_ids !== undefined && !Array.isArray(permission_ids)) {
+      return NextResponse.json({ error: 'permission_ids must be an array' }, { status: 400 })
+    }
+
     const supabase = getSupabaseAdmin()
+    const normalizedPermissionIds = Array.isArray(permission_ids)
+      ? permission_ids.map((permissionId: unknown) => String(permissionId).trim()).filter(Boolean)
+      : []
+
+    await upsertRoleCatalogEntry({
+      supabase,
+      roleId: normalizedRoleId,
+      roleName: discord_role_name || null,
+    })
 
     // Delete existing mappings for this role
     const { error: deleteError } = await supabase
       .from('discord_role_permissions')
       .delete()
-      .eq('discord_role_id', discord_role_id)
+      .eq('discord_role_id', normalizedRoleId)
 
     if (deleteError) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 })
     }
 
     // If no permissions, we're done (role removed)
-    if (!permission_ids || permission_ids.length === 0) {
+    if (normalizedPermissionIds.length === 0) {
       await logAdminActivity({
         action: 'role_permissions_changed',
         targetType: 'discord_role',
-        targetId: discord_role_id,
+        targetId: normalizedRoleId,
         details: {
           operation: 'replace',
           discord_role_name: discord_role_name || null,
@@ -197,7 +299,7 @@ export async function PUT(request: NextRequest) {
       })
       const propagation = await recomputeUsersForRoleIds({
         supabaseAdmin: supabase,
-        roleIds: [discord_role_id],
+        roleIds: [normalizedRoleId],
       }).catch((error) => ({
         processed: 0,
         failed: 0,
@@ -213,8 +315,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // Insert new permission mappings
-    const mappings = permission_ids.map((permId: string) => ({
-      discord_role_id,
+    const mappings = normalizedPermissionIds.map((permId: string) => ({
+      discord_role_id: normalizedRoleId,
       discord_role_name: discord_role_name || null,
       permission_id: permId,
     }))
@@ -231,17 +333,17 @@ export async function PUT(request: NextRequest) {
     await logAdminActivity({
       action: 'role_permissions_changed',
       targetType: 'discord_role',
-      targetId: discord_role_id,
+      targetId: normalizedRoleId,
       details: {
         operation: 'replace',
         discord_role_name: discord_role_name || null,
-        permission_ids,
+        permission_ids: normalizedPermissionIds,
       },
     })
 
     const propagation = await recomputeUsersForRoleIds({
       supabaseAdmin: supabase,
-      roleIds: [discord_role_id],
+      roleIds: [normalizedRoleId],
     }).catch((error) => ({
       processed: 0,
       failed: 0,
@@ -269,7 +371,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const discordRoleId = searchParams.get('discord_role_id')
+    const discordRoleId = String(searchParams.get('discord_role_id') || '').trim()
 
     if (!discordRoleId) {
       return NextResponse.json({ error: 'Discord Role ID is required' }, { status: 400 })

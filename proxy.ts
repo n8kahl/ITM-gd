@@ -123,9 +123,10 @@ async function resolveDiscordRoleIds(
   forceProfileLookup = false,
 ): Promise<string[]> {
   let roleIds = extractDiscordRoleIdsFromUser(user)
-  if (!forceProfileLookup && roleIds.length > 0) return roleIds
+  let hasProfileRow = false
 
-  // Fallback: query cached Discord profile roles if JWT metadata does not include them.
+  // Query cached Discord profile roles and treat them as source-of-truth when present.
+  // This prevents stale JWT role claims from outliving the latest Discord sync state.
   try {
     const rolesResult = await Promise.race([
       supabase
@@ -136,13 +137,16 @@ async function resolveDiscordRoleIds(
       new Promise((_, reject) => setTimeout(() => reject(new Error('roles lookup timeout')), 2000)),
     ]) as any
 
-    const profileRoleIds = normalizeDiscordRoleIds(rolesResult?.data?.discord_roles)
-    if (profileRoleIds.length > 0) {
-      roleIds = Array.from(new Set([...roleIds, ...profileRoleIds]))
+    hasProfileRow = !!rolesResult?.data
+    if (hasProfileRow) {
+      roleIds = normalizeDiscordRoleIds(rolesResult.data.discord_roles)
     }
   } catch (err) {
     console.warn('[Middleware] Failed to lookup user_discord_profiles.discord_roles:', err)
   }
+
+  if (hasProfileRow) return roleIds
+  if (forceProfileLookup) return []
 
   return roleIds
 }

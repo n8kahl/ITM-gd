@@ -91,6 +91,112 @@ function getBestEffortDiscordUsername(user: any): string {
   return 'Unknown'
 }
 
+function asTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeRoleIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return Array.from(new Set(raw.map((id) => String(id).trim()).filter(Boolean)))
+}
+
+function resolveDiscordUserIdFromUser(user: any, fallbackDiscordUserId: string | null = null): string | null {
+  const fromMetadata = (
+    asTrimmedString(user?.user_metadata?.provider_id)
+    || asTrimmedString(user?.user_metadata?.discord_user_id)
+    || asTrimmedString(user?.user_metadata?.sub)
+    || asTrimmedString(user?.app_metadata?.discord_user_id)
+  )
+  if (fromMetadata) return fromMetadata
+
+  const identities = Array.isArray(user?.identities) ? user.identities : []
+  for (const identity of identities) {
+    const provider = asTrimmedString(identity?.provider)
+    const identityProvider = asTrimmedString(identity?.identity_data?.provider)
+    if (provider !== 'discord' && identityProvider !== 'discord') {
+      continue
+    }
+
+    const fromIdentity = (
+      asTrimmedString(identity?.identity_data?.provider_id)
+      || asTrimmedString(identity?.identity_data?.user_id)
+      || asTrimmedString(identity?.identity_data?.sub)
+      || asTrimmedString(identity?.id)
+    )
+    if (fromIdentity) return fromIdentity
+  }
+
+  return asTrimmedString(fallbackDiscordUserId)
+}
+
+function buildDiscordAvatarUrl(discordUserId: string | null | undefined, avatarHash: string | null | undefined): string | null {
+  const userId = asTrimmedString(discordUserId)
+  const avatar = asTrimmedString(avatarHash)
+  if (!userId || !avatar) return null
+  return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png`
+}
+
+function buildSyncedAppMetadata(params: {
+  existingAppMetadata: any
+  isAdmin: boolean
+  isMember: boolean
+  discordUserId: string
+  discordUsername: string | null
+  discordAvatar: string | null
+  discordRoles: string[]
+}): Record<string, unknown> {
+  const {
+    existingAppMetadata,
+    isAdmin,
+    isMember,
+    discordUserId,
+    discordUsername,
+    discordAvatar,
+    discordRoles,
+  } = params
+
+  return {
+    ...(existingAppMetadata || {}),
+    is_admin: isAdmin,
+    is_member: isMember,
+    discord_roles: normalizeRoleIds(discordRoles),
+    discord_user_id: discordUserId,
+    discord_username: discordUsername,
+    discord_avatar: discordAvatar,
+  }
+}
+
+function buildSyncedUserMetadata(params: {
+  existingUserMetadata: any
+  discordUserId: string
+  discordUsername: string | null
+  discordAvatar: string | null
+  discordRoles: string[]
+}): Record<string, unknown> {
+  const {
+    existingUserMetadata,
+    discordUserId,
+    discordUsername,
+    discordAvatar,
+    discordRoles,
+  } = params
+
+  const next = {
+    ...(existingUserMetadata || {}),
+    provider_id: asTrimmedString(existingUserMetadata?.provider_id) || discordUserId,
+    sub: asTrimmedString(existingUserMetadata?.sub) || discordUserId,
+    discord_user_id: discordUserId,
+    discord_username: discordUsername,
+    discord_avatar: discordAvatar,
+    discord_avatar_url: buildDiscordAvatarUrl(discordUserId, discordAvatar),
+    discord_roles: normalizeRoleIds(discordRoles),
+  } as Record<string, unknown>
+
+  return next
+}
+
 async function revokeAccessForNonMember(params: {
   supabaseAdmin: any
   user: any
@@ -126,15 +232,26 @@ async function revokeAccessForNonMember(params: {
       console.error('[sync-discord-roles] Failed to clear user_discord_profiles roles on NOT_MEMBER:', profileError)
     }
 
+    const fallbackUsername = getBestEffortDiscordUsername(user)
     const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
       user.id,
       {
-        app_metadata: {
-          ...(user.app_metadata || {}),
-          is_admin: false,
-          is_member: false,
-          discord_roles: [],
-        },
+        app_metadata: buildSyncedAppMetadata({
+          existingAppMetadata: user.app_metadata,
+          isAdmin: false,
+          isMember: false,
+          discordUserId,
+          discordUsername: fallbackUsername,
+          discordAvatar: null,
+          discordRoles: [],
+        }),
+        user_metadata: buildSyncedUserMetadata({
+          existingUserMetadata: user.user_metadata,
+          discordUserId,
+          discordUsername: fallbackUsername,
+          discordAvatar: null,
+          discordRoles: [],
+        }),
       }
     )
     if (metadataError) {
@@ -242,18 +359,29 @@ serve(async (req) => {
       return errorResponse('Invalid or expired token', ERROR_CODES.INVALID_SESSION, 401)
     }
 
-    // Get Discord user ID from Supabase user metadata (stored during OAuth)
-    const discordUserId = user.user_metadata?.provider_id || user.user_metadata?.sub
+    // Create admin client for database operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Resolve Discord user ID from metadata/identities first, then cached profile fallback.
+    const { data: cachedProfileForDiscordId } = await supabaseAdmin
+      .from('user_discord_profiles')
+      .select('discord_user_id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    const discordUserId = resolveDiscordUserIdFromUser(
+      user,
+      typeof cachedProfileForDiscordId?.discord_user_id === 'string'
+        ? cachedProfileForDiscordId.discord_user_id
+        : null,
+    )
     if (!discordUserId) {
       return errorResponse(
-        'Discord user ID not found. Please re-authenticate with Discord.',
+        'Discord user ID not found. Please reconnect Discord.',
         ERROR_CODES.MISSING_TOKEN,
         401
       )
     }
-
-    // Create admin client for database operations
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     // Fetch discord_guild_id and discord_bot_token from app_settings table
     const { data: settings, error: settingError } = await supabaseAdmin
@@ -345,7 +473,7 @@ serve(async (req) => {
     const memberData: DiscordMember = await discordResponse.json()
     // Note: discordUserId already set from user metadata above
     const discordUsername = memberData.user?.username || memberData.nick || 'Unknown'
-    const discordRoles = memberData.roles
+    const discordRoles = normalizeRoleIds(memberData.roles)
 
     console.log(`Syncing roles for Discord user ${discordUsername} (${discordUserId})`)
     console.log(`Found ${discordRoles.length} roles:`, discordRoles)
@@ -479,16 +607,26 @@ serve(async (req) => {
     console.log(`Updating auth claims: is_admin=${hasAdminPermission}, is_member=${hasMemberPermission}`)
 
     try {
-      // Update app_metadata directly using admin client
+      // Keep auth metadata in lockstep with cached Discord profile data.
       const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
         user.id,
         {
-          app_metadata: {
-            ...user.app_metadata,
-            is_admin: hasAdminPermission,
-            is_member: hasMemberPermission,
-            discord_roles: discordRoles,
-          }
+          app_metadata: buildSyncedAppMetadata({
+            existingAppMetadata: user.app_metadata,
+            isAdmin: hasAdminPermission,
+            isMember: hasMemberPermission,
+            discordUserId,
+            discordUsername,
+            discordAvatar: memberData.user?.avatar || null,
+            discordRoles,
+          }),
+          user_metadata: buildSyncedUserMetadata({
+            existingUserMetadata: user.user_metadata,
+            discordUserId,
+            discordUsername,
+            discordAvatar: memberData.user?.avatar || null,
+            discordRoles,
+          }),
         }
       )
 

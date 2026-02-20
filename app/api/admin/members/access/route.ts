@@ -5,6 +5,7 @@ import {
   MEMBERS_ALLOWED_ROLE_IDS,
   hasMembersAreaAccess,
 } from '@/lib/discord-role-access'
+import { resolveDiscordUserIdFromAuthUser } from '@/lib/discord-user-sync'
 
 type MembershipTier = 'core' | 'pro' | 'executive'
 
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
     }
 
     const authUser = authUserResult.user
-    const discordUserIdFromAuth = authUser.user_metadata?.provider_id || authUser.user_metadata?.sub || null
+    const discordUserIdFromAuth = resolveDiscordUserIdFromAuthUser(authUser)
     const rolesFromJwt = extractDiscordRoleIds(authUser)
 
     const [{ data: discordProfile }, { data: userPermissions }, { data: roleTierSetting }, { data: tabConfigs }] = await Promise.all([
@@ -204,7 +205,8 @@ export async function GET(request: NextRequest) {
       ? discordProfile!.discord_roles.map((id: unknown) => String(id)).filter(Boolean)
       : []
 
-    const effectiveRoleIds = rolesFromJwt.length > 0 ? rolesFromJwt : rolesFromProfile
+    const hasCachedDiscordProfile = !!discordProfile
+    const effectiveRoleIds = hasCachedDiscordProfile ? rolesFromProfile : rolesFromJwt
     const hasMembersRole = hasMembersAreaAccess(effectiveRoleIds)
 
     const roleTierMapping = parseRoleTierMapping(roleTierSetting?.value)
@@ -355,8 +357,13 @@ export async function GET(request: NextRequest) {
       },
       diagnosis: {
         has_discord_user_id: !!discordUserIdFromAuth,
-        has_cached_discord_profile: !!discordProfile,
-        effective_roles_source: rolesFromJwt.length > 0 ? 'jwt' : (rolesFromProfile.length > 0 ? 'user_discord_profiles' : 'none'),
+        has_cached_discord_profile: hasCachedDiscordProfile,
+        effective_roles_source: hasCachedDiscordProfile
+          ? 'user_discord_profiles'
+          : (rolesFromJwt.length > 0 ? 'jwt' : 'none'),
+        jwt_profile_role_mismatch: hasCachedDiscordProfile
+          ? JSON.stringify([...rolesFromJwt].sort()) !== JSON.stringify([...rolesFromProfile].sort())
+          : false,
         likely_members_access_issue: !hasMembersRole
           ? 'Missing required members role'
           : null,
