@@ -4,6 +4,7 @@ import {
   buildProbabilityConeGeometry,
   buildGammaTopographyEntries,
   buildRiskRewardShadowGeometry,
+  resolveVisibleChartLevels,
   buildSetupLockGeometry,
   buildTopographicLadderEntries,
   evolveSpatialGhostLifecycle,
@@ -32,8 +33,10 @@ describe('spatial-hud helpers', () => {
 
       expect(geometry).not.toBeNull()
       expect(geometry?.usedFallback).toBe(false)
+      expect(geometry?.anchorMode).toBe('fallback')
       expect(geometry?.path.startsWith('M820,')).toBe(true)
       expect(geometry?.centerLine.startsWith('M820,')).toBe(true)
+      expect(geometry?.startY).toBeGreaterThan(0)
     })
 
     it('builds fallback cone when prediction windows are missing', () => {
@@ -49,8 +52,36 @@ describe('spatial-hud helpers', () => {
 
       expect(geometry).not.toBeNull()
       expect(geometry?.usedFallback).toBe(true)
+      expect(geometry?.anchorMode).toBe('fallback')
       expect(geometry?.path.includes('Z')).toBe(true)
       expect(geometry?.centerLine.length).toBeGreaterThan(0)
+    })
+
+    it('uses time anchoring when chart exposes forward time coordinates', () => {
+      const geometry = buildProbabilityConeGeometry({
+        width: 1000,
+        height: 420,
+        currentPrice: 6000,
+        windows: [
+          { minutesForward: 5, high: 6008, low: 5994, center: 6001 },
+          { minutesForward: 15, high: 6016, low: 5988, center: 6002 },
+        ],
+        anchorTimestampSec: 1700000000,
+        timeToPixel: (timestamp) => {
+          if (timestamp === 1700000000) return 790
+          if (timestamp === 1700000300) return 850
+          if (timestamp === 1700000900) return 930
+          return null
+        },
+        visiblePriceRange: { min: 5960, max: 6040 },
+        priceToPixel: (price) => ((6040 - price) / 80) * 420,
+      })
+
+      expect(geometry).not.toBeNull()
+      expect(geometry?.anchorMode).toBe('time')
+      expect(geometry?.startX).toBe(790)
+      expect(geometry?.path).toContain('850')
+      expect(geometry?.path).toContain('930')
     })
 
     it('returns null when dimensions are invalid', () => {
@@ -100,6 +131,29 @@ describe('spatial-hud helpers', () => {
       expect(entries.some((entry) => entry.id === 'a')).toBe(true)
       expect(entries.some((entry) => entry.id === 'c')).toBe(true)
       expect(entries[0]!.price).toBeGreaterThanOrEqual(entries[1]!.price)
+    })
+  })
+
+  describe('resolveVisibleChartLevels', () => {
+    it('deduplicates semantically equivalent labels and enforces budget/collision filters', () => {
+      const result = resolveVisibleChartLevels([
+        { price: 6861.9, label: 'PDC', color: '#fff', type: 'options', strength: 'critical' },
+        { price: 6861.9, label: 'SPY->SPX PDC', color: '#ccc', type: 'spy_derived', strength: 'moderate' },
+        { price: 6862.2, label: 'Entry Zone High', color: '#0f0', type: 'entry_zone', strength: 'strong' },
+        { price: 6862.4, label: 'Options Flip', color: '#0f0', type: 'options', strength: 'moderate' },
+        { price: 6862.5, label: 'Daily 0382', color: '#f5edcc', type: 'fibonacci', strength: 'moderate' },
+      ], {
+        livePrice: 6861.9,
+        nearWindowPoints: 3,
+        nearLabelBudget: 3,
+        maxTotalLabels: 4,
+        minGapPoints: 0.25,
+      })
+
+      expect(result.levels.length).toBeLessThanOrEqual(4)
+      expect(result.stats.dedupedCount).toBeGreaterThan(0)
+      expect(result.stats.budgetSuppressedCount + result.stats.collisionSuppressedCount).toBeGreaterThan(0)
+      expect(result.levels.some((level) => level.label === 'PDC')).toBe(true)
     })
   })
 

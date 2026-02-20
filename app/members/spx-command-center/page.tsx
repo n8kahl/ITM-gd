@@ -153,7 +153,9 @@ function SPXCommandCenterContent() {
     if (immersiveMode || (isMobile && mobileSmartStackEnabled)) return 0
     if (sidebarCollapsed) return 0
     if (layoutMode === 'scan') return 360
-    return 320
+    if (layoutMode === 'evaluate') return 380
+    if (layoutMode === 'in_trade') return 368
+    return 344
   }, [immersiveMode, isMobile, mobileSmartStackEnabled, sidebarCollapsed, layoutMode])
   const sidebarOpen = sidebarWidth > 0
   const handleViewModeChange = useCallback((nextMode: SPXViewMode, source: 'toggle' | 'command' | 'shortcut' = 'toggle') => {
@@ -864,30 +866,46 @@ function SPXCommandCenterContent() {
   )
 
   const renderSpatialSidebarContent = () => {
+    const analyticsDrawer = (
+      <details
+        className="rounded-xl border border-white/12 bg-white/[0.02] px-3 py-2.5"
+        data-testid="spx-sidebar-analytics-drawer"
+        onToggle={(event) => {
+          const expanded = (event.currentTarget as HTMLDetailsElement).open
+          trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+            surface: 'sidebar_analytics_drawer',
+            action: expanded ? 'expand' : 'collapse',
+            layoutMode,
+          })
+        }}
+      >
+        <summary className="flex min-h-[36px] cursor-pointer list-none items-center text-[11px] uppercase tracking-[0.1em] text-white/62 hover:text-white/80">
+          Analytics Drawer
+        </summary>
+        <div className="mt-2.5 space-y-2.5">
+          <LevelMatrix />
+          <DecisionContext />
+          <GEXLandscape profile={gexProfile?.combined || null} />
+          <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
+          <FlowTicker />
+        </div>
+      </details>
+    )
+
     if (layoutMode === 'legacy') {
       return (
-        <>
+        <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
           <SetupFeed />
           <ContractSelector />
           <AICoachFeed />
-          <details className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-            <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70">
-              Advanced Analytics
-            </summary>
-            <div className="mt-2.5 space-y-2.5">
-              <LevelMatrix />
-              <DecisionContext />
-              <GEXLandscape profile={gexProfile?.combined || null} />
-              <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
-            </div>
-          </details>
-        </>
+          {analyticsDrawer}
+        </div>
       )
     }
 
     if (layoutMode === 'scan') {
       return (
-        <>
+        <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
           {uxFlags.coachDockV1 && (
             <CoachDock
               surface="desktop"
@@ -897,50 +915,29 @@ function SPXCommandCenterContent() {
           )}
           {desktopCoachPanelOpen && <AICoachFeed />}
           <SetupFeed />
-          <FlowTicker />
-          <details
-            className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
-            onToggle={(event) => {
-              const expanded = (event.currentTarget as HTMLDetailsElement).open
-              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
-                surface: 'advanced_analytics',
-                action: expanded ? 'expand' : 'collapse',
-                layoutMode,
-              })
-            }}
-          >
-            <summary className="cursor-pointer list-none text-[10px] uppercase tracking-[0.1em] text-white/50 hover:text-white/70">
-              Advanced Analytics
-            </summary>
-            <div className="mt-2.5 space-y-2.5">
-              <LevelMatrix />
-              <DecisionContext />
-              <GEXLandscape profile={gexProfile?.combined || null} />
-              <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
-            </div>
-          </details>
-        </>
+          {analyticsDrawer}
+        </div>
       )
     }
 
     if (layoutMode === 'evaluate') {
       return (
-        <>
+        <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
           <AICoachFeed />
           <SetupFeed />
           <ContractSelector />
-          <DecisionContext />
-        </>
+          {analyticsDrawer}
+        </div>
       )
     }
 
     return (
-      <>
+      <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
         <AICoachFeed />
         <ContractSelector />
         <SetupFeed />
-        <FlowTicker />
-      </>
+        {analyticsDrawer}
+      </div>
     )
   }
 

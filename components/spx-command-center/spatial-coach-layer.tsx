@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
@@ -23,9 +23,13 @@ interface SpatialAnchorMessage {
   anchorTimeSec: number | null
 }
 
+const NODE_COLLISION_MIN_GAP_PX = 34
+const NODE_REFRESH_INTERVAL_MS = 140
+
 export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
   const { coachMessages } = useSPXCoachContext()
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const [nodeLayout, setNodeLayout] = useState<Map<string, { yOffsetPx: number; popoverLane: number }>>(new Map())
   const getCoordinates = useCallback(() => coordinatesRef.current, [coordinatesRef])
 
   const spatialMessages = useMemo<SpatialAnchorMessage[]>(() => {
@@ -37,6 +41,70 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
       anchorTimeSec: parseIsoToUnixSeconds(anchor.message.timestamp),
     }))
   }, [coachMessages, dismissedIds])
+
+  useEffect(() => {
+    const mapsEqual = (
+      left: Map<string, { yOffsetPx: number; popoverLane: number }>,
+      right: Map<string, { yOffsetPx: number; popoverLane: number }>,
+    ) => {
+      if (left.size !== right.size) return false
+      for (const [id, leftValue] of left.entries()) {
+        const rightValue = right.get(id)
+        if (!rightValue) return false
+        if (leftValue.yOffsetPx !== rightValue.yOffsetPx || leftValue.popoverLane !== rightValue.popoverLane) {
+          return false
+        }
+      }
+      return true
+    }
+
+    const computeLayout = () => {
+      const coordinates = coordinatesRef.current
+      if (!coordinates?.ready) {
+        setNodeLayout((previous) => (previous.size === 0 ? previous : new Map()))
+        return
+      }
+      const sortable = spatialMessages
+        .map((item) => ({
+          id: item.message.id,
+          y: coordinates.priceToPixel(item.anchorPrice),
+        }))
+        .filter((item): item is { id: string; y: number } => item.y != null && Number.isFinite(item.y))
+        .sort((left, right) => left.y - right.y)
+
+      const next = new Map<string, { yOffsetPx: number; popoverLane: number }>()
+      let lane = 0
+      let previousY = -Infinity
+      for (const item of sortable) {
+        let adjustedY = item.y
+        if (adjustedY < previousY + NODE_COLLISION_MIN_GAP_PX) {
+          adjustedY = previousY + NODE_COLLISION_MIN_GAP_PX
+        }
+        if (adjustedY > coordinates.chartDimensions.height - 52) {
+          adjustedY = coordinates.chartDimensions.height - 52
+        }
+        next.set(item.id, {
+          yOffsetPx: adjustedY - item.y,
+          popoverLane: lane,
+        })
+        previousY = adjustedY
+        lane += 1
+      }
+
+      setNodeLayout((previous) => (mapsEqual(previous, next) ? previous : next))
+    }
+
+    let rafId = 0
+    const schedule = () => {
+      rafId = window.requestAnimationFrame(computeLayout)
+    }
+    schedule()
+    const intervalId = window.setInterval(schedule, NODE_REFRESH_INTERVAL_MS)
+    return () => {
+      window.clearInterval(intervalId)
+      if (rafId) window.cancelAnimationFrame(rafId)
+    }
+  }, [coordinatesRef, spatialMessages])
 
   const handleDismiss = useCallback((id: string) => {
     setDismissedIds((previous) => {
@@ -73,6 +141,13 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
       anchorMode,
       surface: 'spatial_coach_node',
     })
+    if (anchorMode === 'fallback') {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SPATIAL_FALLBACK_ANCHOR_USED, {
+        messageId,
+        surface: 'spatial_coach_node',
+        reason: 'time_coordinate_unavailable',
+      })
+    }
   }, [])
 
   return (
@@ -84,6 +159,8 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
           anchorPrice={anchorPrice}
           anchorTimeSec={anchorTimeSec}
           fallbackIndex={index}
+          yOffsetPx={nodeLayout.get(message.id)?.yOffsetPx || 0}
+          popoverLane={nodeLayout.get(message.id)?.popoverLane || 0}
           getCoordinates={getCoordinates}
           onDismiss={handleDismiss}
           onAction={handleAction}
