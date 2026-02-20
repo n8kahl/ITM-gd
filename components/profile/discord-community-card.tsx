@@ -101,7 +101,7 @@ export function DiscordCommunityCard({
                       variant="outline"
                       className="text-[10px] bg-[#5865F2]/10 text-[#5865F2] border-[#5865F2]/20"
                     >
-                      {discordRoleTitles[role] || 'Unnamed Discord Role'}
+                      {discordRoleTitles[role] || 'Discord Role'}
                     </Badge>
                   ))}
                 </div>

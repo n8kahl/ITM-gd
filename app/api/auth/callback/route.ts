@@ -154,7 +154,12 @@ export async function GET(request: NextRequest) {
         // If we got the claims we expected from sync, we're done
         if (syncResult?.success && syncResult.permissions) {
           const expectedAdmin = syncResult.permissions.some((p: any) => p.name === 'admin_dashboard')
-          const expectedMember = syncResult.permissions.length > 0
+          const rolesFromSync = normalizeDiscordRoleIds(
+            Array.isArray((syncResult as any).roles)
+              ? (syncResult as any).roles.map((r: any) => r?.id)
+              : [],
+          )
+          const expectedMember = hasMembersAreaAccess(rolesFromSync)
 
           if ((!expectedAdmin || isAdmin) && (!expectedMember || isMember)) {
             console.log(`✓ Claims propagated on attempt ${attempt}`)
@@ -174,7 +179,12 @@ export async function GET(request: NextRequest) {
     // This handles cases where database is slow or claims don't propagate
     if (syncResult?.success && syncResult.permissions) {
       const hasAdminPerm = syncResult.permissions.some((p: any) => p.name === 'admin_dashboard')
-      const hasMemberPerm = syncResult.permissions.length > 0
+      const rolesFromSync = normalizeDiscordRoleIds(
+        Array.isArray((syncResult as any).roles)
+          ? (syncResult as any).roles.map((r: any) => r?.id)
+          : [],
+      )
+      const hasMemberPerm = hasMembersAreaAccess(rolesFromSync)
 
       // Override with sync result if it's more permissive
       if (hasAdminPerm && !isAdmin) {

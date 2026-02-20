@@ -13,6 +13,7 @@ export interface SocialUserMeta {
   discord_user_id: string | null
   membership_tier: MembershipTier | null
   discord_roles: string[]
+  discord_role_titles: Record<string, string>
 }
 
 const TIER_PRIORITY: Record<MembershipTier, number> = {
@@ -145,9 +146,44 @@ export async function getSocialUserMetaMap(
     })
   }
 
+  const allRoleIds = Array.from(new Set(
+    Array.from(discordByUserId.values()).flatMap((discord) => discord.discord_roles)
+  ))
+
+  const roleTitleById = new Map<string, string>()
+  if (allRoleIds.length > 0) {
+    const [{ data: guildRoleRows }, { data: permissionRoleRows }] = await Promise.all([
+      supabase
+        .from('discord_guild_roles')
+        .select('discord_role_id, discord_role_name')
+        .in('discord_role_id', allRoleIds),
+      supabase
+        .from('discord_role_permissions')
+        .select('discord_role_id, discord_role_name')
+        .in('discord_role_id', allRoleIds),
+    ])
+
+    for (const row of guildRoleRows || []) {
+      if (!row?.discord_role_id || !row?.discord_role_name) continue
+      roleTitleById.set(String(row.discord_role_id), String(row.discord_role_name))
+    }
+
+    for (const row of permissionRoleRows || []) {
+      if (!row?.discord_role_id || !row?.discord_role_name) continue
+      const roleId = String(row.discord_role_id)
+      if (!roleTitleById.has(roleId)) {
+        roleTitleById.set(roleId, String(row.discord_role_name))
+      }
+    }
+  }
+
   for (const userId of uniqueUserIds) {
     const profile = profileByUserId.get(userId)
     const discord = discordByUserId.get(userId)
+    const roleTitles: Record<string, string> = {}
+    for (const roleId of discord?.discord_roles || []) {
+      roleTitles[roleId] = roleTitleById.get(roleId) || 'Discord Role'
+    }
 
     metaMap.set(userId, {
       display_name: profile?.display_name ?? null,
@@ -156,6 +192,7 @@ export async function getSocialUserMetaMap(
       discord_user_id: discord?.discord_user_id ?? null,
       membership_tier: resolveMembershipTierFromRoles(discord?.discord_roles, roleTierMapping),
       discord_roles: discord?.discord_roles ?? [],
+      discord_role_titles: roleTitles,
     })
   }
 

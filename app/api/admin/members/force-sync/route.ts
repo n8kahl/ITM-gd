@@ -12,6 +12,15 @@ const ERROR_CODES = {
   SYNC_FAILED: 'SYNC_FAILED',
 } as const
 
+interface DiscordGuildRole {
+  id: string
+  name: string
+  color: number
+  position: number
+  managed: boolean
+  mentionable: boolean
+}
+
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -83,6 +92,125 @@ async function fetchDiscordMemberRoles(
   return { roles, username, avatar }
 }
 
+function getBestEffortDiscordUsername(authUser: any): string {
+  if (typeof authUser?.user_metadata?.full_name === 'string' && authUser.user_metadata.full_name.trim().length > 0) {
+    return authUser.user_metadata.full_name.trim()
+  }
+
+  if (typeof authUser?.email === 'string' && authUser.email.includes('@')) {
+    return authUser.email.split('@')[0]
+  }
+
+  return 'Unknown'
+}
+
+async function revokeAccessForNonMember(params: {
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>
+  userId: string
+  discordUserId: string
+  authUser: any
+}) {
+  const { supabaseAdmin, userId, discordUserId, authUser } = params
+  const nowIso = new Date().toISOString()
+
+  const { error: permissionsError } = await supabaseAdmin
+    .from('user_permissions')
+    .delete()
+    .eq('user_id', userId)
+  if (permissionsError) {
+    console.warn('[Admin Force Sync] Failed to clear user_permissions on NOT_MEMBER:', permissionsError.message)
+  }
+
+  const { error: profileError } = await supabaseAdmin
+    .from('user_discord_profiles')
+    .upsert({
+      user_id: userId,
+      discord_user_id: discordUserId,
+      discord_username: getBestEffortDiscordUsername(authUser),
+      discord_discriminator: '0',
+      discord_avatar: null,
+      discord_roles: [],
+      last_synced_at: nowIso,
+      updated_at: nowIso,
+    }, { onConflict: 'user_id' })
+  if (profileError) {
+    console.warn('[Admin Force Sync] Failed to clear user_discord_profiles on NOT_MEMBER:', profileError.message)
+  }
+
+  const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    app_metadata: {
+      ...(authUser?.app_metadata || {}),
+      is_admin: false,
+      is_member: false,
+      discord_roles: [],
+    },
+  })
+  if (metadataError) {
+    console.warn('[Admin Force Sync] Failed to clear auth metadata on NOT_MEMBER:', metadataError.message)
+  }
+}
+
+async function fetchGuildRoles(
+  guildId: string,
+  botToken: string,
+): Promise<DiscordGuildRole[]> {
+  try {
+    const response = await fetch(`${DISCORD_API_BASE}/guilds/${guildId}/roles`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      console.warn('[Admin Force Sync] Failed to fetch guild role catalog:', response.status, body)
+      return []
+    }
+
+    const rows = await response.json()
+    if (!Array.isArray(rows)) return []
+
+    return rows
+      .map((row: any) => ({
+        id: String(row?.id || ''),
+        name: String(row?.name || ''),
+        color: Number(row?.color || 0),
+        position: Number(row?.position || 0),
+        managed: row?.managed === true,
+        mentionable: row?.mentionable === true,
+      }))
+      .filter((role: DiscordGuildRole) => role.id.length > 0)
+  } catch (error) {
+    console.warn('[Admin Force Sync] Exception while fetching guild role catalog:', error)
+    return []
+  }
+}
+
+async function upsertGuildRoleCatalog(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  roles: DiscordGuildRole[],
+): Promise<void> {
+  if (roles.length === 0) return
+
+  const nowIso = new Date().toISOString()
+  const payload = roles.map((role) => ({
+    discord_role_id: role.id,
+    discord_role_name: role.name,
+    role_color: role.color || null,
+    position: role.position,
+    managed: role.managed,
+    mentionable: role.mentionable,
+    last_synced_at: nowIso,
+    updated_at: nowIso,
+  }))
+
+  const { error } = await supabaseAdmin
+    .from('discord_guild_roles')
+    .upsert(payload, { onConflict: 'discord_role_id' })
+
+  if (error) {
+    console.warn('[Admin Force Sync] Failed to upsert guild role catalog:', error.message)
+  }
+}
+
 function buildPermissionMap(rolePermissions: any[]): Map<string, { permission: any; grantedByRoleId: string; grantedByRoleName: string | null }> {
   const permissionMap = new Map<string, { permission: any; grantedByRoleId: string; grantedByRoleName: string | null }>()
 
@@ -113,15 +241,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
+  let supabaseAdmin: ReturnType<typeof getSupabaseAdmin> | null = null
+  let authUser: any = null
+  let userIdForRevoke: string | null = null
+  let discordUserIdForRevoke: string | null = null
+
   try {
     const body = await request.json().catch(() => ({}))
     const userId = String((body as any).user_id || '').trim()
+    userIdForRevoke = userId
 
     if (!userId || !isUuid(userId)) {
       return NextResponse.json({ success: false, error: 'Valid user_id is required' }, { status: 400 })
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
+    supabaseAdmin = getSupabaseAdmin()
 
     const { data: authUserResult, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
     if (authUserError || !authUserResult?.user) {
@@ -131,8 +265,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const authUser = authUserResult.user
+    authUser = authUserResult.user
     const discordUserId = authUser.user_metadata?.provider_id || authUser.user_metadata?.sub || null
+    discordUserIdForRevoke = discordUserId
     if (!discordUserId) {
       return NextResponse.json(
         { success: false, error: 'Discord user ID not found in user metadata (provider_id/sub)' },
@@ -141,6 +276,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { guildId, botToken } = await getDiscordConfig(supabaseAdmin)
+    const guildRoles = await fetchGuildRoles(guildId, botToken)
+    await upsertGuildRoleCatalog(supabaseAdmin, guildRoles)
+    const guildRoleNameById = new Map<string, string>(guildRoles.map((role) => [role.id, role.name]))
     const { roles: discordRoles, username, avatar } = await fetchDiscordMemberRoles(guildId, botToken, discordUserId)
 
     // Fetch role→permission mappings
@@ -166,7 +304,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const permissionMap = buildPermissionMap(rolePermissions || [])
+    const permissionMap = buildPermissionMap((rolePermissions || []).map((rp: any) => ({
+      ...rp,
+      discord_role_name: rp.discord_role_name || guildRoleNameById.get(String(rp.discord_role_id)) || null,
+    })))
 
     // Upsert cached Discord profile
     const { error: profileError } = await supabaseAdmin
@@ -237,7 +378,7 @@ export async function POST(request: NextRequest) {
     const hasAdminPermission = Array.from(permissionMap.values()).some(
       ({ permission }) => permission?.name === 'admin_dashboard',
     )
-    const hasMemberPermission = permissionMap.size > 0
+    const hasMemberPermission = hasMembersAreaAccess(discordRoles)
 
     // Persist claims + discord_roles into auth app_metadata (so middleware can read them).
     const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -289,6 +430,14 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Internal server error'
 
     if (code === ERROR_CODES.NOT_MEMBER) {
+      if (supabaseAdmin && userIdForRevoke && discordUserIdForRevoke && authUser) {
+        await revokeAccessForNonMember({
+          supabaseAdmin,
+          userId: userIdForRevoke,
+          discordUserId: discordUserIdForRevoke,
+          authUser,
+        })
+      }
       return NextResponse.json({ success: false, error: message, code }, { status: 403 })
     }
 

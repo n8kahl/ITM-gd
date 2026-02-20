@@ -123,6 +123,9 @@ export async function GET() {
       .eq('user_id', userId)
 
     // Build diagnostic response
+    const hasAdminRoleInDiscord = discordProfile?.discord_roles?.includes(DISCORD_PRIVILEGED_ROLE_ID) || false
+    const hasAdminPermissionInDb = !!userPermissions?.find((p: any) => p.app_permissions?.name === 'admin_dashboard')
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -148,17 +151,17 @@ export async function GET() {
         admin_role_mapping: roleMappings?.find(
           (m: any) => m.discord_role_id === DISCORD_PRIVILEGED_ROLE_ID
         ),
-        user_has_admin_role: discordProfile?.discord_roles?.includes(DISCORD_PRIVILEGED_ROLE_ID),
+        user_has_admin_role: hasAdminRoleInDiscord,
       },
       user_permissions: userPermissions,
       diagnosis: {
         has_discord_profile: !!discordProfile,
         discord_roles_count: discordProfile?.discord_roles?.length || 0,
-        has_admin_role_in_discord: discordProfile?.discord_roles?.includes(DISCORD_PRIVILEGED_ROLE_ID) || false,
+        has_admin_role_in_discord: hasAdminRoleInDiscord,
         admin_role_mapped_in_db: !!roleMappings?.find((m: any) => m.discord_role_id === DISCORD_PRIVILEGED_ROLE_ID),
-        has_admin_permission_in_db: !!userPermissions?.find((p: any) => p.app_permissions?.name === 'admin_dashboard'),
+        has_admin_permission_in_db: hasAdminPermissionInDb,
         jwt_has_admin_claim: appMetadata.is_admin === true,
-        should_have_admin_access: false, // Will be computed below
+        should_have_admin_access: hasAdminRoleInDiscord || hasAdminPermissionInDb,
       }
     })
   } catch (error) {

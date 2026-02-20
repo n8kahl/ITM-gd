@@ -5,6 +5,7 @@ interface PublishedCourseRow {
   slug: string
   title: string
   position: number | null
+  metadata?: Record<string, unknown> | null
 }
 
 interface LessonRow {
@@ -39,6 +40,7 @@ export interface AcademyResumeTarget {
 type ResolveResumeTargetOptions = {
   userId: string
   courseId?: string
+  roleIds?: string[]
 }
 
 type CourseWithLessons = {
@@ -60,6 +62,25 @@ function sortLessons(lessons: LessonRow[]): LessonRow[] {
     if (orderDelta !== 0) return orderDelta
     return a.id.localeCompare(b.id)
   })
+}
+
+function getRequiredRoleFromMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+
+  const asRecord = metadata as Record<string, unknown>
+  const preferred = asRecord.discord_role_required
+  if (typeof preferred === 'string' && preferred.trim().length > 0) {
+    return preferred.trim()
+  }
+
+  const legacy = asRecord.legacy_discord_role_required
+  if (typeof legacy === 'string' && legacy.trim().length > 0) {
+    return legacy.trim()
+  }
+
+  return null
 }
 
 function buildResumeTarget(
@@ -96,11 +117,11 @@ export async function resolveAcademyResumeTarget(
   supabase: SupabaseClient,
   options: ResolveResumeTargetOptions
 ): Promise<AcademyResumeTarget | null> {
-  const { userId, courseId } = options
+  const { userId, courseId, roleIds = [] } = options
 
   let coursesQuery = supabase
     .from('academy_modules')
-    .select('id, slug, title, position')
+    .select('id, slug, title, position, metadata')
     .eq('is_published', true)
     .order('position', { ascending: true })
 
@@ -115,6 +136,15 @@ export async function resolveAcademyResumeTarget(
   }
 
   const courses = sortCourses((publishedCourses || []) as PublishedCourseRow[])
+    .filter((course) => {
+      const requiredRole = getRequiredRoleFromMetadata(course.metadata)
+      if (!requiredRole) return true
+      return roleIds.includes(requiredRole)
+    })
+
+  if (courses.length === 0) {
+    return null
+  }
   const courseIds = courses.map((course) => course.id)
 
   const lessonsResult = await supabase

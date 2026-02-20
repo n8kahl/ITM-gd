@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
+import { recomputeUsersForRoleIds } from '@/lib/discord-permission-sync'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -134,7 +135,21 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, data })
+    const propagation = await recomputeUsersForRoleIds({
+      supabaseAdmin: supabase,
+      roleIds: [discord_role_id],
+    }).catch((error) => ({
+      processed: 0,
+      failed: 0,
+      affectedUserIds: [],
+      errors: [error instanceof Error ? error.message : 'Role propagation failed'],
+    }))
+
+    return NextResponse.json({
+      success: true,
+      data,
+      propagation,
+    })
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -180,7 +195,21 @@ export async function PUT(request: NextRequest) {
           permission_ids: [],
         },
       })
-      return NextResponse.json({ success: true, data: [] })
+      const propagation = await recomputeUsersForRoleIds({
+        supabaseAdmin: supabase,
+        roleIds: [discord_role_id],
+      }).catch((error) => ({
+        processed: 0,
+        failed: 0,
+        affectedUserIds: [],
+        errors: [error instanceof Error ? error.message : 'Role propagation failed'],
+      }))
+
+      return NextResponse.json({
+        success: true,
+        data: [],
+        propagation,
+      })
     }
 
     // Insert new permission mappings
@@ -210,7 +239,21 @@ export async function PUT(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, data })
+    const propagation = await recomputeUsersForRoleIds({
+      supabaseAdmin: supabase,
+      roleIds: [discord_role_id],
+    }).catch((error) => ({
+      processed: 0,
+      failed: 0,
+      affectedUserIds: [],
+      errors: [error instanceof Error ? error.message : 'Role propagation failed'],
+    }))
+
+    return NextResponse.json({
+      success: true,
+      data,
+      propagation,
+    })
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -252,7 +295,20 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true })
+    const propagation = await recomputeUsersForRoleIds({
+      supabaseAdmin: supabase,
+      roleIds: [discordRoleId],
+    }).catch((error) => ({
+      processed: 0,
+      failed: 0,
+      affectedUserIds: [],
+      errors: [error instanceof Error ? error.message : 'Role propagation failed'],
+    }))
+
+    return NextResponse.json({
+      success: true,
+      propagation,
+    })
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',

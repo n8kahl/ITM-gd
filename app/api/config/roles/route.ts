@@ -14,14 +14,19 @@ const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'executive'> = {
 export async function GET() {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       // Return fallback if Supabase not configured
       return NextResponse.json(DEFAULT_ROLE_MAPPING)
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
 
     // Try to fetch role_tier_mapping from app_settings
     // Expected format: JSON object like {"role_name": "tier", ...}

@@ -96,10 +96,24 @@ serve(async (req) => {
       })
     }
 
-    // Authorization: only admins and team members can send transcripts
+    // Authorization: only admins or explicit team members can send transcripts.
     const isAdmin = user.app_metadata?.is_admin === true
-    const isMember = user.app_metadata?.is_member === true
-    if (!isAdmin && !isMember) {
+    let isTeamMember = false
+    if (!isAdmin) {
+      const { data: teamMember, error: teamError } = await supabase
+        .from('team_members')
+        .select('id, role')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (teamError) {
+        console.warn('[send-chat-transcript] Team member lookup failed:', teamError.message)
+      } else {
+        isTeamMember = Boolean(teamMember?.id)
+      }
+    }
+
+    if (!isAdmin && !isTeamMember) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: only admin/team members can send transcripts' }),
         { status: 403, headers: { ...headers, 'Content-Type': 'application/json' } }
