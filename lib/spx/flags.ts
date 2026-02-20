@@ -9,6 +9,7 @@ export interface SPXUXFlags {
   coachProactive: boolean
   contextSplitV1: boolean
   commandPalette: boolean
+  spatialHudV1: boolean
   coachDockV1: boolean
   coachAlertLifecycleV2: boolean
   coachTimelineV2: boolean
@@ -29,6 +30,7 @@ export const DEFAULT_SPX_UX_FLAGS: Readonly<SPXUXFlags> = Object.freeze({
   coachProactive: true,
   contextSplitV1: true,
   commandPalette: true,
+  spatialHudV1: true,
   coachDockV1: true,
   coachAlertLifecycleV2: true,
   coachTimelineV2: true,
@@ -49,6 +51,7 @@ const FLAG_ENV_KEYS: Record<keyof SPXUXFlags, string[]> = {
   coachProactive: ['NEXT_PUBLIC_SPX_UX_COACH_PROACTIVE', 'SPX_UX_COACH_PROACTIVE'],
   contextSplitV1: ['NEXT_PUBLIC_SPX_UX_CONTEXT_SPLIT_V1', 'SPX_UX_CONTEXT_SPLIT_V1'],
   commandPalette: ['NEXT_PUBLIC_SPX_UX_COMMAND_PALETTE', 'SPX_UX_COMMAND_PALETTE'],
+  spatialHudV1: ['NEXT_PUBLIC_SPX_UX_SPATIAL_HUD_V1', 'SPX_UX_SPATIAL_HUD_V1'],
   coachDockV1: ['NEXT_PUBLIC_SPX_UX_COACH_DOCK_V1', 'SPX_UX_COACH_DOCK_V1'],
   coachAlertLifecycleV2: ['NEXT_PUBLIC_SPX_UX_COACH_ALERT_LIFECYCLE_V2', 'SPX_UX_COACH_ALERT_LIFECYCLE_V2'],
   coachTimelineV2: ['NEXT_PUBLIC_SPX_UX_COACH_TIMELINE_V2', 'SPX_UX_COACH_TIMELINE_V2'],
@@ -94,6 +97,7 @@ export function getSPXUXFlags(overrides?: Partial<SPXUXFlags>): SPXUXFlags {
     coachProactive: resolveFlagFromEnv('coachProactive') ?? DEFAULT_SPX_UX_FLAGS.coachProactive,
     contextSplitV1: resolveFlagFromEnv('contextSplitV1') ?? DEFAULT_SPX_UX_FLAGS.contextSplitV1,
     commandPalette: resolveFlagFromEnv('commandPalette') ?? DEFAULT_SPX_UX_FLAGS.commandPalette,
+    spatialHudV1: resolveFlagFromEnv('spatialHudV1') ?? DEFAULT_SPX_UX_FLAGS.spatialHudV1,
     coachDockV1: resolveFlagFromEnv('coachDockV1') ?? DEFAULT_SPX_UX_FLAGS.coachDockV1,
     coachAlertLifecycleV2: resolveFlagFromEnv('coachAlertLifecycleV2') ?? DEFAULT_SPX_UX_FLAGS.coachAlertLifecycleV2,
     coachTimelineV2: resolveFlagFromEnv('coachTimelineV2') ?? DEFAULT_SPX_UX_FLAGS.coachTimelineV2,

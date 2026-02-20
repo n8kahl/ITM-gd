@@ -38,6 +38,7 @@ describe('SPX UX flags', () => {
       'coachProactive',
       'contextSplitV1',
       'commandPalette',
+      'spatialHudV1',
       'coachDockV1',
       'coachAlertLifecycleV2',
       'coachTimelineV2',
