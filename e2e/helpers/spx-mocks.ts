@@ -2,6 +2,7 @@ import type { Page, Route } from '@playwright/test'
 
 interface SPXMockOptions {
   delayMs?: number
+  omitPrediction?: boolean
 }
 
 const nowIso = '2026-02-15T15:12:00.000Z'
@@ -457,8 +458,26 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOptions = {}): Promise<void> {
-  const { delayMs = 0 } = options
+  const { delayMs = 0, omitPrediction = false } = options
   let coachMessageSequence = 0
+  const regimePayload = omitPrediction
+    ? {
+      ...regimeResponse,
+      prediction: {
+        ...regimeResponse.prediction,
+        probabilityCone: [],
+      },
+    }
+    : regimeResponse
+  const snapshotPayload = omitPrediction
+    ? {
+      ...snapshotResponse,
+      prediction: {
+        ...(snapshotResponse.prediction || {}),
+        probabilityCone: [],
+      },
+    }
+    : snapshotResponse
 
   await page.route('**/api/chart/SPX*', async (route) => {
     await delay(delayMs)
@@ -613,7 +632,7 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
     }
 
     if (endpoint === 'snapshot') {
-      await fulfillJson(route, snapshotResponse)
+      await fulfillJson(route, snapshotPayload)
       return
     }
 
@@ -658,7 +677,7 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
     }
 
     if (endpoint === 'regime') {
-      await fulfillJson(route, regimeResponse)
+      await fulfillJson(route, regimePayload)
       return
     }
 

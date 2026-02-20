@@ -60,6 +60,7 @@ interface TradingChartProps {
   positionOverlays?: PositionOverlay[]
   symbol: string
   timeframe: string
+  futureOffsetBars?: number
   isLoading?: boolean
   onHoverPrice?: (price: number | null) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
@@ -180,6 +181,7 @@ export function TradingChart({
   positionOverlays = [],
   symbol,
   timeframe,
+  futureOffsetBars = 12,
   isLoading,
   onHoverPrice,
   onChartReady,
@@ -391,7 +393,7 @@ export function TradingChart({
         borderColor: CHART_COLORS.borderColor,
         timeVisible: timeframe !== '1D',
         secondsVisible: false,
-        rightOffset: 12,
+        rightOffset: futureOffsetBars,
         barSpacing: timeframe === '1D' ? 8 : 6,
         minBarSpacing: 3,
         lockVisibleTimeRangeOnResize: true,
@@ -509,13 +511,28 @@ export function TradingChart({
         chartRef.current = null
       }
     }
-  }, [timeframe, clearLevelPriceLines, resetMainChartRefs, onChartReady])
+  }, [timeframe, clearLevelPriceLines, resetMainChartRefs, onChartReady, futureOffsetBars])
 
   // Initialize chart on mount
   useEffect(() => {
     const cleanup = initChart()
     return () => cleanup?.()
   }, [initChart])
+
+  useEffect(() => {
+    if (!chartRef.current) return
+    try {
+      chartRef.current.applyOptions({
+        timeScale: {
+          rightOffset: futureOffsetBars,
+        },
+      })
+    } catch (error) {
+      if (!isDisposedError(error)) {
+        console.warn('[TradingChart] Failed to update future lane offset', error)
+      }
+    }
+  }, [futureOffsetBars])
 
   useEffect(() => {
     userAdjustedViewportRef.current = false
