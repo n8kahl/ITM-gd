@@ -13,7 +13,7 @@ export interface DiscordRole {
 }
 
 async function upsertDiscordRoleCatalog(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   roles: DiscordRole[],
 ): Promise<void> {
   if (roles.length === 0) return
@@ -30,7 +30,10 @@ async function upsertDiscordRoleCatalog(
     updated_at: nowIso,
   }))
 
-  const { error } = await supabase
+  // `discord_guild_roles` is introduced via SQL migration and can be ahead of local
+  // generated Supabase TS table metadata during CI/CD builds.
+  const supabaseAny = supabase as any
+  const { error } = await supabaseAny
     .from('discord_guild_roles')
     .upsert(payload, { onConflict: 'discord_role_id' })
 
