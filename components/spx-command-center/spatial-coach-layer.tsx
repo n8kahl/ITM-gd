@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
+import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
@@ -28,19 +30,52 @@ const NODE_REFRESH_INTERVAL_MS = 140
 
 export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
   const { coachMessages } = useSPXCoachContext()
+  const { spxPrice } = useSPXPriceContext()
+  const { activeSetups, inTradeSetup, selectedSetup } = useSPXSetupContext()
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [nodeLayout, setNodeLayout] = useState<Map<string, { yOffsetPx: number; popoverLane: number }>>(new Map())
   const getCoordinates = useCallback(() => coordinatesRef.current, [coordinatesRef])
+
+  const setupById = useMemo(() => {
+    return new Map(activeSetups.map((setup) => [setup.id, setup]))
+  }, [activeSetups])
+
+  const semanticFallbackAnchor = useCallback((message: CoachMessage): number | null => {
+    const payload = message.structuredData
+    const reason = payload && typeof payload === 'object' && typeof payload.reason === 'string'
+      ? payload.reason
+      : null
+    const stopPrice = payload
+      && typeof payload === 'object'
+      && typeof payload.stopPrice === 'number'
+      && Number.isFinite(payload.stopPrice)
+      ? payload.stopPrice
+      : null
+    const scopedSetup = (message.setupId ? setupById.get(message.setupId) : null) || inTradeSetup || selectedSetup
+    if (reason === 'stop_proximity') {
+      if (stopPrice != null) return stopPrice
+      if (!scopedSetup) return null
+      return Number.isFinite(scopedSetup.stop) ? scopedSetup.stop : null
+    }
+    if (!scopedSetup) return null
+    if (reason === 'status_triggered' || reason === 'flow_divergence') {
+      const entryMid = (scopedSetup.entryZone.low + scopedSetup.entryZone.high) / 2
+      return Number.isFinite(entryMid) ? entryMid : null
+    }
+    return null
+  }, [inTradeSetup, selectedSetup, setupById])
 
   const spatialMessages = useMemo<SpatialAnchorMessage[]>(() => {
     return extractSpatialCoachAnchors(coachMessages, {
       dismissedIds,
       maxNodes: DEFAULT_MAX_SPATIAL_COACH_NODES,
+      referencePrice: spxPrice,
+      fallbackAnchorPrice: semanticFallbackAnchor,
     }).map((anchor) => ({
       ...anchor,
       anchorTimeSec: parseIsoToUnixSeconds(anchor.message.timestamp),
     }))
-  }, [coachMessages, dismissedIds])
+  }, [coachMessages, dismissedIds, semanticFallbackAnchor, spxPrice])
 
   useEffect(() => {
     const mapsEqual = (

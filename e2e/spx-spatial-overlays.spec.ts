@@ -23,6 +23,7 @@ test.describe('SPX spatial overlays', () => {
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
     await expect(page.getByTestId('spx-topographic-ladder')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-topography')).toBeVisible()
+    await expect(page.getByTestId('spx-flow-ribbon')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-rail')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-vacuum-zone').first()).toBeVisible()
 

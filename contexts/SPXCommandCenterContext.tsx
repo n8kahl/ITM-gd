@@ -1189,11 +1189,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       type: 'in_trade',
       priority: 'alert',
       setupId: inTradeSetup.id,
-      content: `Price is within ${stopDistance.toFixed(1)} points of your stop. ${flowSummary && flowSummary.alignmentPct >= 55 ? `Flow still confirms ${flowSummary.alignmentPct}%, but consider tightening.` : 'Consider reducing risk or exiting if confirmation does not improve.'}`,
+      content: `Price is within ${stopDistance.toFixed(1)} points of your stop at ${inTradeSetup.stop.toFixed(2)}. ${flowSummary && flowSummary.alignmentPct >= 55 ? `Flow still confirms ${flowSummary.alignmentPct}%, but consider tightening.` : 'Consider reducing risk or exiting if confirmation does not improve.'}`,
       structuredData: {
         source: 'client_proactive',
         reason: 'stop_proximity',
         stopDistance,
+        stopPrice: inTradeSetup.stop,
         flowAlignmentPct: flowSummary?.alignmentPct ?? null,
       },
       timestamp: now,
@@ -1507,9 +1508,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
       let response: Response
       const endpointMode = contractEndpointModeRef.current
+
       if (endpointMode === 'post') {
         response = await postRequest()
-        if (response.status === 405) {
+        if (response.status === 404 || response.status === 405) {
           const fallback = await getRequest()
           if (fallback.ok) {
             contractEndpointModeRef.current = 'get'
@@ -1518,12 +1520,25 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
             response = fallback
           }
         }
-      } else {
+      } else if (endpointMode === 'get') {
         response = await getRequest()
-        if (response.status === 405) {
+        if (response.status === 404 || response.status === 405) {
           const fallback = await postRequest()
           if (fallback.ok) {
             contractEndpointModeRef.current = 'post'
+            response = fallback
+          } else {
+            response = fallback
+          }
+        }
+      } else {
+        response = await postRequest()
+        if (response.ok) {
+          contractEndpointModeRef.current = 'post'
+        } else if (response.status === 404 || response.status === 405) {
+          const fallback = await getRequest()
+          if (fallback.ok) {
+            contractEndpointModeRef.current = 'get'
             response = fallback
           } else {
             response = fallback

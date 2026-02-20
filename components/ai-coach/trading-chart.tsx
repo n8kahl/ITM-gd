@@ -1032,8 +1032,35 @@ export function TradingChart({
       maxTotalLabels: 16,
       minGapPoints: 1.2,
     })
-    const visibleLevels = visibleLevelSelection.levels
-    onLevelLayoutStats?.(visibleLevelSelection.stats)
+    const pixelCollisionGap = 16
+    const levelWithY = visibleLevelSelection.levels.map((level) => ({
+      level,
+      y: series.priceToCoordinate(level.price),
+    }))
+    const pixelFiltered: Array<{ level: LevelAnnotation; y: number | null }> = []
+    let pixelCollisionSuppressedCount = 0
+    for (const candidate of levelWithY) {
+      const candidateY = candidate.y
+      if (candidateY == null || !Number.isFinite(candidateY)) {
+        pixelFiltered.push(candidate)
+        continue
+      }
+      const collided = pixelFiltered.some((accepted) => (
+        accepted.y != null
+        && Number.isFinite(accepted.y)
+        && Math.abs(accepted.y - candidateY) < pixelCollisionGap
+      ))
+      if (collided) {
+        pixelCollisionSuppressedCount += 1
+        continue
+      }
+      pixelFiltered.push(candidate)
+    }
+    const visibleLevels = pixelFiltered.map((entry) => entry.level)
+    onLevelLayoutStats?.({
+      ...visibleLevelSelection.stats,
+      collisionSuppressedCount: visibleLevelSelection.stats.collisionSuppressedCount + pixelCollisionSuppressedCount,
+    })
 
     // Add new price lines for each selected level
     const newLines = []

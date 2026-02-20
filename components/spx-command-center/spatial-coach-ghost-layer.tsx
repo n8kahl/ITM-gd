@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
+import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
@@ -97,6 +98,21 @@ function buildFallbackAnchors(
   if (!setup) return []
   const latestMessage = coachMessages[0]
   if (!latestMessage) return []
+  const payload = latestMessage.structuredData
+  const reason = payload && typeof payload === 'object' && typeof payload.reason === 'string'
+    ? payload.reason
+    : null
+  const stopPrice = payload
+    && typeof payload === 'object'
+    && typeof payload.stopPrice === 'number'
+    && Number.isFinite(payload.stopPrice)
+    ? payload.stopPrice
+    : null
+  if (reason === 'stop_proximity') {
+    const anchorPrice = stopPrice ?? (Number.isFinite(setup.stop) ? setup.stop : null)
+    if (anchorPrice == null) return []
+    return [{ message: latestMessage, anchorPrice }]
+  }
   const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
   if (!Number.isFinite(entryMid)) return []
   return [{ message: latestMessage, anchorPrice: entryMid }]
@@ -104,18 +120,52 @@ function buildFallbackAnchors(
 
 export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLayerProps) {
   const { coachMessages } = useSPXCoachContext()
-  const { selectedSetup } = useSPXSetupContext()
+  const { spxPrice } = useSPXPriceContext()
+  const { activeSetups, inTradeSetup, selectedSetup } = useSPXSetupContext()
   const [renderState, setRenderState] = useState<GhostRenderState | null>(null)
   const [lifecycleMap, setLifecycleMap] = useState<SpatialGhostLifecycleMap>({})
   const anchorSnapshotRef = useRef<Record<string, SpatialCoachAnchorMessage<CoachMessage>>>({})
   const previousLifecycleRef = useRef<SpatialGhostLifecycleMap>({})
   const anchorModeByIdRef = useRef<Record<string, SpatialAnchorMode>>({})
 
+  const setupById = useMemo(() => {
+    return new Map(activeSetups.map((setup) => [setup.id, setup]))
+  }, [activeSetups])
+
+  const semanticFallbackAnchor = useCallback((message: CoachMessage): number | null => {
+    const payload = message.structuredData
+    const reason = payload && typeof payload === 'object' && typeof payload.reason === 'string'
+      ? payload.reason
+      : null
+    const stopPrice = payload
+      && typeof payload === 'object'
+      && typeof payload.stopPrice === 'number'
+      && Number.isFinite(payload.stopPrice)
+      ? payload.stopPrice
+      : null
+    const scopedSetup = (message.setupId ? setupById.get(message.setupId) : null) || inTradeSetup || selectedSetup
+    if (reason === 'stop_proximity') {
+      if (stopPrice != null) return stopPrice
+      if (!scopedSetup) return null
+      return Number.isFinite(scopedSetup.stop) ? scopedSetup.stop : null
+    }
+    if (!scopedSetup) return null
+    if (reason === 'status_triggered' || reason === 'flow_divergence') {
+      const entryMid = (scopedSetup.entryZone.low + scopedSetup.entryZone.high) / 2
+      return Number.isFinite(entryMid) ? entryMid : null
+    }
+    return null
+  }, [inTradeSetup, selectedSetup, setupById])
+
   const sourceAnchors = useMemo(() => {
-    const anchored = extractSpatialCoachAnchors(coachMessages, { maxNodes: MAX_GHOST_ITEMS })
+    const anchored = extractSpatialCoachAnchors(coachMessages, {
+      maxNodes: MAX_GHOST_ITEMS,
+      referencePrice: spxPrice,
+      fallbackAnchorPrice: semanticFallbackAnchor,
+    })
     if (anchored.length > 0) return anchored
     return buildFallbackAnchors(selectedSetup, coachMessages)
-  }, [coachMessages, selectedSetup])
+  }, [coachMessages, selectedSetup, semanticFallbackAnchor, spxPrice])
 
   useEffect(() => {
     const nextSnapshots: Record<string, SpatialCoachAnchorMessage<CoachMessage>> = {
@@ -286,7 +336,7 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
           <button
             key={item.id}
             type="button"
-            className="glass-card-heavy absolute w-[220px] rounded-xl px-3 py-2.5 pointer-events-auto text-left transition-all duration-300"
+            className="glass-card-heavy absolute w-[220px] rounded-xl border border-white/15 bg-[#0A0A0B]/82 px-3 py-2.5 pointer-events-auto text-left transition-all duration-300"
             style={{
               left: item.cardX,
               top: item.cardY,
@@ -309,7 +359,14 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
           >
             <div className="flex items-center justify-between">
               <span className="text-[9px] font-mono uppercase tracking-[0.1em] text-champagne/90">{item.title}</span>
-              <span className="text-[8px] font-mono text-white/45">@ {item.anchorPrice.toFixed(0)}</span>
+              <div className="flex items-center gap-1.5">
+                {item.anchorMode === 'fallback' && (
+                  <span className="rounded border border-champagne/35 bg-champagne/12 px-1 py-0.5 text-[7px] font-mono uppercase tracking-[0.08em] text-champagne">
+                    Fallback
+                  </span>
+                )}
+                <span className="text-[8px] font-mono text-white/45">@ {item.anchorPrice.toFixed(0)}</span>
+              </div>
             </div>
             <p className="mt-1.5 text-[10px] leading-relaxed text-white/78">{item.excerpt}</p>
           </button>
