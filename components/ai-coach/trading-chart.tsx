@@ -28,6 +28,7 @@ import {
   type IndicatorConfig,
 } from './chart-indicators'
 import type { LevelGroupId } from './chart-level-groups'
+import { resolveVisibleChartLevels, type VisibleChartLevelsResult } from '@/lib/spx/spatial-hud'
 
 // ============================================
 // TYPES
@@ -64,6 +65,7 @@ interface TradingChartProps {
   isLoading?: boolean
   onHoverPrice?: (price: number | null) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
+  onLevelLayoutStats?: (stats: VisibleChartLevelsResult<LevelAnnotation>['stats']) => void
 }
 
 export interface PositionOverlay {
@@ -185,6 +187,7 @@ export function TradingChart({
   isLoading,
   onHoverPrice,
   onChartReady,
+  onLevelLayoutStats,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const rsiContainerRef = useRef<HTMLDivElement>(null)
@@ -1021,9 +1024,20 @@ export function TradingChart({
       }
     }
 
-    // Add new price lines for each level
+    const livePrice = safeBars.length > 0 ? safeBars[safeBars.length - 1]!.close : null
+    const visibleLevelSelection = resolveVisibleChartLevels(derivedLevels, {
+      livePrice,
+      nearWindowPoints: 16,
+      nearLabelBudget: 7,
+      maxTotalLabels: 16,
+      minGapPoints: 1.2,
+    })
+    const visibleLevels = visibleLevelSelection.levels
+    onLevelLayoutStats?.(visibleLevelSelection.stats)
+
+    // Add new price lines for each selected level
     const newLines = []
-    for (const level of derivedLevels) {
+    for (const level of visibleLevels) {
       const lineStyle = level.lineStyle === 'dashed' ? 1 : level.lineStyle === 'dotted' ? 2 : 0
 
       try {
@@ -1044,7 +1058,7 @@ export function TradingChart({
     }
 
     levelPriceLinesRef.current = newLines
-  }, [levels, indicators.openingRange, safeBars, timeframe, openingRangeMinutes, positionOverlays, clearLevelPriceLines])
+  }, [levels, indicators.openingRange, safeBars, timeframe, openingRangeMinutes, positionOverlays, clearLevelPriceLines, onLevelLayoutStats])
 
   const showRSIPane = indicators.rsi
   const showMACDPane = indicators.macd

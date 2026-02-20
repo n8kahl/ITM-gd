@@ -12,6 +12,8 @@ interface SpatialCoachNodeProps {
   anchorPrice: number
   anchorTimeSec: number | null
   fallbackIndex: number
+  yOffsetPx?: number
+  popoverLane?: number
   getCoordinates: () => ChartCoordinateAPI | null
   onDismiss: (id: string) => void
   onAction: (actionId: string, messageId: string) => void
@@ -24,6 +26,8 @@ export function SpatialCoachNode({
   anchorPrice,
   anchorTimeSec,
   fallbackIndex,
+  yOffsetPx = 0,
+  popoverLane = 0,
   getCoordinates,
   onDismiss,
   onAction,
@@ -49,13 +53,19 @@ export function SpatialCoachNode({
 
   if (!coordinates?.ready) return null
 
-  const y = coordinates.priceToPixel(anchorPrice)
-  if (y == null || y < 48 || y > coordinates.chartDimensions.height - 48) return null
+  const baseY = coordinates.priceToPixel(anchorPrice)
+  if (baseY == null || baseY < 48 || baseY > coordinates.chartDimensions.height - 48) return null
 
   const x = anchorXResolution.x
+  const y = baseY + yOffsetPx
 
   const isBearish = message.type === 'pre_trade' && message.content.toLowerCase().includes('fade')
   const color = isBearish ? '#FB7185' : '#10B981'
+  const popoverWidth = 260
+  const openToLeft = x + popoverWidth + 32 > coordinates.chartDimensions.width
+  const popoverX = openToLeft ? -(popoverWidth + 20) : 20
+  const popoverTop = -62 + (Math.min(popoverLane, 4) * 10)
+  const connectorLength = Math.max(24, openToLeft ? x - 56 : coordinates.chartDimensions.width - x - 80)
 
   return (
     <div
@@ -73,7 +83,7 @@ export function SpatialCoachNode({
         <line
           x1={0}
           y1={0}
-          x2={coordinates.chartDimensions.width - x - 80}
+          x2={openToLeft ? -connectorLength : connectorLength}
           y2={0}
           stroke={color}
           strokeWidth={0.5}
@@ -106,10 +116,11 @@ export function SpatialCoachNode({
       <AnimatePresence>
         {expanded && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.92, x: 20 }}
-            animate={{ opacity: 1, scale: 1, x: 20 }}
-            exit={{ opacity: 0, scale: 0.92, x: 20 }}
-            className="glass-card-heavy absolute left-5 top-[-62px] z-50 w-[260px] rounded-xl p-3.5"
+            initial={{ opacity: 0, scale: 0.92, x: popoverX }}
+            animate={{ opacity: 1, scale: 1, x: popoverX }}
+            exit={{ opacity: 0, scale: 0.92, x: popoverX }}
+            className="glass-card-heavy absolute z-50 w-[260px] rounded-xl p-3.5"
+            style={{ left: 0, top: popoverTop }}
           >
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[9px] font-mono uppercase tracking-[0.1em]" style={{ color: `${color}cc` }}>

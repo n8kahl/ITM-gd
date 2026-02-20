@@ -17,6 +17,7 @@ interface GammaBandRender {
   widthPct: number
   color: string
   opacity: number
+  edgeOpacity: number
 }
 
 interface GammaRenderState {
@@ -50,6 +51,7 @@ function renderStateEquals(left: GammaRenderState | null, right: GammaRenderStat
       || l.widthPct !== r.widthPct
       || l.color !== r.color
       || l.opacity !== r.opacity
+      || l.edgeOpacity !== r.edgeOpacity
     ) {
       return false
     }
@@ -98,10 +100,11 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
     for (const entry of gammaEntries) {
       const y = coordinates.priceToPixel(entry.strike)
       if (y == null || y < 0 || y > height) continue
-      const stripeHeight = clamp(7 + (entry.weight * 22), 8, 30)
+      const stripeHeight = clamp(9 + (entry.weight * 26), 10, 36)
       const top = clamp(y - (stripeHeight / 2), 0, Math.max(0, height - stripeHeight))
-      const widthPct = clamp(18 + (entry.weight * 38), 16, 62)
-      const opacity = clamp(0.08 + (entry.weight * 0.2), 0.08, 0.28)
+      const widthPct = clamp(28 + (entry.weight * 54), 28, 84)
+      const opacity = clamp(0.16 + (entry.weight * 0.34), 0.16, 0.5)
+      const edgeOpacity = clamp(0.45 + (entry.weight * 0.4), 0.45, 0.88)
       bands.push({
         id: `${entry.strike}:${entry.gex}`,
         top,
@@ -109,6 +112,7 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
         widthPct,
         color: entry.polarity === 'positive' ? '16,185,129' : '251,113,133',
         opacity,
+        edgeOpacity,
       })
     }
 
@@ -151,7 +155,14 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
   if (!renderState || (renderState.bands.length === 0 && renderState.vacuumZones.length === 0)) return null
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[6]" data-testid="spx-gamma-topography" aria-hidden>
+    <div className="pointer-events-none absolute inset-0 z-[8]" data-testid="spx-gamma-topography" aria-hidden>
+      <div
+        className="absolute inset-y-0 right-0 w-[38%] border-l border-white/8"
+        style={{
+          background: 'linear-gradient(270deg, rgba(8,10,13,0.48) 0%, rgba(8,10,13,0.2) 45%, rgba(8,10,13,0) 100%)',
+        }}
+        data-testid="spx-gamma-rail"
+      />
       {renderState.vacuumZones.map((zone) => (
         <div
           key={zone.id}
@@ -167,12 +178,25 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
       {renderState.bands.map((band) => (
         <div
           key={band.id}
-          className="absolute right-0 border-y border-white/5"
+          className="absolute right-0 overflow-hidden rounded-l-md border-y border-white/8"
           style={{
             top: band.top,
             height: band.height,
             width: `${band.widthPct}%`,
-            background: `linear-gradient(270deg, rgba(${band.color}, ${band.opacity}) 0%, rgba(${band.color}, 0) 100%)`,
+            background: `linear-gradient(270deg, rgba(${band.color}, ${band.opacity}) 0%, rgba(${band.color}, ${band.opacity * 0.58}) 38%, rgba(${band.color}, 0) 100%)`,
+            boxShadow: `inset 0 0 0 1px rgba(${band.color}, 0.08)`,
+          }}
+        />
+      ))}
+      {renderState.bands.map((band) => (
+        <div
+          key={`${band.id}:edge`}
+          className="absolute right-0 w-[2px]"
+          style={{
+            top: band.top,
+            height: band.height,
+            background: `rgba(${band.color}, ${band.edgeOpacity})`,
+            boxShadow: `0 0 10px rgba(${band.color}, ${band.edgeOpacity * 0.7})`,
           }}
         />
       ))}

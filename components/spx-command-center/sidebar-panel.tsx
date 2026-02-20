@@ -53,7 +53,7 @@ export function SidebarPanel({ width, open, layoutMode, onClose, children }: Sid
             </button>
           </div>
 
-          <div className="flex-1 space-y-2.5 overflow-x-hidden overflow-y-auto p-3">
+          <div className="flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-3.5 py-3 text-[12px] leading-relaxed">
             {children}
           </div>
         </motion.aside>

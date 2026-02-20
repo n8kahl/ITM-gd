@@ -19,9 +19,11 @@ test.describe('SPX spatial overlays', () => {
 
     await expect(page.getByTestId('spx-sidebar-panel')).toBeVisible()
     await expect(page.getByTestId('spx-probability-cone-svg')).toBeVisible({ timeout: 12_000 })
+    await expect(page.getByTestId('spx-probability-cone-start')).toBeVisible()
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
     await expect(page.getByTestId('spx-topographic-ladder')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-topography')).toBeVisible()
+    await expect(page.getByTestId('spx-gamma-rail')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-vacuum-zone').first()).toBeVisible()
 
     await page.keyboard.press('j')
@@ -74,6 +76,8 @@ test.describe('SPX spatial overlays', () => {
     const cone = page.getByTestId('spx-probability-cone-svg')
     await expect(cone).toBeVisible({ timeout: 12_000 })
     await expect(cone).toHaveAttribute('data-fallback', 'true')
+    await expect(cone).toHaveAttribute('data-anchor-mode', /time|fallback/)
+    await expect(page.getByTestId('spx-probability-cone-fallback-badge')).toBeVisible()
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
   })
 

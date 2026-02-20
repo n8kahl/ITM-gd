@@ -216,6 +216,13 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
           anchorMode: anchorXResolution.mode,
           anchorTimeSec,
         })
+        if (anchorXResolution.mode === 'fallback') {
+          trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SPATIAL_FALLBACK_ANCHOR_USED, {
+            messageId: id,
+            surface: 'spatial_coach_ghost',
+            reason: 'time_coordinate_unavailable',
+          })
+        }
       }
 
       items.push({

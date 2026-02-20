@@ -14,8 +14,11 @@ export interface ProbabilityConeGeometry {
   width: number
   height: number
   startX: number
+  startY: number
   coneWidth: number
   usedFallback: boolean
+  anchorMode: SpatialAnchorMode
+  salience: number
 }
 
 interface BuildProbabilityConeGeometryInput {
@@ -23,6 +26,8 @@ interface BuildProbabilityConeGeometryInput {
   height: number
   currentPrice: number
   priceToPixel: (price: number) => number | null
+  timeToPixel?: (timestamp: number) => number | null
+  anchorTimestampSec?: number | null
   visiblePriceRange?: { min: number; max: number } | null
   directionBias?: number
   windows: ProbabilityConeWindow[]
@@ -109,6 +114,8 @@ export function buildProbabilityConeGeometry(
     height,
     currentPrice,
     priceToPixel,
+    timeToPixel,
+    anchorTimestampSec = null,
     visiblePriceRange,
     directionBias = 0,
     windows,
@@ -120,7 +127,7 @@ export function buildProbabilityConeGeometry(
     return null
   }
 
-  const startX = clamp(width * startXRatio, 0, width)
+  const fallbackStartX = clamp(width * startXRatio, 0, width)
   const coneWidth = clamp(width * coneWidthRatio, Math.min(24, width * 0.08), width * 0.35)
   const startY = safePriceToPixel(currentPrice, height, priceToPixel, visiblePriceRange)
   if (startY == null) return null
@@ -131,6 +138,35 @@ export function buildProbabilityConeGeometry(
     ? buildFallbackConeWindows(currentPrice, visiblePriceRange, directionBias)
     : preparedWindows
 
+  let startX = fallbackStartX
+  let anchorMode: SpatialAnchorMode = 'fallback'
+  let timeAnchoredXs: number[] | null = null
+  if (timeToPixel && anchorTimestampSec != null && Number.isFinite(anchorTimestampSec)) {
+    const fromStart = timeToPixel(anchorTimestampSec)
+    if (fromStart != null && Number.isFinite(fromStart)) {
+      const candidateXs: number[] = []
+      let allResolved = true
+      for (let index = 0; index < coneWindows.length; index += 1) {
+        const windowPoint = coneWindows[index]
+        const minutesForward = Number(windowPoint.minutesForward)
+        const targetTimestamp = Number.isFinite(minutesForward)
+          ? anchorTimestampSec + Math.max(1, Math.round(minutesForward * 60))
+          : anchorTimestampSec + Math.round(((index + 1) / coneWindows.length) * 30 * 60)
+        const x = timeToPixel(targetTimestamp)
+        if (x == null || !Number.isFinite(x)) {
+          allResolved = false
+          break
+        }
+        candidateXs.push(clamp(x, 0, width))
+      }
+      if (allResolved && candidateXs.length === coneWindows.length) {
+        anchorMode = 'time'
+        startX = clamp(fromStart, 0, width)
+        timeAnchoredXs = candidateXs
+      }
+    }
+  }
+
   const topPoints: string[] = []
   const bottomPoints: string[] = []
   const centerPoints: Array<{ x: number; y: number }> = []
@@ -138,7 +174,7 @@ export function buildProbabilityConeGeometry(
   for (let index = 0; index < coneWindows.length; index += 1) {
     const windowPoint = coneWindows[index]
     const fraction = (index + 1) / coneWindows.length
-    const x = startX + (fraction * coneWidth)
+    const x = timeAnchoredXs?.[index] ?? (startX + (fraction * coneWidth))
     const highY = safePriceToPixel(windowPoint.high, height, priceToPixel, visiblePriceRange)
     const lowY = safePriceToPixel(windowPoint.low, height, priceToPixel, visiblePriceRange)
     if (highY == null || lowY == null) continue
@@ -162,6 +198,13 @@ export function buildProbabilityConeGeometry(
   const path = `M${startX},${startY} L${topPoints.join(' L')} L${[...bottomPoints].reverse().join(' L')} Z`
   const lastCenterPoint = centerPoints[centerPoints.length - 1]
   const centerLine = lastCenterPoint ? `M${startX},${startY} L${lastCenterPoint.x},${lastCenterPoint.y}` : ''
+  const confidenceValues = coneWindows
+    .map((point) => (Number.isFinite(point.confidence) ? Number(point.confidence) : null))
+    .filter((value): value is number => value != null)
+  const avgConfidence = confidenceValues.length > 0
+    ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+    : 45
+  const salience = clamp(0.38 + (avgConfidence / 100) * 0.36 + Math.abs(directionBias) * 0.18, 0.35, 1)
 
   return {
     path,
@@ -169,8 +212,176 @@ export function buildProbabilityConeGeometry(
     width,
     height,
     startX,
+    startY,
     coneWidth,
     usedFallback: useFallbackWindows,
+    anchorMode,
+    salience,
+  }
+}
+
+export interface ChartAxisLevelInput {
+  id?: string
+  price: number
+  label: string
+  color: string
+  lineWidth?: number
+  lineStyle?: 'solid' | 'dashed' | 'dotted'
+  axisLabelVisible?: boolean
+  type?: string
+  strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+  group?: string
+}
+
+interface ResolveVisibleChartLevelsOptions {
+  livePrice?: number | null
+  nearWindowPoints?: number
+  nearLabelBudget?: number
+  maxTotalLabels?: number
+  minGapPoints?: number
+}
+
+export interface VisibleChartLevelsResult<T extends ChartAxisLevelInput> {
+  levels: T[]
+  stats: {
+    inputCount: number
+    dedupedCount: number
+    budgetSuppressedCount: number
+    collisionSuppressedCount: number
+  }
+}
+
+function canonicalizeLabel(label: string): string {
+  return label
+    .toUpperCase()
+    .replace(/^SPY\s*(?:→|->|-)\s*SPX\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function labelPriority(label: string): number {
+  const normalized = label.toUpperCase()
+  if (normalized.includes('ENTRY')) return 120
+  if (normalized.includes('STOP')) return 118
+  if (normalized.includes('TARGET')) return 110
+  if (normalized.includes('PDC') || normalized.includes('PDH') || normalized.includes('PDL')) return 108
+  if (normalized.includes('OPTIONS FLIP')) return 106
+  if (normalized.includes('MONTHLY')) return 104
+  if (normalized.includes('DAILY')) return 102
+  return 80
+}
+
+function strengthPriority(strength?: ChartAxisLevelInput['strength']): number {
+  if (strength === 'critical') return 26
+  if (strength === 'strong') return 22
+  if (strength === 'moderate') return 18
+  if (strength === 'dynamic') return 15
+  if (strength === 'weak') return 12
+  return 10
+}
+
+function typePriority(type?: string): number {
+  if (type === 'entry_zone' || type === 'stop' || type === 'target1' || type === 'target2') return 24
+  if (type === 'options') return 20
+  if (type === 'structural') return 18
+  if (type === 'fibonacci') return 14
+  if (type === 'spy_derived') return 12
+  return 10
+}
+
+function levelPriority(level: ChartAxisLevelInput): number {
+  const groupBonus = level.group === 'position' ? 28 : 0
+  const spyPenalty = level.label.toUpperCase().includes('SPY') ? -2 : 0
+  return labelPriority(level.label) + strengthPriority(level.strength) + typePriority(level.type) + groupBonus + spyPenalty
+}
+
+function withinGap(a: number, b: number, minGap: number): boolean {
+  return Math.abs(a - b) < minGap
+}
+
+export function resolveVisibleChartLevels<T extends ChartAxisLevelInput>(
+  levels: T[],
+  options?: ResolveVisibleChartLevelsOptions,
+): VisibleChartLevelsResult<T> {
+  if (levels.length === 0) {
+    return {
+      levels: [],
+      stats: {
+        inputCount: 0,
+        dedupedCount: 0,
+        budgetSuppressedCount: 0,
+        collisionSuppressedCount: 0,
+      },
+    }
+  }
+
+  const nearWindowPoints = options?.nearWindowPoints ?? 14
+  const nearLabelBudget = options?.nearLabelBudget ?? 7
+  const maxTotalLabels = options?.maxTotalLabels ?? 16
+  const minGapPoints = options?.minGapPoints ?? 1.35
+  const livePrice = Number.isFinite(options?.livePrice) ? Number(options?.livePrice) : null
+
+  const dedupeMap = new Map<string, T>()
+  for (const level of levels) {
+    if (!Number.isFinite(level.price)) continue
+    const roundedPrice = Math.round(level.price * 4) / 4
+    const key = `${roundedPrice}|${canonicalizeLabel(level.label)}`
+    const existing = dedupeMap.get(key)
+    if (!existing || levelPriority(level) > levelPriority(existing)) {
+      dedupeMap.set(key, level)
+    }
+  }
+  const deduped = Array.from(dedupeMap.values())
+
+  const ranked = deduped
+    .map((level) => {
+      const distance = livePrice == null ? 0 : Math.abs(level.price - livePrice)
+      const near = livePrice != null ? distance <= nearWindowPoints : true
+      const priority = levelPriority(level)
+      return {
+        level,
+        distance,
+        near,
+        priority,
+      }
+    })
+    .sort((left, right) => {
+      if (left.near !== right.near) return left.near ? -1 : 1
+      if (left.priority !== right.priority) return right.priority - left.priority
+      if (left.distance !== right.distance) return left.distance - right.distance
+      return right.level.price - left.level.price
+    })
+
+  const accepted: T[] = []
+  let nearCount = 0
+  let budgetSuppressedCount = 0
+  let collisionSuppressedCount = 0
+  for (const candidate of ranked) {
+    if (accepted.length >= maxTotalLabels) {
+      budgetSuppressedCount += 1
+      continue
+    }
+    if (candidate.near && nearCount >= nearLabelBudget) {
+      budgetSuppressedCount += 1
+      continue
+    }
+    const collided = accepted.some((existing) => withinGap(existing.price, candidate.level.price, minGapPoints))
+    if (collided) {
+      collisionSuppressedCount += 1
+      continue
+    }
+    accepted.push(candidate.level)
+    if (candidate.near) nearCount += 1
+  }
+
+  return {
+    levels: [...accepted].sort((left, right) => right.price - left.price),
+    stats: {
+      inputCount: levels.length,
+      dedupedCount: Math.max(0, levels.length - deduped.length),
+      budgetSuppressedCount,
+      collisionSuppressedCount,
+    },
   }
 }
 

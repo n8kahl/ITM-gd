@@ -96,6 +96,7 @@ export function SPXChart({
   const focusedLevelStreakByKeyRef = useRef<Record<string, number>>({})
   const levelMutationEpochsRef = useRef<number[]>([])
   const lastLevelMutationEpochRef = useRef<number | null>(null)
+  const lastLabelLayoutSignatureRef = useRef<string | null>(null)
   const priceCommitStatsRef = useRef({
     enqueued: 0,
     committed: 0,
@@ -475,6 +476,38 @@ export function SPXChart({
     onDisplayedLevelsChange?.(displayedLevels.length, levelAnnotations.length)
   }, [displayedLevels.length, levelAnnotations.length, onDisplayedLevelsChange])
 
+  const handleLevelLayoutStats = useCallback((stats: {
+    inputCount: number
+    dedupedCount: number
+    budgetSuppressedCount: number
+    collisionSuppressedCount: number
+  }) => {
+    const signature = [
+      stats.inputCount,
+      stats.dedupedCount,
+      stats.budgetSuppressedCount,
+      stats.collisionSuppressedCount,
+      selectedTimeframe,
+    ].join(':')
+
+    if (signature === lastLabelLayoutSignatureRef.current) return
+    lastLabelLayoutSignatureRef.current = signature
+
+    if (stats.dedupedCount <= 0 && stats.budgetSuppressedCount <= 0 && stats.collisionSuppressedCount <= 0) {
+      return
+    }
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CHART_LABEL_COLLISION, {
+      surface: 'trading_chart_axis_labels',
+      timeframe: selectedTimeframe,
+      inputCount: stats.inputCount,
+      dedupedCount: stats.dedupedCount,
+      budgetSuppressedCount: stats.budgetSuppressedCount,
+      collisionSuppressedCount: stats.collisionSuppressedCount,
+      focusedMode: !showAllRelevantLevels,
+    })
+  }, [selectedTimeframe, showAllRelevantLevels])
+
   return (
     <section className={cn('relative h-full w-full', className)}>
       <div className="pointer-events-none absolute left-2 top-2 z-[2]">
@@ -491,6 +524,7 @@ export function SPXChart({
           futureOffsetBars={futureOffsetBars}
           isLoading={isLoading}
           onChartReady={onChartReady}
+          onLevelLayoutStats={handleLevelLayoutStats}
         />
       </div>
     </section>
