@@ -302,6 +302,12 @@ export interface GammaTopographyEntry {
   polarity: 'positive' | 'negative'
 }
 
+export interface GammaVacuumZone {
+  low: number
+  high: number
+  intensity: number
+}
+
 interface BuildGammaTopographyEntriesOptions {
   maxEntries?: number
   minMagnitudeRatio?: number
@@ -346,6 +352,79 @@ export function buildGammaTopographyEntries(
     }))
 
   return filtered.sort((left, right) => right.strike - left.strike)
+}
+
+interface BuildGammaVacuumZonesOptions {
+  maxZones?: number
+  lowMagnitudeRatio?: number
+}
+
+export function buildGammaVacuumZones(
+  gexByStrike: GammaTopographyStrikeInput[],
+  currentPrice: number,
+  options?: BuildGammaVacuumZonesOptions,
+): GammaVacuumZone[] {
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return []
+
+  const maxZones = options?.maxZones ?? 4
+  const lowMagnitudeRatio = options?.lowMagnitudeRatio ?? 0.12
+  if (maxZones <= 0) return []
+
+  const sorted = gexByStrike
+    .filter((point) => Number.isFinite(point.strike) && Number.isFinite(point.gex))
+    .sort((left, right) => left.strike - right.strike)
+
+  if (sorted.length < 2) return []
+
+  const maxAbs = Math.max(...sorted.map((point) => Math.abs(point.gex)), 0)
+  if (!Number.isFinite(maxAbs) || maxAbs <= 0) return []
+  const lowMagnitudeThreshold = maxAbs * lowMagnitudeRatio
+  if (lowMagnitudeThreshold <= 0) return []
+
+  const provisional: GammaVacuumZone[] = []
+  for (let index = 0; index < sorted.length - 1; index += 1) {
+    const left = sorted[index]
+    const right = sorted[index + 1]
+    if (!left || !right) continue
+    const leftAbs = Math.abs(left.gex)
+    const rightAbs = Math.abs(right.gex)
+    if (leftAbs > lowMagnitudeThreshold || rightAbs > lowMagnitudeThreshold) continue
+
+    const low = Math.min(left.strike, right.strike)
+    const high = Math.max(left.strike, right.strike)
+    const mid = (low + high) / 2
+    const avgAbs = (leftAbs + rightAbs) / 2
+    const voidness = 1 - clamp(avgAbs / lowMagnitudeThreshold, 0, 1)
+    const proximity = 1 / (1 + (Math.abs(mid - currentPrice) / 32))
+    const intensity = clamp((voidness * 0.72) + (proximity * 0.28), 0.18, 1)
+
+    provisional.push({ low, high, intensity })
+  }
+
+  if (provisional.length === 0) return []
+
+  const merged: GammaVacuumZone[] = []
+  for (const zone of provisional) {
+    const previous = merged[merged.length - 1]
+    if (previous && zone.low <= previous.high) {
+      previous.high = Math.max(previous.high, zone.high)
+      previous.intensity = Math.max(previous.intensity, zone.intensity)
+      continue
+    }
+    merged.push({ ...zone })
+  }
+
+  return merged
+    .sort((left, right) => {
+      const leftMid = (left.low + left.high) / 2
+      const rightMid = (right.low + right.high) / 2
+      const leftDistance = Math.abs(leftMid - currentPrice)
+      const rightDistance = Math.abs(rightMid - currentPrice)
+      if (leftDistance !== rightDistance) return leftDistance - rightDistance
+      return (right.high - right.low) - (left.high - left.low)
+    })
+    .slice(0, maxZones)
+    .sort((left, right) => right.high - left.high)
 }
 
 export interface SetupLockPriceBand {

@@ -22,6 +22,7 @@ test.describe('SPX spatial overlays', () => {
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
     await expect(page.getByTestId('spx-topographic-ladder')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-topography')).toBeVisible()
+    await expect(page.getByTestId('spx-gamma-vacuum-zone').first()).toBeVisible()
 
     await page.keyboard.press('j')
     await expect(page.getByTestId('spx-setup-lock-overlay')).toBeVisible({ timeout: 8_000 })
@@ -32,6 +33,8 @@ test.describe('SPX spatial overlays', () => {
     await expect(page.getByTestId('spx-coach-ghost-card').first()).toBeVisible()
     await expect(page.getByTestId('spx-coach-ghost-card').first()).toHaveAttribute('data-lifecycle-state', /entering|active|fading/)
     await expect(page.getByTestId('spx-coach-ghost-card').first()).toHaveAttribute('data-anchor-mode', /time|fallback/)
+    await expect(page.getByTestId('spx-spatial-coach-node').first()).toBeVisible()
+    await expect(page.getByTestId('spx-spatial-coach-node').first()).toHaveAttribute('data-anchor-mode', /time|fallback/)
 
     await page.keyboard.press('a')
     await expect(page.getByTestId('spx-spatial-ghost-layer')).toHaveCount(0)
@@ -90,5 +93,24 @@ test.describe('SPX spatial overlays', () => {
     await page.keyboard.press('a')
     await expect(page.getByTestId('spx-spatial-ghost-layer')).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('[data-testid=\"spx-coach-ghost-card\"][data-anchor-mode=\"time\"]').first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('[data-testid=\"spx-spatial-coach-node\"][data-anchor-mode=\"time\"]').first()).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('surfaces degraded data health state in spatial header', async ({ page }) => {
+    await setupSPXCommandCenterMocks(page, { snapshotDegraded: true })
+    await authenticateAsMember(page)
+    await page.addInitScript(() => {
+      window.__spxUxFlags = {
+        spatialHudV1: true,
+        layoutStateMachine: true,
+      }
+    })
+
+    await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
+    await page.getByTestId('spx-view-mode-spatial').click()
+
+    const header = page.getByTestId('spx-header-overlay')
+    await expect(header).toBeVisible()
+    await expect(header).toContainText(/degraded/i)
   })
 })

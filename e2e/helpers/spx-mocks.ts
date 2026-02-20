@@ -4,6 +4,7 @@ interface SPXMockOptions {
   delayMs?: number
   omitPrediction?: boolean
   alignCoachMessagesToChart?: boolean
+  snapshotDegraded?: boolean
 }
 
 const nowIso = '2026-02-15T15:12:00.000Z'
@@ -250,7 +251,9 @@ const gexByStrike = [
   { strike: 6000, gex: -1800 },
   { strike: 6010, gex: -1200 },
   { strike: 6020, gex: -500 },
-  { strike: 6030, gex: 900 },
+  { strike: 6025, gex: -80 },
+  { strike: 6030, gex: 60 },
+  { strike: 6035, gex: 900 },
   { strike: 6040, gex: 1400 },
   { strike: 6050, gex: 1900 },
 ]
@@ -490,7 +493,12 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOptions = {}): Promise<void> {
-  const { delayMs = 0, omitPrediction = false, alignCoachMessagesToChart = false } = options
+  const {
+    delayMs = 0,
+    omitPrediction = false,
+    alignCoachMessagesToChart = false,
+    snapshotDegraded = false,
+  } = options
   let coachMessageSequence = 0
   const coachMessagesPayload = buildCoachMessagesPayload({ alignToChart: alignCoachMessagesToChart })
   const coachStatePayload = {
@@ -514,10 +522,18 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
         probabilityCone: [],
       },
       coachMessages: coachMessagesPayload,
+      ...(snapshotDegraded ? {
+        degraded: true,
+        message: 'Mocked degraded snapshot for spatial HUD coverage.',
+      } : {}),
     }
     : {
       ...snapshotResponse,
       coachMessages: coachMessagesPayload,
+      ...(snapshotDegraded ? {
+        degraded: true,
+        message: 'Mocked degraded snapshot for spatial HUD coverage.',
+      } : {}),
     }
 
   await page.route('**/api/chart/SPX*', async (route) => {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
-import { buildGammaTopographyEntries } from '@/lib/spx/spatial-hud'
+import { buildGammaTopographyEntries, buildGammaVacuumZones } from '@/lib/spx/spatial-hud'
 
 interface GammaTopographyOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
@@ -21,6 +21,12 @@ interface GammaBandRender {
 
 interface GammaRenderState {
   bands: GammaBandRender[]
+  vacuumZones: Array<{
+    id: string
+    top: number
+    height: number
+    opacity: number
+  }>
 }
 
 const GAMMA_REFRESH_INTERVAL_MS = 160
@@ -32,6 +38,7 @@ function clamp(value: number, min: number, max: number): number {
 function renderStateEquals(left: GammaRenderState | null, right: GammaRenderState | null): boolean {
   if (!left || !right) return left === right
   if (left.bands.length !== right.bands.length) return false
+  if (left.vacuumZones.length !== right.vacuumZones.length) return false
   for (let index = 0; index < left.bands.length; index += 1) {
     const l = left.bands[index]
     const r = right.bands[index]
@@ -44,6 +51,14 @@ function renderStateEquals(left: GammaRenderState | null, right: GammaRenderStat
       || l.color !== r.color
       || l.opacity !== r.opacity
     ) {
+      return false
+    }
+  }
+  for (let index = 0; index < left.vacuumZones.length; index += 1) {
+    const l = left.vacuumZones[index]
+    const r = right.vacuumZones[index]
+    if (!l || !r) return false
+    if (l.id !== r.id || l.top !== r.top || l.height !== r.height || l.opacity !== r.opacity) {
       return false
     }
   }
@@ -60,10 +75,15 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
     spxPrice,
     { maxEntries: 12, minMagnitudeRatio: 0.14 },
   ), [gexProfile?.combined?.gexByStrike, spxPrice])
+  const gammaVacuumZones = useMemo(() => buildGammaVacuumZones(
+    gexProfile?.combined?.gexByStrike || [],
+    spxPrice,
+    { maxZones: 4, lowMagnitudeRatio: 0.14 },
+  ), [gexProfile?.combined?.gexByStrike, spxPrice])
 
   const refreshRenderState = useCallback(() => {
     const coordinates = coordinatesRef.current
-    if (!coordinates?.ready || gammaEntries.length === 0) {
+    if (!coordinates?.ready || (gammaEntries.length === 0 && gammaVacuumZones.length === 0)) {
       setRenderState((previous) => (previous == null ? previous : null))
       return
     }
@@ -92,9 +112,25 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
       })
     }
 
-    const nextState: GammaRenderState = { bands }
+    const vacuumZones = gammaVacuumZones.reduce<Array<{ id: string; top: number; height: number; opacity: number }>>((acc, zone, index) => {
+      const yHigh = coordinates.priceToPixel(zone.high)
+      const yLow = coordinates.priceToPixel(zone.low)
+      if (yHigh == null || yLow == null) return acc
+      const top = clamp(Math.min(yHigh, yLow), 0, height)
+      const rawHeight = Math.abs(yLow - yHigh)
+      const zoneHeight = clamp(rawHeight, 10, height)
+      acc.push({
+        id: `vacuum:${zone.low}:${zone.high}:${index}`,
+        top,
+        height: zoneHeight,
+        opacity: clamp(0.16 + (zone.intensity * 0.2), 0.16, 0.34),
+      })
+      return acc
+    }, [])
+
+    const nextState: GammaRenderState = { bands, vacuumZones }
     setRenderState((previous) => (renderStateEquals(previous, nextState) ? previous : nextState))
-  }, [coordinatesRef, gammaEntries])
+  }, [coordinatesRef, gammaEntries, gammaVacuumZones])
 
   useEffect(() => {
     let rafId = 0
@@ -112,10 +148,22 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
     }
   }, [refreshRenderState])
 
-  if (!renderState || renderState.bands.length === 0) return null
+  if (!renderState || (renderState.bands.length === 0 && renderState.vacuumZones.length === 0)) return null
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[6]" data-testid="spx-gamma-topography" aria-hidden>
+      {renderState.vacuumZones.map((zone) => (
+        <div
+          key={zone.id}
+          className="absolute inset-x-0 border-y border-black/35"
+          style={{
+            top: zone.top,
+            height: zone.height,
+            background: `linear-gradient(90deg, transparent 0%, rgba(4, 8, 14, ${zone.opacity}) 28%, rgba(3, 5, 10, ${zone.opacity + 0.06}) 52%, rgba(4, 8, 14, ${zone.opacity}) 74%, transparent 100%)`,
+          }}
+          data-testid="spx-gamma-vacuum-zone"
+        />
+      ))}
       {renderState.bands.map((band) => (
         <div
           key={band.id}

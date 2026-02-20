@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildGammaVacuumZones,
   buildProbabilityConeGeometry,
   buildGammaTopographyEntries,
   buildRiskRewardShadowGeometry,
@@ -115,6 +116,23 @@ describe('spatial-hud helpers', () => {
       expect(entries.some((entry) => entry.strike === 6000 && entry.polarity === 'positive')).toBe(true)
       expect(entries.some((entry) => entry.strike === 6010 && entry.polarity === 'negative')).toBe(true)
       expect(entries[0]!.strike).toBeGreaterThanOrEqual(entries[1]!.strike)
+    })
+  })
+
+  describe('buildGammaVacuumZones', () => {
+    it('detects low-gamma gaps as vacuum zones near current price', () => {
+      const zones = buildGammaVacuumZones([
+        { strike: 5980, gex: -1200 },
+        { strike: 5990, gex: -90 },
+        { strike: 6000, gex: 60 },
+        { strike: 6010, gex: 1500 },
+        { strike: 6020, gex: 90 },
+        { strike: 6030, gex: -80 },
+      ], 6002, { maxZones: 3, lowMagnitudeRatio: 0.1 })
+
+      expect(zones.length).toBeGreaterThan(0)
+      expect(zones[0]?.high).toBeGreaterThan(zones[0]?.low || 0)
+      expect(zones.some((zone) => zone.low <= 6000 && zone.high >= 6000)).toBe(true)
     })
   })
 

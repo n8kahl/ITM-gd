@@ -1,41 +1,69 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
+import { resolveSpatialAnchorX, type SpatialAnchorMode } from '@/lib/spx/spatial-hud'
 
 interface SpatialCoachNodeProps {
   message: CoachMessage
   anchorPrice: number
+  anchorTimeSec: number | null
+  fallbackIndex: number
   getCoordinates: () => ChartCoordinateAPI | null
   onDismiss: (id: string) => void
   onAction: (actionId: string, messageId: string) => void
-  onExpand?: (messageId: string, expanded: boolean) => void
+  onExpand?: (messageId: string, expanded: boolean, anchorMode: SpatialAnchorMode) => void
+  onAnchorModeChange?: (messageId: string, anchorMode: SpatialAnchorMode) => void
 }
 
 export function SpatialCoachNode({
   message,
   anchorPrice,
+  anchorTimeSec,
+  fallbackIndex,
   getCoordinates,
   onDismiss,
   onAction,
   onExpand,
+  onAnchorModeChange,
 }: SpatialCoachNodeProps) {
   const [expanded, setExpanded] = useState(false)
+  const lastAnchorModeRef = useRef<SpatialAnchorMode | null>(null)
   const coordinates = getCoordinates()
+  const anchorXResolution = resolveSpatialAnchorX({
+    width: coordinates?.chartDimensions.width || 0,
+    fallbackIndex,
+    anchorTimeSec,
+    timeToPixel: coordinates?.timeToPixel || (() => null),
+  })
+
+  useEffect(() => {
+    if (!coordinates?.ready) return
+    if (lastAnchorModeRef.current === anchorXResolution.mode) return
+    lastAnchorModeRef.current = anchorXResolution.mode
+    onAnchorModeChange?.(message.id, anchorXResolution.mode)
+  }, [anchorXResolution.mode, coordinates?.ready, message.id, onAnchorModeChange])
+
   if (!coordinates?.ready) return null
 
   const y = coordinates.priceToPixel(anchorPrice)
   if (y == null || y < 48 || y > coordinates.chartDimensions.height - 48) return null
 
-  const x = coordinates.chartDimensions.width * 0.65
+  const x = anchorXResolution.x
+
   const isBearish = message.type === 'pre_trade' && message.content.toLowerCase().includes('fade')
   const color = isBearish ? '#FB7185' : '#10B981'
 
   return (
-    <div className="pointer-events-auto absolute z-20" style={{ left: x, top: y, transform: 'translate(-16px, -16px)' }}>
+    <div
+      className="pointer-events-auto absolute z-20"
+      style={{ left: x, top: y, transform: 'translate(-16px, -16px)' }}
+      data-testid="spx-spatial-coach-node"
+      data-anchor-mode={anchorXResolution.mode}
+    >
       <svg
         className="pointer-events-none absolute"
         style={{ left: 16, top: 16, overflow: 'visible' }}
@@ -59,7 +87,7 @@ export function SpatialCoachNode({
         onClick={() => {
           const next = !expanded
           setExpanded(next)
-          onExpand?.(message.id, next)
+          onExpand?.(message.id, next, anchorXResolution.mode)
         }}
         className="flex h-8 w-8 items-center justify-center rounded-full"
         aria-label={`Toggle AI coach node at ${anchorPrice.toFixed(0)}`}

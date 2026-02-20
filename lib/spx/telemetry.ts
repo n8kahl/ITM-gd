@@ -46,6 +46,7 @@ export const SPX_TELEMETRY_EVENT = {
   SPATIAL_NODE_EXPANDED: 'spx_spatial_node_expanded',
   SPATIAL_NODE_DISMISSED: 'spx_spatial_node_dismissed',
   SPATIAL_NODE_ACTION: 'spx_spatial_node_action',
+  SPATIAL_NODE_ANCHOR_MODE: 'spx_spatial_node_anchor_mode',
   IMMERSIVE_MODE_TOGGLED: 'spx_immersive_mode_toggled',
   SIDEBAR_TOGGLED: 'spx_sidebar_toggled',
   CONE_INTERACTION: 'spx_cone_interaction',
