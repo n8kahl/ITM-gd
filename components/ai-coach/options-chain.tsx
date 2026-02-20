@@ -52,6 +52,11 @@ type SortField = 'strike' | 'last' | 'volume' | 'openInterest' | 'iv' | 'delta'
 type SortDir = 'asc' | 'desc'
 type OptionsDataView = 'chain' | 'heatmap'
 
+function isExpiryAvailable(expiry: string | null | undefined, expirations: string[]): expiry is string {
+  if (!expiry) return false
+  return expirations.includes(expiry)
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -98,8 +103,15 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
   const [ivError, setIvError] = useState<string | null>(null)
   const [pendingSyncSymbol, setPendingSyncSymbol] = useState<string | null>(null)
   const defaultsAppliedRef = useRef(false)
+  const chainRetryTimerRef = useRef<number | null>(null)
 
   const token = session?.access_token
+
+  const clearChainRetryTimer = useCallback(() => {
+    if (chainRetryTimerRef.current == null) return
+    window.clearTimeout(chainRetryTimerRef.current)
+    chainRetryTimerRef.current = null
+  }, [])
 
   // Load expirations on mount or symbol change
   useEffect(() => {
@@ -144,40 +156,80 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
 
   useEffect(() => {
     if (!activeExpiry || activeSymbol !== symbol) return
+    if (expirations.length > 0 && !isExpiryAvailable(activeExpiry, expirations)) return
     if (activeExpiry !== expiry) {
       setExpiry(activeExpiry)
     }
-  }, [activeExpiry, activeSymbol, symbol, expiry])
+  }, [activeExpiry, activeSymbol, symbol, expiry, expirations])
+
+  useEffect(() => {
+    return () => {
+      clearChainRetryTimer()
+    }
+  }, [clearChainRetryTimer])
 
   const loadExpirations = useCallback(async (sym: string) => {
     if (!token) return
     try {
       const data = await getExpirations(sym, token)
       setExpirations(data.expirations)
-      if (data.expirations.length > 0 && !expiry) {
-        setExpiry(data.expirations[0])
-        setWorkflowExpiry(data.expirations[0])
+
+      if (data.expirations.length === 0) {
+        setExpiry('')
+        setWorkflowExpiry(null)
+        return
+      }
+
+      const workflowExpiry = activeSymbol === sym ? activeExpiry : null
+      const nextExpiry = isExpiryAvailable(expiry, data.expirations)
+        ? expiry
+        : isExpiryAvailable(workflowExpiry, data.expirations)
+          ? workflowExpiry
+          : data.expirations[0]
+
+      if (nextExpiry !== expiry) {
+        setExpiry(nextExpiry)
+      }
+      if (nextExpiry !== workflowExpiry) {
+        setWorkflowExpiry(nextExpiry)
       }
     } catch (err) {
       const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Failed to load expirations'
       setError(msg)
     }
-  }, [token, expiry, setWorkflowExpiry])
+  }, [token, expiry, setWorkflowExpiry, activeSymbol, activeExpiry])
 
   const loadChain = useCallback(async (retryAttempt = 0) => {
     if (!token) return
+    clearChainRetryTimer()
     setIsLoading(true)
     setError(null)
     try {
       const data = await getOptionsChain(symbol, token, expiry || undefined, strikeRange)
       setChain(data)
     } catch (err) {
-      const msg = err instanceof AICoachAPIError ? err.apiError.message : 'Options chain is temporarily unavailable.'
-      if (retryAttempt < 2) {
+      const apiError = err instanceof AICoachAPIError ? err : null
+      const status = apiError?.status || null
+      const msg = apiError?.apiError.message || 'Options chain is temporarily unavailable.'
+
+      if (status === 404) {
+        const fallbackExpiry = expirations.find((candidate) => candidate !== expiry) || null
+        if (fallbackExpiry) {
+          setError(`Selected expiration ${expiry} is unavailable. Switched to ${fallbackExpiry}.`)
+          setExpiry(fallbackExpiry)
+          setWorkflowExpiry(fallbackExpiry)
+          return
+        }
+      }
+
+      const shouldRetry = retryAttempt < 2 && (status == null || status >= 500)
+      if (shouldRetry) {
         const nextAttempt = retryAttempt + 1
-        const retryDelayMs = 3000 * (2 ** retryAttempt)
+        const retryAfterMs = (apiError?.apiError.retryAfter || 0) * 1000
+        const retryDelayMs = Math.max(retryAfterMs, 3000 * (2 ** retryAttempt))
         setError(`${msg} Retrying... (${nextAttempt}/3)`)
-        window.setTimeout(() => {
+        chainRetryTimerRef.current = window.setTimeout(() => {
+          chainRetryTimerRef.current = null
           void loadChain(nextAttempt)
         }, retryDelayMs)
         return
@@ -187,7 +239,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
     } finally {
       setIsLoading(false)
     }
-  }, [token, symbol, expiry, strikeRange])
+  }, [token, symbol, expiry, strikeRange, expirations, setWorkflowExpiry, clearChainRetryTimer])
 
   const loadMatrix = useCallback(async () => {
     if (!token) return

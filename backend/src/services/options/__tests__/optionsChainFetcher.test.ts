@@ -2,6 +2,7 @@ jest.mock('../../../config/massive', () => ({
   getOptionsContracts: jest.fn(),
   getOptionsSnapshot: jest.fn(),
   getOptionsExpirations: jest.fn(),
+  getNearestOptionsExpiration: jest.fn(),
   getDailyAggregates: jest.fn(),
   getMinuteAggregates: jest.fn(),
 }));
@@ -14,6 +15,7 @@ jest.mock('../../../config/redis', () => ({
 import {
   getDailyAggregates,
   getMinuteAggregates,
+  getNearestOptionsExpiration,
   getOptionsContracts,
   getOptionsExpirations,
   getOptionsSnapshot,
@@ -23,6 +25,7 @@ import { fetchExpirationDates, fetchOptionContract, fetchOptionsChain } from '..
 
 const mockGetDailyAggregates = getDailyAggregates as jest.MockedFunction<typeof getDailyAggregates>;
 const mockGetMinuteAggregates = getMinuteAggregates as jest.MockedFunction<typeof getMinuteAggregates>;
+const mockGetNearestOptionsExpiration = getNearestOptionsExpiration as jest.MockedFunction<typeof getNearestOptionsExpiration>;
 const mockGetOptionsContracts = getOptionsContracts as jest.MockedFunction<typeof getOptionsContracts>;
 const mockGetOptionsExpirations = getOptionsExpirations as jest.MockedFunction<typeof getOptionsExpirations>;
 const mockGetOptionsSnapshot = getOptionsSnapshot as jest.MockedFunction<typeof getOptionsSnapshot>;
@@ -55,6 +58,7 @@ describe('optionsChainFetcher', () => {
       },
     ] as any);
     mockGetOptionsExpirations.mockResolvedValue(['2026-02-13']);
+    mockGetNearestOptionsExpiration.mockResolvedValue('2026-02-13');
   });
 
   afterEach(() => {
@@ -193,5 +197,68 @@ describe('optionsChainFetcher', () => {
       ['2026-02-09', '2026-02-10'],
       3600,
     );
+  });
+
+  it('filters stale cached expirations against current ET date', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-02-10T14:00:00.000Z'));
+
+    mockCacheGet.mockResolvedValueOnce(['2026-02-09', '2026-02-10', '2026-02-14']);
+
+    const expirations = await fetchExpirationDates('SPX');
+
+    expect(expirations).toEqual(['2026-02-10', '2026-02-14']);
+    expect(mockGetOptionsExpirations).not.toHaveBeenCalled();
+    expect(mockCacheSet).toHaveBeenCalledWith(
+      'options_expirations:SPX',
+      ['2026-02-10', '2026-02-14'],
+      3600,
+    );
+  });
+
+  it('falls back to nearest expiration when requested expiry has no contracts', async () => {
+    mockGetNearestOptionsExpiration.mockResolvedValue('2026-02-13');
+    mockGetOptionsContracts
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          ticker: 'O:SPY260213C00500000',
+          underlying_ticker: 'SPY',
+          strike_price: 500,
+          expiration_date: '2026-02-13',
+          contract_type: 'call',
+        },
+        {
+          ticker: 'O:SPY260213P00500000',
+          underlying_ticker: 'SPY',
+          strike_price: 500,
+          expiration_date: '2026-02-13',
+          contract_type: 'put',
+        },
+      ] as any);
+
+    mockGetOptionsSnapshot
+      .mockResolvedValueOnce({
+        ticker: 'O:SPY260213C00500000',
+        day: { open: 4.2, high: 5.3, low: 4.0, close: 5.0, volume: 1200 },
+        last_quote: { bid: 4.9, ask: 5.1, bid_size: 10, ask_size: 12, last_updated: 0 },
+        greeks: { delta: 0.53, gamma: 0.02, theta: -0.11, vega: 0.07 },
+        implied_volatility: 0.19,
+        open_interest: 5400,
+      } as any)
+      .mockResolvedValueOnce({
+        ticker: 'O:SPY260213P00500000',
+        day: { open: 4.1, high: 5.0, low: 3.9, close: 4.8, volume: 1100 },
+        last_quote: { bid: 4.7, ask: 4.9, bid_size: 11, ask_size: 13, last_updated: 0 },
+        greeks: { delta: -0.47, gamma: 0.021, theta: -0.1, vega: 0.068 },
+        implied_volatility: 0.2,
+        open_interest: 5100,
+      } as any);
+
+    const result = await fetchOptionsChain('SPY', '2026-02-12', 3);
+
+    expect(result.expiry).toBe('2026-02-13');
+    expect(mockGetOptionsContracts).toHaveBeenNthCalledWith(1, 'SPY', '2026-02-12');
+    expect(mockGetOptionsContracts).toHaveBeenNthCalledWith(2, 'SPY', '2026-02-13');
   });
 });

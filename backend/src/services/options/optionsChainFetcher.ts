@@ -432,16 +432,36 @@ export async function fetchOptionsChain(
     const riskFreeRate = await getRiskFreeRate();
     const dividendYield = await getDividendYield(symbol);
 
+    const requestedExpiry = expiryDate?.trim() || undefined;
+
     // Get expiry date (use nearest if not specified)
-    const expiry = expiryDate || await getNearestExpiration(symbol);
-    const daysToExp = daysToExpiry(expiry);
+    let expiry = requestedExpiry || await getNearestExpiration(symbol);
 
     // Fetch all contracts for this expiration
-    const contracts = await getOptionsContracts(symbol, expiry);
+    let contracts = await getOptionsContracts(symbol, expiry);
+
+    if (contracts.length === 0 && requestedExpiry) {
+      const fallbackExpiry = await getNearestExpiration(symbol);
+
+      if (fallbackExpiry && fallbackExpiry !== expiry) {
+        const fallbackContracts = await getOptionsContracts(symbol, fallbackExpiry);
+        if (fallbackContracts.length > 0) {
+          logger.warn('Requested expiry unavailable; falling back to nearest expiration', {
+            symbol,
+            requestedExpiry: expiry,
+            fallbackExpiry,
+          });
+          expiry = fallbackExpiry;
+          contracts = fallbackContracts;
+        }
+      }
+    }
 
     if (contracts.length === 0) {
       throw new Error(`No options contracts found for ${symbol} ${expiry}`);
     }
+
+    const daysToExp = daysToExpiry(expiry);
 
     // Extract unique strikes and filter by range
     const allStrikes = [...new Set(contracts.map(c => c.strike_price))];
@@ -545,18 +565,22 @@ export async function fetchOptionsChain(
  */
 export async function fetchExpirationDates(symbol: string): Promise<string[]> {
   const cacheKey = `options_expirations:${symbol}`;
+  const today = getCurrentEasternDate();
   const cached = await cacheGet<string[]>(cacheKey);
 
   if (cached) {
     logger.info(`Expirations cache hit: ${cacheKey}`);
-    return cached;
+    const filteredCached = cached.filter(exp => exp >= today);
+    if (filteredCached.length !== cached.length) {
+      await cacheSet(cacheKey, filteredCached, 3600);
+    }
+    return filteredCached;
   }
 
   try {
     const expirations = await getOptionsExpirations(symbol);
 
     // Filter to only future expirations
-    const today = getCurrentEasternDate();
     const futureExpirations = expirations.filter(exp => exp >= today);
 
     // Cache for 1 hour
