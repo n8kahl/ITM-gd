@@ -42,7 +42,7 @@ export interface SetupTradeLevels {
   target?: number;
 }
 
-export type SetupTransitionReason = 'target_reached' | 'stop_loss_hit';
+export type SetupTransitionReason = 'target_reached' | 'stop_loss_hit' | 'stale_timeout' | 'superseded_by_newer_setup';
 
 export interface SetupTransition {
   status: 'triggered' | 'invalidated';
@@ -56,7 +56,8 @@ interface SymbolPriceData {
 export const SETUP_PUSH_POLL_INTERVAL_MARKET_OPEN = 15_000; // 15 seconds
 export const SETUP_PUSH_POLL_INTERVAL_MARKET_CLOSED = 60_000; // 60 seconds
 export const SETUP_PUSH_INITIAL_DELAY = 15_000; // 15 seconds
-const SETUP_PUSH_FETCH_LIMIT = 200;
+const SETUP_PUSH_FETCH_LIMIT = 5_000;
+const SETUP_PUSH_MAX_ACTIVE_AGE_MS = 6 * 60 * 60 * 1000; // 6 hours
 const WORKER_NAME = 'setup_push_worker';
 
 const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'DJI', 'RUT', 'DJX']);
@@ -73,6 +74,54 @@ function toFiniteNumber(value: unknown): number | undefined {
 
 function formatTicker(symbol: string): string {
   return INDEX_SYMBOLS.has(symbol) ? `I:${symbol}` : symbol;
+}
+
+function trackedSetupEpoch(setup: ActiveTrackedSetupRow): number {
+  const parsed = Date.parse(setup.tracked_at);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isAutoDetectedSetup(setup: ActiveTrackedSetupRow): boolean {
+  const metadata = setup.opportunity_data
+    && typeof setup.opportunity_data === 'object'
+    && typeof (setup.opportunity_data as { metadata?: unknown }).metadata === 'object'
+    && (setup.opportunity_data as { metadata: Record<string, unknown> }).metadata !== null
+      ? (setup.opportunity_data as { metadata: Record<string, unknown> }).metadata
+      : null;
+
+  return metadata?.source === 'setup_detector';
+}
+
+function dedupeAutoDetectedSetups(rows: ActiveTrackedSetupRow[]): {
+  canonical: ActiveTrackedSetupRow[];
+  superseded: ActiveTrackedSetupRow[];
+} {
+  const canonical: ActiveTrackedSetupRow[] = [];
+  const superseded: ActiveTrackedSetupRow[] = [];
+  const newestByKey = new Set<string>();
+
+  const ranked = [...rows].sort((a, b) => trackedSetupEpoch(b) - trackedSetupEpoch(a));
+  for (const setup of ranked) {
+    if (!isAutoDetectedSetup(setup)) {
+      canonical.push(setup);
+      continue;
+    }
+
+    const key = [
+      setup.user_id,
+      setup.symbol.toUpperCase(),
+      setup.setup_type,
+      setup.direction,
+    ].join('|');
+    if (!newestByKey.has(key)) {
+      newestByKey.add(key);
+      canonical.push(setup);
+      continue;
+    }
+    superseded.push(setup);
+  }
+
+  return { canonical, superseded };
 }
 
 export function extractSetupTradeLevels(opportunityData: Record<string, unknown> | null): SetupTradeLevels {
@@ -155,9 +204,11 @@ export function getSetupPushPollingInterval(): number {
 async function persistSetupTransition(
   setup: ActiveTrackedSetupRow,
   transition: SetupTransition,
-  currentPrice: number,
+  currentPrice: number | null,
+  options?: { publishEvent?: boolean },
 ): Promise<boolean> {
   const nowIso = new Date().toISOString();
+  const publishEvent = options?.publishEvent !== false;
   const updatePayload: Record<string, unknown> = {
     status: transition.status,
     updated_at: nowIso,
@@ -191,25 +242,28 @@ async function persistSetupTransition(
 
   if (!data) return false;
 
-  publishSetupStatusUpdate({
-    setupId: setup.id,
-    userId: setup.user_id,
-    symbol: setup.symbol,
-    setupType: setup.setup_type,
-    previousStatus: 'active',
-    status: transition.status,
-    currentPrice: Number(currentPrice.toFixed(2)),
-    reason: transition.reason,
-    evaluatedAt: nowIso,
-  });
+  if (publishEvent) {
+    publishSetupStatusUpdate({
+      setupId: setup.id,
+      userId: setup.user_id,
+      symbol: setup.symbol,
+      setupType: setup.setup_type,
+      previousStatus: 'active',
+      status: transition.status,
+      currentPrice: currentPrice != null ? Number(currentPrice.toFixed(2)) : null,
+      reason: transition.reason,
+      evaluatedAt: nowIso,
+    });
+  }
 
-  logger.info('Setup push worker: setup transition published', {
+  logger.info('Setup push worker: setup transition persisted', {
     setupId: setup.id,
     userId: setup.user_id,
     symbol: setup.symbol,
     status: transition.status,
     reason: transition.reason,
-    currentPrice: Number(currentPrice.toFixed(2)),
+    currentPrice: currentPrice != null ? Number(currentPrice.toFixed(2)) : null,
+    publishEvent,
   });
 
   return true;
@@ -242,8 +296,52 @@ async function pollTrackedSetups(): Promise<void> {
 
     if (rows.length === 0) return;
 
+    const nowEpoch = Date.now();
+    const { canonical, superseded } = dedupeAutoDetectedSetups(rows);
+    if (superseded.length > 0) {
+      logger.warn('Setup push worker: superseded active setups detected', {
+        count: superseded.length,
+      });
+      for (const setup of superseded) {
+        await persistSetupTransition(
+          setup,
+          { status: 'invalidated', reason: 'superseded_by_newer_setup' },
+          null,
+          { publishEvent: false },
+        );
+      }
+    }
+
+    const staleSetups: ActiveTrackedSetupRow[] = [];
+    const freshSetups: ActiveTrackedSetupRow[] = [];
+    for (const setup of canonical) {
+      const ageMs = nowEpoch - trackedSetupEpoch(setup);
+      if (ageMs > SETUP_PUSH_MAX_ACTIVE_AGE_MS) {
+        staleSetups.push(setup);
+      } else {
+        freshSetups.push(setup);
+      }
+    }
+
+    if (staleSetups.length > 0) {
+      logger.warn('Setup push worker: stale active setups invalidated', {
+        count: staleSetups.length,
+        maxActiveAgeMs: SETUP_PUSH_MAX_ACTIVE_AGE_MS,
+      });
+      for (const setup of staleSetups) {
+        await persistSetupTransition(
+          setup,
+          { status: 'invalidated', reason: 'stale_timeout' },
+          null,
+          { publishEvent: false },
+        );
+      }
+    }
+
+    if (freshSetups.length === 0) return;
+
     const setupsBySymbol = new Map<string, ActiveTrackedSetupRow[]>();
-    for (const row of rows) {
+    for (const row of freshSetups) {
       const key = row.symbol.toUpperCase();
       const existing = setupsBySymbol.get(key) || [];
       existing.push({ ...row, symbol: key });

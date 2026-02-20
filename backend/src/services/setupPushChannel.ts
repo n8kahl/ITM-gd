@@ -14,7 +14,7 @@ export interface SetupStatusUpdate {
   previousStatus: 'active' | 'triggered' | 'invalidated' | 'archived';
   status: 'active' | 'triggered' | 'invalidated' | 'archived';
   currentPrice: number | null;
-  reason: 'target_reached' | 'stop_loss_hit' | 'manual_update';
+  reason: 'target_reached' | 'stop_loss_hit' | 'manual_update' | 'stale_timeout' | 'superseded_by_newer_setup';
   evaluatedAt: string;
 }
 

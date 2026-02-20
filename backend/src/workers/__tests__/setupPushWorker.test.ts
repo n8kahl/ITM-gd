@@ -195,7 +195,7 @@ describe('Setup Push Worker', () => {
           symbol: 'SPX',
           setup_type: 'breakout',
           direction: 'bullish',
-          tracked_at: '2026-02-09T14:00:00.000Z',
+          tracked_at: '2026-02-20T00:00:00.000Z',
           opportunity_data: {
             suggestedTrade: {
               entry: 100,
@@ -230,5 +230,127 @@ describe('Setup Push Worker', () => {
         reason: 'target_reached',
       }),
     );
+  });
+
+  it('invalidates stale active setups without broadcasting user updates', async () => {
+    jest.setSystemTime(new Date('2026-02-20T00:00:00.000Z'));
+
+    const updateChain: any = {
+      eq: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'setup-stale' }, error: null }),
+    };
+    mockUpdate.mockReturnValue(updateChain);
+
+    let callCount = 0;
+    mockFrom.mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return { select: mockSelect };
+      }
+      return { update: mockUpdate };
+    });
+
+    mockLimit.mockResolvedValue({
+      data: [
+        {
+          id: 'setup-stale',
+          user_id: 'user-1',
+          symbol: 'SPX',
+          setup_type: 'breakout',
+          direction: 'bullish',
+          tracked_at: '2026-02-19T10:00:00.000Z',
+          opportunity_data: {
+            metadata: { source: 'setup_detector' },
+            suggestedTrade: {
+              entry: 100,
+              stopLoss: 95,
+              target: 110,
+            },
+          },
+        },
+      ],
+      error: null,
+    });
+
+    startSetupPushWorker();
+    await jest.advanceTimersByTimeAsync(SETUP_PUSH_INITIAL_DELAY + 10);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'invalidated',
+        invalidated_at: expect.any(String),
+      }),
+    );
+    expect(mockPublishSetupStatusUpdate).not.toHaveBeenCalled();
+  });
+
+  it('invalidates superseded auto-detected duplicates and keeps newest open', async () => {
+    jest.setSystemTime(new Date('2026-02-20T00:00:00.000Z'));
+
+    const updateChain: any = {
+      eq: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'setup-old' }, error: null }),
+    };
+    mockUpdate.mockReturnValue(updateChain);
+
+    let callCount = 0;
+    mockFrom.mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return { select: mockSelect };
+      }
+      return { update: mockUpdate };
+    });
+
+    mockLimit.mockResolvedValue({
+      data: [
+        {
+          id: 'setup-new',
+          user_id: 'user-1',
+          symbol: 'SPX',
+          setup_type: 'level_test',
+          direction: 'bullish',
+          tracked_at: '2026-02-19T23:58:00.000Z',
+          opportunity_data: {
+            metadata: { source: 'setup_detector' },
+            suggestedTrade: {
+              entry: 100,
+              stopLoss: 95,
+              target: 110,
+            },
+          },
+        },
+        {
+          id: 'setup-old',
+          user_id: 'user-1',
+          symbol: 'SPX',
+          setup_type: 'level_test',
+          direction: 'bullish',
+          tracked_at: '2026-02-19T23:50:00.000Z',
+          opportunity_data: {
+            metadata: { source: 'setup_detector' },
+            suggestedTrade: {
+              entry: 100,
+              stopLoss: 95,
+              target: 110,
+            },
+          },
+        },
+      ],
+      error: null,
+    });
+
+    startSetupPushWorker();
+    await jest.advanceTimersByTimeAsync(SETUP_PUSH_INITIAL_DELAY + 10);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'invalidated',
+        invalidated_at: expect.any(String),
+      }),
+    );
+    expect(mockPublishSetupStatusUpdate).not.toHaveBeenCalled();
   });
 });

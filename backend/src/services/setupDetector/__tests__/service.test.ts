@@ -78,7 +78,7 @@ function createMockSupabase(options?: MockSupabaseOptions): MockSupabase {
     .mockResolvedValueOnce({ data: pendingRows, error: null })
     .mockResolvedValue({ data: cooldownRows, error: null });
   const trackedGte = jest.fn().mockReturnValue({ limit: trackedLimit });
-  const trackedIn = jest.fn().mockReturnValue({ gte: trackedGte });
+  const trackedIn = jest.fn().mockReturnValue({ gte: trackedGte, limit: trackedLimit });
   const trackedEq2 = jest.fn().mockReturnValue({ gte: trackedGte, in: trackedIn, limit: trackedLimit });
   const trackedEq1 = jest.fn().mockReturnValue({ eq: trackedEq2 });
   const trackedSelect = jest.fn().mockReturnValue({ eq: trackedEq1 });
