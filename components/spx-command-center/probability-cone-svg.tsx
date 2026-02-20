@@ -4,60 +4,28 @@ import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
+import { buildProbabilityConeGeometry, type ProbabilityConeGeometry } from '@/lib/spx/spatial-hud'
 
 interface ProbabilityConeSVGProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
 }
 
-interface ConePathState {
-  path: string
-  centerLine: string
-  width: number
-  height: number
-}
-
 const CONE_REFRESH_INTERVAL_MS = 120
+const CONE_CLEAR_AFTER_MISSES = 6
 
 export function ProbabilityConeSVG({ coordinatesRef }: ProbabilityConeSVGProps) {
   const { prediction } = useSPXAnalyticsContext()
   const { spxPrice } = useSPXPriceContext()
-  const [coneState, setConeState] = useState<ConePathState | null>(null)
+  const [coneState, setConeState] = useState<ProbabilityConeGeometry | null>(null)
   const rafRef = useRef<number | null>(null)
+  const missCountRef = useRef(0)
 
   const gradientId = useId().replace(/:/g, '')
 
   useEffect(() => {
-    const conePoints = prediction?.probabilityCone || []
-    if (conePoints.length === 0 || !Number.isFinite(spxPrice) || spxPrice <= 0) {
+    if (!Number.isFinite(spxPrice) || spxPrice <= 0) {
       const clearId = window.requestAnimationFrame(() => {
-        setConeState(null)
-      })
-      return () => {
-        window.cancelAnimationFrame(clearId)
-      }
-    }
-
-    const coordinates = coordinatesRef.current
-    if (!coordinates?.ready) {
-      const clearId = window.requestAnimationFrame(() => {
-        setConeState(null)
-      })
-      return () => {
-        window.cancelAnimationFrame(clearId)
-      }
-    }
-
-    if (coordinates.chartDimensions.width <= 0 || coordinates.chartDimensions.height <= 0) {
-      const clearId = window.requestAnimationFrame(() => {
-        setConeState(null)
-      })
-      return () => {
-        window.cancelAnimationFrame(clearId)
-      }
-    }
-
-    if (coordinates.priceToPixel(spxPrice) == null) {
-      const clearId = window.requestAnimationFrame(() => {
+        missCountRef.current = 0
         setConeState(null)
       })
       return () => {
@@ -67,50 +35,45 @@ export function ProbabilityConeSVG({ coordinatesRef }: ProbabilityConeSVGProps) 
 
     const updatePath = () => {
       const liveCoordinates = coordinatesRef.current
-      if (!liveCoordinates?.ready) return
+      if (!liveCoordinates?.ready) {
+        missCountRef.current += 1
+        if (missCountRef.current >= CONE_CLEAR_AFTER_MISSES) {
+          setConeState(null)
+        }
+        return
+      }
       const { width, height } = liveCoordinates.chartDimensions
-      if (width <= 0 || height <= 0) return
-      const startY = liveCoordinates.priceToPixel(spxPrice)
-      if (startY == null) return
+      const geometry = buildProbabilityConeGeometry({
+        width,
+        height,
+        currentPrice: spxPrice,
+        priceToPixel: liveCoordinates.priceToPixel,
+        visiblePriceRange: liveCoordinates.visiblePriceRange,
+        directionBias: (prediction?.direction.bullish ?? 0) - (prediction?.direction.bearish ?? 0),
+        windows: prediction?.probabilityCone || [],
+      })
 
-      const startX = width * 0.84
-      const coneWidth = width * 0.13
-      const topPoints: string[] = []
-      const bottomPoints: string[] = []
-
-      for (let index = 0; index < conePoints.length; index += 1) {
-        const point = conePoints[index]
-        const fraction = (index + 1) / conePoints.length
-        const x = startX + (fraction * coneWidth)
-        const highY = liveCoordinates.priceToPixel(point.high)
-        const lowY = liveCoordinates.priceToPixel(point.low)
-        if (highY != null) topPoints.push(`${x},${highY}`)
-        if (lowY != null) bottomPoints.push(`${x},${lowY}`)
+      if (!geometry) {
+        missCountRef.current += 1
+        if (missCountRef.current >= CONE_CLEAR_AFTER_MISSES) {
+          setConeState(null)
+        }
+        return
       }
 
-      if (topPoints.length === 0 || bottomPoints.length === 0) return
-
-      const path = `M${startX},${startY} L${topPoints.join(' L')} L${[...bottomPoints].reverse().join(' L')} Z`
-      const endX = startX + coneWidth
-      const directionBias = ((prediction?.direction.bullish ?? 0) - (prediction?.direction.bearish ?? 0)) * 2
-      const finalWindow = conePoints[conePoints.length - 1]
-      const centerTarget = finalWindow
-        ? ((finalWindow.high + finalWindow.low) / 2) + directionBias
-        : spxPrice
-      const centerY = liveCoordinates.priceToPixel(centerTarget)
-      const centerLine = centerY == null ? '' : `M${startX},${startY} L${endX},${centerY}`
-
+      missCountRef.current = 0
       setConeState((previous) => {
+        if (!previous) return geometry
         if (
-          previous
-          && previous.path === path
-          && previous.centerLine === centerLine
-          && previous.width === width
-          && previous.height === height
+          previous.path === geometry.path
+          && previous.centerLine === geometry.centerLine
+          && previous.width === geometry.width
+          && previous.height === geometry.height
+          && previous.usedFallback === geometry.usedFallback
         ) {
           return previous
         }
-        return { path, centerLine, width, height }
+        return geometry
       })
     }
 
@@ -130,17 +93,7 @@ export function ProbabilityConeSVG({ coordinatesRef }: ProbabilityConeSVGProps) 
       }
       window.clearInterval(intervalId)
     }
-  }, [coordinatesRef, prediction, spxPrice])
-  
-  useEffect(() => {
-    if (prediction?.probabilityCone?.length || (spxPrice > 0 && Number.isFinite(spxPrice))) return
-    const clearId = window.requestAnimationFrame(() => {
-      setConeState(null)
-    })
-    return () => {
-      window.cancelAnimationFrame(clearId)
-    }
-  }, [prediction?.probabilityCone?.length, spxPrice])
+  }, [coordinatesRef, prediction?.direction.bearish, prediction?.direction.bullish, prediction?.probabilityCone, spxPrice])
 
   if (!coneState) return null
 
@@ -152,6 +105,7 @@ export function ProbabilityConeSVG({ coordinatesRef }: ProbabilityConeSVGProps) 
       style={{ overflow: 'visible' }}
       aria-hidden
       data-testid="spx-probability-cone-svg"
+      data-fallback={coneState.usedFallback ? 'true' : 'false'}
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
@@ -160,7 +114,14 @@ export function ProbabilityConeSVG({ coordinatesRef }: ProbabilityConeSVGProps) 
         </linearGradient>
       </defs>
 
-      <path d={coneState.path} fill={`url(#${gradientId})`} stroke="#10B981" strokeOpacity={0.3} strokeWidth={0.5} />
+      <path
+        d={coneState.path}
+        fill={`url(#${gradientId})`}
+        stroke="#10B981"
+        strokeOpacity={0.32}
+        strokeWidth={0.5}
+        data-testid="spx-probability-cone-path"
+      />
       {coneState.centerLine && (
         <path
           d={coneState.centerLine}

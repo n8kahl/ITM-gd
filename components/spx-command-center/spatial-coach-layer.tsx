@@ -6,9 +6,12 @@ import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry
 import type { CoachMessage } from '@/lib/types/spx-command-center'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
 import { SpatialCoachNode } from '@/components/spx-command-center/spatial-coach-node'
-
-const MAX_SPATIAL_NODES = 5
-const PRICE_PATTERN = /\b(5[5-9]\d{2}|6[0-2]\d{2})\b/
+import {
+  DEFAULT_MAX_SPATIAL_COACH_NODES,
+  extractSpatialCoachAnchors,
+  parseIsoToUnixSeconds,
+  type SpatialAnchorMode,
+} from '@/lib/spx/spatial-hud'
 
 interface SpatialCoachLayerProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
@@ -17,6 +20,7 @@ interface SpatialCoachLayerProps {
 interface SpatialAnchorMessage {
   message: CoachMessage
   anchorPrice: number
+  anchorTimeSec: number | null
 }
 
 export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
@@ -25,22 +29,13 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
   const getCoordinates = useCallback(() => coordinatesRef.current, [coordinatesRef])
 
   const spatialMessages = useMemo<SpatialAnchorMessage[]>(() => {
-    const sorted = [...coachMessages].sort(
-      (left, right) => (Date.parse(right.timestamp || '') || 0) - (Date.parse(left.timestamp || '') || 0),
-    )
-    const anchored: SpatialAnchorMessage[] = []
-
-    for (const message of sorted) {
-      if (dismissedIds.has(message.id)) continue
-      const match = message.content.match(PRICE_PATTERN)
-      if (!match) continue
-      const anchorPrice = Number.parseFloat(match[0])
-      if (!Number.isFinite(anchorPrice)) continue
-      anchored.push({ message, anchorPrice })
-      if (anchored.length >= MAX_SPATIAL_NODES) break
-    }
-
-    return anchored
+    return extractSpatialCoachAnchors(coachMessages, {
+      dismissedIds,
+      maxNodes: DEFAULT_MAX_SPATIAL_COACH_NODES,
+    }).map((anchor) => ({
+      ...anchor,
+      anchorTimeSec: parseIsoToUnixSeconds(anchor.message.timestamp),
+    }))
   }, [coachMessages, dismissedIds])
 
   const handleDismiss = useCallback((id: string) => {
@@ -63,25 +58,37 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
     })
   }, [])
 
-  const handleExpand = useCallback((messageId: string, expanded: boolean) => {
+  const handleExpand = useCallback((messageId: string, expanded: boolean, anchorMode: 'time' | 'fallback') => {
     if (!expanded) return
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SPATIAL_NODE_EXPANDED, {
       messageId,
+      surface: 'spatial_coach_node',
+      anchorMode,
+    })
+  }, [])
+
+  const handleAnchorModeChange = useCallback((messageId: string, anchorMode: SpatialAnchorMode) => {
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SPATIAL_NODE_ANCHOR_MODE, {
+      messageId,
+      anchorMode,
       surface: 'spatial_coach_node',
     })
   }, [])
 
   return (
     <>
-      {spatialMessages.map(({ message, anchorPrice }) => (
+      {spatialMessages.map(({ message, anchorPrice, anchorTimeSec }, index) => (
         <SpatialCoachNode
           key={message.id}
           message={message}
           anchorPrice={anchorPrice}
+          anchorTimeSec={anchorTimeSec}
+          fallbackIndex={index}
           getCoordinates={getCoordinates}
           onDismiss={handleDismiss}
           onAction={handleAction}
           onExpand={handleExpand}
+          onAnchorModeChange={handleAnchorModeChange}
         />
       ))}
     </>

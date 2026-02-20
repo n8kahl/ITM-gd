@@ -56,6 +56,7 @@ function chartLevelLabel(level: SPXLevel): string {
 interface SPXChartProps {
   showAllRelevantLevels: boolean
   mobileExpanded?: boolean
+  futureOffsetBars?: number
   className?: string
   onDisplayedLevelsChange?: (displayed: number, total: number) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
@@ -64,6 +65,7 @@ interface SPXChartProps {
 export function SPXChart({
   showAllRelevantLevels,
   mobileExpanded = false,
+  futureOffsetBars,
   className,
   onDisplayedLevelsChange,
   onChartReady,
@@ -486,6 +488,7 @@ export function SPXChart({
           timeframe={selectedTimeframe}
           bars={bars}
           levels={[...displayedLevels, ...setupAnnotations]}
+          futureOffsetBars={futureOffsetBars}
           isLoading={isLoading}
           onChartReady={onChartReady}
         />

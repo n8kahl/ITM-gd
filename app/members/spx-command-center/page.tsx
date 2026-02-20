@@ -21,9 +21,14 @@ import { ContractSelector } from '@/components/spx-command-center/contract-selec
 import { GEXLandscape } from '@/components/spx-command-center/gex-landscape'
 import { GEXHeatmap } from '@/components/spx-command-center/gex-heatmap'
 import { GEXAmbientGlow } from '@/components/spx-command-center/gex-ambient-glow'
+import { GammaTopographyOverlay } from '@/components/spx-command-center/gamma-topography-overlay'
 import { ProbabilityConeSVG } from '@/components/spx-command-center/probability-cone-svg'
 import { SpatialCoachLayer } from '@/components/spx-command-center/spatial-coach-layer'
+import { SpatialCoachGhostLayer } from '@/components/spx-command-center/spatial-coach-ghost-layer'
 import { SidebarPanel } from '@/components/spx-command-center/sidebar-panel'
+import { RiskRewardShadowOverlay } from '@/components/spx-command-center/risk-reward-shadow-overlay'
+import { SetupLockOverlay } from '@/components/spx-command-center/setup-lock-overlay'
+import { TopographicPriceLadder } from '@/components/spx-command-center/topographic-price-ladder'
 import { MobilePanelTabs, type MobilePanelTab } from '@/components/spx-command-center/mobile-panel-tabs'
 import { SPXPanelSkeleton, SPXSkeleton } from '@/components/spx-command-center/spx-skeleton'
 import { DecisionContext } from '@/components/spx-command-center/decision-context'
@@ -1129,14 +1134,22 @@ function SPXCommandCenterContent() {
                     style={{ boxShadow: 'inset 0 0 120px rgba(0,0,0,0.7)' }}
                   />
                   {showGEXGlow && <GEXAmbientGlow />}
+                  {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
                   <SPXChart
                     showAllRelevantLevels={showAllRelevantLevels}
                     onDisplayedLevelsChange={handleDisplayedLevelsChange}
                     onChartReady={handleChartReady}
+                    futureOffsetBars={showCone ? 42 : 12}
                     className="h-full w-full"
                   />
+                  {!spatialThrottled && <TopographicPriceLadder coordinatesRef={coordinatesRef} />}
+                  {!spatialThrottled && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
+                  {!spatialThrottled && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
                   {showCone && !spatialThrottled && (
                     <ProbabilityConeSVG coordinatesRef={coordinatesRef} />
+                  )}
+                  {showSpatialCoach && !spatialThrottled && (
+                    <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
                   )}
                   {showSpatialCoach && !spatialThrottled && (
                     <SpatialCoachLayer coordinatesRef={coordinatesRef} />
