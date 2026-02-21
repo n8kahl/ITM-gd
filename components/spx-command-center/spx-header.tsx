@@ -120,7 +120,7 @@ export function SPXHeader({
         <div data-testid="spx-header-levels-chip" className="rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right">
           <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Levels</div>
           <div className="font-mono text-[11px] text-white/78">
-            {displayedLevelsCount}/{totalLevelsCount} {showAllLevels ? 'All' : 'Focus'}
+            {displayedLevelsCount}/{totalLevelsCount} {showAllLevels ? 'All' : 'Key'}
           </div>
         </div>
         <button

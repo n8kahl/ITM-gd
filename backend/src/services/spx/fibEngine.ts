@@ -7,7 +7,7 @@ import { getBasisState } from './crossReference';
 
 const FIB_CACHE_KEY = 'spx_command_center:fib_levels';
 const FIB_CACHE_TTL_SECONDS = 30;
-let fibInFlight: Promise<FibLevel[]> | null = null;
+const fibInFlightByKey = new Map<string, Promise<FibLevel[]>>();
 
 interface AggregateBar {
   o: number;
@@ -23,8 +23,22 @@ interface SwingRange {
   trendUp: boolean;
 }
 
-function getDateOffset(days: number): string {
-  const d = new Date(Date.now() - days * 86400000);
+function normalizeAsOfDate(input: string | undefined): string {
+  if (!input) return new Date().toISOString().slice(0, 10);
+  const normalized = input.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  return normalized;
+}
+
+function dateAtNoonUtc(date: string): Date {
+  return new Date(`${date}T12:00:00.000Z`);
+}
+
+function getDateOffset(days: number, asOfDate: string): string {
+  const anchor = dateAtNoonUtc(asOfDate);
+  const d = new Date(anchor.getTime() - days * 86400000);
   return d.toISOString().slice(0, 10);
 }
 
@@ -123,13 +137,17 @@ function markCrossValidatedBySPY(
   });
 }
 
-async function computeFibSet(symbol: 'SPX' | 'SPY'): Promise<FibLevel[]> {
+async function computeFibSet(input: {
+  symbol: 'SPX' | 'SPY';
+  asOfDate: string;
+}): Promise<FibLevel[]> {
+  const { symbol, asOfDate } = input;
   const ticker = symbol === 'SPX' ? 'I:SPX' : 'SPY';
 
   const [daily30, daily90, intraday] = await Promise.all([
-    getDailyAggregates(ticker, getDateOffset(40), getDateOffset(0)).then(toBars),
-    getDailyAggregates(ticker, getDateOffset(180), getDateOffset(0)).then(toBars),
-    getMinuteAggregates(ticker, getDateOffset(0)).then(toBars),
+    getDailyAggregates(ticker, getDateOffset(40, asOfDate), getDateOffset(0, asOfDate)).then(toBars),
+    getDailyAggregates(ticker, getDateOffset(180, asOfDate), getDateOffset(0, asOfDate)).then(toBars),
+    getMinuteAggregates(ticker, asOfDate).then(toBars),
   ]);
 
   const monthlySwing = detectSwingRange(daily90, 3);
@@ -150,35 +168,46 @@ async function computeFibSet(symbol: 'SPX' | 'SPY'): Promise<FibLevel[]> {
 export async function getFibLevels(options?: {
   forceRefresh?: boolean;
   basisState?: BasisState;
+  basisCurrent?: number;
+  asOfDate?: string;
 }): Promise<FibLevel[]> {
   const forceRefresh = options?.forceRefresh === true;
-  const hasPrecomputedBasis = Boolean(options?.basisState);
-  if (!forceRefresh && fibInFlight) {
-    return fibInFlight;
+  const asOfDate = normalizeAsOfDate(options?.asOfDate);
+  const cacheKey = `${FIB_CACHE_KEY}:${asOfDate}`;
+  const hasPrecomputedBasis = Boolean(options?.basisState)
+    || (typeof options?.basisCurrent === 'number' && Number.isFinite(options.basisCurrent));
+  if (!forceRefresh) {
+    const existingInFlight = fibInFlightByKey.get(cacheKey);
+    if (existingInFlight) {
+      return existingInFlight;
+    }
   }
 
   const run = async (): Promise<FibLevel[]> => {
     if (!forceRefresh && !hasPrecomputedBasis) {
-      const cached = await cacheGet<FibLevel[]>(FIB_CACHE_KEY);
+      const cached = await cacheGet<FibLevel[]>(cacheKey);
       if (cached) {
         return cached;
       }
     }
 
-    const [basis, spxLevels, spyLevels] = await Promise.all([
-      options?.basisState
-        ? Promise.resolve(options.basisState)
-        : getBasisState({ forceRefresh }),
-      computeFibSet('SPX'),
-      computeFibSet('SPY'),
+    const [basisCurrent, spxLevels, spyLevels] = await Promise.all([
+      typeof options?.basisCurrent === 'number' && Number.isFinite(options.basisCurrent)
+        ? Promise.resolve(options.basisCurrent)
+        : options?.basisState
+          ? Promise.resolve(options.basisState.current)
+          : getBasisState({ forceRefresh }).then((state) => state.current),
+      computeFibSet({ symbol: 'SPX', asOfDate }),
+      computeFibSet({ symbol: 'SPY', asOfDate }),
     ]);
 
-    const merged = markCrossValidatedBySPY(spxLevels, spyLevels, basis.current)
+    const merged = markCrossValidatedBySPY(spxLevels, spyLevels, basisCurrent)
       .sort((a, b) => a.price - b.price);
 
-    await cacheSet(FIB_CACHE_KEY, merged, FIB_CACHE_TTL_SECONDS);
+    await cacheSet(cacheKey, merged, FIB_CACHE_TTL_SECONDS);
 
     logger.info('SPX fibonacci levels updated', {
+      asOfDate,
       count: merged.length,
       crossValidatedCount: merged.filter((item) => item.crossValidated).length,
       timestamp: nowIso(),
@@ -187,14 +216,13 @@ export async function getFibLevels(options?: {
     return merged;
   };
 
-  if (forceRefresh) {
-    return run();
-  }
+  if (forceRefresh) return run();
 
-  fibInFlight = run();
+  const inFlight = run();
+  fibInFlightByKey.set(cacheKey, inFlight);
   try {
-    return await fibInFlight;
+    return await inFlight;
   } finally {
-    fibInFlight = null;
+    fibInFlightByKey.delete(cacheKey);
   }
 }

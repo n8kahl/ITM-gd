@@ -138,6 +138,16 @@ function normalizeOptionsUnderlyingTicker(underlyingTicker: string): string {
 }
 
 const SNAPSHOT_INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'VIX', 'RUT', 'DJX']);
+const DEFAULT_OPTIONS_SNAPSHOT_MAX_PAGES = 200;
+
+function getOptionsSnapshotMaxPages(): number {
+  const raw = process.env.MASSIVE_OPTIONS_SNAPSHOT_MAX_PAGES;
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_OPTIONS_SNAPSHOT_MAX_PAGES;
+  }
+  return Math.min(parsed, 1000);
+}
 
 function toOptionsSnapshotUnderlyingTicker(underlyingTicker: string): string {
   const normalized = underlyingTicker.trim().toUpperCase();
@@ -264,7 +274,7 @@ export interface MassiveAggregatesResponse {
 export async function getAggregates(
   ticker: string,
   multiplier: number,
-  timespan: 'minute' | 'hour' | 'day' | 'week' | 'month',
+  timespan: 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month',
   from: string,
   to: string
 ): Promise<MassiveAggregatesResponse> {
@@ -686,7 +696,7 @@ export async function getOptionsSnapshot(
 ): Promise<OptionsSnapshot[]> {
   try {
     const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
-    const MAX_PAGES = 5;
+    const maxPages = getOptionsSnapshotMaxPages();
     const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
       if (!results) return [];
       return Array.isArray(results) ? results : [results];
@@ -712,7 +722,7 @@ export async function getOptionsSnapshot(
     let nextUrl = response.data.next_url;
     let page = 1;
 
-    while (nextUrl && page < MAX_PAGES) {
+    while (nextUrl && page < maxPages) {
       const nextResponse = await massiveClient.get<OptionsSnapshotResponse>(nextUrl);
       snapshots.push(...normalizeResults(nextResponse.data.results));
       nextUrl = nextResponse.data.next_url;
@@ -722,13 +732,77 @@ export async function getOptionsSnapshot(
     if (nextUrl) {
       logger.warn(`Options snapshot pagination truncated for ${snapshotUnderlyingTicker}`, {
         pagesFetched: page,
-        maxPages: MAX_PAGES
+        maxPages
       });
     }
 
     return snapshots;
   } catch (error: any) {
     logger.error(`Failed to fetch options snapshot for ${underlyingTicker}`, { error: error.message });
+    throw error;
+  }
+}
+
+// Get historical options snapshot by date (as_of)
+export async function getOptionsSnapshotAtDate(
+  underlyingTicker: string,
+  asOfDate: string,
+  optionTicker?: string,
+): Promise<OptionsSnapshot[]> {
+  try {
+    const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
+    const maxPages = getOptionsSnapshotMaxPages();
+    const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
+      if (!results) return [];
+      return Array.isArray(results) ? results : [results];
+    };
+
+    const url = optionTicker
+      ? `/v3/snapshot/options/${snapshotUnderlyingTicker}/${optionTicker}`
+      : `/v3/snapshot/options/${snapshotUnderlyingTicker}`;
+
+    const baseParams: Record<string, unknown> = {
+      as_of: asOfDate,
+    };
+
+    if (!optionTicker) {
+      baseParams.limit = 250;
+    }
+
+    const response = await massiveClient.get<OptionsSnapshotResponse>(url, {
+      params: baseParams,
+    });
+
+    const firstPage = normalizeResults(response.data.results);
+    if (optionTicker) {
+      return firstPage;
+    }
+
+    const snapshots: OptionsSnapshot[] = [...firstPage];
+    let nextUrl = response.data.next_url;
+    let page = 1;
+
+    while (nextUrl && page < maxPages) {
+      const nextResponse = await massiveClient.get<OptionsSnapshotResponse>(nextUrl);
+      snapshots.push(...normalizeResults(nextResponse.data.results));
+      nextUrl = nextResponse.data.next_url;
+      page += 1;
+    }
+
+    if (nextUrl) {
+      logger.warn(`Historical options snapshot pagination truncated for ${snapshotUnderlyingTicker}`, {
+        asOfDate,
+        pagesFetched: page,
+        maxPages,
+      });
+    }
+
+    return snapshots;
+  } catch (error: any) {
+    logger.error(`Failed to fetch historical options snapshot for ${underlyingTicker}`, {
+      asOfDate,
+      error: error.message,
+    });
     throw error;
   }
 }

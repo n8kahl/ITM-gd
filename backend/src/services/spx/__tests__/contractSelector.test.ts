@@ -1,15 +1,25 @@
 import type { OptionContract } from '../../options/types';
 import type { Setup } from '../types';
+import {
+  deltaTargetForSetup as deltaTargetForSetupProd,
+  filterCandidates as filterCandidatesProd,
+} from '../contractSelector';
 
 // Inline the pure functions from contractSelector for unit testing.
 // This avoids needing to mock fetchOptionsChain / redis / setupDetector.
 
 function deltaTargetForSetup(setup: Pick<Setup, 'type'>): number {
   switch (setup.type) {
+    case 'orb_breakout':
+      return 0.32;
     case 'breakout_vacuum':
       return 0.28;
     case 'trend_continuation':
       return 0.3;
+    case 'trend_pullback':
+      return 0.26;
+    case 'flip_reclaim':
+      return 0.24;
     case 'mean_reversion':
       return 0.22;
     case 'fade_at_wall':
@@ -151,6 +161,9 @@ describe('contractSelector', () => {
       expect(deltaTargetForSetup({ type: 'breakout_vacuum' })).toBe(0.28);
       expect(deltaTargetForSetup({ type: 'mean_reversion' })).toBe(0.22);
       expect(deltaTargetForSetup({ type: 'trend_continuation' })).toBe(0.3);
+      expect(deltaTargetForSetup({ type: 'orb_breakout' })).toBe(0.32);
+      expect(deltaTargetForSetup({ type: 'trend_pullback' })).toBe(0.26);
+      expect(deltaTargetForSetup({ type: 'flip_reclaim' })).toBe(0.24);
     });
   });
 
@@ -349,6 +362,70 @@ describe('contractSelector', () => {
 
       expect(strict).toHaveLength(0);
       expect(relaxed).toHaveLength(2);
+    });
+  });
+
+  describe('production selector helpers', () => {
+    it('uses higher delta targets in choppy regimes and lower in breakout regimes', () => {
+      const rangingTarget = deltaTargetForSetupProd({
+        type: 'fade_at_wall',
+        regime: 'ranging',
+      } as Pick<Setup, 'type' | 'regime'>);
+      const breakoutTarget = deltaTargetForSetupProd({
+        type: 'orb_breakout',
+        regime: 'breakout',
+      } as Pick<Setup, 'type' | 'regime'>);
+
+      expect(rangingTarget).toBeGreaterThan(0.2);
+      expect(breakoutTarget).toBeLessThan(0.32);
+    });
+
+    it('rejects 0DTE contracts after rollover cutoff', () => {
+      const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+      const nowAfterCutoff = new Date('2026-02-20T20:00:00.000Z');
+      const sameDayContract = makeContract({
+        type: 'call',
+        expiry: '2026-02-20',
+        bid: 1.5,
+        ask: 1.8,
+        delta: 0.24,
+        openInterest: 800,
+        volume: 120,
+      });
+
+      const result = filterCandidatesProd(setup, [sameDayContract], false, nowAfterCutoff);
+      expect(result).toHaveLength(0);
+    });
+
+    it('accepts same-day contracts before rollover cutoff when quote quality passes', () => {
+      const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+      const nowBeforeCutoff = new Date('2026-02-20T15:00:00.000Z');
+      const sameDayContract = makeContract({
+        type: 'call',
+        expiry: '2026-02-20',
+        bid: 1.5,
+        ask: 1.8,
+        delta: 0.24,
+        openInterest: 800,
+        volume: 120,
+      });
+
+      const result = filterCandidatesProd(setup, [sameDayContract], false, nowBeforeCutoff);
+      expect(result).toHaveLength(1);
+    });
+
+    it('rejects unstable quotes even in relaxed mode', () => {
+      const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+      const now = new Date('2026-02-20T15:00:00.000Z');
+      const unstableQuote = makeContract({
+        type: 'call',
+        bid: 10,
+        ask: 16,
+        delta: 0.3,
+      });
+
+      expect(filterCandidatesProd(setup, [unstableQuote], false, now)).toHaveLength(0);
+      expect(filterCandidatesProd(setup, [unstableQuote], true, now)).toHaveLength(0);
     });
   });
 });

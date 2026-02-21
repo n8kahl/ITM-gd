@@ -7,6 +7,8 @@ interface TradeBuilderInput {
   atr?: number | null;
   referenceLevel?: number;
   range?: number;
+  minRiskReward?: number;
+  maxFeasibleMove?: number;
 }
 
 function roundPrice(value: number): number {
@@ -14,7 +16,16 @@ function roundPrice(value: number): number {
 }
 
 export function buildTradeSuggestion(input: TradeBuilderInput): SetupTradeSuggestion | undefined {
-  const { setupType, direction, currentPrice, atr, referenceLevel, range } = input;
+  const {
+    setupType,
+    direction,
+    currentPrice,
+    atr,
+    referenceLevel,
+    range,
+    minRiskReward = 2,
+    maxFeasibleMove,
+  } = input;
 
   if (!Number.isFinite(currentPrice) || currentPrice <= 0 || direction === 'neutral') {
     return undefined;
@@ -22,32 +33,52 @@ export function buildTradeSuggestion(input: TradeBuilderInput): SetupTradeSugges
 
   const atrValue = atr && atr > 0 ? atr : Math.max(currentPrice * 0.004, 1);
   const setupRange = range && range > 0 ? range : atrValue * 0.6;
+  const structureStopBuffer = Math.max(atrValue * 0.28, setupRange * 0.18);
+  const targetCap = Number.isFinite(maxFeasibleMove) && (maxFeasibleMove as number) > 0
+    ? (maxFeasibleMove as number)
+    : Math.max(atrValue * 2.4, setupRange * 2.2);
+  const minRisk = Math.max(atrValue * 0.14, setupRange * 0.12, 0.2);
 
   if (direction === 'long') {
-    const stopBuffer = Math.max(atrValue * 0.35, setupRange * 0.2);
     const stopLoss = referenceLevel !== undefined
-      ? Math.min(referenceLevel - stopBuffer, currentPrice - stopBuffer)
-      : currentPrice - stopBuffer;
-    const target = currentPrice + Math.max(setupRange * 1.5, atrValue * 0.9);
+      ? Math.min(referenceLevel - structureStopBuffer, currentPrice - minRisk)
+      : currentPrice - structureStopBuffer;
+    const risk = currentPrice - stopLoss;
+    if (!Number.isFinite(risk) || risk <= minRisk) return undefined;
+
+    const requiredReward = risk * Math.max(1.4, minRiskReward);
+    const proposedReward = Math.max(requiredReward, setupRange * 1.6, atrValue * 1.0);
+    if (proposedReward > targetCap) return undefined;
+
+    const target = currentPrice + proposedReward;
 
     return {
       strategy: setupType.replace(/_/g, ' '),
       entry: roundPrice(currentPrice),
       stopLoss: roundPrice(stopLoss),
       target: roundPrice(target),
+      riskReward: roundPrice(proposedReward / risk),
+      rrQualified: true,
     };
   }
 
-  const stopBuffer = Math.max(atrValue * 0.35, setupRange * 0.2);
   const stopLoss = referenceLevel !== undefined
-    ? Math.max(referenceLevel + stopBuffer, currentPrice + stopBuffer)
-    : currentPrice + stopBuffer;
-  const target = currentPrice - Math.max(setupRange * 1.5, atrValue * 0.9);
+    ? Math.max(referenceLevel + structureStopBuffer, currentPrice + minRisk)
+    : currentPrice + structureStopBuffer;
+  const risk = stopLoss - currentPrice;
+  if (!Number.isFinite(risk) || risk <= minRisk) return undefined;
+
+  const requiredReward = risk * Math.max(1.4, minRiskReward);
+  const proposedReward = Math.max(requiredReward, setupRange * 1.6, atrValue * 1.0);
+  if (proposedReward > targetCap) return undefined;
+  const target = currentPrice - proposedReward;
 
   return {
     strategy: setupType.replace(/_/g, ' '),
     entry: roundPrice(currentPrice),
     stopLoss: roundPrice(stopLoss),
     target: roundPrice(target),
+    riskReward: roundPrice(proposedReward / risk),
+    rrQualified: true,
   };
 }

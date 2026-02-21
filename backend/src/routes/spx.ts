@@ -13,14 +13,52 @@ import { getFlowEvents } from '../services/spx/flowEngine';
 import { computeUnifiedGEXLandscape } from '../services/spx/gexEngine';
 import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
+import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
+import {
+  getSPXOptimizerScorecard,
+  runSPXOptimizerScan,
+} from '../services/spx/optimizer';
+import {
+  runSPXWinRateBacktest,
+  type SPXBacktestPriceResolution,
+  type SPXWinRateBacktestSource,
+} from '../services/spx/winRateBacktest';
 import { classifyCurrentRegime } from '../services/spx/regimeClassifier';
 import { detectActiveSetups, getSetupById } from '../services/spx/setupDetector';
 import type { CoachDecisionRequest, Setup } from '../services/spx/types';
+import { toEasternTime } from '../services/marketHours';
 
 const router = Router();
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
+}
+
+function parseISODateInput(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const parsed = Date.parse(`${trimmed}T00:00:00Z`);
+  if (!Number.isFinite(parsed)) return null;
+  return trimmed;
+}
+
+function dateDaysAgoET(days: number): string {
+  return toEasternTime(new Date(Date.now() - (days * 86400000))).dateStr;
+}
+
+function parseBacktestSource(value: unknown): SPXWinRateBacktestSource {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'spx_setup_instances' || normalized === 'instances') return 'spx_setup_instances';
+  if (normalized === 'ai_coach_tracked_setups' || normalized === 'legacy') return 'ai_coach_tracked_setups';
+  return 'spx_setup_instances';
+}
+
+function parseBacktestResolution(value: unknown): SPXBacktestPriceResolution {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'second' || normalized === '1s') return 'second';
+  if (normalized === 'minute' || normalized === '1m') return 'minute';
+  return 'second';
 }
 
 function parseSetupPayload(value: unknown): Setup | null {
@@ -50,6 +88,95 @@ router.get('/snapshot', async (req: Request, res: Response) => {
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to load SPX command center snapshot.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/analytics/win-rate', async (req: Request, res: Response) => {
+  try {
+    const to = parseISODateInput(req.query.to) || dateDaysAgoET(0);
+    const from = parseISODateInput(req.query.from) || dateDaysAgoET(29);
+
+    if (from > to) {
+      return res.status(400).json({
+        error: 'Invalid date range',
+        message: 'Query parameter "from" must be on or before "to" (YYYY-MM-DD).',
+      });
+    }
+
+    const analytics = await getSPXWinRateAnalytics({ from, to });
+    return res.json(analytics);
+  } catch (error) {
+    logger.error('SPX win-rate analytics endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to compute SPX win-rate analytics.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) => {
+  try {
+    const to = parseISODateInput(req.query.to) || dateDaysAgoET(0);
+    const from = parseISODateInput(req.query.from) || dateDaysAgoET(29);
+    const source = parseBacktestSource(req.query.source);
+    const resolution = parseBacktestResolution(req.query.resolution);
+
+    if (from > to) {
+      return res.status(400).json({
+        error: 'Invalid date range',
+        message: 'Query parameter "from" must be on or before "to" (YYYY-MM-DD).',
+      });
+    }
+
+    const backtest = await runSPXWinRateBacktest({ from, to, source, resolution });
+    return res.json(backtest);
+  } catch (error) {
+    logger.error('SPX win-rate backtest endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to run SPX win-rate backtest.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/analytics/optimizer/scorecard', async (_req: Request, res: Response) => {
+  try {
+    const scorecard = await getSPXOptimizerScorecard();
+    return res.json(scorecard);
+  } catch (error) {
+    logger.error('SPX optimizer scorecard endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX optimizer scorecard.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => {
+  try {
+    const from = parseISODateInput(req.body?.from) || undefined;
+    const to = parseISODateInput(req.body?.to) || undefined;
+
+    const result = await runSPXOptimizerScan({ from, to });
+    return res.json(result);
+  } catch (error) {
+    logger.error('SPX optimizer scan endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to run SPX optimizer scan.',
       retryAfter: 10,
     });
   }

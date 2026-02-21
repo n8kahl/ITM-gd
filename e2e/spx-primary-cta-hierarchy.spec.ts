@@ -17,11 +17,11 @@ test.describe('SPX primary CTA hierarchy', () => {
 
     const primaryCta = page.getByTestId('spx-action-primary-cta')
     const initialLabel = (await primaryCta.textContent())?.trim() || ''
-    expect(['Select Best Setup', 'Enter Trade Focus']).toContain(initialLabel)
+    expect(['Select Best Setup', 'Stage Trade']).toContain(initialLabel)
 
     if (initialLabel === 'Select Best Setup') {
       await primaryCta.click()
-      await expect(primaryCta).toContainText('Enter Trade Focus')
+      await expect(primaryCta).toContainText('Stage Trade')
     }
 
     await primaryCta.click()
@@ -49,7 +49,7 @@ test.describe('SPX primary CTA hierarchy', () => {
       await primaryCta.click()
     }
 
-    await expect(primaryCta).toContainText('Enter Trade Focus')
+    await expect(primaryCta).toContainText('Stage Trade')
     await expect(primaryCta).toBeDisabled()
     await expect(page.getByTestId('spx-action-primary-cta-blocked-reason')).toContainText(/snapshot degraded/i)
   })

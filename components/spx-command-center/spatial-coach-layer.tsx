@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
+import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { evaluateSPXRiskEnvelopeEntryGate } from '@/lib/spx/risk-envelope'
 import { SPX_SHORTCUT_EVENT } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
@@ -31,6 +33,7 @@ const NODE_COLLISION_MIN_GAP_PX = 34
 const NODE_REFRESH_INTERVAL_MS = 140
 
 export function SpatialCoachLayer({ coordinatesRef, onRequestSidebarOpen }: SpatialCoachLayerProps) {
+  const { blockTradeEntryByFeedTrust, feedFallbackReasonCode } = useSPXAnalyticsContext()
   const { coachMessages } = useSPXCoachContext()
   const { spxPrice } = useSPXPriceContext()
   const { activeSetups, inTradeSetup, selectedSetup, selectSetup, enterTrade, tradeMode } = useSPXSetupContext()
@@ -181,6 +184,31 @@ export function SpatialCoachLayer({ coordinatesRef, onRequestSidebarOpen }: Spat
         return
       }
 
+      const entryGate = evaluateSPXRiskEnvelopeEntryGate({
+        setup: targetSetup,
+        feedTrustBlocked: blockTradeEntryByFeedTrust,
+      })
+      if (tradeMode !== 'in_trade' && !entryGate.allowEntry) {
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+          surface: 'spatial_coach_node',
+          action: 'stage_trade_blocked',
+          reason: 'risk_envelope',
+          messageId,
+          setupId: targetSetup.id,
+          riskEnvelopeReasonCode: entryGate.reasonCode,
+          feedFallbackReasonCode,
+        }, { level: 'warning' })
+        onRequestSidebarOpen?.()
+        window.dispatchEvent(new CustomEvent(SPX_SHORTCUT_EVENT.COACH_OPEN_DETAILS, {
+          detail: {
+            messageId,
+            setupId: targetSetup.id,
+            source: 'spatial_node',
+          },
+        }))
+        return
+      }
+
       selectSetup(targetSetup)
       if (tradeMode !== 'in_trade') {
         enterTrade(targetSetup)
@@ -199,7 +227,19 @@ export function SpatialCoachLayer({ coordinatesRef, onRequestSidebarOpen }: Spat
         },
       }))
     }
-  }, [activeSetups, coachMessages, enterTrade, inTradeSetup, onRequestSidebarOpen, selectSetup, selectedSetup, setupById, tradeMode])
+  }, [
+    activeSetups,
+    blockTradeEntryByFeedTrust,
+    coachMessages,
+    enterTrade,
+    feedFallbackReasonCode,
+    inTradeSetup,
+    onRequestSidebarOpen,
+    selectSetup,
+    selectedSetup,
+    setupById,
+    tradeMode,
+  ])
 
   const handleExpand = useCallback((messageId: string, expanded: boolean, anchorMode: 'time' | 'fallback') => {
     if (!expanded) return

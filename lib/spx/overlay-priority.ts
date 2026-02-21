@@ -111,7 +111,7 @@ export function resolveSPXOverlayPriorityPolicy(
   return {
     tier,
     rightSafeAreaPx: tier === 'critical' ? 52 : tier === 'tight' ? 60 : 68,
-    bottomSafeAreaPx: 108,
+    bottomSafeAreaPx: tier === 'critical' ? 112 : tier === 'tight' ? 116 : 124,
     allowCone,
     allowSpatialCoach,
     allowGhostCards,

@@ -373,6 +373,18 @@ describe('spatial-hud helpers', () => {
       expect(fallback.mode).toBe('fallback')
       expect(fallback.x).toBeGreaterThan(0)
     })
+
+    it('snaps to nearby time coordinates when exact timestamp is unavailable', () => {
+      const snapped = resolveSpatialAnchorX({
+        width: 1000,
+        fallbackIndex: 0,
+        anchorTimeSec: 10_000,
+        timeToPixel: (timestamp) => (timestamp === 10_060 ? 622 : null),
+      })
+
+      expect(snapped.mode).toBe('time')
+      expect(snapped.x).toBe(622)
+    })
   })
 
   describe('ghost lifecycle evolution', () => {

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sniper Zone — Mockup v4</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --em: #10B981;
+    --em-dim: rgba(16,185,129,0.12);
+    --em-glow: rgba(16,185,129,0.25);
+    --ch: #F3E5AB;
+    --ch-dim: rgba(243,229,171,0.12);
+    --rd: #F87171;
+    --rd-dim: rgba(248,113,113,0.12);
+    --am: #FBBF24;
+    --am-dim: rgba(251,191,36,0.12);
+    --bl: #60A5FA;
+    --bl-dim: rgba(96,165,250,0.12);
+    --pu: #A78BFA;
+    --pu-dim: rgba(167,139,250,0.12);
+    --bg: #07080C;
+    --bdr: rgba(255,255,255,0.07);
+    --bdr-h: rgba(255,255,255,0.12);
+    --iv: #F5F5F0;
+    --mu: #71717A;
+    --dm: #3F3F46;
+    --gl: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.015) 100%);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--iv); min-height:100vh; -webkit-font-smoothing:antialiased; }
+  .sf { font-family:'Playfair Display',Georgia,serif; }
+  .mn { font-family:'JetBrains Mono',monospace; }
+  .dash { max-width:1440px; margin:0 auto; padding:20px 24px 48px; display:flex; flex-direction:column; gap:18px; }
+
+  /* Glass Card */
+  .gc { background:var(--gl); border:1px solid var(--bdr); border-radius:14px; backdrop-filter:blur(24px); transition:border-color 0.25s; }
+  .gc:hover { border-color:var(--bdr-h); }
+
+  /* Ask AI */
+  .ai { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:7px; background:var(--em-dim); border:1px solid rgba(16,185,129,0.2); color:var(--em); font-size:9.5px; font-weight:600; letter-spacing:0.04em; cursor:pointer; transition:all 0.2s; text-transform:uppercase; flex-shrink:0; }
+  .ai:hover { background:var(--em-glow); border-color:rgba(16,185,129,0.4); }
+  .ai svg { width:11px; height:11px; }
+  .ai-svg { fill:none; stroke:currentColor; stroke-width:2; }
+
+  /* Clickable symbol */
+  .sl { color:var(--iv); font-weight:600; cursor:pointer; transition:color 0.15s; text-decoration:none; border-bottom:1px dotted transparent; }
+  .sl:hover { color:var(--ch); border-bottom-color:rgba(243,229,171,0.3); }
+
+  /* Section Header */
+  .sh { display:flex; align-items:center; gap:7px; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.12em; color:var(--mu); margin-bottom:12px; }
+  .sh .d { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+  .sh .r { margin-left:auto; display:flex; align-items:center; gap:7px; }
+
+  /* Pills */
+  .p { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:999px; font-size:9.5px; font-weight:600; letter-spacing:0.03em; }
+  .p.em { background:var(--em-dim); color:var(--em); }
+  .p.rd { background:var(--rd-dim); color:var(--rd); }
+  .p.am { background:var(--am-dim); color:var(--am); }
+  .p.bl { background:var(--bl-dim); color:var(--bl); }
+  .p.pu { background:var(--pu-dim); color:var(--pu); }
+  .p.ch { background:var(--ch-dim); color:var(--ch); }
+  .p.mt { background:rgba(255,255,255,0.04); color:var(--mu); }
+
+  .tg { display:inline-flex; padding:2px 6px; border-radius:4px; font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+
+  .pulse { animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+  /* ===== WELCOME ===== */
+  .wel { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:0 2px; }
+  .wel h1 { font-size:17px; font-weight:400; }
+  .wel h1 b { color:var(--ch); font-weight:600; }
+  .wel-m { display:flex; align-items:center; gap:12px; font-size:11px; color:var(--mu); }
+
+  /* ===== WEEK STRIP ===== */
+  .week-strip { padding:16px 20px; }
+  .week-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .week-day {
+    border-radius:10px; padding:10px 12px; background:rgba(255,255,255,0.015); border:1px solid transparent;
+    transition:all 0.2s; position:relative; cursor:default; min-height:80px;
+  }
+  .week-day.today { background:rgba(16,185,129,0.06); border-color:rgba(16,185,129,0.2); }
+  .week-day.today .wd-label { color:var(--em); }
+  .wd-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--dm); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .wd-label .today-dot { width:5px; height:5px; border-radius:50%; background:var(--em); display:inline-block; }
+  .wd-items { display:flex; flex-direction:column; gap:4px; }
+  .wd-item { display:flex; align-items:center; gap:5px; font-size:10.5px; line-height:1.3; }
+  .wd-item .wd-time { font-size:9px; color:var(--dm); min-width:42px; flex-shrink:0; }
+  .wd-item .wd-ev { font-weight:500; }
+  .wd-earn { display:flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; }
+
+  @media(max-width:800px) {
+    .week-grid { grid-template-columns:1fr; gap:6px; }
+    .week-day { min-height:auto; }
+  }
+
+  /* ===== TICKER ===== */
+  .tkr-bar { display:flex; align-items:center; gap:18px; padding:9px 16px; overflow-x:auto; scrollbar-width:none; }
+  .tkr-bar::-webkit-scrollbar { display:none; }
+  .tkr { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .tkr-s { font-size:9.5px; color:var(--mu); font-weight:600; letter-spacing:0.06em; }
+  .tkr-p { font-size:12.5px; font-weight:600; }
+  .tkr-c { font-size:10.5px; font-weight:500; }
+  .tkr-c.up { color:var(--em); }
+  .tkr-c.dn { color:var(--rd); }
+  .sep { width:1px; height:20px; background:var(--bdr); flex-shrink:0; }
+
+  /* ===== STAT CARDS ===== */
+  .stats { display:grid; grid-template-columns:2fr repeat(3,1fr); gap:10px; }
+  .st { padding:16px 18px; position:relative; }
+  .st.hero { padding:20px 22px; }
+  .st-l { font-size:9px; text-transform:uppercase; letter-spacing:0.15em; color:var(--mu); font-weight:500; margin-bottom:5px; }
+  .st-v { font-size:24px; font-weight:700; line-height:1; }
+  .st.hero .st-v { font-size:36px; }
+  .st-t { margin-top:5px; font-size:9.5px; letter-spacing:0.02em; }
+  @media(max-width:900px) { .stats { grid-template-columns:1fr 1fr; } .stats .st:first-child { grid-column:1/-1; } }
+
+  /* ===== KEY LEVELS — MINI SPARK CHARTS ===== */
+  .lvl-card { padding:16px 20px; }
+  .lvl-tabs { display:flex; gap:0; margin-bottom:0; border-radius:8px; background:rgba(255,255,255,0.025); padding:2px; }
+  .lvl-tab { flex:1; padding:5px 0; border:none; background:transparent; color:var(--mu); font-size:10px; font-weight:600; border-radius:6px; cursor:pointer; text-align:center; letter-spacing:0.03em; transition:all 0.2s; }
+  .lvl-tab.on { background:rgba(255,255,255,0.06); color:var(--iv); }
+
+  /* Spark grid */
+  .spark-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  @media(max-width:900px) { .spark-grid { grid-template-columns:1fr 1fr; } }
+  @media(max-width:520px) { .spark-grid { grid-template-columns:1fr; } }
+
+  .spark-cell { padding:12px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); transition:all 0.2s; cursor:pointer; }
+  .spark-cell:hover { background:rgba(255,255,255,0.04); border-color:var(--bdr-h); }
+  .spark-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
+  .spark-sym { font-size:13px; font-weight:700; }
+  .spark-px { font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .spark-chg { font-size:10px; font-weight:600; }
+
+  /* Mini chart area */
+  .spark-chart { position:relative; height:48px; margin:6px 0 8px; border-radius:6px; overflow:visible; }
+  .spark-chart svg { width:100%; height:100%; display:block; }
+
+  /* Level ticks overlaid on chart */
+  .spark-levels { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; }
+  .spark-tick {
+    position:absolute; height:100%;
+    border-left:1px dashed; opacity:0.5;
+  }
+  .spark-tick-label {
+    position:absolute; bottom:-14px; transform:translateX(-50%);
+    font-size:7.5px; font-weight:600; letter-spacing:0.02em; white-space:nowrap;
+  }
+  .spark-cur {
+    position:absolute; height:100%;
+    border-left:2px solid var(--iv); opacity:0.9;
+  }
+  .spark-cur::after {
+    content:'◆'; position:absolute; top:-2px; left:-4px; font-size:7px; color:var(--iv);
+  }
+
+  /* Level rows below chart */
+  .spark-lvl-row { display:flex; justify-content:space-between; gap:4px; }
+  .spark-lvl {
+    display:flex; align-items:center; gap:3px; font-size:8.5px; font-weight:500;
+    padding:2px 5px; border-radius:4px; background:rgba(255,255,255,0.02);
+  }
+  .spark-lvl .dot { width:4px; height:4px; border-radius:50%; flex-shrink:0; }
+
+  /* Level legend */
+  .lvl-legend { display:flex; gap:14px; margin-top:12px; flex-wrap:wrap; }
+  .lvl-leg { display:flex; align-items:center; gap:4px; font-size:9px; color:var(--mu); }
+  .lvl-leg .swatch { width:10px; height:3px; border-radius:1px; }
+
+  /* ===== SETUPS ===== */
+  .setups-card { padding:18px 20px; }
+  .su {
+    padding:12px 14px; border-radius:10px; background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.05); margin-bottom:8px; transition:all 0.2s; cursor:pointer;
+  }
+  .su:hover { background:rgba(255,255,255,0.04); border-color:var(--bdr-h); }
+  .su:last-child { margin-bottom:0; }
+  .su-h { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+  .su-s { font-size:13px; font-weight:700; }
+  .su-d { font-size:11px; color:var(--mu); line-height:1.4; margin-bottom:8px; }
+  .su-lvs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .su-lv { text-align:center; padding:5px; border-radius:5px; background:rgba(255,255,255,0.02); }
+  .su-lv-l { font-size:8px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dm); margin-bottom:1px; }
+  .su-lv-v { font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .su-f { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .cf-bar { flex:1; height:3px; border-radius:2px; background:rgba(255,255,255,0.06); overflow:hidden; }
+  .cf-fill { height:100%; border-radius:2px; }
+
+  /* ===== WATCHLIST ===== */
+  .wl-card { padding:18px 20px; }
+  .wl-r { display:flex; align-items:center; justify-content:space-between; padding:7px 8px; border-radius:7px; transition:all 0.15s; cursor:pointer; }
+  .wl-r:hover { background:rgba(255,255,255,0.035); }
+  .wl-l { display:flex; align-items:center; gap:8px; }
+  .wl-s { font-size:12px; font-weight:600; min-width:42px; }
+  .wl-n { font-size:10px; color:var(--dm); }
+  .wl-rt { display:flex; align-items:center; gap:10px; text-align:right; }
+  .wl-px { font-size:11px; font-weight:500; font-variant-numeric:tabular-nums; }
+  .wl-c { font-size:10.5px; font-weight:600; font-variant-numeric:tabular-nums; min-width:48px; text-align:right; }
+  .wl-c.up { color:var(--em); }
+  .wl-c.dn { color:var(--rd); }
+
+  /* ===== BRIEF ===== */
+  .bf-card { padding:18px 20px; }
+  .bf-sum { font-size:12.5px; line-height:1.6; color:var(--iv); opacity:0.88; margin-bottom:14px; }
+
+  /* ===== QUICK ACTIONS ===== */
+  .qa-card { padding:18px 20px; display:flex; flex-direction:column; gap:8px; }
+  .qa {
+    display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px;
+    border:1px solid var(--bdr); background:rgba(255,255,255,0.02); color:var(--iv);
+    font-size:11.5px; font-weight:500; cursor:pointer; transition:all 0.2s;
+  }
+  .qa:hover { background:rgba(255,255,255,0.045); border-color:var(--bdr-h); }
+  .qa-i { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+  .qa-sub { font-size:9.5px; color:var(--mu); font-weight:400; margin-top:1px; }
+
+  /* ===== EQUITY + TRADES ===== */
+  .eq-card { padding:18px 20px; }
+  .eq-h { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .tp-pills { display:flex; gap:2px; }
+  .tp { padding:3px 9px; border-radius:6px; font-size:9.5px; font-weight:600; color:var(--mu); background:transparent; border:none; cursor:pointer; letter-spacing:0.03em; transition:all 0.2s; }
+  .tp.on { background:var(--em-dim); color:var(--em); }
+  .chart-a { height:160px; border-radius:8px; position:relative; overflow:hidden; background:linear-gradient(180deg,rgba(16,185,129,0.05) 0%,rgba(16,185,129,0.005) 100%); }
+  .chart-a svg { width:100%; height:100%; }
+
+  .tr-card { padding:18px 20px; }
+  .tr-r { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+  .tr-r:last-child { border-bottom:none; }
+  .tr-l { display:flex; align-items:center; gap:8px; }
+  .tr-s { font-size:11.5px; font-weight:600; }
+  .tr-dir { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; padding:2px 6px; border-radius:3px; }
+  .tr-dir.lo { background:var(--em-dim); color:var(--em); }
+  .tr-dir.sh { background:var(--rd-dim); color:var(--rd); }
+  .tr-rt { display:flex; align-items:center; gap:8px; }
+  .tr-pnl { font-size:11.5px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .tr-tm { font-size:9.5px; color:var(--dm); }
+
+  /* ===== ANALYTICS + MOVERS ===== */
+  .an-card, .mv-card { padding:18px 20px; }
+  .regime { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:8px; font-size:10.5px; font-weight:600; margin-bottom:10px; }
+  .ix-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-bottom:12px; }
+  .ix-i { display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.02); font-size:10.5px; }
+  .br-track { height:4px; border-radius:2px; background:var(--rd); overflow:hidden; margin-top:5px; }
+  .br-fill { height:100%; border-radius:2px; background:var(--em); }
+
+  .mv-tabs { display:flex; gap:0; margin-bottom:10px; border-radius:8px; background:rgba(255,255,255,0.025); padding:2px; }
+  .mv-tab { flex:1; padding:5px; border:none; background:transparent; color:var(--mu); font-size:10.5px; font-weight:600; border-radius:6px; cursor:pointer; text-align:center; transition:all 0.2s; }
+  .mv-tab.on { background:rgba(255,255,255,0.06); color:var(--iv); }
+  .mv-r { display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+  .mv-s { font-size:11.5px; font-weight:600; }
+
+  /* ===== GRIDS ===== */
+  .g21 { display:grid; grid-template-columns:1fr 320px; gap:18px; }
+  .g12 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+  @media(max-width:1100px) { .g21,.g12,.g3 { grid-template-columns:1fr; } }
+  @media(max-width:640px) { .dash { padding:14px 16px 40px; gap:12px; } }
+
+  /* Badge */
+  .badge { position:fixed; top:8px; right:8px; z-index:999; padding:4px 10px; border-radius:6px; background:rgba(243,229,171,0.12); border:1px solid rgba(243,229,171,0.25); color:var(--ch); font-size:9px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; backdrop-filter:blur(12px); }
+  @media(max-width:768px) { .dsk { display:none !important; } }
+  @media(min-width:769px) { .mob { display:none !important; } }
+</style>
+</head>
+<body>
+<div class="badge">MOCKUP v4</div>
+<div class="dash">
+
+  <!-- ===== WELCOME ===== -->
+  <div class="wel">
+    <h1>Good morning, <b>Nate</b></h1>
+    <div class="wel-m">
+      <span>Wed, Feb 18</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span class="pulse" style="width:6px;height:6px;border-radius:50%;background:var(--am);display:inline-block;"></span>Pre-Market</span>
+      <span class="mn" style="color:var(--iv);font-size:11px;">8:32 AM ET</span>
+    </div>
+  </div>
+
+  <!-- ===== THIS WEEK: EARNINGS + ECONOMIC CALENDAR ===== -->
+  <div class="gc week-strip">
+    <div class="sh">
+      <span class="d" style="background:var(--am);"></span>
+      This Week — Earnings &amp; Events
+      <div class="r">
+        <button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>Ask AI</button>
+      </div>
+    </div>
+    <div class="week-grid">
+      <!-- Monday -->
+      <div class="week-day">
+        <div class="wd-label">Mon 17</div>
+        <div class="wd-items">
+          <div class="wd-item"><span class="wd-time" style="color:var(--dm);">—</span><span class="wd-ev" style="color:var(--dm);font-style:italic;">No major events</span></div>
+        </div>
+      </div>
+      <!-- Tuesday -->
+      <div class="week-day">
+        <div class="wd-label">Tue 18</div>
+        <div class="wd-items">
+          <div class="wd-item"><span class="wd-time">8:30a</span><span class="wd-ev">Housing Starts</span><span class="p em" style="font-size:8px;padding:1px 5px;">Released</span></div>
+          <div class="wd-earn"><span class="sl" style="font-size:10.5px;">ABNB</span><span class="tg" style="background:var(--bl-dim);color:var(--bl);">AMC</span></div>
+        </div>
+      </div>
+      <!-- Wednesday — TODAY -->
+      <div class="week-day today">
+        <div class="wd-label"><span class="today-dot"></span>Wed 19 — TODAY</div>
+        <div class="wd-items">
+          <div class="wd-item"><span class="wd-time" style="color:var(--am);">2:00p</span><span class="wd-ev" style="color:var(--iv);font-weight:600;">FOMC Minutes</span><span class="p am" style="font-size:8px;padding:1px 5px;">5h 28m</span></div>
+          <div class="wd-item"><span class="wd-time">10:30a</span><span class="wd-ev">Crude Oil Inv.</span><span class="p am" style="font-size:8px;padding:1px 5px;">1h 58m</span></div>
+          <div class="wd-earn"><span class="sl" style="font-size:10.5px;">CVNA</span><span class="tg" style="background:var(--bl-dim);color:var(--bl);">AMC</span></div>
+        </div>
+      </div>
+      <!-- Thursday -->
+      <div class="week-day">
+        <div class="wd-label">Thu 20</div>
+        <div class="wd-items">
+          <div class="wd-item"><span class="wd-time">8:30a</span><span class="wd-ev">Jobless Claims</span></div>
+          <div class="wd-earn"><span class="sl" style="font-size:10.5px;">WMT</span><span class="tg" style="background:var(--am-dim);color:var(--am);">BMO</span></div>
+          <div class="wd-earn"><span class="sl" style="font-size:10.5px;">BKNG</span><span class="tg" style="background:var(--bl-dim);color:var(--bl);">AMC</span></div>
+          <div class="wd-earn"><span class="sl" style="font-size:10.5px;">PANW</span><span class="tg" style="background:var(--bl-dim);color:var(--bl);">AMC</span></div>
+        </div>
+      </div>
+      <!-- Friday -->
+      <div class="week-day">
+        <div class="wd-label">Fri 21</div>
+        <div class="wd-items">
+          <div class="wd-item"><span class="wd-time">9:45a</span><span class="wd-ev">PMI Flash</span></div>
+          <div class="wd-earn"><span class="sl" style="font-size:10.5px;">MRNA</span><span class="tg" style="background:var(--am-dim);color:var(--am);">BMO</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TICKER ===== -->
+  <div class="gc tkr-bar">
+    <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;"><span class="pulse" style="width:5px;height:5px;border-radius:50%;background:var(--em);display:inline-block;"></span><span style="font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Live</span></div>
+    <div class="sep"></div>
+    <div class="tkr"><span class="tkr-s">SPX</span><span class="tkr-p">6,117.52</span><span class="tkr-c up">+0.34%</span></div>
+    <div class="tkr"><span class="tkr-s">SPY</span><span class="tkr-p">610.48</span><span class="tkr-c up">+0.31%</span></div>
+    <div class="tkr"><span class="tkr-s">QQQ</span><span class="tkr-p">533.20</span><span class="tkr-c up">+0.52%</span></div>
+    <div class="tkr"><span class="tkr-s">NDX</span><span class="tkr-p">22,041</span><span class="tkr-c up">+0.48%</span></div>
+    <div class="sep dsk"></div>
+    <div class="tkr dsk"><span class="tkr-s">VIX</span><span class="tkr-p" style="color:var(--em);">14.82</span></div>
+    <div class="tkr dsk"><span class="tkr-s" style="letter-spacing:0.08em;">IV RK</span><span class="tkr-p" style="color:var(--em);">18%</span></div>
+    <div class="tkr dsk"><span class="tkr-s">ATR</span><span class="tkr-p">$48.72</span></div>
+    <div style="margin-left:auto;flex-shrink:0;" class="dsk"><span class="mn" style="font-size:10px;color:var(--mu);">8:32:14 AM ET</span></div>
+  </div>
+
+  <!-- ===== STAT CARDS ===== -->
+  <div class="stats">
+    <div class="gc st hero">
+      <div class="st-l">P&L This Month</div>
+      <div class="st-v sf" style="color:var(--em);">+$4,832.50</div>
+      <div class="st-t" style="color:var(--em);">▲ +18.3% vs last month</div>
+      <div style="position:absolute;top:12px;right:12px;"><button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>AI</button></div>
+    </div>
+    <div class="gc st"><div class="st-l">Win Rate</div><div class="st-v sf" style="color:var(--em);">68.4%</div><div class="st-t" style="color:var(--em);">▲ +3.1%</div></div>
+    <div class="gc st"><div class="st-l">Current Streak</div><div class="st-v sf" style="color:var(--ch);">5 W</div><div class="st-t" style="color:var(--mu);">Best: 8</div></div>
+    <div class="gc st"><div class="st-l">Trades MTD</div><div class="st-v sf">19</div><div class="st-t" style="color:var(--mu);">vs 24 last month</div></div>
+  </div>
+
+  <!-- ===== KEY LEVELS — MINI SPARK CHARTS ===== -->
+  <div class="gc lvl-card">
+    <div class="sh">
+      <span class="d" style="background:var(--ch);"></span>
+      Key Levels
+      <div class="r">
+        <div class="lvl-tabs" style="margin-bottom:0;">
+          <button class="lvl-tab on">Intraday</button>
+          <button class="lvl-tab">GEX / Options</button>
+          <button class="lvl-tab">Structural</button>
+        </div>
+        <button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>Ask AI</button>
+      </div>
+    </div>
+
+    <div class="spark-grid">
+
+      <!-- SPX -->
+      <div class="spark-cell">
+        <div class="spark-top">
+          <span class="spark-sym"><a class="sl">SPX</a></span>
+          <span class="spark-chg" style="color:var(--em);">+0.34%</span>
+        </div>
+        <div class="spark-px mn" style="font-size:15px;font-weight:700;color:var(--iv);">6,117.52</div>
+        <div class="spark-chart">
+          <svg viewBox="0 0 160 48" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.18"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.01"/></linearGradient>
+            </defs>
+            <path d="M0,38 C8,36 16,34 24,30 C32,26 40,28 48,22 C56,18 64,20 72,16 C80,12 88,14 96,10 C104,8 112,6 120,8 C128,10 136,6 144,4 C152,2 156,3 160,2" fill="none" stroke="#10B981" stroke-width="1.5"/>
+            <path d="M0,38 C8,36 16,34 24,30 C32,26 40,28 48,22 C56,18 64,20 72,16 C80,12 88,14 96,10 C104,8 112,6 120,8 C128,10 136,6 144,4 C152,2 156,3 160,2 L160,48 L0,48 Z" fill="url(#sg1)"/>
+          </svg>
+          <!-- Level lines overlaid -->
+          <div class="spark-levels">
+            <div class="spark-tick" style="left:18%;border-color:var(--em);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--em);">6,065 PDL</span></div>
+            <div class="spark-tick" style="left:44%;border-color:var(--ch);opacity:0.5;border-left-style:solid;"><span class="spark-tick-label mn" style="color:var(--ch);">6,112 V</span></div>
+            <div class="spark-cur" style="left:72%;"></div>
+            <div class="spark-tick" style="left:85%;border-color:var(--rd);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--rd);">6,155 PDH</span></div>
+          </div>
+        </div>
+        <div class="spark-lvl-row">
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--em);"></span>6,000 <span style="color:var(--mu);">Put</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--ch);"></span>6,112 <span style="color:var(--mu);">VWAP</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--rd);"></span>6,200 <span style="color:var(--mu);">Call</span></span>
+        </div>
+      </div>
+
+      <!-- SPY -->
+      <div class="spark-cell">
+        <div class="spark-top">
+          <span class="spark-sym"><a class="sl">SPY</a></span>
+          <span class="spark-chg" style="color:var(--em);">+0.31%</span>
+        </div>
+        <div class="spark-px mn" style="font-size:15px;font-weight:700;color:var(--iv);">610.48</div>
+        <div class="spark-chart">
+          <svg viewBox="0 0 160 48" preserveAspectRatio="none">
+            <defs><linearGradient id="sg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.18"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.01"/></linearGradient></defs>
+            <path d="M0,36 C8,34 16,32 24,28 C32,30 40,26 48,20 C56,18 64,22 72,16 C80,14 88,12 96,14 C104,10 112,8 120,6 C128,8 136,4 144,6 C152,4 156,3 160,2" fill="none" stroke="#10B981" stroke-width="1.5"/>
+            <path d="M0,36 C8,34 16,32 24,28 C32,30 40,26 48,20 C56,18 64,22 72,16 C80,14 88,12 96,14 C104,10 112,8 120,6 C128,8 136,4 144,6 C152,4 156,3 160,2 L160,48 L0,48 Z" fill="url(#sg2)"/>
+          </svg>
+          <div class="spark-levels">
+            <div class="spark-tick" style="left:20%;border-color:var(--em);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--em);">605.2 PDL</span></div>
+            <div class="spark-tick" style="left:46%;border-color:var(--ch);opacity:0.5;border-left-style:solid;"><span class="spark-tick-label mn" style="color:var(--ch);">610.1 V</span></div>
+            <div class="spark-cur" style="left:68%;"></div>
+            <div class="spark-tick" style="left:88%;border-color:var(--rd);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--rd);">614.8 PDH</span></div>
+          </div>
+        </div>
+        <div class="spark-lvl-row">
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--em);"></span>600 <span style="color:var(--mu);">Put</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--ch);"></span>610.1 <span style="color:var(--mu);">VWAP</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--rd);"></span>620 <span style="color:var(--mu);">Call</span></span>
+        </div>
+      </div>
+
+      <!-- QQQ -->
+      <div class="spark-cell">
+        <div class="spark-top">
+          <span class="spark-sym"><a class="sl">QQQ</a></span>
+          <span class="spark-chg" style="color:var(--em);">+0.52%</span>
+        </div>
+        <div class="spark-px mn" style="font-size:15px;font-weight:700;color:var(--iv);">533.20</div>
+        <div class="spark-chart">
+          <svg viewBox="0 0 160 48" preserveAspectRatio="none">
+            <defs><linearGradient id="sg3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.18"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.01"/></linearGradient></defs>
+            <path d="M0,40 C8,38 16,36 24,34 C32,30 40,32 48,26 C56,22 64,18 72,14 C80,16 88,12 96,8 C104,10 112,6 120,4 C128,6 136,4 144,2 C152,4 156,2 160,1" fill="none" stroke="#10B981" stroke-width="1.5"/>
+            <path d="M0,40 C8,38 16,36 24,34 C32,30 40,32 48,26 C56,22 64,18 72,14 C80,16 88,12 96,8 C104,10 112,6 120,4 C128,6 136,4 144,2 C152,4 156,2 160,1 L160,48 L0,48 Z" fill="url(#sg3)"/>
+          </svg>
+          <div class="spark-levels">
+            <div class="spark-tick" style="left:22%;border-color:var(--em);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--em);">528.6 PDL</span></div>
+            <div class="spark-tick" style="left:48%;border-color:var(--ch);opacity:0.5;border-left-style:solid;"><span class="spark-tick-label mn" style="color:var(--ch);">532.8 V</span></div>
+            <div class="spark-cur" style="left:70%;"></div>
+            <div class="spark-tick" style="left:86%;border-color:var(--rd);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--rd);">536.4 PDH</span></div>
+          </div>
+        </div>
+        <div class="spark-lvl-row">
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--em);"></span>525 <span style="color:var(--mu);">Put</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--ch);"></span>532.8 <span style="color:var(--mu);">VWAP</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--rd);"></span>540 <span style="color:var(--mu);">Call</span></span>
+        </div>
+      </div>
+
+      <!-- NDX -->
+      <div class="spark-cell">
+        <div class="spark-top">
+          <span class="spark-sym"><a class="sl">NDX</a></span>
+          <span class="spark-chg" style="color:var(--em);">+0.48%</span>
+        </div>
+        <div class="spark-px mn" style="font-size:15px;font-weight:700;color:var(--iv);">22,041</div>
+        <div class="spark-chart">
+          <svg viewBox="0 0 160 48" preserveAspectRatio="none">
+            <defs><linearGradient id="sg4" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.18"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.01"/></linearGradient></defs>
+            <path d="M0,42 C8,40 16,38 24,34 C32,32 40,30 48,24 C56,20 64,22 72,18 C80,14 88,16 96,12 C104,10 112,8 120,10 C128,6 136,4 144,6 C152,4 156,2 160,3" fill="none" stroke="#10B981" stroke-width="1.5"/>
+            <path d="M0,42 C8,40 16,38 24,34 C32,32 40,30 48,24 C56,20 64,22 72,18 C80,14 88,16 96,12 C104,10 112,8 120,10 C128,6 136,4 144,6 C152,4 156,2 160,3 L160,48 L0,48 Z" fill="url(#sg4)"/>
+          </svg>
+          <div class="spark-levels">
+            <div class="spark-tick" style="left:20%;border-color:var(--em);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--em);">21,850 PDL</span></div>
+            <div class="spark-tick" style="left:46%;border-color:var(--ch);opacity:0.5;border-left-style:solid;"><span class="spark-tick-label mn" style="color:var(--ch);">22,005 V</span></div>
+            <div class="spark-cur" style="left:68%;"></div>
+            <div class="spark-tick" style="left:84%;border-color:var(--rd);opacity:0.35;"><span class="spark-tick-label mn" style="color:var(--rd);">22,180 PDH</span></div>
+          </div>
+        </div>
+        <div class="spark-lvl-row">
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--em);"></span>21,500 <span style="color:var(--mu);">Put</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--ch);"></span>22,005 <span style="color:var(--mu);">VWAP</span></span>
+          <span class="spark-lvl mn"><span class="dot" style="background:var(--rd);"></span>22,300 <span style="color:var(--mu);">Call</span></span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="lvl-legend">
+      <div class="lvl-leg"><span class="swatch" style="background:var(--iv);"></span>Current ◆</div>
+      <div class="lvl-leg"><span class="swatch" style="background:var(--ch);"></span>VWAP</div>
+      <div class="lvl-leg"><span class="swatch" style="background:var(--em);"></span>Support / Put Wall</div>
+      <div class="lvl-leg"><span class="swatch" style="background:var(--rd);"></span>Resistance / Call Wall</div>
+      <div class="lvl-leg" style="margin-left:auto;font-size:8px;color:var(--dm);">Dashed lines = key levels on chart</div>
+    </div>
+  </div>
+
+  <!-- ===== SETUPS + WATCHLIST ===== -->
+  <div class="g12">
+    <div class="gc setups-card">
+      <div class="sh">
+        <span class="d" style="background:var(--em);"></span>Pre-Market Setups
+        <div class="r"><span class="p em" style="font-size:8.5px;">3 Active</span><button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>Ask AI</button></div>
+      </div>
+      <div class="su">
+        <div class="su-h">
+          <a class="sl su-s">SPX</a><span class="p em">Ready</span><span class="tg" style="background:var(--em-dim);color:var(--em);">Bullish</span><span class="tg" style="background:rgba(255,255,255,0.04);color:var(--mu);">Fade at Wall</span>
+          <button class="ai" style="margin-left:auto;"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>AI</button>
+        </div>
+        <div class="su-d">Gap up into PDH w/ declining volume. Fade at 6,155 back to VWAP 6,112.</div>
+        <div class="su-lvs">
+          <div class="su-lv"><div class="su-lv-l">Entry</div><div class="su-lv-v">6,150–6,158</div></div>
+          <div class="su-lv"><div class="su-lv-l">Stop</div><div class="su-lv-v" style="color:var(--rd);">6,175</div></div>
+          <div class="su-lv"><div class="su-lv-l">Target</div><div class="su-lv-v" style="color:var(--em);">6,112</div></div>
+        </div>
+        <div class="su-f"><span style="font-size:9px;color:var(--mu);">Confluence</span><div class="cf-bar"><div class="cf-fill" style="width:85%;background:var(--em);"></div></div><span class="mn" style="font-size:10px;color:var(--em);font-weight:600;">4.2/5</span><span style="font-size:9px;color:var(--mu);margin-left:6px;">Prob</span><span class="mn" style="font-size:10px;color:var(--ch);font-weight:600;">72%</span></div>
+      </div>
+      <div class="su">
+        <div class="su-h">
+          <a class="sl su-s">QQQ</a><span class="p am">Forming</span><span class="tg" style="background:var(--em-dim);color:var(--em);">Bullish</span><span class="tg" style="background:rgba(255,255,255,0.04);color:var(--mu);">Breakout Vacuum</span>
+          <button class="ai" style="margin-left:auto;"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>AI</button>
+        </div>
+        <div class="su-d">Compression below PDH 536.40 with low gamma above. Run to call wall 540.</div>
+        <div class="su-lvs">
+          <div class="su-lv"><div class="su-lv-l">Entry</div><div class="su-lv-v">536.50–537</div></div>
+          <div class="su-lv"><div class="su-lv-l">Stop</div><div class="su-lv-v" style="color:var(--rd);">534.80</div></div>
+          <div class="su-lv"><div class="su-lv-l">Target</div><div class="su-lv-v" style="color:var(--em);">540.00</div></div>
+        </div>
+        <div class="su-f"><span style="font-size:9px;color:var(--mu);">Confluence</span><div class="cf-bar"><div class="cf-fill" style="width:64%;background:var(--am);"></div></div><span class="mn" style="font-size:10px;color:var(--am);font-weight:600;">3.2/5</span><span style="font-size:9px;color:var(--mu);margin-left:6px;">Prob</span><span class="mn" style="font-size:10px;color:var(--ch);font-weight:600;">58%</span></div>
+      </div>
+      <div class="su">
+        <div class="su-h">
+          <a class="sl su-s">SPY</a><span class="p em">Ready</span><span class="tg" style="background:var(--rd-dim);color:var(--rd);">Bearish</span><span class="tg" style="background:rgba(255,255,255,0.04);color:var(--mu);">Mean Reversion</span>
+          <button class="ai" style="margin-left:auto;"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>AI</button>
+        </div>
+        <div class="su-d">Extended above upper VWAP band. RSI divergence on 5m → reversion to 610.10.</div>
+        <div class="su-lvs">
+          <div class="su-lv"><div class="su-lv-l">Entry</div><div class="su-lv-v">614.50–615</div></div>
+          <div class="su-lv"><div class="su-lv-l">Stop</div><div class="su-lv-v" style="color:var(--rd);">616.80</div></div>
+          <div class="su-lv"><div class="su-lv-l">Target</div><div class="su-lv-v" style="color:var(--em);">610.10</div></div>
+        </div>
+        <div class="su-f"><span style="font-size:9px;color:var(--mu);">Confluence</span><div class="cf-bar"><div class="cf-fill" style="width:76%;background:var(--em);"></div></div><span class="mn" style="font-size:10px;color:var(--em);font-weight:600;">3.8/5</span><span style="font-size:9px;color:var(--mu);margin-left:6px;">Prob</span><span class="mn" style="font-size:10px;color:var(--ch);font-weight:600;">65%</span></div>
+      </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="gc wl-card">
+      <div class="sh">
+        <span class="d" style="background:var(--bl);"></span>Watchlist
+        <div class="r"><button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>Scan All</button></div>
+      </div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">NVDA</a></div><div class="wl-rt"><span class="p am" style="font-size:7.5px;padding:1px 5px;">EARNS FEB 26</span><span class="wl-px mn">$942.30</span><span class="wl-c up mn">+2.14%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">TSLA</a></div><div class="wl-rt"><span class="wl-px mn">$352.40</span><span class="wl-c dn mn">-1.23%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">AAPL</a></div><div class="wl-rt"><span class="wl-px mn">$241.80</span><span class="wl-c up mn">+0.68%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">AMZN</a></div><div class="wl-rt"><span class="wl-px mn">$228.60</span><span class="wl-c up mn">+0.92%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">META</a></div><div class="wl-rt"><span class="wl-px mn">$718.90</span><span class="wl-c up mn">+1.45%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">SMCI</a></div><div class="wl-rt"><span class="p em" style="font-size:7.5px;padding:1px 5px;">HOT</span><span class="wl-px mn">$98.42</span><span class="wl-c up mn">+12.4%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div class="wl-r"><div class="wl-l"><a class="sl wl-s">PLTR</a></div><div class="wl-rt"><span class="wl-px mn">$124.80</span><span class="wl-c up mn">+8.20%</span><button class="ai" style="padding:2px 6px;"><svg class="ai-svg" viewBox="0 0 24 24" style="width:9px;height:9px;"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg></button></div></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:9px;color:var(--dm);">7 symbols</span>
+        <button style="padding:4px 10px;border-radius:6px;border:1px solid var(--bdr);background:transparent;color:var(--mu);font-size:9.5px;font-weight:600;cursor:pointer;">+ Edit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== BRIEF + QUICK ACTIONS ===== -->
+  <div class="g21">
+    <div class="gc bf-card">
+      <div class="sh"><span class="d" style="background:var(--am);"></span>Morning Brief<div class="r"><span style="font-size:8px;color:var(--dm);font-weight:400;text-transform:none;letter-spacing:0;">8:30 AM ET</span><button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>Deep Dive</button></div></div>
+      <div class="bf-sum">Markets positioning cautiously ahead of <strong>FOMC Minutes at 2:00 PM</strong>. SPX futures holding above 6,100 support with low pre-market volume. IV Rank at 18% — <strong>premium is cheap</strong>, favor debit spreads over credit. Watch for fade at 6,155 resistance if breadth stays narrow. <a class="sl" style="font-size:12.5px;">NVDA</a> reports next week — 50% max position sizing.</div>
+    </div>
+    <div class="gc qa-card">
+      <div class="sh" style="margin-bottom:4px;"><span class="d" style="background:var(--em);"></span>Quick Actions</div>
+      <button class="qa"><div class="qa-i" style="background:var(--em-dim);color:var(--em);">🎯</div><div><div>SPX Game Plan</div><div class="qa-sub">Levels, GEX, setups</div></div></button>
+      <button class="qa"><div class="qa-i" style="background:var(--ch-dim);color:var(--ch);">🤖</div><div><div>Best Setup Now</div><div class="qa-sub">AI scans for #1 trade</div></div></button>
+      <button class="qa"><div class="qa-i" style="background:var(--bl-dim);color:var(--bl);">📸</div><div><div>Screenshot Trade</div><div class="qa-sub">Broker screenshot → journal</div></div></button>
+      <button class="qa"><div class="qa-i" style="background:var(--pu-dim);color:var(--pu);">📝</div><div><div>Log a Trade</div><div class="qa-sub">Quick journal entry</div></div></button>
+    </div>
+  </div>
+
+  <!-- ===== EQUITY + RECENT TRADES ===== -->
+  <div class="g21">
+    <div class="gc eq-card">
+      <div class="eq-h"><div class="sh" style="margin-bottom:0;"><span class="d" style="background:var(--em);"></span>Equity Curve</div><div class="tp-pills"><button class="tp">7D</button><button class="tp on">30D</button><button class="tp">90D</button><button class="tp">YTD</button><button class="tp">All</button></div></div>
+      <div class="chart-a"><svg viewBox="0 0 600 160" preserveAspectRatio="none"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.22"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.01"/></linearGradient></defs><path d="M0,140 C20,138 40,135 60,128 C80,121 100,125 120,115 C140,105 160,98 180,92 C200,86 220,90 240,80 C260,70 280,62 300,58 C320,54 340,60 360,48 C380,36 400,28 420,22 C440,16 460,20 480,12 C500,6 520,4 540,3 C560,2 580,1 600,1 L600,160 L0,160 Z" fill="url(#g)"/><path d="M0,140 C20,138 40,135 60,128 C80,121 100,125 120,115 C140,105 160,98 180,92 C200,86 220,90 240,80 C260,70 280,62 300,58 C320,54 340,60 360,48 C380,36 400,28 420,22 C440,16 460,20 480,12 C500,6 520,4 540,3 C560,2 580,1 600,1" fill="none" stroke="#10B981" stroke-width="1.5"/></svg></div>
+    </div>
+    <div class="gc tr-card">
+      <div class="sh"><span class="d" style="background:var(--mu);"></span>Recent Trades<div class="r"><button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>Review</button></div></div>
+      <div class="tr-r"><div class="tr-l"><a class="sl tr-s">SPX 6100P</a><span class="tr-dir sh">Short</span></div><div class="tr-rt"><span class="tr-tm">2h ago</span><span class="tr-pnl" style="color:var(--em);">+$482</span></div></div>
+      <div class="tr-r"><div class="tr-l"><a class="sl tr-s">NVDA 950C</a><span class="tr-dir lo">Long</span></div><div class="tr-rt"><span class="tr-tm">Yesterday</span><span class="tr-pnl" style="color:var(--em);">+$1,240</span></div></div>
+      <div class="tr-r"><div class="tr-l"><a class="sl tr-s">TSLA 380P</a><span class="tr-dir sh">Short</span></div><div class="tr-rt"><span class="tr-tm">Yesterday</span><span class="tr-pnl" style="color:var(--rd);">-$315</span></div></div>
+      <div class="tr-r"><div class="tr-l"><a class="sl tr-s">SPX 6050C</a><span class="tr-dir lo">Long</span></div><div class="tr-rt"><span class="tr-tm">2d ago</span><span class="tr-pnl" style="color:var(--em);">+$890</span></div></div>
+      <div class="tr-r"><div class="tr-l"><a class="sl tr-s">AMZN 230C</a><span class="tr-dir lo">Long</span></div><div class="tr-rt"><span class="tr-tm">3d ago</span><span class="tr-pnl" style="color:var(--em);">+$675</span></div></div>
+    </div>
+  </div>
+
+  <!-- ===== ANALYTICS + MOVERS ===== -->
+  <div class="g12">
+    <div class="gc an-card">
+      <div class="sh"><span class="d" style="background:var(--em);"></span>Market Analytics<div class="r"><button class="ai"><svg class="ai-svg" viewBox="0 0 24 24"><path d="M12 2a4 4 0 014 4v2a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 18h6"/><path d="M12 22v-4"/></svg>AI</button></div></div>
+      <div class="regime" style="background:var(--em-dim);color:var(--em);">▲ Risk-On</div>
+      <div class="ix-grid">
+        <div class="ix-i"><span style="font-weight:600;"><a class="sl">SPY</a></span><span style="color:var(--em);">+0.34%</span></div>
+        <div class="ix-i"><span style="font-weight:600;"><a class="sl">QQQ</a></span><span style="color:var(--em);">+0.51%</span></div>
+        <div class="ix-i"><span style="font-weight:600;"><a class="sl">IWM</a></span><span style="color:var(--rd);">-0.12%</span></div>
+        <div class="ix-i"><span style="font-weight:600;"><a class="sl">DIA</a></span><span style="color:var(--em);">+0.18%</span></div>
+      </div>
+      <div style="font-size:9.5px;color:var(--mu);margin-bottom:4px;">Market Breadth</div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:3px;"><span style="color:var(--em);">Adv 58%</span><span style="color:var(--rd);">Dec 42%</span></div>
+      <div class="br-track"><div class="br-fill" style="width:58%;"></div></div>
+    </div>
+    <div class="gc mv-card">
+      <div class="sh"><span class="d" style="background:var(--am);"></span>Market Movers</div>
+      <div class="mv-tabs"><button class="mv-tab on">Gainers</button><button class="mv-tab">Losers</button></div>
+      <div class="mv-r"><span class="mv-s"><a class="sl">SMCI</a></span><div><span style="font-size:10.5px;color:var(--mu);">$98.42</span><span class="tkr-c up" style="margin-left:6px;font-size:10.5px;">+12.4%</span></div></div>
+      <div class="mv-r"><span class="mv-s"><a class="sl">PLTR</a></span><div><span style="font-size:10.5px;color:var(--mu);">$124.80</span><span class="tkr-c up" style="margin-left:6px;font-size:10.5px;">+8.2%</span></div></div>
+      <div class="mv-r"><span class="mv-s"><a class="sl">COIN</a></span><div><span style="font-size:10.5px;color:var(--mu);">$312.15</span><span class="tkr-c up" style="margin-left:6px;font-size:10.5px;">+6.7%</span></div></div>
+      <div class="mv-r"><span class="mv-s"><a class="sl">RIVN</a></span><div><span style="font-size:10.5px;color:var(--mu);">$18.92</span><span class="tkr-c up" style="margin-left:6px;font-size:10.5px;">+5.1%</span></div></div>
+      <div class="mv-r"><span class="mv-s"><a class="sl">AMD</a></span><div><span style="font-size:10.5px;color:var(--mu);">$178.30</span><span class="tkr-c up" style="margin-left:6px;font-size:10.5px;">+4.3%</span></div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

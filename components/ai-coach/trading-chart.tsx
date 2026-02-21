@@ -106,7 +106,7 @@ function isDisposedError(error: unknown): boolean {
 // Emerald Standard chart colors
 const CHART_COLORS = {
   background: '#0a0f0d',
-  textColor: 'rgba(255, 255, 255, 0.5)',
+  textColor: 'rgba(255, 255, 255, 0.64)',
   gridColor: 'rgba(255, 255, 255, 0.03)',
   borderColor: 'rgba(255, 255, 255, 0.05)',
   crosshairColor: 'rgba(16, 185, 129, 0.3)',
@@ -432,7 +432,7 @@ export function TradingChart({
         mouseWheel: true,
         pressedMouseMove: true,
         horzTouchDrag: true,
-        vertTouchDrag: false,
+        vertTouchDrag: true,
       },
       handleScale: {
         axisPressedMouseMove: { time: true, price: true },
@@ -457,29 +457,18 @@ export function TradingChart({
       }
     }
 
-    let dragStart: { x: number; y: number } | null = null
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return
-      dragStart = { x: event.clientX, y: event.clientY }
       markUserViewportAdjusted()
-    }
-    const handlePointerMove = (event: PointerEvent) => {
-      if (!dragStart) return
-      if ((event.buttons & 1) !== 1) return
-      const deltaX = Math.abs(event.clientX - dragStart.x)
-      const deltaY = Math.abs(event.clientY - dragStart.y)
-      if (deltaY >= 3 && deltaY > (deltaX * 0.6)) {
-        enableManualPriceScale()
-      }
-    }
-    const clearDragStart = () => {
-      dragStart = null
+      // Disable autoscale as soon as the user begins a drag so vertical pan works immediately.
+      enableManualPriceScale()
     }
 
     let touchStartY: number | null = null
     const handleTouchStart = (event: TouchEvent) => {
       touchStartY = event.touches[0]?.clientY ?? null
       markUserViewportAdjusted()
+      enableManualPriceScale()
     }
     const handleTouchMove = (event: TouchEvent) => {
       if (touchStartY == null) return
@@ -494,10 +483,6 @@ export function TradingChart({
     }
 
     containerRef.current.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true })
-    containerRef.current.addEventListener('pointermove', handlePointerMove, { capture: true, passive: true })
-    containerRef.current.addEventListener('pointerup', clearDragStart, { capture: true, passive: true })
-    containerRef.current.addEventListener('pointercancel', clearDragStart, { capture: true, passive: true })
-    containerRef.current.addEventListener('mouseleave', clearDragStart, { capture: true, passive: true })
     containerRef.current.addEventListener('wheel', markUserViewportAdjusted, { capture: true, passive: true })
     containerRef.current.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true })
     containerRef.current.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true })
@@ -582,10 +567,6 @@ export function TradingChart({
       }
       resizeObserver.disconnect()
       containerRef.current?.removeEventListener('pointerdown', handlePointerDown, true)
-      containerRef.current?.removeEventListener('pointermove', handlePointerMove, true)
-      containerRef.current?.removeEventListener('pointerup', clearDragStart, true)
-      containerRef.current?.removeEventListener('pointercancel', clearDragStart, true)
-      containerRef.current?.removeEventListener('mouseleave', clearDragStart, true)
       containerRef.current?.removeEventListener('wheel', markUserViewportAdjusted, true)
       containerRef.current?.removeEventListener('touchstart', handleTouchStart, true)
       containerRef.current?.removeEventListener('touchmove', handleTouchMove, true)

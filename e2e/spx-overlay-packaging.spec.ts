@@ -15,9 +15,9 @@ test.describe('SPX overlay packaging', () => {
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByTestId('spx-action-preset-execution')).toBeVisible()
-    await expect(page.getByTestId('spx-action-preset-flow')).toBeVisible()
-    await expect(page.getByTestId('spx-action-preset-spatial')).toBeVisible()
+    await expect(page.getByTestId('spx-action-preset-execution')).toHaveCount(0)
+    await expect(page.getByTestId('spx-action-preset-flow')).toHaveCount(0)
+    await expect(page.getByTestId('spx-action-preset-spatial')).toHaveCount(0)
     await expect(page.getByTestId('spx-action-strip-throttle-indicator')).toHaveCount(0)
 
     const advancedHudToggle = page.getByTestId('spx-action-advanced-hud-toggle')
@@ -25,15 +25,16 @@ test.describe('SPX overlay packaging', () => {
     await expect(advancedHudDrawer).toHaveAttribute('data-state', 'closed')
     await advancedHudToggle.click()
     await expect(advancedHudDrawer).toHaveAttribute('data-state', 'open')
+    await expect(page.getByTestId('spx-action-preset-execution')).toBeVisible()
+    await expect(page.getByTestId('spx-action-preset-flow')).toBeVisible()
+    await expect(page.getByTestId('spx-action-preset-spatial')).toBeVisible()
 
     const levels = page.getByTestId('spx-action-overlay-levels')
     const cone = page.getByTestId('spx-action-overlay-cone')
     const coach = page.getByTestId('spx-action-overlay-coach')
     const gex = page.getByTestId('spx-action-overlay-gex')
     const clickPreset = async (preset: 'execution' | 'flow' | 'spatial') => {
-      await page.getByTestId(`spx-action-preset-${preset}`).evaluate((node) => {
-        (node as HTMLButtonElement).click()
-      })
+      await page.getByTestId(`spx-action-preset-${preset}`).click()
     }
 
     await page.getByTestId('spx-view-mode-spatial').click()
@@ -65,8 +66,13 @@ test.describe('SPX overlay packaging', () => {
     })
     await expect(levels).toHaveAttribute('aria-pressed', 'true')
 
+    await expect(advancedHudDrawer).toHaveAttribute('data-state', 'closed')
+    await advancedHudToggle.click()
+    await expect(advancedHudDrawer).toHaveAttribute('data-state', 'open')
+    await expect(levels).toHaveAttribute('aria-pressed', 'false')
+
     await clickPreset('execution')
-    await expect(levels).toHaveAttribute('aria-pressed', 'true')
+    await expect(levels).toHaveAttribute('aria-pressed', 'false')
     await expect(cone).toHaveAttribute('aria-pressed', 'false')
     await expect(coach).toHaveAttribute('aria-pressed', 'false')
     await expect(gex).toHaveAttribute('aria-pressed', 'false')

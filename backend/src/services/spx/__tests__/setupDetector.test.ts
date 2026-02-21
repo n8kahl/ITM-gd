@@ -4,6 +4,7 @@ import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { getFibLevels } from '../fibEngine';
 import { classifyCurrentRegime } from '../regimeClassifier';
 import { getFlowEvents } from '../flowEngine';
+import { getActiveSPXOptimizationProfile } from '../optimizer';
 import { cacheGet, cacheSet } from '../../../config/redis';
 
 jest.mock('../../../lib/logger', () => ({
@@ -40,11 +41,16 @@ jest.mock('../flowEngine', () => ({
   getFlowEvents: jest.fn(),
 }));
 
+jest.mock('../optimizer', () => ({
+  getActiveSPXOptimizationProfile: jest.fn(),
+}));
+
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
 const mockGetFibLevels = getFibLevels as jest.MockedFunction<typeof getFibLevels>;
 const mockClassifyCurrentRegime = classifyCurrentRegime as jest.MockedFunction<typeof classifyCurrentRegime>;
 const mockGetFlowEvents = getFlowEvents as jest.MockedFunction<typeof getFlowEvents>;
+const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as jest.MockedFunction<typeof getActiveSPXOptimizationProfile>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
 const originalEnv = { ...process.env };
@@ -127,6 +133,55 @@ describe('spx/setupDetector', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCacheSet.mockResolvedValue(undefined as never);
+    mockGetActiveSPXOptimizationProfile.mockResolvedValue({
+      source: 'default',
+      generatedAt: new Date().toISOString(),
+      qualityGate: {
+        minConfluenceScore: 0,
+        minPWinCalibrated: 0,
+        minEvR: -10,
+        actionableStatuses: ['forming', 'ready', 'triggered', 'invalidated', 'expired'],
+      },
+      flowGate: {
+        requireFlowConfirmation: false,
+        minAlignmentPct: 0,
+      },
+      indicatorGate: {
+        requireEmaAlignment: false,
+        requireVolumeRegimeAlignment: false,
+      },
+      timingGate: {
+        enabled: false,
+        maxFirstSeenMinuteBySetupType: {},
+      },
+      regimeGate: {
+        minTradesPerCombo: 999,
+        minT1WinRatePct: 0,
+        pausedCombos: [],
+      },
+      tradeManagement: {
+        partialAtT1Pct: 0.5,
+        moveStopToBreakeven: true,
+      },
+      walkForward: {
+        trainingDays: 20,
+        validationDays: 5,
+        minTrades: 12,
+        objectiveWeights: {
+          t1: 0.6,
+          t2: 0.4,
+          failurePenalty: 0.45,
+        },
+      },
+      driftControl: {
+        enabled: false,
+        shortWindowDays: 5,
+        longWindowDays: 20,
+        maxDropPct: 12,
+        minLongWindowTrades: 20,
+        pausedSetupTypes: [],
+      },
+    } as never);
     __resetSetupDetectorStateForTests();
     process.env = {
       ...originalEnv,

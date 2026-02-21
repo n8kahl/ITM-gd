@@ -186,7 +186,8 @@ function getMarketContext(): {
  */
 export async function calculateLevels(
   symbol: string,
-  timeframe: string = 'intraday'
+  timeframe: string = 'intraday',
+  options?: { asOfDate?: string },
 ): Promise<LevelsResponse> {
   // Check cache first
   const cachedData = await getCachedLevels(symbol, timeframe);
@@ -200,9 +201,9 @@ export async function calculateLevels(
   try {
     // Fetch all required data in parallel
     const [dailyData, preMarketData, intradayData] = await Promise.all([
-      fetchDailyData(symbol, 30), // 30 days for ATR calculation
-      fetchPreMarketData(symbol).catch(() => []), // Optional - may fail if market closed
-      fetchIntradayData(symbol).catch(() => []), // Optional - may fail if market closed
+      fetchDailyData(symbol, 30, options?.asOfDate), // 30 days for ATR calculation
+      fetchPreMarketData(symbol, options?.asOfDate).catch(() => []), // Optional - may fail if market closed
+      fetchIntradayData(symbol, options?.asOfDate).catch(() => []), // Optional - may fail if market closed
     ]);
 
     const currentPrice = resolveCurrentPrice(symbol, dailyData, preMarketData, intradayData);

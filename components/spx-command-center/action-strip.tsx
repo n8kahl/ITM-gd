@@ -26,9 +26,11 @@ interface ActionStripProps {
   spatialThrottled?: boolean
   primaryActionMode: 'scan' | 'evaluate' | 'in_trade'
   primaryActionLabel: string
+  guidedStatusLabel?: string | null
   primaryActionEnabled: boolean
   primaryActionBlockedReason?: string | null
   onPrimaryAction: () => void
+  onShowWhy: () => void
   focusMode: 'decision' | 'execution' | 'risk_only'
   onFocusModeChange: (mode: 'decision' | 'execution' | 'risk_only') => void
   replayEnabled: boolean
@@ -65,14 +67,23 @@ const FOCUS_MODES: Array<{ key: 'decision' | 'execution' | 'risk_only'; label: s
 
 export function ActionStrip(props: ActionStripProps) {
   const { selectedTimeframe, setChartTimeframe } = useSPXPriceContext()
+  const guidedMode = !props.showAdvancedHud
   const overlayCapability = props.overlayCapability || {}
   const sidebarToggleEnabled = props.sidebarToggleEnabled ?? true
   const immersiveToggleEnabled = props.immersiveToggleEnabled ?? true
+  const quickTimeframes: ChartTimeframe[] = guidedMode
+    ? (() => {
+      const base: ChartTimeframe[] = ['1m', '5m', '15m']
+      if (!base.includes(selectedTimeframe)) base.push(selectedTimeframe)
+      return base
+    })()
+    : TIMEFRAMES
 
   const overlayButtons = [
     {
-      label: 'Levels',
-      key: 'L',
+      label: 'Matrix',
+      key: 'M',
+      testId: 'levels',
       active: props.showLevels,
       enabled: overlayCapability.levels ?? true,
       onClick: props.onToggleLevels,
@@ -81,6 +92,7 @@ export function ActionStrip(props: ActionStripProps) {
     {
       label: 'Cone',
       key: 'C',
+      testId: 'cone',
       active: props.showCone,
       enabled: overlayCapability.cone ?? true,
       onClick: props.onToggleCone,
@@ -89,6 +101,7 @@ export function ActionStrip(props: ActionStripProps) {
     {
       label: 'Coach',
       key: 'A',
+      testId: 'coach',
       active: props.showSpatialCoach,
       enabled: overlayCapability.coach ?? true,
       onClick: props.onToggleSpatialCoach,
@@ -97,6 +110,7 @@ export function ActionStrip(props: ActionStripProps) {
     {
       label: 'GEX',
       key: 'G',
+      testId: 'gex',
       active: props.showGEXGlow,
       enabled: overlayCapability.gex ?? true,
       onClick: props.onToggleGEXGlow,
@@ -115,7 +129,7 @@ export function ActionStrip(props: ActionStripProps) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2">
-          {TIMEFRAMES.map((timeframe) => (
+          {quickTimeframes.map((timeframe) => (
             <button
               key={timeframe}
               type="button"
@@ -137,20 +151,24 @@ export function ActionStrip(props: ActionStripProps) {
             </button>
           ))}
 
-          <div className="mx-2 h-4 w-px bg-white/10" />
+          {!guidedMode && (
+            <>
+              <div className="mx-2 h-4 w-px bg-white/10" />
 
-          <button
-            type="button"
-            onClick={props.onToggleAllLevels}
-            className={cn(
-              'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-              props.showAllLevels
-                ? 'border-champagne/40 bg-champagne/12 text-champagne'
-                : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-            )}
-          >
-            {props.showAllLevels ? 'All Levels' : 'Focus'}
-          </button>
+              <button
+                type="button"
+                onClick={props.onToggleAllLevels}
+                className={cn(
+                  'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                  props.showAllLevels
+                    ? 'border-champagne/40 bg-champagne/12 text-champagne'
+                    : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                )}
+              >
+                {props.showAllLevels ? 'All Levels' : 'Key Levels'}
+              </button>
+            </>
+          )}
 
           <button
             type="button"
@@ -169,6 +187,14 @@ export function ActionStrip(props: ActionStripProps) {
       >
         {props.primaryActionLabel}
       </button>
+      <button
+        type="button"
+        onClick={props.onShowWhy}
+        data-testid="spx-action-primary-why"
+        className="min-h-[36px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
+      >
+        Why
+      </button>
       {!props.primaryActionEnabled && props.primaryActionBlockedReason && (
         <span
           data-testid="spx-action-primary-cta-blocked-reason"
@@ -177,97 +203,28 @@ export function ActionStrip(props: ActionStripProps) {
           {props.primaryActionBlockedReason}
         </span>
       )}
+      {guidedMode && props.guidedStatusLabel && (
+        <span
+          data-testid="spx-action-guided-status"
+          className="ml-1.5 rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/75"
+        >
+          {props.guidedStatusLabel}
+        </span>
+      )}
 
-          <div className="mx-2 h-4 w-px bg-white/10" />
-          <div className="flex items-center gap-1" data-testid="spx-action-focus-mode">
-            {FOCUS_MODES.map((mode) => {
-              const active = props.focusMode === mode.key
-              return (
-                <button
-                  key={mode.key}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => props.onFocusModeChange(mode.key)}
-                  data-testid={`spx-action-focus-mode-${mode.key}`}
-                  className={cn(
-                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                    active
-                      ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
-                      : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-                  )}
-                >
-                  {mode.label}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="mx-2 h-4 w-px bg-white/10" />
-          <div className="flex items-center gap-1" data-testid="spx-action-replay-controls">
-            <button
-              type="button"
-              aria-pressed={props.replayEnabled}
-              onClick={props.onToggleReplay}
-              data-testid="spx-action-replay-toggle"
-              className={cn(
-                'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                props.replayEnabled
-                  ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-100'
-                  : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
-              )}
-            >
-              {props.replayEnabled ? 'Replay On' : 'Replay'}
-            </button>
-            <button
-              type="button"
-              aria-pressed={props.replayPlaying}
-              onClick={props.onToggleReplayPlayback}
-              disabled={!props.replayEnabled}
-              data-testid="spx-action-replay-playback"
-              className={cn(
-                'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-45',
-                props.replayPlaying
-                  ? 'border-champagne/35 bg-champagne/12 text-champagne'
-                  : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
-              )}
-            >
-              {props.replayPlaying ? 'Pause' : 'Play'}
-            </button>
-            <button
-              type="button"
-              onClick={props.onCycleReplayWindow}
-              disabled={!props.replayEnabled}
-              data-testid="spx-action-replay-window"
-              className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {props.replayWindowMinutes}m
-            </button>
-            <button
-              type="button"
-              onClick={props.onCycleReplaySpeed}
-              disabled={!props.replayEnabled}
-              data-testid="spx-action-replay-speed"
-              className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {props.replaySpeed}x
-            </button>
-          </div>
-
-          {props.onSelectOverlayPreset && (
+          {!guidedMode && (
             <>
               <div className="mx-2 h-4 w-px bg-white/10" />
-              <div className="flex items-center gap-1">
-                {OVERLAY_PRESETS.map((preset) => {
-                  const active = props.overlayPreset === preset
+              <div className="flex items-center gap-1" data-testid="spx-action-focus-mode">
+                {FOCUS_MODES.map((mode) => {
+                  const active = props.focusMode === mode.key
                   return (
                     <button
-                      key={preset}
+                      key={mode.key}
                       type="button"
                       aria-pressed={active}
-                      onClick={() => {
-                        props.onSelectOverlayPreset?.(preset)
-                      }}
-                      data-testid={`spx-action-preset-${preset}`}
+                      onClick={() => props.onFocusModeChange(mode.key)}
+                      data-testid={`spx-action-focus-mode-${mode.key}`}
                       className={cn(
                         'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
                         active
@@ -275,23 +232,104 @@ export function ActionStrip(props: ActionStripProps) {
                           : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
                       )}
                     >
-                      {preset}
+                      {mode.label}
                     </button>
                   )
                 })}
               </div>
-            </>
-          )}
 
-          {props.spatialThrottled && (
-            <>
               <div className="mx-2 h-4 w-px bg-white/10" />
-              <div
-                data-testid="spx-action-strip-throttle-indicator"
-                className="rounded-md border border-amber-300/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-amber-100"
-              >
-                Spatial throttle active
+              <div className="flex items-center gap-1" data-testid="spx-action-replay-controls">
+                <button
+                  type="button"
+                  aria-pressed={props.replayEnabled}
+                  onClick={props.onToggleReplay}
+                  data-testid="spx-action-replay-toggle"
+                  className={cn(
+                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                    props.replayEnabled
+                      ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-100'
+                      : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
+                  )}
+                >
+                  {props.replayEnabled ? 'Replay On' : 'Replay'}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={props.replayPlaying}
+                  onClick={props.onToggleReplayPlayback}
+                  disabled={!props.replayEnabled}
+                  data-testid="spx-action-replay-playback"
+                  className={cn(
+                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-45',
+                    props.replayPlaying
+                      ? 'border-champagne/35 bg-champagne/12 text-champagne'
+                      : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
+                  )}
+                >
+                  {props.replayPlaying ? 'Pause' : 'Play'}
+                </button>
+                <button
+                  type="button"
+                  onClick={props.onCycleReplayWindow}
+                  disabled={!props.replayEnabled}
+                  data-testid="spx-action-replay-window"
+                  className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {props.replayWindowMinutes}m
+                </button>
+                <button
+                  type="button"
+                  onClick={props.onCycleReplaySpeed}
+                  disabled={!props.replayEnabled}
+                  data-testid="spx-action-replay-speed"
+                  className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {props.replaySpeed}x
+                </button>
               </div>
+
+              {props.onSelectOverlayPreset && (
+                <>
+                  <div className="mx-2 h-4 w-px bg-white/10" />
+                  <div className="flex items-center gap-1">
+                    {OVERLAY_PRESETS.map((preset) => {
+                      const active = props.overlayPreset === preset
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => {
+                            props.onSelectOverlayPreset?.(preset)
+                          }}
+                          data-testid={`spx-action-preset-${preset}`}
+                          className={cn(
+                            'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                            active
+                              ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                              : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                          )}
+                        >
+                          {preset}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+
+              {props.spatialThrottled && (
+                <>
+                  <div className="mx-2 h-4 w-px bg-white/10" />
+                  <div
+                    data-testid="spx-action-strip-throttle-indicator"
+                    className="rounded-md border border-amber-300/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-amber-100"
+                  >
+                    Spatial throttle active
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -397,7 +435,7 @@ export function ActionStrip(props: ActionStripProps) {
                   nextState: !button.active,
                 })
               }}
-              data-testid={`spx-action-overlay-${button.label.toLowerCase()}`}
+              data-testid={`spx-action-overlay-${button.testId}`}
               className={cn(
                 'flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
                 button.active

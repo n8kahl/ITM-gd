@@ -67,6 +67,39 @@ function buildAdvice(
   };
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value;
+}
+
+function estimateRiskUnit(input: PositionAdviceInput): number {
+  const maxLoss = toFiniteNumber(input.maxLoss);
+  if (maxLoss && maxLoss > 0) return maxLoss;
+
+  const impliedCostBasis = Math.max(1, input.currentValue - input.pnl);
+  return Math.max(250, impliedCostBasis * 0.4);
+}
+
+function inferDirection(input: PositionAdviceInput): 'long' | 'short' {
+  return input.quantity >= 0 ? 'long' : 'short';
+}
+
+function suggestedTrailStop(input: PositionAdviceInput, rMultiple: number): number {
+  const direction = inferDirection(input);
+  const breakeven = toFiniteNumber(input.breakeven);
+  const rawTrailPct = rMultiple >= 2 ? 0.09 : 0.14;
+  const dtePenalty = (input.daysToExpiry ?? 999) <= 1 ? 0.04 : 0;
+  const trailPct = Math.min(0.2, Math.max(0.05, rawTrailPct - dtePenalty));
+
+  if (direction === 'long') {
+    const trailingStop = input.currentPrice * (1 - trailPct);
+    return Number(Math.max(breakeven ?? 0, trailingStop).toFixed(2));
+  }
+
+  const trailingStop = input.currentPrice * (1 + trailPct);
+  return Number(Math.min(breakeven ?? trailingStop, trailingStop).toFixed(2));
+}
+
 export class ExitAdvisor {
   generateAdvice(analyses: PositionAnalysis[]): PositionAdvice[] {
     return this.generateAdviceFromInputs(analyses.map(toAdviceInput));
@@ -84,6 +117,36 @@ export class ExitAdvisor {
 
   private generateAdviceForInput(input: PositionAdviceInput): PositionAdvice[] {
     const advice: PositionAdvice[] = [];
+    const riskUnit = estimateRiskUnit(input);
+    const rMultiple = riskUnit > 0 ? input.pnl / riskUnit : 0;
+
+    if (rMultiple >= 2) {
+      advice.push(buildAdvice(
+        input.positionId,
+        'take_profit',
+        'high',
+        `Position has reached ${rMultiple.toFixed(2)}R. Scale out to lock gains and keep a runner.`,
+        {
+          action: 'scale_out',
+          closePct: 60,
+          milestone: '2R',
+          rMultiple: Number(rMultiple.toFixed(2)),
+        },
+      ));
+    } else if (rMultiple >= 1) {
+      advice.push(buildAdvice(
+        input.positionId,
+        'take_profit',
+        'medium',
+        `Position has reached ${rMultiple.toFixed(2)}R. Consider taking first scale at 1R.`,
+        {
+          action: 'scale_out',
+          closePct: 35,
+          milestone: '1R',
+          rMultiple: Number(rMultiple.toFixed(2)),
+        },
+      ));
+    }
 
     if (input.pnlPct >= 100) {
       advice.push(buildAdvice(
@@ -109,7 +172,7 @@ export class ExitAdvisor {
       ));
     }
 
-    if (input.pnlPct <= -50) {
+    if (input.pnlPct <= -50 || rMultiple <= -0.75) {
       advice.push(buildAdvice(
         input.positionId,
         'stop_loss',
@@ -118,6 +181,7 @@ export class ExitAdvisor {
         {
           action: 'reassess_or_close',
           trigger: 'loss_threshold',
+          rMultiple: Number(rMultiple.toFixed(2)),
         },
       ));
     }
@@ -166,17 +230,35 @@ export class ExitAdvisor {
       ));
     }
 
-    if (input.pnlPct >= 30 && input.type !== 'stock') {
-      const protectiveStop = input.breakeven ?? input.currentPrice * (input.quantity > 0 ? 0.92 : 1.08);
+    if (rMultiple >= 1 && input.type !== 'stock') {
+      const protectiveStop = suggestedTrailStop(input, rMultiple);
+      advice.push(buildAdvice(
+        input.positionId,
+        'stop_loss',
+        'medium',
+        `Position is at ${rMultiple.toFixed(2)}R. Trail stop behind structure to protect runner.`,
+        {
+          action: 'trail_stop',
+          suggestedStop: protectiveStop,
+          trailModel: rMultiple >= 2 ? 'tight_runner' : 'balanced',
+          rMultiple: Number(rMultiple.toFixed(2)),
+        },
+      ));
+    }
+
+    if (rMultiple < 1 && input.pnlPct >= 30 && input.type !== 'stock') {
+      const breakeven = toFiniteNumber(input.breakeven);
+      const fallbackStop = input.currentPrice * (inferDirection(input) === 'long' ? 0.9 : 1.1);
+      const suggestedStop = Number((breakeven ?? fallbackStop).toFixed(2));
 
       advice.push(buildAdvice(
         input.positionId,
         'stop_loss',
         'medium',
-        `Position is up ${input.pnlPct.toFixed(1)}%. Raise your stop to protect gains.`,
+        `Position is up ${input.pnlPct.toFixed(1)}%. Raise stop toward breakeven to reduce giveback.`,
         {
           action: 'tighten_stop',
-          suggestedStop: Number(protectiveStop.toFixed(2)),
+          suggestedStop,
         },
       ));
     }

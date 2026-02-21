@@ -122,8 +122,11 @@ export function useChartCoordinates(
         })
         resizeObserver.observe(chartElement)
         chartElement.addEventListener('pointermove', handleChartInteraction, { passive: true })
+        chartElement.addEventListener('pointerdown', handleChartInteraction, { passive: true })
         chartElement.addEventListener('pointerup', handleChartInteraction, { passive: true })
+        chartElement.addEventListener('pointercancel', handleChartInteraction, { passive: true })
         chartElement.addEventListener('wheel', handleChartInteraction, { passive: true })
+        chartElement.addEventListener('touchstart', handleChartInteraction, { passive: true })
         chartElement.addEventListener('touchmove', handleChartInteraction, { passive: true })
       }
 
@@ -152,8 +155,11 @@ export function useChartCoordinates(
         }
         if (chartElement) {
           chartElement.removeEventListener('pointermove', handleChartInteraction)
+          chartElement.removeEventListener('pointerdown', handleChartInteraction)
           chartElement.removeEventListener('pointerup', handleChartInteraction)
+          chartElement.removeEventListener('pointercancel', handleChartInteraction)
           chartElement.removeEventListener('wheel', handleChartInteraction)
+          chartElement.removeEventListener('touchstart', handleChartInteraction)
           chartElement.removeEventListener('touchmove', handleChartInteraction)
         }
         resizeObserver?.disconnect()

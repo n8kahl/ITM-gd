@@ -8,12 +8,17 @@ test.describe('SPX header signal clarity', () => {
     await authenticateAsMember(page)
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
+    const levelsChip = page
+      .getByTestId('spx-header-levels-chip')
+      .filter({ hasText: /\d+\/\d+/ })
+      .first()
+
     const header = page.getByTestId('spx-header-overlay')
     await expect(header).toBeVisible()
     await expect(page.getByTestId('spx-header-regime-chip')).toBeVisible()
     await expect(page.getByTestId('spx-header-health-chip')).toContainText(/healthy|stale|degraded/i)
     await expect(page.getByTestId('spx-header-feed-chip')).toContainText(/live tick|poll fallback|snapshot fallback|last known good|pending/i)
-    await expect(page.getByTestId('spx-header-levels-chip')).toContainText(/focus|all/i)
+    await expect(levelsChip).toContainText(/key|all/i)
   })
 
   test('surfaces degraded snapshot state in health chip', async ({ page }) => {

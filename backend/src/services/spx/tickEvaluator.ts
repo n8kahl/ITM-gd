@@ -45,6 +45,7 @@ interface SetupRuntimeState {
 
 const DEFAULT_MIN_TRANSITION_GAP_MS = 1000;
 const DEFAULT_STOP_CONFIRMATION_TICKS = 2;
+const DEFAULT_MOVE_STOP_TO_BREAKEVEN_AFTER_T1 = true;
 const setupStateById = new Map<string, SetupRuntimeState>();
 
 function parseIntEnv(value: string | undefined, fallback: number, minimum = 1): number {
@@ -52,6 +53,14 @@ function parseIntEnv(value: string | undefined, fallback: number, minimum = 1): 
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(parsed, minimum);
+}
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return fallback;
 }
 
 function phaseFromSetupStatus(setup: Setup): TransitionPhase {
@@ -72,10 +81,18 @@ function isInsideEntryZone(setup: Setup, price: number): boolean {
   return price >= setup.entryZone.low && price <= setup.entryZone.high;
 }
 
-function stopBreached(setup: Setup, price: number): boolean {
+function stopBreached(setup: Setup, price: number, phase: TransitionPhase): boolean {
+  const moveStopToBreakeven = parseBooleanEnv(
+    process.env.SPX_SETUP_MOVE_STOP_TO_BREAKEVEN_AFTER_T1,
+    DEFAULT_MOVE_STOP_TO_BREAKEVEN_AFTER_T1,
+  );
+  const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2;
+  const stopPrice = phase === 'target1_hit' && moveStopToBreakeven
+    ? entryMid
+    : setup.stop;
   return setup.direction === 'bullish'
-    ? price <= setup.stop
-    : price >= setup.stop;
+    ? price <= stopPrice
+    : price >= stopPrice;
 }
 
 function target1Reached(setup: Setup, price: number): boolean {
@@ -123,7 +140,7 @@ function resolveTransition(
   price: number,
 ): { toPhase: TransitionPhase; reason: SetupTransitionEvent['reason'] } | null {
   if (phase === 'ready') {
-    if (stopBreached(setup, price)) {
+    if (stopBreached(setup, price, phase)) {
       return { toPhase: 'invalidated', reason: 'stop' };
     }
     if (isInsideEntryZone(setup, price)) {
@@ -133,7 +150,7 @@ function resolveTransition(
   }
 
   if (phase === 'triggered') {
-    if (stopBreached(setup, price)) {
+    if (stopBreached(setup, price, phase)) {
       return { toPhase: 'invalidated', reason: 'stop' };
     }
     if (target2Reached(setup, price)) {
@@ -146,7 +163,7 @@ function resolveTransition(
   }
 
   if (phase === 'target1_hit') {
-    if (stopBreached(setup, price)) {
+    if (stopBreached(setup, price, phase)) {
       return { toPhase: 'invalidated', reason: 'stop' };
     }
     if (target2Reached(setup, price)) {
@@ -229,7 +246,7 @@ export function evaluateTickSetupTransitions(
     if (TERMINAL_PHASES.has(state.phase)) continue;
     if (tick.symbol !== 'SPX') continue;
 
-    if (stopBreached(state.setup, tick.price)) {
+    if (stopBreached(state.setup, tick.price, state.phase)) {
       state.stopBreachStreak += 1;
     } else {
       state.stopBreachStreak = 0;

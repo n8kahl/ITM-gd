@@ -405,10 +405,16 @@ function chooseDeltaTarget(type: SetupType): number {
   switch (type) {
     case 'fade_at_wall':
       return 0.18
+    case 'orb_breakout':
+      return 0.32
     case 'breakout_vacuum':
       return 0.26
     case 'trend_continuation':
       return 0.3
+    case 'trend_pullback':
+      return 0.26
+    case 'flip_reclaim':
+      return 0.24
     case 'mean_reversion':
     default:
       return 0.22

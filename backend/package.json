@@ -8,7 +8,10 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "backtest:last-week": "tsx src/scripts/spxBacktestLastWeek.ts",
+    "spx:backfill-historical": "tsx src/scripts/spxBackfillHistoricalSetups.ts",
+    "spx:optimizer-weekly": "tsx src/scripts/spxWeeklyOptimizerScan.ts"
   },
   "keywords": [
     "trading",

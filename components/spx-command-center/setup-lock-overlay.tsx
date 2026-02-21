@@ -97,7 +97,11 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
       return
     }
     const anchorX = lockAnchorTimeSec != null ? coordinates.timeToPixel(lockAnchorTimeSec) : null
-    const centerX = anchorX != null
+    const anchorInViewport = anchorX != null
+      && Number.isFinite(anchorX)
+      && anchorX >= 0
+      && anchorX <= chartWidth
+    const centerX = anchorInViewport
       ? clamp(anchorX, 16, Math.max(16, chartWidth - 16))
       : null
 

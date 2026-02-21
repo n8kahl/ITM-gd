@@ -12,6 +12,7 @@ import { GEXLandscape } from '@/components/spx-command-center/gex-landscape'
 import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
 import { MobileBriefPanel } from '@/components/spx-command-center/mobile-brief-panel'
 import { MobilePanelTabs } from '@/components/spx-command-center/mobile-panel-tabs'
+import { SPXOptimizerScorecardPanel } from '@/components/spx-command-center/optimizer-scorecard-panel'
 import { PostTradePanel } from '@/components/spx-command-center/post-trade-panel'
 import { SetupFeed } from '@/components/spx-command-center/setup-feed'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
@@ -191,6 +192,7 @@ export function SPXMobileSurfaceOrchestrator({
               Deep Analytics
             </summary>
             <div className="mt-2.5 space-y-2.5">
+              <SPXOptimizerScorecardPanel compact />
               <LevelMatrix />
               <GEXLandscape profile={gexProfile?.combined || null} />
               <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
@@ -241,6 +243,7 @@ export function SPXMobileSurfaceOrchestrator({
 
           {mobileTab === 'levels' && (
             <div className="space-y-2.5">
+              <SPXOptimizerScorecardPanel compact />
               <LevelMatrix />
               <GEXLandscape profile={gexProfile?.combined || null} />
               <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />

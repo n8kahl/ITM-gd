@@ -196,11 +196,11 @@ export function useSPXCommandRegistry(input: UseSPXCommandRegistryInput): {
     next.push({
       id: 'enter-trade-focus',
       label: input.enterTradeBlocked
-        ? `Enter trade focus (blocked: ${input.enterTradeBlockedReasonLabel || 'risk envelope'})`
+        ? `Stage trade (blocked: ${input.enterTradeBlockedReasonLabel || 'risk envelope'})`
         : enterTradeTarget
-          ? `Enter trade focus (${enterTradeTarget.direction} ${enterTradeTarget.regime})`
-          : 'Enter trade focus',
-      keywords: ['enter', 'trade', 'focus', 'execute'],
+          ? `Stage trade (${enterTradeTarget.direction} ${enterTradeTarget.regime})`
+          : 'Stage trade',
+      keywords: ['stage', 'trade', 'execute'],
       shortcut: 'Enter',
       group: 'Execution',
       disabled: input.tradeMode === 'in_trade' || !enterTradeTarget || input.enterTradeBlocked,
@@ -208,14 +208,14 @@ export function useSPXCommandRegistry(input: UseSPXCommandRegistryInput): {
         if (!enterTradeTarget) return
         input.selectSetup(enterTradeTarget)
         input.enterTrade(enterTradeTarget)
-        trackCommandAction(source, 'enter_trade_focus', keyboardKey, { setupId: enterTradeTarget.id })
+        trackCommandAction(source, 'stage_trade', keyboardKey, { setupId: enterTradeTarget.id })
       },
     })
 
     next.push({
       id: 'exit-trade-focus',
-      label: 'Exit trade focus',
-      keywords: ['exit', 'close', 'trade', 'focus'],
+      label: 'Exit staged trade',
+      keywords: ['exit', 'close', 'trade', 'risk'],
       shortcut: 'Esc',
       group: 'Execution',
       disabled: input.tradeMode !== 'in_trade',
@@ -227,9 +227,9 @@ export function useSPXCommandRegistry(input: UseSPXCommandRegistryInput): {
 
     next.push({
       id: 'toggle-level-overlay',
-      label: input.showLevelOverlay ? 'Hide level overlay' : 'Show level overlay',
+      label: input.showLevelOverlay ? 'Hide level matrix' : 'Show level matrix',
       keywords: ['level', 'overlay', 'matrix'],
-      shortcut: 'L',
+      shortcut: 'M',
       group: 'View',
       run: (source, keyboardKey) => {
         input.toggleLevelOverlay(source === 'action_strip'

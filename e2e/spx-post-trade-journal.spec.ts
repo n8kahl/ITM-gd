@@ -18,7 +18,7 @@ test.describe('SPX post-trade journal capture', () => {
       await primaryCta.click()
     }
 
-    await expect(primaryCta).toContainText('Enter Trade Focus')
+    await expect(primaryCta).toContainText('Stage Trade')
     await primaryCta.click()
     await expect(primaryCta).toContainText('Manage Risk / Exit Trade')
     await primaryCta.click()
