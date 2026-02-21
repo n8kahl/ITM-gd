@@ -39,6 +39,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  if (tag === 'button' || tag === 'a') return true
+  if (target.getAttribute('role') === 'button') return true
   return target.isContentEditable
 }
 

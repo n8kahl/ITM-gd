@@ -24,9 +24,14 @@ interface ShadowRenderState {
   bands: RenderBand[]
   rrToT1: number | null
   rrToT2: number | null
+  badgeLeft: number
+  badgeTop: number
 }
 
 const RR_REFRESH_INTERVAL_MS = 140
+const RR_BADGE_WIDTH_PX = 164
+const RR_BADGE_HEIGHT_PX = 26
+const RR_RIGHT_GUTTER_PX = 14
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -34,7 +39,15 @@ function clamp(value: number, min: number, max: number): number {
 
 function renderStateEquals(left: ShadowRenderState | null, right: ShadowRenderState | null): boolean {
   if (!left || !right) return left === right
-  if (left.left !== right.left || left.width !== right.width || left.entryLineY !== right.entryLineY || left.rrToT1 !== right.rrToT1 || left.rrToT2 !== right.rrToT2) {
+  if (
+    left.left !== right.left
+    || left.width !== right.width
+    || left.entryLineY !== right.entryLineY
+    || left.rrToT1 !== right.rrToT1
+    || left.rrToT2 !== right.rrToT2
+    || left.badgeLeft !== right.badgeLeft
+    || left.badgeTop !== right.badgeTop
+  ) {
     return false
   }
   if (left.bands.length !== right.bands.length) return false
@@ -90,8 +103,9 @@ export function RiskRewardShadowOverlay({ coordinatesRef }: RiskRewardShadowOver
       return
     }
 
-    const left = chartWidth * 0.24
-    const width = chartWidth * 0.48
+    const left = clamp(chartWidth * 0.24, 72, chartWidth * 0.58)
+    const maxBandWidth = Math.max(160, chartWidth - left - (RR_BADGE_WIDTH_PX + RR_RIGHT_GUTTER_PX + 8))
+    const width = clamp(chartWidth * 0.48, 180, maxBandWidth)
     const riskTop = clamp(Math.min(entryY, stopY), 0, chartHeight)
     const riskHeight = clamp(Math.abs(entryY - stopY), 2, chartHeight)
     const reward1Top = clamp(Math.min(entryY, t1Y), 0, chartHeight)
@@ -112,6 +126,8 @@ export function RiskRewardShadowOverlay({ coordinatesRef }: RiskRewardShadowOver
       bands,
       rrToT1: geometry.rrToT1,
       rrToT2: geometry.rrToT2,
+      badgeLeft: clamp(left + width + 8, 8, chartWidth - RR_BADGE_WIDTH_PX - RR_RIGHT_GUTTER_PX),
+      badgeTop: clamp(entryY - 26, 8, chartHeight - RR_BADGE_HEIGHT_PX - 8),
     }
 
     setRenderState((previous) => (renderStateEquals(previous, nextState) ? previous : nextState))
@@ -174,7 +190,12 @@ export function RiskRewardShadowOverlay({ coordinatesRef }: RiskRewardShadowOver
 
       <div
         className="absolute rounded-md border border-white/10 bg-black/45 px-2 py-1 font-mono text-[9px] text-white/70"
-        style={{ left: renderState.left + renderState.width + 8, top: renderState.entryLineY - 26 }}
+        style={{
+          left: renderState.badgeLeft,
+          top: renderState.badgeTop,
+          width: RR_BADGE_WIDTH_PX,
+          minHeight: RR_BADGE_HEIGHT_PX,
+        }}
       >
         RR T1 {formatRatio(renderState.rrToT1)} · T2 {formatRatio(renderState.rrToT2)}
       </div>
