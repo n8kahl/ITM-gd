@@ -10,6 +10,7 @@ test.describe('SPX spatial overlays', () => {
       window.__spxUxFlags = {
         spatialHudV1: true,
         layoutStateMachine: true,
+        spatialCoachGhostCards: true,
       }
     })
 
@@ -82,6 +83,24 @@ test.describe('SPX spatial overlays', () => {
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
   })
 
+  test('keeps ghost cards disabled by default while spatial coach nodes remain active', async ({ page }) => {
+    await setupSPXCommandCenterMocks(page, { alignCoachMessagesToChart: true })
+    await authenticateAsMember(page)
+    await page.addInitScript(() => {
+      window.__spxUxFlags = {
+        spatialHudV1: true,
+        layoutStateMachine: true,
+      }
+    })
+
+    await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
+    await page.getByTestId('spx-view-mode-spatial').click()
+
+    await page.keyboard.press('a')
+    await expect(page.getByTestId('spx-spatial-ghost-layer')).toHaveCount(0)
+    await expect(page.getByTestId('spx-spatial-coach-node').first()).toBeVisible({ timeout: 10_000 })
+  })
+
   test('time-anchors ghost cards when coach timestamps align to chart window', async ({ page }) => {
     await setupSPXCommandCenterMocks(page, { alignCoachMessagesToChart: true })
     await authenticateAsMember(page)
@@ -89,6 +108,7 @@ test.describe('SPX spatial overlays', () => {
       window.__spxUxFlags = {
         spatialHudV1: true,
         layoutStateMachine: true,
+        spatialCoachGhostCards: true,
       }
     })
 
