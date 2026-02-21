@@ -1,10 +1,13 @@
 import { cacheGet, cacheSet } from '../../config/redis';
+import { getMinuteAggregates } from '../../config/massive';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import { getFibLevels } from './fibEngine';
 import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
+import { getActiveSPXOptimizationProfile } from './optimizer';
+import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
 import type {
   ClusterZone,
@@ -19,7 +22,7 @@ import type {
   SPXLevel,
   UnifiedGEXLandscape,
 } from './types';
-import { nowIso, round, stableId } from './utils';
+import { ema, round, stableId } from './utils';
 
 const SETUPS_CACHE_KEY = 'spx_command_center:setups';
 const SETUPS_CACHE_TTL_SECONDS = 10;
@@ -45,6 +48,45 @@ const DEFAULT_SNIPER_PRIMARY_PWIN = 0.58;
 const DEFAULT_SNIPER_SECONDARY_PWIN = 0.54;
 const DEFAULT_SNIPER_PRIMARY_EV_R = 0.35;
 const DEFAULT_SNIPER_SECONDARY_EV_R = 0.2;
+const EMA_FAST_PERIOD = 21;
+const EMA_SLOW_PERIOD = 55;
+const EMA_MIN_BARS = 8;
+const EMA_MIN_SLOPE_POINTS = 0.05;
+const EMA_PRICE_TOLERANCE_POINTS = 4;
+const ORB_WINDOW_MINUTES = 30;
+const ORB_ACTIVE_WINDOW_MINUTES = 120;
+const ORB_RECLAIM_TOLERANCE_POINTS = 4;
+const TREND_PULLBACK_EMA_DISTANCE_POINTS = 6;
+const FLIP_RECLAIM_TOLERANCE_POINTS = 6;
+const LATE_DAY_FADE_CUTOFF_MINUTES = 300;
+const SESSION_OPEN_MINUTE_ET = 9 * 60 + 30;
+const FADE_ALIGNMENT_MAX_PCT = 84;
+const FADE_STOP_BUFFER_POINTS = 2.25;
+const MEAN_REVERSION_T1_R_MULTIPLIER = 1.45;
+const MEAN_REVERSION_T2_R_MULTIPLIER = 2.35;
+const FLIP_RECLAIM_T1_R_MULTIPLIER = 1.55;
+const FLIP_RECLAIM_T2_R_MULTIPLIER = 2.55;
+const DIVERSIFICATION_RECOVERY_COMBOS: ReadonlySet<string> = new Set([
+  'mean_reversion|ranging',
+  'flip_reclaim|ranging',
+]);
+const DIVERSIFICATION_PREFERRED_SETUP_TYPES: ReadonlySet<SetupType> = new Set([
+  'mean_reversion',
+  'flip_reclaim',
+  'orb_breakout',
+  'trend_pullback',
+]);
+const DEFAULT_FADE_READY_MAX_SHARE = 0.5;
+const DEFAULT_MIN_ALTERNATIVE_READY_SETUPS = 1;
+const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
+  fade_at_wall: 300,
+  breakout_vacuum: 360,
+  mean_reversion: 330,
+  trend_continuation: 390,
+  orb_breakout: 180,
+  trend_pullback: 360,
+  flip_reclaim: 360,
+};
 
 interface SetupLifecycleConfig {
   lifecycleEnabled: boolean;
@@ -67,6 +109,27 @@ interface SetupScoringConfig {
   sniperSecondaryPWin: number;
   sniperPrimaryEvR: number;
   sniperSecondaryEvR: number;
+}
+
+interface SetupDiversificationConfig {
+  enabled: boolean;
+  allowRecoveryCombos: boolean;
+  fadeReadyMaxShare: number;
+  minAlternativeReadySetups: number;
+}
+
+interface SetupIndicatorContext {
+  emaFast: number;
+  emaSlow: number;
+  emaFastSlope: number;
+  emaSlowSlope: number;
+  volumeTrend: 'rising' | 'flat' | 'falling';
+  sessionOpenPrice: number;
+  orbHigh: number;
+  orbLow: number;
+  minutesSinceOpen: number;
+  sessionOpenTimestamp: string;
+  asOfTimestamp: string;
 }
 
 interface SetupContextState {
@@ -194,6 +257,23 @@ function getSetupScoringConfig(): SetupScoringConfig {
   };
 }
 
+function getSetupDiversificationConfig(): SetupDiversificationConfig {
+  return {
+    enabled: parseBooleanEnv(process.env.SPX_SETUP_DIVERSIFICATION_ENABLED, true),
+    allowRecoveryCombos: parseBooleanEnv(process.env.SPX_SETUP_ALLOW_RECOVERY_COMBOS, true),
+    fadeReadyMaxShare: Math.min(0.9, Math.max(0.2, parseFloatEnv(
+      process.env.SPX_SETUP_FADE_READY_MAX_SHARE,
+      DEFAULT_FADE_READY_MAX_SHARE,
+      0.2,
+    ))),
+    minAlternativeReadySetups: parseIntEnv(
+      process.env.SPX_SETUP_MIN_ALTERNATIVE_READY_SETUPS,
+      DEFAULT_MIN_ALTERNATIVE_READY_SETUPS,
+      0,
+    ),
+  };
+}
+
 function setupTypeForRegime(regime: Regime): SetupType {
   switch (regime) {
     case 'ranging':
@@ -209,12 +289,189 @@ function setupTypeForRegime(regime: Regime): SetupType {
 }
 
 function isRegimeAligned(type: SetupType, regime: Regime): boolean {
-  return (
-    (type === 'fade_at_wall' && regime === 'ranging')
-    || (type === 'breakout_vacuum' && regime === 'breakout')
-    || (type === 'trend_continuation' && regime === 'trending')
-    || (type === 'mean_reversion' && regime === 'compression')
+  if (regime === 'ranging') {
+    return type === 'fade_at_wall' || type === 'mean_reversion' || type === 'flip_reclaim';
+  }
+  if (regime === 'compression') {
+    return type === 'mean_reversion' || type === 'breakout_vacuum' || type === 'orb_breakout' || type === 'flip_reclaim';
+  }
+  if (regime === 'trending') {
+    return type === 'trend_continuation' || type === 'breakout_vacuum' || type === 'trend_pullback';
+  }
+  if (regime === 'breakout') {
+    return type === 'breakout_vacuum' || type === 'trend_continuation' || type === 'orb_breakout' || type === 'flip_reclaim';
+  }
+  return false;
+}
+
+function inferSetupTypeForZone(input: {
+  regime: Regime;
+  direction: 'bullish' | 'bearish';
+  currentPrice: number;
+  zoneCenter: number;
+  gexLandscape: UnifiedGEXLandscape;
+  indicatorContext: SetupIndicatorContext | null;
+  emaAligned: boolean;
+  volumeRegimeAligned: boolean;
+}): SetupType {
+  const fallback = setupTypeForRegime(input.regime);
+  const distanceToFlip = Math.abs(input.zoneCenter - input.gexLandscape.combined.flipPoint);
+  const nearFlip = distanceToFlip <= 10;
+  const netGexNegative = input.gexLandscape.combined.netGex < 0;
+  const volumeTrend = input.indicatorContext?.volumeTrend || 'flat';
+  const emaSlope = input.indicatorContext?.emaFastSlope || 0;
+  const directionalMomentum = input.direction === 'bullish'
+    ? emaSlope >= EMA_MIN_SLOPE_POINTS
+    : emaSlope <= -EMA_MIN_SLOPE_POINTS;
+  const inMomentumState = input.emaAligned && directionalMomentum && volumeTrend === 'rising';
+  const minutesSinceOpen = input.indicatorContext?.minutesSinceOpen ?? 120;
+  const hasIndicatorContext = Boolean(input.indicatorContext);
+  const inOpeningWindow = minutesSinceOpen <= ORB_ACTIVE_WINDOW_MINUTES;
+  const orbHigh = input.indicatorContext?.orbHigh;
+  const orbLow = input.indicatorContext?.orbLow;
+  const nearOpeningRangeEdge = input.direction === 'bullish'
+    ? (Number.isFinite(orbHigh)
+      && Math.abs(input.zoneCenter - (orbHigh as number)) <= ORB_RECLAIM_TOLERANCE_POINTS
+      && input.currentPrice >= (orbHigh as number) - ORB_RECLAIM_TOLERANCE_POINTS)
+    : (Number.isFinite(orbLow)
+      && Math.abs(input.zoneCenter - (orbLow as number)) <= ORB_RECLAIM_TOLERANCE_POINTS
+      && input.currentPrice <= (orbLow as number) + ORB_RECLAIM_TOLERANCE_POINTS);
+  const nearFastEma = input.indicatorContext
+    ? Math.abs(input.currentPrice - input.indicatorContext.emaFast) <= TREND_PULLBACK_EMA_DISTANCE_POINTS
+    : false;
+  const flipReclaim = input.direction === 'bullish'
+    ? (input.currentPrice >= input.gexLandscape.combined.flipPoint - FLIP_RECLAIM_TOLERANCE_POINTS
+      && input.zoneCenter <= input.gexLandscape.combined.flipPoint + FLIP_RECLAIM_TOLERANCE_POINTS)
+    : (input.currentPrice <= input.gexLandscape.combined.flipPoint + FLIP_RECLAIM_TOLERANCE_POINTS
+      && input.zoneCenter >= input.gexLandscape.combined.flipPoint - FLIP_RECLAIM_TOLERANCE_POINTS);
+
+  if (
+    hasIndicatorContext
+    && 
+    inOpeningWindow
+    && nearOpeningRangeEdge
+    && (inMomentumState || volumeTrend === 'rising')
+    && (input.regime === 'breakout' || input.regime === 'compression' || input.regime === 'trending')
+  ) {
+    return 'orb_breakout';
+  }
+
+  if (input.regime === 'breakout') {
+    if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
+    return inMomentumState ? 'trend_continuation' : 'breakout_vacuum';
+  }
+
+  if (input.regime === 'trending') {
+    if (hasIndicatorContext && nearFastEma && input.emaAligned && volumeTrend !== 'falling') return 'trend_pullback';
+    if (inMomentumState) return 'trend_continuation';
+    if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
+    if (nearFlip || netGexNegative) return 'breakout_vacuum';
+    return 'trend_continuation';
+  }
+
+  if (input.regime === 'compression') {
+    if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
+    if (volumeTrend === 'rising' && (nearFlip || netGexNegative)) return 'breakout_vacuum';
+    return 'mean_reversion';
+  }
+
+  if (input.regime === 'ranging') {
+    const distanceToZone = Math.abs(input.currentPrice - input.zoneCenter);
+    if (hasIndicatorContext && minutesSinceOpen >= LATE_DAY_FADE_CUTOFF_MINUTES && distanceToZone >= 24) {
+      return flipReclaim ? 'flip_reclaim' : 'mean_reversion';
+    }
+    if (flipReclaim && nearFlip) return 'flip_reclaim';
+    if (hasIndicatorContext && flipReclaim && nearFlip && volumeTrend !== 'rising') return 'flip_reclaim';
+    if (distanceToZone >= 20) return 'mean_reversion';
+    if (inMomentumState && (nearFlip || netGexNegative)) return 'breakout_vacuum';
+    if (distanceToZone >= 40) return 'mean_reversion';
+    return 'fade_at_wall';
+  }
+
+  return fallback;
+}
+
+function adjustTargetsForSetupType(input: {
+  setupType: SetupType;
+  direction: 'bullish' | 'bearish';
+  entryLow: number;
+  entryHigh: number;
+  stop: number;
+  target1: number;
+  target2: number;
+  flipPoint: number;
+  indicatorContext: SetupIndicatorContext | null;
+}): { target1: number; target2: number } {
+  if (
+    input.setupType !== 'fade_at_wall'
+    && input.setupType !== 'mean_reversion'
+    && input.setupType !== 'flip_reclaim'
+  ) {
+    return {
+      target1: round(input.target1, 2),
+      target2: round(input.target2, 2),
+    };
+  }
+
+  const entryMid = (input.entryLow + input.entryHigh) / 2;
+  const risk = Math.max(0.5, Math.abs(entryMid - input.stop));
+  const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
+  const directional = (price: number): boolean => (
+    input.direction === 'bullish' ? price > entryMid : price < entryMid
   );
+
+  const t1Multiplier = input.setupType === 'flip_reclaim'
+    ? FLIP_RECLAIM_T1_R_MULTIPLIER
+    : MEAN_REVERSION_T1_R_MULTIPLIER;
+  const t2Multiplier = input.setupType === 'flip_reclaim'
+    ? FLIP_RECLAIM_T2_R_MULTIPLIER
+    : MEAN_REVERSION_T2_R_MULTIPLIER;
+
+  let target1 = entryMid + (directionMultiplier * Math.max(risk * t1Multiplier, 2.5));
+  let target2 = entryMid + (directionMultiplier * Math.max(risk * t2Multiplier, 4.0));
+
+  const anchorCandidates = [
+    input.flipPoint,
+    input.indicatorContext?.emaFast,
+    input.indicatorContext?.sessionOpenPrice,
+  ]
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    .filter((value) => directional(value))
+    .sort((a, b) => Math.abs(a - entryMid) - Math.abs(b - entryMid));
+
+  const anchor = anchorCandidates.find((candidate) => {
+    const distance = Math.abs(candidate - entryMid);
+    return distance >= (risk * 1.1) && distance <= (risk * 3.2);
+  });
+
+  if (anchor !== undefined) {
+    target1 = anchor;
+  }
+
+  if (input.direction === 'bullish') {
+    target1 = Math.min(target1, input.target1);
+    target2 = Math.min(target2, input.target2);
+    if (target1 <= entryMid + 0.25) {
+      target1 = entryMid + Math.max(risk * 1.1, 1.5);
+    }
+    if (target2 <= target1 + 0.25) {
+      target2 = target1 + Math.max(risk * 0.8, 1.25);
+    }
+  } else {
+    target1 = Math.max(target1, input.target1);
+    target2 = Math.max(target2, input.target2);
+    if (target1 >= entryMid - 0.25) {
+      target1 = entryMid - Math.max(risk * 1.1, 1.5);
+    }
+    if (target2 >= target1 - 0.25) {
+      target2 = target1 - Math.max(risk * 0.8, 1.25);
+    }
+  }
+
+  return {
+    target1: round(target1, 2),
+    target2: round(target2, 2),
+  };
 }
 
 function setupDirection(zone: ClusterZone, currentPrice: number): 'bullish' | 'bearish' {
@@ -258,6 +515,8 @@ function calculateConfluence(input: {
   fibTouch: boolean;
   regimeAligned: boolean;
   flowConfirmed: boolean;
+  emaAligned: boolean;
+  volumeRegimeAligned: boolean;
 }): { score: number; sources: string[] } {
   const sources: string[] = [];
 
@@ -273,6 +532,8 @@ function calculateConfluence(input: {
   if (input.flowConfirmed) sources.push('flow_confirmation');
   if (input.fibTouch) sources.push('fibonacci_touch');
   if (input.regimeAligned) sources.push('regime_alignment');
+  if (input.emaAligned) sources.push('ema_alignment');
+  if (input.volumeRegimeAligned) sources.push('volume_regime_alignment');
 
   return {
     score: Math.min(5, sources.length),
@@ -300,7 +561,8 @@ function pickCandidateZones(zones: ClusterZone[], currentPrice: number): Cluster
 function isRecentFlowEvent(event: SPXFlowEvent, nowMs: number): boolean {
   const eventMs = Date.parse(event.timestamp);
   if (!Number.isFinite(eventMs)) return false;
-  return nowMs - eventMs <= FLOW_CONFIRMATION_WINDOW_MS;
+  const deltaMs = nowMs - eventMs;
+  return deltaMs >= 0 && deltaMs <= FLOW_CONFIRMATION_WINDOW_MS;
 }
 
 function hasFlowConfirmation(input: {
@@ -349,6 +611,133 @@ function flowAlignmentPercent(input: {
 
   const alignedPremium = input.direction === 'bullish' ? bullishPremium : bearishPremium;
   return (alignedPremium / totalPremium) * 100;
+}
+
+function volumeTrendFromBars(bars: Array<{ v: number }>): 'rising' | 'flat' | 'falling' {
+  if (bars.length < 15) return 'flat';
+  const last = bars.slice(-5).reduce((sum, bar) => sum + bar.v, 0) / 5;
+  const prior = bars.slice(-10, -5).reduce((sum, bar) => sum + bar.v, 0) / 5;
+  if (!Number.isFinite(last) || !Number.isFinite(prior) || prior <= 0) return 'flat';
+  const ratio = last / prior;
+  if (ratio > 1.2) return 'rising';
+  if (ratio < 0.85) return 'falling';
+  return 'flat';
+}
+
+function toBarHigh(bar: { h?: number; o?: number; c: number }): number {
+  if (typeof bar.h === 'number' && Number.isFinite(bar.h)) return bar.h;
+  if (typeof bar.o === 'number' && Number.isFinite(bar.o)) return Math.max(bar.o, bar.c);
+  return bar.c;
+}
+
+function toBarLow(bar: { l?: number; o?: number; c: number }): number {
+  if (typeof bar.l === 'number' && Number.isFinite(bar.l)) return bar.l;
+  if (typeof bar.o === 'number' && Number.isFinite(bar.o)) return Math.min(bar.o, bar.c);
+  return bar.c;
+}
+
+function buildIndicatorContextFromBars(input: {
+  bars: Array<{ c: number; v: number; t: number; o?: number; h?: number; l?: number }>;
+  asOfTimestamp: string;
+}): SetupIndicatorContext | null {
+  const sortedBars = [...input.bars]
+    .filter((bar) => Number.isFinite(bar.c) && bar.c > 0)
+    .sort((a, b) => a.t - b.t);
+  if (sortedBars.length < EMA_MIN_BARS) return null;
+
+  const closes = sortedBars.map((bar) => bar.c);
+  const emaFast = ema(closes, Math.min(EMA_FAST_PERIOD, closes.length));
+  const emaSlow = ema(closes, Math.min(EMA_SLOW_PERIOD, closes.length));
+
+  const priorCloses = closes.slice(0, -1);
+  const emaFastPrior = priorCloses.length > 0
+    ? ema(priorCloses, Math.min(EMA_FAST_PERIOD, priorCloses.length))
+    : emaFast;
+  const emaSlowPrior = priorCloses.length > 0
+    ? ema(priorCloses, Math.min(EMA_SLOW_PERIOD, priorCloses.length))
+    : emaSlow;
+  const firstBar = sortedBars[0];
+  const asOfMsRaw = Date.parse(input.asOfTimestamp);
+  const asOfMs = Number.isFinite(asOfMsRaw) ? asOfMsRaw : sortedBars[sortedBars.length - 1].t;
+  const minutesSinceOpen = Math.max(0, Math.floor((asOfMs - firstBar.t) / 60_000));
+  const orbWindowEnd = firstBar.t + (ORB_WINDOW_MINUTES * 60_000);
+  const orbBars = sortedBars.filter((bar) => bar.t <= orbWindowEnd);
+  const orbHigh = orbBars.reduce((max, bar) => Math.max(max, toBarHigh(bar)), Number.NEGATIVE_INFINITY);
+  const orbLow = orbBars.reduce((min, bar) => Math.min(min, toBarLow(bar)), Number.POSITIVE_INFINITY);
+  const sessionOpenPrice = typeof firstBar.o === 'number' && Number.isFinite(firstBar.o)
+    ? firstBar.o
+    : firstBar.c;
+
+  return {
+    emaFast: round(emaFast, 2),
+    emaSlow: round(emaSlow, 2),
+    emaFastSlope: round(emaFast - emaFastPrior, 4),
+    emaSlowSlope: round(emaSlow - emaSlowPrior, 4),
+    volumeTrend: volumeTrendFromBars(sortedBars),
+    sessionOpenPrice: round(sessionOpenPrice, 2),
+    orbHigh: round(Number.isFinite(orbHigh) ? orbHigh : sessionOpenPrice, 2),
+    orbLow: round(Number.isFinite(orbLow) ? orbLow : sessionOpenPrice, 2),
+    minutesSinceOpen,
+    sessionOpenTimestamp: new Date(firstBar.t).toISOString(),
+    asOfTimestamp: input.asOfTimestamp,
+  };
+}
+
+async function loadIndicatorContext(input: {
+  evaluationDate: Date;
+  asOfTimestamp?: string;
+}): Promise<SetupIndicatorContext | null> {
+  try {
+    const dateStr = toEasternTime(input.evaluationDate).dateStr;
+    const bars = await getMinuteAggregates('I:SPX', dateStr);
+    if (!Array.isArray(bars) || bars.length === 0) return null;
+
+    const asOfMs = input.asOfTimestamp ? Date.parse(input.asOfTimestamp) : Number.NaN;
+    const usableBars = Number.isFinite(asOfMs)
+      ? bars.filter((bar) => bar.t <= asOfMs)
+      : bars;
+
+    return buildIndicatorContextFromBars({
+      bars: usableBars,
+      asOfTimestamp: input.asOfTimestamp || input.evaluationDate.toISOString(),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function isEmaAligned(input: {
+  direction: 'bullish' | 'bearish';
+  currentPrice: number;
+  indicatorContext: SetupIndicatorContext | null;
+}): boolean {
+  const context = input.indicatorContext;
+  if (!context) return false;
+
+  if (input.direction === 'bullish') {
+    return (
+      context.emaFast >= context.emaSlow
+      && context.emaFastSlope >= -EMA_MIN_SLOPE_POINTS
+      && input.currentPrice >= context.emaFast - EMA_PRICE_TOLERANCE_POINTS
+    );
+  }
+
+  return (
+    context.emaFast <= context.emaSlow
+    && context.emaFastSlope <= EMA_MIN_SLOPE_POINTS
+    && input.currentPrice <= context.emaFast + EMA_PRICE_TOLERANCE_POINTS
+  );
+}
+
+function isVolumeRegimeAligned(input: {
+  regime: Regime;
+  indicatorContext: SetupIndicatorContext | null;
+}): boolean {
+  const trend = input.indicatorContext?.volumeTrend || 'flat';
+  if (input.regime === 'breakout' || input.regime === 'trending') {
+    return trend === 'rising';
+  }
+  return trend === 'flat' || trend === 'falling';
 }
 
 function hasRegimeConflict(
@@ -621,6 +1010,101 @@ function deriveSetupTier(input: {
   return input.score >= 60 ? 'watchlist' : 'hidden';
 }
 
+function toSessionMinuteEt(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  const et = toEasternTime(new Date(parsed));
+  return Math.max(0, (et.hour * 60 + et.minute) - SESSION_OPEN_MINUTE_ET);
+}
+
+function maxFirstSeenMinuteForSetup(
+  setupType: SetupType,
+  profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>,
+): number {
+  const configured = profile.timingGate.maxFirstSeenMinuteBySetupType[setupType];
+  if (Number.isFinite(configured)) return configured;
+  return DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE[setupType] ?? 390;
+}
+
+function evaluateOptimizationGate(input: {
+  status: Setup['status'];
+  wasPreviouslyTriggered: boolean;
+  setupType: SetupType;
+  regime: Regime;
+  firstSeenAtIso: string | null;
+  confluenceScore: number;
+  pWinCalibrated: number;
+  evR: number;
+  flowConfirmed: boolean;
+  flowAlignmentPct: number | null;
+  emaAligned: boolean;
+  volumeRegimeAligned: boolean;
+  pausedSetupTypes: Set<string>;
+  pausedCombos: Set<string>;
+  profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
+  direction: 'bullish' | 'bearish';
+}): string[] {
+  const actionableStatuses = new Set(input.profile.qualityGate.actionableStatuses);
+  const isNewActionable = (input.status === 'ready' || input.status === 'triggered') && !input.wasPreviouslyTriggered;
+  if (!isNewActionable || !actionableStatuses.has(input.status)) return [];
+
+  const reasons: string[] = [];
+  const comboKey = `${input.setupType}|${input.regime}`;
+  if (input.pausedSetupTypes.has(input.setupType)) {
+    reasons.push(`setup_type_paused:${input.setupType}`);
+  }
+  if (input.pausedCombos.has(comboKey)) {
+    reasons.push(`regime_combo_paused:${comboKey}`);
+  }
+  if (input.confluenceScore < input.profile.qualityGate.minConfluenceScore) {
+    reasons.push(`confluence_below_floor:${input.confluenceScore}<${input.profile.qualityGate.minConfluenceScore}`);
+  }
+  if (input.pWinCalibrated < input.profile.qualityGate.minPWinCalibrated) {
+    reasons.push(`pwin_below_floor:${round(input.pWinCalibrated, 4)}<${input.profile.qualityGate.minPWinCalibrated}`);
+  }
+  if (input.evR < input.profile.qualityGate.minEvR) {
+    reasons.push(`evr_below_floor:${round(input.evR, 3)}<${input.profile.qualityGate.minEvR}`);
+  }
+  if (input.profile.flowGate.requireFlowConfirmation && !input.flowConfirmed) {
+    reasons.push('flow_confirmation_required');
+  }
+  if (input.flowAlignmentPct != null) {
+    if (input.flowAlignmentPct < input.profile.flowGate.minAlignmentPct) {
+      reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${input.profile.flowGate.minAlignmentPct}`);
+    }
+  } else if (input.profile.flowGate.requireFlowConfirmation && input.profile.flowGate.minAlignmentPct > 0) {
+    reasons.push('flow_alignment_unavailable');
+  }
+  if (input.profile.indicatorGate.requireEmaAlignment && !input.emaAligned) {
+    reasons.push('ema_alignment_required');
+  }
+  if (input.profile.indicatorGate.requireVolumeRegimeAlignment && !input.volumeRegimeAligned) {
+    reasons.push('volume_regime_alignment_required');
+  }
+  if (input.profile.timingGate.enabled) {
+    const firstSeenMinute = toSessionMinuteEt(input.firstSeenAtIso);
+    const maxMinute = maxFirstSeenMinuteForSetup(input.setupType, input.profile);
+    if (firstSeenMinute != null && firstSeenMinute > maxMinute) {
+      reasons.push(`timing_gate_blocked:${firstSeenMinute}>${maxMinute}`);
+    }
+  }
+
+  if (input.setupType === 'fade_at_wall' && input.regime === 'ranging') {
+    if (input.flowConfirmed) {
+      reasons.push('fade_flow_momentum_conflict');
+    }
+    if (input.flowAlignmentPct != null && input.flowAlignmentPct >= FADE_ALIGNMENT_MAX_PCT) {
+      reasons.push(`fade_alignment_too_high:${round(input.flowAlignmentPct, 2)}>=${FADE_ALIGNMENT_MAX_PCT}`);
+    }
+    if (input.direction === 'bullish' && input.flowAlignmentPct != null && input.flowAlignmentPct >= 75) {
+      reasons.push(`fade_bullish_alignment_conflict:${round(input.flowAlignmentPct, 2)}`);
+    }
+  }
+
+  return reasons;
+}
+
 function setupSemanticKey(setup: Setup): string {
   return [
     setup.type,
@@ -632,6 +1116,96 @@ function setupSemanticKey(setup: Setup): string {
     round(setup.target2.price, 2),
     setup.regime,
   ].join('|');
+}
+
+function withBlockedByMixPolicy(setup: Setup, reason: string, nowMs: number): Setup {
+  const existingReasons = Array.isArray(setup.gateReasons) ? setup.gateReasons : [];
+  const nextReasons = existingReasons.includes(reason) ? existingReasons : [...existingReasons, reason];
+  return {
+    ...setup,
+    status: 'forming',
+    gateStatus: 'blocked',
+    gateReasons: nextReasons,
+    tier: 'hidden',
+    statusUpdatedAt: new Date(nowMs).toISOString(),
+    triggeredAt: null,
+    invalidationReason: null,
+  };
+}
+
+function withReadyByMixPromotion(setup: Setup, nowMs: number): Setup {
+  return {
+    ...setup,
+    status: 'ready',
+    tier: setup.tier === 'hidden' ? 'watchlist' : setup.tier,
+    gateStatus: setup.gateStatus === 'blocked' ? 'eligible' : setup.gateStatus,
+    gateReasons: setup.gateStatus === 'blocked'
+      ? (setup.gateReasons || []).filter((reason) => !reason.startsWith('mix_cap_blocked'))
+      : setup.gateReasons,
+    statusUpdatedAt: setup.statusUpdatedAt || new Date(nowMs).toISOString(),
+  };
+}
+
+function applySetupMixPolicy(input: {
+  setups: Setup[];
+  config: SetupDiversificationConfig;
+  nowMs: number;
+}): Setup[] {
+  if (!input.config.enabled || input.setups.length < 2) {
+    return input.setups;
+  }
+
+  const setups = [...input.setups];
+  const actionableReady = setups
+    .map((setup, index) => ({ setup, index }))
+    .filter(({ setup }) => setup.status === 'ready' && setup.gateStatus !== 'blocked');
+
+  if (actionableReady.length < 2) {
+    return setups;
+  }
+
+  const fadeReady = actionableReady
+    .filter(({ setup }) => setup.type === 'fade_at_wall')
+    .sort((a, b) => (a.setup.score || 0) - (b.setup.score || 0));
+  const maxFadeReady = Math.max(1, Math.floor(actionableReady.length * input.config.fadeReadyMaxShare));
+  if (fadeReady.length > maxFadeReady) {
+    const toBlock = fadeReady.slice(0, fadeReady.length - maxFadeReady);
+    for (const item of toBlock) {
+      setups[item.index] = withBlockedByMixPolicy(
+        setups[item.index],
+        `mix_cap_blocked:fade_at_wall>${maxFadeReady}`,
+        input.nowMs,
+      );
+    }
+  }
+
+  const refreshedReady = setups
+    .map((setup, index) => ({ setup, index }))
+    .filter(({ setup }) => setup.status === 'ready' && setup.gateStatus !== 'blocked');
+  const alternativeReady = refreshedReady.filter(({ setup }) => setup.type !== 'fade_at_wall');
+  const neededAlternative = Math.max(0, input.config.minAlternativeReadySetups - alternativeReady.length);
+  if (neededAlternative === 0) {
+    return setups;
+  }
+
+  const promotableAlternatives = setups
+    .map((setup, index) => ({ setup, index }))
+    .filter(({ setup }) => (
+      setup.status === 'forming'
+      && setup.gateStatus !== 'blocked'
+      && DIVERSIFICATION_PREFERRED_SETUP_TYPES.has(setup.type)
+      && setup.confluenceScore >= 2
+      && (setup.score || 0) >= 58
+    ))
+    .sort((a, b) => (b.setup.score || 0) - (a.setup.score || 0));
+
+  const promoteCount = Math.min(neededAlternative, promotableAlternatives.length);
+  for (let i = 0; i < promoteCount; i += 1) {
+    const candidate = promotableAlternatives[i];
+    setups[candidate.index] = withReadyByMixPromotion(setups[candidate.index], input.nowMs);
+  }
+
+  return setups;
 }
 
 function shouldReplaceSemanticDuplicate(existing: Setup, incoming: Setup): boolean {
@@ -681,37 +1255,60 @@ const SETUP_TIER_SORT_ORDER: Record<SetupTier, number> = {
 
 export async function detectActiveSetups(options?: {
   forceRefresh?: boolean;
+  asOfTimestamp?: string;
+  persistForWinRate?: boolean;
   levelData?: LevelData;
   gexLandscape?: UnifiedGEXLandscape;
   fibLevels?: FibLevel[];
   regimeState?: RegimeState;
   flowEvents?: SPXFlowEvent[];
+  indicatorContext?: SetupIndicatorContext | null;
+  previousSetups?: Setup[];
 }): Promise<Setup[]> {
   const levelData = options?.levelData;
   const gexLandscape = options?.gexLandscape;
   const fibLevelsProvided = options?.fibLevels;
   const regimeStateProvided = options?.regimeState;
   const flowEventsProvided = options?.flowEvents;
-  const forceRefresh = options?.forceRefresh === true;
-  const hasPrecomputedDependencies = Boolean(levelData || gexLandscape || fibLevelsProvided || regimeStateProvided || flowEventsProvided);
-  if (!forceRefresh && setupsInFlight) {
+  const indicatorContextProvided = options?.indicatorContext;
+  const hasHistoricalTimestamp = typeof options?.asOfTimestamp === 'string' && options.asOfTimestamp.trim().length > 0;
+  const forceRefresh = options?.forceRefresh === true || hasHistoricalTimestamp;
+  const historicalDate = hasHistoricalTimestamp
+    ? new Date(options?.asOfTimestamp as string)
+    : null;
+  const evaluationDate = historicalDate && Number.isFinite(historicalDate.getTime())
+    ? historicalDate
+    : new Date();
+  const evaluationIso = evaluationDate.toISOString();
+  const shouldUseCache = !hasHistoricalTimestamp;
+  const shouldPersistForWinRate = options?.persistForWinRate !== false;
+  const hasPrecomputedDependencies = Boolean(
+    levelData
+    || gexLandscape
+    || fibLevelsProvided
+    || regimeStateProvided
+    || flowEventsProvided
+    || indicatorContextProvided !== undefined
+  );
+  if (shouldUseCache && !forceRefresh && setupsInFlight) {
     return setupsInFlight;
   }
 
   const run = async (): Promise<Setup[]> => {
-  if (!forceRefresh && !hasPrecomputedDependencies) {
+  if (shouldUseCache && !forceRefresh && !hasPrecomputedDependencies) {
     const cached = await cacheGet<Setup[]>(SETUPS_CACHE_KEY);
     if (cached) {
       return cached;
     }
   }
 
-  const previousSetups = await cacheGet<Setup[]>(SETUPS_CACHE_KEY);
+  const previousSetups = options?.previousSetups
+    || (shouldUseCache ? await cacheGet<Setup[]>(SETUPS_CACHE_KEY) : []);
   const previousById = new Map<string, Setup>(
     (previousSetups || []).map((setup) => [setup.id, setup]),
   );
 
-  const [levels, gex, fibLevels, regimeState, flowEvents] = await Promise.all([
+  const [levels, gex, fibLevels, regimeState, flowEvents, indicatorContext] = await Promise.all([
     levelData
       ? Promise.resolve(levelData)
       : getMergedLevels({ forceRefresh }),
@@ -727,16 +1324,29 @@ export async function detectActiveSetups(options?: {
     flowEventsProvided
       ? Promise.resolve(flowEventsProvided)
       : getFlowEvents({ forceRefresh }),
+    indicatorContextProvided !== undefined
+      ? Promise.resolve(indicatorContextProvided)
+      : loadIndicatorContext({
+        evaluationDate,
+        asOfTimestamp: hasHistoricalTimestamp ? evaluationIso : undefined,
+      }),
   ]);
 
   const currentPrice = gex.spx.spotPrice;
   const candidateZones = pickCandidateZones(levels.clusters, currentPrice);
-  const setupType = setupTypeForRegime(regimeState.regime);
-  const nowMs = Date.now();
+  const nowMs = evaluationDate.getTime();
   const lifecycleConfig = getSetupLifecycleConfig();
   const scoringConfig = getSetupScoringConfig();
+  const diversificationConfig = getSetupDiversificationConfig();
+  const optimizationProfile = await getActiveSPXOptimizationProfile();
+  const pausedSetupTypes = new Set(optimizationProfile.driftControl.pausedSetupTypes);
+  const pausedCombos = new Set(
+    optimizationProfile.regimeGate.pausedCombos.filter((combo) => (
+      !diversificationConfig.allowRecoveryCombos || !DIVERSIFICATION_RECOVERY_COMBOS.has(combo)
+    )),
+  );
 
-  const sessionDate = toEasternTime(new Date()).dateStr;
+  const sessionDate = toEasternTime(evaluationDate).dateStr;
 
   const setups: Setup[] = candidateZones.map((zone) => {
     const direction = setupDirection(zone, currentPrice);
@@ -755,11 +1365,30 @@ export async function detectActiveSetups(options?: {
       && alignmentPct < lifecycleConfig.flowDivergenceAlignmentThreshold;
 
     const fibTouch = fibLevels.some((fib) => Math.abs(fib.price - zoneCenter) <= 0.5);
+    const emaAligned = isEmaAligned({
+      direction,
+      currentPrice,
+      indicatorContext,
+    });
+    const volumeRegimeAligned = isVolumeRegimeAligned({
+      regime: regimeState.regime,
+      indicatorContext,
+    });
     const flowConfirmed = hasFlowConfirmation({
       flowEvents,
       direction,
       zoneCenter,
       nowMs,
+    });
+    const setupType = inferSetupTypeForZone({
+      regime: regimeState.regime,
+      direction,
+      currentPrice,
+      zoneCenter,
+      gexLandscape: gex,
+      indicatorContext,
+      emaAligned,
+      volumeRegimeAligned,
     });
     const regimeAligned = isRegimeAligned(setupType, regimeState.regime);
 
@@ -772,18 +1401,46 @@ export async function detectActiveSetups(options?: {
       fibTouch,
       regimeAligned,
       flowConfirmed,
+      emaAligned,
+      volumeRegimeAligned,
     });
 
     const fallbackDistance = Math.max(6, Math.abs(gex.combined.callWall - gex.combined.putWall) / 4);
-    const { target1, target2 } = getTargetPrice(levels.clusters, zoneCenter, direction, fallbackDistance);
-
     const entryLow = round(zone.priceLow, 2);
     const entryHigh = round(zone.priceHigh, 2);
+    const stopBufferBase = zone.type === 'fortress' ? 2.5 : 1.5;
+    const stopBuffer = (
+      setupType === 'fade_at_wall'
+      || setupType === 'mean_reversion'
+      || setupType === 'flip_reclaim'
+    )
+      ? Math.max(stopBufferBase, FADE_STOP_BUFFER_POINTS)
+      : stopBufferBase;
     const stop = direction === 'bullish'
-      ? round(zone.priceLow - (zone.type === 'fortress' ? 2.5 : 1.5), 2)
-      : round(zone.priceHigh + (zone.type === 'fortress' ? 2.5 : 1.5), 2);
+      ? round(zone.priceLow - stopBuffer, 2)
+      : round(zone.priceHigh + stopBuffer, 2);
+    const baseTargets = getTargetPrice(levels.clusters, zoneCenter, direction, fallbackDistance);
+    const tunedTargets = adjustTargetsForSetupType({
+      setupType,
+      direction,
+      entryLow,
+      entryHigh,
+      stop,
+      target1: baseTargets.target1,
+      target2: baseTargets.target2,
+      flipPoint: gex.combined.flipPoint,
+      indicatorContext,
+    });
+    const target1 = tunedTargets.target1;
+    const target2 = tunedTargets.target2;
 
-    let computedStatus: Setup['status'] = confluence.score >= 3 ? 'ready' : 'forming';
+    const readyConfluenceThreshold = (
+      (setupType === 'mean_reversion' && regimeState.regime === 'ranging')
+      || (setupType === 'flip_reclaim' && regimeState.regime === 'ranging')
+    )
+      ? 2
+      : 3;
+    let computedStatus: Setup['status'] = confluence.score >= readyConfluenceThreshold ? 'ready' : 'forming';
     if (isPriceInsideEntry({ entryZone: { low: entryLow, high: entryHigh } }, currentPrice)) {
       computedStatus = 'triggered';
     }
@@ -853,13 +1510,10 @@ export async function detectActiveSetups(options?: {
 
     let triggeredAt: string | null = previous?.triggeredAt || null;
     if (status === 'triggered' && !triggeredAt) {
-      triggeredAt = nowIso();
-    }
-    if (status !== 'triggered' && status !== 'invalidated' && status !== 'expired') {
-      triggeredAt = null;
+      triggeredAt = evaluationIso;
     }
 
-    const createdAt = previous?.createdAt || nowIso();
+    const createdAt = previous?.createdAt || evaluationIso;
     const lifecycle = resolveLifecycleMetadata({
       nowMs,
       currentStatus: status,
@@ -883,6 +1537,12 @@ export async function detectActiveSetups(options?: {
     const structureQuality = clamp(((zone.clusterScore / 5) * 60) + (normalizedConfluence * 0.4) + zoneTypeBonus);
     const flowAlignment = alignmentPct == null ? (flowConfirmed ? 58 : 44) : clamp(alignmentPct + (flowConfirmed ? 6 : 0));
     const gexAlignment = confluence.sources.includes('gex_alignment') ? 82 : 42;
+    const emaTrendScore = emaAligned
+      ? clamp(68 + (indicatorContext?.emaFastSlope || 0) * 20)
+      : 38;
+    const volumeContextScore = volumeRegimeAligned
+      ? 72
+      : 44;
     const regimeAlignment = clamp(
       (regimeAligned ? 82 : 36)
         + (regimeState.direction === direction ? 8 : 0)
@@ -902,11 +1562,12 @@ export async function detectActiveSetups(options?: {
       + (weights.proximity * (proximityUrgency / 100))
       + (weights.microTrigger * (microTriggerQuality / 100))
     );
+    const indicatorBlend = (0.65 * emaTrendScore) + (0.35 * volumeContextScore);
     const stalePenalty = Math.min(12, (contextState.regimeConflictStreak + contextState.flowDivergenceStreak) * 3);
     const contradictionPenalty = (regimeConflict ? 8 : 0) + (flowDivergence ? 7 : 0);
     const lifecyclePenalty = lifecycle.status === 'forming' ? 6 : lifecycle.status === 'invalidated' ? 90 : lifecycle.status === 'expired' ? 95 : 0;
     const finalScore = scoringConfig.evTieringEnabled
-      ? clamp((scoreRaw * 100) - stalePenalty - contradictionPenalty - lifecyclePenalty)
+      ? clamp((scoreRaw * 100) - stalePenalty - contradictionPenalty - lifecyclePenalty + ((indicatorBlend - 50) * 0.1))
       : normalizedConfluence;
 
     const baselineWin = (WIN_RATE_BY_SCORE[confluence.score] || 32) / 100;
@@ -925,15 +1586,50 @@ export async function detectActiveSetups(options?: {
     const rBlended = (0.65 * rTarget1) + (0.35 * rTarget2);
     const costR = 0.08 + (flowConfirmed ? 0 : 0.03) + (lifecycle.status === 'forming' ? 0.05 : 0);
     const evR = (pWinCalibrated * rBlended) - ((1 - pWinCalibrated) * 1.0) - costR;
+    const flowAlignmentPct = alignmentPct == null ? null : round(alignmentPct, 2);
+    const gateReasons = evaluateOptimizationGate({
+      status: lifecycle.status,
+      wasPreviouslyTriggered: Boolean(previous?.triggeredAt),
+      setupType,
+      regime: regimeState.regime,
+      firstSeenAtIso: createdAt,
+      confluenceScore: confluence.score,
+      pWinCalibrated,
+      evR,
+      flowConfirmed,
+      flowAlignmentPct,
+      emaAligned,
+      volumeRegimeAligned,
+      pausedSetupTypes,
+      pausedCombos,
+      profile: optimizationProfile,
+      direction,
+    });
+    const gateStatus: Setup['gateStatus'] = gateReasons.length > 0 ? 'blocked' : 'eligible';
+    const gatedStatus: Setup['status'] = gateStatus === 'blocked' ? 'forming' : lifecycle.status;
+    const gatedTriggeredAt = gateStatus === 'blocked' && !previous?.triggeredAt
+      ? null
+      : triggeredAt;
+    const gatedLifecycle = gateStatus === 'blocked'
+      ? resolveLifecycleMetadata({
+        nowMs,
+        currentStatus: 'forming',
+        previous,
+        invalidationReason: null,
+        config: lifecycleConfig,
+      })
+      : lifecycle;
+
     const tier = scoringConfig.evTieringEnabled
       ? deriveSetupTier({
-        status: lifecycle.status,
+        status: gatedStatus,
         score: finalScore,
         pWinCalibrated,
         evR,
         config: scoringConfig,
       })
-      : (lifecycle.status === 'ready' || lifecycle.status === 'triggered') ? 'watchlist' : 'hidden';
+      : (gatedStatus === 'ready' || gatedStatus === 'triggered') ? 'watchlist' : 'hidden';
+    const gatedTier = gateStatus === 'blocked' ? 'hidden' : tier;
 
     return {
       id: setupId,
@@ -947,20 +1643,36 @@ export async function detectActiveSetups(options?: {
       confluenceSources: confluence.sources,
       clusterZone: zone,
       regime: regimeState.regime,
-      status: lifecycle.status,
+      status: gatedLifecycle.status,
       score: round(finalScore, 2),
+      alignmentScore: flowAlignmentPct ?? undefined,
+      flowConfirmed,
+      confidenceTrend: emaAligned
+        ? ((indicatorContext?.emaFastSlope || 0) > EMA_MIN_SLOPE_POINTS ? 'up' : 'flat')
+        : ((indicatorContext?.emaFastSlope || 0) < -EMA_MIN_SLOPE_POINTS ? 'down' : 'flat'),
+      decisionDrivers: [
+        ...(emaAligned ? ['EMA trend alignment'] : []),
+        ...(volumeRegimeAligned ? ['Volume trend aligned with regime'] : []),
+      ],
+      decisionRisks: [
+        ...(!emaAligned ? ['EMA trend misalignment'] : []),
+        ...(!volumeRegimeAligned ? ['Volume trend not confirming regime'] : []),
+      ],
+      gateStatus,
+      gateReasons,
+      tradeManagement: optimizationProfile.tradeManagement,
       pWinCalibrated: round(pWinCalibrated, 4),
       evR: round(evR, 3),
-      tier,
+      tier: gatedTier,
       rank: undefined,
-      statusUpdatedAt: lifecycle.statusUpdatedAt,
-      ttlExpiresAt: lifecycle.ttlExpiresAt,
-      invalidationReason: lifecycle.invalidationReason,
+      statusUpdatedAt: gatedLifecycle.statusUpdatedAt,
+      ttlExpiresAt: gatedLifecycle.ttlExpiresAt,
+      invalidationReason: gatedLifecycle.invalidationReason,
       probability: WIN_RATE_BY_SCORE[confluence.score] || 32,
       recommendedContract: null,
       createdAt,
-      triggeredAt: lifecycle.status === 'triggered' || lifecycle.status === 'invalidated' || lifecycle.status === 'expired'
-        ? triggeredAt
+      triggeredAt: gatedLifecycle.status === 'triggered' || gatedLifecycle.status === 'invalidated' || gatedLifecycle.status === 'expired'
+        ? gatedTriggeredAt
         : null,
     };
   });
@@ -988,8 +1700,13 @@ export async function detectActiveSetups(options?: {
   pruneSetupContextState(activeContextIds, nowMs);
 
   const dedupedSetups = dedupeSetupsBySemanticKey(setups);
+  const diversifiedSetups = applySetupMixPolicy({
+    setups: dedupedSetups,
+    config: diversificationConfig,
+    nowMs,
+  });
 
-  const rankedSetups = [...dedupedSetups]
+  const rankedSetups = [...diversifiedSetups]
     .sort((a, b) => {
       const statusDelta = SETUP_STATUS_SORT_ORDER[a.status] - SETUP_STATUS_SORT_ORDER[b.status];
       if (statusDelta !== 0) return statusDelta;
@@ -1008,7 +1725,18 @@ export async function detectActiveSetups(options?: {
       rank: index + 1,
     }));
 
-  await cacheSet(SETUPS_CACHE_KEY, rankedSetups, SETUPS_CACHE_TTL_SECONDS);
+  if (shouldUseCache) {
+    await cacheSet(SETUPS_CACHE_KEY, rankedSetups, SETUPS_CACHE_TTL_SECONDS);
+  }
+
+  if (shouldPersistForWinRate) {
+    await persistSetupInstancesForWinRate(rankedSetups).catch((error) => {
+      logger.warn('SPX setup outcome tracking persistence failed', {
+        setupCount: rankedSetups.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 
   const invalidationReasons = rankedSetups
     .filter((setup) => setup.status === 'invalidated' && setup.invalidationReason)
@@ -1038,6 +1766,13 @@ export async function detectActiveSetups(options?: {
     sniperSecondary: rankedSetups.filter((setup) => setup.tier === 'sniper_secondary').length,
     watchlist: rankedSetups.filter((setup) => setup.tier === 'watchlist').length,
     hidden: rankedSetups.filter((setup) => setup.tier === 'hidden').length,
+    optimizerBlocked: rankedSetups.filter((setup) => setup.gateStatus === 'blocked').length,
+    diversificationEnabled: diversificationConfig.enabled,
+    diversificationRecoveryCombosEnabled: diversificationConfig.allowRecoveryCombos,
+    diversificationFadeReadyMaxShare: diversificationConfig.fadeReadyMaxShare,
+    diversificationMinAlternativeReady: diversificationConfig.minAlternativeReadySetups,
+    optimizerPausedSetupTypes: optimizationProfile.driftControl.pausedSetupTypes,
+    optimizerPausedCombos: optimizationProfile.regimeGate.pausedCombos,
     invalidationReasons,
     lifecycleEnabled: lifecycleConfig.lifecycleEnabled,
     evTieringEnabled: scoringConfig.evTieringEnabled,
@@ -1046,7 +1781,7 @@ export async function detectActiveSetups(options?: {
   return rankedSetups;
   };
 
-  if (forceRefresh) {
+  if (!shouldUseCache || forceRefresh) {
     return run();
   }
 

@@ -18,6 +18,7 @@ export interface ProbabilityConeGeometry {
   coneWidth: number
   usedFallback: boolean
   anchorMode: SpatialAnchorMode
+  anchorInViewport: boolean
   salience: number
 }
 
@@ -39,6 +40,7 @@ const DEFAULT_START_X_RATIO = 0.82
 const DEFAULT_CONE_WIDTH_RATIO = 0.16
 const DEFAULT_CONE_WINDOW_MINUTES = [5, 15, 30] as const
 const SPATIAL_COACH_PRICE_PATTERN = /\b([3-9]\d{3}(?:\.\d{1,2})?)\b/g
+const ANCHOR_TIME_SEARCH_OFFSETS_SEC = [0, -30, 30, -60, 60, -120, 120, -300, 300, -600, 600] as const
 
 function isFinitePositive(value: number): boolean {
   return Number.isFinite(value) && value > 0
@@ -177,9 +179,10 @@ export function buildProbabilityConeGeometry(
 
   let startX = fallbackStartX
   let anchorMode: SpatialAnchorMode = 'fallback'
+  let anchorInViewport = false
   let timeAnchoredXs: number[] | null = null
   if (timeToPixel && anchorTimestampSec != null && Number.isFinite(anchorTimestampSec)) {
-    const fromStart = timeToPixel(anchorTimestampSec)
+    const fromStart = resolveTimeCoordinateWithTolerance(timeToPixel, anchorTimestampSec)
     if (fromStart != null && Number.isFinite(fromStart)) {
       const candidateXs: number[] = []
       let allResolved = true
@@ -189,7 +192,7 @@ export function buildProbabilityConeGeometry(
         const targetTimestamp = Number.isFinite(minutesForward)
           ? anchorTimestampSec + Math.max(1, Math.round(minutesForward * 60))
           : anchorTimestampSec + Math.round(((index + 1) / coneWindows.length) * 30 * 60)
-        const x = timeToPixel(targetTimestamp)
+        const x = resolveTimeCoordinateWithTolerance(timeToPixel, targetTimestamp)
         if (x == null || !Number.isFinite(x)) {
           allResolved = false
           break
@@ -198,6 +201,7 @@ export function buildProbabilityConeGeometry(
       }
       if (allResolved && candidateXs.length === coneWindows.length) {
         anchorMode = 'time'
+        anchorInViewport = fromStart >= 0 && fromStart <= width
         startX = clamp(fromStart, 0, width)
         timeAnchoredXs = candidateXs
       }
@@ -253,6 +257,7 @@ export function buildProbabilityConeGeometry(
     coneWidth,
     usedFallback: useFallbackWindows,
     anchorMode,
+    anchorInViewport,
     salience,
   }
 }
@@ -887,12 +892,25 @@ export interface ResolvedSpatialAnchorX {
 export function resolveSpatialAnchorX(input: ResolveSpatialAnchorXInput): ResolvedSpatialAnchorX {
   const minX = input.minX ?? 8
   const maxX = input.maxX ?? Math.max(minX, input.width - 8)
-  const fromTime = input.anchorTimeSec != null ? input.timeToPixel(input.anchorTimeSec) : null
+  const fromTime = input.anchorTimeSec != null
+    ? resolveTimeCoordinateWithTolerance(input.timeToPixel, input.anchorTimeSec)
+    : null
   if (fromTime != null && Number.isFinite(fromTime)) {
     return { x: clamp(fromTime, minX, maxX), mode: 'time' }
   }
   const fallbackX = input.width * (0.64 + (input.fallbackIndex * 0.05))
   return { x: clamp(fallbackX, minX, maxX), mode: 'fallback' }
+}
+
+function resolveTimeCoordinateWithTolerance(
+  timeToPixel: (timestamp: number) => number | null,
+  timestampSec: number,
+): number | null {
+  for (const offset of ANCHOR_TIME_SEARCH_OFFSETS_SEC) {
+    const x = timeToPixel(timestampSec + offset)
+    if (x != null && Number.isFinite(x)) return x
+  }
+  return null
 }
 
 export type SpatialGhostLifecycleState = 'entering' | 'active' | 'fading'

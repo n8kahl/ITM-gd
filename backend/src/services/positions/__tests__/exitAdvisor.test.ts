@@ -29,6 +29,8 @@ describe('ExitAdvisor', () => {
 
     expect(advice.some((item) => item.type === 'take_profit')).toBe(true);
     expect(advice.some((item) => item.type === 'stop_loss')).toBe(true);
+    expect(advice.some((item) => item.suggestedAction.action === 'scale_out')).toBe(true);
+    expect(advice.some((item) => item.suggestedAction.action === 'trail_stop')).toBe(true);
   });
 
   it('returns stop-loss advice for large drawdowns', () => {
@@ -50,6 +52,7 @@ describe('ExitAdvisor', () => {
     ]);
 
     expect(advice.some((item) => item.type === 'stop_loss')).toBe(true);
+    expect(advice.some((item) => item.suggestedAction.trigger === 'loss_threshold')).toBe(true);
   });
 
   it('returns time-decay suggestions near expiry', () => {

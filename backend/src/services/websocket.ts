@@ -51,6 +51,7 @@ import {
   syncTickEvaluatorSetups,
   type SetupTransitionEvent,
 } from './spx/tickEvaluator';
+import { persistSetupTransitionsForWinRate } from './spx/outcomeTracker';
 import {
   subscribeSetupPushEvents,
   type SetupDetectedUpdate,
@@ -1414,6 +1415,12 @@ export function initWebSocket(server: HTTPServer): void {
     for (const transition of transitions) {
       broadcastSetupTransition(transition);
     }
+    void persistSetupTransitionsForWinRate(transitions).catch((error) => {
+      logger.warn('Failed to persist SPX setup transitions for win-rate tracking', {
+        transitionCount: transitions.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   });
 
   logger.info('WebSocket price server initialized at /ws/prices');

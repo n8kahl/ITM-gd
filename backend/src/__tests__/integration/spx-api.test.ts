@@ -59,6 +59,14 @@ jest.mock('../../services/spx/contractSelector', () => ({
   getContractRecommendation: jest.fn(),
 }));
 
+jest.mock('../../services/spx/outcomeTracker', () => ({
+  getSPXWinRateAnalytics: jest.fn(),
+}));
+
+jest.mock('../../services/spx/winRateBacktest', () => ({
+  runSPXWinRateBacktest: jest.fn(),
+}));
+
 jest.mock('../../services/spx/aiCoach', () => ({
   getCoachState: jest.fn(),
   generateCoachStream: jest.fn(),
@@ -92,6 +100,8 @@ import { classifyCurrentRegime } from '../../services/spx/regimeClassifier';
 import { getPredictionState } from '../../services/spx/aiPredictor';
 import { getBasisState } from '../../services/spx/crossReference';
 import { getContractRecommendation } from '../../services/spx/contractSelector';
+import { getSPXWinRateAnalytics } from '../../services/spx/outcomeTracker';
+import { runSPXWinRateBacktest } from '../../services/spx/winRateBacktest';
 import { getCoachState } from '../../services/spx/aiCoach';
 import { getSPXSnapshot } from '../../services/spx';
 
@@ -105,6 +115,8 @@ const mockClassifyCurrentRegime = classifyCurrentRegime as jest.MockedFunction<t
 const mockGetPredictionState = getPredictionState as jest.MockedFunction<typeof getPredictionState>;
 const mockGetBasisState = getBasisState as jest.MockedFunction<typeof getBasisState>;
 const mockGetContractRecommendation = getContractRecommendation as jest.MockedFunction<typeof getContractRecommendation>;
+const mockGetSPXWinRateAnalytics = getSPXWinRateAnalytics as jest.MockedFunction<typeof getSPXWinRateAnalytics>;
+const mockRunSPXWinRateBacktest = runSPXWinRateBacktest as jest.MockedFunction<typeof runSPXWinRateBacktest>;
 const mockGetCoachState = getCoachState as jest.MockedFunction<typeof getCoachState>;
 const mockGetSPXSnapshot = getSPXSnapshot as jest.MockedFunction<typeof getSPXSnapshot>;
 
@@ -239,6 +251,77 @@ describe('SPX API integration schema', () => {
       expectedPnlAtTarget2: 330,
       maxLoss: 2450,
       reasoning: 'test',
+    });
+    mockGetSPXWinRateAnalytics.mockResolvedValue({
+      dateRange: { from: '2026-02-01', to: '2026-02-15' },
+      denominator: 'resolved_triggered',
+      triggeredCount: 10,
+      resolvedCount: 8,
+      pendingCount: 2,
+      t1Wins: 5,
+      t2Wins: 3,
+      stopsBeforeT1: 2,
+      invalidatedOther: 1,
+      expiredUnresolved: 0,
+      t1WinRatePct: 62.5,
+      t2WinRatePct: 37.5,
+      failureRatePct: 25,
+      bySetupType: [],
+      byRegime: [],
+      byTier: [],
+    });
+    mockRunSPXWinRateBacktest.mockResolvedValue({
+      dateRange: { from: '2026-02-01', to: '2026-02-15' },
+      sourceUsed: 'spx_setup_instances',
+      setupCount: 8,
+      evaluatedSetupCount: 8,
+      skippedSetupCount: 0,
+      ambiguousBarCount: 1,
+      missingTarget2Count: 0,
+      missingBarsSessions: [],
+      requestedResolution: 'second',
+      resolutionUsed: 'second',
+      resolutionFallbackSessions: [],
+      usedMassiveMinuteBars: false,
+      executionModel: {
+        enabled: true,
+        entrySlipPoints: 0.2,
+        targetSlipPoints: 0.25,
+        stopSlipPoints: 0.15,
+        commissionPerTradeR: 0.04,
+        partialAtT1Pct: 0.5,
+        moveStopToBreakevenAfterT1: true,
+      },
+      profitability: {
+        triggeredCount: 8,
+        resolvedCount: 8,
+        withRealizedRCount: 8,
+        averageRealizedR: 0.38,
+        medianRealizedR: 0.42,
+        cumulativeRealizedR: 3.04,
+        expectancyR: 0.38,
+        positiveRealizedRatePct: 62.5,
+        bySetupType: [],
+      },
+      notes: [],
+      analytics: {
+        dateRange: { from: '2026-02-01', to: '2026-02-15' },
+        denominator: 'resolved_triggered',
+        triggeredCount: 8,
+        resolvedCount: 8,
+        pendingCount: 0,
+        t1Wins: 5,
+        t2Wins: 3,
+        stopsBeforeT1: 3,
+        invalidatedOther: 0,
+        expiredUnresolved: 0,
+        t1WinRatePct: 62.5,
+        t2WinRatePct: 37.5,
+        failureRatePct: 37.5,
+        bySetupType: [],
+        byRegime: [],
+        byTier: [],
+      },
     });
     mockGetCoachState.mockResolvedValue({ messages: [], generatedAt: '2026-02-15T15:00:00.000Z' });
     mockGetSPXSnapshot.mockResolvedValue({
@@ -376,6 +459,28 @@ describe('SPX API integration schema', () => {
     const contract = await request(app).get('/api/spx/contract-select?setupId=setup-1');
     expect(contract.status).toBe(200);
     expect(contract.body).toEqual(expect.objectContaining({ strike: expect.any(Number), expiry: expect.any(String) }));
+
+    const winRate = await request(app).get('/api/spx/analytics/win-rate?from=2026-02-01&to=2026-02-15');
+    expect(winRate.status).toBe(200);
+    expect(winRate.body).toEqual(expect.objectContaining({
+      triggeredCount: expect.any(Number),
+      resolvedCount: expect.any(Number),
+      t1WinRatePct: expect.any(Number),
+      t2WinRatePct: expect.any(Number),
+      bySetupType: expect.any(Array),
+    }));
+
+    const winRateBacktest = await request(app).get('/api/spx/analytics/win-rate/backtest?from=2026-02-01&to=2026-02-15');
+    expect(winRateBacktest.status).toBe(200);
+    expect(winRateBacktest.body).toEqual(expect.objectContaining({
+      sourceUsed: expect.any(String),
+      setupCount: expect.any(Number),
+      usedMassiveMinuteBars: expect.any(Boolean),
+      analytics: expect.objectContaining({
+        t1WinRatePct: expect.any(Number),
+        t2WinRatePct: expect.any(Number),
+      }),
+    }));
 
     const coach = await request(app).get('/api/spx/coach/state');
     expect(coach.status).toBe(200);

@@ -1,7 +1,8 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { logger } from '../../lib/logger';
-import { fetchOptionsChain } from '../options/optionsChainFetcher';
+import { fetchExpirationDates, fetchOptionsChain } from '../options/optionsChainFetcher';
 import type { OptionContract } from '../options/types';
+import { toEasternTime } from '../marketHours';
 import { detectActiveSetups, getSetupById } from './setupDetector';
 import type { ContractRecommendation, Setup } from './types';
 import { round } from './utils';
@@ -10,12 +11,13 @@ const CONTRACT_CACHE_TTL_SECONDS = 10;
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered']);
 const MIN_OPEN_INTEREST = 100;
 const MIN_VOLUME = 10;
-const MAX_SPREAD_PCT = 0.35;
+const MAX_SPREAD_PCT = 0.28;
 const CONTRACT_MULTIPLIER = 100;
 const MAX_CONTRACT_RISK_STRICT = 2_500;
 const MAX_CONTRACT_RISK_RELAXED = 3_500;
 const MAX_DELTA_STRICT = 0.65;
 const MAX_DELTA_RELAXED = 0.80;
+const ZERO_DTE_ROLLOVER_MINUTE_ET = 13 * 60 + 30;
 interface RankedContract {
   contract: OptionContract;
   score: number;
@@ -28,18 +30,66 @@ interface ContractHealth {
   ivVsRealized: number;
 }
 
-function deltaTargetForSetup(setup: Setup): number {
-  switch (setup.type) {
-    case 'breakout_vacuum':
-      return 0.28;
-    case 'trend_continuation':
-      return 0.3;
-    case 'mean_reversion':
-      return 0.22;
-    case 'fade_at_wall':
-    default:
-      return 0.18;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function sessionMinuteEt(now: Date): number {
+  const et = toEasternTime(now);
+  return et.hour * 60 + et.minute;
+}
+
+function isSameEtDate(expiry: string, now: Date): boolean {
+  const todayEt = toEasternTime(now).dateStr;
+  return expiry === todayEt;
+}
+
+function isTerminalZeroDte(expiry: string, now: Date): boolean {
+  if (!isSameEtDate(expiry, now)) return false;
+  return sessionMinuteEt(now) >= ZERO_DTE_ROLLOVER_MINUTE_ET;
+}
+
+function applyRegimeDeltaAdjustment(setup: Pick<Setup, 'type' | 'regime'>, baseDelta: number): number {
+  if (setup.regime === 'ranging' || setup.regime === 'compression') {
+    return clamp(baseDelta + 0.06, 0.12, 0.55);
   }
+
+  if (
+    (setup.regime === 'breakout' || setup.regime === 'trending')
+    && (setup.type === 'orb_breakout' || setup.type === 'breakout_vacuum' || setup.type === 'trend_continuation')
+  ) {
+    return clamp(baseDelta - 0.04, 0.12, 0.55);
+  }
+
+  if (setup.regime === 'trending' && setup.type === 'trend_pullback') {
+    return clamp(baseDelta - 0.02, 0.12, 0.55);
+  }
+
+  return clamp(baseDelta, 0.12, 0.55);
+}
+
+export function deltaTargetForSetup(setup: Pick<Setup, 'type' | 'regime'>): number {
+  const base = (() => {
+    switch (setup.type) {
+      case 'orb_breakout':
+        return 0.32;
+      case 'breakout_vacuum':
+        return 0.28;
+      case 'trend_continuation':
+        return 0.3;
+      case 'trend_pullback':
+        return 0.26;
+      case 'flip_reclaim':
+        return 0.24;
+      case 'mean_reversion':
+        return 0.22;
+      case 'fade_at_wall':
+      default:
+        return 0.18;
+    }
+  })();
+
+  return applyRegimeDeltaAdjustment(setup, base);
 }
 
 function getMid(contract: OptionContract): number {
@@ -52,10 +102,11 @@ function getSpreadPct(contract: OptionContract): number {
   return (contract.ask - contract.bid) / mid;
 }
 
-function daysToExpiry(expiry: string): number {
-  const expiryMs = Date.parse(`${expiry}T16:00:00Z`);
+function daysToExpiry(expiry: string, now: Date = new Date()): number {
+  // SPX options effectively settle near end of regular session; keep DTE anchored to ET session close.
+  const expiryMs = Date.parse(`${expiry}T21:00:00Z`);
   if (!Number.isFinite(expiryMs)) return 0;
-  const msLeft = expiryMs - Date.now();
+  const msLeft = expiryMs - now.getTime();
   return Math.max(0, Math.ceil(msLeft / 86400000));
 }
 
@@ -105,13 +156,15 @@ function computeContractHealth(contract: OptionContract): ContractHealth {
   };
 }
 
-function scoreContract(setup: Setup, contract: OptionContract): number {
+function scoreContract(setup: Setup, contract: OptionContract, now: Date): number {
   const targetDelta = deltaTargetForSetup(setup);
   const absDelta = Math.abs(contract.delta || 0);
   const deltaPenalty = Math.min(1, Math.abs(absDelta - targetDelta) / 0.2) * 45;
 
   const spreadPct = getSpreadPct(contract);
   const spreadPenalty = Math.min(1, spreadPct / MAX_SPREAD_PCT) * 35;
+  const spreadAbsolute = Math.max(0, contract.ask - contract.bid);
+  const spreadAbsolutePenalty = Math.min(10, spreadAbsolute * 6);
 
   const oi = Math.max(0, contract.openInterest || 0);
   const volume = Math.max(0, contract.volume || 0);
@@ -120,12 +173,12 @@ function scoreContract(setup: Setup, contract: OptionContract): number {
   const gamma = Math.max(0, contract.gamma || 0);
   const gammaBonus = Math.min(10, gamma * 250);
 
-  const dte = daysToExpiry(contract.expiry);
+  const dte = daysToExpiry(contract.expiry, now);
   const theta = Math.abs(contract.theta || 0);
   const thetaTolerance = dte <= 1 ? 1.3 : dte <= 3 ? 1.0 : 0.8;
   const thetaPenalty = Math.max(0, theta - thetaTolerance) * 8;
 
-  return 100 - deltaPenalty - spreadPenalty - thetaPenalty + liquidityBonus + gammaBonus;
+  return 100 - deltaPenalty - spreadPenalty - spreadAbsolutePenalty - thetaPenalty + liquidityBonus + gammaBonus;
 }
 
 function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[]): ContractRecommendation {
@@ -236,15 +289,49 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
   };
 }
 
-function filterCandidates(
+function quoteQualityCaps(mid: number, relaxed: boolean): { spreadCap: number; quoteBalanceFloor: number } {
+  if (mid < 5) {
+    return {
+      spreadCap: relaxed ? 0.5 : 0.35,
+      quoteBalanceFloor: relaxed ? 0.5 : 0.6,
+    };
+  }
+
+  if (mid < 15) {
+    return {
+      spreadCap: relaxed ? 0.9 : 0.65,
+      quoteBalanceFloor: relaxed ? 0.52 : 0.62,
+    };
+  }
+
+  return {
+    spreadCap: relaxed ? 1.4 : 1.05,
+    quoteBalanceFloor: relaxed ? 0.55 : 0.65,
+  };
+}
+
+function hasReliableQuote(contract: OptionContract, relaxed: boolean): boolean {
+  const mid = getMid(contract);
+  const spread = contract.ask - contract.bid;
+  if (!Number.isFinite(mid) || mid <= 0 || !Number.isFinite(spread) || spread <= 0) return false;
+  const spreadPct = getSpreadPct(contract);
+  if (!Number.isFinite(spreadPct)) return false;
+
+  const caps = quoteQualityCaps(mid, relaxed);
+  const quoteBalance = contract.bid / contract.ask;
+  return spread <= caps.spreadCap && quoteBalance >= caps.quoteBalanceFloor;
+}
+
+export function filterCandidates(
   setup: Setup,
   contracts: OptionContract[],
   relaxed: boolean,
+  now: Date,
 ): OptionContract[] {
   const desiredType: OptionContract['type'] = setup.direction === 'bullish' ? 'call' : 'put';
   const minOI = relaxed ? 10 : MIN_OPEN_INTEREST;
   const minVol = relaxed ? 1 : MIN_VOLUME;
-  const maxSpread = relaxed ? 0.50 : MAX_SPREAD_PCT;
+  const maxSpread = relaxed ? 0.42 : MAX_SPREAD_PCT;
   const minDelta = relaxed ? 0.02 : 0.05;
   const maxDelta = relaxed ? MAX_DELTA_RELAXED : MAX_DELTA_STRICT;
   const maxRisk = relaxed ? MAX_CONTRACT_RISK_RELAXED : MAX_CONTRACT_RISK_STRICT;
@@ -252,23 +339,25 @@ function filterCandidates(
   return contracts.filter((contract) => {
     if (contract.type !== desiredType) return false;
     if (!(contract.bid > 0 && contract.ask > contract.bid)) return false;
+    if (isTerminalZeroDte(contract.expiry, now)) return false;
     const absDelta = Math.abs(contract.delta || 0);
     if (!Number.isFinite(absDelta) || absDelta < minDelta || absDelta > maxDelta) return false;
     if ((contract.openInterest || 0) < minOI && (contract.volume || 0) < minVol) return false;
     const spreadPct = getSpreadPct(contract);
     if (!Number.isFinite(spreadPct) || spreadPct > maxSpread) return false;
+    if (!hasReliableQuote(contract, relaxed)) return false;
 
-    const perContractRisk = getMid(contract) * CONTRACT_MULTIPLIER;
+    const perContractRisk = contract.ask * CONTRACT_MULTIPLIER;
     if (!Number.isFinite(perContractRisk) || perContractRisk <= 0) return false;
     return perContractRisk <= maxRisk;
   });
 }
 
-function rankContracts(setup: Setup, contracts: OptionContract[]): RankedContract[] {
-  let candidates = filterCandidates(setup, contracts, false);
+function rankContracts(setup: Setup, contracts: OptionContract[], now: Date): RankedContract[] {
+  let candidates = filterCandidates(setup, contracts, false, now);
 
   if (candidates.length === 0) {
-    candidates = filterCandidates(setup, contracts, true);
+    candidates = filterCandidates(setup, contracts, true, now);
     if (candidates.length > 0) {
       logger.info('Contract selector using relaxed filters', {
         setupId: setup.id,
@@ -282,7 +371,7 @@ function rankContracts(setup: Setup, contracts: OptionContract[]): RankedContrac
   return candidates
     .map((contract) => ({
       contract,
-      score: scoreContract(setup, contract),
+      score: scoreContract(setup, contract, now),
     }))
     .sort((a, b) => {
       if (a.score !== b.score) return b.score - a.score;
@@ -293,9 +382,29 @@ function rankContracts(setup: Setup, contracts: OptionContract[]): RankedContrac
     });
 }
 
-function topRankedContracts(setup: Setup, contracts: OptionContract[]): RankedContract[] {
-  const ranked = rankContracts(setup, contracts);
+function topRankedContracts(setup: Setup, contracts: OptionContract[], now: Date): RankedContract[] {
+  const ranked = rankContracts(setup, contracts, now);
   return ranked.slice(0, 4);
+}
+
+async function resolveTargetExpiry(symbol: string, now: Date): Promise<string | undefined> {
+  const expirations = await fetchExpirationDates(symbol);
+  if (!Array.isArray(expirations) || expirations.length === 0) {
+    return undefined;
+  }
+
+  const todayEt = toEasternTime(now).dateStr;
+  const futureExpirations = expirations.filter((expiry) => expiry >= todayEt);
+  if (futureExpirations.length === 0) {
+    return undefined;
+  }
+
+  const nearestExpiry = futureExpirations[0];
+  if (!isTerminalZeroDte(nearestExpiry, now)) {
+    return nearestExpiry;
+  }
+
+  return futureExpirations[1] || nearestExpiry;
 }
 
 export async function getContractRecommendation(options?: {
@@ -330,15 +439,19 @@ export async function getContractRecommendation(options?: {
     return null;
   }
 
-  const chain = await fetchOptionsChain('SPX', undefined, 20);
+  const now = new Date();
+  const targetExpiry = await resolveTargetExpiry('SPX', now);
+  const chain = await fetchOptionsChain('SPX', targetExpiry, 20);
   const contracts = [...chain.options.calls, ...chain.options.puts];
-  const rankedContracts = topRankedContracts(setup, contracts);
+  const rankedContracts = topRankedContracts(setup, contracts, now);
 
   if (rankedContracts.length === 0) {
     logger.warn('SPX contract selector could not find suitable contract', {
       setupId: setup.id,
       direction: setup.direction,
       type: setup.type,
+      requestedExpiry: targetExpiry || 'nearest',
+      chainExpiry: chain.expiry,
     });
     return null;
   }

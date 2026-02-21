@@ -54,12 +54,19 @@ test.describe('SPX setup interaction', () => {
     const fadeSetupButton = page.getByRole('button', { name: /bullish ranging.*actionable/i })
     const breakoutSetupButton = page.getByRole('button', { name: /bearish breakout.*triggered/i })
     const breakoutSetupCard = breakoutSetupButton.locator('..')
-    const enterTradeFocusButton = page.getByRole('button', { name: /enter trade focus for bearish breakout vacuum/i })
+    const primaryCta = page.getByTestId('spx-action-primary-cta')
 
-    await expect(enterTradeFocusButton).toBeEnabled()
-    await enterTradeFocusButton.click()
+    await breakoutSetupButton.click()
+    const initialPrimaryLabel = (await primaryCta.textContent())?.trim() || ''
+    if (initialPrimaryLabel === 'Select Best Setup') {
+      await primaryCta.click()
+    }
 
-    const focusBanner = page.getByText(/in trade focus ·/i)
+    await expect(primaryCta).toContainText(/stage trade/i)
+    await expect(primaryCta).toBeEnabled()
+    await primaryCta.click()
+
+    const focusBanner = page.getByText(/in trade ·/i)
     await expect(focusBanner).toBeVisible()
     await expect(focusBanner).toContainText(/bearish breakout/i)
 
@@ -68,7 +75,7 @@ test.describe('SPX setup interaction', () => {
     await expect(focusBanner).toContainText(/bearish breakout/i)
 
     await page.getByRole('button', { name: /exit trade/i }).first().click()
-    await expect(page.getByText(/in trade focus/i)).toHaveCount(0)
+    await expect(page.getByText(/in trade ·/i)).toHaveCount(0)
     await expect(fadeSetupButton).toBeVisible()
   })
 })

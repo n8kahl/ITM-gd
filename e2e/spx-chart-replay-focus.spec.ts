@@ -8,6 +8,7 @@ test.describe('SPX chart replay and focus controls', () => {
     await authenticateAsMember(page)
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
+    await page.getByTestId('spx-action-advanced-hud-toggle').click()
 
     const focusDecision = page.getByTestId('spx-action-focus-mode-decision')
     const focusExecution = page.getByTestId('spx-action-focus-mode-execution')
@@ -18,6 +19,8 @@ test.describe('SPX chart replay and focus controls', () => {
     await expect(focusExecution).toHaveAttribute('aria-pressed', 'true')
     await focusRisk.click()
     await expect(focusRisk).toHaveAttribute('aria-pressed', 'true')
+    await focusExecution.click()
+    await expect(focusExecution).toHaveAttribute('aria-pressed', 'true')
 
     const replayToggle = page.getByTestId('spx-action-replay-toggle')
     const replayPlayback = page.getByTestId('spx-action-replay-playback')

@@ -37,7 +37,7 @@ test.describe('SPX responsive layout', () => {
     await expect(primaryActionButton).toBeVisible()
     const buttonBox = await primaryActionButton.boundingBox()
     expect(buttonBox?.height ?? 0).toBeGreaterThanOrEqual(44)
-    await expect(page.getByRole('button', { name: /enter trade focus for bearish breakout vacuum/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /stage trade for bearish breakout vacuum/i })).toHaveCount(0)
 
     const hasHorizontalOverflow = await page.evaluate(() => {
       const root = document.documentElement

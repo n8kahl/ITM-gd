@@ -103,7 +103,7 @@ export function SetupFeed({
               ? 'border-champagne/35 bg-champagne/12 text-champagne'
               : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
           )}>
-            {tradeMode === 'in_trade' ? 'Trade Focus' : 'Scan'}
+            {tradeMode === 'in_trade' ? 'In Trade' : 'Scan'}
           </span>
         </div>
       </div>
@@ -118,7 +118,7 @@ export function SetupFeed({
             <div className="space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[10px] uppercase tracking-[0.1em] text-emerald-200">
-                  In Trade Focus · {inTradeSetup.direction} {inTradeSetup.regime}
+                  In Trade · {inTradeSetup.direction} {inTradeSetup.regime}
                 </p>
                 {localPrimaryCtaEnabled ? (
                   <button
@@ -155,10 +155,10 @@ export function SetupFeed({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[10px] text-white/68">
                 {!localPrimaryCtaEnabled
-                  ? 'Use the mobile primary action rail to select setup and enter trade focus.'
+                  ? 'Use the mobile primary action rail to select setup and stage trade.'
                   : oneClickEntryEnabled
-                  ? 'Use the Enter Trade CTA on actionable setup cards for one-click focus.'
-                  : 'Select a ready/triggered setup, then lock hyper focus when you enter.'}
+                  ? 'Use the Stage Trade CTA on actionable setup cards for one-click staging.'
+                  : 'Select a ready/triggered setup, then stage trade with clear risk controls.'}
               </p>
               {localPrimaryCtaEnabled && !oneClickEntryEnabled && (
                 <button
@@ -167,7 +167,7 @@ export function SetupFeed({
                   onClick={() => enterTrade(selectedSetup)}
                   className="min-h-[40px] rounded border border-emerald-400/35 bg-emerald-500/14 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/65 disabled:opacity-40"
                 >
-                  Enter Trade Focus
+                  Stage Trade
                 </button>
               )}
             </div>
@@ -243,7 +243,7 @@ export function SetupFeed({
 
             {hiddenByTradeFocusCount > 0 && (
               <p className="px-1 text-[10px] text-white/40">
-                {hiddenByTradeFocusCount} additional actionable setup{hiddenByTradeFocusCount === 1 ? '' : 's'} hidden while in-trade focus is active.
+                {hiddenByTradeFocusCount} additional actionable setup{hiddenByTradeFocusCount === 1 ? '' : 's'} hidden while a trade is active.
               </p>
             )}
 

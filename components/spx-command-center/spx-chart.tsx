@@ -697,7 +697,7 @@ export function SPXChart({
         </div>
       )}
       {scenarioLanes.length > 0 && focusMode !== 'risk_only' && (
-        <div className="pointer-events-none absolute bottom-20 left-2 z-[5] flex flex-wrap items-center gap-1.5" data-testid="spx-chart-scenario-lanes">
+        <div className="pointer-events-none absolute left-2 top-12 z-[5] flex max-w-[72%] flex-wrap items-center gap-1.5" data-testid="spx-chart-scenario-lanes">
           {scenarioLanes.map((lane) => (
             <span
               key={lane.id}

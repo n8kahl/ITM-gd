@@ -35,7 +35,7 @@ export type SPXCommandId =
 export type SPXCommandGroup = 'Setups' | 'Execution' | 'View' | 'Overlays' | 'Replay' | 'Coach' | 'Help'
 
 export const SPX_KEYBOARD_COMMAND_BINDINGS: Partial<Record<string, SPXCommandId>> = {
-  l: 'toggle-level-overlay',
+  m: 'toggle-level-overlay',
   f: 'toggle-flow-panel',
   i: 'toggle-immersive',
   s: 'toggle-sidebar',

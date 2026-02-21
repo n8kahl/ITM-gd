@@ -281,7 +281,7 @@ export function SetupCard({
               ? 'border-emerald-300/55 bg-emerald-500/25 text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
               : 'border-emerald-400/35 bg-emerald-500/14 text-emerald-100 hover:bg-emerald-500/22',
           )}
-          aria-label={`Enter trade focus for ${setup.direction} ${setup.type.replace(/_/g, ' ')}`}
+          aria-label={`Stage trade for ${setup.direction} ${setup.type.replace(/_/g, ' ')}`}
         >
           Enter Trade
         </button>

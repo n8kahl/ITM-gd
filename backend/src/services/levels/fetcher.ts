@@ -17,9 +17,15 @@ function normalizeSymbol(symbol: string): string {
 }
 
 // Get dates for fetching historical data
-function getDateRange(daysBack: number): { from: string; to: string } {
-  const to = new Date();
+function getDateRange(daysBack: number, referenceDate?: string): { from: string; to: string } {
+  const parsedReference = referenceDate
+    ? new Date(`${referenceDate}T12:00:00.000Z`)
+    : null;
+  const to = parsedReference && Number.isFinite(parsedReference.getTime())
+    ? parsedReference
+    : new Date();
   const from = new Date();
+  from.setTime(to.getTime());
   from.setDate(from.getDate() - daysBack);
 
   return {
@@ -29,9 +35,13 @@ function getDateRange(daysBack: number): { from: string; to: string } {
 }
 
 // Fetch daily historical data (for PDH/PDL/PDC, pivots, ATR)
-export async function fetchDailyData(symbol: string, daysBack: number = 30): Promise<MassiveAggregate[]> {
+export async function fetchDailyData(
+  symbol: string,
+  daysBack: number = 30,
+  referenceDate?: string,
+): Promise<MassiveAggregate[]> {
   const ticker = normalizeSymbol(symbol);
-  const { from, to } = getDateRange(daysBack);
+  const { from, to } = getDateRange(daysBack, referenceDate);
 
   logger.info(`Fetching daily data for ${ticker} from ${from} to ${to}`);
 

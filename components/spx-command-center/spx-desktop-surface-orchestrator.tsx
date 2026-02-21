@@ -31,9 +31,11 @@ export type SPXDesktopSurfaceOrchestratorProps = {
   spatialThrottled: boolean
   primaryActionMode: SPXCommandController['primaryActionMode']
   primaryActionLabel: string
+  guidedStatusLabel: string
   primaryActionEnabled: boolean
   primaryActionBlockedReason: string | null
   onPrimaryAction: () => void
+  onShowWhy: () => void
   focusMode: 'decision' | 'execution' | 'risk_only'
   onFocusModeChange: (mode: 'decision' | 'execution' | 'risk_only') => void
   replayEnabled: boolean
@@ -69,9 +71,11 @@ export function SPXDesktopSurfaceOrchestrator({
   spatialThrottled,
   primaryActionMode,
   primaryActionLabel,
+  guidedStatusLabel,
   primaryActionEnabled,
   primaryActionBlockedReason,
   onPrimaryAction,
+  onShowWhy,
   focusMode,
   onFocusModeChange,
   replayEnabled,
@@ -121,9 +125,11 @@ export function SPXDesktopSurfaceOrchestrator({
         spatialThrottled={spatialThrottled}
         primaryActionMode={primaryActionMode}
         primaryActionLabel={primaryActionLabel}
+        guidedStatusLabel={guidedStatusLabel}
         primaryActionEnabled={primaryActionEnabled}
         primaryActionBlockedReason={primaryActionBlockedReason}
         onPrimaryAction={onPrimaryAction}
+        onShowWhy={onShowWhy}
         focusMode={focusMode}
         onFocusModeChange={onFocusModeChange}
         replayEnabled={replayEnabled}

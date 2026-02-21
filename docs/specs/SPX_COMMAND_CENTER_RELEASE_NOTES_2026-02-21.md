@@ -14,6 +14,8 @@ Track: Production Recovery Autonomous Program
 2. Phase 8 complete: decision intelligence and risk-envelope gating.
 3. Phase 9 complete: chart interaction, replay, scenario lanes, focus modes.
 4. Phase 10 complete: journal automation and governance hardening.
+5. Phase 11 slice P11-S1 complete: regime-aware contract selector hardening, R:R feasibility gate in trade suggestions, and mechanical 1R/2R trailing exit advisories.
+6. Phase 11 slice P11-S2 complete: ranging setup hardening and fade target/stop geometry recalibration, improving strict last-week SPX backtest win-rate and expectancy.
 
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).

@@ -163,7 +163,7 @@ export function useSPXCommandController() {
   }, [layoutMode])
   const primaryActionLabel = useMemo(() => {
     if (primaryActionMode === 'in_trade') return 'Manage Risk / Exit Trade'
-    if (primaryActionMode === 'evaluate') return 'Enter Trade Focus'
+    if (primaryActionMode === 'evaluate') return 'Stage Trade'
     return 'Select Best Setup'
   }, [primaryActionMode])
   const primaryActionBlockedReason = useMemo(() => {
@@ -174,6 +174,28 @@ export function useSPXCommandController() {
     }
     return formatSPXRiskEnvelopeReason(primaryEntryRiskGate.reasonCode)
   }, [feedFallbackReasonCode, primaryActionMode, primaryEntryRiskGate.allowEntry, primaryEntryRiskGate.reasonCode])
+  const primaryActionGuidance = useMemo(() => {
+    if (primaryActionMode === 'in_trade') {
+      return 'Trade active: manage risk and exits.'
+    }
+    if (!primaryActionTargetSetup) {
+      return 'No actionable setup: wait for alignment.'
+    }
+    if (primaryActionMode === 'scan') {
+      return `Best setup: ${primaryActionTargetSetup.direction} ${primaryActionTargetSetup.regime}.`
+    }
+    if (!primaryEntryRiskGate.allowEntry) {
+      return primaryActionBlockedReason
+        ? `Hold: ${primaryActionBlockedReason}.`
+        : 'Hold: entry gate is blocking staging.'
+    }
+    return `Ready to stage: ${primaryActionTargetSetup.direction} ${primaryActionTargetSetup.regime}.`
+  }, [
+    primaryActionBlockedReason,
+    primaryActionMode,
+    primaryActionTargetSetup,
+    primaryEntryRiskGate.allowEntry,
+  ])
   const primaryActionEnabled = useMemo(() => {
     if (primaryActionMode === 'in_trade') return tradeMode === 'in_trade'
     if (primaryActionMode === 'evaluate') {
@@ -473,6 +495,24 @@ export function useSPXCommandController() {
     tradeMode,
   ])
 
+  const handleShowWhy = useCallback(() => {
+    if (isMobile) {
+      setMobileTab('coach')
+      setShowMobileCoachSheet(true)
+    } else {
+      setSidebarCollapsed(false)
+      setImmersiveMode(false)
+      setShowDesktopCoachPanel(true)
+    }
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+      surface: 'action_strip_primary_why',
+      layoutMode,
+      tradeMode,
+      selectedSetupId: selectedSetup?.id || null,
+    }, { persist: true })
+  }, [isMobile, layoutMode, selectedSetup?.id, tradeMode])
+
   const handleMobileTabChange = useCallback((next: MobilePanelTab) => {
     setMobileTab(next)
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
@@ -669,7 +709,23 @@ export function useSPXCommandController() {
 
   useEffect(() => {
     invalidateChartCoordinates()
-  }, [invalidateChartCoordinates, sidebarWidth, immersiveMode, viewMode, uxFlags.spatialHudV1])
+  }, [
+    focusMode,
+    immersiveMode,
+    invalidateChartCoordinates,
+    replayEnabled,
+    replayPlaying,
+    replaySpeed,
+    replayWindowMinutes,
+    showAdvancedHud,
+    showCone,
+    showGEXGlow,
+    showLevelOverlay,
+    showSpatialCoach,
+    sidebarWidth,
+    uxFlags.spatialHudV1,
+    viewMode,
+  ])
 
   const desktopViewMode: SPXViewMode = uxFlags.spatialHudV1 ? viewMode : 'classic'
   const shouldShowInitialSkeleton = !initialSkeletonExpired && isLoading && activeSetups.length === 0 && levels.length === 0
@@ -712,6 +768,7 @@ export function useSPXCommandController() {
     layoutMode,
     primaryActionMode,
     primaryActionLabel,
+    primaryActionGuidance,
     primaryActionEnabled,
     primaryActionBlockedReason,
     stateDrivenLayoutEnabled,
@@ -740,6 +797,7 @@ export function useSPXCommandController() {
     runActionStripCommand,
     handleOverlayPresetChange,
     handlePrimaryAction,
+    handleShowWhy,
     handleChartReady,
     handleLatestChartBarTimeChange,
     handleDisplayedLevelsChange,

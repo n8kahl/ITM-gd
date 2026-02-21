@@ -21,6 +21,8 @@ export interface SetupTradeSuggestion {
   entry: number;
   stopLoss: number;
   target: number;
+  riskReward?: number;
+  rrQualified?: boolean;
 }
 
 export interface SetupSignal {

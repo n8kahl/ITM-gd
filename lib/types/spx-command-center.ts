@@ -78,7 +78,14 @@ export interface FlowEvent {
 
 // ─── Setup Types ───
 
-export type SetupType = 'fade_at_wall' | 'breakout_vacuum' | 'mean_reversion' | 'trend_continuation'
+export type SetupType =
+  | 'fade_at_wall'
+  | 'breakout_vacuum'
+  | 'mean_reversion'
+  | 'trend_continuation'
+  | 'orb_breakout'
+  | 'trend_pullback'
+  | 'flip_reclaim'
 
 export type SetupStatus = 'forming' | 'ready' | 'triggered' | 'invalidated' | 'expired'
 
@@ -88,6 +95,10 @@ export type SetupInvalidationReason =
   | 'stop_breach_confirmed'
   | 'regime_conflict'
   | 'flow_divergence'
+  | 'quality_gate_blocked'
+  | 'regime_gate_blocked'
+  | 'flow_gate_blocked'
+  | 'drift_control_paused'
   | 'ttl_expired'
   | 'manual'
   | 'unknown'
@@ -111,6 +122,13 @@ export interface Setup {
   pWinCalibrated?: number
   evR?: number
   alignmentScore?: number
+  flowConfirmed?: boolean
+  gateStatus?: 'eligible' | 'blocked'
+  gateReasons?: string[]
+  tradeManagement?: {
+    partialAtT1Pct: number
+    moveStopToBreakeven: boolean
+  }
   confidenceTrend?: 'up' | 'flat' | 'down'
   decisionDrivers?: string[]
   decisionRisks?: string[]

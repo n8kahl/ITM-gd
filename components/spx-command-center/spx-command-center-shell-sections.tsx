@@ -8,6 +8,7 @@ import { DecisionContext } from '@/components/spx-command-center/decision-contex
 import { GEXHeatmap } from '@/components/spx-command-center/gex-heatmap'
 import { GEXLandscape } from '@/components/spx-command-center/gex-landscape'
 import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
+import { SPXOptimizerScorecardPanel } from '@/components/spx-command-center/optimizer-scorecard-panel'
 import { PostTradePanel } from '@/components/spx-command-center/post-trade-panel'
 import { SetupFeed } from '@/components/spx-command-center/setup-feed'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
@@ -112,6 +113,12 @@ export function SPXDesktopSidebarSurface({
   coachPreviewFallback,
   gexProfile,
 }: SPXDesktopSidebarSurfaceProps) {
+  const showSetupFeed = focusMode !== 'risk_only'
+  const showContractSelector = showSetupFeed && (!stateDrivenLayoutEnabled || layoutMode !== 'scan')
+  const showDecisionContext = focusMode === 'risk_only'
+  const showInlineCoachFeed = !stateDrivenLayoutEnabled || layoutMode !== 'scan'
+  const showAnalytics = focusMode !== 'execution' && (!stateDrivenLayoutEnabled || layoutMode === 'evaluate')
+
   return (
     <div className={cn('h-full space-y-2.5 overflow-auto', className)}>
       {stateDrivenLayoutEnabled && layoutMode === 'scan' && (
@@ -133,24 +140,12 @@ export function SPXDesktopSidebarSurface({
         )
       )}
 
-      {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
-      {!stateDrivenLayoutEnabled ? (
-        <>
-          {focusMode !== 'risk_only' && <ContractSelector />}
-          <AICoachFeed suppressPrimaryTradeActions />
-          {focusMode === 'risk_only' && <DecisionContext />}
-        </>
-      ) : layoutMode === 'scan' ? (
-        focusMode === 'risk_only' ? <DecisionContext /> : null
-      ) : (
-        <>
-          <AICoachFeed suppressPrimaryTradeActions />
-          {focusMode !== 'risk_only' && <ContractSelector />}
-          {focusMode === 'risk_only' && <DecisionContext />}
-        </>
-      )}
+      {showSetupFeed && <SetupFeed suppressLocalPrimaryCta />}
+      {showContractSelector && <ContractSelector />}
+      {showInlineCoachFeed && <AICoachFeed suppressPrimaryTradeActions />}
+      {showDecisionContext && <DecisionContext />}
 
-      {(focusMode !== 'execution' && (!stateDrivenLayoutEnabled || layoutMode === 'evaluate')) && (
+      {showAnalytics && (
         <details
           className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
           onToggle={(event) => {
@@ -166,6 +161,7 @@ export function SPXDesktopSidebarSurface({
             Advanced GEX · Basis · Analytics
           </summary>
           <div className="mt-2.5 space-y-2.5">
+            <SPXOptimizerScorecardPanel compact />
             <GEXLandscape profile={gexProfile?.combined || null} />
             <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
           </div>
@@ -210,6 +206,7 @@ export function SPXSpatialSidebarContent({
         Analytics Drawer
       </summary>
       <div className="mt-2.5 space-y-2.5">
+        <SPXOptimizerScorecardPanel compact />
         <LevelMatrix />
         <GEXLandscape profile={gexProfile?.combined || null} />
         <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
@@ -218,55 +215,24 @@ export function SPXSpatialSidebarContent({
       </div>
     </details>
   )
-
-  if (layoutMode === 'legacy') {
-    return (
-      <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-        {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
-        {focusMode !== 'risk_only' && <ContractSelector />}
-        <AICoachFeed suppressPrimaryTradeActions />
-        {focusMode === 'risk_only' && <DecisionContext />}
-        {analyticsDrawer}
-      </div>
-    )
-  }
-
-  if (layoutMode === 'scan') {
-    return (
-      <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-        {coachDockEnabled && (
-          <CoachDock
-            surface="desktop"
-            isOpen={desktopCoachPanelOpen}
-            onToggle={onDesktopCoachDockToggle}
-          />
-        )}
-        {desktopCoachPanelOpen && <AICoachFeed suppressPrimaryTradeActions />}
-        {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
-        {focusMode === 'risk_only' && <DecisionContext />}
-        {analyticsDrawer}
-      </div>
-    )
-  }
-
-  if (layoutMode === 'evaluate') {
-    return (
-      <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-        <AICoachFeed suppressPrimaryTradeActions />
-        {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
-        {focusMode !== 'risk_only' && <ContractSelector />}
-        {focusMode === 'risk_only' && <DecisionContext />}
-        {analyticsDrawer}
-      </div>
-    )
-  }
+  const showSetupFeed = focusMode !== 'risk_only'
+  const showContractSelector = showSetupFeed && layoutMode !== 'scan'
+  const showInlineCoachFeed = layoutMode !== 'scan' || desktopCoachPanelOpen
+  const showDecisionContext = focusMode === 'risk_only'
 
   return (
     <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-      <AICoachFeed suppressPrimaryTradeActions />
-      {focusMode !== 'risk_only' && <ContractSelector />}
-      {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
-      {focusMode === 'risk_only' && <DecisionContext />}
+      {layoutMode === 'scan' && coachDockEnabled && (
+        <CoachDock
+          surface="desktop"
+          isOpen={desktopCoachPanelOpen}
+          onToggle={onDesktopCoachDockToggle}
+        />
+      )}
+      {showSetupFeed && <SetupFeed suppressLocalPrimaryCta />}
+      {showContractSelector && <ContractSelector />}
+      {showInlineCoachFeed && <AICoachFeed suppressPrimaryTradeActions />}
+      {showDecisionContext && <DecisionContext />}
       {analyticsDrawer}
     </div>
   )
@@ -304,10 +270,10 @@ export function SPXKeyboardShortcutsOverlay({
         </div>
         <div className="space-y-1.5 text-[12px] text-white/80">
           <p><span className="font-mono text-emerald-200">J / K</span> cycle setups</p>
-          <p><span className="font-mono text-emerald-200">Enter</span> enter trade focus on selected actionable setup</p>
-          <p><span className="font-mono text-emerald-200">Esc</span> exit focus or clear selection</p>
+          <p><span className="font-mono text-emerald-200">Enter</span> stage trade on selected actionable setup</p>
+          <p><span className="font-mono text-emerald-200">Esc</span> exit trade or clear selection</p>
           <p><span className="font-mono text-emerald-200">1-4</span> coach quick actions</p>
-          <p><span className="font-mono text-emerald-200">L</span> toggle level overlay</p>
+          <p><span className="font-mono text-emerald-200">M</span> toggle level matrix</p>
           <p><span className="font-mono text-emerald-200">F</span> toggle flow expansion</p>
           <p><span className="font-mono text-emerald-200">I</span> toggle immersive mode</p>
           <p><span className="font-mono text-emerald-200">S</span> toggle sidebar</p>
