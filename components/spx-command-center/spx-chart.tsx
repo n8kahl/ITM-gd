@@ -17,6 +17,7 @@ import {
 } from '@/lib/spx/replay-engine'
 import { buildSPXScenarioLanes } from '@/lib/spx/scenario-lanes'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
+import type { SPXLevelVisibilityBudget } from '@/lib/spx/overlay-priority'
 import type { SPXLevel } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
@@ -76,6 +77,7 @@ interface SPXChartProps {
   replayPlaying?: boolean
   replayWindowMinutes?: SPXReplayWindowMinutes
   replaySpeed?: SPXReplaySpeed
+  levelVisibilityBudget?: SPXLevelVisibilityBudget
   onDisplayedLevelsChange?: (displayed: number, total: number) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
   onLatestBarTimeChange?: (timeSec: number | null) => void
@@ -91,6 +93,7 @@ export function SPXChart({
   replayPlaying = false,
   replayWindowMinutes = 60,
   replaySpeed = 1,
+  levelVisibilityBudget,
   onDisplayedLevelsChange,
   onChartReady,
   onLatestBarTimeChange,
@@ -693,8 +696,8 @@ export function SPXChart({
           <span>{replayWindowMinutes}m</span>
         </div>
       )}
-      {scenarioLanes.length > 0 && (
-        <div className="pointer-events-none absolute bottom-16 left-2 z-[5] flex flex-wrap items-center gap-1.5" data-testid="spx-chart-scenario-lanes">
+      {scenarioLanes.length > 0 && focusMode !== 'risk_only' && (
+        <div className="pointer-events-none absolute bottom-20 left-2 z-[5] flex flex-wrap items-center gap-1.5" data-testid="spx-chart-scenario-lanes">
           {scenarioLanes.map((lane) => (
             <span
               key={lane.id}
@@ -726,6 +729,7 @@ export function SPXChart({
             levels={[...marketDisplayedLevels, ...setupAnnotations, ...scenarioLaneAnnotations]}
             futureOffsetBars={futureOffsetBars}
             isLoading={isLoading}
+            levelVisibilityBudget={levelVisibilityBudget}
             onChartReady={onChartReady}
             onCrosshairSnapshot={setCrosshairSnapshot}
             onLevelLayoutStats={handleLevelLayoutStats}

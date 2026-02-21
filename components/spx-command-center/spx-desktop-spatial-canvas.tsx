@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import type { SPXCommandController } from '@/hooks/use-spx-command-controller'
 import { FlowRibbon } from '@/components/spx-command-center/flow-ribbon'
 import { GEXAmbientGlow } from '@/components/spx-command-center/gex-ambient-glow'
@@ -12,6 +13,7 @@ import { SPXChart } from '@/components/spx-command-center/spx-chart'
 import { SpatialCoachGhostLayer } from '@/components/spx-command-center/spatial-coach-ghost-layer'
 import { SpatialCoachLayer } from '@/components/spx-command-center/spatial-coach-layer'
 import { TopographicPriceLadder } from '@/components/spx-command-center/topographic-price-ladder'
+import { resolveSPXOverlayPriorityPolicy } from '@/lib/spx/overlay-priority'
 
 export type SPXDesktopSpatialCanvasProps = {
   sidebarOpen: boolean
@@ -37,6 +39,8 @@ export type SPXDesktopSpatialCanvasProps = {
   onCloseLevelOverlay: () => void
 }
 
+const OVERLAY_POLICY_REFRESH_INTERVAL_MS = 180
+
 export function SPXDesktopSpatialCanvas({
   sidebarOpen,
   sidebarWidth,
@@ -60,6 +64,48 @@ export function SPXDesktopSpatialCanvas({
   showLevelOverlay,
   onCloseLevelOverlay,
 }: SPXDesktopSpatialCanvasProps) {
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    let rafId = 0
+    const refresh = () => {
+      const coordinates = coordinatesRef.current
+      const width = coordinates?.chartDimensions.width || 0
+      const height = coordinates?.chartDimensions.height || 0
+      setViewport((previous) => {
+        if (previous.width === width && previous.height === height) return previous
+        return { width, height }
+      })
+    }
+    const tick = () => {
+      rafId = window.requestAnimationFrame(refresh)
+    }
+    tick()
+    const intervalId = window.setInterval(tick, OVERLAY_POLICY_REFRESH_INTERVAL_MS)
+    return () => {
+      window.clearInterval(intervalId)
+      if (rafId) window.cancelAnimationFrame(rafId)
+    }
+  }, [coordinatesRef])
+
+  const overlayPolicy = useMemo(() => resolveSPXOverlayPriorityPolicy({
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    focusMode,
+    spatialThrottled,
+    showCone,
+    showSpatialCoach,
+    showSpatialGhostCards,
+  }), [
+    focusMode,
+    showCone,
+    showSpatialCoach,
+    showSpatialGhostCards,
+    spatialThrottled,
+    viewport.height,
+    viewport.width,
+  ])
+
   return (
     <div
       className="absolute inset-0 transition-[right] duration-300 ease-out"
@@ -68,40 +114,50 @@ export function SPXDesktopSpatialCanvas({
     >
       <div ref={chartCanvasRef} className="absolute inset-0">
         <div
-          className="pointer-events-none absolute inset-0 z-[1]"
-          style={{ boxShadow: 'inset 0 0 120px rgba(0,0,0,0.7)' }}
-        />
-        {showGEXGlow && <GEXAmbientGlow intensity="boosted" />}
-        {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
-        <FlowRibbon className="absolute left-4 top-[74px] z-[24] w-[320px] max-w-[46vw]" />
-        <SPXChart
-          showAllRelevantLevels={showAllRelevantLevels}
-          onDisplayedLevelsChange={onDisplayedLevelsChange}
-          onChartReady={onChartReady}
-          onLatestBarTimeChange={onLatestBarTimeChange}
-          focusMode={focusMode}
-          replayEnabled={replayEnabled}
-          replayPlaying={replayPlaying}
-          replayWindowMinutes={replayWindowMinutes}
-          replaySpeed={replaySpeed}
-          futureOffsetBars={showCone ? 42 : 12}
-          className="h-full w-full"
-        />
-        {!spatialThrottled && <TopographicPriceLadder coordinatesRef={coordinatesRef} />}
-        {!spatialThrottled && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
-        {!spatialThrottled && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
-        {showCone && !spatialThrottled && (
-          <ProbabilityConeSVG
-            coordinatesRef={coordinatesRef}
-            anchorTimestampSec={latestChartBarTimeSec}
+          className="absolute inset-0"
+          style={{
+            bottom: `${overlayPolicy.bottomSafeAreaPx}px`,
+            right: `${overlayPolicy.rightSafeAreaPx}px`,
+          }}
+          data-testid="spx-desktop-spatial-chart-viewport"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 z-[1]"
+            style={{ boxShadow: 'inset 0 0 120px rgba(0,0,0,0.7)' }}
           />
-        )}
-        {showSpatialCoach && showSpatialGhostCards && !spatialThrottled && (
-          <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
-        )}
-        {showSpatialCoach && !spatialThrottled && (
-          <SpatialCoachLayer coordinatesRef={coordinatesRef} />
-        )}
+          {showGEXGlow && <GEXAmbientGlow intensity="boosted" />}
+          {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
+          <FlowRibbon className="absolute left-4 top-[74px] z-[24] w-[320px] max-w-[46vw]" />
+          <SPXChart
+            showAllRelevantLevels={showAllRelevantLevels}
+            onDisplayedLevelsChange={onDisplayedLevelsChange}
+            onChartReady={onChartReady}
+            onLatestBarTimeChange={onLatestBarTimeChange}
+            focusMode={focusMode}
+            replayEnabled={replayEnabled}
+            replayPlaying={replayPlaying}
+            replayWindowMinutes={replayWindowMinutes}
+            replaySpeed={replaySpeed}
+            futureOffsetBars={overlayPolicy.allowCone ? 42 : 12}
+            levelVisibilityBudget={overlayPolicy.levelVisibilityBudget}
+            className="h-full w-full"
+          />
+          {!spatialThrottled && overlayPolicy.allowTopographicLadder && <TopographicPriceLadder coordinatesRef={coordinatesRef} />}
+          {!spatialThrottled && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
+          {!spatialThrottled && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
+          {overlayPolicy.allowCone && !spatialThrottled && (
+            <ProbabilityConeSVG
+              coordinatesRef={coordinatesRef}
+              anchorTimestampSec={latestChartBarTimeSec}
+            />
+          )}
+          {overlayPolicy.allowGhostCards && !spatialThrottled && (
+            <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
+          )}
+          {overlayPolicy.allowSpatialCoach && !spatialThrottled && (
+            <SpatialCoachLayer coordinatesRef={coordinatesRef} />
+          )}
+        </div>
 
         {showLevelOverlay && (
           <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { SPX_SHORTCUT_EVENT } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
@@ -31,7 +32,7 @@ const NODE_REFRESH_INTERVAL_MS = 140
 export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
   const { coachMessages } = useSPXCoachContext()
   const { spxPrice } = useSPXPriceContext()
-  const { activeSetups, inTradeSetup, selectedSetup } = useSPXSetupContext()
+  const { activeSetups, inTradeSetup, selectedSetup, selectSetup, enterTrade, tradeMode } = useSPXSetupContext()
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [nodeLayout, setNodeLayout] = useState<Map<string, { yOffsetPx: number; popoverLane: number }>>(new Map())
   const getCoordinates = useCallback(() => coordinatesRef.current, [coordinatesRef])
@@ -154,12 +155,48 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
   }, [])
 
   const handleAction = useCallback((actionId: string, messageId: string) => {
+    const sourceMessage = coachMessages.find((message) => message.id === messageId) || null
+    const targetSetup = (sourceMessage?.setupId ? setupById.get(sourceMessage.setupId) : null)
+      || inTradeSetup
+      || selectedSetup
+      || activeSetups[0]
+      || null
+
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.SPATIAL_NODE_ACTION, {
       actionId,
       messageId,
+      setupId: targetSetup?.id || sourceMessage?.setupId || null,
       surface: 'spatial_coach_node',
     })
-  }, [])
+
+    if (actionId === 'stage_trade') {
+      if (!targetSetup) {
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+          surface: 'spatial_coach_node',
+          action: 'stage_trade_blocked',
+          reason: 'no_setup_context',
+          messageId,
+        }, { level: 'warning' })
+        return
+      }
+
+      selectSetup(targetSetup)
+      if (tradeMode !== 'in_trade') {
+        enterTrade(targetSetup)
+      }
+      return
+    }
+
+    if (actionId === 'details') {
+      window.dispatchEvent(new CustomEvent(SPX_SHORTCUT_EVENT.COACH_OPEN_DETAILS, {
+        detail: {
+          messageId,
+          setupId: targetSetup?.id || sourceMessage?.setupId || null,
+          source: 'spatial_node',
+        },
+      }))
+    }
+  }, [activeSetups, coachMessages, enterTrade, inTradeSetup, selectSetup, selectedSetup, setupById, tradeMode])
 
   const handleExpand = useCallback((messageId: string, expanded: boolean, anchorMode: 'time' | 'fallback') => {
     if (!expanded) return

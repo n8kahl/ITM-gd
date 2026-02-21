@@ -29,6 +29,7 @@ import {
 } from './chart-indicators'
 import type { LevelGroupId } from './chart-level-groups'
 import { resolveVisibleChartLevels, type VisibleChartLevelsResult } from '@/lib/spx/spatial-hud'
+import type { SPXLevelVisibilityBudget } from '@/lib/spx/overlay-priority'
 
 // ============================================
 // TYPES
@@ -63,6 +64,7 @@ interface TradingChartProps {
   timeframe: string
   futureOffsetBars?: number
   isLoading?: boolean
+  levelVisibilityBudget?: SPXLevelVisibilityBudget
   onHoverPrice?: (price: number | null) => void
   onCrosshairSnapshot?: (snapshot: TradingChartCrosshairSnapshot | null) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
@@ -195,6 +197,7 @@ export function TradingChart({
   timeframe,
   futureOffsetBars = 12,
   isLoading,
+  levelVisibilityBudget,
   onHoverPrice,
   onCrosshairSnapshot,
   onChartReady,
@@ -237,6 +240,13 @@ export function TradingChart({
     }, [])
   const minBarTime = safeBars.length > 0 ? safeBars[0].time : null
   const maxBarTime = safeBars.length > 0 ? safeBars[safeBars.length - 1].time : null
+  const resolvedLevelVisibilityBudget = levelVisibilityBudget || {
+    nearWindowPoints: 16,
+    nearLabelBudget: 7,
+    maxTotalLabels: 16,
+    minGapPoints: 1.2,
+    pixelCollisionGap: 16,
+  }
 
   const normalizeIndicatorPoints = useCallback((
     points: Array<{ time: number; value: number; signal?: number; histogram?: number }> | undefined,
@@ -1069,12 +1079,12 @@ export function TradingChart({
     const livePrice = safeBars.length > 0 ? safeBars[safeBars.length - 1]!.close : null
     const visibleLevelSelection = resolveVisibleChartLevels(derivedLevels, {
       livePrice,
-      nearWindowPoints: 16,
-      nearLabelBudget: 7,
-      maxTotalLabels: 16,
-      minGapPoints: 1.2,
+      nearWindowPoints: resolvedLevelVisibilityBudget.nearWindowPoints,
+      nearLabelBudget: resolvedLevelVisibilityBudget.nearLabelBudget,
+      maxTotalLabels: resolvedLevelVisibilityBudget.maxTotalLabels,
+      minGapPoints: resolvedLevelVisibilityBudget.minGapPoints,
     })
-    const pixelCollisionGap = 16
+    const pixelCollisionGap = resolvedLevelVisibilityBudget.pixelCollisionGap
     const levelWithY = visibleLevelSelection.levels.map((level) => ({
       level,
       y: series.priceToCoordinate(level.price),
@@ -1127,7 +1137,21 @@ export function TradingChart({
     }
 
     levelPriceLinesRef.current = newLines
-  }, [levels, indicators.openingRange, safeBars, timeframe, openingRangeMinutes, positionOverlays, clearLevelPriceLines, onLevelLayoutStats])
+  }, [
+    levels,
+    indicators.openingRange,
+    safeBars,
+    timeframe,
+    openingRangeMinutes,
+    positionOverlays,
+    clearLevelPriceLines,
+    onLevelLayoutStats,
+    resolvedLevelVisibilityBudget.maxTotalLabels,
+    resolvedLevelVisibilityBudget.minGapPoints,
+    resolvedLevelVisibilityBudget.nearLabelBudget,
+    resolvedLevelVisibilityBudget.nearWindowPoints,
+    resolvedLevelVisibilityBudget.pixelCollisionGap,
+  ])
 
   const showRSIPane = indicators.rsi
   const showMACDPane = indicators.macd

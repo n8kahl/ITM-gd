@@ -39,7 +39,11 @@ import type {
 } from '@/lib/types/spx-command-center'
 import { summarizeFlowAlignment } from '@/lib/spx/coach-context'
 import { buildSPXScenarioLanes } from '@/lib/spx/scenario-lanes'
-import { SPX_SHORTCUT_EVENT, type SPXCoachQuickActionEventDetail } from '@/lib/spx/shortcut-events'
+import {
+  SPX_SHORTCUT_EVENT,
+  type SPXCoachOpenDetailsEventDetail,
+  type SPXCoachQuickActionEventDetail,
+} from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import {
   COACH_ALERT_LIFECYCLE_EVENT,
@@ -554,6 +558,54 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
       window.removeEventListener(SPX_SHORTCUT_EVENT.COACH_QUICK_ACTION, handleShortcutQuickAction as EventListener)
     }
   }, [isSending, quickActions, readOnly, scopedSetup?.id, sendMessage, tradeMode])
+
+  useEffect(() => {
+    if (readOnly) return
+
+    const handleCoachOpenDetails = (event: Event) => {
+      const custom = event as CustomEvent<SPXCoachOpenDetailsEventDetail>
+      const detail = custom.detail
+      if (!detail) return
+
+      if (detail.setupId) {
+        const targetSetup = findSetupById(activeSetups, detail.setupId)
+        if (targetSetup) {
+          selectSetup(targetSetup)
+        }
+      }
+
+      setHistoryOpen(true)
+      setShowAllMessages(true)
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_SHORTCUT_USED, {
+        action: 'coach_open_details',
+        source: detail.source || 'ui',
+        messageId: detail.messageId || null,
+        setupId: detail.setupId || null,
+        tradeMode,
+        selectedSetupId: scopedSetup?.id || null,
+      })
+
+      const targetMessageId = detail.messageId
+      if (!targetMessageId) return
+
+      window.requestAnimationFrame(() => {
+        const timelineNode = timelineRef.current
+        if (!timelineNode) return
+        const targetNode = timelineNode.querySelector<HTMLElement>(`[data-coach-message-id="${targetMessageId}"]`)
+        if (!targetNode) return
+        targetNode.scrollIntoView({
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+          block: 'nearest',
+        })
+      })
+    }
+
+    window.addEventListener(SPX_SHORTCUT_EVENT.COACH_OPEN_DETAILS, handleCoachOpenDetails as EventListener)
+    return () => {
+      window.removeEventListener(SPX_SHORTCUT_EVENT.COACH_OPEN_DETAILS, handleCoachOpenDetails as EventListener)
+    }
+  }, [activeSetups, prefersReducedMotion, readOnly, scopedSetup?.id, selectSetup, tradeMode])
 
   useEffect(() => {
     if (!pinnedAlert) return
@@ -1108,6 +1160,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
                       {[...group.messages].reverse().map((message) => (
                         <motion.div
                           key={message.id}
+                          data-coach-message-id={message.id}
                           layout={uxFlags.coachMotionV1 && !prefersReducedMotion}
                           initial={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 0, y: 6 } : undefined}
                           animate={uxFlags.coachMotionV1 && !prefersReducedMotion ? { opacity: 1, y: 0 } : undefined}

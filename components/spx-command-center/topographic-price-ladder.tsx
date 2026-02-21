@@ -26,6 +26,7 @@ interface LadderRenderEntry {
   width: number
   color: string
   priceLabel: string
+  showLabel: boolean
 }
 
 interface LadderRenderState {
@@ -49,6 +50,7 @@ function renderStateEquals(left: LadderRenderState | null, right: LadderRenderSt
       || l.width !== r.width
       || l.color !== r.color
       || l.priceLabel !== r.priceLabel
+      || l.showLabel !== r.showLabel
     ) {
       return false
     }
@@ -88,7 +90,7 @@ export function TopographicPriceLadder({ coordinatesRef }: TopographicPriceLadde
     }
 
     const entries: LadderRenderEntry[] = []
-    for (const entry of ladderEntries) {
+    for (const [index, entry] of ladderEntries.entries()) {
       const y = coordinates.priceToPixel(entry.price)
       if (y == null || y < 0 || y > laneHeight) continue
       const width = clamp(entry.weight * 22, LADDER_BLOCK_MIN_WIDTH, LADDER_BLOCK_MAX_WIDTH)
@@ -99,6 +101,7 @@ export function TopographicPriceLadder({ coordinatesRef }: TopographicPriceLadde
         width,
         color: entry.color,
         priceLabel: entry.price.toFixed(0),
+        showLabel: index < 3,
       })
     }
 
@@ -137,11 +140,11 @@ export function TopographicPriceLadder({ coordinatesRef }: TopographicPriceLadde
 
   return (
     <div
-      className="pointer-events-none absolute inset-y-0 right-2 z-10 w-[88px]"
+      className="pointer-events-none absolute inset-y-0 right-[72px] z-[9] w-[64px]"
       data-testid="spx-topographic-ladder"
       aria-hidden
     >
-      <div className="absolute inset-y-0 right-0 w-[74px] rounded-l-xl border-l border-white/10 bg-gradient-to-l from-white/[0.05] via-white/[0.015] to-transparent" />
+      <div className="absolute inset-y-0 right-0 w-[56px] rounded-l-xl border-l border-white/10 bg-gradient-to-l from-white/[0.04] via-white/[0.012] to-transparent" />
 
       {renderState.entries.map((entry) => (
         <div
@@ -155,15 +158,17 @@ export function TopographicPriceLadder({ coordinatesRef }: TopographicPriceLadde
               background: `linear-gradient(90deg, transparent 0%, ${entry.color}70 100%)`,
             }}
           />
-          <span className="absolute right-1 top-1/2 -translate-y-1/2 font-mono text-[8px] text-white/70">
-            {entry.priceLabel}
-          </span>
+          {entry.showLabel && (
+            <span className="absolute right-1 top-1/2 -translate-y-1/2 font-mono text-[8px] text-white/62">
+              {entry.priceLabel}
+            </span>
+          )}
         </div>
       ))}
 
       {renderState.livePriceY != null && (
         <div
-          className="absolute right-0 h-[1px] w-[84px] bg-emerald-300/60 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+          className="absolute right-0 h-[1px] w-[56px] bg-emerald-300/60 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
           style={{ top: renderState.livePriceY }}
           data-testid="spx-topographic-needle"
         />

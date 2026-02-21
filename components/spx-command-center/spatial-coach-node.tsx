@@ -21,6 +21,14 @@ interface SpatialCoachNodeProps {
   onAnchorModeChange?: (messageId: string, anchorMode: SpatialAnchorMode) => void
 }
 
+const SPATIAL_POPOVER_WIDTH_PX = 260
+const SPATIAL_POPOVER_HEIGHT_PX = 168
+const SPATIAL_POPOVER_GUTTER_PX = 12
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
 export function SpatialCoachNode({
   message,
   anchorPrice,
@@ -61,11 +69,17 @@ export function SpatialCoachNode({
 
   const isBearish = message.type === 'pre_trade' && message.content.toLowerCase().includes('fade')
   const color = isBearish ? '#FB7185' : '#10B981'
-  const popoverWidth = 260
-  const openToLeft = x + popoverWidth + 32 > coordinates.chartDimensions.width
-  const popoverX = openToLeft ? -(popoverWidth + 20) : 20
-  const popoverTop = -62 + (Math.min(popoverLane, 4) * 10)
-  const connectorLength = Math.max(24, openToLeft ? x - 56 : coordinates.chartDimensions.width - x - 80)
+  const rawOpenToLeft = x + SPATIAL_POPOVER_WIDTH_PX + 32 > coordinates.chartDimensions.width
+  const rawPopoverX = rawOpenToLeft ? -(SPATIAL_POPOVER_WIDTH_PX + 20) : 20
+  const minPopoverX = -(x - SPATIAL_POPOVER_GUTTER_PX)
+  const maxPopoverX = coordinates.chartDimensions.width - x - SPATIAL_POPOVER_WIDTH_PX - SPATIAL_POPOVER_GUTTER_PX
+  const popoverX = clamp(rawPopoverX, minPopoverX, maxPopoverX)
+  const rawPopoverTop = -62 + (Math.min(popoverLane, 4) * 10)
+  const minPopoverTop = -(y - SPATIAL_POPOVER_GUTTER_PX)
+  const maxPopoverTop = coordinates.chartDimensions.height - y - SPATIAL_POPOVER_HEIGHT_PX - SPATIAL_POPOVER_GUTTER_PX
+  const popoverTop = clamp(rawPopoverTop, minPopoverTop, maxPopoverTop)
+  const openToLeft = popoverX < 0
+  const connectorLength = Math.max(24, openToLeft ? Math.abs(popoverX) - 4 : popoverX + 8)
 
   return (
     <div
