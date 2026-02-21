@@ -73,7 +73,10 @@ describe('academy-v3 access control', () => {
       data: null,
       error: null,
     })
-    const insertMock = vi.fn(async () => ({ error: null }))
+    const insertMock = vi.fn(async (payload: Record<string, unknown>) => {
+      void payload
+      return { error: null }
+    })
 
     const supabase: any = {
       from: vi.fn((table: string) => {
@@ -94,10 +97,10 @@ describe('academy-v3 access control', () => {
     })
 
     expect(insertMock).toHaveBeenCalledTimes(1)
-    expect(insertMock.mock.calls[0]?.[0]).toMatchObject({
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({
       status: 'active',
       metadata: { source: 'academy_v3_auto_enroll' },
-    })
+    }))
   })
 
   it('reactivates enrollment when status is not active/completed', async () => {

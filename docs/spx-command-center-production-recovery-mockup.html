@@ -1,0 +1,2063 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SPX Command Center Recovery Mockup</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg-0: #040607;
+      --bg-1: #0a0f11;
+      --bg-2: #11171a;
+      --line: rgba(255, 255, 255, 0.12);
+      --line-strong: rgba(255, 255, 255, 0.22);
+      --text: #eef2f0;
+      --muted: rgba(238, 242, 240, 0.62);
+      --muted-soft: rgba(238, 242, 240, 0.45);
+      --emerald: #10b981;
+      --emerald-soft: rgba(16, 185, 129, 0.18);
+      --champagne: #f3e5ab;
+      --champagne-soft: rgba(243, 229, 171, 0.17);
+      --amber: #f59e0b;
+      --rose: #fb7185;
+      --blue: #7dd3fc;
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+      --radius-xl: 18px;
+      --radius-lg: 14px;
+      --radius-md: 10px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(1100px 620px at 88% -12%, rgba(16, 185, 129, 0.14), transparent 52%),
+        radial-gradient(1000px 600px at 15% -18%, rgba(243, 229, 171, 0.12), transparent 58%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-0));
+      color: var(--text);
+      font-family: "Space Grotesk", "Avenir Next", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    .page {
+      max-width: 1460px;
+      margin: 0 auto;
+      padding: 18px 22px 28px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      background: linear-gradient(168deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 16px;
+      flex-wrap: wrap;
+    }
+
+    .title-block {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 21px;
+      letter-spacing: 0.02em;
+      line-height: 1.1;
+      color: var(--text);
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.01em;
+    }
+
+    .chip-row,
+    .button-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 7px 11px;
+      font-size: 11px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.02);
+      font-family: "IBM Plex Mono", "SF Mono", monospace;
+    }
+
+    .chip.ok {
+      border-color: rgba(16, 185, 129, 0.45);
+      color: #b5f3d8;
+      background: rgba(16, 185, 129, 0.14);
+    }
+
+    .chip.warn {
+      border-color: rgba(245, 158, 11, 0.42);
+      color: #fbd58d;
+      background: rgba(245, 158, 11, 0.13);
+    }
+
+    .chip.bad {
+      border-color: rgba(251, 113, 133, 0.45);
+      color: #fecdd6;
+      background: rgba(251, 113, 133, 0.13);
+    }
+
+    .btn,
+    .seg-btn {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      border-radius: 10px;
+      min-height: 40px;
+      padding: 0 12px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+      font-family: "IBM Plex Mono", "SF Mono", monospace;
+    }
+
+    .btn:hover,
+    .seg-btn:hover {
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.075);
+      transform: translateY(-1px);
+    }
+
+    .btn.primary {
+      border-color: rgba(16, 185, 129, 0.5);
+      background: rgba(16, 185, 129, 0.21);
+      color: #d6fced;
+      font-weight: 600;
+    }
+
+    .btn.soft {
+      border-color: rgba(243, 229, 171, 0.42);
+      background: rgba(243, 229, 171, 0.14);
+      color: #f5ebc2;
+    }
+
+    .btn.ghost {
+      background: rgba(255, 255, 255, 0.015);
+      color: var(--muted);
+    }
+
+    .seg {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 4px;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .seg-btn {
+      min-height: 36px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+    }
+
+    .seg-btn.active {
+      border-color: rgba(16, 185, 129, 0.46);
+      background: rgba(16, 185, 129, 0.18);
+      color: #c8fae7;
+    }
+
+    .signal-bar {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .signal-main,
+    .signal-sub {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(8, 11, 13, 0.67);
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .signal-price {
+      font-size: 30px;
+      font-family: "Fraunces", Georgia, serif;
+      letter-spacing: 0.02em;
+      color: #f4f6f5;
+      line-height: 1;
+    }
+
+    .signal-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted-soft);
+      font-family: "IBM Plex Mono", "SF Mono", monospace;
+    }
+
+    .signal-value {
+      font-size: 13px;
+      color: var(--text);
+      font-family: "IBM Plex Mono", "SF Mono", monospace;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.9fr);
+      min-height: 640px;
+    }
+
+    .chart-shell {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: linear-gradient(170deg, rgba(10, 15, 16, 0.9), rgba(6, 9, 10, 0.95));
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .chart-head {
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chart-stage {
+      position: relative;
+      overflow: hidden;
+      min-height: 320px;
+      padding: 10px 10px 0;
+      background:
+        linear-gradient(0deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px) 0 0 / 100% 58px,
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px) 0 0 / 62px 100%,
+        radial-gradient(circle at 78% 6%, rgba(16, 185, 129, 0.14), transparent 36%),
+        radial-gradient(circle at 18% 0%, rgba(243, 229, 171, 0.09), transparent 35%);
+    }
+
+    .chart-svg {
+      position: absolute;
+      inset: 10px 12px 10px;
+      width: calc(100% - 24px);
+      height: calc(100% - 20px);
+      pointer-events: none;
+    }
+
+    .chart-svg text {
+      font-family: "IBM Plex Mono", "SF Mono", monospace;
+      fill: rgba(238, 242, 240, 0.58);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+    }
+
+    .chart-legend {
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .legend-chip {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(8, 13, 14, 0.82);
+      padding: 4px 8px;
+      color: rgba(238, 242, 240, 0.72);
+      font-size: 10px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .legend-chip.good {
+      border-color: rgba(16, 185, 129, 0.42);
+      background: rgba(16, 185, 129, 0.15);
+      color: #c8f9e7;
+    }
+
+    .legend-chip.warn {
+      border-color: rgba(243, 229, 171, 0.42);
+      background: rgba(243, 229, 171, 0.14);
+      color: #faefca;
+    }
+
+    .overlay-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .overlay-badge {
+      position: absolute;
+      border: 1px solid var(--line);
+      background: rgba(8, 13, 14, 0.84);
+      border-radius: 999px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 5px 9px;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .overlay-badge.hot {
+      border-color: rgba(243, 229, 171, 0.4);
+      color: #f5ebc2;
+      background: rgba(243, 229, 171, 0.14);
+    }
+
+    .overlay-badge.good {
+      border-color: rgba(16, 185, 129, 0.42);
+      color: #cbf8e8;
+      background: rgba(16, 185, 129, 0.16);
+    }
+
+    .overlay-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.24), transparent);
+      opacity: 0.6;
+    }
+
+    .overlay-line.emerald {
+      background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.54), transparent);
+    }
+
+    .overlay-line.rose {
+      background: linear-gradient(90deg, transparent, rgba(251, 113, 133, 0.46), transparent);
+    }
+
+    .scope-card {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: min(305px, 88%);
+      border-radius: 11px;
+      border: 1px solid var(--line);
+      background: rgba(7, 11, 13, 0.9);
+      padding: 10px;
+      display: grid;
+      gap: 5px;
+    }
+
+    .scope-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .scope-item strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .exec-rail {
+      border-top: 1px solid var(--line);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: linear-gradient(180deg, rgba(10, 14, 15, 0.48), rgba(10, 14, 15, 0.82));
+    }
+
+    .exec-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 200px;
+    }
+
+    .exec-title {
+      font-size: 11px;
+      color: var(--muted-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .exec-value {
+      color: #f4f6f5;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .right-rail {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: rgba(7, 10, 11, 0.75);
+      display: grid;
+      grid-template-rows: auto auto auto;
+      gap: 8px;
+      padding: 9px;
+      min-height: 640px;
+      overflow: hidden;
+    }
+
+    .section {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .setup-list {
+      display: grid;
+      gap: 8px;
+      max-height: 186px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .setup-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.24);
+      padding: 9px;
+      cursor: pointer;
+      display: grid;
+      gap: 6px;
+      transition: border-color 140ms ease, background 140ms ease;
+    }
+
+    .setup-card:hover {
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .setup-card.active {
+      border-color: rgba(16, 185, 129, 0.52);
+      background: rgba(16, 185, 129, 0.14);
+    }
+
+    .setup-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .setup-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.01em;
+    }
+
+    .setup-meta {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .coach-alert {
+      border: 1px solid rgba(251, 113, 133, 0.45);
+      background: rgba(251, 113, 133, 0.14);
+      color: #ffd5dc;
+      border-radius: 10px;
+      padding: 8px;
+      display: grid;
+      gap: 7px;
+    }
+
+    .coach-now {
+      border: 1px solid rgba(16, 185, 129, 0.34);
+      background: rgba(16, 185, 129, 0.12);
+      border-radius: 10px;
+      padding: 9px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .coach-now.critical {
+      border-color: rgba(251, 113, 133, 0.45);
+      background: rgba(251, 113, 133, 0.11);
+    }
+
+    .coach-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .verdict {
+      border-radius: 999px;
+      border: 1px solid rgba(16, 185, 129, 0.52);
+      background: rgba(16, 185, 129, 0.19);
+      color: #d6fced;
+      padding: 4px 9px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .verdict.warn {
+      border-color: rgba(245, 158, 11, 0.47);
+      background: rgba(245, 158, 11, 0.18);
+      color: #ffe4b3;
+    }
+
+    .verdict.bad {
+      border-color: rgba(251, 113, 133, 0.52);
+      background: rgba(251, 113, 133, 0.19);
+      color: #ffd5dc;
+    }
+
+    .coach-copy {
+      font-size: 12px;
+      color: #f2f5f3;
+      line-height: 1.45;
+    }
+
+    .why-list,
+    .history-list {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .history-list {
+      max-height: 130px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .action-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .contract-mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .contract-card {
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.12);
+      border-radius: 10px;
+      padding: 9px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .alt-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .alt-btn {
+      width: 100%;
+      text-align: left;
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      padding: 7px 9px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: "IBM Plex Mono", monospace;
+      transition: border-color 140ms ease, background 140ms ease;
+    }
+
+    .alt-btn:hover {
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .alt-btn.active {
+      border-color: rgba(243, 229, 171, 0.5);
+      background: rgba(243, 229, 171, 0.16);
+      color: #f8eec8;
+    }
+
+    .palette {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 4, 5, 0.82);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 13vh;
+      z-index: 60;
+    }
+
+    .palette.open {
+      display: flex;
+    }
+
+    .palette-card {
+      width: min(760px, 92vw);
+      border-radius: 15px;
+      border: 1px solid var(--line-strong);
+      background: linear-gradient(170deg, rgba(9, 12, 13, 0.97), rgba(6, 9, 10, 0.97));
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+      overflow: hidden;
+    }
+
+    .palette-head {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 8px;
+    }
+
+    .palette-input {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      padding: 0 11px;
+      font-size: 13px;
+      font-family: "IBM Plex Mono", monospace;
+      outline: none;
+    }
+
+    .palette-input:focus {
+      border-color: rgba(16, 185, 129, 0.48);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.16);
+    }
+
+    .command-list {
+      max-height: 350px;
+      overflow: auto;
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .command-btn {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+      border-radius: 9px;
+      min-height: 40px;
+      padding: 8px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .command-btn:hover {
+      border-color: rgba(16, 185, 129, 0.45);
+      background: rgba(16, 185, 129, 0.11);
+    }
+
+    .command-kbd {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 2px 6px;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10px;
+    }
+
+    @media (max-width: 1180px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .right-rail {
+        min-height: auto;
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 840px) {
+      .page {
+        padding: 12px;
+      }
+
+      .topbar {
+        padding: 12px;
+      }
+
+      .signal-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-stage {
+        min-height: 250px;
+      }
+
+      .chart-svg {
+        inset: 8px 8px 8px;
+        width: calc(100% - 16px);
+        height: calc(100% - 16px);
+      }
+
+      .exec-rail {
+        position: sticky;
+        bottom: 0;
+        z-index: 15;
+        border-top: 1px solid var(--line-strong);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="panel topbar">
+      <div class="title-block">
+        <div>
+          <div class="brand">SPX Command Center Recovery Mockup</div>
+          <div class="muted">Interactive local prototype for execution scope validation</div>
+        </div>
+        <div class="chip-row" id="statusChips"></div>
+      </div>
+      <div class="button-row">
+        <button class="btn ghost" id="simulateAlertBtn" type="button">Simulate Alert</button>
+        <button class="btn ghost" id="cycleHealthBtn" type="button">Cycle Data Health</button>
+        <button class="btn soft" id="openPaletteBtn" type="button">Command Palette (Cmd/Ctrl+K)</button>
+        <button class="btn" id="resetBtn" type="button">Reset Flow</button>
+      </div>
+    </section>
+
+    <section class="panel signal-bar" id="signalBar"></section>
+
+    <section class="workspace">
+      <section class="chart-shell">
+        <div class="chart-head" id="chartHead"></div>
+        <div class="chart-stage" id="chartStage"></div>
+        <div class="exec-rail" id="executionRail"></div>
+      </section>
+
+      <section class="right-rail">
+        <section class="section" id="setupSection"></section>
+        <section class="section" id="coachSection"></section>
+        <section class="section" id="contractSection"></section>
+      </section>
+    </section>
+  </div>
+
+  <div class="palette" id="palette">
+    <div class="palette-card">
+      <div class="palette-head">
+        <input class="palette-input" id="paletteInput" type="text" placeholder="Search commands (enter trade, open history, switch overlays)" />
+        <div class="muted">Enter to run the first command. Esc to close.</div>
+      </div>
+      <div class="command-list" id="commandList"></div>
+    </div>
+  </div>
+
+  <script>
+    const setups = [
+      {
+        id: "setup-1",
+        name: "Bullish Fade Wall",
+        status: "ready",
+        direction: "bullish",
+        confidence: 71,
+        confluence: "4/5",
+        entry: "6028-6030",
+        stop: "6024",
+        t1: "6038",
+        t2: "6044",
+        aiContract: "6030C 2026-03-20"
+      },
+      {
+        id: "setup-2",
+        name: "Bearish Breakout Vacuum",
+        status: "triggered",
+        direction: "bearish",
+        confidence: 78,
+        confluence: "5/5",
+        entry: "6018-6020",
+        stop: "6024",
+        t1: "6008",
+        t2: "5996",
+        aiContract: "6020P 2026-03-20"
+      },
+      {
+        id: "setup-3",
+        name: "Compression Coil",
+        status: "forming",
+        direction: "neutral",
+        confidence: 54,
+        confluence: "3/5",
+        entry: "6034-6037",
+        stop: "6027",
+        t1: "6042",
+        t2: "6051",
+        aiContract: "6035C 2026-03-20"
+      }
+    ];
+
+    const alternativeContracts = {
+      "setup-1": ["6035C 2026-03-20", "6025C 2026-03-20"],
+      "setup-2": ["6015P 2026-03-20", "6025P 2026-03-20"],
+      "setup-3": ["6040C 2026-03-20"]
+    };
+
+    function createRng(seed) {
+      let value = seed >>> 0;
+      return () => {
+        value = (1664525 * value + 1013904223) >>> 0;
+        return value / 4294967296;
+      };
+    }
+
+    function formatSessionLabel(totalMinutes) {
+      const minutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+      const hour = Math.floor(minutes / 60);
+      const minute = minutes % 60;
+      const hh = String(hour).padStart(2, "0");
+      const mm = String(minute).padStart(2, "0");
+      return hh + ":" + mm;
+    }
+
+    function buildInitialSeries(basePrice, count = 84) {
+      const rng = createRng(Math.round(basePrice * 100));
+      const bars = [];
+      const startMinutes = (9 * 60 + 30) - ((count - 1) * 5);
+      let previousClose = basePrice - 5.6;
+
+      for (let index = 0; index < count; index += 1) {
+        const open = previousClose + (rng() - 0.5) * 0.42;
+        const structureBias =
+          index < count * 0.2 ? -0.08 :
+            index < count * 0.58 ? 0.09 :
+              index < count * 0.82 ? 0.02 : -0.05;
+        const wave = Math.sin(index / 5.6) * 0.24 + Math.cos(index / 13.5) * 0.19;
+        const drift = (rng() - 0.5) * 0.9 + wave + structureBias;
+        const close = open + drift;
+        const wickHigh = Math.max(open, close) + 0.22 + (rng() * 0.95);
+        const wickLow = Math.min(open, close) - 0.22 - (rng() * 0.95);
+        const volume = Math.round(
+          260 + (rng() * 450) + (Math.abs(close - open) * 210) + (index > count * 0.72 ? 110 : 0),
+        );
+        bars.push({
+          o: Number(open.toFixed(2)),
+          h: Number(wickHigh.toFixed(2)),
+          l: Number(wickLow.toFixed(2)),
+          c: Number(close.toFixed(2)),
+          v: volume,
+          minuteLabel: formatSessionLabel(startMinutes + (index * 5)),
+          index,
+        });
+        previousClose = close;
+      }
+
+      return bars;
+    }
+
+    function parseEntryRange(entry) {
+      if (typeof entry !== "string" || !entry.includes("-")) return null;
+      const pieces = entry.split("-").map((piece) => Number.parseFloat(piece.trim()));
+      if (pieces.length !== 2 || !Number.isFinite(pieces[0]) || !Number.isFinite(pieces[1])) return null;
+      return {
+        low: Math.min(pieces[0], pieces[1]),
+        high: Math.max(pieces[0], pieces[1]),
+      };
+    }
+
+    function numericFromString(value) {
+      const parsed = Number.parseFloat(String(value));
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function computeEma(values, period) {
+      if (!Array.isArray(values) || values.length === 0) return [];
+      const k = 2 / (period + 1);
+      let ema = values[0];
+      return values.map((value, index) => {
+        if (index === 0) {
+          ema = value;
+          return ema;
+        }
+        ema = (value * k) + (ema * (1 - k));
+        return ema;
+      });
+    }
+
+    function computeVwap(bars) {
+      let cumulativePV = 0;
+      let cumulativeVolume = 0;
+      return bars.map((bar) => {
+        const typicalPrice = (bar.h + bar.l + bar.c) / 3;
+        cumulativePV += typicalPrice * bar.v;
+        cumulativeVolume += bar.v;
+        return cumulativeVolume > 0 ? cumulativePV / cumulativeVolume : bar.c;
+      });
+    }
+
+    function toPath(values, mapX, mapY) {
+      if (!Array.isArray(values) || values.length === 0) return "";
+      let path = "";
+      values.forEach((value, index) => {
+        if (!Number.isFinite(value)) return;
+        const x = mapX(index);
+        const y = mapY(value);
+        path += (path ? " L" : "M") + x.toFixed(2) + "," + y.toFixed(2);
+      });
+      return path;
+    }
+
+    function directionalBias() {
+      const setup = state.mode === "in_trade" ? activeTradeSetup() : selectedSetup();
+      if (!setup) return 0;
+      if (setup.direction === "bullish") return 0.11;
+      if (setup.direction === "bearish") return -0.11;
+      return 0;
+    }
+
+    function advanceChartSeries() {
+      const source = Array.isArray(state.chartSeries) && state.chartSeries.length > 0
+        ? state.chartSeries.slice()
+        : buildInitialSeries(state.price, 84);
+      const previous = source[source.length - 1];
+      if (!previous) return;
+
+      const modeVolatility = state.mode === "in_trade"
+        ? 1.28
+        : state.mode === "evaluate"
+          ? 1.06
+          : 0.9;
+      const meanReversion = (state.price - previous.c) * 0.26;
+      const pulse = Math.sin((state.barSeq || source.length) / 5.1) * 0.2;
+      const drift = meanReversion + pulse + (Math.random() - 0.5) * 1.3 * modeVolatility + directionalBias();
+      const open = previous.c + (Math.random() - 0.5) * 0.36;
+      const close = open + drift;
+      const high = Math.max(open, close) + 0.18 + (Math.random() * 0.98 * modeVolatility);
+      const low = Math.min(open, close) - 0.18 - (Math.random() * 0.98 * modeVolatility);
+      const volume = Math.round(
+        240
+        + (Math.random() * 470)
+        + (Math.abs(close - open) * 230)
+        + (state.mode === "in_trade" ? 120 : 0)
+        + (state.overlayPreset === "spatial" ? 45 : 0),
+      );
+
+      const nextIndex = (state.barSeq || source.length) + 1;
+      source.push({
+        o: Number(open.toFixed(2)),
+        h: Number(high.toFixed(2)),
+        l: Number(low.toFixed(2)),
+        c: Number(close.toFixed(2)),
+        v: volume,
+        minuteLabel: formatSessionLabel((9 * 60 + 30) + (nextIndex * 5)),
+        index: nextIndex,
+      });
+
+      state.barSeq = nextIndex;
+      state.chartSeries = source.slice(-110);
+    }
+
+    const defaultState = () => {
+      const chartSeries = buildInitialSeries(6031.44, 84);
+      const lastBar = chartSeries[chartSeries.length - 1] || null;
+      const lastVwap = computeVwap(chartSeries).slice(-1)[0] || (lastBar ? lastBar.c : 6031.44);
+      const basisValue = (lastBar ? lastBar.c : 6031.44) - lastVwap;
+
+      return {
+        mode: "scan",
+        selectedSetupId: null,
+        inTradeSetupId: null,
+        postTradeNote: null,
+        overlayPreset: "execution",
+        viewMode: "classic",
+        dataHealth: "healthy",
+        showWhy: false,
+        showHistory: false,
+        commandPaletteOpen: false,
+        commandQuery: "",
+        contractMode: "ai",
+        selectedContract: null,
+        coachAlert: null,
+        coachHistory: [
+          "Scan complete. Two actionable setups are now in sniper scope.",
+          "Setup-2 has strongest flow alignment and trigger confirmation.",
+          "Risk reminder: maintain max 1 contract until second confirmation."
+        ],
+        price: lastBar ? lastBar.c : 6031.44,
+        basis: (basisValue >= 0 ? "+" : "") + basisValue.toFixed(2),
+        regime: "Compression -> Breakout Bias",
+        clock: "--:--:-- ET",
+        chartSeries,
+        barSeq: lastBar ? lastBar.index : chartSeries.length - 1
+      };
+    };
+
+    let state = defaultState();
+    let clockTimer = null;
+    let priceTimer = null;
+    let alertTimer = null;
+
+    const els = {
+      statusChips: document.getElementById("statusChips"),
+      signalBar: document.getElementById("signalBar"),
+      chartHead: document.getElementById("chartHead"),
+      chartStage: document.getElementById("chartStage"),
+      executionRail: document.getElementById("executionRail"),
+      setupSection: document.getElementById("setupSection"),
+      coachSection: document.getElementById("coachSection"),
+      contractSection: document.getElementById("contractSection"),
+      palette: document.getElementById("palette"),
+      paletteInput: document.getElementById("paletteInput"),
+      commandList: document.getElementById("commandList"),
+      resetBtn: document.getElementById("resetBtn"),
+      openPaletteBtn: document.getElementById("openPaletteBtn"),
+      simulateAlertBtn: document.getElementById("simulateAlertBtn"),
+      cycleHealthBtn: document.getElementById("cycleHealthBtn")
+    };
+
+    function getSetup(id) {
+      return setups.find((item) => item.id === id) || null;
+    }
+
+    function selectedSetup() {
+      return getSetup(state.selectedSetupId);
+    }
+
+    function activeTradeSetup() {
+      return getSetup(state.inTradeSetupId);
+    }
+
+    function isActionable(setup) {
+      return setup && (setup.status === "ready" || setup.status === "triggered");
+    }
+
+    function toEtClock(now = new Date()) {
+      return now.toLocaleTimeString("en-US", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZone: "America/New_York"
+      }) + " ET";
+    }
+
+    function statusToneForHealth() {
+      if (state.dataHealth === "healthy") return "ok";
+      if (state.dataHealth === "stale") return "warn";
+      return "bad";
+    }
+
+    function cycleHealth() {
+      const order = ["healthy", "stale", "degraded"];
+      const next = order[(order.indexOf(state.dataHealth) + 1) % order.length];
+      state.dataHealth = next;
+      render();
+    }
+
+    function pushHistory(note) {
+      state.coachHistory = [note, ...state.coachHistory].slice(0, 8);
+    }
+
+    function selectSetupById(id) {
+      if (state.mode === "in_trade") return;
+      const setup = getSetup(id);
+      if (!setup) return;
+      state.selectedSetupId = setup.id;
+      if (isActionable(setup) && state.mode === "scan") {
+        state.mode = "evaluate";
+      }
+      state.contractMode = "ai";
+      state.selectedContract = setup.aiContract;
+      state.showWhy = false;
+      pushHistory("Selected " + setup.name + ". Evaluation scope updated.");
+      render();
+    }
+
+    function enterTrade() {
+      const setup = selectedSetup();
+      if (!setup || !isActionable(setup)) return;
+      state.mode = "in_trade";
+      state.inTradeSetupId = setup.id;
+      pushHistory("Entered trade focus on " + setup.name + ".");
+      render();
+    }
+
+    function exitTrade() {
+      const setup = activeTradeSetup();
+      if (!setup) return;
+      state.mode = "post_trade";
+      state.postTradeNote = "Exited " + setup.name + ". Review execution before returning to scan.";
+      state.inTradeSetupId = null;
+      pushHistory("Exited trade focus. Debrief available.");
+      render();
+    }
+
+    function returnToScan() {
+      state.mode = "scan";
+      state.selectedSetupId = null;
+      state.postTradeNote = null;
+      state.showWhy = false;
+      state.showHistory = false;
+      state.contractMode = "ai";
+      state.selectedContract = null;
+      pushHistory("Returned to scan mode. Awaiting next actionable setup.");
+      render();
+    }
+
+    function simulateAlert() {
+      state.coachAlert = {
+        severity: state.mode === "in_trade" ? "critical" : "warning",
+        text: state.mode === "in_trade"
+          ? "Stop proximity reached. Opposing flow is rising. Tighten or reduce now."
+          : "Fresh trigger detected on Setup-2. Confirm flow before entry."
+      };
+      clearTimeout(alertTimer);
+      alertTimer = setTimeout(() => {
+        state.coachAlert = null;
+        render();
+      }, 9000);
+      render();
+    }
+
+    function dismissAlert() {
+      state.coachAlert = null;
+      render();
+    }
+
+    function setContractAlternative(contract) {
+      state.contractMode = "alternative";
+      state.selectedContract = contract;
+      pushHistory("Switched to alternative contract: " + contract + ".");
+      render();
+    }
+
+    function revertAiContract() {
+      const setup = selectedSetup();
+      if (!setup) return;
+      state.contractMode = "ai";
+      state.selectedContract = setup.aiContract;
+      pushHistory("Reverted to AI recommendation for " + setup.name + ".");
+      render();
+    }
+
+    function toggleViewMode() {
+      state.viewMode = state.viewMode === "classic" ? "spatial" : "classic";
+      if (state.viewMode === "spatial" && state.overlayPreset === "execution") {
+        state.overlayPreset = "flow";
+      }
+      render();
+    }
+
+    function setOverlayPreset(preset) {
+      state.overlayPreset = preset;
+      if (preset === "spatial") {
+        state.viewMode = "spatial";
+      }
+      render();
+    }
+
+    function primaryActionLabel() {
+      if (state.mode === "scan") return "Select Best Setup";
+      if (state.mode === "evaluate") return "Enter Trade Focus";
+      if (state.mode === "in_trade") return "Manage Risk / Exit";
+      return "Return To Scan";
+    }
+
+    function runPrimaryAction() {
+      if (state.mode === "scan") {
+        const target = setups.find((item) => item.status === "triggered") || setups.find((item) => item.status === "ready");
+        if (target) selectSetupById(target.id);
+        return;
+      }
+      if (state.mode === "evaluate") {
+        enterTrade();
+        return;
+      }
+      if (state.mode === "in_trade") {
+        simulateAlert();
+        return;
+      }
+      returnToScan();
+    }
+
+    function commandDefinitions() {
+      const setup = selectedSetup();
+      const inTrade = activeTradeSetup();
+      const commands = [
+        {
+          id: "toggle_palette_help",
+          label: "Toggle coach history",
+          shortcut: "H",
+          run: () => {
+            state.showHistory = !state.showHistory;
+            render();
+          }
+        },
+        {
+          id: "toggle_view_mode",
+          label: state.viewMode === "classic" ? "Switch to Spatial View" : "Switch to Classic View",
+          shortcut: "V",
+          run: toggleViewMode
+        },
+        {
+          id: "preset_execution",
+          label: "Overlay Preset: Execution",
+          shortcut: "1",
+          run: () => setOverlayPreset("execution")
+        },
+        {
+          id: "preset_flow",
+          label: "Overlay Preset: Flow",
+          shortcut: "2",
+          run: () => setOverlayPreset("flow")
+        },
+        {
+          id: "preset_spatial",
+          label: "Overlay Preset: Spatial",
+          shortcut: "3",
+          run: () => setOverlayPreset("spatial")
+        },
+        {
+          id: "simulate_alert",
+          label: "Simulate pinned coach alert",
+          shortcut: "A",
+          run: simulateAlert
+        }
+      ];
+
+      if (setup && isActionable(setup) && state.mode === "evaluate") {
+        commands.unshift({
+          id: "enter_trade",
+          label: "Enter trade focus",
+          shortcut: "Enter",
+          run: enterTrade
+        });
+      }
+
+      if (inTrade && state.mode === "in_trade") {
+        commands.unshift({
+          id: "exit_trade",
+          label: "Exit trade focus",
+          shortcut: "Esc",
+          run: exitTrade
+        });
+      }
+
+      if (state.contractMode === "alternative") {
+        commands.push({
+          id: "revert_contract",
+          label: "Revert to AI recommendation",
+          shortcut: "R",
+          run: revertAiContract
+        });
+      }
+
+      if (state.mode === "post_trade") {
+        commands.unshift({
+          id: "return_scan",
+          label: "Return to scan mode",
+          shortcut: "S",
+          run: returnToScan
+        });
+      }
+
+      return commands;
+    }
+
+    function filteredCommands() {
+      const query = state.commandQuery.trim().toLowerCase();
+      const all = commandDefinitions();
+      if (!query) return all;
+      return all.filter((cmd) => cmd.label.toLowerCase().includes(query) || cmd.shortcut.toLowerCase().includes(query));
+    }
+
+    function openPalette() {
+      state.commandPaletteOpen = true;
+      state.commandQuery = "";
+      render();
+      requestAnimationFrame(() => els.paletteInput.focus());
+    }
+
+    function closePalette() {
+      state.commandPaletteOpen = false;
+      state.commandQuery = "";
+      render();
+    }
+
+    function runCommand(id) {
+      const command = commandDefinitions().find((item) => item.id === id);
+      if (!command) return;
+      command.run();
+      closePalette();
+    }
+
+    function renderStatusChips() {
+      const modeChip = "<span class=\"chip ok\">Mode: " + state.mode.replace("_", " ") + "</span>";
+      const presetChip = "<span class=\"chip\">Overlay: " + state.overlayPreset + "</span>";
+      const healthChip = "<span class=\"chip " + statusToneForHealth() + "\">Health: " + state.dataHealth + "</span>";
+      const viewChip = "<span class=\"chip\">View: " + state.viewMode + "</span>";
+      const contractChip = "<span class=\"chip\">Contract: " + state.contractMode + "</span>";
+      els.statusChips.innerHTML = [modeChip, presetChip, healthChip, viewChip, contractChip].join("");
+    }
+
+    function renderSignalBar() {
+      const feedLabel = state.dataHealth === "healthy" ? "Live tick" : state.dataHealth === "stale" ? "Poll fallback" : "Snapshot degraded";
+      const feedTone = state.dataHealth === "healthy" ? "ok" : state.dataHealth === "stale" ? "warn" : "bad";
+
+      els.signalBar.innerHTML = ""
+        + "<div class=\"signal-main\">"
+        + "  <div>"
+        + "    <div class=\"signal-label\">SPX command center</div>"
+        + "    <div class=\"signal-price\">SPX " + state.price.toFixed(2) + "</div>"
+        + "  </div>"
+        + "  <div class=\"chip-row\">"
+        + "    <span class=\"chip " + feedTone + "\">" + feedLabel + "</span>"
+        + "    <span class=\"chip\">Regime: " + state.regime + "</span>"
+        + "  </div>"
+        + "</div>"
+        + "<div class=\"signal-sub\">"
+        + "  <div>"
+        + "    <div class=\"signal-label\">Market clock</div>"
+        + "    <div class=\"signal-value\">" + state.clock + "</div>"
+        + "  </div>"
+        + "  <div>"
+        + "    <div class=\"signal-label\">Basis</div>"
+        + "    <div class=\"signal-value\">" + state.basis + "</div>"
+        + "  </div>"
+        + "  <div>"
+        + "    <div class=\"signal-label\">Primary CTA</div>"
+        + "    <div class=\"signal-value\">" + primaryActionLabel() + "</div>"
+        + "  </div>"
+        + "</div>";
+    }
+
+    function renderChartHead() {
+      const presetButtons = ["execution", "flow", "spatial"].map((preset) => {
+        const active = state.overlayPreset === preset ? "active" : "";
+        return "<button class=\"seg-btn " + active + "\" type=\"button\" data-preset=\"" + preset + "\">" + preset + "</button>";
+      }).join("");
+
+      els.chartHead.innerHTML = ""
+        + "<div class=\"chip-row\">"
+        + "  <span class=\"chip\">Chart-forward workspace</span>"
+        + "  <span class=\"chip\">One primary action per state</span>"
+        + "</div>"
+        + "<div class=\"button-row\">"
+        + "  <div class=\"seg\">" + presetButtons + "</div>"
+        + "  <button class=\"btn ghost\" id=\"toggleViewBtn\" type=\"button\">" + (state.viewMode === "classic" ? "Switch Spatial" : "Switch Classic") + "</button>"
+        + "</div>";
+
+      els.chartHead.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setOverlayPreset(button.getAttribute("data-preset"));
+        });
+      });
+
+      document.getElementById("toggleViewBtn").addEventListener("click", toggleViewMode);
+    }
+
+    function renderOverlayBadges() {
+      const badges = [];
+
+      if (state.overlayPreset === "execution") {
+        badges.push("<span class=\"overlay-badge good\" style=\"left:16px;top:16px\">Setup lock</span>");
+        badges.push("<span class=\"overlay-badge\" style=\"left:16px;top:48px\">Risk shadow</span>");
+      }
+
+      if (state.overlayPreset === "flow" || state.overlayPreset === "spatial") {
+        badges.push("<span class=\"overlay-badge hot\" style=\"left:16px;top:16px\">Flow ribbon</span>");
+        badges.push("<span class=\"overlay-badge\" style=\"left:16px;top:48px\">Gamma topography</span>");
+      }
+
+      if (state.overlayPreset === "spatial") {
+        badges.push("<span class=\"overlay-badge good\" style=\"right:16px;top:16px\">Spatial coach nodes</span>");
+        badges.push("<span class=\"overlay-badge\" style=\"right:16px;top:48px\">Probability cone</span>");
+      }
+
+      const lines = [
+        "<span class=\"overlay-line emerald\" style=\"top:33%\"></span>",
+        "<span class=\"overlay-line\" style=\"top:48%\"></span>",
+        "<span class=\"overlay-line rose\" style=\"top:65%\"></span>"
+      ].join("");
+
+      return "<div class=\"overlay-layer\">" + badges.join("") + lines + "</div>";
+    }
+
+    function renderChartStage() {
+      const bars = Array.isArray(state.chartSeries) && state.chartSeries.length > 0
+        ? state.chartSeries.slice(-96)
+        : buildInitialSeries(state.price, 84);
+
+      if (!bars.length) {
+        els.chartStage.innerHTML = "<div class=\"muted\">Chart feed unavailable.</div>";
+        return;
+      }
+
+      const setup = state.mode === "in_trade"
+        ? activeTradeSetup()
+        : selectedSetup() || setups.find((item) => item.status === "triggered") || setups.find((item) => item.status === "ready");
+      const entryRange = setup ? parseEntryRange(setup.entry) : null;
+      const stop = setup ? numericFromString(setup.stop) : null;
+      const t1 = setup ? numericFromString(setup.t1) : null;
+      const t2 = setup ? numericFromString(setup.t2) : null;
+
+      const width = 1160;
+      const height = 500;
+      const plotLeft = 14;
+      const plotRight = width - 64;
+      const plotWidth = plotRight - plotLeft;
+      const priceTop = 16;
+      const priceHeight = 332;
+      const priceBottom = priceTop + priceHeight;
+      const volumeTop = priceBottom + 12;
+      const volumeBottom = volumeTop + 88;
+
+      const lows = bars.map((bar) => bar.l);
+      const highs = bars.map((bar) => bar.h);
+      const closes = bars.map((bar) => bar.c);
+      const numericLevels = [state.price, stop, t1, t2].filter((value) => Number.isFinite(value));
+      if (entryRange) {
+        numericLevels.push(entryRange.low, entryRange.high);
+      }
+
+      const minRaw = Math.min(...lows, ...numericLevels);
+      const maxRaw = Math.max(...highs, ...numericLevels);
+      const rawSpan = Math.max(0.8, maxRaw - minRaw);
+      const padding = Math.max(1.15, rawSpan * 0.18);
+      const yMin = minRaw - padding;
+      const yMax = maxRaw + padding;
+      const yRange = Math.max(0.0001, yMax - yMin);
+      const maxVolume = Math.max(1, ...bars.map((bar) => bar.v));
+
+      const mapX = (index) => (
+        bars.length <= 1
+          ? (plotLeft + (plotWidth / 2))
+          : (plotLeft + ((index / (bars.length - 1)) * plotWidth))
+      );
+      const mapY = (price) => priceTop + (((yMax - price) / yRange) * priceHeight);
+      const mapVolumeY = (volume) => volumeBottom - ((volume / maxVolume) * (volumeBottom - volumeTop));
+
+      const ema9 = computeEma(closes, 9);
+      const ema21 = computeEma(closes, 21);
+      const vwap = computeVwap(bars);
+
+      const priceGrid = Array.from({ length: 6 }).map((_, idx) => {
+        const ratio = idx / 5;
+        const value = yMax - (ratio * yRange);
+        const y = mapY(value);
+        return ""
+          + "<line x1=\"" + plotLeft.toFixed(2) + "\" y1=\"" + y.toFixed(2) + "\" x2=\"" + plotRight.toFixed(2) + "\" y2=\"" + y.toFixed(2) + "\" stroke=\"rgba(226,232,240,0.12)\" stroke-width=\"1\" />"
+          + "<text x=\"" + (plotRight + 6).toFixed(2) + "\" y=\"" + (y + 3.2).toFixed(2) + "\">" + value.toFixed(1) + "</text>";
+      }).join("");
+
+      const timeLabels = [];
+      const targetTicks = 6;
+      for (let idx = 0; idx <= targetTicks; idx += 1) {
+        const barIndex = Math.round((bars.length - 1) * (idx / targetTicks));
+        if (timeLabels.some((item) => item.barIndex === barIndex)) continue;
+        timeLabels.push({
+          barIndex,
+          x: mapX(barIndex),
+          label: bars[barIndex].minuteLabel
+        });
+      }
+
+      const timeGrid = timeLabels.map((tick) => {
+        return ""
+          + "<line x1=\"" + tick.x.toFixed(2) + "\" y1=\"" + priceTop.toFixed(2) + "\" x2=\"" + tick.x.toFixed(2) + "\" y2=\"" + volumeBottom.toFixed(2) + "\" stroke=\"rgba(226,232,240,0.07)\" stroke-width=\"1\" />"
+          + "<text x=\"" + tick.x.toFixed(2) + "\" y=\"" + (volumeBottom + 15).toFixed(2) + "\" text-anchor=\"middle\">" + tick.label + "</text>";
+      }).join("");
+
+      const slotWidth = bars.length <= 1 ? 8 : (plotWidth / (bars.length - 1));
+      const bodyWidth = Math.max(3.5, Math.min(10.5, slotWidth * 0.58));
+
+      const candleSvg = bars.map((bar, index) => {
+        const x = mapX(index);
+        const yOpen = mapY(bar.o);
+        const yClose = mapY(bar.c);
+        const yHigh = mapY(bar.h);
+        const yLow = mapY(bar.l);
+        const isUp = bar.c >= bar.o;
+        const wickColor = isUp ? "rgba(16,185,129,0.78)" : "rgba(251,113,133,0.76)";
+        const fill = isUp ? "#10b981" : "#fb7185";
+        const bodyY = Math.min(yOpen, yClose);
+        const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+        const volumeY = mapVolumeY(bar.v);
+        const volumeHeight = Math.max(1, volumeBottom - volumeY);
+
+        return ""
+          + "<line x1=\"" + x.toFixed(2) + "\" y1=\"" + yHigh.toFixed(2) + "\" x2=\"" + x.toFixed(2) + "\" y2=\"" + yLow.toFixed(2) + "\" stroke=\"" + wickColor + "\" stroke-width=\"1.2\" />"
+          + "<rect x=\"" + (x - (bodyWidth / 2)).toFixed(2) + "\" y=\"" + bodyY.toFixed(2) + "\" width=\"" + bodyWidth.toFixed(2) + "\" height=\"" + bodyHeight.toFixed(2) + "\" rx=\"1.2\" fill=\"" + fill + "\" opacity=\"0.95\" />"
+          + "<rect x=\"" + (x - (Math.max(2.2, bodyWidth * 0.46) / 2)).toFixed(2) + "\" y=\"" + volumeY.toFixed(2) + "\" width=\"" + Math.max(2.2, bodyWidth * 0.46).toFixed(2) + "\" height=\"" + volumeHeight.toFixed(2) + "\" fill=\"" + fill + "\" opacity=\"0.28\" />";
+      }).join("");
+
+      const ema9Path = toPath(ema9, mapX, mapY);
+      const ema21Path = toPath(ema21, mapX, mapY);
+      const vwapPath = toPath(vwap, mapX, mapY);
+
+      function levelLine(value, label, color, dash = "4 4", widthPx = 1) {
+        if (!Number.isFinite(value)) return "";
+        const y = mapY(value);
+        return ""
+          + "<line x1=\"" + plotLeft.toFixed(2) + "\" y1=\"" + y.toFixed(2) + "\" x2=\"" + plotRight.toFixed(2) + "\" y2=\"" + y.toFixed(2) + "\" stroke=\"" + color + "\" stroke-width=\"" + widthPx + "\" stroke-dasharray=\"" + dash + "\" opacity=\"0.92\" />"
+          + "<text x=\"" + (plotLeft + 6).toFixed(2) + "\" y=\"" + (y - 4).toFixed(2) + "\" fill=\"" + color + "\">" + label + " " + value.toFixed(1) + "</text>";
+      }
+
+      const setupGuides = []
+        .concat(entryRange
+          ? [
+              "<rect x=\"" + plotLeft.toFixed(2) + "\" y=\"" + Math.min(mapY(entryRange.high), mapY(entryRange.low)).toFixed(2) + "\" width=\"" + plotWidth.toFixed(2) + "\" height=\"" + Math.max(1, Math.abs(mapY(entryRange.low) - mapY(entryRange.high))).toFixed(2) + "\" fill=\"" + (setup && setup.direction === "bearish" ? "rgba(251,113,133,0.12)" : "rgba(16,185,129,0.12)") + "\" />",
+              levelLine((entryRange.low + entryRange.high) / 2, "entry", "rgba(244,246,245,0.78)", "2 6", 1.1)
+            ]
+          : [])
+        .concat(levelLine(stop, "stop", "rgba(251,113,133,0.82)", "5 4", 1.1))
+        .concat(levelLine(t1, "target1", "rgba(16,185,129,0.85)", "6 3", 1.15))
+        .concat(levelLine(t2, "target2", "rgba(56,189,248,0.82)", "6 3", 1.1))
+        .join("");
+
+      const lastBar = bars[bars.length - 1];
+      const prevBar = bars[bars.length - 2] || lastBar;
+      const lastPrice = lastBar ? lastBar.c : state.price;
+      const lastPriceTone = lastBar && prevBar && lastBar.c >= prevBar.c ? "#10b981" : "#fb7185";
+      const lastY = mapY(lastPrice);
+      const lastLine = ""
+        + "<line x1=\"" + plotLeft.toFixed(2) + "\" y1=\"" + lastY.toFixed(2) + "\" x2=\"" + plotRight.toFixed(2) + "\" y2=\"" + lastY.toFixed(2) + "\" stroke=\"" + lastPriceTone + "\" stroke-width=\"1.1\" stroke-dasharray=\"3 3\" opacity=\"0.9\" />";
+      const lastBadge = ""
+        + "<rect x=\"" + (plotRight + 5).toFixed(2) + "\" y=\"" + (lastY - 9).toFixed(2) + "\" width=\"50\" height=\"16\" rx=\"8\" fill=\"rgba(8,13,14,0.85)\" stroke=\"" + lastPriceTone + "\" stroke-width=\"1\" />"
+        + "<text x=\"" + (plotRight + 30).toFixed(2) + "\" y=\"" + (lastY + 2.7).toFixed(2) + "\" text-anchor=\"middle\" fill=\"" + lastPriceTone + "\">" + lastPrice.toFixed(2) + "</text>";
+
+      const svg = ""
+        + "<svg class=\"chart-svg\" viewBox=\"0 0 " + width + " " + height + "\" preserveAspectRatio=\"none\" aria-label=\"SPX intraday chart\">"
+        + "  <defs>"
+        + "    <clipPath id=\"priceClip\"><rect x=\"" + plotLeft.toFixed(2) + "\" y=\"" + priceTop.toFixed(2) + "\" width=\"" + plotWidth.toFixed(2) + "\" height=\"" + priceHeight.toFixed(2) + "\" /></clipPath>"
+        + "  </defs>"
+        + "  <rect x=\"" + plotLeft.toFixed(2) + "\" y=\"" + priceTop.toFixed(2) + "\" width=\"" + plotWidth.toFixed(2) + "\" height=\"" + priceHeight.toFixed(2) + "\" fill=\"rgba(8,13,14,0.25)\" />"
+        + "  <rect x=\"" + plotLeft.toFixed(2) + "\" y=\"" + volumeTop.toFixed(2) + "\" width=\"" + plotWidth.toFixed(2) + "\" height=\"" + (volumeBottom - volumeTop).toFixed(2) + "\" fill=\"rgba(8,13,14,0.32)\" />"
+        + "  " + priceGrid
+        + "  " + timeGrid
+        + "  <text x=\"" + (plotRight + 6).toFixed(2) + "\" y=\"" + (volumeTop + 10).toFixed(2) + "\">VOL</text>"
+        + "  <g clip-path=\"url(#priceClip)\">"
+        + "    " + setupGuides
+        + "    " + candleSvg
+        + "    <path d=\"" + ema9Path + "\" fill=\"none\" stroke=\"rgba(56,189,248,0.92)\" stroke-width=\"1.5\" />"
+        + "    <path d=\"" + ema21Path + "\" fill=\"none\" stroke=\"rgba(250,204,21,0.88)\" stroke-width=\"1.4\" />"
+        + "    <path d=\"" + vwapPath + "\" fill=\"none\" stroke=\"rgba(226,232,240,0.7)\" stroke-width=\"1.2\" stroke-dasharray=\"6 4\" />"
+        + "    " + lastLine
+        + "  </g>"
+        + "  " + lastBadge
+        + "</svg>";
+
+      const avgVolume = bars.reduce((sum, bar) => sum + bar.v, 0) / bars.length;
+      const lastVolume = lastBar ? lastBar.v : 0;
+      const volRatio = avgVolume > 0 ? (lastVolume / avgVolume) : 1;
+      const flowTone = volRatio >= 1.1 ? "good" : "warn";
+      const flowLabel = volRatio >= 1.1 ? "Flow Expanding" : "Flow Balanced";
+      const barMinutes = bars.length * 5;
+
+      const legend = ""
+        + "<div class=\"chart-legend\">"
+        + "  <span class=\"legend-chip\">5m bars</span>"
+        + "  <span class=\"legend-chip\">EMA9 / EMA21</span>"
+        + "  <span class=\"legend-chip\">VWAP</span>"
+        + "  <span class=\"legend-chip " + flowTone + "\">" + flowLabel + "</span>"
+        + "  <span class=\"legend-chip\">Window " + Math.round(barMinutes / 60) + "h</span>"
+        + "</div>";
+
+      const checklist = ""
+        + "<div class=\"scope-card\">"
+        + "  <div class=\"scope-item\"><span>State machine</span><strong>" + state.mode + "</strong></div>"
+        + "  <div class=\"scope-item\"><span>Bars rendered</span><strong>" + bars.length + "</strong></div>"
+        + "  <div class=\"scope-item\"><span>Coach model</span><strong>Now / Why / History</strong></div>"
+        + "  <div class=\"scope-item\"><span>Contract model</span><strong>" + state.contractMode + "</strong></div>"
+        + "  <div class=\"scope-item\"><span>Overlay package</span><strong>" + state.overlayPreset + "</strong></div>"
+        + "</div>";
+
+      els.chartStage.innerHTML = ""
+        + svg
+        + legend
+        + renderOverlayBadges()
+        + checklist;
+    }
+
+    function renderExecutionRail() {
+      const activeSetup = state.mode === "in_trade" ? activeTradeSetup() : selectedSetup();
+      const setupLabel = activeSetup ? activeSetup.name : "No setup selected";
+
+      const primaryClass = state.mode === "in_trade" ? "btn soft" : "btn primary";
+      const secondary = [];
+      secondary.push("<button class=\"btn ghost\" id=\"execPaletteBtn\" type=\"button\">Commands</button>");
+      secondary.push("<button class=\"btn ghost\" id=\"execHistoryBtn\" type=\"button\">" + (state.showHistory ? "Hide History" : "Open History") + "</button>");
+      if (state.mode === "in_trade") {
+        secondary.push("<button class=\"btn ghost\" id=\"execExitBtn\" type=\"button\">Exit Trade</button>");
+      }
+
+      els.executionRail.innerHTML = ""
+        + "<div class=\"exec-meta\">"
+        + "  <span class=\"exec-title\">Execution rail</span>"
+        + "  <span class=\"exec-value\">" + setupLabel + "</span>"
+        + "</div>"
+        + "<div class=\"button-row\">"
+        + "  <button class=\"" + primaryClass + "\" id=\"primaryActionBtn\" type=\"button\">" + primaryActionLabel() + "</button>"
+        + secondary.join("")
+        + "</div>";
+
+      document.getElementById("primaryActionBtn").addEventListener("click", runPrimaryAction);
+      document.getElementById("execPaletteBtn").addEventListener("click", openPalette);
+      document.getElementById("execHistoryBtn").addEventListener("click", () => {
+        state.showHistory = !state.showHistory;
+        render();
+      });
+
+      const exitBtn = document.getElementById("execExitBtn");
+      if (exitBtn) exitBtn.addEventListener("click", exitTrade);
+    }
+
+    function setupStatusChip(status) {
+      if (status === "triggered") return "<span class=\"chip ok\">triggered</span>";
+      if (status === "ready") return "<span class=\"chip ok\">ready</span>";
+      return "<span class=\"chip\">forming</span>";
+    }
+
+    function renderSetupSection() {
+      const cards = setups.map((setup) => {
+        const active = state.selectedSetupId === setup.id ? "active" : "";
+        const blocked = state.mode === "in_trade" && state.inTradeSetupId !== setup.id;
+        return ""
+          + "<article class=\"setup-card " + active + "\" data-setup-id=\"" + setup.id + "\" " + (blocked ? "style=\"opacity:0.45;pointer-events:none\"" : "") + ">"
+          + "  <div class=\"setup-row\">"
+          + "    <strong class=\"setup-name\">" + setup.name + "</strong>"
+          + setupStatusChip(setup.status)
+          + "  </div>"
+          + "  <div class=\"setup-meta\">" + setup.direction + " | confidence " + setup.confidence + "% | confluence " + setup.confluence + "</div>"
+          + "  <div class=\"setup-meta\">entry " + setup.entry + " | stop " + setup.stop + " | t1 " + setup.t1 + "</div>"
+          + "</article>";
+      }).join("");
+
+      const postTradeBlock = state.mode === "post_trade" && state.postTradeNote
+        ? "<div class=\"coach-now\"><strong>Post-trade debrief</strong><div class=\"coach-copy\">" + state.postTradeNote + "</div></div>"
+        : "";
+
+      els.setupSection.innerHTML = ""
+        + "<div class=\"section-head\">"
+        + "  <div class=\"section-title\">Setup Feed</div>"
+        + "  <span class=\"chip\">" + setups.filter((s) => s.status !== "forming").length + " actionable</span>"
+        + "</div>"
+        + postTradeBlock
+        + "<div class=\"setup-list\">" + cards + "</div>";
+
+      els.setupSection.querySelectorAll("[data-setup-id]").forEach((card) => {
+        card.addEventListener("click", () => {
+          selectSetupById(card.getAttribute("data-setup-id"));
+        });
+      });
+    }
+
+    function coachDecision() {
+      const setup = state.mode === "in_trade" ? activeTradeSetup() : selectedSetup();
+      if (state.mode === "scan") {
+        return {
+          verdict: "WAIT",
+          tone: "warn",
+          text: "Two setups are actionable. Prioritize Setup-2 on trigger follow-through before committing size.",
+          why: [
+            "Breakout setup shows highest confidence and confluence.",
+            "Flow remains supportive but still needs second confirmation.",
+            "Risk is best controlled by waiting for entry acceptance."
+          ],
+          actions: [
+            { id: "auto_select", label: "Select Best Setup", run: () => selectSetupById("setup-2") },
+            { id: "open_history", label: "Open History", run: () => { state.showHistory = true; render(); } }
+          ]
+        };
+      }
+
+      if (state.mode === "evaluate" && setup) {
+        return {
+          verdict: "ENTER",
+          tone: "",
+          text: "Setup is actionable with aligned flow. Enter trade focus with fixed risk at stop " + setup.stop + ".",
+          why: [
+            "Confluence and confidence exceed minimum execution threshold.",
+            "Contract recommendation is healthy for one-contract starter risk.",
+            "State machine is in evaluate mode with single primary CTA."
+          ],
+          actions: [
+            { id: "enter", label: "Enter Trade Focus", run: enterTrade },
+            { id: "toggle_why", label: state.showWhy ? "Hide Why" : "Show Why", run: () => { state.showWhy = !state.showWhy; render(); } }
+          ]
+        };
+      }
+
+      if (state.mode === "in_trade" && setup) {
+        return {
+          verdict: "REDUCE",
+          tone: "warn",
+          text: "Trade is active. Keep management-only controls visible. Tighten if opposing flow expands.",
+          why: [
+            "Entry context locked to avoid accidental setup switching.",
+            "Primary action has shifted to risk management, not new entry.",
+            "Pinned alerts should surface if stop proximity increases."
+          ],
+          actions: [
+            { id: "simulate", label: "Simulate Risk Alert", run: simulateAlert },
+            { id: "exit", label: "Exit Trade", run: exitTrade }
+          ]
+        };
+      }
+
+      return {
+        verdict: "WAIT",
+        tone: "",
+        text: "Debrief complete. Return to scan for the next trade cycle.",
+        why: ["Post-trade mode isolates debrief before new setup selection."],
+        actions: [{ id: "return", label: "Return To Scan", run: returnToScan }]
+      };
+    }
+
+    function renderCoachSection() {
+      const decision = coachDecision();
+      const toneClass = decision.tone === "warn" ? "warn" : decision.tone === "bad" ? "bad" : "";
+
+      const alertHtml = state.coachAlert
+        ? ""
+          + "<div class=\"coach-alert\">"
+          + "  <div><strong>Pinned Alert:</strong> " + state.coachAlert.text + "</div>"
+          + "  <div class=\"button-row\">"
+          + "    <button class=\"btn ghost\" id=\"dismissAlertBtn\" type=\"button\">Dismiss</button>"
+          + "  </div>"
+          + "</div>"
+        : "";
+
+      const whyHtml = state.showWhy
+        ? "<ul class=\"why-list\">" + decision.why.map((line) => "<li>" + line + "</li>").join("") + "</ul>"
+        : "";
+
+      const historyHtml = state.showHistory
+        ? "<ul class=\"history-list\">" + state.coachHistory.map((line) => "<li>" + line + "</li>").join("") + "</ul>"
+        : "";
+
+      const actionButtons = decision.actions.map((action, index) => {
+        const cls = index === 0 ? "btn primary" : "btn ghost";
+        return "<button class=\"" + cls + "\" type=\"button\" data-coach-action=\"" + action.id + "\">" + action.label + "</button>";
+      }).join("");
+
+      els.coachSection.innerHTML = ""
+        + "<div class=\"section-head\">"
+        + "  <div class=\"section-title\">Coach</div>"
+        + "  <span class=\"chip\">Now / Why / History</span>"
+        + "</div>"
+        + alertHtml
+        + "<article class=\"coach-now " + (state.coachAlert && state.coachAlert.severity === "critical" ? "critical" : "") + "\">"
+        + "  <div class=\"coach-topline\">"
+        + "    <span class=\"verdict " + toneClass + "\">" + decision.verdict + "</span>"
+        + "    <span class=\"chip\">Fresh 12s</span>"
+        + "  </div>"
+        + "  <div class=\"coach-copy\">" + decision.text + "</div>"
+        + "  " + whyHtml
+        + "  <div class=\"action-grid\">"
+        + actionButtons
+        + "    <button class=\"btn ghost\" id=\"toggleHistoryBtn\" type=\"button\">" + (state.showHistory ? "Hide History" : "Open History") + "</button>"
+        + "    <button class=\"btn ghost\" id=\"toggleWhyBtn\" type=\"button\">" + (state.showWhy ? "Hide Why" : "Show Why") + "</button>"
+        + "  </div>"
+        + "  " + historyHtml
+        + "</article>";
+
+      if (state.coachAlert) {
+        const dismiss = document.getElementById("dismissAlertBtn");
+        if (dismiss) dismiss.addEventListener("click", dismissAlert);
+      }
+
+      document.getElementById("toggleHistoryBtn").addEventListener("click", () => {
+        state.showHistory = !state.showHistory;
+        render();
+      });
+
+      document.getElementById("toggleWhyBtn").addEventListener("click", () => {
+        state.showWhy = !state.showWhy;
+        render();
+      });
+
+      els.coachSection.querySelectorAll("[data-coach-action]").forEach((button) => {
+        const id = button.getAttribute("data-coach-action");
+        const action = decision.actions.find((item) => item.id === id);
+        if (!action) return;
+        button.addEventListener("click", action.run);
+      });
+    }
+
+    function renderContractSection() {
+      const setup = selectedSetup() || activeTradeSetup();
+
+      if (!setup) {
+        els.contractSection.innerHTML = ""
+          + "<div class=\"section-head\">"
+          + "  <div class=\"section-title\">Contract</div>"
+          + "  <span class=\"chip\">Await setup</span>"
+          + "</div>"
+          + "<div class=\"muted\">Select an actionable setup to load AI recommendation and alternatives.</div>";
+        return;
+      }
+
+      const current = state.selectedContract || setup.aiContract;
+      const alternatives = alternativeContracts[setup.id] || [];
+
+      const altButtons = alternatives.map((contract) => {
+        const active = state.contractMode === "alternative" && state.selectedContract === contract ? "active" : "";
+        return "<button class=\"alt-btn " + active + "\" data-alt-contract=\"" + contract + "\" type=\"button\">" + contract + "</button>";
+      }).join("");
+
+      els.contractSection.innerHTML = ""
+        + "<div class=\"section-head\">"
+        + "  <div class=\"section-title\">Contract Selector</div>"
+        + "  <span class=\"chip\">Deterministic revert</span>"
+        + "</div>"
+        + "<div class=\"contract-mode\">Mode: <strong>" + state.contractMode + "</strong></div>"
+        + "<article class=\"contract-card\">"
+        + "  <strong>Current contract</strong>"
+        + "  <div class=\"setup-meta\">" + current + "</div>"
+        + "  <div class=\"setup-meta\">R:R 2.35 | Liquidity 82 | Health Green</div>"
+        + (state.contractMode === "alternative"
+          ? "<button class=\"btn soft\" id=\"revertAiBtn\" type=\"button\">Use AI Recommendation</button>"
+          : "")
+        + "</article>"
+        + "<div class=\"alt-list\">"
+        + "  <div class=\"muted\">Alternatives</div>"
+        + altButtons
+        + "</div>";
+
+      if (state.contractMode === "alternative") {
+        const revertBtn = document.getElementById("revertAiBtn");
+        if (revertBtn) revertBtn.addEventListener("click", revertAiContract);
+      }
+
+      els.contractSection.querySelectorAll("[data-alt-contract]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setContractAlternative(button.getAttribute("data-alt-contract"));
+        });
+      });
+    }
+
+    function renderPalette() {
+      els.palette.classList.toggle("open", state.commandPaletteOpen);
+      if (!state.commandPaletteOpen) return;
+
+      const rows = filteredCommands().map((command) => {
+        return ""
+          + "<button class=\"command-btn\" type=\"button\" data-command-id=\"" + command.id + "\">"
+          + "  <span>" + command.label + "</span>"
+          + "  <span class=\"command-kbd\">" + command.shortcut + "</span>"
+          + "</button>";
+      }).join("");
+
+      els.commandList.innerHTML = rows || "<div class=\"muted\">No commands for this search.</div>";
+
+      els.commandList.querySelectorAll("[data-command-id]").forEach((button) => {
+        button.addEventListener("click", () => runCommand(button.getAttribute("data-command-id")));
+      });
+    }
+
+    function render() {
+      renderStatusChips();
+      renderSignalBar();
+      renderChartHead();
+      renderChartStage();
+      renderExecutionRail();
+      renderSetupSection();
+      renderCoachSection();
+      renderContractSection();
+      renderPalette();
+    }
+
+    function tickClock() {
+      state.clock = toEtClock(new Date());
+    }
+
+    function tickPrice() {
+      advanceChartSeries();
+      const bars = state.chartSeries || [];
+      const latest = bars[bars.length - 1];
+      if (!latest) return;
+
+      state.price = latest.c;
+
+      const vwap = computeVwap(bars);
+      const latestVwap = vwap[vwap.length - 1] || latest.c;
+      const basisValue = latest.c - latestVwap;
+      state.basis = (basisValue >= 0 ? "+" : "") + basisValue.toFixed(2);
+
+      const closes = bars.map((bar) => bar.c);
+      const emaFast = computeEma(closes, 9);
+      const emaSlow = computeEma(closes, 21);
+      const fastNow = emaFast[emaFast.length - 1] || latest.c;
+      const fastPrev = emaFast[Math.max(0, emaFast.length - 3)] || fastNow;
+      const slowNow = emaSlow[emaSlow.length - 1] || latest.c;
+      const spread = fastNow - slowNow;
+      const slope = fastNow - fastPrev;
+
+      if (spread > 0.34 && slope > 0.08) {
+        state.regime = "Trend Up / Pullback Buy";
+      } else if (spread < -0.34 && slope < -0.08) {
+        state.regime = "Trend Down / Rally Sell";
+      } else if (Math.abs(spread) <= 0.18) {
+        state.regime = "Compression -> Breakout Bias";
+      } else {
+        state.regime = spread > 0 ? "Drift Up / Selective Longs" : "Drift Down / Selective Shorts";
+      }
+    }
+
+    function attachGlobalEvents() {
+      els.resetBtn.addEventListener("click", () => {
+        state = defaultState();
+        render();
+      });
+
+      els.openPaletteBtn.addEventListener("click", openPalette);
+      els.simulateAlertBtn.addEventListener("click", simulateAlert);
+      els.cycleHealthBtn.addEventListener("click", cycleHealth);
+
+      els.palette.addEventListener("click", (event) => {
+        if (event.target === els.palette) closePalette();
+      });
+
+      els.paletteInput.addEventListener("input", (event) => {
+        state.commandQuery = event.target.value;
+        renderPalette();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const key = event.key.toLowerCase();
+
+        if ((event.metaKey || event.ctrlKey) && key === "k") {
+          event.preventDefault();
+          if (state.commandPaletteOpen) {
+            closePalette();
+          } else {
+            openPalette();
+          }
+          return;
+        }
+
+        if (state.commandPaletteOpen && key === "escape") {
+          event.preventDefault();
+          closePalette();
+          return;
+        }
+
+        if (state.commandPaletteOpen && key === "enter") {
+          event.preventDefault();
+          const first = filteredCommands()[0];
+          if (first) runCommand(first.id);
+          return;
+        }
+
+        if (!state.commandPaletteOpen) {
+          if (key === "1") setOverlayPreset("execution");
+          if (key === "2") setOverlayPreset("flow");
+          if (key === "3") setOverlayPreset("spatial");
+          if (key === "v") toggleViewMode();
+        }
+      });
+    }
+
+    function init() {
+      tickClock();
+      render();
+      attachGlobalEvents();
+
+      clearInterval(clockTimer);
+      clearInterval(priceTimer);
+
+      clockTimer = setInterval(() => {
+        tickClock();
+        renderSignalBar();
+      }, 1000);
+
+      priceTimer = setInterval(() => {
+        tickPrice();
+        renderSignalBar();
+        renderChartStage();
+      }, 2200);
+    }
+
+    init();
+  </script>
+</body>
+</html>

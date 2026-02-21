@@ -63,6 +63,8 @@ export function ServiceWorkerRegister() {
     navigator.serviceWorker
       .register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
+        if (!registration) return
+
         // Already a waiting worker (from a previous page load)
         if (registration.waiting) {
           showUpdateToast(registration.waiting)

@@ -110,6 +110,10 @@ export interface Setup {
   score?: number
   pWinCalibrated?: number
   evR?: number
+  alignmentScore?: number
+  confidenceTrend?: 'up' | 'flat' | 'down'
+  decisionDrivers?: string[]
+  decisionRisks?: string[]
   tier?: SetupTier
   rank?: number
   statusUpdatedAt?: string

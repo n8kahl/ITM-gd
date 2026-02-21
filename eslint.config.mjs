@@ -13,8 +13,11 @@ const eslintConfig = [
       'playwright-report/',
       'test-results/',
       'docs/specs/mockups/**',
+      'app/members/ai-coach/mockup/**',
       'member-dashboard-mockup.jsx',
       'member-journal-mockup.jsx',
+      'AICoachSpatialHUD.jsx',
+      'spx-spatial-hud-mockup.jsx',
     ],
   },
 ]

@@ -22,7 +22,13 @@ function prioritizeSelected(setups: Setup[], selectedSetupId: string | null): Se
   return next
 }
 
-export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
+export function SetupFeed({
+  readOnly = false,
+  suppressLocalPrimaryCta = false,
+}: {
+  readOnly?: boolean
+  suppressLocalPrimaryCta?: boolean
+}) {
   const { uxFlags } = useSPXCommandCenter()
   const { regime, prediction } = useSPXAnalyticsContext()
   const {
@@ -61,7 +67,8 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
   const hiddenByTradeFocusCount = inTradeSetup ? Math.max(policy.actionableVisibleCount - 1, 0) : 0
   const forming = inTradeSetup ? [] : policy.forming
   const selectedEnterable = Boolean(selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
-  const oneClickEntryEnabled = uxFlags.oneClickEntry && !readOnly
+  const localPrimaryCtaEnabled = !readOnly && !suppressLocalPrimaryCta
+  const oneClickEntryEnabled = uxFlags.oneClickEntry && localPrimaryCtaEnabled
 
   const watchlistVisible = forming.length > 0 && (showWatchlist || actionable.length === 0)
 
@@ -113,13 +120,19 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
                 <p className="text-[10px] uppercase tracking-[0.1em] text-emerald-200">
                   In Trade Focus · {inTradeSetup.direction} {inTradeSetup.regime}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => exitTrade()}
-                  className="min-h-[40px] rounded border border-rose-300/35 bg-rose-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-rose-100 transition-colors hover:bg-rose-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-300/65"
-                >
-                  Exit Trade
-                </button>
+                {localPrimaryCtaEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => exitTrade()}
+                    className="min-h-[40px] rounded border border-rose-300/35 bg-rose-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-rose-100 transition-colors hover:bg-rose-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-300/65"
+                  >
+                    Exit Trade
+                  </button>
+                ) : (
+                  <span className="text-[9px] uppercase tracking-[0.08em] text-white/45">
+                    Use primary action rail
+                  </span>
+                )}
               </div>
               <p className="text-[10px] text-white/55">
                 Entry {activeTradePlan?.entryAnchor != null ? activeTradePlan.entryAnchor.toFixed(2) : '--'}
@@ -141,11 +154,13 @@ export function SetupFeed({ readOnly = false }: { readOnly?: boolean }) {
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[10px] text-white/68">
-                {oneClickEntryEnabled
+                {!localPrimaryCtaEnabled
+                  ? 'Use the mobile primary action rail to select setup and enter trade focus.'
+                  : oneClickEntryEnabled
                   ? 'Use the Enter Trade CTA on actionable setup cards for one-click focus.'
                   : 'Select a ready/triggered setup, then lock hyper focus when you enter.'}
               </p>
-              {!oneClickEntryEnabled && (
+              {localPrimaryCtaEnabled && !oneClickEntryEnabled && (
                 <button
                   type="button"
                   disabled={!selectedEnterable}

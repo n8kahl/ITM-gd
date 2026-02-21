@@ -33,10 +33,11 @@ test.describe('SPX responsive layout', () => {
     await expect(page.getByRole('heading', { name: 'Level Matrix' })).toBeVisible()
     await expect(page.getByText('GEX Landscape')).toBeVisible()
 
-    const enterTradeButton = page.getByRole('button', { name: /enter trade focus for bearish breakout vacuum/i }).first()
-    await expect(enterTradeButton).toBeVisible()
-    const buttonBox = await enterTradeButton.boundingBox()
+    const primaryActionButton = page.getByTestId('spx-mobile-primary-cta-button')
+    await expect(primaryActionButton).toBeVisible()
+    const buttonBox = await primaryActionButton.boundingBox()
     expect(buttonBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    await expect(page.getByRole('button', { name: /enter trade focus for bearish breakout vacuum/i })).toHaveCount(0)
 
     const hasHorizontalOverflow = await page.evaluate(() => {
       const root = document.documentElement
