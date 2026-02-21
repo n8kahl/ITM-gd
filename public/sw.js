@@ -1,13 +1,11 @@
-const STATIC_CACHE_NAME = 'tradeitm-static-v6'
-const RUNTIME_CACHE_NAME = 'tradeitm-runtime-v5'
+const STATIC_CACHE_NAME = 'tradeitm-static-v7'
+const RUNTIME_CACHE_NAME = 'tradeitm-runtime-v6'
 const API_CACHE_NAME = 'tradeitm-api-v2'
 const JOURNAL_MUTATION_DB_NAME = 'tradeitm-offline-journal'
 const JOURNAL_MUTATION_STORE_NAME = 'mutations'
 const JOURNAL_MUTATION_SYNC_TAG = 'journal-mutation-sync-v1'
 
 const STATIC_ASSETS = [
-  '/',
-  '/members/journal',
   '/manifest.json',
   '/favicon.png',
   '/hero-logo.png',
@@ -148,7 +146,8 @@ async function networkFirst(request, cacheName) {
     }
     return networkResponse
   } catch (error) {
-    const cachedResponse = await caches.match(request)
+    const cache = await caches.open(cacheName)
+    const cachedResponse = await cache.match(request)
     if (cachedResponse) return cachedResponse
     throw error
   }
