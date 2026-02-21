@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { useSPXCoachContext } from '@/contexts/spx/SPXCoachContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { applySPXAlertSuppression } from '@/lib/spx/alert-suppression'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
 import {
@@ -45,11 +46,25 @@ interface GhostRenderState {
 
 const GHOST_REFRESH_INTERVAL_MS = 180
 const GHOST_LIFECYCLE_TICK_MS = 240
-const MAX_GHOST_ITEMS = 2
-const MAX_RENDER_ITEMS = 3
+const MAX_GHOST_ITEMS = 3
+const MAX_RENDER_ITEMS = 1
+const ANCHOR_CANDIDATE_LIMIT = 8
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function toEpoch(timestamp: string): number {
+  const parsed = Date.parse(timestamp)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function normalizeGhostContent(content: string): string {
+  return content
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 96)
 }
 
 function renderStateEquals(left: GhostRenderState | null, right: GhostRenderState | null): boolean {
@@ -96,7 +111,7 @@ function buildFallbackAnchors(
   coachMessages: CoachMessage[],
 ): SpatialCoachAnchorMessage<CoachMessage>[] {
   if (!setup) return []
-  const latestMessage = coachMessages[0]
+  const latestMessage = [...coachMessages].sort((left, right) => toEpoch(right.timestamp) - toEpoch(left.timestamp))[0]
   if (!latestMessage) return []
   const payload = latestMessage.structuredData
   const reason = payload && typeof payload === 'object' && typeof payload.reason === 'string'
@@ -116,6 +131,37 @@ function buildFallbackAnchors(
   const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
   if (!Number.isFinite(entryMid)) return []
   return [{ message: latestMessage, anchorPrice: entryMid }]
+}
+
+function resolveGhostSemanticKey(anchor: SpatialCoachAnchorMessage<CoachMessage>): string {
+  const payload = anchor.message.structuredData
+  const reason = payload && typeof payload === 'object' && typeof payload.reason === 'string'
+    ? payload.reason
+    : 'none'
+  const setupId = anchor.message.setupId || 'global'
+  const bucketedAnchorPrice = Math.round(anchor.anchorPrice * 2) / 2
+  return [
+    anchor.message.type,
+    anchor.message.priority,
+    setupId,
+    reason,
+    bucketedAnchorPrice.toFixed(1),
+    normalizeGhostContent(anchor.message.content),
+  ].join('|')
+}
+
+function dedupeGhostAnchors(
+  anchors: SpatialCoachAnchorMessage<CoachMessage>[],
+): SpatialCoachAnchorMessage<CoachMessage>[] {
+  const seen = new Set<string>()
+  const deduped: SpatialCoachAnchorMessage<CoachMessage>[] = []
+  for (const anchor of anchors) {
+    const key = resolveGhostSemanticKey(anchor)
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(anchor)
+  }
+  return deduped
 }
 
 export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLayerProps) {
@@ -157,15 +203,24 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
     return null
   }, [inTradeSetup, selectedSetup, setupById])
 
+  const eligibleGhostMessages = useMemo(() => {
+    const suppressed = applySPXAlertSuppression(coachMessages)
+    return suppressed.messages.filter((message) => (
+      message.priority === 'alert'
+      || message.type === 'pre_trade'
+      || message.type === 'in_trade'
+    ))
+  }, [coachMessages])
+
   const sourceAnchors = useMemo(() => {
-    const anchored = extractSpatialCoachAnchors(coachMessages, {
-      maxNodes: MAX_GHOST_ITEMS,
+    const anchored = dedupeGhostAnchors(extractSpatialCoachAnchors(eligibleGhostMessages, {
+      maxNodes: ANCHOR_CANDIDATE_LIMIT,
       referencePrice: spxPrice,
       fallbackAnchorPrice: semanticFallbackAnchor,
-    })
-    if (anchored.length > 0) return anchored
-    return buildFallbackAnchors(selectedSetup, coachMessages)
-  }, [coachMessages, selectedSetup, semanticFallbackAnchor, spxPrice])
+    }))
+    if (anchored.length > 0) return anchored.slice(0, MAX_GHOST_ITEMS)
+    return dedupeGhostAnchors(buildFallbackAnchors(selectedSetup, eligibleGhostMessages)).slice(0, MAX_GHOST_ITEMS)
+  }, [eligibleGhostMessages, selectedSetup, semanticFallbackAnchor, spxPrice])
 
   useEffect(() => {
     const nextSnapshots: Record<string, SpatialCoachAnchorMessage<CoachMessage>> = {
@@ -229,7 +284,6 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
     const orderedIds = Object.entries(lifecycleMap)
       .sort((left, right) => right[1].firstSeenMs - left[1].firstSeenMs)
       .map(([id]) => id)
-      .slice(0, MAX_RENDER_ITEMS)
 
     const items: GhostRenderItem[] = []
     for (let index = 0; index < orderedIds.length; index += 1) {
@@ -290,7 +344,11 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
       })
     }
 
-    const nextState: GhostRenderState = { width, height, items }
+    const timeAnchoredItems = items.filter((item) => item.anchorMode === 'time')
+    const fallbackAnchoredItems = items.filter((item) => item.anchorMode !== 'time')
+    const prioritizedItems = [...timeAnchoredItems, ...fallbackAnchoredItems].slice(0, MAX_RENDER_ITEMS)
+
+    const nextState: GhostRenderState = { width, height, items: prioritizedItems }
     setRenderState((previous) => (renderStateEquals(previous, nextState) ? previous : nextState))
   }, [coordinatesRef, lifecycleMap])
 

@@ -40,23 +40,35 @@ test.describe('SPX overlay packaging', () => {
     await expect(cone).toBeEnabled()
     await expect(coach).toBeEnabled()
     await expect(gex).toBeEnabled()
+    await expect(levels).toHaveAttribute('aria-pressed', 'false')
+
+    await clickPreset('execution')
+    await expect(levels).toHaveAttribute('aria-pressed', 'false')
+    await expect(cone).toHaveAttribute('aria-pressed', 'false')
+    await expect(coach).toHaveAttribute('aria-pressed', 'false')
+    await expect(gex).toHaveAttribute('aria-pressed', 'false')
+
+    await clickPreset('flow')
+    await expect(levels).toHaveAttribute('aria-pressed', 'false')
+    await expect(cone).toHaveAttribute('aria-pressed', 'false')
+    await expect(coach).toHaveAttribute('aria-pressed', 'false')
+    await expect(gex).toHaveAttribute('aria-pressed', 'true')
+
+    await clickPreset('spatial')
+    await expect(levels).toHaveAttribute('aria-pressed', 'false')
+    await expect(cone).toHaveAttribute('aria-pressed', 'true')
+    await expect(coach).toHaveAttribute('aria-pressed', 'true')
+    await expect(gex).toHaveAttribute('aria-pressed', 'true')
+
+    await levels.evaluate((node) => {
+      (node as HTMLButtonElement).click()
+    })
+    await expect(levels).toHaveAttribute('aria-pressed', 'true')
 
     await clickPreset('execution')
     await expect(levels).toHaveAttribute('aria-pressed', 'true')
     await expect(cone).toHaveAttribute('aria-pressed', 'false')
     await expect(coach).toHaveAttribute('aria-pressed', 'false')
     await expect(gex).toHaveAttribute('aria-pressed', 'false')
-
-    await clickPreset('flow')
-    await expect(levels).toHaveAttribute('aria-pressed', 'true')
-    await expect(cone).toHaveAttribute('aria-pressed', 'false')
-    await expect(coach).toHaveAttribute('aria-pressed', 'false')
-    await expect(gex).toHaveAttribute('aria-pressed', 'true')
-
-    await clickPreset('spatial')
-    await expect(levels).toHaveAttribute('aria-pressed', 'true')
-    await expect(cone).toHaveAttribute('aria-pressed', 'true')
-    await expect(coach).toHaveAttribute('aria-pressed', 'true')
-    await expect(gex).toHaveAttribute('aria-pressed', 'true')
   })
 })

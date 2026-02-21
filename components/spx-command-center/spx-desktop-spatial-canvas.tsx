@@ -19,6 +19,7 @@ export type SPXDesktopSpatialCanvasProps = {
   chartCanvasRef: SPXCommandController['chartCanvasRef']
   showGEXGlow: boolean
   spatialThrottled: boolean
+  showSpatialGhostCards: boolean
   coordinatesRef: SPXCommandController['coordinatesRef']
   showAllRelevantLevels: boolean
   onDisplayedLevelsChange: SPXCommandController['handleDisplayedLevelsChange']
@@ -42,6 +43,7 @@ export function SPXDesktopSpatialCanvas({
   chartCanvasRef,
   showGEXGlow,
   spatialThrottled,
+  showSpatialGhostCards,
   coordinatesRef,
   showAllRelevantLevels,
   onDisplayedLevelsChange,
@@ -94,7 +96,7 @@ export function SPXDesktopSpatialCanvas({
             anchorTimestampSec={latestChartBarTimeSec}
           />
         )}
-        {showSpatialCoach && !spatialThrottled && (
+        {showSpatialCoach && showSpatialGhostCards && !spatialThrottled && (
           <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
         )}
         {showSpatialCoach && !spatialThrottled && (

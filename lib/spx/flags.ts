@@ -10,6 +10,7 @@ export interface SPXUXFlags {
   contextSplitV1: boolean
   commandPalette: boolean
   spatialHudV1: boolean
+  spatialCoachGhostCards: boolean
   coachDockV1: boolean
   coachAlertLifecycleV2: boolean
   coachTimelineV2: boolean
@@ -39,6 +40,7 @@ export const DEFAULT_SPX_UX_FLAGS: Readonly<SPXUXFlags> = Object.freeze({
   contextSplitV1: true,
   commandPalette: true,
   spatialHudV1: true,
+  spatialCoachGhostCards: false,
   coachDockV1: true,
   coachAlertLifecycleV2: true,
   coachTimelineV2: true,
@@ -113,6 +115,13 @@ export const SPX_UX_FLAG_METADATA: Readonly<Record<keyof SPXUXFlags, SPXUXFlagLi
     createdOn: '2026-02-20',
     reviewBy: '2026-03-10',
     removalCondition: 'Promote to GA after performance and conversion targets are met.',
+  },
+  spatialCoachGhostCards: {
+    owner: 'spx-visual',
+    rolloutStage: 'experiment',
+    createdOn: '2026-02-21',
+    reviewBy: '2026-03-10',
+    removalCondition: 'Promote only after ghost signal quality and noise metrics meet runbook thresholds.',
   },
   coachDockV1: {
     owner: 'spx-coach',
@@ -189,6 +198,7 @@ const FLAG_ENV_KEYS: Record<keyof SPXUXFlags, string[]> = {
   contextSplitV1: ['NEXT_PUBLIC_SPX_UX_CONTEXT_SPLIT_V1', 'SPX_UX_CONTEXT_SPLIT_V1'],
   commandPalette: ['NEXT_PUBLIC_SPX_UX_COMMAND_PALETTE', 'SPX_UX_COMMAND_PALETTE'],
   spatialHudV1: ['NEXT_PUBLIC_SPX_UX_SPATIAL_HUD_V1', 'SPX_UX_SPATIAL_HUD_V1'],
+  spatialCoachGhostCards: ['NEXT_PUBLIC_SPX_UX_SPATIAL_COACH_GHOST_CARDS', 'SPX_UX_SPATIAL_COACH_GHOST_CARDS'],
   coachDockV1: ['NEXT_PUBLIC_SPX_UX_COACH_DOCK_V1', 'SPX_UX_COACH_DOCK_V1'],
   coachAlertLifecycleV2: ['NEXT_PUBLIC_SPX_UX_COACH_ALERT_LIFECYCLE_V2', 'SPX_UX_COACH_ALERT_LIFECYCLE_V2'],
   coachTimelineV2: ['NEXT_PUBLIC_SPX_UX_COACH_TIMELINE_V2', 'SPX_UX_COACH_TIMELINE_V2'],
@@ -235,6 +245,7 @@ export function getSPXUXFlags(overrides?: Partial<SPXUXFlags>): SPXUXFlags {
     contextSplitV1: resolveFlagFromEnv('contextSplitV1') ?? DEFAULT_SPX_UX_FLAGS.contextSplitV1,
     commandPalette: resolveFlagFromEnv('commandPalette') ?? DEFAULT_SPX_UX_FLAGS.commandPalette,
     spatialHudV1: resolveFlagFromEnv('spatialHudV1') ?? DEFAULT_SPX_UX_FLAGS.spatialHudV1,
+    spatialCoachGhostCards: resolveFlagFromEnv('spatialCoachGhostCards') ?? DEFAULT_SPX_UX_FLAGS.spatialCoachGhostCards,
     coachDockV1: resolveFlagFromEnv('coachDockV1') ?? DEFAULT_SPX_UX_FLAGS.coachDockV1,
     coachAlertLifecycleV2: resolveFlagFromEnv('coachAlertLifecycleV2') ?? DEFAULT_SPX_UX_FLAGS.coachAlertLifecycleV2,
     coachTimelineV2: resolveFlagFromEnv('coachTimelineV2') ?? DEFAULT_SPX_UX_FLAGS.coachTimelineV2,

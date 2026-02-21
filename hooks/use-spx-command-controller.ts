@@ -135,12 +135,11 @@ export function useSPXCommandController() {
   )
   const overlayPreset = useMemo(
     () => resolveOverlayPresetFromState({
-      showLevels: showLevelOverlay,
       showCone,
       showSpatialCoach,
       showGEXGlow,
     }),
-    [showCone, showGEXGlow, showLevelOverlay, showSpatialCoach],
+    [showCone, showGEXGlow, showSpatialCoach],
   )
   const selectedActionableSetup = useMemo(
     () => (selectedSetup && isActionableSetup(selectedSetup) ? selectedSetup : null),
@@ -373,7 +372,6 @@ export function useSPXCommandController() {
     const next = SPX_OVERLAY_PRESET_STATE[preset]
     if (!next) return
 
-    setShowLevelOverlay(next.showLevels)
     setShowCone(next.showCone)
     setShowSpatialCoach(next.showSpatialCoach)
     setShowGEXGlow(next.showGEXGlow)
