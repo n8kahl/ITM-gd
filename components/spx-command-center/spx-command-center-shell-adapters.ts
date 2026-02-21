@@ -67,7 +67,9 @@ function createDesktopSurfaceBaseProps(
     onCycleReplayWindow: () => controller.handleCycleReplayWindow('action_strip'),
     onCycleReplaySpeed: () => controller.handleCycleReplaySpeed('action_strip'),
     spatialHudEnabled: controller.uxFlags.spatialHudV1,
+    showAdvancedHud: controller.showAdvancedHud,
     onToggleAllLevels: controller.handleToggleAllLevels,
+    onToggleAdvancedHud: controller.handleToggleAdvancedHud,
     overlayPreset: controller.overlayPreset,
     onSelectOverlayPreset: controller.handleOverlayPresetChange,
     onRunActionStripCommand: controller.runActionStripCommand,
@@ -227,6 +229,7 @@ export function createDesktopSpatialCanvasProps(
     showSpatialCoach: controller.showSpatialCoach,
     showLevelOverlay: controller.showLevelOverlay,
     onCloseLevelOverlay,
+    onRequestSidebarOpen: () => controller.setSidebarCollapsed(false),
   }
 }
 

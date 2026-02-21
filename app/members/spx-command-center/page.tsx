@@ -10,7 +10,6 @@ import {
 import { SPXCommandPalette } from '@/components/spx-command-center/command-palette'
 import {
   SPXKeyboardShortcutsOverlay,
-  SPXViewModeToggle,
 } from '@/components/spx-command-center/spx-command-center-shell-sections'
 import { SPXSkeleton } from '@/components/spx-command-center/spx-skeleton'
 import { useSPXCommandController } from '@/hooks/use-spx-command-controller'
@@ -25,10 +24,8 @@ function SPXCommandCenterContent() {
     showShortcutHelp,
     showCommandPalette,
     commandPaletteCommands,
-    desktopViewMode,
     setShowShortcutHelp,
     setShowCommandPalette,
-    handleViewModeChange,
   } = controller
 
   if (shouldShowInitialSkeleton) {
@@ -58,15 +55,6 @@ function SPXCommandCenterContent() {
         spatialHudEnabled={uxFlags.spatialHudV1}
         onClose={() => setShowShortcutHelp(false)}
       />
-
-      {!isMobile && uxFlags.spatialHudV1 && (
-        <div className="flex items-center justify-end gap-2">
-          <SPXViewModeToggle
-            desktopViewMode={desktopViewMode}
-            onChange={handleViewModeChange}
-          />
-        </div>
-      )}
 
       <SPXCommandPalette
         open={showCommandPalette}

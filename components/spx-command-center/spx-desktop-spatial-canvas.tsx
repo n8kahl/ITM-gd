@@ -37,6 +37,7 @@ export type SPXDesktopSpatialCanvasProps = {
   showSpatialCoach: boolean
   showLevelOverlay: boolean
   onCloseLevelOverlay: () => void
+  onRequestSidebarOpen?: () => void
 }
 
 const OVERLAY_POLICY_REFRESH_INTERVAL_MS = 180
@@ -63,8 +64,12 @@ export function SPXDesktopSpatialCanvas({
   showSpatialCoach,
   showLevelOverlay,
   onCloseLevelOverlay,
+  onRequestSidebarOpen,
 }: SPXDesktopSpatialCanvasProps) {
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
+  const runtimeGhostFlagEnabled = typeof window !== 'undefined'
+    && Boolean((window as { __spxUxFlags?: { spatialCoachGhostCards?: boolean } }).__spxUxFlags?.spatialCoachGhostCards)
+  const ghostCardsEnabled = showSpatialGhostCards || runtimeGhostFlagEnabled
 
   useEffect(() => {
     let rafId = 0
@@ -95,12 +100,12 @@ export function SPXDesktopSpatialCanvas({
     spatialThrottled,
     showCone,
     showSpatialCoach,
-    showSpatialGhostCards,
+    showSpatialGhostCards: ghostCardsEnabled,
   }), [
     focusMode,
+    ghostCardsEnabled,
     showCone,
     showSpatialCoach,
-    showSpatialGhostCards,
     spatialThrottled,
     viewport.height,
     viewport.width,
@@ -155,12 +160,15 @@ export function SPXDesktopSpatialCanvas({
             <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
           )}
           {overlayPolicy.allowSpatialCoach && !spatialThrottled && (
-            <SpatialCoachLayer coordinatesRef={coordinatesRef} />
+            <SpatialCoachLayer
+              coordinatesRef={coordinatesRef}
+              onRequestSidebarOpen={onRequestSidebarOpen}
+            />
           )}
         </div>
 
         {showLevelOverlay && (
-          <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
+          <div className="absolute inset-0 z-50 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
             <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>

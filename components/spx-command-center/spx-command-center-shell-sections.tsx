@@ -69,7 +69,7 @@ export function SPXDesktopMainSurface({
       {(focusMode !== 'execution' && (!stateDrivenLayoutEnabled || layoutMode !== 'in_trade')) && <DecisionContext />}
 
       {showLevelOverlay && (
-        <div className="absolute inset-0 z-20 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
+        <div className="absolute inset-0 z-50 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
           <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
@@ -124,7 +124,7 @@ export function SPXDesktopSidebarSurface({
             />
             {desktopCoachPanelOpen ? (
               <div className="mt-2">
-                <AICoachFeed />
+                <AICoachFeed suppressPrimaryTradeActions />
               </div>
             ) : null}
           </div>
@@ -133,18 +133,18 @@ export function SPXDesktopSidebarSurface({
         )
       )}
 
-      {focusMode !== 'risk_only' && <SetupFeed />}
+      {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
       {!stateDrivenLayoutEnabled ? (
         <>
           {focusMode !== 'risk_only' && <ContractSelector />}
-          <AICoachFeed />
+          <AICoachFeed suppressPrimaryTradeActions />
           {focusMode === 'risk_only' && <DecisionContext />}
         </>
       ) : layoutMode === 'scan' ? (
         focusMode === 'risk_only' ? <DecisionContext /> : null
       ) : (
         <>
-          <AICoachFeed />
+          <AICoachFeed suppressPrimaryTradeActions />
           {focusMode !== 'risk_only' && <ContractSelector />}
           {focusMode === 'risk_only' && <DecisionContext />}
         </>
@@ -211,7 +211,6 @@ export function SPXSpatialSidebarContent({
       </summary>
       <div className="mt-2.5 space-y-2.5">
         <LevelMatrix />
-        <DecisionContext />
         <GEXLandscape profile={gexProfile?.combined || null} />
         <GEXHeatmap spx={gexProfile?.spx || null} spy={gexProfile?.spy || null} />
         <FlowTicker />
@@ -223,9 +222,9 @@ export function SPXSpatialSidebarContent({
   if (layoutMode === 'legacy') {
     return (
       <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-        {focusMode !== 'risk_only' && <SetupFeed />}
+        {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
         {focusMode !== 'risk_only' && <ContractSelector />}
-        <AICoachFeed />
+        <AICoachFeed suppressPrimaryTradeActions />
         {focusMode === 'risk_only' && <DecisionContext />}
         {analyticsDrawer}
       </div>
@@ -242,8 +241,8 @@ export function SPXSpatialSidebarContent({
             onToggle={onDesktopCoachDockToggle}
           />
         )}
-        {desktopCoachPanelOpen && <AICoachFeed />}
-        {focusMode !== 'risk_only' && <SetupFeed />}
+        {desktopCoachPanelOpen && <AICoachFeed suppressPrimaryTradeActions />}
+        {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
         {focusMode === 'risk_only' && <DecisionContext />}
         {analyticsDrawer}
       </div>
@@ -253,8 +252,8 @@ export function SPXSpatialSidebarContent({
   if (layoutMode === 'evaluate') {
     return (
       <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-        <AICoachFeed />
-        {focusMode !== 'risk_only' && <SetupFeed />}
+        <AICoachFeed suppressPrimaryTradeActions />
+        {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
         {focusMode !== 'risk_only' && <ContractSelector />}
         {focusMode === 'risk_only' && <DecisionContext />}
         {analyticsDrawer}
@@ -264,9 +263,9 @@ export function SPXSpatialSidebarContent({
 
   return (
     <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-      <AICoachFeed />
+      <AICoachFeed suppressPrimaryTradeActions />
       {focusMode !== 'risk_only' && <ContractSelector />}
-      {focusMode !== 'risk_only' && <SetupFeed />}
+      {focusMode !== 'risk_only' && <SetupFeed suppressLocalPrimaryCta />}
       {focusMode === 'risk_only' && <DecisionContext />}
       {analyticsDrawer}
     </div>

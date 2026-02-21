@@ -45,7 +45,9 @@ export type SPXDesktopSurfaceOrchestratorProps = {
   onCycleReplayWindow: () => void
   onCycleReplaySpeed: () => void
   spatialHudEnabled: boolean
+  showAdvancedHud: boolean
   onToggleAllLevels: () => void
+  onToggleAdvancedHud: () => void
   overlayPreset: SPXOverlayPreset
   onSelectOverlayPreset: (preset: SPXOverlayPreset) => void
   onRunActionStripCommand: (id: SPXCommandId) => void
@@ -81,7 +83,9 @@ export function SPXDesktopSurfaceOrchestrator({
   onCycleReplayWindow,
   onCycleReplaySpeed,
   spatialHudEnabled,
+  showAdvancedHud,
   onToggleAllLevels,
+  onToggleAdvancedHud,
   overlayPreset,
   onSelectOverlayPreset,
   onRunActionStripCommand,
@@ -131,6 +135,7 @@ export function SPXDesktopSurfaceOrchestrator({
         onCycleReplayWindow={onCycleReplayWindow}
         onCycleReplaySpeed={onCycleReplaySpeed}
         showViewModeToggle={spatialHudEnabled}
+        desktopViewMode={desktopViewMode}
         viewModeLabel={isSpatialView ? 'Classic' : 'Spatial HUD'}
         onToggleViewMode={() => onRunActionStripCommand('toggle-view-mode')}
         overlayCapability={isSpatialView
@@ -138,6 +143,8 @@ export function SPXDesktopSurfaceOrchestrator({
           : { levels: true, cone: false, coach: false, gex: false }}
         sidebarToggleEnabled={isSpatialView}
         immersiveToggleEnabled={isSpatialView}
+        showAdvancedHud={showAdvancedHud}
+        onToggleAdvancedHud={onToggleAdvancedHud}
       />
       {sidebarPanel ? (
         <SidebarPanel

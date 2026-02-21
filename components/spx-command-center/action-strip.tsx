@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import type { ChartTimeframe } from '@/lib/api/ai-coach'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import type { SPXOverlayPreset } from '@/lib/spx/overlay-presets'
@@ -41,6 +40,7 @@ interface ActionStripProps {
   onCycleReplayWindow: () => void
   onCycleReplaySpeed: () => void
   showViewModeToggle?: boolean
+  desktopViewMode?: 'classic' | 'spatial'
   viewModeLabel?: string
   onToggleViewMode?: () => void
   overlayCapability?: {
@@ -51,6 +51,8 @@ interface ActionStripProps {
   }
   sidebarToggleEnabled?: boolean
   immersiveToggleEnabled?: boolean
+  showAdvancedHud: boolean
+  onToggleAdvancedHud: () => void
 }
 
 const TIMEFRAMES: ChartTimeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D']
@@ -63,7 +65,6 @@ const FOCUS_MODES: Array<{ key: 'decision' | 'execution' | 'risk_only'; label: s
 
 export function ActionStrip(props: ActionStripProps) {
   const { selectedTimeframe, setChartTimeframe } = useSPXPriceContext()
-  const [showAdvancedHud, setShowAdvancedHud] = useState(false)
   const overlayCapability = props.overlayCapability || {}
   const sidebarToggleEnabled = props.sidebarToggleEnabled ?? true
   const immersiveToggleEnabled = props.immersiveToggleEnabled ?? true
@@ -105,7 +106,7 @@ export function ActionStrip(props: ActionStripProps) {
 
   return (
     <div
-      className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 px-5 py-2.5"
+      className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 px-5 py-2.5"
       data-testid="spx-action-strip"
       style={{
         background: 'linear-gradient(0deg, rgba(10,10,11,0.88) 0%, rgba(10,10,11,0.4) 70%, transparent 100%)',
@@ -113,7 +114,7 @@ export function ActionStrip(props: ActionStripProps) {
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2">
           {TIMEFRAMES.map((timeframe) => (
             <button
               key={timeframe}
@@ -298,19 +299,19 @@ export function ActionStrip(props: ActionStripProps) {
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => {
-              const next = !showAdvancedHud
-              setShowAdvancedHud(next)
-              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
-                surface: 'action_strip_advanced_hud',
-                action: next ? 'open' : 'close',
-              })
-            }}
-            aria-expanded={showAdvancedHud}
+              onClick={() => {
+                const next = !props.showAdvancedHud
+                props.onToggleAdvancedHud()
+                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                  surface: 'action_strip_advanced_hud',
+                  action: next ? 'open' : 'close',
+                })
+              }}
+            aria-expanded={props.showAdvancedHud}
             data-testid="spx-action-advanced-hud-toggle"
             className={cn(
               'flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-              showAdvancedHud
+              props.showAdvancedHud
                 ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
                 : 'border-white/10 bg-white/[0.02] text-white/55 hover:text-white/80',
             )}
@@ -319,24 +320,53 @@ export function ActionStrip(props: ActionStripProps) {
           </button>
 
           {props.showViewModeToggle && props.onToggleViewMode && (
-            <button
-              type="button"
-              onClick={props.onToggleViewMode}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/50 transition-colors hover:text-white/80"
+            <div
+              className="inline-flex items-center rounded-lg border border-white/15 bg-white/[0.03] p-1"
+              data-testid="spx-view-mode-toggle"
             >
-              {props.viewModeLabel || 'Toggle View'}
-              <span className="rounded border border-white/15 px-1 py-0.5 text-[7px] text-white/30">V</span>
-            </button>
+              <button
+                type="button"
+                data-testid="spx-view-mode-classic"
+                aria-pressed={props.desktopViewMode === 'classic'}
+                onClick={() => {
+                  if (props.desktopViewMode === 'spatial') props.onToggleViewMode?.()
+                }}
+                className={cn(
+                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                  props.desktopViewMode === 'classic'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : 'text-white/55 hover:text-white/80',
+                )}
+              >
+                Classic
+              </button>
+              <button
+                type="button"
+                data-testid="spx-view-mode-spatial"
+                aria-pressed={props.desktopViewMode === 'spatial'}
+                onClick={() => {
+                  if (props.desktopViewMode !== 'spatial') props.onToggleViewMode?.()
+                }}
+                className={cn(
+                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                  props.desktopViewMode === 'spatial'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : 'text-white/55 hover:text-white/80',
+                )}
+              >
+                Spatial HUD
+              </button>
+            </div>
           )}
         </div>
       </div>
 
       <div
         data-testid="spx-action-advanced-hud-drawer"
-        data-state={showAdvancedHud ? 'open' : 'closed'}
+        data-state={props.showAdvancedHud ? 'open' : 'closed'}
         className={cn(
-          'absolute bottom-[54px] right-5 z-40 w-[min(760px,calc(100vw-40px))] rounded-xl border border-white/12 bg-[#0A0A0B]/95 p-2.5 shadow-2xl transition-all duration-150',
-          showAdvancedHud ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
+          'absolute bottom-[54px] right-5 z-50 w-[min(760px,calc(100vw-40px))] rounded-xl border border-white/12 bg-[#0A0A0B]/95 p-2.5 shadow-2xl transition-all duration-150',
+          props.showAdvancedHud ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
         )}
       >
         <div className="mb-2 flex items-center justify-between">

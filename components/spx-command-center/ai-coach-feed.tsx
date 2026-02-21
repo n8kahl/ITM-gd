@@ -111,13 +111,19 @@ function resolveActionLabel(action: CoachDecisionAction): string {
   return action.label
 }
 
-function normalizeDecisionActions(actions: CoachDecisionAction[]): CoachDecisionAction[] {
+function normalizeDecisionActions(
+  actions: CoachDecisionAction[],
+  options?: { suppressPrimaryTradeActions?: boolean },
+): CoachDecisionAction[] {
   const deduped: CoachDecisionAction[] = []
   const seen = new Set<string>()
 
   for (const action of actions) {
     // History already has a dedicated control below; keep decision row execution-focused.
     if (action.id === 'OPEN_HISTORY') continue
+    if (options?.suppressPrimaryTradeActions && (action.id === 'ENTER_TRADE_FOCUS' || action.id === 'EXIT_TRADE_FOCUS')) {
+      continue
+    }
     const key = `${action.id}:${resolveActionLabel(action).trim().toLowerCase()}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -155,7 +161,13 @@ function decisionStatusLabel(status: 'idle' | 'loading' | 'ready' | 'error'): st
   return 'Idle'
 }
 
-export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
+export function AICoachFeed({
+  readOnly = false,
+  suppressPrimaryTradeActions = false,
+}: {
+  readOnly?: boolean
+  suppressPrimaryTradeActions?: boolean
+}) {
   const { uxFlags } = useSPXCommandCenter()
   const { regime } = useSPXAnalyticsContext()
   const { spxPrice } = useSPXPriceContext()
@@ -743,8 +755,10 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
   const latestMessage = visibleMessages[0] || null
   const decisionAge = staleAgeLabel(effectiveCoachDecision)
   const decisionActions = useMemo(
-    () => normalizeDecisionActions(effectiveCoachDecision?.actions || []),
-    [effectiveCoachDecision?.actions],
+    () => normalizeDecisionActions(effectiveCoachDecision?.actions || [], {
+      suppressPrimaryTradeActions,
+    }),
+    [effectiveCoachDecision?.actions, suppressPrimaryTradeActions],
   )
   const coachDecisionDisplayStatus = coachDecisionStatus === 'loading' && effectiveCoachDecision
     ? 'ready'
@@ -1072,7 +1086,7 @@ export function AICoachFeed({ readOnly = false }: { readOnly?: boolean }) {
             ))}
           </div>
 
-          {tradeMode === 'in_trade' && (
+          {tradeMode === 'in_trade' && !suppressPrimaryTradeActions && (
             <button
               type="button"
               onClick={() => {

@@ -51,7 +51,7 @@ interface UseSPXCommandRegistryInput {
   selectSetup: (setup: Setup | null) => void
   enterTrade: (setup?: Setup | null) => void
   exitTrade: () => void
-  setShowLevelOverlay: Dispatch<SetStateAction<boolean>>
+  toggleLevelOverlay: (source: 'action_strip' | 'command' | 'shortcut') => void
   setShowCone: Dispatch<SetStateAction<boolean>>
   setShowSpatialCoach: Dispatch<SetStateAction<boolean>>
   setShowGEXGlow: Dispatch<SetStateAction<boolean>>
@@ -232,11 +232,12 @@ export function useSPXCommandRegistry(input: UseSPXCommandRegistryInput): {
       shortcut: 'L',
       group: 'View',
       run: (source, keyboardKey) => {
-        input.setShowLevelOverlay((previous) => {
-          const nextState = !previous
-          trackCommandAction(source, 'toggle_level_overlay', keyboardKey, { nextState })
-          return nextState
-        })
+        input.toggleLevelOverlay(source === 'action_strip'
+          ? 'action_strip'
+          : source === 'command_palette'
+            ? 'command'
+            : 'shortcut')
+        trackCommandAction(source, 'toggle_level_overlay', keyboardKey)
       },
     })
 

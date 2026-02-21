@@ -60,8 +60,10 @@ function resolveTier(
   viewportHeight: number,
   spatialThrottled: boolean,
 ): SPXOverlayPriorityTier {
-  if (spatialThrottled || viewportWidth < 1100 || viewportHeight < 590) return 'critical'
-  if (viewportWidth < 1260 || viewportHeight < 680) return 'tight'
+  // Use post-sidebar viewport dimensions (already reduced by side rails/panels).
+  // Keep default desktop Spatial HUD in normal tier; tighten only on genuinely constrained canvases.
+  if (spatialThrottled || viewportWidth < 430 || viewportHeight < 340) return 'critical'
+  if (viewportWidth < 480 || viewportHeight < 400) return 'tight'
   return 'normal'
 }
 

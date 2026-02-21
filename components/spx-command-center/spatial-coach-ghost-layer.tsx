@@ -207,6 +207,7 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
     const suppressed = applySPXAlertSuppression(coachMessages)
     return suppressed.messages.filter((message) => (
       message.priority === 'alert'
+      || message.priority === 'setup'
       || message.type === 'pre_trade'
       || message.type === 'in_trade'
     ))
@@ -293,8 +294,11 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
       const anchor = anchorSnapshotRef.current[id]
       if (!lifecycleNode || !anchor) continue
 
-      const anchorY = coordinates.priceToPixel(anchor.anchorPrice)
-      if (anchorY == null || anchorY < 36 || anchorY > height - 36) continue
+      const rawAnchorY = coordinates.priceToPixel(anchor.anchorPrice)
+      if (rawAnchorY == null) continue
+      const minAnchorY = 36
+      const maxAnchorY = Math.max(36, height - 36)
+      const anchorY = clamp(rawAnchorY, minAnchorY, maxAnchorY)
 
       const anchorTimeSec = parseIsoToUnixSeconds(anchor.message.timestamp)
       const anchorXResolution = resolveSpatialAnchorX({
