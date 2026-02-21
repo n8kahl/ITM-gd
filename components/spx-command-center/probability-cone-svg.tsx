@@ -152,17 +152,19 @@ export function ProbabilityConeSVG({ coordinatesRef, anchorTimestampSec }: Proba
         strokeWidth={0.8 + (coneState.salience * 0.5)}
         data-testid="spx-probability-cone-path"
       />
-      <circle
-        cx={coneState.startX}
-        cy={coneState.startY}
-        r={2.8 + (coneState.salience * 1.2)}
-        fill="#10B981"
-        fillOpacity={0.86}
-        stroke="#F5EDCC"
-        strokeOpacity={0.52}
-        strokeWidth={0.9}
-        data-testid="spx-probability-cone-start"
-      />
+      {coneState.anchorMode === 'time' && (
+        <circle
+          cx={coneState.startX}
+          cy={coneState.startY}
+          r={2.8 + (coneState.salience * 1.2)}
+          fill="#10B981"
+          fillOpacity={0.86}
+          stroke="#F5EDCC"
+          strokeOpacity={0.52}
+          strokeWidth={0.9}
+          data-testid="spx-probability-cone-start"
+        />
+      )}
       {coneState.centerLine && (
         <path
           d={coneState.centerLine}

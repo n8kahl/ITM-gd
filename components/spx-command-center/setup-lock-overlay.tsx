@@ -18,8 +18,8 @@ interface SetupBandRender {
 }
 
 interface SetupLockRenderState {
-  centerX: number
-  ringX: number
+  centerX: number | null
+  anchorMode: 'time' | 'offscreen'
   centerY: number
   width: number
   bands: SetupBandRender[]
@@ -37,7 +37,7 @@ function renderStateEquals(left: SetupLockRenderState | null, right: SetupLockRe
   if (!left || !right) return left === right
   if (
     left.centerX !== right.centerX
-    || left.ringX !== right.ringX
+    || left.anchorMode !== right.anchorMode
     || left.centerY !== right.centerY
     || left.width !== right.width
     || left.confluenceRings !== right.confluenceRings
@@ -96,10 +96,10 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
       setRenderState((previous) => (previous == null ? previous : null))
       return
     }
-    const fallbackCenterX = chartWidth * 0.52
     const anchorX = lockAnchorTimeSec != null ? coordinates.timeToPixel(lockAnchorTimeSec) : null
-    const centerX = clamp(anchorX ?? fallbackCenterX, 16, Math.max(16, chartWidth - 16))
-    const ringX = clamp(centerX + Math.min(chartWidth * 0.21, 168), 18, Math.max(18, chartWidth - 18))
+    const centerX = anchorX != null
+      ? clamp(anchorX, 16, Math.max(16, chartWidth - 16))
+      : null
 
     const bands: SetupBandRender[] = []
     for (const band of lockGeometry.bands) {
@@ -118,7 +118,7 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
 
     const nextState: SetupLockRenderState = {
       centerX,
-      ringX,
+      anchorMode: centerX != null ? 'time' : 'offscreen',
       centerY,
       width: chartWidth,
       bands,
@@ -192,9 +192,15 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
   if (!renderState || renderState.bands.length === 0) return null
 
   const crosshairColor = renderState.direction === 'bullish' ? '#10B981' : '#FB7185'
+  const showAnchorMarkers = renderState.centerX != null
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[18]" data-testid="spx-setup-lock-overlay" aria-hidden>
+    <div
+      className="pointer-events-none absolute inset-0 z-[18]"
+      data-testid="spx-setup-lock-overlay"
+      data-anchor-mode={renderState.anchorMode}
+      aria-hidden
+    >
       {renderState.bands.map((band) => (
         <div
           key={band.id}
@@ -212,27 +218,31 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
         style={{ top: renderState.centerY }}
       />
 
-      <div
-        className="absolute w-[1px] border-l border-dashed border-white/30"
-        style={{ left: renderState.centerX, top: renderState.centerY - 68, height: 136 }}
-      />
+      {showAnchorMarkers && (
+        <div
+          className="absolute w-[1px] border-l border-dashed border-white/30"
+          style={{ left: renderState.centerX || 0, top: renderState.centerY - 68, height: 136 }}
+        />
+      )}
 
-      <div
-        className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border"
-        style={{
-          left: renderState.centerX,
-          top: renderState.centerY,
-          borderColor: `${crosshairColor}99`,
-          boxShadow: `0 0 14px ${crosshairColor}44`,
-        }}
-      />
+      {showAnchorMarkers && (
+        <div
+          className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border"
+          style={{
+            left: renderState.centerX || 0,
+            top: renderState.centerY,
+            borderColor: `${crosshairColor}99`,
+            boxShadow: `0 0 14px ${crosshairColor}44`,
+          }}
+        />
+      )}
 
-      {showPulse && (
+      {showPulse && showAnchorMarkers && (
         <div
           key={`setup-lock-pulse-${pulseTick}`}
           className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-champagne/60"
           style={{
-            left: renderState.centerX,
+            left: renderState.centerX || 0,
             top: renderState.centerY,
             width: 28,
             height: 28,
@@ -243,13 +253,14 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
       )}
 
       {Array.from({ length: renderState.confluenceRings }).map((_, index) => {
+        if (!showAnchorMarkers) return null
         const size = 8 + (index * 8)
         return (
           <div
             key={`ring-${index + 1}`}
               className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border"
               style={{
-                left: renderState.ringX,
+                left: renderState.centerX || 0,
                 top: renderState.centerY,
                 width: size,
                 height: size,
