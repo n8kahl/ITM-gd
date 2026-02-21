@@ -88,39 +88,86 @@ export function useChartCoordinates(
   }, [chartRef, fallbackContainerRef, seriesRef])
 
   useEffect(() => {
-    const chart = chartRef.current
-    if (!chart) return
+    let detached = false
+    let attachRafId: number | null = null
+    let interactionIntervalId: number | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let cleanupAttachedListeners: (() => void) | null = null
 
-    const timeScale = chart.timeScale()
     const scheduleRecalculate = () => {
       window.requestAnimationFrame(recalculate)
     }
 
-    timeScale.subscribeVisibleLogicalRangeChange(scheduleRecalculate)
-    timeScale.subscribeVisibleTimeRangeChange(scheduleRecalculate)
-    recalculate()
+    const tryAttach = () => {
+      if (detached) return
+      const chart = chartRef.current
+      if (!chart) {
+        attachRafId = window.requestAnimationFrame(tryAttach)
+        return
+      }
 
-    const chartElement = resolveChartElement(chart, fallbackContainerRef)
-    let resizeObserver: ResizeObserver | null = null
-    if (chartElement) {
-      resizeObserver = new ResizeObserver(() => {
-        window.requestAnimationFrame(recalculate)
-      })
-      resizeObserver.observe(chartElement)
+      const timeScale = chart.timeScale()
+      const handleChartInteraction = () => {
+        scheduleRecalculate()
+      }
+
+      timeScale.subscribeVisibleLogicalRangeChange(scheduleRecalculate)
+      timeScale.subscribeVisibleTimeRangeChange(scheduleRecalculate)
+      chart.subscribeCrosshairMove(scheduleRecalculate)
+
+      const chartElement = resolveChartElement(chart, fallbackContainerRef)
+      if (chartElement) {
+        resizeObserver = new ResizeObserver(() => {
+          window.requestAnimationFrame(recalculate)
+        })
+        resizeObserver.observe(chartElement)
+        chartElement.addEventListener('pointermove', handleChartInteraction, { passive: true })
+        chartElement.addEventListener('pointerup', handleChartInteraction, { passive: true })
+        chartElement.addEventListener('wheel', handleChartInteraction, { passive: true })
+        chartElement.addEventListener('touchmove', handleChartInteraction, { passive: true })
+      }
+
+      // Fallback sampler for interactions that may skip visible-range callbacks.
+      interactionIntervalId = window.setInterval(scheduleRecalculate, 180)
+      scheduleRecalculate()
+
+      cleanupAttachedListeners = () => {
+        try {
+          timeScale.unsubscribeVisibleLogicalRangeChange(scheduleRecalculate)
+        } catch {
+          // no-op
+        }
+        try {
+          timeScale.unsubscribeVisibleTimeRangeChange(scheduleRecalculate)
+        } catch {
+          // no-op
+        }
+        try {
+          chart.unsubscribeCrosshairMove(scheduleRecalculate)
+        } catch {
+          // no-op
+        }
+        if (interactionIntervalId != null) {
+          window.clearInterval(interactionIntervalId)
+        }
+        if (chartElement) {
+          chartElement.removeEventListener('pointermove', handleChartInteraction)
+          chartElement.removeEventListener('pointerup', handleChartInteraction)
+          chartElement.removeEventListener('wheel', handleChartInteraction)
+          chartElement.removeEventListener('touchmove', handleChartInteraction)
+        }
+        resizeObserver?.disconnect()
+      }
     }
 
+    tryAttach()
+
     return () => {
-      try {
-        timeScale.unsubscribeVisibleLogicalRangeChange(scheduleRecalculate)
-      } catch {
-        // no-op
+      detached = true
+      if (attachRafId != null) {
+        window.cancelAnimationFrame(attachRafId)
       }
-      try {
-        timeScale.unsubscribeVisibleTimeRangeChange(scheduleRecalculate)
-      } catch {
-        // no-op
-      }
-      resizeObserver?.disconnect()
+      cleanupAttachedListeners?.()
     }
   }, [chartRef, recalculate, fallbackContainerRef])
 

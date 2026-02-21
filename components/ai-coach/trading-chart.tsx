@@ -220,6 +220,7 @@ export function TradingChart({
   const macdHistogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const levelPriceLinesRef = useRef<any[]>([])
   const userAdjustedViewportRef = useRef(false)
+  const manualPriceScaleRef = useRef(false)
   const safeBars = bars
     .filter((bar) => (
       Number.isFinite(bar.time)
@@ -433,14 +434,75 @@ export function TradingChart({
         horzTouchDrag: true,
         vertTouchDrag: false,
       },
+      handleScale: {
+        axisPressedMouseMove: { time: true, price: true },
+        mouseWheel: true,
+        pinch: true,
+      },
     })
 
     const markUserViewportAdjusted = () => {
       userAdjustedViewportRef.current = true
     }
-    containerRef.current.addEventListener('pointerdown', markUserViewportAdjusted, { passive: true })
-    containerRef.current.addEventListener('wheel', markUserViewportAdjusted, { passive: true })
-    containerRef.current.addEventListener('touchstart', markUserViewportAdjusted, { passive: true })
+
+    const enableManualPriceScale = () => {
+      if (manualPriceScaleRef.current) return
+      try {
+        chart.priceScale('right').applyOptions({ autoScale: false })
+        manualPriceScaleRef.current = true
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to disable right autoScale after vertical drag', error)
+        }
+      }
+    }
+
+    let dragStart: { x: number; y: number } | null = null
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return
+      dragStart = { x: event.clientX, y: event.clientY }
+      markUserViewportAdjusted()
+    }
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragStart) return
+      if ((event.buttons & 1) !== 1) return
+      const deltaX = Math.abs(event.clientX - dragStart.x)
+      const deltaY = Math.abs(event.clientY - dragStart.y)
+      if (deltaY >= 3 && deltaY > (deltaX * 0.6)) {
+        enableManualPriceScale()
+      }
+    }
+    const clearDragStart = () => {
+      dragStart = null
+    }
+
+    let touchStartY: number | null = null
+    const handleTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? null
+      markUserViewportAdjusted()
+    }
+    const handleTouchMove = (event: TouchEvent) => {
+      if (touchStartY == null) return
+      const currentY = event.touches[0]?.clientY
+      if (currentY == null) return
+      if (Math.abs(currentY - touchStartY) >= 4) {
+        enableManualPriceScale()
+      }
+    }
+    const clearTouchStart = () => {
+      touchStartY = null
+    }
+
+    containerRef.current.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true })
+    containerRef.current.addEventListener('pointermove', handlePointerMove, { capture: true, passive: true })
+    containerRef.current.addEventListener('pointerup', clearDragStart, { capture: true, passive: true })
+    containerRef.current.addEventListener('pointercancel', clearDragStart, { capture: true, passive: true })
+    containerRef.current.addEventListener('mouseleave', clearDragStart, { capture: true, passive: true })
+    containerRef.current.addEventListener('wheel', markUserViewportAdjusted, { capture: true, passive: true })
+    containerRef.current.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true })
+    containerRef.current.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true })
+    containerRef.current.addEventListener('touchend', clearTouchStart, { capture: true, passive: true })
+    containerRef.current.addEventListener('touchcancel', clearTouchStart, { capture: true, passive: true })
 
     // Candlestick series
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
@@ -519,9 +581,16 @@ export function TradingChart({
         window.clearTimeout(resizeTimeoutId)
       }
       resizeObserver.disconnect()
-      containerRef.current?.removeEventListener('pointerdown', markUserViewportAdjusted)
-      containerRef.current?.removeEventListener('wheel', markUserViewportAdjusted)
-      containerRef.current?.removeEventListener('touchstart', markUserViewportAdjusted)
+      containerRef.current?.removeEventListener('pointerdown', handlePointerDown, true)
+      containerRef.current?.removeEventListener('pointermove', handlePointerMove, true)
+      containerRef.current?.removeEventListener('pointerup', clearDragStart, true)
+      containerRef.current?.removeEventListener('pointercancel', clearDragStart, true)
+      containerRef.current?.removeEventListener('mouseleave', clearDragStart, true)
+      containerRef.current?.removeEventListener('wheel', markUserViewportAdjusted, true)
+      containerRef.current?.removeEventListener('touchstart', handleTouchStart, true)
+      containerRef.current?.removeEventListener('touchmove', handleTouchMove, true)
+      containerRef.current?.removeEventListener('touchend', clearTouchStart, true)
+      containerRef.current?.removeEventListener('touchcancel', clearTouchStart, true)
       clearLevelPriceLines(candlestickSeriesRef.current)
       resetMainChartRefs()
       try {
@@ -560,6 +629,16 @@ export function TradingChart({
 
   useEffect(() => {
     userAdjustedViewportRef.current = false
+    manualPriceScaleRef.current = false
+    if (chartRef.current) {
+      try {
+        chartRef.current.priceScale('right').applyOptions({ autoScale: true })
+      } catch (error) {
+        if (!isDisposedError(error)) {
+          console.warn('[TradingChart] Failed to reset right autoScale on symbol/timeframe change', error)
+        }
+      }
+    }
   }, [symbol, timeframe])
 
   useEffect(() => {
