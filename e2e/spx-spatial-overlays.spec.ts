@@ -19,8 +19,15 @@ test.describe('SPX spatial overlays', () => {
     await expect(page.getByTestId('spx-desktop-spatial')).toBeVisible()
 
     await expect(page.getByTestId('spx-sidebar-panel')).toBeVisible()
-    await expect(page.getByTestId('spx-probability-cone-svg')).toBeVisible({ timeout: 12_000 })
-    await expect(page.getByTestId('spx-probability-cone-start')).toBeVisible()
+    const cone = page.getByTestId('spx-probability-cone-svg')
+    await expect(cone).toBeVisible({ timeout: 12_000 })
+    const coneAnchorMode = await cone.getAttribute('data-anchor-mode')
+    if (coneAnchorMode === 'time') {
+      await expect(page.getByTestId('spx-probability-cone-start')).toBeVisible()
+    } else {
+      await expect(page.getByTestId('spx-probability-cone-start')).toHaveCount(0)
+      await expect(page.getByTestId('spx-probability-cone-fallback-badge')).toBeVisible()
+    }
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
     await expect(page.getByTestId('spx-topographic-ladder')).toBeVisible()
     await expect(page.getByTestId('spx-gamma-topography')).toBeVisible()

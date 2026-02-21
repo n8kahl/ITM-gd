@@ -7,6 +7,7 @@ import { GEXAmbientGlow } from '@/components/spx-command-center/gex-ambient-glow
 import { GammaTopographyOverlay } from '@/components/spx-command-center/gamma-topography-overlay'
 import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
 import { ProbabilityConeSVG } from '@/components/spx-command-center/probability-cone-svg'
+import { PriorityLevelOverlay } from '@/components/spx-command-center/priority-level-overlay'
 import { RiskRewardShadowOverlay } from '@/components/spx-command-center/risk-reward-shadow-overlay'
 import { SetupLockOverlay } from '@/components/spx-command-center/setup-lock-overlay'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
@@ -165,6 +166,11 @@ export function SPXDesktopSpatialCanvas({
               onRequestSidebarOpen={onRequestSidebarOpen}
             />
           )}
+          <PriorityLevelOverlay
+            coordinatesRef={coordinatesRef}
+            showAllRelevantLevels={showAllRelevantLevels}
+            focusMode={focusMode}
+          />
         </div>
 
         {showLevelOverlay && (
