@@ -131,6 +131,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
         return
       }
       if (selectedContract) {
+        const displayContract = cached?.recommendation || selectedContract
         if (!cached) {
           recommendationCacheRef.current.set(setupId, {
             recommendation: selectedContract,
@@ -138,7 +139,7 @@ export function ContractSelector({ readOnly = false }: { readOnly?: boolean }) {
             status: 'success',
           })
         }
-        setContract(selectedContract)
+        setContract(displayContract)
         setIsLoading(false)
         setIsRefreshing(false)
         setErrorMessage(null)

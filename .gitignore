@@ -27,9 +27,18 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts.pnpm-store
+next-env.d.ts
+
+# package manager cache
 .pnpm-store
-.pnpm-store
+
+# editor temp files
+*.swp
+*.swo
+*~
+
+# local temp artifacts
+_tmp_*
 .git.backup
 
 # playwright

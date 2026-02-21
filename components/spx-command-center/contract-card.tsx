@@ -112,18 +112,6 @@ export function ContractCard({
         </div>
       </div>
 
-      {onSelectContract && !isPrimarySelected && (
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => onSelectContract(contract)}
-            className="min-h-[40px] rounded border border-emerald-400/35 bg-emerald-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
-          >
-            Use AI Recommendation
-          </button>
-        </div>
-      )}
-
       {/* Visual R:R bar */}
       <div className="mt-2.5">
         <div className="relative h-[10px] w-full overflow-hidden rounded-full bg-white/[0.06]">
@@ -234,6 +222,16 @@ export function ContractCard({
         <span className="text-[10px] uppercase tracking-[0.09em] text-white/55">Full analytics</span>
         <ChevronDown className={cn('h-3 w-3 text-white/40 transition-transform', expanded && 'rotate-180')} />
       </button>
+
+      {onSelectContract && !isPrimarySelected && (
+        <button
+          type="button"
+          onClick={() => onSelectContract(contract)}
+          className="mt-2 min-h-[40px] rounded border border-emerald-400/35 bg-emerald-500/12 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+        >
+          Use AI Recommendation
+        </button>
+      )}
 
       {expanded && (
         <div className="mt-2 space-y-2">

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { DEFAULT_SPX_UX_FLAGS, getEnabledSPXUXFlagKeys, getSPXUXFlags } from '@/lib/spx/flags'
+import {
+  DEFAULT_SPX_UX_FLAGS,
+  getEnabledSPXUXFlagKeys,
+  getSPXUXFlagCatalog,
+  getSPXUXFlagMetadataCoverageGaps,
+  getSPXUXFlags,
+} from '@/lib/spx/flags'
 
 describe('SPX UX flags', () => {
   it('uses the rollout baseline defaults', () => {
@@ -45,5 +51,12 @@ describe('SPX UX flags', () => {
       'coachMotionV1',
       'coachSurfaceV2',
     ])
+  })
+
+  it('has lifecycle metadata for every flag', () => {
+    expect(getSPXUXFlagMetadataCoverageGaps()).toEqual([])
+    const catalog = getSPXUXFlagCatalog(DEFAULT_SPX_UX_FLAGS)
+    expect(catalog.length).toBe(Object.keys(DEFAULT_SPX_UX_FLAGS).length)
+    expect(catalog.every((entry) => entry.metadata.owner.length > 0)).toBe(true)
   })
 })

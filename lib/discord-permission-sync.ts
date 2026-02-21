@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasMembersAreaAccess } from '@/lib/discord-role-access'
+import {
+  buildSyncedAppMetadata,
+  buildSyncedUserMetadata,
+  resolveDiscordUserIdFromAuthUser,
+} from '@/lib/discord-user-sync'
 
 type RolePermissionRow = {
   discord_role_id: string
@@ -141,14 +146,26 @@ async function recomputeSingleUser(params: {
     throw new Error(`Failed to load auth user ${userProfile.user_id}: ${authUserError?.message || 'unknown error'}`)
   }
 
-  const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userProfile.user_id, {
-    app_metadata: {
-      ...(authUserResult.user.app_metadata || {}),
-      is_admin: hasAdminPermission,
-      is_member: hasMemberRole,
-      discord_roles: roleIds,
+  const resolvedDiscordUserId = userProfile.discord_user_id
+    || resolveDiscordUserIdFromAuthUser(authUserResult.user)
+
+  const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
+    userProfile.user_id,
+    {
+      app_metadata: buildSyncedAppMetadata({
+        existingAppMetadata: authUserResult.user.app_metadata,
+        discordRoles: roleIds,
+        isAdmin: hasAdminPermission,
+        isMember: hasMemberRole,
+        discordUserId: resolvedDiscordUserId,
+      }),
+      user_metadata: buildSyncedUserMetadata({
+        existingUserMetadata: authUserResult.user.user_metadata,
+        discordRoles: roleIds,
+        discordUserId: resolvedDiscordUserId,
+      }),
     },
-  })
+  )
 
   if (metadataError) {
     throw new Error(`Failed to update auth metadata for ${userProfile.user_id}: ${metadataError.message}`)

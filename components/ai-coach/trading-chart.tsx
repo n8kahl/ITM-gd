@@ -64,8 +64,18 @@ interface TradingChartProps {
   futureOffsetBars?: number
   isLoading?: boolean
   onHoverPrice?: (price: number | null) => void
+  onCrosshairSnapshot?: (snapshot: TradingChartCrosshairSnapshot | null) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
   onLevelLayoutStats?: (stats: VisibleChartLevelsResult<LevelAnnotation>['stats']) => void
+}
+
+export interface TradingChartCrosshairSnapshot {
+  timeSec: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number | null
 }
 
 export interface PositionOverlay {
@@ -186,6 +196,7 @@ export function TradingChart({
   futureOffsetBars = 12,
   isLoading,
   onHoverPrice,
+  onCrosshairSnapshot,
   onChartReady,
   onLevelLayoutStats,
 }: TradingChartProps) {
@@ -918,31 +929,61 @@ export function TradingChart({
   }, [safeBars, indicators, buildRSIData, buildMACDData])
 
   useEffect(() => {
-    if (!chartRef.current || !candlestickSeriesRef.current || !onHoverPrice) return
+    if (!chartRef.current || !candlestickSeriesRef.current || (!onHoverPrice && !onCrosshairSnapshot)) return
 
     const chart = chartRef.current
     const series = candlestickSeriesRef.current
+    const volumeSeries = volumeSeriesRef.current
+    const barByTime = new Map<number, ChartBar>(safeBars.map((bar) => [bar.time, bar]))
+
     const handleCrosshairMove = (param: any) => {
       if (!param?.point || !param?.time) {
-        onHoverPrice(null)
+        onHoverPrice?.(null)
+        onCrosshairSnapshot?.(null)
         return
       }
 
       const seriesData = param.seriesData?.get(series)
-      if (seriesData && typeof seriesData.close === 'number') {
-        onHoverPrice(seriesData.close)
+      if (
+        seriesData
+        && typeof seriesData.open === 'number'
+        && typeof seriesData.high === 'number'
+        && typeof seriesData.low === 'number'
+        && typeof seriesData.close === 'number'
+      ) {
+        const timeSec = toUnixSecondsFromChartTime(param.time)
+        const volumeData = volumeSeries ? param.seriesData?.get(volumeSeries) : null
+        const fallbackBar = timeSec != null ? barByTime.get(timeSec) : null
+        const volume = volumeData && typeof volumeData.value === 'number'
+          ? volumeData.value
+          : (fallbackBar?.volume ?? null)
+        onHoverPrice?.(seriesData.close)
+        if (timeSec != null) {
+          onCrosshairSnapshot?.({
+            timeSec,
+            open: seriesData.open,
+            high: seriesData.high,
+            low: seriesData.low,
+            close: seriesData.close,
+            volume,
+          })
+        } else {
+          onCrosshairSnapshot?.(null)
+        }
         return
       }
 
       if (typeof param.point.y === 'number') {
         const coordinatePrice = series.coordinateToPrice(param.point.y)
         if (typeof coordinatePrice === 'number' && Number.isFinite(coordinatePrice)) {
-          onHoverPrice(coordinatePrice)
+          onHoverPrice?.(coordinatePrice)
+          onCrosshairSnapshot?.(null)
           return
         }
       }
 
-      onHoverPrice(null)
+      onHoverPrice?.(null)
+      onCrosshairSnapshot?.(null)
     }
 
     chart.subscribeCrosshairMove(handleCrosshairMove)
@@ -954,9 +995,10 @@ export function TradingChart({
           console.warn('[TradingChart] Failed to unsubscribe crosshair handler', error)
         }
       }
-      onHoverPrice(null)
+      onHoverPrice?.(null)
+      onCrosshairSnapshot?.(null)
     }
-  }, [onHoverPrice])
+  }, [onCrosshairSnapshot, onHoverPrice, safeBars])
 
   // Update level annotations
   useEffect(() => {

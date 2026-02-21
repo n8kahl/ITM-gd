@@ -35,23 +35,22 @@ async function requireAdmin(): Promise<{ authorized: boolean; userId?: string; r
     }
 
     let roleIds = extractDiscordRoleIdsFromUser(user)
-    let hasRoleAccess = hasAdminRoleAccess(roleIds)
-    if (!hasRoleAccess) {
-      try {
-        const { data: profile } = await supabase
-          .from('user_discord_profiles')
-          .select('discord_roles')
-          .eq('user_id', user.id)
-          .maybeSingle()
-        const profileRoleIds = normalizeDiscordRoleIds(profile?.discord_roles)
-        if (profileRoleIds.length > 0) {
-          roleIds = Array.from(new Set([...roleIds, ...profileRoleIds]))
-        }
-        hasRoleAccess = hasAdminRoleAccess(roleIds)
-      } catch (lookupErr) {
-        console.warn('[Admin Tabs API] Discord role lookup failed:', lookupErr)
+    try {
+      const { data: profile } = await supabase
+        .from('user_discord_profiles')
+        .select('discord_roles')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (profile) {
+        // Prefer cached Discord profile roles when present to avoid stale JWT role claims.
+        roleIds = normalizeDiscordRoleIds(profile.discord_roles)
       }
+    } catch (lookupErr) {
+      console.warn('[Admin Tabs API] Discord role lookup failed:', lookupErr)
     }
+
+    const hasRoleAccess = hasAdminRoleAccess(roleIds)
 
     if (!hasRoleAccess) {
       console.error('[Admin Tabs API] User is not admin:', user.id)

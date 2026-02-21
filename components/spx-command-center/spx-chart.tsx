@@ -2,13 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { mergeRealtimeMicrobarIntoBars, mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
-import { TradingChart, type LevelAnnotation } from '@/components/ai-coach/trading-chart'
+import { TradingChart, type LevelAnnotation, type TradingChartCrosshairSnapshot } from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { getChartData, type ChartBar } from '@/lib/api/ai-coach'
 import { arraysEqual, stabilizeLevelKeys } from '@/lib/spx/level-stability'
+import {
+  createSPXReplayEngine,
+  getSPXReplayIntervalMs,
+  type SPXReplaySpeed,
+  type SPXReplayWindowMinutes,
+} from '@/lib/spx/replay-engine'
+import { buildSPXScenarioLanes } from '@/lib/spx/scenario-lanes'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { SPXLevel } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
@@ -19,6 +26,12 @@ const PRICE_COMMIT_REPORT_MS = 30_000
 const FOCUSED_LEVEL_REFRESH_MS = 1_000
 const FOCUSED_LEVEL_MIN_PROMOTE_STREAK = 2
 const LEVEL_CHURN_WINDOW_MS = 60_000
+const CHART_TOOLTIP_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/New_York',
+})
 
 function toLineStyle(style: 'solid' | 'dashed' | 'dotted' | 'dot-dash'): 'solid' | 'dashed' | 'dotted' {
   if (style === 'dot-dash') return 'dashed'
@@ -58,6 +71,11 @@ interface SPXChartProps {
   mobileExpanded?: boolean
   futureOffsetBars?: number
   className?: string
+  focusMode?: 'decision' | 'execution' | 'risk_only'
+  replayEnabled?: boolean
+  replayPlaying?: boolean
+  replayWindowMinutes?: SPXReplayWindowMinutes
+  replaySpeed?: SPXReplaySpeed
   onDisplayedLevelsChange?: (displayed: number, total: number) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
   onLatestBarTimeChange?: (timeSec: number | null) => void
@@ -68,6 +86,11 @@ export function SPXChart({
   mobileExpanded = false,
   futureOffsetBars,
   className,
+  focusMode = 'decision',
+  replayEnabled = false,
+  replayPlaying = false,
+  replayWindowMinutes = 60,
+  replaySpeed = 1,
   onDisplayedLevelsChange,
   onChartReady,
   onLatestBarTimeChange,
@@ -87,6 +110,9 @@ export function SPXChart({
 
   const [bars, setBars] = useState<ChartBar[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [crosshairSnapshot, setCrosshairSnapshot] = useState<TradingChartCrosshairSnapshot | null>(null)
+  const [touchHoldActive, setTouchHoldActive] = useState(false)
+  const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null)
   const [stableFocusedLevelKeys, setStableFocusedLevelKeys] = useState<string[]>([])
   const pendingPriceUpdateRef = useRef<{
     price: number
@@ -99,6 +125,9 @@ export function SPXChart({
   const levelMutationEpochsRef = useRef<number[]>([])
   const lastLevelMutationEpochRef = useRef<number | null>(null)
   const lastLabelLayoutSignatureRef = useRef<string | null>(null)
+  const lastTooltipVisibilityRef = useRef<boolean | null>(null)
+  const lastReplayProgressBucketRef = useRef<number | null>(null)
+  const lastScenarioSignatureRef = useRef<string | null>(null)
   const priceCommitStatsRef = useRef({
     enqueued: 0,
     committed: 0,
@@ -261,6 +290,77 @@ export function SPXChart({
     }
   }, [flushPendingPriceUpdate, flushPriceCommitStats])
 
+  const replayEngine = useMemo(() => {
+    if (!replayEnabled) return null
+    return createSPXReplayEngine(bars, { windowMinutes: replayWindowMinutes })
+  }, [bars, replayEnabled, replayWindowMinutes])
+
+  useEffect(() => {
+    if (!replayEnabled || !replayEngine) {
+      setReplayCursorIndex(null)
+      lastReplayProgressBucketRef.current = null
+      return
+    }
+    setReplayCursorIndex(replayEngine.firstCursorIndex)
+    lastReplayProgressBucketRef.current = null
+  }, [replayEnabled, replayEngine?.checksum, replayEngine])
+
+  useEffect(() => {
+    if (!replayEnabled || !replayPlaying || !replayEngine) return
+    if (replayEngine.bars.length === 0) return
+
+    const intervalMs = getSPXReplayIntervalMs(replaySpeed)
+    const intervalId = window.setInterval(() => {
+      setReplayCursorIndex((previous) => {
+        const current = previous ?? replayEngine.firstCursorIndex
+        if (replayEngine.isComplete(current)) return current
+        return replayEngine.nextCursorIndex(current)
+      })
+    }, intervalMs)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [replayEnabled, replayEngine, replayPlaying, replaySpeed])
+
+  const replayFrame = useMemo(() => {
+    if (!replayEnabled || !replayEngine) return null
+    return replayEngine.getFrame(replayCursorIndex ?? replayEngine.firstCursorIndex)
+  }, [replayCursorIndex, replayEnabled, replayEngine])
+
+  useEffect(() => {
+    if (!replayEnabled || !replayFrame) return
+    const bucket = Math.floor(replayFrame.progress * 10)
+    if (bucket === lastReplayProgressBucketRef.current) return
+    lastReplayProgressBucketRef.current = bucket
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CHART_REPLAY_PROGRESS, {
+      progress: replayFrame.progress,
+      bucket,
+      cursorIndex: replayFrame.cursorIndex,
+      speed: replaySpeed,
+      windowMinutes: replayWindowMinutes,
+    })
+  }, [replayEnabled, replayFrame, replaySpeed, replayWindowMinutes])
+
+  const renderedBars = replayFrame?.visibleBars || bars
+
+  const scenarioLanes = useMemo(() => {
+    const referencePrice = renderedBars[renderedBars.length - 1]?.close ?? (spxPrice > 0 ? spxPrice : null)
+    return buildSPXScenarioLanes(selectedSetup, referencePrice)
+  }, [renderedBars, selectedSetup, spxPrice])
+
+  useEffect(() => {
+    const signature = scenarioLanes.map((lane) => `${lane.type}:${lane.price}`).join('|')
+    if (!signature || signature === lastScenarioSignatureRef.current) return
+    lastScenarioSignatureRef.current = signature
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CHART_SCENARIO_LANES_RENDERED, {
+      setupId: selectedSetup?.id || null,
+      laneCount: scenarioLanes.length,
+      focusMode,
+      replayEnabled,
+    })
+  }, [focusMode, replayEnabled, scenarioLanes, selectedSetup?.id])
+
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     return levels.map((level) => ({
       ...(isVWAPLevel(level)
@@ -295,7 +395,7 @@ export function SPXChart({
 
   const focusedLevelCandidates = useMemo<LevelAnnotation[]>(() => {
     if (levelAnnotations.length === 0) return []
-    const livePrice = bars[bars.length - 1]?.close || (spxPrice > 0 ? spxPrice : null)
+    const livePrice = renderedBars[renderedBars.length - 1]?.close || (spxPrice > 0 ? spxPrice : null)
 
     const strengthWeight = (strength?: string) => {
       if (strength === 'critical') return 1.5
@@ -336,7 +436,7 @@ export function SPXChart({
     }
 
     return Array.from(merged.values())
-  }, [bars, levelAnnotations, spxPrice, targetFocusedLevelCount])
+  }, [levelAnnotations, renderedBars, spxPrice, targetFocusedLevelCount])
 
   const toLevelKey = useCallback((annotation: LevelAnnotation): string => (
     `${annotation.label}:${annotation.price}:${annotation.type || 'unknown'}`
@@ -472,17 +572,47 @@ export function SPXChart({
     }, [])
   }, [chartAnnotations, selectedSetup])
 
-  const displayedLevels = showAllRelevantLevels ? levelAnnotations : focusedLevelAnnotations
+  const scenarioLaneAnnotations = useMemo<LevelAnnotation[]>(() => {
+    return scenarioLanes.map((lane) => ({
+      price: lane.price,
+      label: lane.label,
+      color: lane.type === 'adverse'
+        ? 'rgba(251,113,133,0.72)'
+        : lane.type === 'acceleration'
+          ? 'rgba(34,211,238,0.72)'
+          : 'rgba(16,185,129,0.72)',
+      lineStyle: lane.type === 'base' ? 'solid' : 'dotted',
+      lineWidth: lane.type === 'base' ? 2 : 1,
+      axisLabelVisible: true,
+      type: `scenario_${lane.type}`,
+      description: lane.description,
+    }))
+  }, [scenarioLanes])
+
+  const marketDisplayedLevels = useMemo(() => {
+    if (focusMode === 'risk_only') return []
+    if (focusMode === 'execution') return focusedLevelAnnotations
+    return showAllRelevantLevels ? levelAnnotations : focusedLevelAnnotations
+  }, [focusMode, focusedLevelAnnotations, levelAnnotations, showAllRelevantLevels])
 
   useEffect(() => {
-    onDisplayedLevelsChange?.(displayedLevels.length, levelAnnotations.length)
-  }, [displayedLevels.length, levelAnnotations.length, onDisplayedLevelsChange])
+    onDisplayedLevelsChange?.(
+      marketDisplayedLevels.length + setupAnnotations.length + scenarioLaneAnnotations.length,
+      levelAnnotations.length + setupAnnotations.length + scenarioLaneAnnotations.length,
+    )
+  }, [
+    levelAnnotations.length,
+    marketDisplayedLevels.length,
+    onDisplayedLevelsChange,
+    scenarioLaneAnnotations.length,
+    setupAnnotations.length,
+  ])
 
   useEffect(() => {
     if (!onLatestBarTimeChange) return
-    const latestBar = bars[bars.length - 1]
+    const latestBar = renderedBars[renderedBars.length - 1]
     onLatestBarTimeChange(latestBar && Number.isFinite(latestBar.time) ? latestBar.time : null)
-  }, [bars, onLatestBarTimeChange])
+  }, [onLatestBarTimeChange, renderedBars])
 
   const handleLevelLayoutStats = useCallback((stats: {
     inputCount: number
@@ -516,24 +646,91 @@ export function SPXChart({
     })
   }, [selectedTimeframe, showAllRelevantLevels])
 
+  const showCrosshairTooltip = crosshairSnapshot != null && (!mobileExpanded || touchHoldActive)
+
+  useEffect(() => {
+    if (showCrosshairTooltip === lastTooltipVisibilityRef.current) return
+    lastTooltipVisibilityRef.current = showCrosshairTooltip
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CHART_INTERACTION_TOOLTIP, {
+      visible: showCrosshairTooltip,
+      mobileExpanded,
+      focusMode,
+      replayEnabled,
+    })
+  }, [focusMode, mobileExpanded, replayEnabled, showCrosshairTooltip])
+
   return (
-    <section className={cn('relative h-full w-full', className)}>
+    <section className={cn('relative h-full w-full', className)} data-testid="spx-chart-surface">
       <div className="pointer-events-none absolute left-2 top-2 z-[2]">
         <h3 className="rounded-md border border-white/10 bg-black/35 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white/65">
           Price + Levels
         </h3>
       </div>
+      {showCrosshairTooltip && crosshairSnapshot && (
+        <div
+          className="pointer-events-none absolute right-3 top-2.5 z-[6] rounded-lg border border-white/14 bg-[#080B10]/90 px-2.5 py-1.5 font-mono text-[10px] text-white/82 shadow-xl backdrop-blur"
+          data-testid="spx-chart-ohlc-tooltip"
+        >
+          <p className="mb-1 text-[9px] uppercase tracking-[0.09em] text-white/55">
+            {CHART_TOOLTIP_TIME_FORMATTER.format(new Date(crosshairSnapshot.timeSec * 1000))} ET
+          </p>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+            <span className="text-white/55">O</span><span>{crosshairSnapshot.open.toFixed(2)}</span>
+            <span className="text-white/55">H</span><span>{crosshairSnapshot.high.toFixed(2)}</span>
+            <span className="text-white/55">L</span><span>{crosshairSnapshot.low.toFixed(2)}</span>
+            <span className="text-white/55">C</span><span>{crosshairSnapshot.close.toFixed(2)}</span>
+            <span className="text-white/55">Vol</span><span>{Math.round(crosshairSnapshot.volume ?? 0).toLocaleString()}</span>
+          </div>
+        </div>
+      )}
+      {replayEnabled && replayFrame && (
+        <div
+          className="pointer-events-none absolute left-2 top-10 z-[5] inline-flex items-center gap-1.5 rounded-md border border-champagne/35 bg-[#0A0A0B]/82 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.08em] text-champagne"
+          data-testid="spx-chart-replay-status"
+        >
+          <span>{replayPlaying ? `Replay ${replaySpeed}x` : 'Replay Paused'}</span>
+          <span>{Math.round(replayFrame.progress * 100)}%</span>
+          <span>{replayWindowMinutes}m</span>
+        </div>
+      )}
+      {scenarioLanes.length > 0 && (
+        <div className="pointer-events-none absolute bottom-16 left-2 z-[5] flex flex-wrap items-center gap-1.5" data-testid="spx-chart-scenario-lanes">
+          {scenarioLanes.map((lane) => (
+            <span
+              key={lane.id}
+              className={cn(
+                'rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.07em]',
+                lane.type === 'base'
+                  ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                  : lane.type === 'adverse'
+                    ? 'border-rose-300/35 bg-rose-500/12 text-rose-100'
+                    : 'border-sky-300/35 bg-sky-500/12 text-sky-100',
+              )}
+            >
+              {lane.label} {lane.price.toFixed(1)}
+            </span>
+          ))}
+        </div>
+      )}
       <div className={cn(mobileExpanded ? 'h-[55vh] min-h-[320px] max-h-[500px]' : 'h-full')}>
-        <TradingChart
-          symbol="SPX"
-          timeframe={selectedTimeframe}
-          bars={bars}
-          levels={[...displayedLevels, ...setupAnnotations]}
-          futureOffsetBars={futureOffsetBars}
-          isLoading={isLoading}
-          onChartReady={onChartReady}
-          onLevelLayoutStats={handleLevelLayoutStats}
-        />
+        <div
+          className="h-full w-full"
+          onTouchStart={() => setTouchHoldActive(true)}
+          onTouchEnd={() => setTouchHoldActive(false)}
+          onTouchCancel={() => setTouchHoldActive(false)}
+        >
+          <TradingChart
+            symbol="SPX"
+            timeframe={selectedTimeframe}
+            bars={renderedBars}
+            levels={[...marketDisplayedLevels, ...setupAnnotations, ...scenarioLaneAnnotations]}
+            futureOffsetBars={futureOffsetBars}
+            isLoading={isLoading}
+            onChartReady={onChartReady}
+            onCrosshairSnapshot={setCrosshairSnapshot}
+            onLevelLayoutStats={handleLevelLayoutStats}
+          />
+        </div>
       </div>
     </section>
   )

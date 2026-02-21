@@ -81,6 +81,8 @@ export function SetupCard({
   const calibratedWin = setup.pWinCalibrated != null ? setup.pWinCalibrated * 100 : setup.probability
   const setupScore = setup.score ?? (setup.confluenceScore * 20)
   const setupEv = setup.evR ?? null
+  const alignmentScore = typeof setup.alignmentScore === 'number' ? setup.alignmentScore : null
+  const confidenceTrend = setup.confidenceTrend || null
 
   const distToEntry = Number.isFinite(currentPrice) && currentPrice > 0
     ? Math.abs(currentPrice - entryMid)
@@ -156,6 +158,29 @@ export function SetupCard({
                 {source.replace(/_/g, ' ')}
               </div>
             ))}
+          </div>
+        )}
+        {(alignmentScore != null || confidenceTrend) && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {alignmentScore != null && (
+              <span className="rounded-full border border-white/15 bg-white/[0.04] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.07em] text-white/75">
+                Align {alignmentScore.toFixed(0)}%
+              </span>
+            )}
+            {confidenceTrend && (
+              <span
+                className={cn(
+                  'rounded-full border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.07em]',
+                  confidenceTrend === 'up'
+                    ? 'border-emerald-300/30 bg-emerald-500/12 text-emerald-200'
+                    : confidenceTrend === 'down'
+                      ? 'border-rose-300/30 bg-rose-500/12 text-rose-200'
+                      : 'border-white/15 bg-white/[0.04] text-white/70',
+                )}
+              >
+                Confidence {confidenceTrend}
+              </span>
+            )}
           </div>
         )}
 

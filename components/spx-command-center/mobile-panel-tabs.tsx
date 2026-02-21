@@ -20,17 +20,18 @@ export function MobilePanelTabs({
   onChange: (next: MobilePanelTab) => void
 }) {
   return (
-    <div className="glass-card-heavy grid grid-cols-5 gap-1 rounded-xl p-1">
+    <div className="glass-card-heavy grid grid-cols-5 gap-1 rounded-xl p-1" data-testid="spx-mobile-panel-tabs">
       {TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
           onClick={() => onChange(tab.id)}
+          data-testid={`spx-mobile-tab-${tab.id}`}
           className={cn(
-            'min-h-[44px] rounded-lg text-xs uppercase tracking-[0.12em] transition-colors',
+            'min-h-[44px] rounded-lg text-xs uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60',
             active === tab.id
-              ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/30'
-              : 'bg-transparent text-white/60 border border-transparent',
+              ? 'border border-emerald-400/35 bg-emerald-500/20 text-emerald-100'
+              : 'border border-white/10 bg-white/[0.02] text-white/75 hover:text-white/90',
           )}
         >
           {tab.label}

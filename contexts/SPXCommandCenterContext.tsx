@@ -15,7 +15,20 @@ import {
 import { postSPX, postSPXStream } from '@/hooks/use-spx-api'
 import { usePriceStream, type RealtimeSocketMessage } from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
+import { enrichCoachDecisionExplainability } from '@/lib/spx/coach-explainability'
 import { distanceToStopPoints, isFlowDivergence, summarizeFlowAlignment } from '@/lib/spx/coach-context'
+import { enrichSPXSetupWithDecisionEngine } from '@/lib/spx/decision-engine'
+import { normalizeSPXRealtimeEvent } from '@/lib/spx/event-schema'
+import {
+  resolveSPXFeedHealth,
+  type SPXFeedFallbackReasonCode,
+  type SPXFeedFallbackStage,
+} from '@/lib/spx/feed-health'
+import {
+  createSPXTradeJournalArtifact,
+  persistSPXTradeJournalArtifact,
+} from '@/lib/spx/trade-journal-capture'
+import { createSPXMarketDataOrchestrator } from '@/lib/spx/market-data-orchestrator'
 import { SPX_TELEMETRY_EVENT, startSPXPerfTimer, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { getEnabledSPXUXFlagKeys, getSPXUXFlags, type SPXUXFlags } from '@/lib/spx/flags'
 import type {
@@ -58,6 +71,9 @@ type TradeMode = 'scan' | 'in_trade'
 interface SPXCommandCenterState {
   dataHealth: 'healthy' | 'degraded' | 'stale'
   dataHealthMessage: string | null
+  feedFallbackStage: SPXFeedFallbackStage
+  feedFallbackReasonCode: SPXFeedFallbackReasonCode
+  blockTradeEntryByFeedTrust: boolean
   spxPrice: number
   spxTickTimestamp: string | null
   spxPriceAgeMs: number | null
@@ -122,8 +138,6 @@ const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['formin
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const ENTERABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
-const TICK_FRESHNESS_STALE_MS = 7_500
-const POLL_FRESHNESS_STALE_MS = 90_000
 const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
 const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
 const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
@@ -484,7 +498,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const hasTrackedFirstActionableRef = useRef(false)
   const hasTrackedFirstSetupSelectRef = useRef(false)
   const hasTrackedPageViewRef = useRef(false)
-  const lastDataHealthRef = useRef<'healthy' | 'degraded' | 'stale' | null>(null)
+  const lastFeedTrustTransitionRef = useRef<string | null>(null)
+  const activeSetupsRef = useRef<Setup[]>([])
   const proactiveCooldownByKeyRef = useRef<Record<string, number>>({})
   const previousSetupStatusByIdRef = useRef<Record<string, Setup['status']>>({})
   const contractEndpointModeRef = useRef<'unknown' | 'get' | 'post' | 'unavailable'>('unknown')
@@ -497,6 +512,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const legacyCoachStateRef = useRef<SPXCoachContextState | null>(null)
   const legacyFlowStateRef = useRef<SPXFlowContextState | null>(null)
   const legacySetupStateRef = useRef<SPXSetupContextState | null>(null)
+  const marketDataOrchestratorRef = useRef(createSPXMarketDataOrchestrator())
+  const previousStreamConnectedRef = useRef(false)
   const uxFlags = useMemo(() => getSPXUXFlags(), [])
 
   useEffect(() => {
@@ -511,6 +528,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [])
 
   const handleRealtimeMessage = useCallback((message: RealtimeSocketMessage) => {
+    const normalizedRealtimeEvent = normalizeSPXRealtimeEvent(message)
+    marketDataOrchestratorRef.current.ingest(normalizedRealtimeEvent)
+
     const microbar = parseRealtimeMicrobar(message)
     if (microbar) {
       setLatestMicrobar(microbar)
@@ -620,17 +640,51 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   })
 
   useEffect(() => {
+    if (stream.isConnected && !previousStreamConnectedRef.current) {
+      marketDataOrchestratorRef.current.clearSequenceGap()
+    }
+    if (!stream.isConnected && previousStreamConnectedRef.current) {
+      marketDataOrchestratorRef.current.reset()
+    }
+    previousStreamConnectedRef.current = stream.isConnected
+  }, [stream.isConnected])
+
+  useEffect(() => {
     const snapshotSetups = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
     setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups))
   }, [snapshotData?.generatedAt, snapshotData?.setups])
 
-  const activeSetups = useMemo(() => rankSetups(realtimeSetups), [realtimeSetups])
+  const flowEvents = useMemo(() => snapshotData?.flow || [], [snapshotData?.flow])
+  const activeSetups = useMemo(() => {
+    const nowMs = toEpoch(snapshotData?.generatedAt) || Date.now()
+    const enriched = realtimeSetups.map((setup) => enrichSPXSetupWithDecisionEngine(setup, {
+      regime: snapshotData?.regime?.regime || null,
+      prediction: snapshotData?.prediction || null,
+      basis: snapshotData?.basis || null,
+      gex: snapshotData?.gex?.combined || null,
+      flowEvents,
+      nowMs,
+    }))
+    return rankSetups(enriched)
+  }, [
+    flowEvents,
+    realtimeSetups,
+    snapshotData?.basis,
+    snapshotData?.generatedAt,
+    snapshotData?.gex?.combined,
+    snapshotData?.prediction,
+    snapshotData?.regime?.regime,
+  ])
   const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
   const inTradeSetup = useMemo(
     () => (inTradeSetupId ? activeSetups.find((setup) => setup.id === inTradeSetupId) || null : null),
     [activeSetups, inTradeSetupId],
   )
   const tradeMode: TradeMode = inTradeSetupId ? 'in_trade' : 'scan'
+
+  useEffect(() => {
+    activeSetupsRef.current = activeSetups
+  }, [activeSetups])
 
   useEffect(() => {
     coachDecisionRef.current = coachDecision
@@ -783,33 +837,38 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       })
 
       if (requestSequence !== coachDecisionRequestSequenceRef.current) return null
-      setCoachDecision(decision)
+      const explainabilitySetup = activeSetupsRef.current.find((item) => item.id === decision.setupId)
+        || activeSetupsRef.current.find((item) => item.id === requestSetupId)
+        || null
+      const enrichedDecision = enrichCoachDecisionExplainability(decision, explainabilitySetup)
+      setCoachDecision(enrichedDecision)
       setCoachDecisionStatus('ready')
       setCoachDecisionError(null)
       coachDecisionFailureCountRef.current = 0
       coachDecisionBackoffUntilRef.current = 0
 
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_GENERATED, {
-        decisionId: decision.decisionId,
-        setupId: decision.setupId,
-        verdict: decision.verdict,
-        confidence: decision.confidence,
-        severity: decision.severity,
-        source: decision.source,
+        decisionId: enrichedDecision.decisionId,
+        setupId: enrichedDecision.setupId,
+        verdict: enrichedDecision.verdict,
+        confidence: enrichedDecision.confidence,
+        severity: enrichedDecision.severity,
+        source: enrichedDecision.source,
+        explainabilityLines: enrichedDecision.why.length,
         tradeMode: requestTradeMode,
       }, { persist: true })
 
-      if (decision.source === 'fallback_v1') {
+      if (enrichedDecision.source === 'fallback_v1') {
         trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.COACH_DECISION_FALLBACK_USED, {
-          decisionId: decision.decisionId,
-          setupId: decision.setupId,
-          verdict: decision.verdict,
-          source: decision.source,
+          decisionId: enrichedDecision.decisionId,
+          setupId: enrichedDecision.setupId,
+          verdict: enrichedDecision.verdict,
+          source: enrichedDecision.source,
           tradeMode: requestTradeMode,
         }, { level: 'warning', persist: true })
       }
 
-      return decision
+      return enrichedDecision
     } catch (error) {
       if (requestSequence !== coachDecisionRequestSequenceRef.current) return null
       const message = error instanceof Error ? error.message : 'Coach decision request failed.'
@@ -931,6 +990,22 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const spxPriceSource = spxStreamPrice?.source ?? (snapshotData?.basis?.spxPrice ? 'snapshot' : null)
   const spxPriceAgeMs = spxStreamPrice?.feedAgeMs ?? calculateAgeMs(spxTickTimestamp)
   const spyPrice = spyStreamPrice?.price ?? snapshotData?.basis?.spyPrice ?? 0
+
+  useEffect(() => {
+    if (!spxTickTimestamp) return
+    const parsedTimestamp = Date.parse(spxTickTimestamp)
+    marketDataOrchestratorRef.current.ingest({
+      kind: 'heartbeat',
+      channel: 'price:spx',
+      symbol: 'SPX',
+      timestamp: spxTickTimestamp,
+      source: spxPriceSource,
+      feedAgeMs: spxPriceAgeMs,
+      sequence: null,
+      receivedAtMs: Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now(),
+    })
+  }, [spxPriceAgeMs, spxPriceSource, spxTickTimestamp])
+
   const tradePnlPoints = useMemo(() => {
     if (!inTradeSetup || tradeEntryPrice == null || !Number.isFinite(spxPrice) || spxPrice <= 0) return null
     const move = spxPrice - tradeEntryPrice
@@ -1066,8 +1141,6 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
       .slice(0, 80)
   }, [ephemeralCoachMessages, snapshotData?.coachMessages])
-  const flowEvents = useMemo(() => snapshotData?.flow || [], [snapshotData?.flow])
-
   const canEmitProactiveMessage = useCallback((cooldownKey: string, nowEpoch: number) => {
     const lastEpoch = proactiveCooldownByKeyRef.current[cooldownKey] || 0
     if (nowEpoch - lastEpoch < PROACTIVE_COACH_COOLDOWN_MS) return false
@@ -1406,7 +1479,27 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [selectedContractBySetupId, selectedSetup, selectedSetupContract, spxPrice, uxFlags.mobileFullTradeFocus])
 
   const exitTrade = useCallback(() => {
+    if (!inTradeSetupId) return
     const exitingSetupId = inTradeSetupId
+    const exitingSetup = inTradeSetupRef.current
+    const exitContract = inTradeContractRef.current
+    const exitDecision = coachDecisionRef.current
+    const exitPrice = Number.isFinite(spxPrice) && spxPrice > 0 ? spxPrice : null
+    const artifact = createSPXTradeJournalArtifact({
+      setup: exitingSetup,
+      openedAt: tradeEnteredAt,
+      entryPrice: tradeEntryPrice,
+      exitPrice,
+      pnlPoints: tradePnlPoints,
+      pnlDollars: tradePnlDollars,
+      contractDescription: exitContract?.description || null,
+      contractEntryMid: tradeEntryContractMid,
+      contractExitMid: contractMid(exitContract),
+      timeframe: selectedTimeframe,
+      coachDecision: exitDecision,
+    })
+    persistSPXTradeJournalArtifact(artifact)
+
     setInTradeSetupId(null)
     setInTradeContract(null)
     setTradeEntryPrice(null)
@@ -1419,6 +1512,14 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       action: 'exit',
       setupId: exitingSetupId,
     }, { persist: true })
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.TRADE_JOURNAL_CAPTURED, {
+      setupId: artifact.setupId,
+      artifactId: artifact.artifactId,
+      pnlPoints: artifact.pnlPoints,
+      pnlDollars: artifact.pnlDollars,
+      expectancyR: artifact.expectancyR,
+      adherenceScore: artifact.adherenceScore,
+    }, { persist: true })
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_MOBILE_FOCUS_CHANGED, {
         action: 'exit',
@@ -1426,7 +1527,17 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         mobileFullTradeFocusEnabled: uxFlags.mobileFullTradeFocus,
       }, { persist: true })
     }
-  }, [inTradeSetupId, uxFlags.mobileFullTradeFocus])
+  }, [
+    inTradeSetupId,
+    selectedTimeframe,
+    spxPrice,
+    tradeEnteredAt,
+    tradeEntryContractMid,
+    tradeEntryPrice,
+    tradePnlDollars,
+    tradePnlPoints,
+    uxFlags.mobileFullTradeFocus,
+  ])
 
   const setChartTimeframe = useCallback((timeframe: ChartTimeframe) => {
     setSelectedTimeframe(timeframe)
@@ -1796,84 +1907,69 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   ])
 
   const error = snapshotError || null
-  const tickSourceStale = spxPriceSource === 'tick'
-    && spxPriceAgeMs != null
-    && spxPriceAgeMs > TICK_FRESHNESS_STALE_MS
-  const pollSourceStale = spxPriceSource === 'poll'
-    && spxPriceAgeMs != null
-    && spxPriceAgeMs > POLL_FRESHNESS_STALE_MS
-  const dataHealth = useMemo<'healthy' | 'degraded' | 'stale'>(() => {
-    if (snapshotIsDegraded || error || snapshotRequestLate) return 'degraded'
-    if (stream.isConnected && (spxPriceSource === 'poll' || spxPriceSource === 'snapshot' || tickSourceStale || pollSourceStale)) return 'stale'
-    if (!stream.isConnected && Boolean(snapshotData?.generatedAt)) return 'stale'
-    return 'healthy'
-  }, [
-    error,
-    pollSourceStale,
-    snapshotData?.generatedAt,
+  const streamTrustState = marketDataOrchestratorRef.current.evaluate(Date.now(), stream.isConnected)
+  const resolvedFeedHealth = resolveSPXFeedHealth({
     snapshotIsDegraded,
-    snapshotRequestLate,
-    spxPriceSource,
-    stream.isConnected,
-    tickSourceStale,
-  ])
-
-  const dataHealthMessage = useMemo(() => {
-    if (snapshotIsDegraded) {
-      return snapshotDegradedMessage || 'SPX service is running in degraded mode.'
-    }
-    if (error?.message) {
-      return error.message
-    }
-    if (snapshotRequestLate && !snapshotData) {
-      return 'SPX snapshot request is delayed. Core chart stream is still active while analytics recover.'
-    }
-    if (tickSourceStale) {
-      const seconds = spxPriceAgeMs != null ? Math.floor(spxPriceAgeMs / 1000) : null
-      return `Tick stream lag detected (${seconds != null ? `${seconds}s` : 'unknown'} behind). Falling back to last known price until feed recovers.`
-    }
-    if (spxPriceSource === 'poll' && stream.isConnected) {
-      return 'Live tick feed unavailable. Streaming over poll fallback, so chart and price updates may lag.'
-    }
-    if (spxPriceSource === 'snapshot' && stream.isConnected) {
-      return 'WebSocket connected but no live price packets received yet. Running on snapshot fallback.'
-    }
-    if (pollSourceStale) {
-      return 'Poll fallback data is stale. Waiting for fresher provider bars or tick feed recovery.'
-    }
-    if (dataHealth === 'stale') {
-      return 'Live stream disconnected and snapshot is stale. Reconnecting in background.'
-    }
-    return null
-  }, [
-    dataHealth,
-    error,
-    pollSourceStale,
-    snapshotData,
     snapshotDegradedMessage,
-    snapshotIsDegraded,
+    errorMessage: error?.message || null,
     snapshotRequestLate,
-    spxPriceAgeMs,
+    snapshotAvailable: Boolean(snapshotData),
+    streamConnected: stream.isConnected,
     spxPriceSource,
-    stream.isConnected,
-    tickSourceStale,
-  ])
+    spxPriceAgeMs,
+    sequenceGapDetected: streamTrustState.sequenceGapDetected,
+    heartbeatStale: streamTrustState.heartbeatStale,
+  })
+  const dataHealth = resolvedFeedHealth.dataHealth
+  const dataHealthMessage = resolvedFeedHealth.dataHealthMessage
+  const feedFallbackStage = resolvedFeedHealth.fallbackPolicy.stage
+  const feedFallbackReasonCode = resolvedFeedHealth.fallbackPolicy.reasonCode
+  const blockTradeEntryByFeedTrust = resolvedFeedHealth.fallbackPolicy.blockTradeEntry
 
   useEffect(() => {
-    if (lastDataHealthRef.current === dataHealth) return
-    lastDataHealthRef.current = dataHealth
+    const nextTransitionKey = [
+      dataHealth,
+      feedFallbackStage,
+      feedFallbackReasonCode,
+    ].join(':')
+    if (lastFeedTrustTransitionRef.current === nextTransitionKey) return
+    lastFeedTrustTransitionRef.current = nextTransitionKey
 
-    if (dataHealth !== 'healthy') {
+    if (dataHealth !== 'healthy' || feedFallbackReasonCode !== 'none') {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.DATA_HEALTH_CHANGED, {
         dataHealth,
         message: dataHealthMessage,
+        spxPriceSource,
+        spxPriceAgeMs,
+        feedFallbackStage,
+        feedFallbackReasonCode,
+        blockTradeEntryByFeedTrust,
+        streamConnected: stream.isConnected,
+        sequenceGapDetected: resolvedFeedHealth.flags.sequenceGapDetected,
+        heartbeatStale: resolvedFeedHealth.flags.heartbeatStale,
+        lastRealtimeEventAtMs: streamTrustState.lastEventAtMs,
       }, { level: dataHealth === 'degraded' ? 'warning' : 'info' })
     }
-  }, [dataHealth, dataHealthMessage])
+  }, [
+    dataHealth,
+    dataHealthMessage,
+    feedFallbackReasonCode,
+    feedFallbackStage,
+    blockTradeEntryByFeedTrust,
+    resolvedFeedHealth.flags.heartbeatStale,
+    resolvedFeedHealth.flags.sequenceGapDetected,
+    spxPriceAgeMs,
+    spxPriceSource,
+    stream.isConnected,
+    streamTrustState.lastEventAtMs,
+  ])
 
   const liveAnalyticsState = useMemo<SPXAnalyticsContextState>(() => ({
     dataHealth,
     dataHealthMessage,
+    feedFallbackStage,
+    feedFallbackReasonCode,
+    blockTradeEntryByFeedTrust,
     basis: snapshotData?.basis || null,
     spyImpact: snapshotData?.spyImpact || null,
     regime: snapshotData?.regime?.regime || null,
@@ -1887,6 +1983,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }), [
     dataHealth,
     dataHealthMessage,
+    feedFallbackReasonCode,
+    feedFallbackStage,
+    blockTradeEntryByFeedTrust,
     error,
     filteredLevels,
     isLoading,
@@ -2040,6 +2139,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const value = useMemo<SPXCommandCenterState>(() => ({
     dataHealth: legacyAnalyticsState.dataHealth,
     dataHealthMessage: legacyAnalyticsState.dataHealthMessage,
+    feedFallbackStage: legacyAnalyticsState.feedFallbackStage,
+    feedFallbackReasonCode: legacyAnalyticsState.feedFallbackReasonCode,
+    blockTradeEntryByFeedTrust: legacyAnalyticsState.blockTradeEntryByFeedTrust,
     spxPrice: legacyPriceState.spxPrice,
     spxTickTimestamp: legacyPriceState.spxTickTimestamp,
     spxPriceAgeMs: legacyPriceState.spxPriceAgeMs,

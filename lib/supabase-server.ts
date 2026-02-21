@@ -91,22 +91,18 @@ export async function isAdminUser(): Promise<boolean> {
   }
 
   let roleIds = extractDiscordRoleIdsFromUser(user)
-  if (hasAdminRoleAccess(roleIds)) {
-    return true
-  }
-
   try {
     const { data: profile } = await supabase
       .from('user_discord_profiles')
       .select('discord_roles')
       .eq('user_id', user.id)
       .maybeSingle()
-    const profileRoleIds = normalizeDiscordRoleIds(profile?.discord_roles)
-    if (profileRoleIds.length > 0) {
-      roleIds = Array.from(new Set([...roleIds, ...profileRoleIds]))
+    // Treat cached Discord profile roles as source-of-truth when available.
+    if (profile) {
+      roleIds = normalizeDiscordRoleIds(profile.discord_roles)
     }
   } catch {
-    return false
+    // Fall back to JWT/user metadata claims when profile lookup fails.
   }
 
   return hasAdminRoleAccess(roleIds)

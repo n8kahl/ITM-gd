@@ -31,10 +31,10 @@ test.describe('SPX layout state machine', () => {
     await expect(page.getByTestId('spx-coach-bottom-sheet')).toBeVisible()
     await page.getByTestId('spx-coach-bottom-sheet-close').click()
     await expect(page.getByTestId('spx-coach-bottom-sheet')).toHaveCount(0)
-    await expect(smartStack.getByText(/^evaluate$/i)).toBeVisible()
+    await expect(page.getByTestId('spx-mobile-layout-mode-chip')).toHaveText(/evaluate/i)
 
     await page.getByRole('button', { name: 'Enter Trade' }).first().click()
-    await expect(smartStack.getByText(/^in trade$/i)).toBeVisible()
+    await expect(page.getByTestId('spx-mobile-layout-mode-chip')).toHaveText(/in trade/i)
     await expect(page.getByText(/in trade focus/i).first()).toBeVisible()
   })
 })

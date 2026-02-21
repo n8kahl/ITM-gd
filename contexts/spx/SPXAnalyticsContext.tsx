@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext } from 'react'
+import type { SPXFeedFallbackReasonCode, SPXFeedFallbackStage } from '@/lib/spx/feed-health'
 import type {
   BasisState,
   ClusterZone,
@@ -15,6 +16,9 @@ import type {
 export interface SPXAnalyticsContextState {
   dataHealth: 'healthy' | 'degraded' | 'stale'
   dataHealthMessage: string | null
+  feedFallbackStage: SPXFeedFallbackStage
+  feedFallbackReasonCode: SPXFeedFallbackReasonCode
+  blockTradeEntryByFeedTrust: boolean
   basis: BasisState | null
   spyImpact: SpyImpactState | null
   regime: Regime | null

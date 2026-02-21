@@ -117,11 +117,6 @@ export default function RolesPage() {
       return
     }
 
-    if (role.permission_ids.length === 0) {
-      setError('At least one app permission must be selected. Tab access is configured in Member Tabs.')
-      return
-    }
-
     const requestBody = {
       discord_role_id: discordRoleId,
       discord_role_name: role.discord_role_name?.trim() || null,
@@ -151,7 +146,12 @@ export default function RolesPage() {
       }
 
       if (data.success) {
-        setSuccess(`Role "${getRoleTitle(role)}" saved successfully`)
+        const roleTitle = getRoleTitle(role)
+        const successMessage = role.permission_ids.length === 0
+          ? `Role "${roleTitle}" saved with no app permissions`
+          : `Role "${roleTitle}" saved successfully`
+
+        setSuccess(successMessage)
         setTimeout(() => setSuccess(null), 3000)
 
         // Update role state
@@ -296,8 +296,8 @@ export default function RolesPage() {
           <h3 className="font-medium text-white mb-2">How Role Mapping Works</h3>
           <ol className="text-sm text-white/70 space-y-1 list-decimal list-inside">
             <li>Click &quot;Add New Mapping&quot; and pick a Discord role title</li>
-            <li>Select one or more app permissions for that role</li>
-            <li>Save the mapping to apply access rules immediately</li>
+            <li>Optionally select app permissions for that role</li>
+            <li>Save to sync role metadata and apply permission changes immediately</li>
             <li>Configure tab visibility in <a href="/admin/tabs" className="text-emerald-500 hover:underline">Member Tabs</a></li>
             <li>Map Discord roles to tier levels in <a href="/admin/settings#membership-tier-mapping" className="text-emerald-500 hover:underline">Admin Settings</a></li>
             <li>Use Reload if you recently changed Discord roles</li>
@@ -459,7 +459,7 @@ export default function RolesPage() {
                     </div>
                     {role.permission_ids.length === 0 && (
                       <p className="text-xs text-white/40 mt-2">
-                        Click permissions above to assign them to this role
+                        Optional: assign app permissions here. Tier-based tab access is configured in Member Tabs and Settings.
                       </p>
                     )}
                   </div>
