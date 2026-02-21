@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { ChartCoordinateAPI } from '@/hooks/use-chart-coordinates'
-import { buildSetupLockGeometry, resolveSetupLockState, type SetupLockState } from '@/lib/spx/spatial-hud'
+import { buildSetupLockGeometry, parseIsoToUnixSeconds, resolveSetupLockState, type SetupLockState } from '@/lib/spx/spatial-hud'
 
 interface SetupLockOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
@@ -18,6 +18,8 @@ interface SetupBandRender {
 }
 
 interface SetupLockRenderState {
+  centerX: number
+  ringX: number
   centerY: number
   width: number
   bands: SetupBandRender[]
@@ -34,7 +36,9 @@ function clamp(value: number, min: number, max: number): number {
 function renderStateEquals(left: SetupLockRenderState | null, right: SetupLockRenderState | null): boolean {
   if (!left || !right) return left === right
   if (
-    left.centerY !== right.centerY
+    left.centerX !== right.centerX
+    || left.ringX !== right.ringX
+    || left.centerY !== right.centerY
     || left.width !== right.width
     || left.confluenceRings !== right.confluenceRings
     || left.direction !== right.direction
@@ -66,6 +70,12 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
   const shouldRender = Boolean(selectedSetup && (tradeMode === 'in_trade' || selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
   const lockGeometry = useMemo(() => (shouldRender ? buildSetupLockGeometry(selectedSetup) : null), [selectedSetup, shouldRender])
   const lockState = resolveSetupLockState(tradeMode, selectedSetup?.status)
+  const lockAnchorTimeSec = useMemo(() => {
+    if (!selectedSetup) return null
+    return parseIsoToUnixSeconds(selectedSetup.statusUpdatedAt)
+      ?? parseIsoToUnixSeconds(selectedSetup.triggeredAt)
+      ?? parseIsoToUnixSeconds(selectedSetup.createdAt)
+  }, [selectedSetup])
 
   const refreshRenderState = useCallback(() => {
     const coordinates = coordinatesRef.current
@@ -86,6 +96,10 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
       setRenderState((previous) => (previous == null ? previous : null))
       return
     }
+    const fallbackCenterX = chartWidth * 0.52
+    const anchorX = lockAnchorTimeSec != null ? coordinates.timeToPixel(lockAnchorTimeSec) : null
+    const centerX = clamp(anchorX ?? fallbackCenterX, 16, Math.max(16, chartWidth - 16))
+    const ringX = clamp(centerX + Math.min(chartWidth * 0.21, 168), 18, Math.max(18, chartWidth - 18))
 
     const bands: SetupBandRender[] = []
     for (const band of lockGeometry.bands) {
@@ -103,6 +117,8 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
     }
 
     const nextState: SetupLockRenderState = {
+      centerX,
+      ringX,
       centerY,
       width: chartWidth,
       bands,
@@ -111,7 +127,7 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
     }
 
     setRenderState((previous) => (renderStateEquals(previous, nextState) ? previous : nextState))
-  }, [coordinatesRef, lockGeometry, selectedSetup])
+  }, [coordinatesRef, lockAnchorTimeSec, lockGeometry, selectedSetup])
 
   useEffect(() => {
     let rafId = 0
@@ -175,8 +191,6 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
 
   if (!renderState || renderState.bands.length === 0) return null
 
-  const reticleX = renderState.width * 0.52
-  const ringX = renderState.width * 0.73
   const crosshairColor = renderState.direction === 'bullish' ? '#10B981' : '#FB7185'
 
   return (
@@ -200,13 +214,13 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
 
       <div
         className="absolute w-[1px] border-l border-dashed border-white/30"
-        style={{ left: reticleX, top: renderState.centerY - 68, height: 136 }}
+        style={{ left: renderState.centerX, top: renderState.centerY - 68, height: 136 }}
       />
 
       <div
         className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border"
         style={{
-          left: reticleX,
+          left: renderState.centerX,
           top: renderState.centerY,
           borderColor: `${crosshairColor}99`,
           boxShadow: `0 0 14px ${crosshairColor}44`,
@@ -218,7 +232,7 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
           key={`setup-lock-pulse-${pulseTick}`}
           className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-champagne/60"
           style={{
-            left: reticleX,
+            left: renderState.centerX,
             top: renderState.centerY,
             width: 28,
             height: 28,
@@ -233,12 +247,12 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
         return (
           <div
             key={`ring-${index + 1}`}
-            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border"
-            style={{
-              left: ringX,
-              top: renderState.centerY,
-              width: size,
-              height: size,
+              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border"
+              style={{
+                left: renderState.ringX,
+                top: renderState.centerY,
+                width: size,
+                height: size,
               borderColor: `${crosshairColor}${index < 2 ? '88' : '44'}`,
             }}
           />
