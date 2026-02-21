@@ -18,6 +18,7 @@ import {
 
 interface SpatialCoachLayerProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  onRequestSidebarOpen?: () => void
 }
 
 interface SpatialAnchorMessage {
@@ -29,7 +30,7 @@ interface SpatialAnchorMessage {
 const NODE_COLLISION_MIN_GAP_PX = 34
 const NODE_REFRESH_INTERVAL_MS = 140
 
-export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
+export function SpatialCoachLayer({ coordinatesRef, onRequestSidebarOpen }: SpatialCoachLayerProps) {
   const { coachMessages } = useSPXCoachContext()
   const { spxPrice } = useSPXPriceContext()
   const { activeSetups, inTradeSetup, selectedSetup, selectSetup, enterTrade, tradeMode } = useSPXSetupContext()
@@ -184,10 +185,12 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
       if (tradeMode !== 'in_trade') {
         enterTrade(targetSetup)
       }
+      onRequestSidebarOpen?.()
       return
     }
 
     if (actionId === 'details') {
+      onRequestSidebarOpen?.()
       window.dispatchEvent(new CustomEvent(SPX_SHORTCUT_EVENT.COACH_OPEN_DETAILS, {
         detail: {
           messageId,
@@ -196,7 +199,7 @@ export function SpatialCoachLayer({ coordinatesRef }: SpatialCoachLayerProps) {
         },
       }))
     }
-  }, [activeSetups, coachMessages, enterTrade, inTradeSetup, selectSetup, selectedSetup, setupById, tradeMode])
+  }, [activeSetups, coachMessages, enterTrade, inTradeSetup, onRequestSidebarOpen, selectSetup, selectedSetup, setupById, tradeMode])
 
   const handleExpand = useCallback((messageId: string, expanded: boolean, anchorMode: 'time' | 'fallback') => {
     if (!expanded) return

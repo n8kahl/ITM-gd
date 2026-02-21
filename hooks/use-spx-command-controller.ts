@@ -74,6 +74,7 @@ export function useSPXCommandController() {
 
   const [mobileTab, setMobileTab] = useState<MobilePanelTab>('chart')
   const [showLevelOverlay, setShowLevelOverlay] = useState(false)
+  const [showAdvancedHud, setShowAdvancedHud] = useState(false)
   const [initialSkeletonExpired, setInitialSkeletonExpired] = useState(false)
   const [showShortcutHelp, setShowShortcutHelp] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -297,6 +298,26 @@ export function useSPXCommandController() {
     })
   }, [])
 
+  const handleToggleAdvancedHud = useCallback(() => {
+    setShowAdvancedHud((previous) => {
+      const next = !previous
+      if (next) {
+        setShowLevelOverlay(false)
+      }
+      return next
+    })
+  }, [])
+
+  const handleToggleLevelOverlay = useCallback((_: 'action_strip' | 'command' | 'shortcut') => {
+    setShowLevelOverlay((previous) => {
+      const next = !previous
+      if (next) {
+        setShowAdvancedHud(false)
+      }
+      return next
+    })
+  }, [])
+
   const { commandPaletteCommands, runKeyboardShortcut, runCommandById } = useSPXCommandRegistry({
     uxFlagsCommandPalette: uxFlags.commandPalette,
     uxFlagsSpatialHudV1: uxFlags.spatialHudV1,
@@ -317,7 +338,7 @@ export function useSPXCommandController() {
     selectSetup,
     enterTrade,
     exitTrade,
-    setShowLevelOverlay,
+    toggleLevelOverlay: handleToggleLevelOverlay,
     setShowCone,
     setShowSpatialCoach,
     setShowGEXGlow,
@@ -492,6 +513,20 @@ export function useSPXCommandController() {
   }, [layoutMode, selectedSetup?.id, tradeMode])
 
   useEffect(() => {
+    if (!showAdvancedHud) return
+    if (showLevelOverlay || showCommandPalette || !sidebarOpen || isMobile) {
+      setShowAdvancedHud(false)
+    }
+  }, [isMobile, showAdvancedHud, showCommandPalette, showLevelOverlay, sidebarOpen])
+
+  useEffect(() => {
+    if (!showLevelOverlay) return
+    if (showCommandPalette || isMobile) {
+      setShowLevelOverlay(false)
+    }
+  }, [isMobile, showCommandPalette, showLevelOverlay])
+
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setInitialSkeletonExpired(true)
     }, INITIAL_SKELETON_MAX_MS)
@@ -655,6 +690,7 @@ export function useSPXCommandController() {
     initialSkeletonExpired,
     showShortcutHelp,
     showCommandPalette,
+    showAdvancedHud,
     showMobileCoachSheet,
     showAllRelevantLevels,
     overlayPreset,
@@ -695,6 +731,7 @@ export function useSPXCommandController() {
     setShowCommandPalette,
     setSidebarCollapsed,
     handleViewModeChange,
+    handleToggleAdvancedHud,
     handleFocusModeChange,
     handleToggleReplay,
     handleToggleReplayPlayback,
