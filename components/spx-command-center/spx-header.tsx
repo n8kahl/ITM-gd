@@ -4,9 +4,11 @@ import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { formatSPXFeedFallbackReasonCode } from '@/lib/spx/feed-health'
 import { cn } from '@/lib/utils'
+import { Settings2 } from 'lucide-react'
 
 interface SPXHeaderProps {
   onOpenCommandPalette: () => void
+  onOpenSettings: () => void
   onToggleLevelOverlay?: () => void
   showLevelOverlay?: boolean
   showAllLevels: boolean
@@ -45,6 +47,7 @@ function feedTone(stage: 'live_stream' | 'poll_fallback' | 'snapshot_fallback' |
 
 export function SPXHeader({
   onOpenCommandPalette,
+  onOpenSettings,
   onToggleLevelOverlay,
   showLevelOverlay = true,
   showAllLevels,
@@ -131,6 +134,15 @@ export function SPXHeader({
           <div className="font-mono text-[11px] text-white/78">
             {displayedLevelsCount}/{totalLevelsCount} {showAllLevels ? 'All' : 'Key'} · {showLevelOverlay ? 'On' : 'Off'}
           </div>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          data-testid="spx-settings-trigger"
+          className="flex min-h-[36px] items-center gap-1.5 rounded-lg border border-emerald-300/25 bg-emerald-500/[0.08] px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/[0.15] hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+          Settings
         </button>
         <button
           type="button"

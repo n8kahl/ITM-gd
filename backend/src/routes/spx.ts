@@ -19,6 +19,7 @@ import {
   getActiveSPXOptimizationProfile,
   runSPXOptimizerScan,
 } from '../services/spx/optimizer';
+import { getSPXOptimizerWorkerStatus } from '../workers/spxOptimizerWorker';
 import {
   runSPXWinRateBacktest,
   type SPXBacktestPriceResolution,
@@ -169,6 +170,28 @@ router.get('/analytics/optimizer/scorecard', async (_req: Request, res: Response
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to load SPX optimizer scorecard.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/analytics/optimizer/schedule', async (_req: Request, res: Response) => {
+  try {
+    const scorecard = await getSPXOptimizerScorecard();
+    const schedule = getSPXOptimizerWorkerStatus();
+    return res.json({
+      ...schedule,
+      lastOptimizationGeneratedAt: scorecard.generatedAt,
+      lastOptimizationRange: scorecard.scanRange,
+      lastOptimizationApplied: scorecard.optimizationApplied,
+    });
+  } catch (error) {
+    logger.error('SPX optimizer schedule endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX optimizer schedule.',
       retryAfter: 10,
     });
   }

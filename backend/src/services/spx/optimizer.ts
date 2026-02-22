@@ -1559,13 +1559,13 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
 export async function runSPXOptimizerScan(input?: {
   from?: string;
   to?: string;
-  mode?: 'manual' | 'weekly_auto';
+  mode?: 'manual' | 'weekly_auto' | 'nightly_auto';
 }): Promise<SPXOptimizationScanResult> {
   const currentProfile = await getActiveSPXOptimizationProfile();
   const fallbackRange = defaultScanRange(currentProfile);
   const scanFrom = normalizeDateInput(input?.from || fallbackRange.from);
   const scanTo = normalizeDateInput(input?.to || fallbackRange.to);
-  const weeklyAutoMode = input?.mode === 'weekly_auto';
+  const automatedMode = input?.mode === 'weekly_auto' || input?.mode === 'nightly_auto';
 
   const profileForScan = normalizeProfile(currentProfile);
   const trainingDays = profileForScan.walkForward.trainingDays;
@@ -1635,7 +1635,7 @@ export async function runSPXOptimizerScan(input?: {
   const baseRequiredValidationTrades = baselineValidationQualified
     ? profileForScan.walkForward.minTrades
     : fallbackValidationMinTrades;
-  const requiredValidationTrades = weeklyAutoMode
+  const requiredValidationTrades = automatedMode
     ? Math.max(baseRequiredValidationTrades, WEEKLY_AUTO_MIN_VALIDATION_TRADES)
     : baseRequiredValidationTrades;
   const baselineHasValidationTrades = baselineValidationMetrics.tradeCount > 0;
@@ -1648,7 +1648,7 @@ export async function runSPXOptimizerScan(input?: {
   const t1WinRateDelta = round(optimizedValidationMetrics.t1WinRatePct - baselineValidationMetrics.t1WinRatePct, 2);
   const t2WinRateDelta = round(optimizedValidationMetrics.t2WinRatePct - baselineValidationMetrics.t2WinRatePct, 2);
   const failureRateDelta = round(optimizedValidationMetrics.failureRatePct - baselineValidationMetrics.failureRatePct, 2);
-  const weeklyGuardrailPassed = !weeklyAutoMode || (
+  const weeklyGuardrailPassed = !automatedMode || (
     objectiveDelta >= WEEKLY_AUTO_MIN_OBJECTIVE_DELTA
     && objectiveConservativeDelta >= 0
     && expectancyRDelta >= 0
@@ -1791,9 +1791,9 @@ export async function runSPXOptimizerScan(input?: {
       optimizationApplied
         ? `Walk-forward optimization applied to active profile (validation trades=${optimizedValidationMetrics.tradeCount}, minimum required=${requiredValidationTrades}).`
         : 'Candidate thresholds did not beat baseline on validation window; baseline retained.',
-      weeklyAutoMode
-        ? `Weekly auto guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
-        : 'Weekly auto guardrails not enforced for this scan mode.',
+      automatedMode
+        ? `Automated guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
+        : 'Automated guardrails not enforced for this scan mode.',
       `Promotion guardrails: T1 delta >= ${PROMOTION_MIN_T1_DELTA_PCT}, T2 delta >= ${PROMOTION_MIN_T2_DELTA_PCT}, expectancy delta >= ${PROMOTION_MIN_EXPECTANCY_DELTA_R}, failure delta <= ${PROMOTION_MAX_FAILURE_DELTA_PCT}, conservative objective delta >= 0.`,
       `Validation objective: baseline ${baselineValidationMetrics.objectiveScore} (conservative ${baselineValidationMetrics.objectiveScoreConservative}) vs optimized ${optimizedValidationMetrics.objectiveScore} (conservative ${optimizedValidationMetrics.objectiveScoreConservative}).`,
       `Validation expectancy(R): baseline ${baselineValidationMetrics.expectancyR} (lower bound ${baselineValidationMetrics.expectancyLowerBoundR}) vs optimized ${optimizedValidationMetrics.expectancyR} (lower bound ${optimizedValidationMetrics.expectancyLowerBoundR}).`,

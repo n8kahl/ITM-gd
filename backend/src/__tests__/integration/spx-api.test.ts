@@ -67,6 +67,16 @@ jest.mock('../../services/spx/winRateBacktest', () => ({
   runSPXWinRateBacktest: jest.fn(),
 }));
 
+jest.mock('../../services/spx/optimizer', () => ({
+  getActiveSPXOptimizationProfile: jest.fn(),
+  getSPXOptimizerScorecard: jest.fn(),
+  runSPXOptimizerScan: jest.fn(),
+}));
+
+jest.mock('../../workers/spxOptimizerWorker', () => ({
+  getSPXOptimizerWorkerStatus: jest.fn(),
+}));
+
 jest.mock('../../services/spx/aiCoach', () => ({
   getCoachState: jest.fn(),
   generateCoachStream: jest.fn(),
@@ -102,8 +112,13 @@ import { getBasisState } from '../../services/spx/crossReference';
 import { getContractRecommendation } from '../../services/spx/contractSelector';
 import { getSPXWinRateAnalytics } from '../../services/spx/outcomeTracker';
 import { runSPXWinRateBacktest } from '../../services/spx/winRateBacktest';
+import {
+  getActiveSPXOptimizationProfile,
+  getSPXOptimizerScorecard,
+} from '../../services/spx/optimizer';
 import { getCoachState } from '../../services/spx/aiCoach';
 import { getSPXSnapshot } from '../../services/spx';
+import { getSPXOptimizerWorkerStatus } from '../../workers/spxOptimizerWorker';
 
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
@@ -117,8 +132,11 @@ const mockGetBasisState = getBasisState as jest.MockedFunction<typeof getBasisSt
 const mockGetContractRecommendation = getContractRecommendation as jest.MockedFunction<typeof getContractRecommendation>;
 const mockGetSPXWinRateAnalytics = getSPXWinRateAnalytics as jest.MockedFunction<typeof getSPXWinRateAnalytics>;
 const mockRunSPXWinRateBacktest = runSPXWinRateBacktest as jest.MockedFunction<typeof runSPXWinRateBacktest>;
+const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as jest.MockedFunction<typeof getActiveSPXOptimizationProfile>;
+const mockGetSPXOptimizerScorecard = getSPXOptimizerScorecard as jest.MockedFunction<typeof getSPXOptimizerScorecard>;
 const mockGetCoachState = getCoachState as jest.MockedFunction<typeof getCoachState>;
 const mockGetSPXSnapshot = getSPXSnapshot as jest.MockedFunction<typeof getSPXSnapshot>;
+const mockGetSPXOptimizerWorkerStatus = getSPXOptimizerWorkerStatus as jest.MockedFunction<typeof getSPXOptimizerWorkerStatus>;
 
 const app = express();
 app.use(express.json());
@@ -323,7 +341,142 @@ describe('SPX API integration schema', () => {
         byTier: [],
       },
     });
+    mockGetActiveSPXOptimizationProfile.mockResolvedValue({
+      source: 'default',
+      generatedAt: '2026-02-15T15:00:00.000Z',
+      qualityGate: {
+        minConfluenceScore: 3,
+        minPWinCalibrated: 0.62,
+        minEvR: 0.2,
+        actionableStatuses: ['ready', 'triggered'],
+      },
+      flowGate: {
+        requireFlowConfirmation: false,
+        minAlignmentPct: 0,
+      },
+      indicatorGate: {
+        requireEmaAlignment: false,
+        requireVolumeRegimeAlignment: false,
+      },
+      timingGate: {
+        enabled: true,
+        maxFirstSeenMinuteBySetupType: {},
+      },
+      regimeGate: {
+        minTradesPerCombo: 12,
+        minT1WinRatePct: 48,
+        pausedCombos: [],
+      },
+      tradeManagement: {
+        partialAtT1Pct: 0.5,
+        moveStopToBreakeven: true,
+      },
+      geometryPolicy: {
+        bySetupType: {},
+        bySetupRegime: {},
+        bySetupRegimeTimeBucket: {},
+      },
+      walkForward: {
+        trainingDays: 20,
+        validationDays: 5,
+        minTrades: 12,
+        objectiveWeights: {
+          t1: 0.62,
+          t2: 0.38,
+          failurePenalty: 0.5,
+          expectancyR: 14,
+        },
+      },
+      driftControl: {
+        enabled: true,
+        shortWindowDays: 5,
+        longWindowDays: 20,
+        maxDropPct: 12,
+        minLongWindowTrades: 20,
+        autoQuarantineEnabled: true,
+        triggerRateWindowDays: 20,
+        minQuarantineOpportunities: 20,
+        minTriggerRatePct: 3,
+        pausedSetupTypes: [],
+      },
+    });
     mockGetCoachState.mockResolvedValue({ messages: [], generatedAt: '2026-02-15T15:00:00.000Z' });
+    mockGetSPXOptimizerScorecard.mockResolvedValue({
+      generatedAt: '2026-02-15T15:00:00.000Z',
+      scanRange: { from: '2026-02-01', to: '2026-02-15' },
+      trainingRange: { from: '2026-01-20', to: '2026-02-09' },
+      validationRange: { from: '2026-02-10', to: '2026-02-15' },
+      baseline: {
+        tradeCount: 10,
+        resolvedCount: 10,
+        t1Wins: 6,
+        t2Wins: 4,
+        stopsBeforeT1: 3,
+        t1WinRatePct: 60,
+        t2WinRatePct: 40,
+        failureRatePct: 30,
+        expectancyR: 0.25,
+        expectancyLowerBoundR: 0.2,
+        positiveRealizedRatePct: 60,
+        objectiveScore: 10,
+        objectiveScoreConservative: 8,
+        t1Confidence95: { sampleSize: 10, pointPct: 60, lowerPct: 35, upperPct: 80 },
+        t2Confidence95: { sampleSize: 10, pointPct: 40, lowerPct: 20, upperPct: 65 },
+        failureConfidence95: { sampleSize: 10, pointPct: 30, lowerPct: 12, upperPct: 55 },
+      },
+      optimized: {
+        tradeCount: 12,
+        resolvedCount: 12,
+        t1Wins: 8,
+        t2Wins: 5,
+        stopsBeforeT1: 2,
+        t1WinRatePct: 66.67,
+        t2WinRatePct: 41.67,
+        failureRatePct: 16.67,
+        expectancyR: 0.45,
+        expectancyLowerBoundR: 0.35,
+        positiveRealizedRatePct: 66.67,
+        objectiveScore: 12,
+        objectiveScoreConservative: 10,
+        t1Confidence95: { sampleSize: 12, pointPct: 66.67, lowerPct: 41, upperPct: 85 },
+        t2Confidence95: { sampleSize: 12, pointPct: 41.67, lowerPct: 21, upperPct: 66 },
+        failureConfidence95: { sampleSize: 12, pointPct: 16.67, lowerPct: 5, upperPct: 42 },
+      },
+      improvementPct: {
+        t1WinRateDelta: 6.67,
+        t2WinRateDelta: 1.67,
+        objectiveDelta: 2,
+        objectiveConservativeDelta: 2,
+        expectancyRDelta: 0.2,
+      },
+      driftAlerts: [],
+      setupTypePerformance: [],
+      setupComboPerformance: [],
+      setupActions: {
+        add: [],
+        update: [],
+        remove: [],
+      },
+      optimizationApplied: true,
+      notes: ['test'],
+    });
+    mockGetSPXOptimizerWorkerStatus.mockReturnValue({
+      enabled: true,
+      isRunning: true,
+      mode: 'nightly_auto',
+      timezone: 'America/New_York',
+      targetMinuteEt: 1150,
+      targetTimeEt: '19:10',
+      checkIntervalMs: 60000,
+      lastRunDateEt: '2026-02-14',
+      lastAttemptAt: '2026-02-15T00:15:00.000Z',
+      lastAttemptAtEt: '2026-02-14 19:15:00 ET',
+      lastSuccessAt: '2026-02-15T00:15:10.000Z',
+      lastSuccessAtEt: '2026-02-14 19:15:10 ET',
+      lastErrorMessage: null,
+      nextEligibleRunDateEt: '2026-02-17',
+      nextEligibleRunAtEt: '2026-02-17 19:10 ET',
+    });
     mockGetSPXSnapshot.mockResolvedValue({
       levels: [],
       clusters: [],
@@ -480,6 +633,20 @@ describe('SPX API integration schema', () => {
         t1WinRatePct: expect.any(Number),
         t2WinRatePct: expect.any(Number),
       }),
+    }));
+
+    const optimizerSchedule = await request(app).get('/api/spx/analytics/optimizer/schedule');
+    expect(optimizerSchedule.status).toBe(200);
+    expect(optimizerSchedule.body).toEqual(expect.objectContaining({
+      enabled: true,
+      mode: 'nightly_auto',
+      targetTimeEt: expect.any(String),
+      lastOptimizationGeneratedAt: expect.any(String),
+      lastOptimizationRange: expect.objectContaining({
+        from: expect.any(String),
+        to: expect.any(String),
+      }),
+      lastOptimizationApplied: expect.any(Boolean),
     }));
 
     const coach = await request(app).get('/api/spx/coach/state');

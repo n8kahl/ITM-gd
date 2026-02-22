@@ -38,6 +38,9 @@ function createDesktopSurfaceBaseProps(
   return {
     desktopViewMode: controller.desktopViewMode,
     onOpenCommandPalette: () => controller.setShowCommandPalette(true),
+    onOpenSettings: () => controller.handleSettingsPanelChange(true),
+    showSettingsPanel: controller.showSettingsPanel,
+    onSettingsPanelChange: controller.handleSettingsPanelChange,
     showAllRelevantLevels: controller.showAllRelevantLevels,
     displayedLevelsCount: controller.displayedLevelsCount,
     totalLevelsCount: controller.totalLevelsCount,
@@ -105,6 +108,9 @@ export function createMobileSurfaceOrchestratorProps(
     primaryActionEnabled: controller.primaryActionEnabled,
     primaryActionBlockedReason: controller.primaryActionBlockedReason,
     onPrimaryAction: controller.handlePrimaryAction,
+    onOpenSettings: () => controller.handleSettingsPanelChange(true),
+    showSettingsPanel: controller.showSettingsPanel,
+    onSettingsPanelChange: controller.handleSettingsPanelChange,
   }
 }
 

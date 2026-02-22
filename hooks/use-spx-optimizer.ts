@@ -83,6 +83,27 @@ export interface SPXOptimizerScorecard {
   notes: string[]
 }
 
+export interface SPXOptimizerScheduleStatus {
+  enabled: boolean
+  isRunning: boolean
+  mode: 'nightly_auto'
+  timezone: 'America/New_York'
+  targetMinuteEt: number
+  targetTimeEt: string
+  checkIntervalMs: number
+  lastRunDateEt: string | null
+  lastAttemptAt: string | null
+  lastAttemptAtEt: string | null
+  lastSuccessAt: string | null
+  lastSuccessAtEt: string | null
+  lastErrorMessage: string | null
+  nextEligibleRunDateEt: string | null
+  nextEligibleRunAtEt: string | null
+  lastOptimizationGeneratedAt: string | null
+  lastOptimizationRange: { from: string; to: string } | null
+  lastOptimizationApplied: boolean | null
+}
+
 interface SPXOptimizerScanResponse {
   profile: Record<string, unknown>
   scorecard: SPXOptimizerScorecard
@@ -94,6 +115,10 @@ export function useSPXOptimizer() {
   const [isScanning, setIsScanning] = useState(false)
 
   const scorecardQuery = useSPXQuery<SPXOptimizerScorecard>('/api/spx/analytics/optimizer/scorecard', {
+    refreshInterval: 30_000,
+    revalidateOnFocus: false,
+  })
+  const scheduleQuery = useSPXQuery<SPXOptimizerScheduleStatus>('/api/spx/analytics/optimizer/schedule', {
     refreshInterval: 30_000,
     revalidateOnFocus: false,
   })
@@ -109,6 +134,7 @@ export function useSPXOptimizer() {
     try {
       const response = await postSPX<SPXOptimizerScanResponse>('/api/spx/analytics/optimizer/scan', token, {})
       await scorecardQuery.mutate(response.scorecard, { revalidate: false })
+      await scheduleQuery.mutate()
       return response
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Optimizer scan failed'
@@ -117,15 +143,19 @@ export function useSPXOptimizer() {
     } finally {
       setIsScanning(false)
     }
-  }, [scorecardQuery, session?.access_token])
+  }, [scheduleQuery, scorecardQuery, session?.access_token])
 
   return {
     scorecard: scorecardQuery.data || null,
+    schedule: scheduleQuery.data || null,
     isLoading: scorecardQuery.isLoading,
+    isScheduleLoading: scheduleQuery.isLoading,
     error: scorecardQuery.error,
+    scheduleError: scheduleQuery.error,
     isScanning,
     scanError,
     runScan,
     refresh: scorecardQuery.mutate,
+    refreshSchedule: scheduleQuery.mutate,
   }
 }
