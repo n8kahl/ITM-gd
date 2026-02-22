@@ -34,6 +34,14 @@ export interface TradierOrderResult {
   raw: Record<string, unknown>;
 }
 
+export interface TradierBrokerPosition {
+  symbol: string;
+  quantity: number;
+  costBasis: number | null;
+  dateAcquired: string | null;
+  raw: Record<string, unknown>;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim().length > 0) {
@@ -100,6 +108,41 @@ export class TradierClient {
       realizedPnlDaily,
       raw: body,
     };
+  }
+
+  async getPositions(): Promise<TradierBrokerPosition[]> {
+    const response = await this.http.get(`/accounts/${this.accountId}/positions`);
+    const body = response.data as Record<string, any>;
+    const rawNode = body?.positions?.position;
+    const nodes = Array.isArray(rawNode)
+      ? rawNode
+      : rawNode && typeof rawNode === 'object'
+        ? [rawNode]
+        : [];
+
+    const positions: TradierBrokerPosition[] = [];
+    for (const node of nodes) {
+      const record = node && typeof node === 'object'
+        ? (node as Record<string, unknown>)
+        : null;
+      if (!record) continue;
+
+      const symbol = typeof record.symbol === 'string'
+        ? record.symbol.trim().toUpperCase()
+        : '';
+      const quantity = toFiniteNumber(record.quantity) ?? 0;
+      if (!symbol || !Number.isFinite(quantity) || quantity === 0) continue;
+
+      positions.push({
+        symbol,
+        quantity,
+        costBasis: toFiniteNumber(record.cost_basis),
+        dateAcquired: typeof record.date_acquired === 'string' ? record.date_acquired : null,
+        raw: record,
+      });
+    }
+
+    return positions;
   }
 
   async placeOrder(order: TradierOrderPayload): Promise<TradierOrderResult> {

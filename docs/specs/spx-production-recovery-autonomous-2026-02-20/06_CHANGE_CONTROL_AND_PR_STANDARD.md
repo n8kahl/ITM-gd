@@ -1346,3 +1346,45 @@ PR can merge only when:
   - Keep `TRADIER_PORTFOLIO_SYNC_ENABLED=false` to disable runtime sync.
 - Notes:
   - This slice is intentionally backend-foundational; live broker reconciliation remains `P14-S4`.
+
+### Slice: P14-S4
+- Objective: Add broker/internal ledger reconciliation and execution slippage feedback that auto-adjusts optimizer EV floors under sustained fill friction.
+- Status: done
+- Scope:
+  - Add Tradier positions retrieval in broker client.
+  - Add Tradier-vs-internal position reconciliation service for `ai_coach_positions`.
+  - Wire reconciliation and slippage-guardrail cycles into `positionTrackerWorker` with bounded intervals.
+  - Add optimizer slippage guardrail function that bumps `qualityGate.minEvR` when rolling broker entry slippage breaches threshold.
+- Out of scope:
+  - Full broker order lifecycle reconciliation (entry/exit routing + cancel/replace orchestration).
+  - UI contract changes for explicit post-trade mode transitions.
+  - KMS-backed credential decryption hardening.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/brokerLedgerReconciliation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/__tests__/brokerLedgerReconciliation.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/optimizer.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S4_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/positions/__tests__/brokerLedgerReconciliation.test.ts src/services/spx/__tests__/optimizer-confidence.test.ts src/services/spx/__tests__/contractSelector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm exec eslint backend/src/services/broker/tradier/client.ts backend/src/services/positions/brokerLedgerReconciliation.ts backend/src/services/positions/__tests__/brokerLedgerReconciliation.test.ts backend/src/workers/positionTrackerWorker.ts backend/src/services/spx/optimizer.ts backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - Result: tests/typecheck pass; eslint warning-only because backend files are ignored by root config.
+- Risks introduced:
+  - Incorrect broker symbol normalization can produce false force-close actions.
+  - Slippage guardrail can reduce trade throughput when raised repeatedly in low-liquidity periods.
+- Mitigations:
+  - Reconciliation is disabled by default and uses strict option-key normalization.
+  - Guardrail is idempotent per rolling-window signature and capped with configurable max `minEvR`.
+  - Optimizer history persists each guardrail adjustment for full audit/revert.
+- Rollback:
+  - Revert P14-S4 files listed above.
+  - Disable runtime toggles:
+    - `TRADIER_POSITION_RECONCILIATION_ENABLED=false`
+    - `SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_ENABLED=false`
+- Notes:
+  - This slice closes the Phase 14 “execution reconciliation + drift calibration” backend objective with bounded automation controls.

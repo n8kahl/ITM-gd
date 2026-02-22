@@ -1044,6 +1044,39 @@ Update this file at the end of each autonomous execution session.
 - Blockers:
   - None.
 
+### Session 2026-02-22 18:30 ET
+- Goal: Execute `P14-S4` with broker/internal ledger parity controls and slippage-driven optimizer hardening.
+- Completed:
+  - Added Tradier position retrieval:
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - Added broker ledger reconciliation service + tests:
+    - `/Users/natekahl/ITM-gd/backend/src/services/positions/brokerLedgerReconciliation.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/positions/__tests__/brokerLedgerReconciliation.test.ts`
+  - Wired reconciliation + slippage guardrail cycles into position tracker:
+    - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - Added optimizer execution-slippage guardrail mutation path (audited state/history persistence):
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/optimizer.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - Added env controls:
+    - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - Authored slice report:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S4_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/positions/__tests__/brokerLedgerReconciliation.test.ts src/services/spx/__tests__/optimizer-confidence.test.ts src/services/spx/__tests__/contractSelector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm exec eslint backend/src/services/broker/tradier/client.ts backend/src/services/positions/brokerLedgerReconciliation.ts backend/src/services/positions/__tests__/brokerLedgerReconciliation.test.ts backend/src/workers/positionTrackerWorker.ts backend/src/services/spx/optimizer.ts backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+- Risks found:
+  - Reconciliation keying errors can force-close internal positions incorrectly.
+  - Slippage guardrail can compress setup throughput if repeatedly triggered.
+- Risks mitigated:
+  - Reconciliation defaults to disabled and uses deterministic OCC normalization.
+  - Guardrail requires minimum sample size, de-dupes by window signature, and caps max `minEvR`.
+- Next slice:
+  - `P14-S5`: run full promotion gates and produce parity delta report for release promotion decision.
+- Blockers:
+  - None.
+
 ## 4. Blocking Gate Checklist
 1. [x] No open P0 defects.
 2. [x] No open P1 defects.
