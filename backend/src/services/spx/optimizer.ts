@@ -1382,7 +1382,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   const metadata = toMetadataObject(row.metadata);
   const confluenceScore = toFiniteNumber(metadata.confluenceScore);
   const flowAlignmentPct = toFiniteNumber(metadata.flowAlignmentPct) ?? toFiniteNumber(metadata.alignmentScore);
-  const flowConfirmed = metadata.flowConfirmed === true;
+  const flowConfirmed = metadata.effectiveFlowConfirmed === true || metadata.flowConfirmed === true;
   const confluenceSources = Array.isArray(metadata.confluenceSources)
     ? metadata.confluenceSources.filter((item): item is string => typeof item === 'string')
     : [];
@@ -1404,7 +1404,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
       : null;
   const gateReasons = toMetadataStringArray(metadata.gateReasons);
   const emaAligned = metadata.emaAligned === true || confluenceSources.includes('ema_alignment');
-  const volumeRegimeAligned = metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
+  const volumeRegimeAligned = metadata.effectiveVolumeAligned === true || metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
   const orbTrendConfluence = confluenceSources.includes('orb_trend_confluence');
   const macroAlignmentScore = toFiniteNumber(metadata.macroAlignmentScore);
   const microstructureScore = toFiniteNumber(metadata.microstructureScore);
@@ -2125,7 +2125,9 @@ function passesCandidate(
 
   if (candidate.requireFlowConfirmation) {
     if (!row.flowConfirmed) return false;
-    if ((row.flowAlignmentPct ?? -1) < candidate.minAlignmentPct) return false;
+    // When flow was admitted via grace (effectiveFlowConfirmed), raw alignment may be null.
+    // Skip alignment floor when alignment data is unavailable but flow is effectively confirmed.
+    if (row.flowAlignmentPct != null && row.flowAlignmentPct < candidate.minAlignmentPct) return false;
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
@@ -2204,7 +2206,9 @@ function passesCandidateOpportunity(
 
   if (candidate.requireFlowConfirmation) {
     if (!row.flowConfirmed) return false;
-    if ((row.flowAlignmentPct ?? -1) < candidate.minAlignmentPct) return false;
+    // When flow was admitted via grace (effectiveFlowConfirmed), raw alignment may be null.
+    // Skip alignment floor when alignment data is unavailable but flow is effectively confirmed.
+    if (row.flowAlignmentPct != null && row.flowAlignmentPct < candidate.minAlignmentPct) return false;
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;

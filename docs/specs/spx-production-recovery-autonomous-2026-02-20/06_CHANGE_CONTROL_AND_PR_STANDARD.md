@@ -1423,3 +1423,54 @@ PR can merge only when:
   - No runtime rollback required for this slice (documentation/evidence only).
 - Notes:
   - Strict second-bar fidelity remained intact (`usedMassiveMinuteBars=false`) while throughput collapsed.
+
+### Slice: P15-S1
+- Objective: Establish quantitative diagnostic baseline of full-population blocker distribution before gate recalibration.
+- Status: done
+- Scope: Enhanced `spxFailureAttribution.ts` with full-population blocker analysis, multi-blocker overlap, flow data availability audit.
+- Files: `backend/src/scripts/spxFailureAttribution.ts`
+- Validation: `pnpm --dir backend exec tsc --noEmit` pass.
+- Key findings: 1000 rows analyzed (YTD). Flow data availability is 0% across all 27 dates. Top blockers: pwin_below_floor (345), timing_gate_blocked (233), volume_regime_alignment_required (204), evr_below_floor (186), trend_orb_confluence_required (150).
+- Rollback: Revert script changes.
+
+### Slice: P15-S2
+- Objective: Replace narrow trend-only flow grace with structured flow-availability classification for all setup types.
+- Status: done
+- Scope: Added `flowAvailability` classification, unified `flowUnavailableGraceActive`, env kill switch `SPX_FLOW_UNAVAILABLE_GRACE_ENABLED`.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/__tests__/setupDetector.test.ts`
+- Tests run: `pnpm --dir backend test -- src/services/spx/__tests__/setupDetector.test.ts` (19/19 pass), `tsc --noEmit` pass.
+- Rollback: `SPX_FLOW_UNAVAILABLE_GRACE_ENABLED=false` or revert.
+
+### Slice: P15-S3
+- Objective: Extend volume grace to all trend types and add flat-volume tolerance.
+- Status: done
+- Scope: Added `expandedVolumeGraceEligible`, widened time windows (trend 240→300, ORB 180→240), env kill switch `SPX_VOLUME_GRACE_EXPANDED_ENABLED`.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/__tests__/setupDetector.test.ts`
+- Tests run: 19/19 pass, `tsc --noEmit` pass.
+- Rollback: `SPX_VOLUME_GRACE_EXPANDED_ENABLED=false` or revert.
+
+### Slice: P15-S4
+- Objective: Make ORB setups achievable in replay with sparse-flow alternative confirmation.
+- Status: done
+- Scope: Added `orbSparseFlowGrace`, lowered ORB flow quality score 52→45 when sparse.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/__tests__/setupDetector.test.ts`
+- Tests run: 19/19 pass, `tsc --noEmit` pass.
+- Rollback: Revert code.
+
+### Slice: P15-S5
+- Objective: Ensure optimizer `passesCandidate` produces consistent results with detector grace-aware gating.
+- Status: done
+- Scope: Refactored `evaluateOptimizationGate` return type, added `effectiveFlowConfirmed`/`effectiveVolumeAligned` to metadata, updated `toPreparedRow` and `passesCandidate`.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/optimizer.ts`, `backend/src/services/spx/types.ts`, `backend/src/services/spx/__tests__/setupDetector.test.ts`
+- Tests run: 40/40 pass across 3 suites, `tsc --noEmit` pass.
+- Rollback: Revert setupDetector.ts, optimizer.ts, types.ts.
+
+### Slice: P15-S6
+- Objective: Run full promotion pipeline and compare against Gold Standard baseline.
+- Status: done (promotion blocked)
+- Scope: Backfill, strict replay, attribution, promotion decision.
+- Tests run: 40/40 pass, `tsc --noEmit` pass, backfill 5/5 days pass.
+- Strict replay: triggered=7, T1=28.57%, T2=28.57%, expectancy=-0.093R.
+- Blocker elimination: flow_confirmation_required 30→0, flow_alignment_unavailable 30→0, volume_regime_alignment_required 42→0.
+- Promotion decision: **BLOCKED** — quality far below targets despite throughput recovery.
+- Rollback: Kill switches for S2/S3 graces, code revert for S4.

@@ -1,4 +1,4 @@
-import { __resetSetupDetectorStateForTests, detectActiveSetups } from '../setupDetector';
+import { __resetSetupDetectorStateForTests, __testables, detectActiveSetups } from '../setupDetector';
 import { getMergedLevels } from '../levelEngine';
 import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { getFibLevels } from '../fibEngine';
@@ -574,5 +574,198 @@ describe('spx/setupDetector', () => {
     expect(sameSetup?.status).toBe('invalidated');
     expect(sameSetup?.invalidationReason).toBe('ttl_expired');
     expect(sameSetup?.ttlExpiresAt).toBeNull();
+  });
+});
+
+describe('spx/setupDetector optimization gate grace paths', () => {
+  const baseProfile = {
+    source: 'scan' as const,
+    generatedAt: '2026-02-22T03:00:00.000Z',
+    qualityGate: {
+      minConfluenceScore: 3,
+      minPWinCalibrated: 0.62,
+      minEvR: 0.2,
+      actionableStatuses: ['ready', 'triggered'] as ('ready' | 'triggered')[],
+    },
+    flowGate: { requireFlowConfirmation: false, minAlignmentPct: 0 },
+    indicatorGate: { requireEmaAlignment: false, requireVolumeRegimeAlignment: false },
+    timingGate: {
+      enabled: true,
+      maxFirstSeenMinuteBySetupType: {
+        fade_at_wall: 300, breakout_vacuum: 360, mean_reversion: 330,
+        trend_continuation: 390, orb_breakout: 180, trend_pullback: 240, flip_reclaim: 360,
+      },
+    },
+    regimeGate: { minTradesPerCombo: 12, minT1WinRatePct: 48, pausedCombos: [] },
+    tradeManagement: { partialAtT1Pct: 0.65, moveStopToBreakeven: true },
+    geometryPolicy: { bySetupType: {}, bySetupRegime: {}, bySetupRegimeTimeBucket: {} },
+    macroMicroPolicy: {
+      defaultMinMacroAlignmentScore: 34,
+      defaultRequireTrendMicrostructureAlignment: false,
+      defaultFailClosedWhenUnavailable: false,
+      defaultMinMicroAggressorSkewAbs: 0.15,
+      defaultMinMicroImbalanceAbs: 0.1,
+      defaultMinMicroQuoteCoveragePct: 35,
+      defaultMaxMicroSpreadBps: 5,
+      bySetupType: {},
+      bySetupRegime: {},
+      bySetupRegimeTimeBucket: {},
+    },
+    walkForward: {
+      trainingDays: 30,
+      validationDays: 5,
+      minTrades: 15,
+      objectiveWeights: { t1: 0.4, t2: 0.2, failurePenalty: 0.2, expectancyR: 0.2 },
+    },
+    driftControl: {
+      enabled: true, shortWindowDays: 5, longWindowDays: 20, maxDropPct: 12,
+      minLongWindowTrades: 20, autoQuarantineEnabled: true,
+      triggerRateWindowDays: 20, minQuarantineOpportunities: 20,
+      minTriggerRatePct: 3, pausedSetupTypes: [],
+    },
+  };
+
+  const noFlowQuality = {
+    score: 0, recentDirectionalEvents: 0, recentDirectionalPremium: 0,
+    localDirectionalEvents: 0, localDirectionalPremium: 0, localCoveragePct: 0,
+  };
+
+  const noMicroConfig = {
+    enabled: false, lookbackTicks: 60, minTicks: 10, minDirectionalVolume: 120,
+    minQuoteCoveragePct: 35, minAggressorSkewAbs: 0.15, minImbalanceAbs: 0.1,
+    maxSpreadBps: 5, requireTrendAlignment: false, failClosedWhenUnavailable: false,
+  };
+
+  const noMicroAlignment = { available: false, aligned: false, conflict: false, score: null, reasons: [] };
+
+  const noOrbConfluence = {
+    available: false, aligned: false, orbLevel: null, distanceToOrb: null,
+    breakConfirmed: false, pullbackRetest: false, reclaimed: false, reasons: [],
+  };
+
+  function buildGateInput(overrides: Record<string, unknown> = {}) {
+    return {
+      status: 'ready' as const,
+      wasPreviouslyTriggered: false,
+      setupType: 'trend_pullback' as const,
+      regime: 'trending' as const,
+      firstSeenAtIso: '2026-02-20T11:00:00.000Z', // ~90 min after open
+      confluenceScore: 4,
+      pWinCalibrated: 0.65,
+      evR: 0.35,
+      flowConfirmed: false,
+      flowAlignmentPct: null as number | null,
+      flowQuality: noFlowQuality,
+      macroAlignmentScore: 50,
+      macroFilterConfig: { enabled: false, minAlignmentScore: 34 },
+      emaAligned: true,
+      volumeRegimeAligned: true,
+      microstructureConfig: noMicroConfig,
+      microstructureAlignment: noMicroAlignment,
+      orbTrendConfluence: noOrbConfluence,
+      requireOrbTrendConfluence: false,
+      pausedSetupTypes: new Set<string>(),
+      pausedCombos: new Set<string>(),
+      profile: baseProfile,
+      direction: 'bullish' as const,
+      ...overrides,
+    };
+  }
+
+  it('blocks trend_pullback when flow unavailable and no grace conditions met', () => {
+    // With emaAligned=false, neither the new flowUnavailableGrace nor the old
+    // trendFlowUnavailableGraceEligible can fire (both require EMA alignment).
+    process.env.SPX_FLOW_UNAVAILABLE_GRACE_ENABLED = 'false';
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      emaAligned: false,
+    }));
+    expect(result.reasons).toContain('flow_confirmation_required');
+    expect(result.reasons).toContain('flow_alignment_unavailable');
+    expect(result.effectiveFlowConfirmed).toBe(false);
+    delete process.env.SPX_FLOW_UNAVAILABLE_GRACE_ENABLED;
+  });
+
+  it('allows trend_pullback through flow-unavailable grace when EMA+confluence met', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput());
+    expect(result.reasons).not.toContain('flow_confirmation_required');
+    expect(result.reasons).not.toContain('flow_alignment_unavailable');
+    expect(result.effectiveFlowConfirmed).toBe(true);
+  });
+
+  it('allows mean_reversion through flow-unavailable grace (all setup types)', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      setupType: 'mean_reversion',
+      firstSeenAtIso: '2026-02-20T10:30:00.000Z',
+    }));
+    // mean_reversion has no requireFlowConfirmation floor, so flow gates never fire
+    expect(result.reasons).not.toContain('flow_confirmation_required');
+    expect(result.reasons).not.toContain('flow_alignment_unavailable');
+    // effectiveFlowConfirmed stays false (same as raw) — no grace was needed
+    expect(result.effectiveFlowConfirmed).toBe(false);
+  });
+
+  it('blocks flow-unavailable grace when EMA not aligned', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      emaAligned: false,
+    }));
+    expect(result.reasons).toContain('flow_confirmation_required');
+    expect(result.effectiveFlowConfirmed).toBe(false);
+  });
+
+  it('allows trend_pullback through expanded volume grace with flat volume', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      volumeRegimeAligned: false,
+    }));
+    expect(result.reasons).not.toContain('volume_regime_alignment_required');
+    expect(result.effectiveVolumeAligned).toBe(true);
+  });
+
+  it('blocks volume grace when expanded grace disabled', () => {
+    process.env.SPX_VOLUME_GRACE_EXPANDED_ENABLED = 'false';
+    // trend_pullback at 90 min with confluence 4 + ema → trendFamilyVolumeGraceEligible applies at <= 300 min
+    // so this should still pass via the existing narrow grace
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      volumeRegimeAligned: false,
+    }));
+    expect(result.reasons).not.toContain('volume_regime_alignment_required');
+    expect(result.effectiveVolumeAligned).toBe(true);
+    delete process.env.SPX_VOLUME_GRACE_EXPANDED_ENABLED;
+  });
+
+  it('allows trend_continuation through expanded volume grace (was previously blocked)', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      setupType: 'trend_continuation',
+      volumeRegimeAligned: false,
+      confluenceScore: 4,
+      pWinCalibrated: 0.65,
+      evR: 0.35,
+    }));
+    expect(result.reasons).not.toContain('volume_regime_alignment_required');
+    expect(result.effectiveVolumeAligned).toBe(true);
+  });
+
+  it('allows orb_breakout through sparse-flow grace when no flow data', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      setupType: 'orb_breakout',
+      firstSeenAtIso: '2026-02-20T10:15:00.000Z', // ~45 min after open
+      confluenceScore: 3,
+      pWinCalibrated: 0.60,
+      evR: 0.25,
+    }));
+    expect(result.reasons).not.toContain('orb_flow_or_confluence_required');
+    expect(result.effectiveFlowConfirmed).toBe(true);
+  });
+
+  it('blocks orb_breakout sparse-flow grace when EMA not aligned', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      setupType: 'orb_breakout',
+      firstSeenAtIso: '2026-02-20T10:15:00.000Z',
+      emaAligned: false,
+      confluenceScore: 3,
+      pWinCalibrated: 0.60,
+      evR: 0.25,
+    }));
+    expect(result.reasons).toContain('orb_flow_or_confluence_required');
+    expect(result.effectiveFlowConfirmed).toBe(false);
   });
 });
