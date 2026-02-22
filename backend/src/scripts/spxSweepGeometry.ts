@@ -10,7 +10,7 @@ import {
   type SPXBacktestGeometryAdjustment,
 } from '../services/spx/winRateBacktest';
 
-type SweepFamily = 'fade_at_wall' | 'mean_reversion';
+type SweepFamily = 'fade_at_wall' | 'mean_reversion' | 'trend_pullback' | 'orb_breakout';
 
 interface SetupDbRow {
   engine_setup_id: string;
@@ -267,19 +267,32 @@ function toFamilyMetrics(input: {
   };
 }
 
-function candidateGrid(baselinePartial: number): CandidateConfig[] {
+function candidateGrid(input: {
+  family: SweepFamily;
+  baselinePartial: number;
+  fastMode: boolean;
+}): CandidateConfig[] {
   const configs: CandidateConfig[] = [];
-  const stopScales = [0.9, 1, 1.1];
-  const target1Scales = [0.95, 1, 1.05];
-  const target2Scales = [0.9, 1, 1.1];
-  const partials = Array.from(new Set([0.6, round(baselinePartial, 2), 0.75])).sort((a, b) => a - b);
-  const moveBEValues = [true, false];
+  const trendFamily = input.family === 'trend_pullback' || input.family === 'orb_breakout';
+  const stopScales = input.fastMode
+    ? [0.95, 1, 1.05]
+    : trendFamily ? [0.95, 1, 1.05] : [0.9, 1, 1.1];
+  const target1Scales = input.fastMode
+    ? [0.95, 1, 1.05]
+    : trendFamily ? [0.9, 1, 1.1] : [0.95, 1, 1.05];
+  const target2Scales = input.fastMode
+    ? [0.95, 1, 1.05]
+    : trendFamily ? [0.85, 0.95, 1, 1.05] : [0.9, 1, 1.1];
+  const partials = trendFamily
+    ? Array.from(new Set([0.5, 0.6, round(input.baselinePartial, 2), 0.7])).sort((a, b) => a - b)
+    : Array.from(new Set([0.6, round(input.baselinePartial, 2), 0.75])).sort((a, b) => a - b);
+  const moveBEValues = input.fastMode ? [true] : [true, false];
 
   configs.push({
     geometry: { stopScale: 1, target1Scale: 1, target2Scale: 1 },
-    partialAtT1Pct: round(baselinePartial, 2),
+    partialAtT1Pct: round(input.baselinePartial, 2),
     moveStopToBreakeven: true,
-    label: `baseline|partial=${round(baselinePartial, 2)}|be=true`,
+    label: `baseline|partial=${round(input.baselinePartial, 2)}|be=true`,
   });
 
   for (const stopScale of stopScales) {
@@ -391,7 +404,21 @@ function evaluateFamilyConfig(input: {
 async function main() {
   const from = (process.argv[2] || '2026-01-01').trim();
   const to = (process.argv[3] || '2026-02-20').trim();
-  const families: SweepFamily[] = ['fade_at_wall', 'mean_reversion'];
+  const rawFamilies = (process.argv[4] || '').trim();
+  const fastMode = (process.argv[5] || '').trim().toLowerCase() === 'fast'
+    || String(process.env.SPX_SWEEP_FAST || '').trim().toLowerCase() === 'true';
+  const defaultFamilies: SweepFamily[] = ['fade_at_wall', 'mean_reversion', 'trend_pullback', 'orb_breakout'];
+  const families: SweepFamily[] = rawFamilies.length > 0
+    ? rawFamilies
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item): item is SweepFamily => (
+        item === 'fade_at_wall'
+        || item === 'mean_reversion'
+        || item === 'trend_pullback'
+        || item === 'orb_breakout'
+      ))
+    : defaultFamilies;
 
   const profile = await getActiveSPXOptimizationProfile();
   const paused = new Set(profile.driftControl.pausedSetupTypes);
@@ -406,14 +433,20 @@ async function main() {
   const sessions = Array.from(new Set(sweepSetups.map((setup) => setup.sessionDate))).sort();
   const barsBySession = await loadBarsBySession(sessions);
 
-  const configs = candidateGrid(profile.tradeManagement.partialAtT1Pct);
   const byFamily: Record<SweepFamily, CandidateResult[]> = {
     fade_at_wall: [],
     mean_reversion: [],
+    trend_pullback: [],
+    orb_breakout: [],
   };
 
   for (const family of families) {
     const familySetups = sweepSetups.filter((setup) => setup.setupType === family);
+    const configs = candidateGrid({
+      family,
+      baselinePartial: profile.tradeManagement.partialAtT1Pct,
+      fastMode,
+    });
     for (const config of configs) {
       byFamily[family].push(evaluateFamilyConfig({
         family,
@@ -456,6 +489,8 @@ async function main() {
 
   console.log(JSON.stringify({
     range: { from, to },
+    fastMode,
+    selectedFamilies: families,
     pausedSetupTypes: Array.from(paused),
     profileTradeManagement: profile.tradeManagement,
     objectiveWeights: profile.walkForward.objectiveWeights,

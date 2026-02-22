@@ -32,6 +32,9 @@ const FLOW_ZONE_TOLERANCE_POINTS = 12;
 const FLOW_MIN_DIRECTIONAL_PREMIUM = 75_000;
 const FLOW_MIN_LOCAL_PREMIUM = 150_000;
 const FLOW_MIN_LOCAL_EVENTS = 2;
+const FLOW_QUALITY_MIN_EVENTS = 2;
+const FLOW_QUALITY_MIN_PREMIUM = 90_000;
+const ORB_MIN_FLOW_QUALITY_SCORE = 58;
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
 
 const DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
@@ -55,8 +58,9 @@ const EMA_MIN_SLOPE_POINTS = 0.05;
 const EMA_PRICE_TOLERANCE_POINTS = 4;
 const ORB_WINDOW_MINUTES = 30;
 const ORB_ACTIVE_WINDOW_MINUTES = 120;
-const ORB_RECLAIM_TOLERANCE_POINTS = 4;
-const TREND_PULLBACK_EMA_DISTANCE_POINTS = 6;
+const ORB_RECLAIM_TOLERANCE_POINTS = 8;
+const ORB_BREAK_CONFIRM_POINTS = 1.5;
+const TREND_PULLBACK_EMA_DISTANCE_POINTS = 10;
 const FLIP_RECLAIM_TOLERANCE_POINTS = 6;
 const LATE_DAY_FADE_CUTOFF_MINUTES = 300;
 const SESSION_OPEN_MINUTE_ET = 9 * 60 + 30;
@@ -68,6 +72,16 @@ const MEAN_REVERSION_T1_R_MAX_MULTIPLIER = 1.85;
 const MEAN_REVERSION_T2_R_MAX_MULTIPLIER = 2.7;
 const FLIP_RECLAIM_T1_R_MULTIPLIER = 1.55;
 const FLIP_RECLAIM_T2_R_MULTIPLIER = 2.55;
+const TREND_PULLBACK_T1_R_MIN_MULTIPLIER = 1.1;
+const TREND_PULLBACK_T1_R_MAX_MULTIPLIER = 2.2;
+const TREND_PULLBACK_T2_R_MIN_MULTIPLIER = 1.75;
+const TREND_PULLBACK_T2_R_MAX_MULTIPLIER = 3.4;
+const TREND_PULLBACK_TARGET_SCALE = 0.95;
+const ORB_BREAKOUT_T1_R_MIN_MULTIPLIER = 1.15;
+const ORB_BREAKOUT_T1_R_MAX_MULTIPLIER = 2.4;
+const ORB_BREAKOUT_T2_R_MIN_MULTIPLIER = 1.9;
+const ORB_BREAKOUT_T2_R_MAX_MULTIPLIER = 3.8;
+const MEAN_FADE_TARGET_SCALE = 0.95;
 const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
 const DIVERSIFICATION_RECOVERY_COMBOS: ReadonlySet<string> = new Set([
   'mean_reversion|ranging',
@@ -119,11 +133,11 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     maxFirstSeenMinuteEt: 165,
   },
   trend_pullback: {
-    minConfluenceScore: 4,
-    minPWinCalibrated: 0.62,
-    minEvR: 0.32,
+    minConfluenceScore: 3,
+    minPWinCalibrated: 0.58,
+    minEvR: 0.24,
     requireFlowConfirmation: true,
-    minAlignmentPct: 58,
+    minAlignmentPct: 50,
     requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
     maxFirstSeenMinuteEt: 300,
@@ -191,6 +205,14 @@ interface SetupIndicatorContext {
   minutesSinceOpen: number;
   sessionOpenTimestamp: string;
   asOfTimestamp: string;
+}
+
+interface FlowQualitySummary {
+  score: number;
+  recentDirectionalEvents: number;
+  recentDirectionalPremium: number;
+  localDirectionalEvents: number;
+  localDirectionalPremium: number;
 }
 
 interface SetupContextState {
@@ -405,10 +427,16 @@ function inferSetupTypeForZone(input: {
     : (Number.isFinite(orbLow)
       && Math.abs(input.zoneCenter - (orbLow as number)) <= ORB_RECLAIM_TOLERANCE_POINTS
       && input.currentPrice <= (orbLow as number) + ORB_RECLAIM_TOLERANCE_POINTS);
+  const openingRangeBreakConfirmed = input.direction === 'bullish'
+    ? (Number.isFinite(orbHigh) && input.currentPrice >= (orbHigh as number) + ORB_BREAK_CONFIRM_POINTS)
+    : (Number.isFinite(orbLow) && input.currentPrice <= (orbLow as number) - ORB_BREAK_CONFIRM_POINTS);
   const nearFastEma = input.indicatorContext
     ? Math.abs(input.currentPrice - input.indicatorContext.emaFast) <= TREND_PULLBACK_EMA_DISTANCE_POINTS
     : false;
-  const openingMomentumConfirmed = inMomentumState || (directionalMomentum && volumeTrend === 'rising');
+  const openingMomentumConfirmed = inMomentumState || (
+    directionalMomentum
+    && (volumeTrend === 'rising' || (minutesSinceOpen <= 75 && volumeTrend === 'flat'))
+  );
   const intradayTrendStructure = (
     hasIndicatorContext
     && nearFastEma
@@ -426,7 +454,7 @@ function inferSetupTypeForZone(input: {
     hasIndicatorContext
     && 
     inOpeningWindow
-    && nearOpeningRangeEdge
+    && (nearOpeningRangeEdge || openingRangeBreakConfirmed)
     && openingMomentumConfirmed
     && (
       input.regime === 'breakout'
@@ -493,6 +521,55 @@ function adjustTargetsForSetupType(input: {
   flipPoint: number;
   indicatorContext: SetupIndicatorContext | null;
 }): { target1: number; target2: number } {
+  if (
+    input.setupType === 'trend_pullback'
+    || input.setupType === 'orb_breakout'
+    || input.setupType === 'trend_continuation'
+  ) {
+    const entryMid = (input.entryLow + input.entryHigh) / 2;
+    const risk = Math.max(0.5, Math.abs(entryMid - input.stop));
+    const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
+    const t1MinMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T1_R_MIN_MULTIPLIER
+      : TREND_PULLBACK_T1_R_MIN_MULTIPLIER;
+    const t1MaxMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T1_R_MAX_MULTIPLIER
+      : TREND_PULLBACK_T1_R_MAX_MULTIPLIER;
+    const t2MinMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T2_R_MIN_MULTIPLIER
+      : TREND_PULLBACK_T2_R_MIN_MULTIPLIER;
+    const t2MaxMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T2_R_MAX_MULTIPLIER
+      : TREND_PULLBACK_T2_R_MAX_MULTIPLIER;
+    const targetScale = input.setupType === 'trend_pullback'
+      ? TREND_PULLBACK_TARGET_SCALE
+      : 1;
+
+    const existingT1Distance = Math.max(0.25, Math.abs(input.target1 - entryMid));
+    const existingT2Distance = Math.max(0.4, Math.abs(input.target2 - entryMid));
+    const boundedT1Distance = Math.max(
+      risk * t1MinMultiplier,
+      Math.min(risk * t1MaxMultiplier, existingT1Distance),
+    );
+    const boundedT2Distance = Math.max(
+      boundedT1Distance + Math.max(0.35, risk * 0.55),
+      Math.max(
+        risk * t2MinMultiplier,
+        Math.min(risk * t2MaxMultiplier, existingT2Distance),
+      ),
+    );
+    const scaledT1Distance = Math.max(0.25, boundedT1Distance * targetScale);
+    const scaledT2Distance = Math.max(
+      scaledT1Distance + Math.max(0.3, risk * 0.5),
+      boundedT2Distance * targetScale,
+    );
+
+    return {
+      target1: round(entryMid + (directionMultiplier * scaledT1Distance), 2),
+      target2: round(entryMid + (directionMultiplier * scaledT2Distance), 2),
+    };
+  }
+
   if (
     input.setupType !== 'fade_at_wall'
     && input.setupType !== 'mean_reversion'
@@ -575,6 +652,18 @@ function adjustTargetsForSetupType(input: {
         target2 = target1 - Math.max(risk * 0.8, 1.25);
       }
     }
+  }
+
+  if (input.setupType === 'mean_reversion' || input.setupType === 'fade_at_wall') {
+    const entryMid = (input.entryLow + input.entryHigh) / 2;
+    const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
+    const target1Distance = Math.max(0.25, Math.abs(target1 - entryMid) * MEAN_FADE_TARGET_SCALE);
+    const target2Distance = Math.max(
+      target1Distance + 0.25,
+      Math.abs(target2 - entryMid) * MEAN_FADE_TARGET_SCALE,
+    );
+    target1 = entryMid + (directionMultiplier * target1Distance);
+    target2 = entryMid + (directionMultiplier * target2Distance);
   }
 
   return {
@@ -738,6 +827,37 @@ function hasFlowConfirmation(input: {
     localPremium >= FLOW_MIN_LOCAL_PREMIUM
     || (local.length >= FLOW_MIN_LOCAL_EVENTS && localPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM)
   );
+}
+
+function evaluateFlowQuality(input: {
+  flowEvents: SPXFlowEvent[];
+  direction: 'bullish' | 'bearish';
+  zoneCenter: number;
+  nowMs: number;
+}): FlowQualitySummary {
+  const directional = input.flowEvents.filter((event) => (
+    event.direction === input.direction && isRecentFlowEvent(event, input.nowMs)
+  ));
+  const recentDirectionalPremium = directional.reduce((sum, event) => sum + event.premium, 0);
+  const localDirectional = directional.filter((event) => (
+    Math.abs(event.strike - input.zoneCenter) <= FLOW_ZONE_TOLERANCE_POINTS
+  ));
+  const localDirectionalPremium = localDirectional.reduce((sum, event) => sum + event.premium, 0);
+
+  const eventCountScore = Math.min(100, directional.length * 20);
+  const premiumScore = Math.min(100, (recentDirectionalPremium / FLOW_QUALITY_MIN_PREMIUM) * 100);
+  const localCoverage = recentDirectionalPremium > 0
+    ? localDirectionalPremium / recentDirectionalPremium
+    : 0;
+  const localCoverageScore = Math.min(100, localCoverage * 100);
+
+  return {
+    score: round((eventCountScore * 0.35) + (premiumScore * 0.40) + (localCoverageScore * 0.25), 2),
+    recentDirectionalEvents: directional.length,
+    recentDirectionalPremium: round(recentDirectionalPremium, 2),
+    localDirectionalEvents: localDirectional.length,
+    localDirectionalPremium: round(localDirectionalPremium, 2),
+  };
 }
 
 function flowAlignmentPercent(input: {
@@ -1189,6 +1309,7 @@ function evaluateOptimizationGate(input: {
   evR: number;
   flowConfirmed: boolean;
   flowAlignmentPct: number | null;
+  flowQuality: FlowQualitySummary;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
   pausedSetupTypes: Set<string>;
@@ -1237,6 +1358,21 @@ function evaluateOptimizationGate(input: {
     || setupFloors?.requireVolumeRegimeAlignment === true
   );
   const comboKey = `${input.setupType}|${input.regime}`;
+  const firstSeenMinute = toSessionMinuteEt(input.firstSeenAtIso);
+  const trendFamilyFlowGraceEligible = (
+    input.setupType === 'trend_pullback'
+    && firstSeenMinute != null
+    && firstSeenMinute <= 300
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(3, minConfluenceScore - 1)
+  );
+  const trendFamilyVolumeGraceEligible = (
+    input.setupType === 'trend_pullback'
+    && firstSeenMinute != null
+    && firstSeenMinute <= 240
+    && input.emaAligned
+    && input.confluenceScore >= 3
+  );
   if (input.pausedSetupTypes.has(input.setupType)) {
     reasons.push(`setup_type_paused:${input.setupType}`);
   }
@@ -1252,26 +1388,25 @@ function evaluateOptimizationGate(input: {
   if (input.evR < minEvR) {
     reasons.push(`evr_below_floor:${round(input.evR, 3)}<${round(minEvR, 3)}`);
   }
-  if (requireFlowConfirmation && !input.flowConfirmed) {
+  if (requireFlowConfirmation && !input.flowConfirmed && !trendFamilyFlowGraceEligible) {
     reasons.push('flow_confirmation_required');
   }
   if (input.flowAlignmentPct != null) {
     if (minAlignmentPct > 0 && input.flowAlignmentPct < minAlignmentPct) {
       reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${minAlignmentPct}`);
     }
-  } else if (requireFlowConfirmation && minAlignmentPct > 0) {
+  } else if (requireFlowConfirmation && minAlignmentPct > 0 && !trendFamilyFlowGraceEligible) {
     reasons.push('flow_alignment_unavailable');
   }
   if (requireEmaAlignment && !input.emaAligned) {
     reasons.push('ema_alignment_required');
   }
-  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned) {
+  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned && !trendFamilyVolumeGraceEligible) {
     reasons.push('volume_regime_alignment_required');
   }
   const setupSpecificMaxMinute = setupFloors?.maxFirstSeenMinuteEt;
   const timingGateEnabled = input.profile.timingGate.enabled || Number.isFinite(setupSpecificMaxMinute);
   if (timingGateEnabled) {
-    const firstSeenMinute = toSessionMinuteEt(input.firstSeenAtIso);
     const profileMaxMinute = input.profile.timingGate.enabled
       ? maxFirstSeenMinuteForSetup(input.setupType, input.profile)
       : 390;
@@ -1293,6 +1428,28 @@ function evaluateOptimizationGate(input: {
     }
     if (input.direction === 'bullish' && input.flowAlignmentPct != null && input.flowAlignmentPct >= 75) {
       reasons.push(`fade_bullish_alignment_conflict:${round(input.flowAlignmentPct, 2)}`);
+    }
+  }
+
+  if (input.setupType === 'orb_breakout') {
+    if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
+      reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
+    }
+    if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
+      reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
+    }
+  }
+
+  if (input.setupType === 'trend_pullback' && firstSeenMinute != null) {
+    const trendTimingByRegime: Record<Regime, number> = {
+      breakout: 300,
+      trending: 320,
+      compression: 240,
+      ranging: 210,
+    };
+    const trendMaxMinute = trendTimingByRegime[input.regime];
+    if (firstSeenMinute > trendMaxMinute) {
+      reasons.push(`trend_timing_window:${firstSeenMinute}>${trendMaxMinute}`);
     }
   }
 
@@ -1576,6 +1733,12 @@ export async function detectActiveSetups(options?: {
       zoneCenter,
       nowMs,
     });
+    const flowQuality = evaluateFlowQuality({
+      flowEvents,
+      direction,
+      zoneCenter,
+      nowMs,
+    });
     const setupType = inferSetupTypeForZone({
       regime: regimeState.regime,
       direction,
@@ -1794,6 +1957,7 @@ export async function detectActiveSetups(options?: {
       evR,
       flowConfirmed,
       flowAlignmentPct,
+      flowQuality,
       emaAligned,
       volumeRegimeAligned,
       pausedSetupTypes,
@@ -1825,7 +1989,11 @@ export async function detectActiveSetups(options?: {
         config: scoringConfig,
       })
       : (gatedStatus === 'ready' || gatedStatus === 'triggered') ? 'watchlist' : 'hidden';
-    const gatedTier = gateStatus === 'blocked' ? 'hidden' : tier;
+    const gatedTier = gateStatus === 'blocked'
+      ? 'hidden'
+      : (gatedStatus === 'triggered' && tier === 'hidden')
+        ? 'watchlist'
+        : tier;
     const tradeManagementPolicy = resolveTradeManagementForSetup({
       setupType,
       regime: regimeState.regime,
