@@ -37,6 +37,7 @@ describe('SPX UX flags', () => {
 
     expect(enabled).toEqual([
       'oneClickEntry',
+      'setupRealtimeAlertsV1',
       'mobileFullTradeFocus',
       'keyboardShortcuts',
       'layoutStateMachine',

@@ -190,6 +190,44 @@ function applyGeometryAdjustment(
   };
 }
 
+function toSessionMinuteEt(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  const et = toEasternTime(new Date(parsed));
+  const sessionOpenMinute = (9 * 60) + 30;
+  return Math.max(0, (et.hour * 60 + et.minute) - sessionOpenMinute);
+}
+
+function toGeometryBucket(firstSeenAtIso: string | null): 'opening' | 'midday' | 'late' {
+  const minuteSinceOpen = toSessionMinuteEt(firstSeenAtIso);
+  if (minuteSinceOpen == null) return 'midday';
+  if (minuteSinceOpen <= 90) return 'opening';
+  if (minuteSinceOpen <= 240) return 'midday';
+  return 'late';
+}
+
+function resolveGeometryAdjustmentForSetup(
+  setup: BacktestSetupCandidate,
+  map: Record<string, SPXBacktestGeometryAdjustment>,
+): SPXBacktestGeometryAdjustment | null {
+  const regime = setup.regime || 'unknown';
+  const bucket = toGeometryBucket(setup.firstSeenAt);
+  const keys = [
+    `${setup.setupType}|${regime}|${bucket}`,
+    `${setup.setupType}|${regime}`,
+    `${setup.setupType}|${bucket}`,
+    setup.setupType,
+  ];
+  for (const key of keys) {
+    const adjustment = map[key];
+    if (adjustment && typeof adjustment === 'object' && !Array.isArray(adjustment)) {
+      return adjustment;
+    }
+  }
+  return null;
+}
+
 export interface SPXWinRateBacktestResult {
   dateRange: { from: string; to: string };
   sourceUsed: InternalBacktestSource | 'none';
@@ -1167,7 +1205,8 @@ export async function runSPXWinRateBacktest(input: {
     : null;
   if (geometryBySetupType) {
     setups = setups.map((setup) => {
-      const adjusted = applyGeometryAdjustment(setup, geometryBySetupType[setup.setupType]);
+      const adjustment = resolveGeometryAdjustmentForSetup(setup, geometryBySetupType);
+      const adjusted = applyGeometryAdjustment(setup, adjustment);
       if (
         adjusted.stopPrice !== setup.stopPrice
         || adjusted.target1Price !== setup.target1Price

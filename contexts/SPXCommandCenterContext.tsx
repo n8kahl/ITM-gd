@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { SPXAnalyticsProvider, type SPXAnalyticsContextState } from '@/contexts/spx/SPXAnalyticsContext'
 import { SPXCoachProvider, type SPXCoachContextState } from '@/contexts/spx/SPXCoachContext'
@@ -149,6 +150,8 @@ const COACH_DECISION_FAILURE_BACKOFF_BASE_MS = 4_000
 const COACH_DECISION_FAILURE_BACKOFF_MAX_MS = 60_000
 const COACH_DECISION_RATE_LIMIT_BACKOFF_MS = 15_000
 const COACH_DECISION_AUTO_MIN_REFRESH_MS = 2_500
+const SETUP_TRIGGER_TOAST_COOLDOWN_MS = 90_000
+const SETUP_TRIGGER_BROWSER_COOLDOWN_MS = 180_000
 const SETUP_STATUS_PRIORITY: Record<Setup['status'], number> = {
   triggered: 0,
   ready: 1,
@@ -452,6 +455,19 @@ function isCoachPriority(value: unknown): value is CoachMessage['priority'] {
   return value === 'alert' || value === 'setup' || value === 'guidance' || value === 'behavioral'
 }
 
+function humanizeSetupType(type: string): string {
+  return type
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ')
+}
+
+function setupAlertSummary(setup: Setup): string {
+  const side = setup.direction === 'bullish' ? 'LONG' : 'SHORT'
+  const entry = `${setup.entryZone.low.toFixed(2)}-${setup.entryZone.high.toFixed(2)}`
+  return `${side} ${humanizeSetupType(setup.type)} | entry ${entry} | stop ${setup.stop.toFixed(2)} | T1 ${setup.target1.price.toFixed(2)} | T2 ${setup.target2.price.toFixed(2)}`
+}
+
 const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null)
 
 export function SPXCommandCenterProvider({ children }: { children: React.ReactNode }) {
@@ -481,6 +497,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [coachDecisionStatus, setCoachDecisionStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [coachDecisionError, setCoachDecisionError] = useState<string | null>(null)
   const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
+  const [setupTriggerNotificationsEnabled, setSetupTriggerNotificationsEnabled] = useState(true)
   const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
   const selectedSetupIdRef = useRef<string | null>(null)
   const inTradeSetupIdRef = useRef<string | null>(null)
@@ -501,6 +518,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const lastFeedTrustTransitionRef = useRef<string | null>(null)
   const activeSetupsRef = useRef<Setup[]>([])
   const proactiveCooldownByKeyRef = useRef<Record<string, number>>({})
+  const setupToastCooldownByKeyRef = useRef<Record<string, number>>({})
+  const setupBrowserCooldownByKeyRef = useRef<Record<string, number>>({})
   const previousSetupStatusByIdRef = useRef<Record<string, Setup['status']>>({})
   const contractEndpointModeRef = useRef<'unknown' | 'get' | 'post' | 'unavailable'>('unknown')
   const contractEndpointUnavailableUntilRef = useRef(0)
@@ -525,6 +544,35 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     setInTradeContract(persisted.contract || null)
     setTradeEnteredAt(persisted.enteredAt)
     setSelectedSetupId((current) => current || persisted.setupId)
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let active = true
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/members/dashboard/notification-preferences', {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        if (!response.ok) return
+        const payload = await response.json() as {
+          success?: boolean
+          data?: { setups?: boolean }
+        }
+        if (!active || payload.success !== true) return
+        setSetupTriggerNotificationsEnabled(payload.data?.setups !== false)
+      } catch {
+        // Keep safe default enabled state.
+      }
+    })()
+
+    return () => {
+      active = false
+      controller.abort()
+    }
   }, [])
 
   const handleRealtimeMessage = useCallback((message: RealtimeSocketMessage) => {
@@ -1172,21 +1220,56 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     })
   }, [canEmitProactiveMessage])
 
+  const emitSetupTriggeredNotification = useCallback((setup: Setup) => {
+    if (!uxFlags.setupRealtimeAlertsV1) return
+    const now = Date.now()
+    const cooldownKey = `triggered:${setup.id}`
+    const lastToastAt = setupToastCooldownByKeyRef.current[cooldownKey] || 0
+    if (now - lastToastAt < SETUP_TRIGGER_TOAST_COOLDOWN_MS) return
+
+    setupToastCooldownByKeyRef.current[cooldownKey] = now
+    const title = `${humanizeSetupType(setup.type)} Triggered`
+    toast(title, {
+      id: `spx_setup_triggered_${setup.id}`,
+      description: setupAlertSummary(setup),
+      duration: 8_000,
+    })
+
+    if (!setupTriggerNotificationsEnabled) return
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    if (!('Notification' in window)) return
+    if (document.visibilityState === 'visible') return
+    if (Notification.permission !== 'granted') return
+
+    const lastBrowserAt = setupBrowserCooldownByKeyRef.current[cooldownKey] || 0
+    if (now - lastBrowserAt < SETUP_TRIGGER_BROWSER_COOLDOWN_MS) return
+    setupBrowserCooldownByKeyRef.current[cooldownKey] = now
+
+    const notification = new Notification(title, {
+      body: setupAlertSummary(setup),
+      icon: '/hero-logo.png',
+      tag: `spx-trigger-${setup.id}`,
+      requireInteraction: false,
+    })
+    notification.onclick = () => {
+      window.focus()
+      notification.close()
+    }
+  }, [setupTriggerNotificationsEnabled, uxFlags.setupRealtimeAlertsV1])
+
   useEffect(() => {
     const nextStatusById: Record<string, Setup['status']> = {}
     for (const setup of activeSetups) {
       nextStatusById[setup.id] = setup.status
     }
 
-    if (!uxFlags.coachProactive) {
-      previousSetupStatusByIdRef.current = nextStatusById
-      return
-    }
-
     for (const setup of activeSetups) {
       const previousStatus = previousSetupStatusByIdRef.current[setup.id]
       if (!previousStatus) continue
       if (previousStatus === 'triggered' || setup.status !== 'triggered') continue
+
+      emitSetupTriggeredNotification(setup)
+      if (!uxFlags.coachProactive) continue
 
       const flowSummary = summarizeFlowAlignment(flowEvents.slice(0, 12), setup.direction)
       const now = new Date().toISOString()
@@ -1209,7 +1292,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
 
     previousSetupStatusByIdRef.current = nextStatusById
-  }, [activeSetups, flowEvents, pushProactiveCoachMessage, uxFlags.coachProactive])
+  }, [
+    activeSetups,
+    emitSetupTriggeredNotification,
+    flowEvents,
+    pushProactiveCoachMessage,
+    uxFlags.coachProactive,
+  ])
 
   useEffect(() => {
     if (!uxFlags.coachProactive) return
