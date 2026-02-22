@@ -7,6 +7,7 @@ import { getFlowEvents } from '../flowEngine';
 import { getActiveSPXOptimizationProfile } from '../optimizer';
 import { loadSetupPWinCalibrationModel } from '../setupCalibration';
 import { cacheGet, cacheSet } from '../../../config/redis';
+import { getRecentTicks } from '../../tickCache';
 
 jest.mock('../../../lib/logger', () => ({
   logger: {
@@ -50,6 +51,10 @@ jest.mock('../setupCalibration', () => ({
   loadSetupPWinCalibrationModel: jest.fn(),
 }));
 
+jest.mock('../../tickCache', () => ({
+  getRecentTicks: jest.fn(),
+}));
+
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
 const mockGetFibLevels = getFibLevels as jest.MockedFunction<typeof getFibLevels>;
@@ -59,6 +64,7 @@ const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as j
 const mockLoadSetupPWinCalibrationModel = loadSetupPWinCalibrationModel as jest.MockedFunction<typeof loadSetupPWinCalibrationModel>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
+const mockGetRecentTicks = getRecentTicks as jest.MockedFunction<typeof getRecentTicks>;
 const originalEnv = { ...process.env };
 
 function buildBaseMocks(currentPrice: number) {
@@ -139,6 +145,7 @@ describe('spx/setupDetector', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCacheSet.mockResolvedValue(undefined as never);
+    mockGetRecentTicks.mockReturnValue([]);
     mockGetActiveSPXOptimizationProfile.mockResolvedValue({
       source: 'default',
       generatedAt: new Date().toISOString(),
@@ -169,6 +176,23 @@ describe('spx/setupDetector', () => {
         partialAtT1Pct: 0.5,
         moveStopToBreakeven: true,
       },
+      geometryPolicy: {
+        bySetupType: {},
+        bySetupRegime: {},
+        bySetupRegimeTimeBucket: {},
+      },
+      macroMicroPolicy: {
+        defaultMinMacroAlignmentScore: 34,
+        defaultRequireTrendMicrostructureAlignment: true,
+        defaultFailClosedWhenUnavailable: false,
+        defaultMinMicroAggressorSkewAbs: 0.1,
+        defaultMinMicroImbalanceAbs: 0.06,
+        defaultMinMicroQuoteCoveragePct: 0.4,
+        defaultMaxMicroSpreadBps: 30,
+        bySetupType: {},
+        bySetupRegime: {},
+        bySetupRegimeTimeBucket: {},
+      },
       walkForward: {
         trainingDays: 20,
         validationDays: 5,
@@ -177,6 +201,7 @@ describe('spx/setupDetector', () => {
           t1: 0.6,
           t2: 0.4,
           failurePenalty: 0.45,
+          expectancyR: 14,
         },
       },
       driftControl: {
@@ -185,6 +210,10 @@ describe('spx/setupDetector', () => {
         longWindowDays: 20,
         maxDropPct: 12,
         minLongWindowTrades: 20,
+        autoQuarantineEnabled: false,
+        triggerRateWindowDays: 20,
+        minQuarantineOpportunities: 20,
+        minTriggerRatePct: 3,
         pausedSetupTypes: [],
       },
     } as never);
@@ -367,6 +396,75 @@ describe('spx/setupDetector', () => {
     expect(typeof setup.rank).toBe('number');
     expect(setup.rank).toBe(1);
     expect(['sniper_primary', 'sniper_secondary', 'watchlist', 'hidden']).toContain(setup.tier);
+  });
+
+  it('adds microstructure confluence when tick aggressor flow aligns with setup direction', async () => {
+    process.env.SPX_SETUP_MICROSTRUCTURE_MIN_TICKS = '1';
+    process.env.SPX_SETUP_MICROSTRUCTURE_MIN_DIRECTIONAL_VOLUME = '1';
+    process.env.SPX_SETUP_MICROSTRUCTURE_MIN_QUOTE_COVERAGE_PCT = '0';
+    process.env.SPX_SETUP_MICROSTRUCTURE_ENABLED = 'true';
+    process.env.SPX_SETUP_MICROSTRUCTURE_REQUIRE_TREND_ALIGNMENT = 'false';
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    const now = Date.now();
+    mockGetRecentTicks.mockReturnValue([
+      {
+        symbol: 'SPX',
+        rawSymbol: 'I:SPX',
+        price: 101,
+        size: 25,
+        timestamp: now - 1_500,
+        sequence: 1001,
+        bid: 100.95,
+        ask: 101.05,
+        bidSize: 120,
+        askSize: 60,
+        aggressorSide: 'buyer',
+      },
+      {
+        symbol: 'SPX',
+        rawSymbol: 'I:SPX',
+        price: 101.1,
+        size: 20,
+        timestamp: now - 900,
+        sequence: 1002,
+        bid: 101.0,
+        ask: 101.1,
+        bidSize: 150,
+        askSize: 70,
+        aggressorSide: 'buyer',
+      },
+    ]);
+
+    const setups = await detectActiveSetups({ forceRefresh: true });
+    const setup = setups[0];
+
+    expect(setup.confluenceSources).toContain('microstructure_alignment');
+    expect(setup.microstructure?.available).toBe(true);
+    expect(setup.microstructure?.aligned).toBe(true);
+    expect(typeof setup.microstructureScore).toBe('number');
+  });
+
+  it('blocks new actionable setups when macro alignment score falls below kill-switch floor', async () => {
+    process.env.SPX_SETUP_MACRO_KILLSWITCH_ENABLED = 'true';
+    process.env.SPX_SETUP_MACRO_MIN_ALIGNMENT_SCORE = '70';
+    buildBaseMocks(101);
+    mockClassifyCurrentRegime.mockResolvedValue({
+      regime: 'ranging',
+      direction: 'bearish',
+      probability: 82,
+      magnitude: 'small',
+      confidence: 88,
+      timestamp: '2026-02-15T14:40:00.000Z',
+    });
+    mockCacheGet.mockResolvedValueOnce(null as never);
+
+    const setups = await detectActiveSetups({ forceRefresh: true });
+    const setup = setups[0];
+
+    expect(setup.gateStatus).toBe('blocked');
+    expect(setup.gateReasons?.some((reason) => reason.startsWith('macro_alignment_below_floor'))).toBe(true);
+    expect(setup.status).toBe('forming');
   });
 
   it('invalidates triggered setups with ttl_expired reason when triggered ttl is exceeded', async () => {

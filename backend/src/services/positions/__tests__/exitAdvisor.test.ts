@@ -29,8 +29,46 @@ describe('ExitAdvisor', () => {
 
     expect(advice.some((item) => item.type === 'take_profit')).toBe(true);
     expect(advice.some((item) => item.type === 'stop_loss')).toBe(true);
-    expect(advice.some((item) => item.suggestedAction.action === 'scale_out')).toBe(true);
-    expect(advice.some((item) => item.suggestedAction.action === 'trail_stop')).toBe(true);
+    expect(advice.some((item) => (
+      item.suggestedAction.action === 'scale_out'
+      && item.suggestedAction.milestone === '1R'
+      && item.suggestedAction.closePct === 65
+      && item.suggestedAction.moveStopToBreakeven === true
+    ))).toBe(true);
+    expect(advice.some((item) => (
+      item.suggestedAction.action === 'trail_stop'
+      && item.suggestedAction.trailModel === 'pivot_runner'
+    ))).toBe(true);
+  });
+
+  it('issues deterministic 2R scale guidance for high-R winners', () => {
+    const advice = advisor.generateAdviceFromInputs([
+      {
+        positionId: 'pos-1b',
+        symbol: 'SPX',
+        type: 'call',
+        quantity: 1,
+        strike: 6000,
+        expiry: '2026-02-20',
+        currentPrice: 60,
+        currentValue: 6000,
+        pnl: 2600,
+        pnlPct: 130,
+        daysToExpiry: 8,
+        maxLoss: 1000,
+      },
+    ]);
+
+    expect(advice.some((item) => (
+      item.suggestedAction.action === 'scale_out'
+      && item.suggestedAction.milestone === '2R'
+      && item.suggestedAction.closePct === 25
+      && item.suggestedAction.retainedRunnerPct === 10
+    ))).toBe(true);
+    expect(advice.some((item) => (
+      item.suggestedAction.action === 'trail_stop'
+      && item.suggestedAction.trailModel === 'pivot_runner_tight'
+    ))).toBe(true);
   });
 
   it('returns stop-loss advice for large drawdowns', () => {

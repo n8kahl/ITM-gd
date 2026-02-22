@@ -1,5 +1,7 @@
 import { logger } from '../lib/logger';
 
+export type TickAggressorSide = 'buyer' | 'seller' | 'neutral';
+
 export interface NormalizedMarketTick {
   symbol: string;
   rawSymbol: string;
@@ -7,6 +9,11 @@ export interface NormalizedMarketTick {
   size: number;
   timestamp: number;
   sequence: number | null;
+  bid?: number | null;
+  ask?: number | null;
+  bidSize?: number | null;
+  askSize?: number | null;
+  aggressorSide?: TickAggressorSide;
 }
 
 const DEFAULT_MAX_TICKS_PER_SYMBOL = 6000;
@@ -22,6 +29,40 @@ export function normalizeTickSymbol(symbol: string): string {
 
 function toFiniteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function toOptionalPositiveNumber(value: unknown): number | null {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim().length > 0
+      ? Number(value)
+      : NaN;
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function toOptionalNonNegativeSize(value: unknown): number | null {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim().length > 0
+      ? Number(value)
+      : NaN;
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+}
+
+function deriveAggressorSide(input: {
+  explicit: TickAggressorSide | null;
+  price: number;
+  bid: number | null;
+  ask: number | null;
+}): TickAggressorSide {
+  if (input.explicit === 'buyer' || input.explicit === 'seller' || input.explicit === 'neutral') {
+    return input.explicit;
+  }
+  if (input.ask != null && input.price >= input.ask) return 'buyer';
+  if (input.bid != null && input.price <= input.bid) return 'seller';
+  return 'neutral';
 }
 
 function trimBuffer(symbol: string): void {
@@ -52,6 +93,19 @@ export function ingestTick(tick: NormalizedMarketTick): boolean {
   const sequence = typeof tick.sequence === 'number' && Number.isFinite(tick.sequence)
     ? Math.floor(tick.sequence)
     : null;
+  const bid = toOptionalPositiveNumber(tick.bid);
+  const ask = toOptionalPositiveNumber(tick.ask);
+  const bidSize = toOptionalNonNegativeSize(tick.bidSize);
+  const askSize = toOptionalNonNegativeSize(tick.askSize);
+  const explicitAggressor = tick.aggressorSide === 'buyer' || tick.aggressorSide === 'seller' || tick.aggressorSide === 'neutral'
+    ? tick.aggressorSide
+    : null;
+  const aggressorSide = deriveAggressorSide({
+    explicit: explicitAggressor,
+    price,
+    bid,
+    ask,
+  });
 
   if (price <= 0 || timestamp <= 0) {
     logger.debug('Rejected invalid tick', { symbol, price, timestamp });
@@ -64,7 +118,12 @@ export function ingestTick(tick: NormalizedMarketTick): boolean {
       latest.price === price
       && latest.size === size
       && latest.timestamp === timestamp
-      && latest.sequence === sequence;
+      && latest.sequence === sequence
+      && (latest.bid ?? null) === bid
+      && (latest.ask ?? null) === ask
+      && (latest.bidSize ?? null) === bidSize
+      && (latest.askSize ?? null) === askSize
+      && (latest.aggressorSide ?? 'neutral') === aggressorSide;
     if (isDuplicate) return false;
   }
 
@@ -84,6 +143,11 @@ export function ingestTick(tick: NormalizedMarketTick): boolean {
     size,
     timestamp,
     sequence,
+    bid,
+    ask,
+    bidSize,
+    askSize,
+    aggressorSide,
   };
 
   latestTickBySymbol.set(symbol, normalized);

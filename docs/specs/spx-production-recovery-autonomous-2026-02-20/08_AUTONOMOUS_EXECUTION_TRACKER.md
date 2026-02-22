@@ -855,6 +855,102 @@ Update this file at the end of each autonomous execution session.
 - Blockers:
   - None.
 
+### Session 2026-02-22 03:35 ET
+- Goal: Execute Phase 13 slice `P13-S1` to add tick/quote microstructure fidelity to the realtime ingestion path.
+- Completed:
+  - Extended normalized tick schema with quote fields and aggressor proxy.
+  - Upgraded microbar aggregation with side volumes, delta, and bid/ask imbalance.
+  - Added additive websocket microbar payload fields.
+  - Added/updated tick + microbar tests.
+  - Documented slice report:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S1_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/__tests__/massiveTickStream.test.ts`
+  - `pnpm --dir backend test -- src/services/__tests__/tickCache.test.ts`
+  - `pnpm --dir backend test -- src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+- Risks found:
+  - Quote fields can be sparse across feed intervals.
+- Risks mitigated:
+  - Nullable additive schema + `ENABLE_L2_MICROSTRUCTURE` rollback flag.
+- Next slice:
+  - `P13-S2`: integrate macro/microstructure confluence and gate logic into production setup detector.
+- Blockers:
+  - None.
+
+### Session 2026-02-22 04:18 ET
+- Goal: Execute Phase 13 slice `P13-S2` to reduce false positives with macro + microstructure setup gating.
+- Completed:
+  - Added macro kill-switch alignment scoring and explicit gate reason telemetry.
+  - Added live tick-cache microstructure summary + alignment scoring in `spx/setupDetector`.
+  - Added strike-flow and intraday gamma-pressure confluence sources.
+  - Persisted macro/microstructure diagnostics in setup metadata for optimizer governance.
+  - Added targeted detector tests for microstructure confluence and macro gate blocking.
+  - Documented slice report:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S2_2026-02-22.md`
+- Tests run:
+  - `pnpm exec eslint --no-ignore backend/src/services/spx/setupDetector.ts backend/src/services/spx/types.ts backend/src/services/spx/outcomeTracker.ts backend/src/services/spx/__tests__/setupDetector.test.ts`
+  - `pnpm --dir backend test -- src/services/spx/__tests__/setupDetector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+- Risks found:
+  - Strict macro/microstructure thresholds can suppress setup throughput if misconfigured.
+- Risks mitigated:
+  - Thresholds are env-tunable; microstructure remains fail-open by default when unavailable.
+  - Historical timestamp runs explicitly bypass live tick-cache microstructure to avoid replay contamination.
+- Next slice:
+  - `P13-S3`: ORB/trend setup-mix calibration using the new microstructure and macro telemetry.
+- Blockers:
+  - None.
+
+### Session 2026-02-22 12:58 ET
+- Goal: Execute remaining natural-next-step implementation: `P13-S3` ORB/trend setup-mix recalibration and `P13-S4` contract/exit mechanics refinements, then run promotion gates and baseline deltas.
+- Completed:
+  - Implemented telemetry-aware setup-mix recalibration in setup detector diversification policy:
+    - Added trend-family promotion constraints tied to macro/micro telemetry and calibrated quality floors.
+    - Added configurable trend-ready minimum and promotion thresholds.
+    - Updated detector telemetry logging with new diversification diagnostics.
+    - File: `/Users/natekahl/ITM-gd/backend/src/services/spx/setupDetector.ts`
+  - Implemented contract selector refinements:
+    - Regime-aware delta banding around setup target delta.
+    - Setup-family-specific 0DTE rollover cutoffs.
+    - 0DTE theta caps to reduce terminal decay exposure.
+    - File: `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+  - Implemented deterministic exit-advisor mechanics:
+    - 1R: scale 65% + breakeven discipline.
+    - 2R: scale additional 25%, retain 10% runner.
+    - Pivot-proxy runner trailing model with explicit metadata.
+    - Files:
+      - `/Users/natekahl/ITM-gd/backend/src/services/positions/exitAdvisor.ts`
+      - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+      - `/Users/natekahl/ITM-gd/backend/src/services/positions/__tests__/exitAdvisor.test.ts`
+  - Added slice documentation:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S4_2026-02-22.md`
+  - Updated process packet docs:
+    - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/services/spx/__tests__/contractSelector.test.ts src/services/positions/__tests__/exitAdvisor.test.ts src/services/spx/__tests__/setupDetector.test.ts`
+  - `pnpm --dir backend test -- src/services/__tests__/massiveTickStream.test.ts src/services/spx/__tests__/microbarAggregator.test.ts src/services/spx/__tests__/contractSelector.test.ts src/services/positions/__tests__/exitAdvisor.test.ts`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:backfill-historical 2026-02-16 2026-02-20`
+  - `LOG_LEVEL=warn pnpm --dir backend backtest:last-week instances second`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:optimizer-weekly`
+- Risks found:
+  - Promotion output remains throughput-collapsed for strict last-week replay (`triggeredCount=1`), causing severe delta vs historical baseline.
+  - Massive options-contract endpoint intermittently returned `502`/timeout during optimizer weekly scan (retries succeeded).
+- Risks mitigated:
+  - Historical backfill gate completed 5/5 days with strict second-resolution fidelity (`usedMassiveMinuteBars=false`).
+  - Retry/backoff handling allowed optimizer weekly scan to complete despite upstream instability.
+- Promotion delta vs baseline:
+  - Baseline reference: `T1 76.47%`, `T2 70.59%`, `expectancyR +1.0587`.
+  - Current strict last-week replay: `T1 0.00%`, `T2 0.00%`, `expectancyR -1.04`.
+  - Deltas: `T1 -76.47pp`, `T2 -70.59pp`, `expectancyR -2.0987R`.
+- Next slice:
+  - Recalibrate gating/mix policy to restore actionable throughput before promotion (focus: blocked/hidden/paused distribution and trend-family enablement).
+- Blockers:
+  - Promotion criteria not met due throughput collapse; production promotion should remain blocked pending policy recalibration.
+
 ## 4. Blocking Gate Checklist
 1. [x] No open P0 defects.
 2. [x] No open P1 defects.

@@ -1,4 +1,4 @@
-import type { NormalizedMarketTick } from '../tickCache';
+import type { NormalizedMarketTick, TickAggressorSide } from '../tickCache';
 
 export type MicrobarInterval = '1s' | '5s';
 
@@ -13,6 +13,13 @@ export interface TickMicrobar {
   close: number;
   volume: number;
   trades: number;
+  buyVolume: number;
+  sellVolume: number;
+  neutralVolume: number;
+  deltaVolume: number;
+  bidSize: number | null;
+  askSize: number | null;
+  bidAskImbalance: number | null;
   updatedAtMs: number;
   finalized: boolean;
   source: 'tick';
@@ -29,6 +36,13 @@ interface WorkingMicrobar {
   close: number;
   volume: number;
   trades: number;
+  buyVolume: number;
+  sellVolume: number;
+  neutralVolume: number;
+  bidSizeSum: number;
+  askSizeSum: number;
+  bidSizeSamples: number;
+  askSizeSamples: number;
   updatedAtMs: number;
 }
 
@@ -40,6 +54,12 @@ const INTERVALS: Array<{ interval: MicrobarInterval; intervalMs: number }> = [
 const workingByKey = new Map<string, WorkingMicrobar>();
 
 function mapToReadonlyMicrobar(bar: WorkingMicrobar, finalized: boolean): TickMicrobar {
+  const bidSize = bar.bidSizeSamples > 0 ? bar.bidSizeSum / bar.bidSizeSamples : null;
+  const askSize = bar.askSizeSamples > 0 ? bar.askSizeSum / bar.askSizeSamples : null;
+  const bidAskImbalance = bidSize != null && askSize != null && (bidSize + askSize) > 0
+    ? (bidSize - askSize) / (bidSize + askSize)
+    : null;
+
   return {
     symbol: bar.symbol,
     interval: bar.interval,
@@ -51,6 +71,13 @@ function mapToReadonlyMicrobar(bar: WorkingMicrobar, finalized: boolean): TickMi
     close: bar.close,
     volume: bar.volume,
     trades: bar.trades,
+    buyVolume: bar.buyVolume,
+    sellVolume: bar.sellVolume,
+    neutralVolume: bar.neutralVolume,
+    deltaVolume: bar.buyVolume - bar.sellVolume,
+    bidSize: bidSize == null ? null : Number(bidSize.toFixed(2)),
+    askSize: askSize == null ? null : Number(askSize.toFixed(2)),
+    bidAskImbalance: bidAskImbalance == null ? null : Number(bidAskImbalance.toFixed(4)),
     updatedAtMs: bar.updatedAtMs,
     finalized,
     source: 'tick',
@@ -63,6 +90,35 @@ function buildKey(symbol: string, interval: MicrobarInterval): string {
 
 function toBucketStart(timestampMs: number, intervalMs: number): number {
   return Math.floor(timestampMs / intervalMs) * intervalMs;
+}
+
+function classifyAggressorSide(tick: NormalizedMarketTick): TickAggressorSide {
+  if (tick.aggressorSide === 'buyer' || tick.aggressorSide === 'seller' || tick.aggressorSide === 'neutral') {
+    return tick.aggressorSide;
+  }
+  if (tick.ask != null && tick.price >= tick.ask) return 'buyer';
+  if (tick.bid != null && tick.price <= tick.bid) return 'seller';
+  return 'neutral';
+}
+
+function applyTickToWorkingBar(bar: WorkingMicrobar, tick: NormalizedMarketTick): void {
+  const volume = Math.max(0, Math.floor(tick.size));
+  const aggressorSide = classifyAggressorSide(tick);
+  if (aggressorSide === 'buyer') {
+    bar.buyVolume += volume;
+  } else if (aggressorSide === 'seller') {
+    bar.sellVolume += volume;
+  } else {
+    bar.neutralVolume += volume;
+  }
+  if (typeof tick.bidSize === 'number' && Number.isFinite(tick.bidSize) && tick.bidSize >= 0) {
+    bar.bidSizeSum += tick.bidSize;
+    bar.bidSizeSamples += 1;
+  }
+  if (typeof tick.askSize === 'number' && Number.isFinite(tick.askSize) && tick.askSize >= 0) {
+    bar.askSizeSum += tick.askSize;
+    bar.askSizeSamples += 1;
+  }
 }
 
 export function ingestTickMicrobars(tick: NormalizedMarketTick): TickMicrobar[] {
@@ -84,10 +140,18 @@ export function ingestTickMicrobars(tick: NormalizedMarketTick): TickMicrobar[] 
         high: tick.price,
         low: tick.price,
         close: tick.price,
-        volume: tick.size,
+        volume: Math.max(0, Math.floor(tick.size)),
         trades: 1,
+        buyVolume: 0,
+        sellVolume: 0,
+        neutralVolume: 0,
+        bidSizeSum: 0,
+        askSizeSum: 0,
+        bidSizeSamples: 0,
+        askSizeSamples: 0,
         updatedAtMs: tick.timestamp,
       };
+      applyTickToWorkingBar(created, tick);
       workingByKey.set(key, created);
       events.push(mapToReadonlyMicrobar(created, false));
       continue;
@@ -109,10 +173,18 @@ export function ingestTickMicrobars(tick: NormalizedMarketTick): TickMicrobar[] 
         high: tick.price,
         low: tick.price,
         close: tick.price,
-        volume: tick.size,
+        volume: Math.max(0, Math.floor(tick.size)),
         trades: 1,
+        buyVolume: 0,
+        sellVolume: 0,
+        neutralVolume: 0,
+        bidSizeSum: 0,
+        askSizeSum: 0,
+        bidSizeSamples: 0,
+        askSizeSamples: 0,
         updatedAtMs: tick.timestamp,
       };
+      applyTickToWorkingBar(rolled, tick);
       workingByKey.set(key, rolled);
       events.push(mapToReadonlyMicrobar(rolled, false));
       continue;
@@ -121,9 +193,10 @@ export function ingestTickMicrobars(tick: NormalizedMarketTick): TickMicrobar[] 
     working.high = Math.max(working.high, tick.price);
     working.low = Math.min(working.low, tick.price);
     working.close = tick.price;
-    working.volume += tick.size;
+    working.volume += Math.max(0, Math.floor(tick.size));
     working.trades += 1;
     working.updatedAtMs = tick.timestamp;
+    applyTickToWorkingBar(working, tick);
     events.push(mapToReadonlyMicrobar(working, false));
   }
 
@@ -139,4 +212,3 @@ export function getWorkingMicrobar(symbol: string, interval: MicrobarInterval): 
   if (!bar) return null;
   return mapToReadonlyMicrobar(bar, false);
 }
-
