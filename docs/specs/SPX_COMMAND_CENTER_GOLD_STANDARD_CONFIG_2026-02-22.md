@@ -11,6 +11,7 @@ This document defines the current production-grade baseline for:
 2. Backtest methodology and execution assumptions
 3. Optimizer guardrails and pause policy
 4. Reproducible performance baselines
+5. Contract execution safety and late-day risk controls
 
 ## Data Fidelity Standard (Massive)
 
@@ -66,6 +67,16 @@ Profile generated at: `2026-02-22T03:01:24.493Z`
 1. `partialAtT1Pct=0.65`
 2. `moveStopToBreakeven=true`
 
+### Promotion Guardrails
+
+Optimizer promotion now requires all of:
+
+1. `T1 delta >= +3.0pp`
+2. `T2 delta >= +2.0pp`
+3. `expectancy delta >= +0.10R`
+4. `failure-rate delta <= +1.0pp`
+5. `conservative objective delta >= 0`
+
 ## Setup Detector Gold Rules
 
 Source: `backend/src/services/spx/setupDetector.ts`
@@ -96,10 +107,31 @@ Source: `backend/src/services/spx/setupDetector.ts`
    - volume-regime grace (time-bound)
 2. Goal: reduce false suppression while retaining quality controls.
 
+### ORB Flow-Quality Gate
+
+1. ORB now requires minimum flow-quality score/event count before triggering.
+2. This prevents low-information ORB activations even when inference conditions are met.
+
 ### Tier Visibility Rule
 
 1. Non-blocked `triggered` setups cannot remain `hidden`.
 2. Triggered visibility defaults to at least `watchlist`.
+
+### Mean/Fade + Trend Target Refinement
+
+1. Applied conservative target tightening for:
+   - `trend_pullback` (distance scaling)
+   - `mean_reversion` and `fade_at_wall` (distance scaling)
+2. Goal: improve practical T1/T2 capture while preserving positive expectancy.
+
+## Contract Execution Gold Rules
+
+Source: `backend/src/services/spx/contractSelector.ts`
+
+1. Increased base liquidity requirements (`OI`, volume) and tightened spread filters.
+2. Tightened 0DTE rollover cutoff to `13:00 ET` (previously later).
+3. Added stricter late-day quote quality checks (spread %, absolute spread, OI floor).
+4. Effect: reduces slippage/theta decay exposure in late-session contract selection.
 
 ## Backtest Gold Methodology
 
@@ -134,20 +166,26 @@ As of 2026-02-22, strict replay on current config:
 
 ### YTD (2026-01-02 to 2026-02-20)
 
-1. `setupCount=189`
+1. `setupCount=187`
 2. `triggered=114`
-3. `T1=61.40%`
-4. `T2=50.88%`
-5. `failure=37.72%`
-6. `expectancyR=+0.4268`
+3. `T1=63.16%`
+4. `T2=51.75%`
+5. `failure=35.96%`
+6. `expectancyR=+0.4823`
 7. `resolutionUsed=second`
 8. `usedMassiveMinuteBars=false`
 
 YTD strict setup-family outcomes:
 
-1. `mean_reversion`: T1 `64.58%`, T2 `47.92%`, failure `35.42%`
-2. `fade_at_wall`: T1 `65.71%`, T2 `57.14%`, failure `34.29%`
-3. `trend_pullback`: T1 `51.61%`, T2 `48.39%`, failure `45.16%`
+1. `mean_reversion`: T1 `63.27%`, T2 `46.94%`, failure `36.73%`
+2. `fade_at_wall`: T1 `67.65%`, T2 `55.88%`, failure `32.35%`
+3. `trend_pullback`: T1 `58.06%`, T2 `54.84%`, failure `38.71%`
+
+Late-session behavior snapshot (strict YTD trigger buckets):
+
+1. `240-299 min since open`: T1 `55.56%`, T2 `55.56%`, stop `44.44%`
+2. `300+ min since open`: T1 `58.82%`, T2 `35.29%`, stop `35.29%`
+3. Interpretation: very-late entries degrade runner quality (`T2`), supporting strict late-day contract safeguards.
 
 ## ORB / Trend Diagnostics Snapshot (YTD)
 

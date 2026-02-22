@@ -25,6 +25,7 @@ Track: Production Recovery Autonomous Program
 13. Phase 11 slice P11-S9 complete: live-parity backtest filtering now excludes optimizer-paused setup types/combos by default, while optimizer/backfill research paths explicitly include paused setups for analysis continuity.
 14. Phase 11 slice P11-S10 complete: ORB/trend-pullback audit and gating rebalance, trend target-geometry bounds, triggered-tier visibility correction, and refreshed 2026 YTD/last-week Massive replays with improved strict last-week T1/T2/expectancy while keeping ORB quality-gated.
 15. Gold Standard published: `SPX_COMMAND_CENTER_GOLD_STANDARD_CONFIG_2026-02-22.md` is now the canonical live/backtest/optimizer baseline reference for SPX win-rate governance.
+16. Phase 11 slice P11-S11 complete: strict failure attribution tooling, ORB flow-quality gating, trend/mean/fade conservative target refinement, late-day contract execution hardening (including earlier 0DTE rollover), and stronger optimizer promotion guardrails (T1/T2/expectancy/failure deltas).
 
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).

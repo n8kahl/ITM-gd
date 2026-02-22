@@ -9,15 +9,19 @@ import { round } from './utils';
 
 const CONTRACT_CACHE_TTL_SECONDS = 10;
 const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered']);
-const MIN_OPEN_INTEREST = 100;
-const MIN_VOLUME = 10;
-const MAX_SPREAD_PCT = 0.28;
+const MIN_OPEN_INTEREST = 150;
+const MIN_VOLUME = 20;
+const MAX_SPREAD_PCT = 0.24;
 const CONTRACT_MULTIPLIER = 100;
 const MAX_CONTRACT_RISK_STRICT = 2_500;
 const MAX_CONTRACT_RISK_RELAXED = 3_500;
 const MAX_DELTA_STRICT = 0.65;
 const MAX_DELTA_RELAXED = 0.80;
-const ZERO_DTE_ROLLOVER_MINUTE_ET = 13 * 60 + 30;
+const ZERO_DTE_ROLLOVER_MINUTE_ET = 13 * 60;
+const LATE_DAY_FILTER_MINUTE_ET = 14 * 60;
+const LATE_DAY_MAX_SPREAD_PCT = 0.18;
+const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;
+const LATE_DAY_MIN_OPEN_INTEREST = 250;
 interface RankedContract {
   contract: OptionContract;
   score: number;
@@ -328,6 +332,8 @@ export function filterCandidates(
   relaxed: boolean,
   now: Date,
 ): OptionContract[] {
+  const nowMinuteEt = sessionMinuteEt(now);
+  const lateDay = nowMinuteEt >= LATE_DAY_FILTER_MINUTE_ET;
   const desiredType: OptionContract['type'] = setup.direction === 'bullish' ? 'call' : 'put';
   const minOI = relaxed ? 10 : MIN_OPEN_INTEREST;
   const minVol = relaxed ? 1 : MIN_VOLUME;
@@ -345,6 +351,12 @@ export function filterCandidates(
     if ((contract.openInterest || 0) < minOI && (contract.volume || 0) < minVol) return false;
     const spreadPct = getSpreadPct(contract);
     if (!Number.isFinite(spreadPct) || spreadPct > maxSpread) return false;
+    if (lateDay) {
+      const absoluteSpread = contract.ask - contract.bid;
+      if (spreadPct > LATE_DAY_MAX_SPREAD_PCT) return false;
+      if (!Number.isFinite(absoluteSpread) || absoluteSpread > LATE_DAY_MAX_ABSOLUTE_SPREAD) return false;
+      if ((contract.openInterest || 0) < LATE_DAY_MIN_OPEN_INTEREST) return false;
+    }
     if (!hasReliableQuote(contract, relaxed)) return false;
 
     const perContractRisk = contract.ask * CONTRACT_MULTIPLIER;

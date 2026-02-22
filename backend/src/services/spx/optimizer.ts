@@ -306,6 +306,10 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
 const WEEKLY_AUTO_MIN_VALIDATION_TRADES = 12;
 const WEEKLY_AUTO_MIN_OBJECTIVE_DELTA = 0.5;
 const WEEKLY_AUTO_MAX_T2_DROP_PCT = 2;
+const PROMOTION_MIN_T1_DELTA_PCT = 3;
+const PROMOTION_MIN_T2_DELTA_PCT = 2;
+const PROMOTION_MIN_EXPECTANCY_DELTA_R = 0.10;
+const PROMOTION_MAX_FAILURE_DELTA_PCT = 1;
 const WILSON_Z_95 = 1.96;
 const ADD_SETUP_MIN_T1_LOWER_BOUND_PCT = 52;
 
@@ -1387,12 +1391,20 @@ export async function runSPXOptimizerScan(input?: {
   const expectancyRDelta = round(optimizedValidationMetrics.expectancyR - baselineValidationMetrics.expectancyR, 4);
   const t1WinRateDelta = round(optimizedValidationMetrics.t1WinRatePct - baselineValidationMetrics.t1WinRatePct, 2);
   const t2WinRateDelta = round(optimizedValidationMetrics.t2WinRatePct - baselineValidationMetrics.t2WinRatePct, 2);
+  const failureRateDelta = round(optimizedValidationMetrics.failureRatePct - baselineValidationMetrics.failureRatePct, 2);
   const weeklyGuardrailPassed = !weeklyAutoMode || (
     objectiveDelta >= WEEKLY_AUTO_MIN_OBJECTIVE_DELTA
     && objectiveConservativeDelta >= 0
     && expectancyRDelta >= 0
     && t1WinRateDelta >= 0
     && t2WinRateDelta >= -WEEKLY_AUTO_MAX_T2_DROP_PCT
+  );
+  const promotionGuardrailPassed = (
+    objectiveConservativeDelta >= 0
+    && t1WinRateDelta >= PROMOTION_MIN_T1_DELTA_PCT
+    && t2WinRateDelta >= PROMOTION_MIN_T2_DELTA_PCT
+    && expectancyRDelta >= PROMOTION_MIN_EXPECTANCY_DELTA_R
+    && failureRateDelta <= PROMOTION_MAX_FAILURE_DELTA_PCT
   );
   const optimizationApplied = (
     optimizedValidationMetrics.tradeCount >= requiredValidationTrades
@@ -1404,6 +1416,7 @@ export async function runSPXOptimizerScan(input?: {
       )
     )
     && weeklyGuardrailPassed
+    && promotionGuardrailPassed
   );
 
   const activeCandidate = optimizationApplied ? bestCandidate : baselineCandidate;
@@ -1525,8 +1538,10 @@ export async function runSPXOptimizerScan(input?: {
       weeklyAutoMode
         ? `Weekly auto guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
         : 'Weekly auto guardrails not enforced for this scan mode.',
+      `Promotion guardrails: T1 delta >= ${PROMOTION_MIN_T1_DELTA_PCT}, T2 delta >= ${PROMOTION_MIN_T2_DELTA_PCT}, expectancy delta >= ${PROMOTION_MIN_EXPECTANCY_DELTA_R}, failure delta <= ${PROMOTION_MAX_FAILURE_DELTA_PCT}, conservative objective delta >= 0.`,
       `Validation objective: baseline ${baselineValidationMetrics.objectiveScore} (conservative ${baselineValidationMetrics.objectiveScoreConservative}) vs optimized ${optimizedValidationMetrics.objectiveScore} (conservative ${optimizedValidationMetrics.objectiveScoreConservative}).`,
       `Validation expectancy(R): baseline ${baselineValidationMetrics.expectancyR} (lower bound ${baselineValidationMetrics.expectancyLowerBoundR}) vs optimized ${optimizedValidationMetrics.expectancyR} (lower bound ${optimizedValidationMetrics.expectancyLowerBoundR}).`,
+      `Validation win/failure deltas: T1 ${t1WinRateDelta}, T2 ${t2WinRateDelta}, failure ${failureRateDelta}.`,
       `Flow gate: require flow confirmation=${nextProfile.flowGate.requireFlowConfirmation}, alignment floor=${nextProfile.flowGate.minAlignmentPct}.`,
       `Indicator gates: require EMA alignment=${nextProfile.indicatorGate.requireEmaAlignment}, require volume-regime alignment=${nextProfile.indicatorGate.requireVolumeRegimeAlignment}.`,
       `Timing gate: enforce=${nextProfile.timingGate.enabled}.`,

@@ -32,6 +32,9 @@ const FLOW_ZONE_TOLERANCE_POINTS = 12;
 const FLOW_MIN_DIRECTIONAL_PREMIUM = 75_000;
 const FLOW_MIN_LOCAL_PREMIUM = 150_000;
 const FLOW_MIN_LOCAL_EVENTS = 2;
+const FLOW_QUALITY_MIN_EVENTS = 2;
+const FLOW_QUALITY_MIN_PREMIUM = 90_000;
+const ORB_MIN_FLOW_QUALITY_SCORE = 58;
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
 
 const DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
@@ -73,10 +76,12 @@ const TREND_PULLBACK_T1_R_MIN_MULTIPLIER = 1.1;
 const TREND_PULLBACK_T1_R_MAX_MULTIPLIER = 2.2;
 const TREND_PULLBACK_T2_R_MIN_MULTIPLIER = 1.75;
 const TREND_PULLBACK_T2_R_MAX_MULTIPLIER = 3.4;
+const TREND_PULLBACK_TARGET_SCALE = 0.95;
 const ORB_BREAKOUT_T1_R_MIN_MULTIPLIER = 1.15;
 const ORB_BREAKOUT_T1_R_MAX_MULTIPLIER = 2.4;
 const ORB_BREAKOUT_T2_R_MIN_MULTIPLIER = 1.9;
 const ORB_BREAKOUT_T2_R_MAX_MULTIPLIER = 3.8;
+const MEAN_FADE_TARGET_SCALE = 0.95;
 const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
 const DIVERSIFICATION_RECOVERY_COMBOS: ReadonlySet<string> = new Set([
   'mean_reversion|ranging',
@@ -200,6 +205,14 @@ interface SetupIndicatorContext {
   minutesSinceOpen: number;
   sessionOpenTimestamp: string;
   asOfTimestamp: string;
+}
+
+interface FlowQualitySummary {
+  score: number;
+  recentDirectionalEvents: number;
+  recentDirectionalPremium: number;
+  localDirectionalEvents: number;
+  localDirectionalPremium: number;
 }
 
 interface SetupContextState {
@@ -528,6 +541,9 @@ function adjustTargetsForSetupType(input: {
     const t2MaxMultiplier = input.setupType === 'orb_breakout'
       ? ORB_BREAKOUT_T2_R_MAX_MULTIPLIER
       : TREND_PULLBACK_T2_R_MAX_MULTIPLIER;
+    const targetScale = input.setupType === 'trend_pullback'
+      ? TREND_PULLBACK_TARGET_SCALE
+      : 1;
 
     const existingT1Distance = Math.max(0.25, Math.abs(input.target1 - entryMid));
     const existingT2Distance = Math.max(0.4, Math.abs(input.target2 - entryMid));
@@ -542,10 +558,15 @@ function adjustTargetsForSetupType(input: {
         Math.min(risk * t2MaxMultiplier, existingT2Distance),
       ),
     );
+    const scaledT1Distance = Math.max(0.25, boundedT1Distance * targetScale);
+    const scaledT2Distance = Math.max(
+      scaledT1Distance + Math.max(0.3, risk * 0.5),
+      boundedT2Distance * targetScale,
+    );
 
     return {
-      target1: round(entryMid + (directionMultiplier * boundedT1Distance), 2),
-      target2: round(entryMid + (directionMultiplier * boundedT2Distance), 2),
+      target1: round(entryMid + (directionMultiplier * scaledT1Distance), 2),
+      target2: round(entryMid + (directionMultiplier * scaledT2Distance), 2),
     };
   }
 
@@ -631,6 +652,18 @@ function adjustTargetsForSetupType(input: {
         target2 = target1 - Math.max(risk * 0.8, 1.25);
       }
     }
+  }
+
+  if (input.setupType === 'mean_reversion' || input.setupType === 'fade_at_wall') {
+    const entryMid = (input.entryLow + input.entryHigh) / 2;
+    const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
+    const target1Distance = Math.max(0.25, Math.abs(target1 - entryMid) * MEAN_FADE_TARGET_SCALE);
+    const target2Distance = Math.max(
+      target1Distance + 0.25,
+      Math.abs(target2 - entryMid) * MEAN_FADE_TARGET_SCALE,
+    );
+    target1 = entryMid + (directionMultiplier * target1Distance);
+    target2 = entryMid + (directionMultiplier * target2Distance);
   }
 
   return {
@@ -794,6 +827,37 @@ function hasFlowConfirmation(input: {
     localPremium >= FLOW_MIN_LOCAL_PREMIUM
     || (local.length >= FLOW_MIN_LOCAL_EVENTS && localPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM)
   );
+}
+
+function evaluateFlowQuality(input: {
+  flowEvents: SPXFlowEvent[];
+  direction: 'bullish' | 'bearish';
+  zoneCenter: number;
+  nowMs: number;
+}): FlowQualitySummary {
+  const directional = input.flowEvents.filter((event) => (
+    event.direction === input.direction && isRecentFlowEvent(event, input.nowMs)
+  ));
+  const recentDirectionalPremium = directional.reduce((sum, event) => sum + event.premium, 0);
+  const localDirectional = directional.filter((event) => (
+    Math.abs(event.strike - input.zoneCenter) <= FLOW_ZONE_TOLERANCE_POINTS
+  ));
+  const localDirectionalPremium = localDirectional.reduce((sum, event) => sum + event.premium, 0);
+
+  const eventCountScore = Math.min(100, directional.length * 20);
+  const premiumScore = Math.min(100, (recentDirectionalPremium / FLOW_QUALITY_MIN_PREMIUM) * 100);
+  const localCoverage = recentDirectionalPremium > 0
+    ? localDirectionalPremium / recentDirectionalPremium
+    : 0;
+  const localCoverageScore = Math.min(100, localCoverage * 100);
+
+  return {
+    score: round((eventCountScore * 0.35) + (premiumScore * 0.40) + (localCoverageScore * 0.25), 2),
+    recentDirectionalEvents: directional.length,
+    recentDirectionalPremium: round(recentDirectionalPremium, 2),
+    localDirectionalEvents: localDirectional.length,
+    localDirectionalPremium: round(localDirectionalPremium, 2),
+  };
 }
 
 function flowAlignmentPercent(input: {
@@ -1245,6 +1309,7 @@ function evaluateOptimizationGate(input: {
   evR: number;
   flowConfirmed: boolean;
   flowAlignmentPct: number | null;
+  flowQuality: FlowQualitySummary;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
   pausedSetupTypes: Set<string>;
@@ -1363,6 +1428,28 @@ function evaluateOptimizationGate(input: {
     }
     if (input.direction === 'bullish' && input.flowAlignmentPct != null && input.flowAlignmentPct >= 75) {
       reasons.push(`fade_bullish_alignment_conflict:${round(input.flowAlignmentPct, 2)}`);
+    }
+  }
+
+  if (input.setupType === 'orb_breakout') {
+    if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
+      reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
+    }
+    if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
+      reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
+    }
+  }
+
+  if (input.setupType === 'trend_pullback' && firstSeenMinute != null) {
+    const trendTimingByRegime: Record<Regime, number> = {
+      breakout: 300,
+      trending: 320,
+      compression: 240,
+      ranging: 210,
+    };
+    const trendMaxMinute = trendTimingByRegime[input.regime];
+    if (firstSeenMinute > trendMaxMinute) {
+      reasons.push(`trend_timing_window:${firstSeenMinute}>${trendMaxMinute}`);
     }
   }
 
@@ -1646,6 +1733,12 @@ export async function detectActiveSetups(options?: {
       zoneCenter,
       nowMs,
     });
+    const flowQuality = evaluateFlowQuality({
+      flowEvents,
+      direction,
+      zoneCenter,
+      nowMs,
+    });
     const setupType = inferSetupTypeForZone({
       regime: regimeState.regime,
       direction,
@@ -1864,6 +1957,7 @@ export async function detectActiveSetups(options?: {
       evR,
       flowConfirmed,
       flowAlignmentPct,
+      flowQuality,
       emaAligned,
       volumeRegimeAligned,
       pausedSetupTypes,
