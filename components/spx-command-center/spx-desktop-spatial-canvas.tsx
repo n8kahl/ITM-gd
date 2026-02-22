@@ -111,10 +111,10 @@ export function SPXDesktopSpatialCanvas({
     viewport.width,
   ])
   const levelOverlaysEnabled = showLevelOverlay && !spatialThrottled
-  const showPriorityLevels = levelOverlaysEnabled && focusMode !== 'risk_only'
+  const showPriorityLevels = levelOverlaysEnabled
   const showRiskShadow = levelOverlaysEnabled && (focusMode === 'execution' || focusMode === 'risk_only')
   const showSetupLock = levelOverlaysEnabled && focusMode === 'execution'
-  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only'
+  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only' && !showPriorityLevels
   const showConeOverlay = overlayPolicy.allowCone && !spatialThrottled
   const showCoachOverlay = overlayPolicy.allowSpatialCoach && !spatialThrottled
 

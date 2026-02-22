@@ -244,9 +244,9 @@ export function PriorityLevelOverlay({
   }, [actionableSetupVisible, selectedSetup, spxPrice])
 
   const candidateLevels = useMemo<OverlayLevel[]>(() => {
-    const marketDisplayed = focusMode === 'risk_only'
-      ? []
-      : (focusMode === 'execution' ? focusedMarketLevels : (showAllRelevantLevels ? marketLevelAnnotations : focusedMarketLevels))
+    const marketDisplayed = focusMode === 'execution'
+      ? focusedMarketLevels
+      : (showAllRelevantLevels ? marketLevelAnnotations : focusedMarketLevels)
     return [...marketDisplayed, ...setupAnnotations, ...scenarioAnnotations]
   }, [focusMode, focusedMarketLevels, marketLevelAnnotations, scenarioAnnotations, setupAnnotations, showAllRelevantLevels])
 
