@@ -16,9 +16,11 @@ import { SPXOptimizerScorecardPanel } from '@/components/spx-command-center/opti
 import { PostTradePanel } from '@/components/spx-command-center/post-trade-panel'
 import { SetupFeed } from '@/components/spx-command-center/setup-feed'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
+import { SPXSettingsSheet } from '@/components/spx-command-center/spx-settings-sheet'
 import type { SPXCommandController } from '@/hooks/use-spx-command-controller'
 import { formatSPXFeedFallbackReasonCode, formatSPXFeedFallbackStage } from '@/lib/spx/feed-health'
 import { cn } from '@/lib/utils'
+import { Settings2 } from 'lucide-react'
 
 export type SPXMobileSurfaceOrchestratorProps = {
   dataHealth: SPXCommandController['dataHealth']
@@ -48,6 +50,9 @@ export type SPXMobileSurfaceOrchestratorProps = {
   primaryActionEnabled: boolean
   primaryActionBlockedReason: string | null
   onPrimaryAction: () => void
+  onOpenSettings: () => void
+  showSettingsPanel: boolean
+  onSettingsPanelChange: (next: boolean) => void
 }
 
 export function SPXMobileSurfaceOrchestrator({
@@ -78,6 +83,9 @@ export function SPXMobileSurfaceOrchestrator({
   primaryActionEnabled,
   primaryActionBlockedReason,
   onPrimaryAction,
+  onOpenSettings,
+  showSettingsPanel,
+  onSettingsPanelChange,
 }: SPXMobileSurfaceOrchestratorProps) {
   const primaryActionTone = primaryActionMode === 'in_trade'
     ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
@@ -93,6 +101,15 @@ export function SPXMobileSurfaceOrchestrator({
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-[0.1em] text-white/55">Primary Action Rail</p>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            data-testid="spx-mobile-settings-trigger"
+            className="inline-flex min-h-[28px] items-center gap-1 rounded-md border border-emerald-300/25 bg-emerald-500/[0.08] px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] text-emerald-100"
+          >
+            <Settings2 className="h-3 w-3" />
+            Settings
+          </button>
           <span
             data-testid="spx-mobile-primary-action-mode-chip"
             className="rounded border border-white/15 bg-white/[0.04] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/70"
@@ -272,6 +289,8 @@ export function SPXMobileSurfaceOrchestrator({
           </CoachBottomSheet>
         </>
       )}
+
+      <SPXSettingsSheet open={showSettingsPanel} onOpenChange={onSettingsPanelChange} />
     </>
   )
 }

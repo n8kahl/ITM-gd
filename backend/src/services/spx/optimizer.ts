@@ -6,6 +6,16 @@ import type { SetupStatus, SetupType } from './types';
 import type { SetupFinalOutcome } from './outcomeTracker';
 import { runSPXWinRateBacktest } from './winRateBacktest';
 
+export interface SPXGeometryPolicyEntry {
+  stopScale: number;
+  target1Scale: number;
+  target2Scale: number;
+  t1MinR: number;
+  t1MaxR: number;
+  t2MinR: number;
+  t2MaxR: number;
+}
+
 export interface SPXOptimizationProfile {
   source: 'default' | 'scan';
   generatedAt: string;
@@ -35,6 +45,11 @@ export interface SPXOptimizationProfile {
   tradeManagement: {
     partialAtT1Pct: number;
     moveStopToBreakeven: boolean;
+  };
+  geometryPolicy: {
+    bySetupType: Record<string, SPXGeometryPolicyEntry>;
+    bySetupRegime: Record<string, Partial<SPXGeometryPolicyEntry>>;
+    bySetupRegimeTimeBucket: Record<string, Partial<SPXGeometryPolicyEntry>>;
   };
   walkForward: {
     trainingDays: number;
@@ -248,6 +263,116 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   trend_pullback: 360,
   flip_reclaim: 360,
 };
+const FALLBACK_GEOMETRY_POLICY_ENTRY: SPXGeometryPolicyEntry = {
+  stopScale: 1,
+  target1Scale: 1,
+  target2Scale: 1,
+  t1MinR: 1.0,
+  t1MaxR: 2.2,
+  t2MinR: 1.6,
+  t2MaxR: 3.4,
+};
+const DEFAULT_GEOMETRY_BY_SETUP_TYPE: Record<SetupType, SPXGeometryPolicyEntry> = {
+  fade_at_wall: {
+    stopScale: 1,
+    target1Scale: 0.95,
+    target2Scale: 0.95,
+    t1MinR: 1.0,
+    t1MaxR: 1.7,
+    t2MinR: 1.5,
+    t2MaxR: 2.4,
+  },
+  breakout_vacuum: {
+    stopScale: 1.04,
+    target1Scale: 0.94,
+    target2Scale: 0.92,
+    t1MinR: 1.2,
+    t1MaxR: 2.4,
+    t2MinR: 1.9,
+    t2MaxR: 3.8,
+  },
+  mean_reversion: {
+    stopScale: 1,
+    target1Scale: 0.95,
+    target2Scale: 0.95,
+    t1MinR: 1.1,
+    t1MaxR: 1.85,
+    t2MinR: 1.7,
+    t2MaxR: 2.7,
+  },
+  trend_continuation: {
+    stopScale: 1.02,
+    target1Scale: 0.98,
+    target2Scale: 0.96,
+    t1MinR: 1.1,
+    t1MaxR: 2.2,
+    t2MinR: 1.7,
+    t2MaxR: 3.3,
+  },
+  orb_breakout: {
+    stopScale: 1.02,
+    target1Scale: 0.96,
+    target2Scale: 0.94,
+    t1MinR: 1.1,
+    t1MaxR: 2.3,
+    t2MinR: 1.8,
+    t2MaxR: 3.6,
+  },
+  trend_pullback: {
+    stopScale: 1.02,
+    target1Scale: 0.96,
+    target2Scale: 0.94,
+    t1MinR: 1.05,
+    t1MaxR: 2.1,
+    t2MinR: 1.6,
+    t2MaxR: 3.2,
+  },
+  flip_reclaim: {
+    stopScale: 1,
+    target1Scale: 0.97,
+    target2Scale: 0.95,
+    t1MinR: 1.3,
+    t1MaxR: 2.1,
+    t2MinR: 2.0,
+    t2MaxR: 3.0,
+  },
+};
+const DEFAULT_GEOMETRY_BY_SETUP_REGIME: Record<string, Partial<SPXGeometryPolicyEntry>> = {
+  'trend_pullback|breakout': {
+    stopScale: 1.04,
+    target1Scale: 0.94,
+    target2Scale: 0.92,
+  },
+  'orb_breakout|breakout': {
+    stopScale: 1.03,
+    target1Scale: 0.95,
+    target2Scale: 0.92,
+  },
+  'mean_reversion|ranging': {
+    target1Scale: 0.97,
+    target2Scale: 0.96,
+  },
+};
+const DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET: Record<string, Partial<SPXGeometryPolicyEntry>> = {
+  'trend_pullback|breakout|late': {
+    stopScale: 1.06,
+    target1Scale: 0.9,
+    target2Scale: 0.88,
+    t1MaxR: 1.8,
+    t2MaxR: 2.8,
+  },
+  'orb_breakout|breakout|late': {
+    stopScale: 1.06,
+    target1Scale: 0.9,
+    target2Scale: 0.88,
+    t1MaxR: 1.85,
+    t2MaxR: 2.9,
+  },
+  'mean_reversion|ranging|opening': {
+    target1Scale: 0.99,
+    target2Scale: 0.98,
+  },
+};
 
 const DEFAULT_PROFILE: SPXOptimizationProfile = {
   source: 'default',
@@ -278,6 +403,11 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
   tradeManagement: {
     partialAtT1Pct: 0.65,
     moveStopToBreakeven: true,
+  },
+  geometryPolicy: {
+    bySetupType: { ...DEFAULT_GEOMETRY_BY_SETUP_TYPE },
+    bySetupRegime: { ...DEFAULT_GEOMETRY_BY_SETUP_REGIME },
+    bySetupRegimeTimeBucket: { ...DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET },
   },
   walkForward: {
     trainingDays: 20,
@@ -317,6 +447,10 @@ function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim().length > 0) {
@@ -324,6 +458,117 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function normalizeGeometryPolicyEntry(
+  raw: unknown,
+  fallback: SPXGeometryPolicyEntry = FALLBACK_GEOMETRY_POLICY_ENTRY,
+): SPXGeometryPolicyEntry {
+  const candidate = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const stopScale = clamp(
+    toFiniteNumber(candidate.stopScale) ?? fallback.stopScale,
+    0.75,
+    1.4,
+  );
+  const target1Scale = clamp(
+    toFiniteNumber(candidate.target1Scale) ?? fallback.target1Scale,
+    0.7,
+    1.3,
+  );
+  const target2Scale = clamp(
+    toFiniteNumber(candidate.target2Scale) ?? fallback.target2Scale,
+    0.7,
+    1.4,
+  );
+  const t1MinR = clamp(
+    toFiniteNumber(candidate.t1MinR) ?? fallback.t1MinR,
+    0.6,
+    3.5,
+  );
+  const t1MaxR = clamp(
+    toFiniteNumber(candidate.t1MaxR) ?? fallback.t1MaxR,
+    t1MinR + 0.1,
+    4.5,
+  );
+  const t2MinR = clamp(
+    toFiniteNumber(candidate.t2MinR) ?? fallback.t2MinR,
+    Math.max(t1MinR + 0.2, 0.8),
+    4.2,
+  );
+  const t2MaxR = clamp(
+    toFiniteNumber(candidate.t2MaxR) ?? fallback.t2MaxR,
+    Math.max(t2MinR + 0.1, t1MaxR + 0.2),
+    6,
+  );
+  return {
+    stopScale: round(stopScale, 4),
+    target1Scale: round(target1Scale, 4),
+    target2Scale: round(target2Scale, 4),
+    t1MinR: round(t1MinR, 4),
+    t1MaxR: round(t1MaxR, 4),
+    t2MinR: round(t2MinR, 4),
+    t2MaxR: round(t2MaxR, 4),
+  };
+}
+
+function normalizeGeometryPolicyPatch(raw: unknown): Partial<SPXGeometryPolicyEntry> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const candidate = raw as Record<string, unknown>;
+  const patch: Partial<SPXGeometryPolicyEntry> = {};
+  const stopScale = toFiniteNumber(candidate.stopScale);
+  const target1Scale = toFiniteNumber(candidate.target1Scale);
+  const target2Scale = toFiniteNumber(candidate.target2Scale);
+  const t1MinR = toFiniteNumber(candidate.t1MinR);
+  const t1MaxR = toFiniteNumber(candidate.t1MaxR);
+  const t2MinR = toFiniteNumber(candidate.t2MinR);
+  const t2MaxR = toFiniteNumber(candidate.t2MaxR);
+  if (stopScale != null) patch.stopScale = round(clamp(stopScale, 0.75, 1.4), 4);
+  if (target1Scale != null) patch.target1Scale = round(clamp(target1Scale, 0.7, 1.3), 4);
+  if (target2Scale != null) patch.target2Scale = round(clamp(target2Scale, 0.7, 1.4), 4);
+  if (t1MinR != null) patch.t1MinR = round(clamp(t1MinR, 0.6, 3.5), 4);
+  if (t1MaxR != null) patch.t1MaxR = round(clamp(t1MaxR, 0.7, 4.5), 4);
+  if (t2MinR != null) patch.t2MinR = round(clamp(t2MinR, 0.8, 4.2), 4);
+  if (t2MaxR != null) patch.t2MaxR = round(clamp(t2MaxR, 0.9, 6), 4);
+  return patch;
+}
+
+function normalizeGeometryPolicyMap(
+  raw: unknown,
+): Record<string, SPXGeometryPolicyEntry> {
+  const normalized: Record<string, SPXGeometryPolicyEntry> = Object.fromEntries(
+    Object.entries(DEFAULT_GEOMETRY_BY_SETUP_TYPE).map(([key, value]) => [key, { ...value }]),
+  );
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return normalized;
+  }
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const fallback = normalized[key] || FALLBACK_GEOMETRY_POLICY_ENTRY;
+    normalized[key] = normalizeGeometryPolicyEntry(value, fallback);
+  }
+  return normalized;
+}
+
+function normalizeGeometryPolicyPatchMap(
+  raw: unknown,
+  defaults: Record<string, Partial<SPXGeometryPolicyEntry>>,
+): Record<string, Partial<SPXGeometryPolicyEntry>> {
+  const normalized: Record<string, Partial<SPXGeometryPolicyEntry>> = Object.fromEntries(
+    Object.entries(defaults).map(([key, value]) => [key, { ...value }]),
+  );
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return normalized;
+  }
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const patch = normalizeGeometryPolicyPatch(value);
+    if (Object.keys(patch).length === 0) continue;
+    normalized[key] = {
+      ...(normalized[key] || {}),
+      ...patch,
+    };
+  }
+  return normalized;
 }
 
 function emptyConfidenceInterval(): SPXConfidenceInterval {
@@ -470,6 +715,17 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         toFiniteNumber(candidate.tradeManagement?.partialAtT1Pct) ?? DEFAULT_PROFILE.tradeManagement.partialAtT1Pct,
       )),
       moveStopToBreakeven: candidate.tradeManagement?.moveStopToBreakeven !== false,
+    },
+    geometryPolicy: {
+      bySetupType: normalizeGeometryPolicyMap(candidate.geometryPolicy?.bySetupType),
+      bySetupRegime: normalizeGeometryPolicyPatchMap(
+        candidate.geometryPolicy?.bySetupRegime,
+        DEFAULT_GEOMETRY_BY_SETUP_REGIME,
+      ),
+      bySetupRegimeTimeBucket: normalizeGeometryPolicyPatchMap(
+        candidate.geometryPolicy?.bySetupRegimeTimeBucket,
+        DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET,
+      ),
     },
     walkForward: {
       trainingDays: Math.max(5, Math.floor(toFiniteNumber(candidate.walkForward?.trainingDays) ?? DEFAULT_PROFILE.walkForward.trainingDays)),
@@ -1303,13 +1559,13 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
 export async function runSPXOptimizerScan(input?: {
   from?: string;
   to?: string;
-  mode?: 'manual' | 'weekly_auto';
+  mode?: 'manual' | 'weekly_auto' | 'nightly_auto';
 }): Promise<SPXOptimizationScanResult> {
   const currentProfile = await getActiveSPXOptimizationProfile();
   const fallbackRange = defaultScanRange(currentProfile);
   const scanFrom = normalizeDateInput(input?.from || fallbackRange.from);
   const scanTo = normalizeDateInput(input?.to || fallbackRange.to);
-  const weeklyAutoMode = input?.mode === 'weekly_auto';
+  const automatedMode = input?.mode === 'weekly_auto' || input?.mode === 'nightly_auto';
 
   const profileForScan = normalizeProfile(currentProfile);
   const trainingDays = profileForScan.walkForward.trainingDays;
@@ -1379,7 +1635,7 @@ export async function runSPXOptimizerScan(input?: {
   const baseRequiredValidationTrades = baselineValidationQualified
     ? profileForScan.walkForward.minTrades
     : fallbackValidationMinTrades;
-  const requiredValidationTrades = weeklyAutoMode
+  const requiredValidationTrades = automatedMode
     ? Math.max(baseRequiredValidationTrades, WEEKLY_AUTO_MIN_VALIDATION_TRADES)
     : baseRequiredValidationTrades;
   const baselineHasValidationTrades = baselineValidationMetrics.tradeCount > 0;
@@ -1392,7 +1648,7 @@ export async function runSPXOptimizerScan(input?: {
   const t1WinRateDelta = round(optimizedValidationMetrics.t1WinRatePct - baselineValidationMetrics.t1WinRatePct, 2);
   const t2WinRateDelta = round(optimizedValidationMetrics.t2WinRatePct - baselineValidationMetrics.t2WinRatePct, 2);
   const failureRateDelta = round(optimizedValidationMetrics.failureRatePct - baselineValidationMetrics.failureRatePct, 2);
-  const weeklyGuardrailPassed = !weeklyAutoMode || (
+  const weeklyGuardrailPassed = !automatedMode || (
     objectiveDelta >= WEEKLY_AUTO_MIN_OBJECTIVE_DELTA
     && objectiveConservativeDelta >= 0
     && expectancyRDelta >= 0
@@ -1535,9 +1791,9 @@ export async function runSPXOptimizerScan(input?: {
       optimizationApplied
         ? `Walk-forward optimization applied to active profile (validation trades=${optimizedValidationMetrics.tradeCount}, minimum required=${requiredValidationTrades}).`
         : 'Candidate thresholds did not beat baseline on validation window; baseline retained.',
-      weeklyAutoMode
-        ? `Weekly auto guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
-        : 'Weekly auto guardrails not enforced for this scan mode.',
+      automatedMode
+        ? `Automated guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
+        : 'Automated guardrails not enforced for this scan mode.',
       `Promotion guardrails: T1 delta >= ${PROMOTION_MIN_T1_DELTA_PCT}, T2 delta >= ${PROMOTION_MIN_T2_DELTA_PCT}, expectancy delta >= ${PROMOTION_MIN_EXPECTANCY_DELTA_R}, failure delta <= ${PROMOTION_MAX_FAILURE_DELTA_PCT}, conservative objective delta >= 0.`,
       `Validation objective: baseline ${baselineValidationMetrics.objectiveScore} (conservative ${baselineValidationMetrics.objectiveScoreConservative}) vs optimized ${optimizedValidationMetrics.objectiveScore} (conservative ${optimizedValidationMetrics.objectiveScoreConservative}).`,
       `Validation expectancy(R): baseline ${baselineValidationMetrics.expectancyR} (lower bound ${baselineValidationMetrics.expectancyLowerBoundR}) vs optimized ${optimizedValidationMetrics.expectancyR} (lower bound ${optimizedValidationMetrics.expectancyLowerBoundR}).`,
@@ -1546,6 +1802,7 @@ export async function runSPXOptimizerScan(input?: {
       `Indicator gates: require EMA alignment=${nextProfile.indicatorGate.requireEmaAlignment}, require volume-regime alignment=${nextProfile.indicatorGate.requireVolumeRegimeAlignment}.`,
       `Timing gate: enforce=${nextProfile.timingGate.enabled}.`,
       `Trade management policy: ${nextProfile.tradeManagement.partialAtT1Pct * 100}% at T1, stop to breakeven=${nextProfile.tradeManagement.moveStopToBreakeven}.`,
+      `Geometry policy: setupType=${Object.keys(nextProfile.geometryPolicy.bySetupType).length}, setupRegime=${Object.keys(nextProfile.geometryPolicy.bySetupRegime).length}, setupRegimeTimeBucket=${Object.keys(nextProfile.geometryPolicy.bySetupRegimeTimeBucket).length}.`,
       `Drift control paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine paused ${quarantinePausedSetupTypes.length} setup types; merged paused setup types=${mergedPausedSetupTypes.length}.`,
       `Regime gate paused ${pausedCombos.length} setup/regime combos.`,
     ],

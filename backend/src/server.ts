@@ -37,6 +37,7 @@ import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
 import { startSPXDataLoop, stopSPXDataLoop } from './workers/spxDataLoop';
+import { startSPXOptimizerWorker, stopSPXOptimizerWorker } from './workers/spxOptimizerWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startMassiveTickStream, stopMassiveTickStream } from './services/massiveTickStream';
 import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
@@ -218,6 +219,7 @@ async function start() {
     startSetupDetectorService();
     startWorkerHealthAlertWorker();
     startSPXDataLoop();
+    startSPXOptimizerWorker();
 
     // Initialize market holidays (async, but don't block server start completely)
     initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
@@ -244,6 +246,7 @@ async function gracefulShutdown(signal: string) {
     stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
     stopSPXDataLoop();
+    stopSPXOptimizerWorker();
     stopMassiveTickStream();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown

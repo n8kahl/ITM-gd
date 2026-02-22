@@ -67,6 +67,22 @@ Profile generated at: `2026-02-22T03:01:24.493Z`
 1. `partialAtT1Pct=0.65`
 2. `moveStopToBreakeven=true`
 
+### Geometry Policy
+
+1. Profile now carries geometry controls for:
+   - `bySetupType`
+   - `bySetupRegime`
+   - `bySetupRegimeTimeBucket`
+2. Live detector resolves geometry in this precedence:
+   1. `setupType|regime|timeBucket`
+   2. `setupType|regime`
+   3. `setupType`
+3. Time buckets:
+   - `opening` (`<=90m` since open)
+   - `midday` (`91m-240m`)
+   - `late` (`>240m`)
+4. Backtest geometry overrides now support the same scoped-key format in addition to plain setup-type keys.
+
 ### Promotion Guardrails
 
 Optimizer promotion now requires all of:
@@ -123,6 +139,25 @@ Source: `backend/src/services/spx/setupDetector.ts`
    - `trend_pullback` (distance scaling)
    - `mean_reversion` and `fade_at_wall` (distance scaling)
 2. Goal: improve practical T1/T2 capture while preserving positive expectancy.
+
+### Profile-Driven Geometry Application
+
+1. `setupDetector` now applies optimization-profile geometry policy directly to:
+   - stop distance scaling
+   - T1/T2 target scaling
+   - T1/T2 R-bound constraints
+2. This enables regime/time-bucket shape control without hardcoding detector constants per slice.
+
+## Realtime Setup Notifications (Live UX)
+
+1. SPX setup-trigger notifications now emit on `ready -> triggered` transitions with cooldown/dedupe controls.
+2. Delivery policy:
+   - in-app toast: immediate
+   - browser notification: only when tab is backgrounded, permission is granted, and user `notification_preferences.setups=true`
+3. Preference source: `ai_coach_user_preferences.notification_preferences`.
+4. Alert noise controls:
+   - toast cooldown: `90s` per setup trigger key
+   - browser notification cooldown: `180s` per setup trigger key
 
 ## Contract Execution Gold Rules
 

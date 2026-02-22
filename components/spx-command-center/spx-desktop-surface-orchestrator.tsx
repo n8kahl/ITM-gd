@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { ActionStrip } from '@/components/spx-command-center/action-strip'
 import { SidebarPanel } from '@/components/spx-command-center/sidebar-panel'
 import { SPXHeader } from '@/components/spx-command-center/spx-header'
+import { SPXSettingsSheet } from '@/components/spx-command-center/spx-settings-sheet'
 import type { SPXCommandController } from '@/hooks/use-spx-command-controller'
 import type { SPXOverlayPreset } from '@/lib/spx/overlay-presets'
 import type { SPXCommandId } from '@/lib/spx/commands'
@@ -19,6 +20,9 @@ export type SidebarPanelConfig = {
 export type SPXDesktopSurfaceOrchestratorProps = {
   desktopViewMode: 'classic' | 'spatial'
   onOpenCommandPalette: () => void
+  onOpenSettings: () => void
+  showSettingsPanel: boolean
+  onSettingsPanelChange: (next: boolean) => void
   showAllRelevantLevels: boolean
   displayedLevelsCount: number
   totalLevelsCount: number
@@ -59,6 +63,9 @@ export type SPXDesktopSurfaceOrchestratorProps = {
 export function SPXDesktopSurfaceOrchestrator({
   desktopViewMode,
   onOpenCommandPalette,
+  onOpenSettings,
+  showSettingsPanel,
+  onSettingsPanelChange,
   showAllRelevantLevels,
   displayedLevelsCount,
   totalLevelsCount,
@@ -101,6 +108,7 @@ export function SPXDesktopSurfaceOrchestrator({
     <>
       <SPXHeader
         onOpenCommandPalette={onOpenCommandPalette}
+        onOpenSettings={onOpenSettings}
         onToggleLevelOverlay={() => onRunActionStripCommand('toggle-level-overlay')}
         showLevelOverlay={showLevelOverlay}
         showAllLevels={showAllRelevantLevels}
@@ -164,6 +172,7 @@ export function SPXDesktopSurfaceOrchestrator({
           {sidebarPanel.content}
         </SidebarPanel>
       ) : null}
+      <SPXSettingsSheet open={showSettingsPanel} onOpenChange={onSettingsPanelChange} />
     </>
   )
 }

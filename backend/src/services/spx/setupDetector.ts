@@ -6,7 +6,7 @@ import { getFibLevels } from './fibEngine';
 import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
-import { getActiveSPXOptimizationProfile } from './optimizer';
+import { getActiveSPXOptimizationProfile, type SPXGeometryPolicyEntry } from './optimizer';
 import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
 import type {
@@ -83,6 +83,17 @@ const ORB_BREAKOUT_T2_R_MIN_MULTIPLIER = 1.9;
 const ORB_BREAKOUT_T2_R_MAX_MULTIPLIER = 3.8;
 const MEAN_FADE_TARGET_SCALE = 0.95;
 const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
+const GEOMETRY_BUCKET_OPENING_MAX_MINUTE = 90;
+const GEOMETRY_BUCKET_MIDDAY_MAX_MINUTE = 240;
+const FALLBACK_GEOMETRY_POLICY: SPXGeometryPolicyEntry = {
+  stopScale: 1,
+  target1Scale: 1,
+  target2Scale: 1,
+  t1MinR: 1,
+  t1MaxR: 2.2,
+  t2MinR: 1.6,
+  t2MaxR: 3.4,
+};
 const DIVERSIFICATION_RECOVERY_COMBOS: ReadonlySet<string> = new Set([
   'mean_reversion|ranging',
   'flip_reclaim|ranging',
@@ -520,7 +531,12 @@ function adjustTargetsForSetupType(input: {
   target2: number;
   flipPoint: number;
   indicatorContext: SetupIndicatorContext | null;
+  geometryPolicy: SPXGeometryPolicyEntry;
 }): { target1: number; target2: number } {
+  const geometryPolicy = normalizeGeometryPolicyEntry(
+    input.geometryPolicy,
+    defaultGeometryPolicyForSetup(input.setupType),
+  );
   if (
     input.setupType === 'trend_pullback'
     || input.setupType === 'orb_breakout'
@@ -529,39 +545,23 @@ function adjustTargetsForSetupType(input: {
     const entryMid = (input.entryLow + input.entryHigh) / 2;
     const risk = Math.max(0.5, Math.abs(entryMid - input.stop));
     const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
-    const t1MinMultiplier = input.setupType === 'orb_breakout'
-      ? ORB_BREAKOUT_T1_R_MIN_MULTIPLIER
-      : TREND_PULLBACK_T1_R_MIN_MULTIPLIER;
-    const t1MaxMultiplier = input.setupType === 'orb_breakout'
-      ? ORB_BREAKOUT_T1_R_MAX_MULTIPLIER
-      : TREND_PULLBACK_T1_R_MAX_MULTIPLIER;
-    const t2MinMultiplier = input.setupType === 'orb_breakout'
-      ? ORB_BREAKOUT_T2_R_MIN_MULTIPLIER
-      : TREND_PULLBACK_T2_R_MIN_MULTIPLIER;
-    const t2MaxMultiplier = input.setupType === 'orb_breakout'
-      ? ORB_BREAKOUT_T2_R_MAX_MULTIPLIER
-      : TREND_PULLBACK_T2_R_MAX_MULTIPLIER;
-    const targetScale = input.setupType === 'trend_pullback'
-      ? TREND_PULLBACK_TARGET_SCALE
-      : 1;
-
     const existingT1Distance = Math.max(0.25, Math.abs(input.target1 - entryMid));
     const existingT2Distance = Math.max(0.4, Math.abs(input.target2 - entryMid));
     const boundedT1Distance = Math.max(
-      risk * t1MinMultiplier,
-      Math.min(risk * t1MaxMultiplier, existingT1Distance),
+      risk * geometryPolicy.t1MinR,
+      Math.min(risk * geometryPolicy.t1MaxR, existingT1Distance),
     );
     const boundedT2Distance = Math.max(
       boundedT1Distance + Math.max(0.35, risk * 0.55),
       Math.max(
-        risk * t2MinMultiplier,
-        Math.min(risk * t2MaxMultiplier, existingT2Distance),
+        risk * geometryPolicy.t2MinR,
+        Math.min(risk * geometryPolicy.t2MaxR, existingT2Distance),
       ),
     );
-    const scaledT1Distance = Math.max(0.25, boundedT1Distance * targetScale);
+    const scaledT1Distance = Math.max(0.25, boundedT1Distance * geometryPolicy.target1Scale);
     const scaledT2Distance = Math.max(
       scaledT1Distance + Math.max(0.3, risk * 0.5),
-      boundedT2Distance * targetScale,
+      boundedT2Distance * geometryPolicy.target2Scale,
     );
 
     return {
@@ -657,13 +657,31 @@ function adjustTargetsForSetupType(input: {
   if (input.setupType === 'mean_reversion' || input.setupType === 'fade_at_wall') {
     const entryMid = (input.entryLow + input.entryHigh) / 2;
     const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
-    const target1Distance = Math.max(0.25, Math.abs(target1 - entryMid) * MEAN_FADE_TARGET_SCALE);
+    const target1Distance = Math.max(0.25, Math.abs(target1 - entryMid) * geometryPolicy.target1Scale);
     const target2Distance = Math.max(
       target1Distance + 0.25,
-      Math.abs(target2 - entryMid) * MEAN_FADE_TARGET_SCALE,
+      Math.abs(target2 - entryMid) * geometryPolicy.target2Scale,
     );
     target1 = entryMid + (directionMultiplier * target1Distance);
     target2 = entryMid + (directionMultiplier * target2Distance);
+  }
+
+  {
+    const target1Distance = Math.max(0.25, Math.abs(target1 - entryMid));
+    const target2Distance = Math.max(0.3, Math.abs(target2 - entryMid));
+    const boundedTarget1Distance = Math.max(
+      risk * geometryPolicy.t1MinR,
+      Math.min(risk * geometryPolicy.t1MaxR, target1Distance),
+    );
+    const boundedTarget2Distance = Math.max(
+      boundedTarget1Distance + Math.max(0.2, risk * 0.45),
+      Math.max(
+        risk * geometryPolicy.t2MinR,
+        Math.min(risk * geometryPolicy.t2MaxR, target2Distance),
+      ),
+    );
+    target1 = entryMid + (directionMultiplier * boundedTarget1Distance);
+    target2 = entryMid + (directionMultiplier * boundedTarget2Distance);
   }
 
   return {
@@ -1201,6 +1219,15 @@ function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function regimeWeights(regime: Regime): {
   structure: number;
   flow: number;
@@ -1287,6 +1314,185 @@ function toSessionMinuteEt(value: string | null | undefined): number | null {
   if (!Number.isFinite(parsed)) return null;
   const et = toEasternTime(new Date(parsed));
   return Math.max(0, (et.hour * 60 + et.minute) - SESSION_OPEN_MINUTE_ET);
+}
+
+type SetupGeometryBucket = 'opening' | 'midday' | 'late';
+
+function toGeometryBucket(minuteSinceOpenEt: number | null): SetupGeometryBucket {
+  if (minuteSinceOpenEt == null) return 'midday';
+  if (minuteSinceOpenEt <= GEOMETRY_BUCKET_OPENING_MAX_MINUTE) return 'opening';
+  if (minuteSinceOpenEt <= GEOMETRY_BUCKET_MIDDAY_MAX_MINUTE) return 'midday';
+  return 'late';
+}
+
+function normalizeGeometryPolicyEntry(
+  raw: unknown,
+  fallback: SPXGeometryPolicyEntry = FALLBACK_GEOMETRY_POLICY,
+): SPXGeometryPolicyEntry {
+  const candidate = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const stopScale = clamp(
+    toFiniteNumber(candidate.stopScale) ?? fallback.stopScale,
+    0.75,
+    1.4,
+  );
+  const target1Scale = clamp(
+    toFiniteNumber(candidate.target1Scale) ?? fallback.target1Scale,
+    0.7,
+    1.3,
+  );
+  const target2Scale = clamp(
+    toFiniteNumber(candidate.target2Scale) ?? fallback.target2Scale,
+    0.7,
+    1.4,
+  );
+  const t1MinR = clamp(
+    toFiniteNumber(candidate.t1MinR) ?? fallback.t1MinR,
+    0.6,
+    3.5,
+  );
+  const t1MaxR = clamp(
+    toFiniteNumber(candidate.t1MaxR) ?? fallback.t1MaxR,
+    t1MinR + 0.1,
+    4.5,
+  );
+  const t2MinR = clamp(
+    toFiniteNumber(candidate.t2MinR) ?? fallback.t2MinR,
+    Math.max(0.8, t1MinR + 0.2),
+    4.2,
+  );
+  const t2MaxR = clamp(
+    toFiniteNumber(candidate.t2MaxR) ?? fallback.t2MaxR,
+    Math.max(t2MinR + 0.1, t1MaxR + 0.2),
+    6,
+  );
+  return {
+    stopScale: round(stopScale, 4),
+    target1Scale: round(target1Scale, 4),
+    target2Scale: round(target2Scale, 4),
+    t1MinR: round(t1MinR, 4),
+    t1MaxR: round(t1MaxR, 4),
+    t2MinR: round(t2MinR, 4),
+    t2MaxR: round(t2MaxR, 4),
+  };
+}
+
+function mergeGeometryPolicy(
+  base: SPXGeometryPolicyEntry,
+  patch: unknown,
+): SPXGeometryPolicyEntry {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return base;
+  return normalizeGeometryPolicyEntry({
+    ...base,
+    ...(patch as Record<string, unknown>),
+  }, base);
+}
+
+function defaultGeometryPolicyForSetup(setupType: SetupType): SPXGeometryPolicyEntry {
+  if (setupType === 'orb_breakout') {
+    return {
+      stopScale: 1.02,
+      target1Scale: 1,
+      target2Scale: 1,
+      t1MinR: ORB_BREAKOUT_T1_R_MIN_MULTIPLIER,
+      t1MaxR: ORB_BREAKOUT_T1_R_MAX_MULTIPLIER,
+      t2MinR: ORB_BREAKOUT_T2_R_MIN_MULTIPLIER,
+      t2MaxR: ORB_BREAKOUT_T2_R_MAX_MULTIPLIER,
+    };
+  }
+  if (setupType === 'trend_pullback') {
+    return {
+      stopScale: 1,
+      target1Scale: TREND_PULLBACK_TARGET_SCALE,
+      target2Scale: TREND_PULLBACK_TARGET_SCALE,
+      t1MinR: TREND_PULLBACK_T1_R_MIN_MULTIPLIER,
+      t1MaxR: TREND_PULLBACK_T1_R_MAX_MULTIPLIER,
+      t2MinR: TREND_PULLBACK_T2_R_MIN_MULTIPLIER,
+      t2MaxR: TREND_PULLBACK_T2_R_MAX_MULTIPLIER,
+    };
+  }
+  if (setupType === 'trend_continuation') {
+    return {
+      stopScale: 1,
+      target1Scale: 1,
+      target2Scale: 1,
+      t1MinR: TREND_PULLBACK_T1_R_MIN_MULTIPLIER,
+      t1MaxR: TREND_PULLBACK_T1_R_MAX_MULTIPLIER,
+      t2MinR: TREND_PULLBACK_T2_R_MIN_MULTIPLIER,
+      t2MaxR: TREND_PULLBACK_T2_R_MAX_MULTIPLIER,
+    };
+  }
+  if (setupType === 'mean_reversion') {
+    return {
+      stopScale: 1,
+      target1Scale: MEAN_FADE_TARGET_SCALE,
+      target2Scale: MEAN_FADE_TARGET_SCALE,
+      t1MinR: MEAN_REVERSION_T1_R_MULTIPLIER,
+      t1MaxR: MEAN_REVERSION_T1_R_MAX_MULTIPLIER,
+      t2MinR: MEAN_REVERSION_T2_R_MULTIPLIER,
+      t2MaxR: MEAN_REVERSION_T2_R_MAX_MULTIPLIER,
+    };
+  }
+  if (setupType === 'fade_at_wall') {
+    return {
+      stopScale: 1,
+      target1Scale: MEAN_FADE_TARGET_SCALE,
+      target2Scale: MEAN_FADE_TARGET_SCALE,
+      t1MinR: 1,
+      t1MaxR: 1.7,
+      t2MinR: 1.5,
+      t2MaxR: 2.4,
+    };
+  }
+  if (setupType === 'flip_reclaim') {
+    return {
+      stopScale: 1,
+      target1Scale: 1,
+      target2Scale: 1,
+      t1MinR: FLIP_RECLAIM_T1_R_MULTIPLIER,
+      t1MaxR: 2.2,
+      t2MinR: FLIP_RECLAIM_T2_R_MULTIPLIER,
+      t2MaxR: 3.2,
+    };
+  }
+  return FALLBACK_GEOMETRY_POLICY;
+}
+
+function resolveSetupGeometryPolicy(input: {
+  setupType: SetupType;
+  regime: Regime;
+  firstSeenMinuteEt: number | null;
+  profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
+}): SPXGeometryPolicyEntry {
+  const bucket = toGeometryBucket(input.firstSeenMinuteEt);
+  const fallback = defaultGeometryPolicyForSetup(input.setupType);
+  const policy = input.profile.geometryPolicy;
+  const byType = normalizeGeometryPolicyEntry(
+    policy?.bySetupType?.[input.setupType],
+    fallback,
+  );
+  const byRegime = policy?.bySetupRegime?.[`${input.setupType}|${input.regime}`];
+  const byRegimeBucket = policy?.bySetupRegimeTimeBucket?.[
+    `${input.setupType}|${input.regime}|${bucket}`
+  ];
+  return mergeGeometryPolicy(mergeGeometryPolicy(byType, byRegime), byRegimeBucket);
+}
+
+function applyStopGeometryPolicy(input: {
+  direction: 'bullish' | 'bearish';
+  entryLow: number;
+  entryHigh: number;
+  baseStop: number;
+  geometryPolicy: SPXGeometryPolicyEntry;
+}): number {
+  const entryMid = (input.entryLow + input.entryHigh) / 2;
+  const risk = Math.max(0.35, Math.abs(entryMid - input.baseStop));
+  const scaledRisk = Math.max(0.35, risk * input.geometryPolicy.stopScale);
+  const stop = input.direction === 'bullish'
+    ? entryMid - scaledRisk
+    : entryMid + scaledRisk;
+  return round(stop, 2);
 }
 
 function maxFirstSeenMinuteForSetup(
@@ -1767,6 +1973,23 @@ export async function detectActiveSetups(options?: {
     const fallbackDistance = Math.max(6, Math.abs(gex.combined.callWall - gex.combined.putWall) / 4);
     const entryLow = round(zone.priceLow, 2);
     const entryHigh = round(zone.priceHigh, 2);
+    const setupIdSeed = [
+      sessionDate,
+      setupType,
+      zone.id,
+      round(zone.priceLow, 2),
+      round(zone.priceHigh, 2),
+    ].join('|');
+    const setupId = stableId('spx_setup', setupIdSeed);
+    const previous = previousById.get(setupId) || null;
+    const createdAt = previous?.createdAt || evaluationIso;
+    const firstSeenMinuteEt = toSessionMinuteEt(createdAt);
+    const geometryPolicy = resolveSetupGeometryPolicy({
+      setupType,
+      regime: regimeState.regime,
+      firstSeenMinuteEt,
+      profile: optimizationProfile,
+    });
     const stopBufferBase = zone.type === 'fortress' ? 2.5 : 1.5;
     const stopBuffer = (
       setupType === 'fade_at_wall'
@@ -1775,9 +1998,16 @@ export async function detectActiveSetups(options?: {
     )
       ? Math.max(stopBufferBase, FADE_STOP_BUFFER_POINTS)
       : stopBufferBase;
-    const stop = direction === 'bullish'
+    const baseStop = direction === 'bullish'
       ? round(zone.priceLow - stopBuffer, 2)
       : round(zone.priceHigh + stopBuffer, 2);
+    const stop = applyStopGeometryPolicy({
+      direction,
+      entryLow,
+      entryHigh,
+      baseStop,
+      geometryPolicy,
+    });
     const baseTargets = getTargetPrice(levels.clusters, zoneCenter, direction, fallbackDistance);
     const tunedTargets = adjustTargetsForSetupType({
       setupType,
@@ -1789,6 +2019,7 @@ export async function detectActiveSetups(options?: {
       target2: baseTargets.target2,
       flipPoint: gex.combined.flipPoint,
       indicatorContext,
+      geometryPolicy,
     });
     const target1 = tunedTargets.target1;
     const target2 = tunedTargets.target2;
@@ -1804,15 +2035,6 @@ export async function detectActiveSetups(options?: {
       computedStatus = 'triggered';
     }
 
-    const setupIdSeed = [
-      sessionDate,
-      setupType,
-      zone.id,
-      round(zone.priceLow, 2),
-      round(zone.priceHigh, 2),
-    ].join('|');
-    const setupId = stableId('spx_setup', setupIdSeed);
-    const previous = previousById.get(setupId) || null;
     const lifecycleSetup = previous?.status === 'triggered'
       ? {
         direction: previous.direction,
@@ -1872,7 +2094,6 @@ export async function detectActiveSetups(options?: {
       triggeredAt = evaluationIso;
     }
 
-    const createdAt = previous?.createdAt || evaluationIso;
     const lifecycle = resolveLifecycleMetadata({
       nowMs,
       currentStatus: status,

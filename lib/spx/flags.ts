@@ -2,6 +2,7 @@
 
 export interface SPXUXFlags {
   oneClickEntry: boolean
+  setupRealtimeAlertsV1: boolean
   mobileFullTradeFocus: boolean
   keyboardShortcuts: boolean
   layoutStateMachine: boolean
@@ -32,6 +33,7 @@ export interface SPXUXFlagLifecycleMetadata {
 
 export const DEFAULT_SPX_UX_FLAGS: Readonly<SPXUXFlags> = Object.freeze({
   oneClickEntry: true,
+  setupRealtimeAlertsV1: true,
   mobileFullTradeFocus: true,
   keyboardShortcuts: true,
   layoutStateMachine: true,
@@ -59,6 +61,13 @@ export const SPX_UX_FLAG_METADATA: Readonly<Record<keyof SPXUXFlags, SPXUXFlagLi
     createdOn: '2026-02-20',
     reviewBy: '2026-03-20',
     removalCondition: 'Retire when trade focus is entirely command-driven.',
+  },
+  setupRealtimeAlertsV1: {
+    owner: 'spx-notifications',
+    rolloutStage: 'beta',
+    createdOn: '2026-02-22',
+    reviewBy: '2026-03-15',
+    removalCondition: 'Promote to GA after trigger-alert latency/noise review closes.',
   },
   mobileFullTradeFocus: {
     owner: 'spx-mobile',
@@ -190,6 +199,7 @@ export const SPX_UX_FLAG_METADATA: Readonly<Record<keyof SPXUXFlags, SPXUXFlagLi
 
 const FLAG_ENV_KEYS: Record<keyof SPXUXFlags, string[]> = {
   oneClickEntry: ['NEXT_PUBLIC_SPX_UX_ONE_CLICK_ENTRY', 'SPX_UX_ONE_CLICK_ENTRY'],
+  setupRealtimeAlertsV1: ['NEXT_PUBLIC_SPX_UX_SETUP_REALTIME_ALERTS_V1', 'SPX_UX_SETUP_REALTIME_ALERTS_V1'],
   mobileFullTradeFocus: ['NEXT_PUBLIC_SPX_UX_MOBILE_FULL_TRADE_FOCUS', 'SPX_UX_MOBILE_FULL_TRADE_FOCUS'],
   keyboardShortcuts: ['NEXT_PUBLIC_SPX_UX_KEYBOARD_SHORTCUTS', 'SPX_UX_KEYBOARD_SHORTCUTS'],
   layoutStateMachine: ['NEXT_PUBLIC_SPX_UX_LAYOUT_STATE_MACHINE', 'SPX_UX_LAYOUT_STATE_MACHINE'],
@@ -237,6 +247,7 @@ function resolveWindowOverrides(): Partial<SPXUXFlags> {
 export function getSPXUXFlags(overrides?: Partial<SPXUXFlags>): SPXUXFlags {
   const envResolved: SPXUXFlags = {
     oneClickEntry: resolveFlagFromEnv('oneClickEntry') ?? DEFAULT_SPX_UX_FLAGS.oneClickEntry,
+    setupRealtimeAlertsV1: resolveFlagFromEnv('setupRealtimeAlertsV1') ?? DEFAULT_SPX_UX_FLAGS.setupRealtimeAlertsV1,
     mobileFullTradeFocus: resolveFlagFromEnv('mobileFullTradeFocus') ?? DEFAULT_SPX_UX_FLAGS.mobileFullTradeFocus,
     keyboardShortcuts: resolveFlagFromEnv('keyboardShortcuts') ?? DEFAULT_SPX_UX_FLAGS.keyboardShortcuts,
     layoutStateMachine: resolveFlagFromEnv('layoutStateMachine') ?? DEFAULT_SPX_UX_FLAGS.layoutStateMachine,

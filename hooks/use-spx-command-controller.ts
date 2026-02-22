@@ -80,6 +80,7 @@ export function useSPXCommandController() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showMobileCoachSheet, setShowMobileCoachSheet] = useState(false)
   const [showDesktopCoachPanel, setShowDesktopCoachPanel] = useState(false)
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false)
   const [showAllRelevantLevels, setShowAllRelevantLevels] = useState(false)
   const [displayedLevelsCount, setDisplayedLevelsCount] = useState(0)
   const [totalLevelsCount, setTotalLevelsCount] = useState(0)
@@ -523,6 +524,17 @@ export function useSPXCommandController() {
     )
   }, [layoutMode, selectedSetup?.id, tradeMode])
 
+  const handleSettingsPanelChange = useCallback((nextOpen: boolean) => {
+    setShowSettingsPanel(nextOpen)
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+      surface: 'spx_settings_panel',
+      action: nextOpen ? 'open' : 'close',
+      layoutMode,
+      tradeMode,
+      selectedSetupId: selectedSetup?.id || null,
+    }, { persist: true })
+  }, [layoutMode, selectedSetup?.id, tradeMode])
+
   const handleDesktopCoachDockToggle = useCallback(() => {
     setShowDesktopCoachPanel((previous) => {
       const nextOpen = !previous
@@ -734,6 +746,7 @@ export function useSPXCommandController() {
     showCommandPalette,
     showAdvancedHud,
     showMobileCoachSheet,
+    showSettingsPanel,
     showAllRelevantLevels,
     overlayPreset,
     displayedLevelsCount,
@@ -790,6 +803,7 @@ export function useSPXCommandController() {
     handleToggleAllLevels,
     handleMobileTabChange,
     handleMobileCoachSheetChange,
+    handleSettingsPanelChange,
     handleDesktopCoachDockToggle,
   }
 }
