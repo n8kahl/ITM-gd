@@ -69,7 +69,9 @@ jest.mock('../../services/spx/winRateBacktest', () => ({
 
 jest.mock('../../services/spx/optimizer', () => ({
   getActiveSPXOptimizationProfile: jest.fn(),
+  getSPXOptimizerHistory: jest.fn(),
   getSPXOptimizerScorecard: jest.fn(),
+  revertSPXOptimizerToHistory: jest.fn(),
   runSPXOptimizerScan: jest.fn(),
 }));
 
@@ -114,7 +116,9 @@ import { getSPXWinRateAnalytics } from '../../services/spx/outcomeTracker';
 import { runSPXWinRateBacktest } from '../../services/spx/winRateBacktest';
 import {
   getActiveSPXOptimizationProfile,
+  getSPXOptimizerHistory,
   getSPXOptimizerScorecard,
+  revertSPXOptimizerToHistory,
 } from '../../services/spx/optimizer';
 import { getCoachState } from '../../services/spx/aiCoach';
 import { getSPXSnapshot } from '../../services/spx';
@@ -133,7 +137,9 @@ const mockGetContractRecommendation = getContractRecommendation as jest.MockedFu
 const mockGetSPXWinRateAnalytics = getSPXWinRateAnalytics as jest.MockedFunction<typeof getSPXWinRateAnalytics>;
 const mockRunSPXWinRateBacktest = runSPXWinRateBacktest as jest.MockedFunction<typeof runSPXWinRateBacktest>;
 const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as jest.MockedFunction<typeof getActiveSPXOptimizationProfile>;
+const mockGetSPXOptimizerHistory = getSPXOptimizerHistory as jest.MockedFunction<typeof getSPXOptimizerHistory>;
 const mockGetSPXOptimizerScorecard = getSPXOptimizerScorecard as jest.MockedFunction<typeof getSPXOptimizerScorecard>;
+const mockRevertSPXOptimizerToHistory = revertSPXOptimizerToHistory as jest.MockedFunction<typeof revertSPXOptimizerToHistory>;
 const mockGetCoachState = getCoachState as jest.MockedFunction<typeof getCoachState>;
 const mockGetSPXSnapshot = getSPXSnapshot as jest.MockedFunction<typeof getSPXSnapshot>;
 const mockGetSPXOptimizerWorkerStatus = getSPXOptimizerWorkerStatus as jest.MockedFunction<typeof getSPXOptimizerWorkerStatus>;
@@ -460,7 +466,7 @@ describe('SPX API integration schema', () => {
       optimizationApplied: true,
       notes: ['test'],
     });
-    mockGetSPXOptimizerWorkerStatus.mockReturnValue({
+    mockGetSPXOptimizerWorkerStatus.mockResolvedValue({
       enabled: true,
       isRunning: true,
       mode: 'nightly_auto',
@@ -476,6 +482,155 @@ describe('SPX API integration schema', () => {
       lastErrorMessage: null,
       nextEligibleRunDateEt: '2026-02-17',
       nextEligibleRunAtEt: '2026-02-17 19:10 ET',
+    });
+    mockGetSPXOptimizerHistory.mockResolvedValue([
+      {
+        id: 41,
+        createdAt: '2026-02-15T16:00:00.000Z',
+        mode: 'manual',
+        action: 'scan',
+        optimizationApplied: false,
+        actor: 'integration-user-1',
+        reason: null,
+        revertedFromHistoryId: null,
+        scanRange: { from: '2026-01-27', to: '2026-02-20' },
+        trainingRange: { from: '2026-01-27', to: '2026-02-15' },
+        validationRange: { from: '2026-02-16', to: '2026-02-20' },
+        previousProfileGeneratedAt: '2026-02-14T00:00:00.000Z',
+        nextProfileGeneratedAt: '2026-02-15T16:00:00.000Z',
+        scorecardSummary: {
+          baselineTrades: 17,
+          optimizedTrades: 12,
+          t1Delta: -9.8,
+          t2Delta: -12.26,
+          expectancyDeltaR: -0.4726,
+          objectiveConservativeDelta: -27.56,
+          optimizationApplied: false,
+        },
+        notes: ['Candidate thresholds did not beat baseline on validation window; baseline retained.'],
+      },
+    ]);
+    mockRevertSPXOptimizerToHistory.mockResolvedValue({
+      profile: {
+        source: 'scan',
+        generatedAt: '2026-02-14T00:00:00.000Z',
+        qualityGate: {
+          minConfluenceScore: 3,
+          minPWinCalibrated: 0.62,
+          minEvR: 0.2,
+          actionableStatuses: ['ready', 'triggered'],
+        },
+        flowGate: {
+          requireFlowConfirmation: false,
+          minAlignmentPct: 0,
+        },
+        indicatorGate: {
+          requireEmaAlignment: false,
+          requireVolumeRegimeAlignment: false,
+        },
+        timingGate: {
+          enabled: true,
+          maxFirstSeenMinuteBySetupType: {},
+        },
+        regimeGate: {
+          minTradesPerCombo: 12,
+          minT1WinRatePct: 48,
+          pausedCombos: [],
+        },
+        tradeManagement: {
+          partialAtT1Pct: 0.65,
+          moveStopToBreakeven: true,
+        },
+        geometryPolicy: {
+          bySetupType: {},
+          bySetupRegime: {},
+          bySetupRegimeTimeBucket: {},
+        },
+        walkForward: {
+          trainingDays: 20,
+          validationDays: 5,
+          minTrades: 12,
+          objectiveWeights: {
+            t1: 0.62,
+            t2: 0.38,
+            failurePenalty: 0.5,
+            expectancyR: 14,
+          },
+        },
+        driftControl: {
+          enabled: true,
+          shortWindowDays: 5,
+          longWindowDays: 20,
+          maxDropPct: 12,
+          minLongWindowTrades: 20,
+          autoQuarantineEnabled: true,
+          triggerRateWindowDays: 20,
+          minQuarantineOpportunities: 20,
+          minTriggerRatePct: 3,
+          pausedSetupTypes: [],
+        },
+      },
+      scorecard: {
+        generatedAt: '2026-02-15T16:10:00.000Z',
+        scanRange: { from: '2026-01-27', to: '2026-02-20' },
+        trainingRange: { from: '2026-01-27', to: '2026-02-15' },
+        validationRange: { from: '2026-02-16', to: '2026-02-20' },
+        baseline: {
+          tradeCount: 17,
+          resolvedCount: 17,
+          t1Wins: 13,
+          t2Wins: 12,
+          stopsBeforeT1: 3,
+          t1WinRatePct: 76.47,
+          t2WinRatePct: 70.59,
+          failureRatePct: 17.65,
+          expectancyR: 1.0987,
+          expectancyLowerBoundR: 0.47,
+          positiveRealizedRatePct: 76.47,
+          objectiveScore: 80.79,
+          objectiveScoreConservative: 36.57,
+          t1Confidence95: { sampleSize: 17, pointPct: 76.47, lowerPct: 52.74, upperPct: 90.45 },
+          t2Confidence95: { sampleSize: 17, pointPct: 70.59, lowerPct: 46.87, upperPct: 86.72 },
+          failureConfidence95: { sampleSize: 17, pointPct: 17.65, lowerPct: 6.19, upperPct: 41.03 },
+        },
+        optimized: {
+          tradeCount: 12,
+          resolvedCount: 12,
+          t1Wins: 8,
+          t2Wins: 7,
+          stopsBeforeT1: 3,
+          t1WinRatePct: 66.67,
+          t2WinRatePct: 58.33,
+          failureRatePct: 25,
+          expectancyR: 0.6261,
+          expectancyLowerBoundR: -0.0521,
+          positiveRealizedRatePct: 66.67,
+          objectiveScore: 59.77,
+          objectiveScoreConservative: 9.01,
+          t1Confidence95: { sampleSize: 12, pointPct: 66.67, lowerPct: 39.06, upperPct: 86.19 },
+          t2Confidence95: { sampleSize: 12, pointPct: 58.33, lowerPct: 31.95, upperPct: 80.67 },
+          failureConfidence95: { sampleSize: 12, pointPct: 25, lowerPct: 8.89, upperPct: 53.23 },
+        },
+        improvementPct: {
+          t1WinRateDelta: -9.8,
+          t2WinRateDelta: -12.26,
+          objectiveDelta: -21.02,
+          objectiveConservativeDelta: -27.56,
+          expectancyRDelta: -0.4726,
+        },
+        driftAlerts: [],
+        setupTypePerformance: [],
+        setupComboPerformance: [],
+        setupActions: {
+          add: [],
+          update: [],
+          remove: [],
+        },
+        optimizationApplied: false,
+        notes: ['Profile reverted to optimizer history #41.'],
+      },
+      revertedFromHistoryId: 41,
+      historyEntryId: 42,
     });
     mockGetSPXSnapshot.mockResolvedValue({
       levels: [],
@@ -647,6 +802,24 @@ describe('SPX API integration schema', () => {
         to: expect.any(String),
       }),
       lastOptimizationApplied: expect.any(Boolean),
+    }));
+
+    const optimizerHistory = await request(app).get('/api/spx/analytics/optimizer/history?limit=10');
+    expect(optimizerHistory.status).toBe(200);
+    expect(optimizerHistory.body).toEqual(expect.objectContaining({
+      history: expect.any(Array),
+      count: expect.any(Number),
+    }));
+
+    const optimizerRevert = await request(app)
+      .post('/api/spx/analytics/optimizer/revert')
+      .send({ historyId: 41, reason: 'test-revert' });
+    expect(optimizerRevert.status).toBe(200);
+    expect(optimizerRevert.body).toEqual(expect.objectContaining({
+      revertedFromHistoryId: 41,
+      historyEntryId: expect.any(Number),
+      message: expect.any(String),
+      scorecard: expect.any(Object),
     }));
 
     const coach = await request(app).get('/api/spx/coach/state');

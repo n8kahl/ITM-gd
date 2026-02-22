@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Loader2, Settings2, Sparkles, X } from 'lucide-react'
 import { useSPXOptimizer } from '@/hooks/use-spx-optimizer'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
@@ -54,22 +54,46 @@ function formatDelta(value: number, suffix = ''): string {
   return `0.00${suffix}`
 }
 
+function formatHistoryTime(value: string): string {
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return '--'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(parsed))
+}
+
 export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) {
+  const [activeRevertId, setActiveRevertId] = useState<number | null>(null)
   const {
     scorecard,
     schedule,
+    history,
     isLoading,
     isScheduleLoading,
+    isHistoryLoading,
     error,
     scheduleError,
+    historyError,
     isScanning,
     scanError,
+    isReverting,
+    revertError,
     runScan,
+    revertToHistory,
     refresh,
     refreshSchedule,
+    refreshHistory,
   } = useSPXOptimizer()
 
-  const loadError = useMemo(() => summarizeError(error) || summarizeError(scheduleError), [error, scheduleError])
+  const loadError = useMemo(
+    () => summarizeError(error) || summarizeError(scheduleError) || summarizeError(historyError),
+    [error, scheduleError, historyError],
+  )
 
   const handleRunScan = useCallback(async () => {
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
@@ -97,8 +121,19 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
   }, [runScan])
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([refresh(), refreshSchedule()])
-  }, [refresh, refreshSchedule])
+    await Promise.all([refresh(), refreshSchedule(), refreshHistory()])
+  }, [refresh, refreshHistory, refreshSchedule])
+
+  const handleRevert = useCallback(async (historyId: number) => {
+    const approved = window.confirm(`Revert optimizer profile using audit entry #${historyId}?`)
+    if (!approved) return
+    setActiveRevertId(historyId)
+    try {
+      await revertToHistory(historyId, `settings_manual_revert:${historyId}`)
+    } finally {
+      setActiveRevertId(null)
+    }
+  }, [revertToHistory])
 
   if (!open) return null
 
@@ -196,13 +231,72 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
           </section>
         </div>
 
-        {(loadError || scanError) && (
+        {(loadError || scanError || revertError) && (
           <div className="px-4 pb-2">
             <p className="rounded border border-rose-300/35 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100">
-              {scanError || loadError}
+              {revertError || scanError || loadError}
             </p>
           </div>
         )}
+
+        <div className="border-t border-white/10 px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-white/60">Audit History</p>
+            <p className="text-[10px] text-white/45">{isHistoryLoading ? 'Loading…' : `${history.length} entries`}</p>
+          </div>
+          {history.length === 0 ? (
+            <p className="text-[11px] text-white/55">No optimizer audit entries yet.</p>
+          ) : (
+            <div className="max-h-[220px] space-y-1.5 overflow-auto pr-1">
+              {history.map((entry) => {
+                const summary = entry.scorecardSummary
+                const canRevert = entry.action === 'scan'
+                const revertingThis = activeRevertId === entry.id
+                return (
+                  <div
+                    key={entry.id}
+                    className="grid grid-cols-[1fr_auto] gap-2 rounded border border-white/10 bg-black/25 px-2 py-1.5"
+                  >
+                    <div className="min-w-0 text-[10px] text-white/75">
+                      <p className="font-mono text-white/88">
+                        #{entry.id} · {entry.action.toUpperCase()} · {entry.mode} · {formatHistoryTime(entry.createdAt)} ET
+                      </p>
+                      <p className="mt-0.5 text-white/55">
+                        Range {entry.scanRange.from || '--'} → {entry.scanRange.to || '--'} · Applied {String(entry.optimizationApplied)}
+                      </p>
+                      {summary && (
+                        <p className="mt-0.5 text-white/55">
+                          T1 {formatDelta(summary.t1Delta, ' pts')} · T2 {formatDelta(summary.t2Delta, ' pts')} · Exp {formatDelta(summary.expectancyDeltaR, 'R')}
+                        </p>
+                      )}
+                      {entry.reason && <p className="mt-0.5 text-white/50">Reason: {entry.reason}</p>}
+                    </div>
+                    <div className="flex items-center">
+                      {canRevert ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRevert(entry.id)}
+                          disabled={isReverting}
+                          data-testid={`spx-settings-revert-${entry.id}`}
+                          className="inline-flex min-h-[30px] items-center rounded border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-amber-100 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {(revertingThis && isReverting) ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Reverting
+                            </>
+                          ) : 'Revert'}
+                        </button>
+                      ) : (
+                        <span className="text-[9px] uppercase tracking-[0.08em] text-white/35">Audit</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 px-4 py-3">
           <button
@@ -215,7 +309,7 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
           <button
             type="button"
             onClick={handleRunScan}
-            disabled={isScanning}
+            disabled={isScanning || isReverting}
             data-testid="spx-settings-run-optimize"
             className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-emerald-300/35 bg-emerald-500/12 px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/18 disabled:cursor-not-allowed disabled:opacity-50"
           >

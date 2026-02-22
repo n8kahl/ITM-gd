@@ -15,7 +15,9 @@ import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
 import {
+  getSPXOptimizerHistory,
   getSPXOptimizerScorecard,
+  revertSPXOptimizerToHistory,
   getActiveSPXOptimizationProfile,
   runSPXOptimizerScan,
 } from '../services/spx/optimizer';
@@ -178,7 +180,7 @@ router.get('/analytics/optimizer/scorecard', async (_req: Request, res: Response
 router.get('/analytics/optimizer/schedule', async (_req: Request, res: Response) => {
   try {
     const scorecard = await getSPXOptimizerScorecard();
-    const schedule = getSPXOptimizerWorkerStatus();
+    const schedule = await getSPXOptimizerWorkerStatus();
     return res.json({
       ...schedule,
       lastOptimizationGeneratedAt: scorecard.generatedAt,
@@ -197,12 +199,41 @@ router.get('/analytics/optimizer/schedule', async (_req: Request, res: Response)
   }
 });
 
+router.get('/analytics/optimizer/history', async (req: Request, res: Response) => {
+  try {
+    const rawLimit = Number(req.query.limit || 20);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.trunc(rawLimit))) : 20;
+    const history = await getSPXOptimizerHistory(limit);
+    return res.json({
+      history,
+      count: history.length,
+    });
+  } catch (error) {
+    logger.error('SPX optimizer history endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX optimizer history.',
+      retryAfter: 10,
+    });
+  }
+});
+
 router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => {
   try {
     const from = parseISODateInput(req.body?.from) || undefined;
     const to = parseISODateInput(req.body?.to) || undefined;
+    const actor = typeof (req as Request & { user?: { id?: string } }).user?.id === 'string'
+      ? (req as Request & { user?: { id?: string } }).user?.id || null
+      : null;
 
-    const result = await runSPXOptimizerScan({ from, to });
+    const result = await runSPXOptimizerScan({
+      from,
+      to,
+      mode: 'manual',
+      actor,
+    });
     return res.json(result);
   } catch (error) {
     logger.error('SPX optimizer scan endpoint failed', {
@@ -211,6 +242,45 @@ router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => 
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to run SPX optimizer scan.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/analytics/optimizer/revert', async (req: Request, res: Response) => {
+  try {
+    const historyIdRaw = Number(req.body?.historyId);
+    const historyId = Number.isFinite(historyIdRaw) ? Math.trunc(historyIdRaw) : NaN;
+    if (!Number.isFinite(historyId) || historyId <= 0) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'historyId must be a positive integer.',
+      });
+    }
+
+    const reason = typeof req.body?.reason === 'string' && req.body.reason.trim().length > 0
+      ? req.body.reason.trim().slice(0, 240)
+      : null;
+    const actor = typeof (req as Request & { user?: { id?: string } }).user?.id === 'string'
+      ? (req as Request & { user?: { id?: string } }).user?.id || null
+      : null;
+    const result = await revertSPXOptimizerToHistory({
+      historyId,
+      actor,
+      reason,
+    });
+
+    return res.json({
+      ...result,
+      message: `Optimizer profile reverted to history entry ${historyId}.`,
+    });
+  } catch (error) {
+    logger.error('SPX optimizer revert endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to revert SPX optimizer profile.',
       retryAfter: 10,
     });
   }

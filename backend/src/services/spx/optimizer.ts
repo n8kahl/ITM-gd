@@ -81,6 +81,48 @@ export interface SPXOptimizationScanResult {
   scorecard: SPXOptimizerScorecard;
 }
 
+export type SPXOptimizerMode = 'manual' | 'weekly_auto' | 'nightly_auto' | 'revert';
+
+export interface SPXOptimizerHistoryEntry {
+  id: number;
+  createdAt: string;
+  mode: SPXOptimizerMode;
+  action: 'scan' | 'revert';
+  optimizationApplied: boolean;
+  actor: string | null;
+  reason: string | null;
+  revertedFromHistoryId: number | null;
+  scanRange: { from: string | null; to: string | null };
+  trainingRange: { from: string | null; to: string | null };
+  validationRange: { from: string | null; to: string | null };
+  previousProfileGeneratedAt: string | null;
+  nextProfileGeneratedAt: string | null;
+  scorecardSummary: {
+    baselineTrades: number;
+    optimizedTrades: number;
+    t1Delta: number;
+    t2Delta: number;
+    expectancyDeltaR: number;
+    objectiveConservativeDelta: number;
+    optimizationApplied: boolean;
+  } | null;
+  notes: string[];
+}
+
+export interface SPXOptimizerNightlyStatus {
+  lastRunDateEt: string | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface SPXOptimizerRevertResult {
+  profile: SPXOptimizationProfile;
+  scorecard: SPXOptimizerScorecard;
+  revertedFromHistoryId: number;
+  historyEntryId: number | null;
+}
+
 export interface SPXConfidenceInterval {
   sampleSize: number;
   pointPct: number;
@@ -245,10 +287,35 @@ interface PersistedOptimizerStateRow {
   training_to: string | null;
   validation_from: string | null;
   validation_to: string | null;
+  last_nightly_run_date_et: string | null;
+  last_nightly_attempt_at: string | null;
+  last_nightly_success_at: string | null;
+  last_nightly_error_message: string | null;
   updated_at: string;
 }
 
+interface PersistedOptimizerHistoryRow {
+  id: number;
+  action: 'scan' | 'revert' | null;
+  mode: string | null;
+  actor: string | null;
+  reason: string | null;
+  optimization_applied: boolean | null;
+  previous_profile: unknown;
+  next_profile: unknown;
+  scorecard: unknown;
+  scan_range_from: string | null;
+  scan_range_to: string | null;
+  training_from: string | null;
+  training_to: string | null;
+  validation_from: string | null;
+  validation_to: string | null;
+  reverted_from_history_id: number | null;
+  created_at: string;
+}
+
 const OPTIMIZER_STATE_TABLE = 'spx_setup_optimizer_state';
+const OPTIMIZER_HISTORY_TABLE = 'spx_setup_optimizer_history';
 const OPTIMIZER_STATE_ROW_ID = 'active';
 const OPTIMIZER_PROFILE_CACHE_KEY = 'spx_command_center:optimizer_profile';
 const OPTIMIZER_PROFILE_CACHE_TTL_SECONDS = 30;
@@ -458,6 +525,13 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function normalizeOptimizerMode(value: unknown): SPXOptimizerMode {
+  if (value === 'manual' || value === 'weekly_auto' || value === 'nightly_auto' || value === 'revert') {
+    return value;
+  }
+  return 'manual';
 }
 
 function normalizeGeometryPolicyEntry(
@@ -1415,7 +1489,7 @@ async function loadOptimizationRows(
 async function readPersistedOptimizerState(): Promise<PersistedOptimizerStateRow | null> {
   const { data, error } = await supabase
     .from(OPTIMIZER_STATE_TABLE)
-    .select('id,profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,updated_at')
+    .select('id,profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,last_nightly_run_date_et,last_nightly_attempt_at,last_nightly_success_at,last_nightly_error_message,updated_at')
     .eq('id', OPTIMIZER_STATE_ROW_ID)
     .maybeSingle();
 
@@ -1460,6 +1534,175 @@ async function persistOptimizerState(input: {
     }
 
     logger.warn('SPX optimizer failed to persist optimizer state', { error: error.message });
+  }
+}
+
+function summarizeHistoryScorecard(scorecard: unknown): SPXOptimizerHistoryEntry['scorecardSummary'] {
+  if (!scorecard || typeof scorecard !== 'object' || Array.isArray(scorecard)) return null;
+  const record = scorecard as Record<string, unknown>;
+  const baseline = record.baseline && typeof record.baseline === 'object' && !Array.isArray(record.baseline)
+    ? record.baseline as Record<string, unknown>
+    : null;
+  const optimized = record.optimized && typeof record.optimized === 'object' && !Array.isArray(record.optimized)
+    ? record.optimized as Record<string, unknown>
+    : null;
+  const improvement = record.improvementPct && typeof record.improvementPct === 'object' && !Array.isArray(record.improvementPct)
+    ? record.improvementPct as Record<string, unknown>
+    : null;
+  if (!baseline || !optimized || !improvement) return null;
+
+  return {
+    baselineTrades: toFiniteNumber(baseline.tradeCount) ?? 0,
+    optimizedTrades: toFiniteNumber(optimized.tradeCount) ?? 0,
+    t1Delta: round(toFiniteNumber(improvement.t1WinRateDelta) ?? 0, 2),
+    t2Delta: round(toFiniteNumber(improvement.t2WinRateDelta) ?? 0, 2),
+    expectancyDeltaR: round(toFiniteNumber(improvement.expectancyRDelta) ?? 0, 4),
+    objectiveConservativeDelta: round(toFiniteNumber(improvement.objectiveConservativeDelta) ?? 0, 2),
+    optimizationApplied: record.optimizationApplied === true,
+  };
+}
+
+function extractProfileGeneratedAt(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const generatedAt = (value as Record<string, unknown>).generatedAt;
+  return typeof generatedAt === 'string' && generatedAt.length > 0 ? generatedAt : null;
+}
+
+function toHistoryNotes(scorecard: unknown): string[] {
+  if (!scorecard || typeof scorecard !== 'object' || Array.isArray(scorecard)) return [];
+  const notes = (scorecard as Record<string, unknown>).notes;
+  if (!Array.isArray(notes)) return [];
+  return notes.filter((note): note is string => typeof note === 'string').slice(0, 8);
+}
+
+function toHistoryEntry(row: PersistedOptimizerHistoryRow): SPXOptimizerHistoryEntry {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    mode: normalizeOptimizerMode(row.mode),
+    action: row.action === 'revert' ? 'revert' : 'scan',
+    optimizationApplied: row.optimization_applied === true,
+    actor: row.actor,
+    reason: row.reason,
+    revertedFromHistoryId: row.reverted_from_history_id,
+    scanRange: {
+      from: row.scan_range_from,
+      to: row.scan_range_to,
+    },
+    trainingRange: {
+      from: row.training_from,
+      to: row.training_to,
+    },
+    validationRange: {
+      from: row.validation_from,
+      to: row.validation_to,
+    },
+    previousProfileGeneratedAt: extractProfileGeneratedAt(row.previous_profile),
+    nextProfileGeneratedAt: extractProfileGeneratedAt(row.next_profile),
+    scorecardSummary: summarizeHistoryScorecard(row.scorecard),
+    notes: toHistoryNotes(row.scorecard),
+  };
+}
+
+async function appendOptimizerHistory(input: {
+  action: 'scan' | 'revert';
+  mode: SPXOptimizerMode;
+  actor?: string | null;
+  reason?: string | null;
+  optimizationApplied: boolean;
+  previousProfile: SPXOptimizationProfile;
+  nextProfile: SPXOptimizationProfile;
+  scorecard: SPXOptimizerScorecard;
+  scanRange: { from: string; to: string };
+  trainingRange: { from: string; to: string };
+  validationRange: { from: string; to: string };
+  revertedFromHistoryId?: number | null;
+}): Promise<number | null> {
+  const row = {
+    action: input.action,
+    mode: input.mode,
+    actor: input.actor || null,
+    reason: input.reason || null,
+    optimization_applied: input.optimizationApplied,
+    previous_profile: input.previousProfile,
+    next_profile: input.nextProfile,
+    scorecard: input.scorecard,
+    scan_range_from: input.scanRange.from,
+    scan_range_to: input.scanRange.to,
+    training_from: input.trainingRange.from,
+    training_to: input.trainingRange.to,
+    validation_from: input.validationRange.from,
+    validation_to: input.validationRange.to,
+    reverted_from_history_id: input.revertedFromHistoryId || null,
+  };
+
+  const { data, error } = await supabase
+    .from(OPTIMIZER_HISTORY_TABLE)
+    .insert(row)
+    .select('id')
+    .single();
+
+  if (error) {
+    if (isMissingTableError(error.message)) {
+      logger.warn('SPX optimizer history table missing; skipping history append');
+      return null;
+    }
+    logger.warn('SPX optimizer failed to append history', { error: error.message });
+    return null;
+  }
+
+  const id = toFiniteNumber((data as Record<string, unknown>).id);
+  return id != null ? Math.trunc(id) : null;
+}
+
+export async function getSPXOptimizerHistory(limit = 20): Promise<SPXOptimizerHistoryEntry[]> {
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const { data, error } = await supabase
+    .from(OPTIMIZER_HISTORY_TABLE)
+    .select('id,action,mode,actor,reason,optimization_applied,previous_profile,next_profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,reverted_from_history_id,created_at')
+    .order('id', { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    if (isMissingTableError(error.message)) return [];
+    logger.warn('SPX optimizer failed to read history', { error: error.message });
+    return [];
+  }
+
+  return ((data || []) as PersistedOptimizerHistoryRow[]).map((row) => toHistoryEntry(row));
+}
+
+export async function getSPXOptimizerNightlyStatus(): Promise<SPXOptimizerNightlyStatus> {
+  const persisted = await readPersistedOptimizerState();
+  return {
+    lastRunDateEt: persisted?.last_nightly_run_date_et ?? null,
+    lastAttemptAt: persisted?.last_nightly_attempt_at ?? null,
+    lastSuccessAt: persisted?.last_nightly_success_at ?? null,
+    lastErrorMessage: persisted?.last_nightly_error_message ?? null,
+  };
+}
+
+export async function persistSPXOptimizerNightlyStatus(input: SPXOptimizerNightlyStatus): Promise<void> {
+  const row = {
+    id: OPTIMIZER_STATE_ROW_ID,
+    status: 'active',
+    last_nightly_run_date_et: input.lastRunDateEt,
+    last_nightly_attempt_at: input.lastAttemptAt,
+    last_nightly_success_at: input.lastSuccessAt,
+    last_nightly_error_message: input.lastErrorMessage,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from(OPTIMIZER_STATE_TABLE)
+    .upsert(row, { onConflict: 'id' });
+
+  if (error) {
+    if (isMissingTableError(error.message)) {
+      logger.warn('SPX optimizer state table missing; skipping nightly status persistence');
+      return;
+    }
+    logger.warn('SPX optimizer failed to persist nightly status', { error: error.message });
   }
 }
 
@@ -1559,13 +1802,16 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
 export async function runSPXOptimizerScan(input?: {
   from?: string;
   to?: string;
-  mode?: 'manual' | 'weekly_auto' | 'nightly_auto';
+  mode?: SPXOptimizerMode;
+  actor?: string | null;
+  reason?: string | null;
 }): Promise<SPXOptimizationScanResult> {
   const currentProfile = await getActiveSPXOptimizationProfile();
   const fallbackRange = defaultScanRange(currentProfile);
   const scanFrom = normalizeDateInput(input?.from || fallbackRange.from);
   const scanTo = normalizeDateInput(input?.to || fallbackRange.to);
-  const automatedMode = input?.mode === 'weekly_auto' || input?.mode === 'nightly_auto';
+  const scanMode = normalizeOptimizerMode(input?.mode || 'manual');
+  const automatedMode = scanMode === 'weekly_auto' || scanMode === 'nightly_auto';
 
   const profileForScan = normalizeProfile(currentProfile);
   const trainingDays = profileForScan.walkForward.trainingDays;
@@ -1816,6 +2062,20 @@ export async function runSPXOptimizerScan(input?: {
     validationRange: { from: validationFrom, to: validationTo },
   });
 
+  await appendOptimizerHistory({
+    action: 'scan',
+    mode: scanMode,
+    actor: input?.actor ?? null,
+    reason: input?.reason ?? null,
+    optimizationApplied,
+    previousProfile: profileForScan,
+    nextProfile,
+    scorecard,
+    scanRange: { from: scanFrom, to: scanTo },
+    trainingRange: { from: trainingFrom, to: trainingTo },
+    validationRange: { from: validationFrom, to: validationTo },
+  });
+
   try {
     await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, nextProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
   } catch {
@@ -1825,6 +2085,107 @@ export async function runSPXOptimizerScan(input?: {
   return {
     profile: nextProfile,
     scorecard,
+  };
+}
+
+async function readOptimizerHistoryRow(historyId: number): Promise<PersistedOptimizerHistoryRow | null> {
+  const normalizedId = Math.trunc(historyId);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) return null;
+
+  const { data, error } = await supabase
+    .from(OPTIMIZER_HISTORY_TABLE)
+    .select('id,action,mode,actor,reason,optimization_applied,previous_profile,next_profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,reverted_from_history_id,created_at')
+    .eq('id', normalizedId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error.message)) return null;
+    throw new Error(`Failed to load optimizer history row ${normalizedId}: ${error.message}`);
+  }
+
+  return (data || null) as PersistedOptimizerHistoryRow | null;
+}
+
+function resolvePersistedRange(persisted: PersistedOptimizerStateRow | null): {
+  scanRange: { from: string; to: string };
+  trainingRange: { from: string; to: string };
+  validationRange: { from: string; to: string };
+} {
+  const fallback = defaultScanRange(DEFAULT_PROFILE);
+  const scanRange = persisted?.scan_range_from && persisted?.scan_range_to
+    ? { from: persisted.scan_range_from, to: persisted.scan_range_to }
+    : fallback;
+  const trainingRange = persisted?.training_from && persisted?.training_to
+    ? { from: persisted.training_from, to: persisted.training_to }
+    : scanRange;
+  const validationRange = persisted?.validation_from && persisted?.validation_to
+    ? { from: persisted.validation_from, to: persisted.validation_to }
+    : scanRange;
+  return { scanRange, trainingRange, validationRange };
+}
+
+export async function revertSPXOptimizerToHistory(input: {
+  historyId: number;
+  actor?: string | null;
+  reason?: string | null;
+}): Promise<SPXOptimizerRevertResult> {
+  const targetRow = await readOptimizerHistoryRow(input.historyId);
+  if (!targetRow) {
+    throw new Error(`Optimizer history entry ${input.historyId} was not found.`);
+  }
+
+  const persisted = await readPersistedOptimizerState();
+  const currentProfile = normalizeProfile(persisted?.profile || DEFAULT_PROFILE);
+  const targetProfile = normalizeProfile(targetRow.previous_profile || DEFAULT_PROFILE);
+  const persistedScorecard = persisted?.scorecard && typeof persisted.scorecard === 'object' && !Array.isArray(persisted.scorecard)
+    ? persisted.scorecard as SPXOptimizerScorecard
+    : await getSPXOptimizerScorecard();
+  const generatedAt = new Date().toISOString();
+  const revertedScorecard: SPXOptimizerScorecard = {
+    ...persistedScorecard,
+    generatedAt,
+    optimizationApplied: false,
+    notes: [
+      `Profile reverted to optimizer history #${targetRow.id}. Run Scan & Optimize to refresh scorecard under reverted profile.`,
+      ...(Array.isArray(persistedScorecard.notes) ? persistedScorecard.notes : []),
+    ].slice(0, 16),
+  };
+
+  const { scanRange, trainingRange, validationRange } = resolvePersistedRange(persisted);
+  await persistOptimizerState({
+    profile: targetProfile,
+    scorecard: revertedScorecard,
+    scanRange,
+    trainingRange,
+    validationRange,
+  });
+
+  const historyEntryId = await appendOptimizerHistory({
+    action: 'revert',
+    mode: 'revert',
+    actor: input.actor ?? null,
+    reason: input.reason ?? null,
+    optimizationApplied: false,
+    previousProfile: currentProfile,
+    nextProfile: targetProfile,
+    scorecard: revertedScorecard,
+    scanRange,
+    trainingRange,
+    validationRange,
+    revertedFromHistoryId: targetRow.id,
+  });
+
+  try {
+    await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, targetProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
+  } catch {
+    // noop
+  }
+
+  return {
+    profile: targetProfile,
+    scorecard: revertedScorecard,
+    revertedFromHistoryId: targetRow.id,
+    historyEntryId,
   };
 }
 
