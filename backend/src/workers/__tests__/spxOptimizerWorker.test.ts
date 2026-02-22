@@ -1,6 +1,6 @@
-const mockRunSPXOptimizerScan = jest.fn();
 const mockGetSPXOptimizerNightlyStatus = jest.fn();
 const mockPersistSPXOptimizerNightlyStatus = jest.fn();
+const mockRunSPXNightlyReplayOptimizerCycle = jest.fn();
 
 jest.mock('../../lib/logger', () => ({
   logger: {
@@ -12,9 +12,12 @@ jest.mock('../../lib/logger', () => ({
 }));
 
 jest.mock('../../services/spx/optimizer', () => ({
-  runSPXOptimizerScan: (...args: any[]) => mockRunSPXOptimizerScan(...args),
   getSPXOptimizerNightlyStatus: (...args: any[]) => mockGetSPXOptimizerNightlyStatus(...args),
   persistSPXOptimizerNightlyStatus: (...args: any[]) => mockPersistSPXOptimizerNightlyStatus(...args),
+}));
+
+jest.mock('../../services/spx/nightlyReplayOptimizer', () => ({
+  runSPXNightlyReplayOptimizerCycle: (...args: any[]) => mockRunSPXNightlyReplayOptimizerCycle(...args),
 }));
 
 import {
@@ -28,6 +31,20 @@ describe('SPX optimizer nightly worker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    mockRunSPXNightlyReplayOptimizerCycle.mockResolvedValue({
+      asOfDateEt: '2026-02-17',
+      replayEnabled: true,
+      replayRange: { from: '2026-01-20', to: '2026-02-17', lookbackDays: 20 },
+      replaySummary: null,
+      optimizerResult: {
+        scorecard: {
+          optimizationApplied: false,
+          optimized: { tradeCount: 0 },
+          improvementPct: { t1WinRateDelta: 0, t2WinRateDelta: 0 },
+          dataQuality: { failClosedActive: false, gatePassed: true, reasons: [] },
+        },
+      },
+    });
     mockGetSPXOptimizerNightlyStatus.mockResolvedValue({
       lastRunDateEt: null,
       lastAttemptAt: null,

@@ -27,6 +27,7 @@ Track: Production Recovery Autonomous Program
 15. Gold Standard published: `SPX_COMMAND_CENTER_GOLD_STANDARD_CONFIG_2026-02-22.md` is now the canonical live/backtest/optimizer baseline reference for SPX win-rate governance.
 16. Phase 11 slice P11-S11 complete: strict failure attribution tooling, ORB flow-quality gating, trend/mean/fade conservative target refinement, late-day contract execution hardening (including earlier 0DTE rollover), and stronger optimizer promotion guardrails (T1/T2/expectancy/failure deltas).
 17. Phase 12 slice P12-S1 complete: profile-driven setup geometry policy (setup-type + optional regime/time-bucket overrides) now feeds live setup target/stop shaping, backtest geometry lookup now supports scoped override keys, and SPX realtime trigger notifications now ship with toast + browser-notification routing (dedupe/cooldown + user preference gate).
+18. Phase 12 slice P12-S5 complete: setup `pWin` is now calibrated from realized `spx_setup_instances` outcomes (hierarchical setup/regime/time-bucket smoothing + conservative blending), and nightly optimization now runs replay reconstruction before scan/promotion so optimizer decisions are based on reconstructed Massive-driven actuals.
 
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).

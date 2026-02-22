@@ -3,8 +3,8 @@ import { isTradingDay, toEasternTime } from '../services/marketHours';
 import {
   getSPXOptimizerNightlyStatus,
   persistSPXOptimizerNightlyStatus,
-  runSPXOptimizerScan,
 } from '../services/spx/optimizer';
+import { runSPXNightlyReplayOptimizerCycle } from '../services/spx/nightlyReplayOptimizer';
 import {
   markWorkerCycleFailed,
   markWorkerCycleStarted,
@@ -131,8 +131,12 @@ async function runCycle(): Promise<void> {
         lastErrorMessage,
       });
 
-      const result = await runSPXOptimizerScan({ mode: 'nightly_auto' });
+      const cycleResult = await runSPXNightlyReplayOptimizerCycle({
+        asOfDateEt: schedule.dateEt,
+        mode: 'nightly_auto',
+      });
       lastRunDateEt = schedule.dateEt;
+      const result = cycleResult.optimizerResult;
 
       const dataQuality = result.scorecard.dataQuality;
       if (dataQuality?.failClosedActive && !dataQuality.gatePassed) {
@@ -153,6 +157,10 @@ async function runCycle(): Promise<void> {
 
       logger.info('SPX optimizer nightly run complete', {
         dateEt: schedule.dateEt,
+        replayEnabled: cycleResult.replayEnabled,
+        replayFrom: cycleResult.replayRange.from,
+        replayTo: cycleResult.replayRange.to,
+        replayFailedDays: cycleResult.replaySummary?.failedDays ?? 0,
         applied: result.scorecard.optimizationApplied,
         validationTrades: result.scorecard.optimized.tradeCount,
         t1Delta: result.scorecard.improvementPct.t1WinRateDelta,

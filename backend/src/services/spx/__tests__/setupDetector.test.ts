@@ -5,6 +5,7 @@ import { getFibLevels } from '../fibEngine';
 import { classifyCurrentRegime } from '../regimeClassifier';
 import { getFlowEvents } from '../flowEngine';
 import { getActiveSPXOptimizationProfile } from '../optimizer';
+import { loadSetupPWinCalibrationModel } from '../setupCalibration';
 import { cacheGet, cacheSet } from '../../../config/redis';
 
 jest.mock('../../../lib/logger', () => ({
@@ -45,12 +46,17 @@ jest.mock('../optimizer', () => ({
   getActiveSPXOptimizationProfile: jest.fn(),
 }));
 
+jest.mock('../setupCalibration', () => ({
+  loadSetupPWinCalibrationModel: jest.fn(),
+}));
+
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
 const mockGetFibLevels = getFibLevels as jest.MockedFunction<typeof getFibLevels>;
 const mockClassifyCurrentRegime = classifyCurrentRegime as jest.MockedFunction<typeof classifyCurrentRegime>;
 const mockGetFlowEvents = getFlowEvents as jest.MockedFunction<typeof getFlowEvents>;
 const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as jest.MockedFunction<typeof getActiveSPXOptimizationProfile>;
+const mockLoadSetupPWinCalibrationModel = loadSetupPWinCalibrationModel as jest.MockedFunction<typeof loadSetupPWinCalibrationModel>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
 const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
 const originalEnv = { ...process.env };
@@ -181,6 +187,19 @@ describe('spx/setupDetector', () => {
         minLongWindowTrades: 20,
         pausedSetupTypes: [],
       },
+    } as never);
+    mockLoadSetupPWinCalibrationModel.mockResolvedValue({
+      generatedAt: '2026-02-15T14:40:00.000Z',
+      asOfDateEt: '2026-02-15',
+      range: { from: '2026-01-01', to: '2026-02-14' },
+      sampleSize: 0,
+      calibrate: (input: { rawPWin: number }) => ({
+        pWin: input.rawPWin,
+        source: 'heuristic',
+        sampleSize: 0,
+        empiricalPWin: null,
+        blendWeight: 0,
+      }),
     } as never);
     __resetSetupDetectorStateForTests();
     process.env = {

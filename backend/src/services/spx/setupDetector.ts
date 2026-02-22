@@ -9,6 +9,7 @@ import { getMergedLevels } from './levelEngine';
 import { getActiveSPXOptimizationProfile, type SPXGeometryPolicyEntry } from './optimizer';
 import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
+import { loadSetupPWinCalibrationModel } from './setupCalibration';
 import type {
   ClusterZone,
   FibLevel,
@@ -1867,7 +1868,8 @@ export async function detectActiveSetups(options?: {
     (previousSetups || []).map((setup) => [setup.id, setup]),
   );
 
-  const [levels, gex, fibLevels, regimeState, flowEvents, indicatorContext] = await Promise.all([
+  const sessionDate = toEasternTime(evaluationDate).dateStr;
+  const [levels, gex, fibLevels, regimeState, flowEvents, indicatorContext, optimizationProfile, pWinCalibrationModel] = await Promise.all([
     levelData
       ? Promise.resolve(levelData)
       : getMergedLevels({ forceRefresh }),
@@ -1889,6 +1891,11 @@ export async function detectActiveSetups(options?: {
         evaluationDate,
         asOfTimestamp: hasHistoricalTimestamp ? evaluationIso : undefined,
       }),
+    getActiveSPXOptimizationProfile(),
+    loadSetupPWinCalibrationModel({
+      asOfDateEt: sessionDate,
+      forceRefresh,
+    }),
   ]);
 
   const currentPrice = gex.spx.spotPrice;
@@ -1897,15 +1904,12 @@ export async function detectActiveSetups(options?: {
   const lifecycleConfig = getSetupLifecycleConfig();
   const scoringConfig = getSetupScoringConfig();
   const diversificationConfig = getSetupDiversificationConfig();
-  const optimizationProfile = await getActiveSPXOptimizationProfile();
   const pausedSetupTypes = new Set(optimizationProfile.driftControl.pausedSetupTypes);
   const pausedCombos = new Set(
     optimizationProfile.regimeGate.pausedCombos.filter((combo) => (
       !diversificationConfig.allowRecoveryCombos || !DIVERSIFICATION_RECOVERY_COMBOS.has(combo)
     )),
   );
-
-  const sessionDate = toEasternTime(evaluationDate).dateStr;
 
   const setups: Setup[] = candidateZones.map((zone) => {
     const direction = setupDirection(zone, currentPrice);
@@ -2150,17 +2154,24 @@ export async function detectActiveSetups(options?: {
       ? clamp((scoreRaw * 100) - stalePenalty - contradictionPenalty - lifecyclePenalty + ((indicatorBlend - 50) * 0.1))
       : normalizedConfluence;
 
-    const baselineWin = (WIN_RATE_BY_SCORE[confluence.score] || 32) / 100;
+    const heuristicBaselineWin = (WIN_RATE_BY_SCORE[confluence.score] || 32) / 100;
     const scoreAdjustment = (finalScore - 50) / 220;
     const flowAdjustment = alignmentPct == null ? 0 : ((alignmentPct - 50) / 240);
-    const pWinCalibrated = clamp(
-      baselineWin
+    const pWinHeuristic = clamp(
+      heuristicBaselineWin
         + scoreAdjustment
         + (regimeAligned ? 0.03 : -0.04)
         + flowAdjustment,
       0.05,
       0.95,
     );
+    const pWinCalibration = pWinCalibrationModel.calibrate({
+      setupType,
+      regime: regimeState.regime,
+      firstSeenMinuteEt,
+      rawPWin: pWinHeuristic,
+    });
+    const pWinCalibrated = clamp(pWinCalibration.pWin, 0.05, 0.95);
     const rTarget1 = rewardToTarget1 / riskToStop;
     const rTarget2 = rewardToTarget2 / riskToStop;
     const rBlended = (0.65 * rTarget1) + (0.35 * rTarget2);
@@ -2260,7 +2271,7 @@ export async function detectActiveSetups(options?: {
       statusUpdatedAt: gatedLifecycle.statusUpdatedAt,
       ttlExpiresAt: gatedLifecycle.ttlExpiresAt,
       invalidationReason: gatedLifecycle.invalidationReason,
-      probability: WIN_RATE_BY_SCORE[confluence.score] || 32,
+      probability: round(pWinCalibrated * 100, 2),
       recommendedContract: null,
       createdAt,
       triggeredAt: gatedLifecycle.status === 'triggered' || gatedLifecycle.status === 'invalidated' || gatedLifecycle.status === 'expired'
