@@ -3,15 +3,12 @@ import { authenticateAsMember } from './helpers/member-auth'
 import { setupSPXCommandCenterMocks } from './helpers/spx-mocks'
 
 async function pressShortcut(page: Page, key: string) {
-  await page.evaluate((shortcut) => {
+  await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
-    window.dispatchEvent(new KeyboardEvent('keydown', {
-      key: shortcut,
-      bubbles: true,
-    }))
-  }, key)
+  })
+  await page.keyboard.press(key)
 }
 
 async function ensureSpatialMode(page: Page) {
@@ -67,11 +64,16 @@ test.describe('SPX spatial overlays', () => {
 
     await pressShortcut(page, 'm')
     await expect(page.getByTestId('spx-priority-level-overlay')).toHaveCount(0)
-    await expect(page.getByTestId('spx-topographic-ladder')).toBeVisible()
+    await expect(page.getByTestId('spx-topographic-ladder')).toHaveCount(0)
+    await expect(page.getByTestId('spx-setup-lock-overlay')).toHaveCount(0)
+    await expect(page.getByTestId('spx-rr-shadow-overlay')).toHaveCount(0)
+
+    await pressShortcut(page, 'm')
+    await expect(page.getByTestId('spx-priority-level-overlay')).toBeVisible()
 
     await pressShortcut(page, 'j')
-    await expect(page.getByTestId('spx-setup-lock-overlay')).toBeVisible({ timeout: 8_000 })
-    await expect(page.getByTestId('spx-rr-shadow-overlay')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('spx-setup-lock-overlay')).toHaveCount(0)
+    await expect(page.getByTestId('spx-rr-shadow-overlay')).toHaveCount(0)
 
     await pressShortcut(page, 'a')
     await expect(page.getByTestId('spx-spatial-ghost-layer')).toBeVisible({ timeout: 8_000 })

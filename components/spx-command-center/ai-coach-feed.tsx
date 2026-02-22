@@ -28,6 +28,7 @@ import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { CoachMessageCard } from '@/components/spx-command-center/coach-message'
 import { applySPXAlertSuppression } from '@/lib/spx/alert-suppression'
 import { normalizeCoachDecisionForMode } from '@/lib/spx/coach-decision-policy'
+import { dedupeCoachMessagesForTimeline } from '@/lib/spx/coach-message-dedupe'
 import { cn } from '@/lib/utils'
 import type {
   CoachDecisionAction,
@@ -154,6 +155,11 @@ function findSetupById(setups: Setup[], setupId?: string | null): Setup | null {
   return setups.find((setup) => setup.id === setupId) || null
 }
 
+function isActionableSetup(setup: Setup | null | undefined): boolean {
+  if (!setup) return false
+  return setup.status === 'ready' || setup.status === 'triggered'
+}
+
 function decisionStatusLabel(status: 'idle' | 'loading' | 'ready' | 'error'): string {
   if (status === 'loading') return 'Refreshing'
   if (status === 'error') return 'Delayed'
@@ -209,7 +215,8 @@ export function AICoachFeed({
   const lastVisibleMessageIdRef = useRef<string | null>(null)
 
   const scopedSetup = inTradeSetup || selectedSetup
-  const coachDecisionMode = tradeMode === 'in_trade' ? 'in_trade' : (scopedSetup ? 'evaluate' : 'scan')
+  const scopedSetupActionable = isActionableSetup(scopedSetup)
+  const coachDecisionMode = tradeMode === 'in_trade' ? 'in_trade' : (scopedSetupActionable ? 'evaluate' : 'scan')
   const effectiveCoachDecision = useMemo(
     () => normalizeCoachDecisionForMode(
       coachDecision,
@@ -270,11 +277,15 @@ export function AICoachFeed({
     () => effectiveMessages.filter((message) => message.id !== pinnedAlert?.id),
     [effectiveMessages, pinnedAlert?.id],
   )
+  const timelineMessages = useMemo(
+    () => dedupeCoachMessagesForTimeline(visibleMessages),
+    [visibleMessages],
+  )
 
   const groupedMessages = useMemo(() => {
     const groups = new Map<string, CoachMessage[]>()
 
-    visibleMessages.forEach((message) => {
+    timelineMessages.forEach((message) => {
       const key = message.setupId || '__global__'
       const existing = groups.get(key)
       if (existing) {
@@ -298,7 +309,7 @@ export function AICoachFeed({
         messages,
       }
     })
-  }, [scopedSetup, setupTypeById, visibleMessages])
+  }, [scopedSetup, setupTypeById, timelineMessages])
 
   const flowSummary = useMemo(() => {
     if (!scopedSetup) return null
@@ -460,6 +471,9 @@ export function AICoachFeed({
     }
 
     if (action.id === 'ENTER_TRADE_FOCUS' && actionSetup) {
+      if (!isActionableSetup(actionSetup)) {
+        return
+      }
       selectSetup(actionSetup)
       enterTrade(actionSetup)
       void requestCoachDecision({
@@ -701,7 +715,7 @@ export function AICoachFeed({
   useEffect(() => {
     if (!uxFlags.coachTimelineV2) return
 
-    const latestMessageId = visibleMessages[0]?.id || null
+    const latestMessageId = timelineMessages[0]?.id || null
     if (!latestMessageId) {
       lastVisibleMessageIdRef.current = null
       return
@@ -722,7 +736,7 @@ export function AICoachFeed({
     }
 
     lastVisibleMessageIdRef.current = latestMessageId
-  }, [historyOpen, isTimelineAtBottom, prefersReducedMotion, scrollTimelineToBottom, uxFlags.coachTimelineV2, visibleMessages])
+  }, [historyOpen, isTimelineAtBottom, prefersReducedMotion, scrollTimelineToBottom, timelineMessages, uxFlags.coachTimelineV2])
 
   useEffect(() => {
     if (suppressedAlertResult.suppressedCount <= 0) return
@@ -752,13 +766,19 @@ export function AICoachFeed({
     })
   }, [scopedSetup?.id, sendMessage, tradeMode])
 
-  const latestMessage = visibleMessages[0] || null
+  const latestMessage = timelineMessages[0] || null
   const decisionAge = staleAgeLabel(effectiveCoachDecision)
   const decisionActions = useMemo(
-    () => normalizeDecisionActions(effectiveCoachDecision?.actions || [], {
-      suppressPrimaryTradeActions,
-    }),
-    [effectiveCoachDecision?.actions, suppressPrimaryTradeActions],
+    () => normalizeDecisionActions(
+      (effectiveCoachDecision?.actions || []).filter((action) => {
+        if (tradeMode !== 'in_trade' && !scopedSetupActionable && action.id === 'ENTER_TRADE_FOCUS') return false
+        return true
+      }),
+      {
+        suppressPrimaryTradeActions,
+      },
+    ),
+    [effectiveCoachDecision?.actions, scopedSetupActionable, suppressPrimaryTradeActions, tradeMode],
   )
   const coachDecisionDisplayStatus = coachDecisionStatus === 'loading' && effectiveCoachDecision
     ? 'ready'
