@@ -7,13 +7,30 @@ import { nowIso, round } from './utils';
 
 const GEX_CACHE_KEY = 'spx_command_center:gex:unified';
 const GEX_CACHE_TTL_SECONDS = 15;
+const GEX_STALE_CACHE_KEY = 'spx_command_center:gex:unified:stale';
+const GEX_STALE_CACHE_TTL_SECONDS = 300;
 const SPY_TO_SPX_GEX_SCALE = 0.1;
 const COMBINED_GEX_SPOT_WINDOW_POINTS = 220;
-let gexInFlight: Promise<{
+export interface UnifiedGEXLandscapePayload {
   spx: GEXProfile;
   spy: GEXProfile;
   combined: GEXProfile;
-}> | null = null;
+}
+
+let gexInFlight: Promise<UnifiedGEXLandscapePayload> | null = null;
+
+function timeoutAfter(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    const handle = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+    if (typeof handle === 'object' && typeof (handle as NodeJS.Timeout).unref === 'function') {
+      (handle as NodeJS.Timeout).unref();
+    }
+  });
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([promise, timeoutAfter(timeoutMs)]);
+}
 
 function toStrikePair(strike: number, gex: number): { strike: number; gex: number } {
   return {
@@ -145,88 +162,106 @@ function buildCombinedProfile(
   };
 }
 
+function buildSyntheticSpyProfile(spxProfile: OptionsGEXProfile): OptionsGEXProfile {
+  const estimatedSpySpot = round(spxProfile.spotPrice / 10, 2);
+  const estimatedSpyFlip = spxProfile.flipPoint != null ? round(spxProfile.flipPoint / 10, 2) : estimatedSpySpot;
+  const estimatedSpyMaxGex = spxProfile.maxGEXStrike != null ? round(spxProfile.maxGEXStrike / 10, 2) : estimatedSpySpot;
+
+  return {
+    symbol: 'SPY',
+    spotPrice: estimatedSpySpot,
+    gexByStrike: [],
+    flipPoint: estimatedSpyFlip,
+    maxGEXStrike: estimatedSpyMaxGex,
+    keyLevels: [],
+    regime: spxProfile.regime,
+    implication: 'Synthetic SPY profile fallback (derived from SPX context).',
+    calculatedAt: nowIso(),
+    expirationsAnalyzed: spxProfile.expirationsAnalyzed,
+  };
+}
+
 export async function computeUnifiedGEXLandscape(options?: {
   forceRefresh?: boolean;
   strikeRange?: number;
   maxExpirations?: number;
-}): Promise<{
-  spx: GEXProfile;
-  spy: GEXProfile;
-  combined: GEXProfile;
-}> {
-  const forceRefresh = options?.forceRefresh === true;
-  if (!forceRefresh && gexInFlight) {
+}): Promise<UnifiedGEXLandscapePayload> {
+  if (gexInFlight) {
     return gexInFlight;
   }
+  const forceRefresh = options?.forceRefresh === true;
 
-  const run = async (): Promise<{
-    spx: GEXProfile;
-    spy: GEXProfile;
-    combined: GEXProfile;
-  }> => {
-  if (!forceRefresh) {
-    const cached = await cacheGet<{
-      spx: GEXProfile;
-      spy: GEXProfile;
-      combined: GEXProfile;
-    }>(GEX_CACHE_KEY);
+  const run = async (): Promise<UnifiedGEXLandscapePayload> => {
+    if (!forceRefresh) {
+      const cached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_CACHE_KEY);
+      if (cached) {
+        return cached;
+      }
 
-    if (cached) {
-      return cached;
+      const staleCached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_STALE_CACHE_KEY);
+      if (staleCached) {
+        return staleCached;
+      }
     }
-  }
 
-  const spxStrikeRange = options?.strikeRange ?? 30;
-  const spyStrikeRange = options?.strikeRange ?? 40;
-  const maxExpirations = options?.maxExpirations ?? 4;
+    const spxStrikeRange = options?.strikeRange ?? 10;
+    const spyStrikeRange = options?.strikeRange ?? 12;
+    const maxExpirations = options?.maxExpirations ?? 1;
 
-  const [spxRaw, spyRaw] = await Promise.all([
-    calculateGEXProfile('SPX', {
+    const spxRaw = await withTimeout(calculateGEXProfile('SPX', {
       strikeRange: spxStrikeRange,
       maxExpirations,
       forceRefresh,
-    }),
-    calculateGEXProfile('SPY', {
-      strikeRange: spyStrikeRange,
-      maxExpirations,
-      forceRefresh,
-    }),
-  ]);
+    }), 22_000);
 
-  const basis = spxRaw.spotPrice - spyRaw.spotPrice * 10;
+    let spyRaw: OptionsGEXProfile;
+    try {
+      spyRaw = await withTimeout(calculateGEXProfile('SPY', {
+        strikeRange: spyStrikeRange,
+        maxExpirations,
+        // Prefer cached SPY profile during force refresh to keep SPX snapshot latency bounded.
+        forceRefresh: false,
+      }), 8_000);
+    } catch (error) {
+      logger.warn('SPX unified GEX using synthetic SPY fallback', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      spyRaw = buildSyntheticSpyProfile(spxRaw);
+    }
 
-  // Derive per-expiry breakdown from the aggregate profile data already fetched
-  // instead of re-fetching each expiration individually (which doubles API calls).
-  const spx = {
-    ...toInternalProfile('SPX', spxRaw),
-    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
+    const basis = spxRaw.spotPrice - spyRaw.spotPrice * 10;
+
+    // Derive per-expiry breakdown from the aggregate profile data already fetched
+    // instead of re-fetching each expiration individually (which doubles API calls).
+    const spx = {
+      ...toInternalProfile('SPX', spxRaw),
+      expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
+    };
+    const spy = {
+      ...toInternalProfile('SPY', spyRaw, (strike) => strike * 10 + basis),
+      expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
+    };
+    const combined = {
+      ...buildCombinedProfile(spxRaw, spyRaw),
+      expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
+    };
+
+    const payload = { spx, spy, combined };
+    await Promise.all([
+      cacheSet(GEX_CACHE_KEY, payload, GEX_CACHE_TTL_SECONDS),
+      cacheSet(GEX_STALE_CACHE_KEY, payload, GEX_STALE_CACHE_TTL_SECONDS),
+    ]);
+
+    logger.info('SPX command center GEX landscape updated', {
+      spxNetGex: spx.netGex,
+      spyNetGex: spy.netGex,
+      combinedNetGex: combined.netGex,
+      flipPoint: combined.flipPoint,
+      combinedStrikes: combined.gexByStrike.length,
+    });
+
+    return payload;
   };
-  const spy = {
-    ...toInternalProfile('SPY', spyRaw, (strike) => strike * 10 + basis),
-    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
-  };
-  const combined = {
-    ...buildCombinedProfile(spxRaw, spyRaw),
-    expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
-  };
-
-  const payload = { spx, spy, combined };
-  await cacheSet(GEX_CACHE_KEY, payload, GEX_CACHE_TTL_SECONDS);
-
-  logger.info('SPX command center GEX landscape updated', {
-    spxNetGex: spx.netGex,
-    spyNetGex: spy.netGex,
-    combinedNetGex: combined.netGex,
-    flipPoint: combined.flipPoint,
-    combinedStrikes: combined.gexByStrike.length,
-  });
-
-  return payload;
-  };
-
-  if (forceRefresh) {
-    return run();
-  }
 
   gexInFlight = run();
   try {
@@ -234,4 +269,13 @@ export async function computeUnifiedGEXLandscape(options?: {
   } finally {
     gexInFlight = null;
   }
+}
+
+export async function getCachedUnifiedGEXLandscape(): Promise<UnifiedGEXLandscapePayload | null> {
+  const cached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_CACHE_KEY);
+  if (cached) {
+    return cached;
+  }
+  const staleCached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_STALE_CACHE_KEY);
+  return staleCached || null;
 }

@@ -203,3 +203,112 @@ describe('spx/winRateBacktest evaluateSetupAgainstBars', () => {
     expect(result.row.realized_r).toBeCloseTo(1.0, 4);
   });
 });
+
+describe('spx/winRateBacktest options replay helpers', () => {
+  it('selects same-day call contract nearest strike for bullish setup', () => {
+    const setup = baseSetup({
+      setupType: 'trend_pullback',
+      direction: 'bullish',
+      sessionDate: '2026-02-20',
+      triggeredAt: '2026-02-20T16:05:00.000Z', // 11:05 ET
+    });
+    const row = {
+      engine_setup_id: setup.engineSetupId,
+      session_date: setup.sessionDate,
+      setup_type: setup.setupType,
+      direction: setup.direction,
+      regime: setup.regime,
+      tier: setup.tier,
+      triggered_at: '2026-02-20T16:05:00.000Z',
+      final_outcome: 't1_before_stop' as const,
+      t1_hit_at: '2026-02-20T16:20:00.000Z',
+      t2_hit_at: null,
+      stop_hit_at: null,
+      entry_fill_price: 6050,
+    };
+
+    const contracts = [
+      {
+        ticker: 'O:SPX260220C06050000',
+        expiry: '2026-02-20',
+        strike: 6050,
+        type: 'call' as const,
+      },
+      {
+        ticker: 'O:SPX260220C06080000',
+        expiry: '2026-02-20',
+        strike: 6080,
+        type: 'call' as const,
+      },
+    ];
+
+    const selected = __testables.chooseHistoricalOptionContract({
+      setup,
+      row,
+      contracts,
+    });
+
+    expect(selected?.ticker).toBe('O:SPX260220C06050000');
+    expect(selected?.type).toBe('call');
+    expect(selected?.expiry).toBe('2026-02-20');
+  });
+
+  it('finds close price at or after timestamp', () => {
+    const bars = [
+      bar('2026-02-20T16:05:00.000Z', 7.4, 7.6, 7.3, 7.5),
+      bar('2026-02-20T16:06:00.000Z', 7.5, 7.7, 7.4, 7.6),
+      bar('2026-02-20T16:07:00.000Z', 7.6, 7.8, 7.5, 7.7),
+    ];
+    expect(__testables.findBarCloseAtOrAfter(bars, '2026-02-20T16:05:30.000Z')).toBe(7.6);
+    expect(__testables.findBarCloseAtOrAfter(bars, '2026-02-20T16:10:00.000Z')).toBe(7.7);
+  });
+
+  it('prefers next expiry after late-day cutoff', () => {
+    const setup = baseSetup({
+      setupType: 'trend_pullback',
+      direction: 'bullish',
+      sessionDate: '2026-02-20',
+      triggeredAt: '2026-02-20T20:05:00.000Z', // 15:05 ET
+    });
+    const row = {
+      engine_setup_id: setup.engineSetupId,
+      session_date: setup.sessionDate,
+      setup_type: setup.setupType,
+      direction: setup.direction,
+      regime: setup.regime,
+      tier: setup.tier,
+      triggered_at: '2026-02-20T20:05:00.000Z',
+      final_outcome: 't1_before_stop' as const,
+      t1_hit_at: '2026-02-20T20:18:00.000Z',
+      t2_hit_at: null,
+      stop_hit_at: null,
+      entry_fill_price: 6050,
+    };
+
+    const contracts = [
+      {
+        ticker: 'O:SPXW260220C06050000',
+        expiry: '2026-02-20',
+        strike: 6050,
+        type: 'call' as const,
+      },
+      {
+        ticker: 'O:SPXW260223C06050000',
+        expiry: '2026-02-23',
+        strike: 6050,
+        type: 'call' as const,
+      },
+    ];
+
+    const selected = __testables.chooseHistoricalOptionContract({
+      setup,
+      row,
+      contracts,
+    });
+
+    expect(selected?.ticker).toBe('O:SPXW260223C06050000');
+    expect(selected?.type).toBe('call');
+    expect(selected?.expiry).toBe('2026-02-23');
+    expect(selected?.strike).toBe(6050);
+  });
+});

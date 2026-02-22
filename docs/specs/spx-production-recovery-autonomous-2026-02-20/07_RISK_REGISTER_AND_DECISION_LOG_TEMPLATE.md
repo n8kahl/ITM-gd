@@ -130,3 +130,16 @@ Before release:
 | D-034 | 2026-02-21 | 10-closeout | Mobile state selector contract for E2E | Continue text-only assertions, add deterministic test IDs to state chips | Add deterministic mode-chip test IDs and assert those in E2E | Prevents strict-locator collisions when UX intentionally repeats state labels across chips | Slightly larger selector surface to maintain in component markup | Eng | Accepted |
 | D-035 | 2026-02-21 | 10-closeout | Runtime gate closure method | Accept Node 20 evidence with warnings, rerun full release gate under Node 22 | Re-run complete release gate under Node `v22.12.0` | Aligns final evidence with project runtime requirement and removes environment ambiguity | Requires alternate command path + elevated Playwright execution for local bind | Eng | Accepted |
 | D-036 | 2026-02-21 | 10-closeout | Release authorization recording model | Leave deploy-approval checklist unresolved, explicitly record approved state in execution spec + tracker | Explicitly record deploy-approval completion in checklist and tracker | Removes residual process ambiguity and cleanly closes autonomous packet scope | Depends on explicit stakeholder approval timing | Eng | Accepted |
+
+## 10. Execution Updates (2026-02-22)
+### Risk Register Updates
+| Risk ID | Date | Category | Description | Likelihood | Impact | Score | Phase | Owner | Mitigation | Trigger | Status |
+|---|---|---|---|---:|---:|---:|---|---|---|---|---|
+| R-036 | 2026-02-22 | Model Calibration | Realized-outcome calibration can overfit sparse setup/regime/time buckets and distort pWin in live ranking. | 3 | 4 | 12 | 12 | Eng | Hierarchical fallback (`bucket -> regime -> type -> global`), Bayesian smoothing priors, conservative blend cap, heuristic fallback when no sample. | Sudden pWin swings in low-trade buckets or unexpected gate-block spikes. | Mitigated |
+| R-037 | 2026-02-22 | Nightly Operations | Replay-before-optimize can fail nightly due to reconstruction errors, blocking optimizer promotion. | 3 | 4 | 12 | 12 | Eng | Explicit replay fail-closed controls with env thresholds, deterministic replay window, nightly status persistence + error visibility. | Nightly schedule shows failed run with replay error details. | Mitigated |
+
+### Decision Log Updates
+| Decision ID | Date | Phase | Decision | Options Considered | Chosen Option | Rationale | Tradeoffs | Owner | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| D-037 | 2026-02-22 | 12 | Setup pWin calibration strategy | Keep heuristic-only pWin, direct empirical replacement, hierarchical smoothed calibration blended with heuristic | Hierarchical smoothed calibration + conservative blend | Preserves live stability while grounding probabilities in realized outcomes and avoiding sparse-bucket overreaction. | Additional model service/cache complexity and DB dependence. | Eng | Accepted |
+| D-038 | 2026-02-22 | 12 | Nightly optimization sequence | Optimizer-only nightly scan, replay then scan, replay-only reporting | Replay reconstruction before optimizer scan/promotion | Ensures nightly optimizer decisions use freshest reconstructed Massive-driven setup outcomes. | Nightly run duration and failure surface increase versus scan-only mode. | Eng | Accepted |

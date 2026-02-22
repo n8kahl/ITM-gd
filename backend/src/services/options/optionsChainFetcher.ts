@@ -45,6 +45,15 @@ const SNAPSHOT_BULK_CACHE_TTL_MS = 15_000;
 const SNAPSHOT_BATCH_SIZE = 12;
 const SNAPSHOT_BATCH_DELAY_MS = 60;
 const BULK_SNAPSHOT_MIN_CONTRACTS = 20;
+const BULK_SNAPSHOT_MAX_PAGES = 4;
+const SINGLE_SNAPSHOT_TIMEOUT_MS = 1_800;
+const EXPIRATION_LOOKAHEAD_DAYS = 21;
+const EXPIRATION_LOOKAHEAD_MAX_PAGES = 4;
+
+interface FetchExpirationDatesOptions {
+  maxDaysAhead?: number;
+  maxPages?: number;
+}
 
 interface BulkSnapshotCacheEntry {
   capturedAt: number;
@@ -102,7 +111,10 @@ async function getNearestExpiration(symbol: string): Promise<string> {
   if (nearest) return nearest;
 
   // Fallback for providers that do not support expiration_date.gte sorting params.
-  const expirations = await getOptionsExpirations(symbol);
+  const expirations = await getOptionsExpirations(symbol, {
+    maxDaysAhead: EXPIRATION_LOOKAHEAD_DAYS,
+    maxPages: EXPIRATION_LOOKAHEAD_MAX_PAGES,
+  });
   if (expirations.length === 0) {
     throw new Error(`No options expirations found for ${symbol}`);
   }
@@ -151,8 +163,8 @@ function toSnapshotTicker(snapshot: OptionsSnapshot): string | null {
   return normalized || null;
 }
 
-async function getBulkSnapshotIndex(symbol: string): Promise<Map<string, OptionsSnapshot>> {
-  const cacheKey = symbol.toUpperCase();
+async function getBulkSnapshotIndex(symbol: string, expiry?: string): Promise<Map<string, OptionsSnapshot>> {
+  const cacheKey = `${symbol.toUpperCase()}:${expiry || 'all'}`;
   const cached = bulkSnapshotCache.get(cacheKey);
 
   if (cached && (Date.now() - cached.capturedAt) <= SNAPSHOT_BULK_CACHE_TTL_MS) {
@@ -165,7 +177,10 @@ async function getBulkSnapshotIndex(symbol: string): Promise<Map<string, Options
   }
 
   const run = (async () => {
-    const snapshots = await getOptionsSnapshot(symbol);
+    const snapshots = await getOptionsSnapshot(symbol, undefined, {
+      ...(expiry ? { expirationDateGte: expiry, expirationDateLte: expiry } : {}),
+      maxPages: BULK_SNAPSHOT_MAX_PAGES,
+    });
     const rows = Array.isArray(snapshots) ? snapshots : (snapshots ? [snapshots] : []);
     const byTicker = new Map<string, OptionsSnapshot>();
 
@@ -203,10 +218,11 @@ async function resolveSnapshotsForContracts(
   const snapshots = new Map<string, OptionsSnapshot>();
   let bulkUsed = false;
   let bulkHits = 0;
+  const primaryExpiry = contracts[0]?.expiration_date;
 
   if (contracts.length >= BULK_SNAPSHOT_MIN_CONTRACTS) {
     try {
-      const bulkIndex = await getBulkSnapshotIndex(symbol);
+      const bulkIndex = await getBulkSnapshotIndex(symbol, primaryExpiry);
       bulkUsed = true;
 
       for (const contract of contracts) {
@@ -230,7 +246,13 @@ async function resolveSnapshotsForContracts(
 
     await Promise.all(batch.map(async (contract) => {
       try {
-        const snapshotData = await getOptionsSnapshot(symbol, contract.ticker);
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Snapshot timeout for ${contract.ticker}`)), SINGLE_SNAPSHOT_TIMEOUT_MS);
+        });
+        const snapshotData = await Promise.race([
+          getOptionsSnapshot(symbol, contract.ticker),
+          timeout,
+        ]);
         const snapshotRows = Array.isArray(snapshotData)
           ? snapshotData
           : (snapshotData ? [snapshotData as unknown as OptionsSnapshot] : []);
@@ -563,8 +585,20 @@ export async function fetchOptionsChain(
 /**
  * Get available expiration dates for a symbol
  */
-export async function fetchExpirationDates(symbol: string): Promise<string[]> {
-  const cacheKey = `options_expirations:${symbol}`;
+export async function fetchExpirationDates(
+  symbol: string,
+  options?: FetchExpirationDatesOptions,
+): Promise<string[]> {
+  const maxDaysAhead = Number.isFinite(options?.maxDaysAhead)
+    ? Math.max(Math.floor(options?.maxDaysAhead as number), 0)
+    : EXPIRATION_LOOKAHEAD_DAYS;
+  const maxPages = Number.isFinite(options?.maxPages)
+    ? Math.max(Math.floor(options?.maxPages as number), 1)
+    : EXPIRATION_LOOKAHEAD_MAX_PAGES;
+  const hasCustomWindow = options?.maxDaysAhead != null || options?.maxPages != null;
+  const cacheKey = hasCustomWindow
+    ? `options_expirations:${symbol}:${maxDaysAhead}:${maxPages}`
+    : `options_expirations:${symbol}`;
   const today = getCurrentEasternDate();
   const cached = await cacheGet<string[]>(cacheKey);
 
@@ -578,7 +612,13 @@ export async function fetchExpirationDates(symbol: string): Promise<string[]> {
   }
 
   try {
-    const expirations = await getOptionsExpirations(symbol);
+    let expirations = await getOptionsExpirations(symbol, {
+      maxDaysAhead,
+      maxPages,
+    });
+    if (expirations.length === 0) {
+      expirations = await getOptionsExpirations(symbol);
+    }
 
     // Filter to only future expirations
     const futureExpirations = expirations.filter(exp => exp >= today);

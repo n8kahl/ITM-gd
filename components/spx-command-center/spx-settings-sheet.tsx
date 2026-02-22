@@ -27,6 +27,21 @@ function formatR(value: number): string {
   return `${value.toFixed(3)}R`
 }
 
+function formatObjective(value: number): string {
+  if (!Number.isFinite(value)) return '--'
+  return value.toFixed(2)
+}
+
+function formatPoints(value: number | null | undefined, decimals = 2): string {
+  if (!Number.isFinite(value ?? NaN)) return '--'
+  return `${Number(value).toFixed(decimals)}`
+}
+
+function formatCI(value: { lowerPct: number; upperPct: number } | null | undefined): string {
+  if (!value || !Number.isFinite(value.lowerPct) || !Number.isFinite(value.upperPct)) return '--'
+  return `${value.lowerPct.toFixed(1)}-${value.upperPct.toFixed(1)}%`
+}
+
 function formatEtIso(value: string | null | undefined): string {
   if (!value) return '--'
   const parsed = Date.parse(value)
@@ -67,6 +82,17 @@ function formatHistoryTime(value: string): string {
   }).format(new Date(parsed))
 }
 
+function formatBucketLabel(value: string): string {
+  if (!value) return '--'
+  return value
+    .split('|')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+    .map((segment) => segment.replace(/_/g, ' '))
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' • ')
+}
+
 export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) {
   const [activeRevertId, setActiveRevertId] = useState<number | null>(null)
   const {
@@ -94,6 +120,46 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
     () => summarizeError(error) || summarizeError(scheduleError) || summarizeError(historyError),
     [error, scheduleError, historyError],
   )
+  const strategyRows = useMemo(() => {
+    if (!scorecard) return []
+    return [...scorecard.setupTypePerformance]
+      .filter((bucket) => Number.isFinite(bucket.tradeCount) && bucket.tradeCount > 0)
+      .sort((a, b) => {
+        if (b.tradeCount !== a.tradeCount) return b.tradeCount - a.tradeCount
+        return b.t1WinRatePct - a.t1WinRatePct
+      })
+      .slice(0, 6)
+  }, [scorecard])
+  const comboRows = useMemo(() => {
+    if (!scorecard) return []
+    return [...scorecard.setupComboPerformance]
+      .filter((bucket) => Number.isFinite(bucket.tradeCount) && bucket.tradeCount > 0)
+      .sort((a, b) => {
+        if (b.tradeCount !== a.tradeCount) return b.tradeCount - a.tradeCount
+        return b.t1WinRatePct - a.t1WinRatePct
+      })
+      .slice(0, 4)
+  }, [scorecard])
+  const strategyAverages = useMemo(() => {
+    if (!scorecard) return null
+    const buckets = scorecard.setupTypePerformance.filter((bucket) => (
+      Number.isFinite(bucket.tradeCount) && bucket.tradeCount > 0
+    ))
+    if (buckets.length === 0) return null
+    const totalTrades = buckets.reduce((sum, bucket) => sum + bucket.tradeCount, 0)
+    if (totalTrades <= 0) return null
+    const weightedT1 = buckets.reduce((sum, bucket) => sum + (bucket.t1WinRatePct * bucket.tradeCount), 0) / totalTrades
+    const weightedT2 = buckets.reduce((sum, bucket) => sum + (bucket.t2WinRatePct * bucket.tradeCount), 0) / totalTrades
+    const weightedFailure = buckets.reduce((sum, bucket) => sum + (bucket.failureRatePct * bucket.tradeCount), 0) / totalTrades
+    return {
+      totalStrategies: buckets.length,
+      totalTrades,
+      avgTradesPerStrategy: totalTrades / buckets.length,
+      weightedT1,
+      weightedT2,
+      weightedFailure,
+    }
+  }, [scorecard])
 
   const handleRunScan = useCallback(async () => {
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
@@ -222,6 +288,107 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
                     <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Validation Trades</p>
                     <p className="font-mono">{scorecard.optimized.tradeCount}</p>
                     <p className="text-[10px] text-white/55">{scorecard.optimized.resolvedCount} resolved</p>
+                  </div>
+                </div>
+                <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
+                  <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Averages and Objective</p>
+                  <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-white/72">
+                    <p>Objective (base → opt)</p>
+                    <p className="font-mono text-white/88">{formatObjective(scorecard.baseline.objectiveScore)} → {formatObjective(scorecard.optimized.objectiveScore)}</p>
+                    <p>Conservative objective</p>
+                    <p className="font-mono text-white/88">{formatObjective(scorecard.baseline.objectiveScoreConservative)} → {formatObjective(scorecard.optimized.objectiveScoreConservative)}</p>
+                    <p>Positive realized rate</p>
+                    <p className="font-mono text-white/88">{formatPct(scorecard.optimized.positiveRealizedRatePct)}</p>
+                    {strategyAverages && (
+                      <>
+                        <p>Avg trades / strategy</p>
+                        <p className="font-mono text-white/88">{strategyAverages.avgTradesPerStrategy.toFixed(2)}</p>
+                        <p>Weighted strategy T1 / T2</p>
+                        <p className="font-mono text-white/88">{formatPct(strategyAverages.weightedT1)} / {formatPct(strategyAverages.weightedT2)}</p>
+                        <p>Weighted strategy failure</p>
+                        <p className="font-mono text-white/88">{formatPct(strategyAverages.weightedFailure)}</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {scorecard.dataQuality && (
+                  <div className="rounded border border-emerald-300/20 bg-emerald-500/[0.06] px-2 py-1.5 text-[10px]">
+                    <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-100">Execution Actuals</p>
+                    <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-emerald-50/85">
+                      <p>Fill table</p>
+                      <p className="font-mono">
+                        {scorecard.dataQuality.executionFillTableAvailable === true
+                          ? 'available'
+                          : scorecard.dataQuality.executionFillTableAvailable === false
+                            ? 'missing'
+                            : 'unknown'}
+                      </p>
+                      <p>Any fill coverage</p>
+                      <p className="font-mono">{formatPct(scorecard.dataQuality.executionCoveragePct)} ({scorecard.dataQuality.executionTradesWithAnyFill ?? 0}/{scorecard.dataQuality.executionTriggeredTradeCount ?? 0})</p>
+                      <p>Non-proxy coverage</p>
+                      <p className="font-mono">{formatPct(scorecard.dataQuality.executionNonProxyCoveragePct)} ({scorecard.dataQuality.executionTradesWithNonProxyFill ?? 0}/{scorecard.dataQuality.executionTriggeredTradeCount ?? 0})</p>
+                      <p>Entry / Exit coverage</p>
+                      <p className="font-mono">{formatPct(scorecard.dataQuality.executionEntryCoveragePct)} / {formatPct(scorecard.dataQuality.executionExitCoveragePct)}</p>
+                      <p>Entry slip (pts / bps)</p>
+                      <p className="font-mono">{formatPoints(scorecard.dataQuality.executionEntryAvgSlippagePts, 4)} / {formatPoints(scorecard.dataQuality.executionEntryAvgSlippageBps, 2)}</p>
+                      <p>Exit slip (pts / bps)</p>
+                      <p className="font-mono">{formatPoints(scorecard.dataQuality.executionExitAvgSlippagePts, 4)} / {formatPoints(scorecard.dataQuality.executionExitAvgSlippageBps, 2)}</p>
+                    </div>
+                  </div>
+                )}
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">By Strategy</p>
+                      <p className="text-[9px] text-white/42">{strategyRows.length} shown</p>
+                    </div>
+                    {strategyRows.length === 0 ? (
+                      <p className="text-[10px] text-white/50">No strategy buckets in this range.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {strategyRows.map((bucket) => (
+                          <div key={`strategy_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1">
+                            <div className="grid grid-cols-[1fr_auto] gap-2 text-[10px]">
+                              <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
+                              <p className="font-mono text-white/70">{bucket.tradeCount} trades</p>
+                            </div>
+                            <div className="mt-0.5 grid grid-cols-3 gap-1 text-[9px] text-white/60">
+                              <p>T1 <span className="font-mono text-white/78">{formatPct(bucket.t1WinRatePct)}</span></p>
+                              <p>T2 <span className="font-mono text-white/78">{formatPct(bucket.t2WinRatePct)}</span></p>
+                              <p>Fail <span className="font-mono text-white/78">{formatPct(bucket.failureRatePct)}</span></p>
+                            </div>
+                            <p className="mt-0.5 text-[9px] text-white/45">
+                              95% CI T1 {formatCI(bucket.t1Confidence95)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">By Setup + Regime</p>
+                      <p className="text-[9px] text-white/42">{comboRows.length} shown</p>
+                    </div>
+                    {comboRows.length === 0 ? (
+                      <p className="text-[10px] text-white/50">No setup/regime buckets in this range.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {comboRows.map((bucket) => (
+                          <div key={`combo_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1">
+                            <div className="grid grid-cols-[1fr_auto] gap-2 text-[10px]">
+                              <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
+                              <p className="font-mono text-white/70">{bucket.tradeCount} trades</p>
+                            </div>
+                            <div className="mt-0.5 grid grid-cols-3 gap-1 text-[9px] text-white/60">
+                              <p>T1 <span className="font-mono text-white/78">{formatPct(bucket.t1WinRatePct)}</span></p>
+                              <p>T2 <span className="font-mono text-white/78">{formatPct(bucket.t2WinRatePct)}</span></p>
+                              <p>Fail <span className="font-mono text-white/78">{formatPct(bucket.failureRatePct)}</span></p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

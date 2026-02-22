@@ -821,6 +821,40 @@ Update this file at the end of each autonomous execution session.
 - Blockers:
   - None.
 
+### Session 2026-02-22 02:28 ET
+- Goal: Execute Phase 12 slice `P12-S5` to improve setup-detection win-rate fidelity and nightly optimizer operational accuracy.
+- Completed:
+  - Added realized-outcome setup calibration service:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/setupCalibration.ts`
+  - Integrated calibrated `pWin` into live setup scoring:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/setupDetector.ts`
+  - Added nightly replay->optimizer orchestration service:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/nightlyReplayOptimizer.ts`
+  - Rewired nightly optimizer worker to run replay reconstruction before scan:
+    - `/Users/natekahl/ITM-gd/backend/src/workers/spxOptimizerWorker.ts`
+  - Added targeted tests:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/setupCalibration.test.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/nightlyReplayOptimizer.test.ts`
+  - Updated process docs/specs:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S5_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir /Users/natekahl/ITM-gd exec eslint --no-ignore backend/src/services/spx/setupCalibration.ts backend/src/services/spx/setupDetector.ts backend/src/services/spx/nightlyReplayOptimizer.ts backend/src/workers/spxOptimizerWorker.ts backend/src/services/spx/__tests__/setupCalibration.test.ts backend/src/services/spx/__tests__/nightlyReplayOptimizer.test.ts backend/src/services/spx/__tests__/setupDetector.test.ts backend/src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm --dir /Users/natekahl/ITM-gd/backend exec tsc --noEmit`
+  - `pnpm --dir /Users/natekahl/ITM-gd exec tsc --noEmit`
+  - `pnpm --dir /Users/natekahl/ITM-gd/backend test -- src/services/spx/__tests__/setupCalibration.test.ts src/services/spx/__tests__/nightlyReplayOptimizer.test.ts src/services/spx/__tests__/setupDetector.test.ts src/workers/__tests__/spxOptimizerWorker.test.ts src/__tests__/integration/spx-api.test.ts`
+  - `pnpm --dir /Users/natekahl/ITM-gd exec playwright test e2e/spx-command-center.spec.ts --project=chromium --workers=1`
+  - `pnpm --dir /Users/natekahl/ITM-gd/backend backtest:last-week instances second`
+- Risks found:
+  - Calibration overreaction risk in sparse setup/regime/time buckets.
+  - Replay pre-pass adds nightly runtime/failure surface.
+- Risks mitigated:
+  - Hierarchical smoothing fallback + conservative blending + heuristic fallback.
+  - Replay fail-closed thresholds with explicit nightly error propagation.
+- Next slice:
+  - Refit setup-specific quality floors (`minPWinCalibrated`, `minEvR`) from the new calibration telemetry after 1-2 nightly cycles.
+- Blockers:
+  - None.
+
 ## 4. Blocking Gate Checklist
 1. [x] No open P0 defects.
 2. [x] No open P1 defects.

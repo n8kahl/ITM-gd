@@ -15,6 +15,13 @@ import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
 import {
+  getExecutionReconciliationHistory,
+  recordExecutionFill,
+  type ExecutionFillSide,
+  type ExecutionFillSource,
+  type ExecutionTransitionPhase,
+} from '../services/spx/executionReconciliation';
+import {
   getSPXOptimizerHistory,
   getSPXOptimizerScorecard,
   revertSPXOptimizerToHistory,
@@ -24,6 +31,7 @@ import {
 import { getSPXOptimizerWorkerStatus } from '../workers/spxOptimizerWorker';
 import {
   runSPXWinRateBacktest,
+  type SPXBacktestExecutionBasis,
   type SPXBacktestPriceResolution,
   type SPXWinRateBacktestSource,
 } from '../services/spx/winRateBacktest';
@@ -63,6 +71,48 @@ function parseBacktestResolution(value: unknown): SPXBacktestPriceResolution {
   if (normalized === 'second' || normalized === '1s') return 'second';
   if (normalized === 'minute' || normalized === '1m') return 'minute';
   return 'second';
+}
+
+function parseBacktestExecutionBasis(value: unknown): SPXBacktestExecutionBasis {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'options_contract' || normalized === 'options' || normalized === 'contract') {
+    return 'options_contract';
+  }
+  return 'underlying';
+}
+
+function parseExecutionFillSide(value: unknown): ExecutionFillSide | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'entry') return 'entry';
+  if (normalized === 'partial') return 'partial';
+  if (normalized === 'exit') return 'exit';
+  return null;
+}
+
+function parseExecutionFillSource(value: unknown): ExecutionFillSource {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'proxy') return 'proxy';
+  if (normalized === 'broker_tradier' || normalized === 'tradier') return 'broker_tradier';
+  if (normalized === 'broker_other' || normalized === 'broker') return 'broker_other';
+  if (normalized === 'manual') return 'manual';
+  return 'manual';
+}
+
+function parseExecutionTransitionPhase(value: unknown): ExecutionTransitionPhase | undefined {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'triggered') return 'triggered';
+  if (normalized === 'target1_hit') return 'target1_hit';
+  if (normalized === 'target2_hit') return 'target2_hit';
+  if (normalized === 'invalidated') return 'invalidated';
+  if (normalized === 'expired') return 'expired';
+  return undefined;
+}
+
+function parseSetupDirection(value: unknown): Setup['direction'] | undefined {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'bullish') return 'bullish';
+  if (normalized === 'bearish') return 'bearish';
+  return undefined;
 }
 
 function parseSetupPayload(value: unknown): Setup | null {
@@ -129,6 +179,10 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
     const from = parseISODateInput(req.query.from) || dateDaysAgoET(29);
     const source = parseBacktestSource(req.query.source);
     const resolution = parseBacktestResolution(req.query.resolution);
+    const executionBasis = parseBacktestExecutionBasis(req.query.executionBasis);
+    const strictOptionsBars = req.query.strictOptionsBars == null
+      ? true
+      : parseBoolean(req.query.strictOptionsBars);
 
     if (from > to) {
       return res.status(400).json({
@@ -143,9 +197,13 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
       to,
       source,
       resolution,
+      executionBasis,
       executionModel: {
         partialAtT1Pct: optimizerProfile.tradeManagement.partialAtT1Pct,
         moveStopToBreakevenAfterT1: optimizerProfile.tradeManagement.moveStopToBreakeven,
+      },
+      optionsReplay: {
+        strictBars: strictOptionsBars,
       },
     });
     return res.json(backtest);
@@ -156,6 +214,116 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to run SPX win-rate backtest.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/execution/fills', async (req: Request, res: Response) => {
+  try {
+    const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId.trim() : '';
+    if (!setupId) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'setupId is required.',
+      });
+    }
+
+    const side = parseExecutionFillSide(req.body?.side);
+    if (!side) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'side must be one of entry, partial, or exit.',
+      });
+    }
+
+    const fillPrice = Number(req.body?.fillPrice);
+    if (!Number.isFinite(fillPrice) || fillPrice <= 0) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'fillPrice must be a positive number.',
+      });
+    }
+
+    const fillQuantity = req.body?.fillQuantity == null ? undefined : Number(req.body.fillQuantity);
+    if (fillQuantity != null && (!Number.isFinite(fillQuantity) || fillQuantity <= 0)) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'fillQuantity must be a positive number when provided.',
+      });
+    }
+
+    const source = parseExecutionFillSource(req.body?.source);
+    const phase = parseExecutionTransitionPhase(req.body?.phase);
+    const direction = parseSetupDirection(req.body?.direction);
+    const executedAt = typeof req.body?.executedAt === 'string' ? req.body.executedAt : undefined;
+    const transitionEventId = typeof req.body?.transitionEventId === 'string' && req.body.transitionEventId.trim().length > 0
+      ? req.body.transitionEventId.trim()
+      : undefined;
+    const brokerOrderId = typeof req.body?.brokerOrderId === 'string' && req.body.brokerOrderId.trim().length > 0
+      ? req.body.brokerOrderId.trim().slice(0, 120)
+      : undefined;
+    const brokerExecutionId = typeof req.body?.brokerExecutionId === 'string' && req.body.brokerExecutionId.trim().length > 0
+      ? req.body.brokerExecutionId.trim().slice(0, 120)
+      : undefined;
+    const metadata = req.body?.metadata && typeof req.body.metadata === 'object' && !Array.isArray(req.body.metadata)
+      ? req.body.metadata as Record<string, unknown>
+      : undefined;
+    const userId = typeof req.user?.id === 'string' ? req.user.id : undefined;
+
+    const reconciliation = await recordExecutionFill({
+      setupId,
+      side,
+      fillPrice,
+      fillQuantity,
+      source,
+      phase,
+      direction,
+      executedAt,
+      transitionEventId,
+      brokerOrderId,
+      brokerExecutionId,
+      userId,
+      metadata,
+    });
+
+    return res.json(reconciliation);
+  } catch (error) {
+    logger.error('SPX execution fill ingestion endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to record SPX execution fill.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/execution/reconciliation', async (req: Request, res: Response) => {
+  try {
+    const setupId = typeof req.query.setupId === 'string' ? req.query.setupId.trim() : '';
+    if (!setupId) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'setupId query parameter is required.',
+      });
+    }
+
+    const sessionDate = parseISODateInput(req.query.sessionDate) || undefined;
+    const history = await getExecutionReconciliationHistory({
+      setupId,
+      sessionDate,
+    });
+
+    return res.json(history);
+  } catch (error) {
+    logger.error('SPX execution reconciliation endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX execution reconciliation.',
       retryAfter: 10,
     });
   }

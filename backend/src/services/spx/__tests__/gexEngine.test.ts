@@ -1,4 +1,4 @@
-import { computeUnifiedGEXLandscape } from '../gexEngine';
+import { computeUnifiedGEXLandscape, getCachedUnifiedGEXLandscape } from '../gexEngine';
 import { calculateGEXProfile } from '../../options/gexCalculator';
 import { cacheGet, cacheSet } from '../../../config/redis';
 
@@ -116,5 +116,89 @@ describe('spx/gexEngine', () => {
     // Only 2 calls (SPX aggregate + SPY aggregate), no per-expiry breakdown calls.
     expect(mockCalculateGEXProfile).toHaveBeenCalledTimes(2);
     expect(mockCacheSet).toHaveBeenCalled();
+  });
+
+  it('returns cached unified landscape when available', async () => {
+    const cachedPayload = {
+      spx: {
+        symbol: 'SPX' as const,
+        spotPrice: 6000,
+        netGex: 1000,
+        flipPoint: 6005,
+        callWall: 6010,
+        putWall: 5990,
+        zeroGamma: 6005,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-20T15:30:00.000Z',
+      },
+      spy: {
+        symbol: 'SPY' as const,
+        spotPrice: 600,
+        netGex: 100,
+        flipPoint: 600,
+        callWall: 601,
+        putWall: 599,
+        zeroGamma: 600,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-20T15:30:00.000Z',
+      },
+      combined: {
+        symbol: 'COMBINED' as const,
+        spotPrice: 6000,
+        netGex: 1100,
+        flipPoint: 6005,
+        callWall: 6010,
+        putWall: 5990,
+        zeroGamma: 6005,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-20T15:30:00.000Z',
+      },
+    };
+    mockCacheGet.mockResolvedValue(cachedPayload as never);
+
+    const result = await getCachedUnifiedGEXLandscape();
+    expect(result).toEqual(cachedPayload);
+    expect(mockCacheGet).toHaveBeenCalled();
+  });
+
+  it('reuses in-flight force refresh for non-force callers', async () => {
+    mockCalculateGEXProfile.mockImplementation(async (symbolInput) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const symbol = symbolInput.toUpperCase();
+      return {
+        symbol,
+        spotPrice: symbol === 'SPX' ? 6030 : 603,
+        gexByStrike: [
+          {
+            strike: symbol === 'SPX' ? 6025 : 602,
+            gexValue: symbol === 'SPX' ? 1000 : 100,
+            callGamma: 0.01,
+            putGamma: 0.01,
+            callOI: 1000,
+            putOI: 1000,
+          },
+        ],
+        flipPoint: symbol === 'SPX' ? 6025 : 602,
+        maxGEXStrike: symbol === 'SPX' ? 6025 : 602,
+        keyLevels: [],
+        regime: 'positive_gamma' as const,
+        implication: 'test',
+        calculatedAt: '2026-02-22T15:30:00.000Z',
+        expirationsAnalyzed: ['2026-02-22'],
+      };
+    });
+
+    const forceRefreshPromise = computeUnifiedGEXLandscape({ forceRefresh: true });
+    const passivePromise = computeUnifiedGEXLandscape({ forceRefresh: false });
+    const [forceResult, passiveResult] = await Promise.all([forceRefreshPromise, passivePromise]);
+
+    expect(forceResult.combined.netGex).toBe(passiveResult.combined.netGex);
+    expect(mockCalculateGEXProfile).toHaveBeenCalledTimes(2);
   });
 });

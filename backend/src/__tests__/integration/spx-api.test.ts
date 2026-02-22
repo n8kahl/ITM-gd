@@ -63,6 +63,11 @@ jest.mock('../../services/spx/outcomeTracker', () => ({
   getSPXWinRateAnalytics: jest.fn(),
 }));
 
+jest.mock('../../services/spx/executionReconciliation', () => ({
+  recordExecutionFill: jest.fn(),
+  getExecutionReconciliationHistory: jest.fn(),
+}));
+
 jest.mock('../../services/spx/winRateBacktest', () => ({
   runSPXWinRateBacktest: jest.fn(),
 }));
@@ -113,6 +118,10 @@ import { getPredictionState } from '../../services/spx/aiPredictor';
 import { getBasisState } from '../../services/spx/crossReference';
 import { getContractRecommendation } from '../../services/spx/contractSelector';
 import { getSPXWinRateAnalytics } from '../../services/spx/outcomeTracker';
+import {
+  getExecutionReconciliationHistory,
+  recordExecutionFill,
+} from '../../services/spx/executionReconciliation';
 import { runSPXWinRateBacktest } from '../../services/spx/winRateBacktest';
 import {
   getActiveSPXOptimizationProfile,
@@ -135,6 +144,8 @@ const mockGetPredictionState = getPredictionState as jest.MockedFunction<typeof 
 const mockGetBasisState = getBasisState as jest.MockedFunction<typeof getBasisState>;
 const mockGetContractRecommendation = getContractRecommendation as jest.MockedFunction<typeof getContractRecommendation>;
 const mockGetSPXWinRateAnalytics = getSPXWinRateAnalytics as jest.MockedFunction<typeof getSPXWinRateAnalytics>;
+const mockRecordExecutionFill = recordExecutionFill as jest.MockedFunction<typeof recordExecutionFill>;
+const mockGetExecutionReconciliationHistory = getExecutionReconciliationHistory as jest.MockedFunction<typeof getExecutionReconciliationHistory>;
 const mockRunSPXWinRateBacktest = runSPXWinRateBacktest as jest.MockedFunction<typeof runSPXWinRateBacktest>;
 const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as jest.MockedFunction<typeof getActiveSPXOptimizationProfile>;
 const mockGetSPXOptimizerHistory = getSPXOptimizerHistory as jest.MockedFunction<typeof getSPXOptimizerHistory>;
@@ -297,6 +308,7 @@ describe('SPX API integration schema', () => {
     mockRunSPXWinRateBacktest.mockResolvedValue({
       dateRange: { from: '2026-02-01', to: '2026-02-15' },
       sourceUsed: 'spx_setup_instances',
+      executionBasis: 'underlying',
       setupCount: 8,
       evaluatedSetupCount: 8,
       skippedSetupCount: 0,
@@ -721,6 +733,60 @@ describe('SPX API integration schema', () => {
       coachMessages: [],
       generatedAt: '2026-02-15T15:00:00.000Z',
     });
+
+    mockRecordExecutionFill.mockResolvedValue({
+      persisted: true,
+      tableAvailable: true,
+      fillId: 12,
+      setupId: 'setup-1',
+      sessionDate: '2026-02-15',
+      side: 'entry',
+      phase: 'triggered',
+      source: 'proxy',
+      fillPrice: 6033.25,
+      fillQuantity: 1,
+      executedAt: '2026-02-15T15:01:00.000Z',
+      direction: 'bullish',
+      reference: {
+        transitionEventId: 'setup-1:1:triggered:123',
+        phase: 'triggered',
+        reason: 'entry',
+        price: 6033.5,
+        timestamp: '2026-02-15T15:01:00.000Z',
+      },
+      slippagePoints: 0.25,
+      slippageBps: 0.41,
+    } as never);
+
+    mockGetExecutionReconciliationHistory.mockResolvedValue({
+      setupId: 'setup-1',
+      count: 1,
+      fills: [
+        {
+          persisted: true,
+          tableAvailable: true,
+          fillId: 12,
+          setupId: 'setup-1',
+          sessionDate: '2026-02-15',
+          side: 'entry',
+          phase: 'triggered',
+          source: 'proxy',
+          fillPrice: 6033.25,
+          fillQuantity: 1,
+          executedAt: '2026-02-15T15:01:00.000Z',
+          direction: 'bullish',
+          reference: {
+            transitionEventId: 'setup-1:1:triggered:123',
+            phase: 'triggered',
+            reason: 'entry',
+            price: 6033.5,
+            timestamp: '2026-02-15T15:01:00.000Z',
+          },
+          slippagePoints: 0.25,
+          slippageBps: 0.41,
+        },
+      ],
+    } as never);
   });
 
   it('returns expected schemas for SPX endpoints', async () => {
@@ -825,5 +891,31 @@ describe('SPX API integration schema', () => {
     const coach = await request(app).get('/api/spx/coach/state');
     expect(coach.status).toBe(200);
     expect(coach.body).toEqual(expect.objectContaining({ messages: expect.any(Array), generatedAt: expect.any(String) }));
+
+    const executionFill = await request(app)
+      .post('/api/spx/execution/fills')
+      .send({
+        setupId: 'setup-1',
+        side: 'entry',
+        fillPrice: 6033.25,
+        source: 'proxy',
+      });
+    expect(executionFill.status).toBe(200);
+    expect(executionFill.body).toEqual(expect.objectContaining({
+      setupId: 'setup-1',
+      side: 'entry',
+      fillPrice: expect.any(Number),
+      persisted: expect.any(Boolean),
+      tableAvailable: expect.any(Boolean),
+      reference: expect.any(Object),
+    }));
+
+    const executionHistory = await request(app).get('/api/spx/execution/reconciliation?setupId=setup-1');
+    expect(executionHistory.status).toBe(200);
+    expect(executionHistory.body).toEqual(expect.objectContaining({
+      setupId: 'setup-1',
+      count: expect.any(Number),
+      fills: expect.any(Array),
+    }));
   });
 });

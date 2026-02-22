@@ -1043,3 +1043,46 @@ PR can merge only when:
   - Revert documentation updates above if approval status changes.
 - Notes:
   - Autonomous delivery packet is fully closed from engineering and release-authorization perspectives.
+
+### Slice: P12-S5
+- Objective: Upgrade setup pWin calibration to realized-outcome modeling and enforce nightly replay->optimize orchestration.
+- Status: done
+- Scope:
+  - Add data-driven setup calibration model from `spx_setup_instances`.
+  - Integrate calibration into live `setupDetector` pWin pipeline.
+  - Add nightly replay orchestrator and wire nightly worker to replay before optimizer scan.
+  - Add targeted tests for calibration and orchestration fail-closed behavior.
+- Out of scope:
+  - New setup families.
+  - UI redesign.
+  - Contract selector/exit model rewrites.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/setupCalibration.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/nightlyReplayOptimizer.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/setupDetector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/spxOptimizerWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/setupCalibration.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/nightlyReplayOptimizer.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/setupDetector.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S5_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir /Users/natekahl/ITM-gd exec eslint --no-ignore backend/src/services/spx/setupCalibration.ts backend/src/services/spx/setupDetector.ts backend/src/services/spx/nightlyReplayOptimizer.ts backend/src/workers/spxOptimizerWorker.ts backend/src/services/spx/__tests__/setupCalibration.test.ts backend/src/services/spx/__tests__/nightlyReplayOptimizer.test.ts backend/src/services/spx/__tests__/setupDetector.test.ts backend/src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm --dir /Users/natekahl/ITM-gd/backend exec tsc --noEmit`
+  - `pnpm --dir /Users/natekahl/ITM-gd exec tsc --noEmit`
+  - `pnpm --dir /Users/natekahl/ITM-gd/backend test -- src/services/spx/__tests__/setupCalibration.test.ts src/services/spx/__tests__/nightlyReplayOptimizer.test.ts src/services/spx/__tests__/setupDetector.test.ts src/workers/__tests__/spxOptimizerWorker.test.ts src/__tests__/integration/spx-api.test.ts`
+  - `pnpm --dir /Users/natekahl/ITM-gd exec playwright test e2e/spx-command-center.spec.ts --project=chromium --workers=1`
+  - `pnpm --dir /Users/natekahl/ITM-gd/backend backtest:last-week instances second`
+  - Result: all listed gates passed.
+- Risks introduced:
+  - Calibration drift if resolved-outcome samples are sparse in active buckets.
+  - Nightly replay pre-pass adds a failure point before optimizer scan.
+- Mitigations:
+  - Hierarchical smoothing + conservative blend limits small-sample overreaction.
+  - Replay fail-closed thresholds are explicit and tunable via env.
+- Rollback:
+  - Revert this slice commit.
+  - Disable replay pre-pass (`SPX_OPTIMIZER_NIGHTLY_REPLAY_ENABLED=false`) if incident triage requires optimizer-only mode.
+  - Zero calibration blend weights to restore heuristic-only behavior temporarily.
+- Notes:
+  - Last-week strict second-bar backtest remained strong after slice (`T1 76.47%`, `T2 70.59%`, `expectancyR +1.0587`).
