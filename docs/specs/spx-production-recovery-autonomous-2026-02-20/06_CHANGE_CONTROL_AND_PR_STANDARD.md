@@ -1236,3 +1236,155 @@ PR can merge only when:
   - Promotion-gate backfill held at 5/5 successful sessions with strict second-resolution fidelity.
   - Last-week strict replay output: `T1 0.00%`, `T2 0.00%`, `expectancyR -1.04`, `triggeredCount=1`.
   - Baseline comparator from earlier strict run (`T1 76.47%`, `T2 70.59%`, `expectancyR +1.0587`) implies deltas of `-76.47pp`, `-70.59pp`, `-2.0987R`; throughput policy recalibration remains the blocking promotion issue.
+
+### Slice: P14-S1
+- Objective: Resolve spec ambiguity in microstructure math and add canonical close-quote telemetry to SPX microbars.
+- Status: done
+- Scope:
+  - Extend microbar contract with close-quote ratio/coverage/spread metrics.
+  - Preserve backward-compatible existing microbar fields.
+  - Fan out new telemetry through websocket microbar payloads.
+- Out of scope:
+  - Detector threshold policy changes.
+  - Broker/tradier routing and portfolio sync.
+  - Database migration work.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/microbarAggregator.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_INSTITUTIONAL_UPGRADE_SPEC_2026-02-22.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S1_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint backend/src/services/spx/microbarAggregator.ts backend/src/services/spx/__tests__/microbarAggregator.test.ts backend/src/services/websocket.ts`
+  - Result: unit pass, typecheck pass, eslint warning-only (backend sources matched ignore pattern).
+- Risks introduced:
+  - New telemetry fields can be misinterpreted if direction-normalization is not applied in detectors.
+- Mitigations:
+  - Preserved existing normalized imbalance metric and added explicit ratio fields for next-slice direction-aware gating.
+- Rollback:
+  - Revert P14-S1 files listed above and redeploy websocket service.
+- Notes:
+  - This slice intentionally limits change radius to telemetry contracts before detector-policy edits.
+
+### Slice: P14-S2
+- Objective: Integrate directional microstructure confirmation into setup-detector `volumeClimax` and `vwap` logic.
+- Status: done
+- Scope:
+  - Extend setup-detector snapshot contract with optional microstructure telemetry.
+  - Build microstructure summary from live tick cache in setup-detector service.
+  - Apply directional pressure confirmation in `volumeClimax` and `vwap` detectors.
+  - Add targeted unit tests for microstructure conflict/confirm behavior.
+- Out of scope:
+  - Optimizer scorecard/blocker-mix changes for this detector pipeline.
+  - SPX core setup-detector threshold/gating changes.
+  - Broker routing or reconciliation work.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/volumeClimax.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/vwap.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/volumeClimax.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/vwap.test.ts`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S2_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/vwap.test.ts src/services/setupDetector/__tests__/detectors.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - Result: all pass.
+- Risks introduced:
+  - Static directional microstructure thresholds may require regime tuning.
+- Mitigations:
+  - Fail-open behavior retained when microstructure unavailable.
+  - Signal payload now carries microstructure evidence for later optimization/governance.
+- Rollback:
+  - Revert P14-S2 files listed above and rerun targeted tests.
+- Notes:
+  - This slice improves live directional fidelity while preserving backward compatibility in sparse quote conditions.
+
+### Slice: P14-S3
+- Objective: Add Tradier adapter foundations, DTBP-aware sizing hooks, and portfolio snapshot sync plumbing behind explicit flags.
+- Status: done
+- Scope:
+  - Add Tradier OCC symbol formatter/parser, REST client, and order payload router helpers.
+  - Add portfolio sync service + worker and wire worker lifecycle in backend server.
+  - Add DTBP/PDT-aware sizing context in SPX contract selector + route input parsing.
+  - Add additive Supabase migration for broker credentials, portfolio snapshots, and execution-fidelity setup-instance columns.
+- Out of scope:
+  - Live execution state transitions in setup lifecycle.
+  - Broker/internal position reconciliation and slippage feedback loop.
+  - UI execution controls (flatten/routing pulses) in this backend slice.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/occFormatter.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/orderRouter.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/__tests__/occFormatter.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/__tests__/orderRouter.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/portfolio/portfolioSync.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/portfolioSyncWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/spx.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/supabase/migrations/20260326000000_institutional_upgrade.sql`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S3_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/broker/tradier/__tests__/orderRouter.test.ts src/services/spx/__tests__/contractSelector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint backend/src/services/broker/tradier/client.ts backend/src/services/broker/tradier/orderRouter.ts backend/src/services/broker/tradier/occFormatter.ts backend/src/services/broker/tradier/__tests__/occFormatter.test.ts backend/src/services/broker/tradier/__tests__/orderRouter.test.ts backend/src/services/portfolio/portfolioSync.ts backend/src/workers/portfolioSyncWorker.ts backend/src/services/spx/contractSelector.ts backend/src/routes/spx.ts backend/src/server.ts backend/src/services/spx/types.ts`
+  - Result: tests/typecheck pass; eslint warning-only because backend files are ignored by root config.
+- Risks introduced:
+  - Credential decryption remains placeholder in this foundation slice (`access_token_ciphertext` pass-through).
+  - Risk-context cache cardinality increases due new DTBP/PDT fingerprint.
+- Mitigations:
+  - Worker defaults to disabled and sandbox-first env posture.
+  - Missing migration tables fail-safe with warn-and-skip behavior in portfolio sync.
+  - Cache key now includes risk fingerprint and ad-hoc setup requests bypass cache to prevent stale sizing leakage.
+- Rollback:
+  - Revert P14-S3 files listed above.
+  - Keep `TRADIER_PORTFOLIO_SYNC_ENABLED=false` to disable runtime sync.
+- Notes:
+  - This slice is intentionally backend-foundational; live broker reconciliation remains `P14-S4`.
+
+### Slice: P14-S4
+- Objective: Add broker/internal ledger reconciliation and execution slippage feedback that auto-adjusts optimizer EV floors under sustained fill friction.
+- Status: done
+- Scope:
+  - Add Tradier positions retrieval in broker client.
+  - Add Tradier-vs-internal position reconciliation service for `ai_coach_positions`.
+  - Wire reconciliation and slippage-guardrail cycles into `positionTrackerWorker` with bounded intervals.
+  - Add optimizer slippage guardrail function that bumps `qualityGate.minEvR` when rolling broker entry slippage breaches threshold.
+- Out of scope:
+  - Full broker order lifecycle reconciliation (entry/exit routing + cancel/replace orchestration).
+  - UI contract changes for explicit post-trade mode transitions.
+  - KMS-backed credential decryption hardening.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/brokerLedgerReconciliation.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/__tests__/brokerLedgerReconciliation.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/optimizer.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S4_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/positions/__tests__/brokerLedgerReconciliation.test.ts src/services/spx/__tests__/optimizer-confidence.test.ts src/services/spx/__tests__/contractSelector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm exec eslint backend/src/services/broker/tradier/client.ts backend/src/services/positions/brokerLedgerReconciliation.ts backend/src/services/positions/__tests__/brokerLedgerReconciliation.test.ts backend/src/workers/positionTrackerWorker.ts backend/src/services/spx/optimizer.ts backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - Result: tests/typecheck pass; eslint warning-only because backend files are ignored by root config.
+- Risks introduced:
+  - Incorrect broker symbol normalization can produce false force-close actions.
+  - Slippage guardrail can reduce trade throughput when raised repeatedly in low-liquidity periods.
+- Mitigations:
+  - Reconciliation is disabled by default and uses strict option-key normalization.
+  - Guardrail is idempotent per rolling-window signature and capped with configurable max `minEvR`.
+  - Optimizer history persists each guardrail adjustment for full audit/revert.
+- Rollback:
+  - Revert P14-S4 files listed above.
+  - Disable runtime toggles:
+    - `TRADIER_POSITION_RECONCILIATION_ENABLED=false`
+    - `SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_ENABLED=false`
+- Notes:
+  - This slice closes the Phase 14 “execution reconciliation + drift calibration” backend objective with bounded automation controls.

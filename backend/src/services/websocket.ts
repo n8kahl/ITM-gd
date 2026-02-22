@@ -108,6 +108,11 @@ interface MicrobarUpdate {
   bidSize: number | null;
   askSize: number | null;
   bidAskImbalance: number | null;
+  bidSizeAtClose: number | null;
+  askSizeAtClose: number | null;
+  askBidSizeRatio: number | null;
+  quoteCoveragePct: number;
+  avgSpreadBps: number | null;
   finalized: boolean;
   timestamp: string;
   source: 'tick';
@@ -720,6 +725,11 @@ function broadcastTickMicrobars(tick: NormalizedMarketTick): void {
       bidSize: microbar.bidSize,
       askSize: microbar.askSize,
       bidAskImbalance: microbar.bidAskImbalance,
+      bidSizeAtClose: microbar.bidSizeAtClose,
+      askSizeAtClose: microbar.askSizeAtClose,
+      askBidSizeRatio: microbar.askBidSizeRatio,
+      quoteCoveragePct: microbar.quoteCoveragePct,
+      avgSpreadBps: microbar.avgSpreadBps,
       finalized: microbar.finalized,
       timestamp: new Date(microbar.updatedAtMs).toISOString(),
       source: 'tick',

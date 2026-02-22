@@ -56,6 +56,11 @@ describe('spx/microbarAggregator', () => {
     expect(current1s?.bidSize).toBe(10);
     expect(current1s?.askSize).toBe(6);
     expect(current1s?.bidAskImbalance).toBe(0.25);
+    expect(current1s?.bidSizeAtClose).toBe(10);
+    expect(current1s?.askSizeAtClose).toBe(6);
+    expect(current1s?.askBidSizeRatio).toBe(0.6);
+    expect(current1s?.quoteCoveragePct).toBe(0.5);
+    expect(current1s?.avgSpreadBps).toBeCloseTo(0.4166, 4);
   });
 
   it('finalizes previous bar when bucket rolls', () => {
@@ -144,5 +149,10 @@ describe('spx/microbarAggregator', () => {
     expect(bar?.bidSize).toBe(19);
     expect(bar?.askSize).toBe(13.5);
     expect(bar?.bidAskImbalance).toBeCloseTo(0.1692, 4);
+    expect(bar?.bidSizeAtClose).toBe(20);
+    expect(bar?.askSizeAtClose).toBe(15);
+    expect(bar?.askBidSizeRatio).toBe(0.75);
+    expect(bar?.quoteCoveragePct).toBe(1);
+    expect(bar?.avgSpreadBps).toBeCloseTo(0.625, 3);
   });
 });

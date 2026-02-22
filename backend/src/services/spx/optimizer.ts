@@ -22,6 +22,7 @@ export interface SPXGeometryPolicyEntry {
 export interface SPXMacroMicroPolicyEntry {
   minMacroAlignmentScore?: number;
   requireMicrostructureAlignment?: boolean;
+  requireOrbTrendConfluence?: boolean;
   failClosedWhenUnavailable?: boolean;
   minMicroAggressorSkewAbs?: number;
   minMicroImbalanceAbs?: number;
@@ -101,6 +102,12 @@ export interface SPXOptimizationProfile {
     minTriggerRatePct: number;
     pausedSetupTypes: string[];
   };
+  executionGuardrails?: {
+    lastSlippageAdjustmentAt: string | null;
+    lastSlippageWindowSignature: string | null;
+    lastObservedAvgEntrySlippagePts: number | null;
+    lastObservedSampleCount: number;
+  };
 }
 
 export interface SPXOptimizationScanResult {
@@ -147,6 +154,18 @@ export interface SPXOptimizerRevertResult {
   profile: SPXOptimizationProfile;
   scorecard: SPXOptimizerScorecard;
   revertedFromHistoryId: number;
+  historyEntryId: number | null;
+}
+
+export interface SPXSlippageGuardrailResult {
+  applied: boolean;
+  reason: string;
+  sampleCount: number;
+  thresholdPts: number;
+  avgEntrySlippagePts: number | null;
+  currentMinEvR: number;
+  nextMinEvR: number;
+  windowSignature: string | null;
   historyEntryId: number | null;
 }
 
@@ -355,12 +374,14 @@ interface SPXOptionsReplayDataQuality {
 }
 
 interface ExecutionFillRow {
+  id?: number;
   engine_setup_id: string;
   session_date: string;
   side: 'entry' | 'partial' | 'exit';
   source: 'proxy' | 'manual' | 'broker_tradier' | 'broker_other';
   slippage_points: number | string | null;
   slippage_bps: number | string | null;
+  executed_at?: string;
 }
 
 interface SPXExecutionActualsDataQuality {
@@ -414,6 +435,7 @@ interface PreparedOptimizationRow {
   microBidAskImbalance: number | null;
   microQuoteCoveragePct: number | null;
   microAvgSpreadBps: number | null;
+  orbTrendConfluence: boolean;
 }
 
 interface OptimizationRowsLoadResult {
@@ -431,6 +453,7 @@ interface ThresholdCandidate {
   requireEmaAlignment: boolean;
   requireVolumeRegimeAlignment: boolean;
   requireMicrostructureAlignment: boolean;
+  requireTrendPullbackOrbConfluence: boolean;
   minMicroAggressorSkewAbs: number;
   minMicroImbalanceAbs: number;
   minMicroQuoteCoveragePct: number;
@@ -488,7 +511,7 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   mean_reversion: 330,
   trend_continuation: 390,
   orb_breakout: 180,
-  trend_pullback: 360,
+  trend_pullback: 240,
   flip_reclaim: 360,
 };
 const FALLBACK_GEOMETRY_POLICY_ENTRY: SPXGeometryPolicyEntry = {
@@ -619,6 +642,7 @@ const DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE: Record<string, SPXMacroMicroPoli
   trend_pullback: {
     minMacroAlignmentScore: 34,
     requireMicrostructureAlignment: true,
+    requireOrbTrendConfluence: true,
     minMicroAggressorSkewAbs: 0.1,
     minMicroImbalanceAbs: 0.06,
     minMicroQuoteCoveragePct: 0.4,
@@ -736,6 +760,12 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     minTriggerRatePct: 3,
     pausedSetupTypes: ['breakout_vacuum'],
   },
+  executionGuardrails: {
+    lastSlippageAdjustmentAt: null,
+    lastSlippageWindowSignature: null,
+    lastObservedAvgEntrySlippagePts: null,
+    lastObservedSampleCount: 0,
+  },
 };
 const WEEKLY_AUTO_MIN_VALIDATION_TRADES = 12;
 const WEEKLY_AUTO_MIN_OBJECTIVE_DELTA = 0.5;
@@ -772,6 +802,29 @@ const FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS = (() => {
   const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS || '', 10);
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, parsed);
+})();
+const SLIPPAGE_GUARDRAIL_ENABLED = String(
+  process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_ENABLED || 'true',
+).toLowerCase() !== 'false';
+const SLIPPAGE_GUARDRAIL_WINDOW_SIZE = (() => {
+  const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_WINDOW || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 3) return parsed;
+  return 5;
+})();
+const SLIPPAGE_GUARDRAIL_THRESHOLD_PTS = (() => {
+  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_THRESHOLD_PTS || '');
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 0.25;
+})();
+const SLIPPAGE_GUARDRAIL_MIN_EVR_BUMP = (() => {
+  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_EVR_BUMP || '');
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 0.05;
+})();
+const SLIPPAGE_GUARDRAIL_MAX_MIN_EVR = (() => {
+  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_MAX_MIN_EVR || '');
+  if (Number.isFinite(parsed) && parsed >= 0.2) return parsed;
+  return 0.8;
 })();
 
 function round(value: number, decimals = 2): number {
@@ -936,6 +989,14 @@ function normalizeMacroMicroPolicyEntry(
     normalized.requireMicrostructureAlignment = typeof candidate.requireMicrostructureAlignment === 'boolean'
       ? candidate.requireMicrostructureAlignment
       : (fallback.requireMicrostructureAlignment === true);
+  }
+  if (
+    typeof candidate.requireOrbTrendConfluence === 'boolean'
+    || typeof fallback.requireOrbTrendConfluence === 'boolean'
+  ) {
+    normalized.requireOrbTrendConfluence = typeof candidate.requireOrbTrendConfluence === 'boolean'
+      ? candidate.requireOrbTrendConfluence
+      : (fallback.requireOrbTrendConfluence === true);
   }
   if (
     typeof candidate.failClosedWhenUnavailable === 'boolean'
@@ -1246,6 +1307,22 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         ? candidate.driftControl.pausedSetupTypes.filter((item): item is string => typeof item === 'string' && item.length > 0)
         : [],
     },
+    executionGuardrails: {
+      lastSlippageAdjustmentAt: typeof candidate.executionGuardrails?.lastSlippageAdjustmentAt === 'string'
+        ? candidate.executionGuardrails.lastSlippageAdjustmentAt
+        : DEFAULT_PROFILE.executionGuardrails?.lastSlippageAdjustmentAt ?? null,
+      lastSlippageWindowSignature: typeof candidate.executionGuardrails?.lastSlippageWindowSignature === 'string'
+        ? candidate.executionGuardrails.lastSlippageWindowSignature
+        : DEFAULT_PROFILE.executionGuardrails?.lastSlippageWindowSignature ?? null,
+      lastObservedAvgEntrySlippagePts: toFiniteNumber(candidate.executionGuardrails?.lastObservedAvgEntrySlippagePts)
+        ?? DEFAULT_PROFILE.executionGuardrails?.lastObservedAvgEntrySlippagePts
+        ?? null,
+      lastObservedSampleCount: Math.max(0, Math.floor(
+        toFiniteNumber(candidate.executionGuardrails?.lastObservedSampleCount)
+        ?? DEFAULT_PROFILE.executionGuardrails?.lastObservedSampleCount
+        ?? 0,
+      )),
+    },
   };
 
   const legacyWeightShape = (
@@ -1289,6 +1366,7 @@ function resolveMacroMicroPolicyForRow(
       policy.defaultRequireTrendMicrostructureAlignment
       && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType)
     ),
+    requireOrbTrendConfluence: false,
     failClosedWhenUnavailable: policy.defaultFailClosedWhenUnavailable,
     minMicroAggressorSkewAbs: policy.defaultMinMicroAggressorSkewAbs,
     minMicroImbalanceAbs: policy.defaultMinMicroImbalanceAbs,
@@ -1327,6 +1405,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   const gateReasons = toMetadataStringArray(metadata.gateReasons);
   const emaAligned = metadata.emaAligned === true || confluenceSources.includes('ema_alignment');
   const volumeRegimeAligned = metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
+  const orbTrendConfluence = confluenceSources.includes('orb_trend_confluence');
   const macroAlignmentScore = toFiniteNumber(metadata.macroAlignmentScore);
   const microstructureScore = toFiniteNumber(metadata.microstructureScore);
   const microstructureMetadata = (
@@ -1404,6 +1483,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
     microBidAskImbalance,
     microQuoteCoveragePct,
     microAvgSpreadBps,
+    orbTrendConfluence,
   };
 }
 
@@ -1954,23 +2034,26 @@ function candidateGrid(): ThresholdCandidate[] {
               for (const requireEmaAlignment of [false, true]) {
                 for (const requireVolumeRegimeAlignment of [false, true]) {
                   for (const enforceTimingGate of [true, false]) {
-                    for (const partialAtT1Pct of partialTakeGrid) {
-                      candidates.push({
-                        requireFlowConfirmation,
-                        minConfluenceScore,
-                        minPWinCalibrated,
-                        minEvR,
-                        minMacroAlignmentScore: macroMicro.minMacroAlignmentScore,
-                        minAlignmentPct,
-                        requireEmaAlignment,
-                        requireVolumeRegimeAlignment,
-                        requireMicrostructureAlignment: macroMicro.requireMicrostructureAlignment,
-                        minMicroAggressorSkewAbs: macroMicro.minMicroAggressorSkewAbs,
-                        minMicroImbalanceAbs: macroMicro.minMicroImbalanceAbs,
-                        minMicroQuoteCoveragePct: macroMicro.minMicroQuoteCoveragePct,
-                        enforceTimingGate,
-                        partialAtT1Pct,
-                      });
+                    for (const requireTrendPullbackOrbConfluence of [true, false]) {
+                      for (const partialAtT1Pct of partialTakeGrid) {
+                        candidates.push({
+                          requireFlowConfirmation,
+                          minConfluenceScore,
+                          minPWinCalibrated,
+                          minEvR,
+                          minMacroAlignmentScore: macroMicro.minMacroAlignmentScore,
+                          minAlignmentPct,
+                          requireEmaAlignment,
+                          requireVolumeRegimeAlignment,
+                          requireMicrostructureAlignment: macroMicro.requireMicrostructureAlignment,
+                          requireTrendPullbackOrbConfluence,
+                          minMicroAggressorSkewAbs: macroMicro.minMicroAggressorSkewAbs,
+                          minMicroImbalanceAbs: macroMicro.minMicroImbalanceAbs,
+                          minMicroQuoteCoveragePct: macroMicro.minMicroQuoteCoveragePct,
+                          enforceTimingGate,
+                          partialAtT1Pct,
+                        });
+                      }
                     }
                   }
                 }
@@ -1995,8 +2078,6 @@ function passesCandidate(
   },
 ): boolean {
   if (!row.triggered) return false;
-  if (row.tier === 'hidden') return false;
-  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -2018,6 +2099,10 @@ function passesCandidate(
     candidate.requireMicrostructureAlignment
     || rowPolicy.requireMicrostructureAlignment === true
   ) && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType);
+  const requireTrendPullbackOrbConfluence = (
+    candidate.requireTrendPullbackOrbConfluence
+    || rowPolicy.requireOrbTrendConfluence === true
+  ) && row.setupType === 'trend_pullback';
   const minMicroAggressorSkewAbs = Math.max(
     candidate.minMicroAggressorSkewAbs,
     rowPolicy.minMicroAggressorSkewAbs ?? 0,
@@ -2044,6 +2129,7 @@ function passesCandidate(
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
+  if (requireTrendPullbackOrbConfluence && !row.orbTrendConfluence) return false;
   if (requireMicrostructureAlignment) {
     if (!row.microstructureAvailable) {
       if (failClosedWhenUnavailable) return false;
@@ -2071,8 +2157,6 @@ function passesCandidateOpportunity(
     profile?: SPXOptimizationProfile;
   },
 ): boolean {
-  if (row.tier === 'hidden') return false;
-  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -2094,6 +2178,10 @@ function passesCandidateOpportunity(
     candidate.requireMicrostructureAlignment
     || rowPolicy.requireMicrostructureAlignment === true
   ) && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType);
+  const requireTrendPullbackOrbConfluence = (
+    candidate.requireTrendPullbackOrbConfluence
+    || rowPolicy.requireOrbTrendConfluence === true
+  ) && row.setupType === 'trend_pullback';
   const minMicroAggressorSkewAbs = Math.max(
     candidate.minMicroAggressorSkewAbs,
     rowPolicy.minMicroAggressorSkewAbs ?? 0,
@@ -2120,6 +2208,7 @@ function passesCandidateOpportunity(
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
+  if (requireTrendPullbackOrbConfluence && !row.orbTrendConfluence) return false;
   if (requireMicrostructureAlignment) {
     if (!row.microstructureAvailable) {
       if (failClosedWhenUnavailable) return false;
@@ -2419,6 +2508,9 @@ function buildSetupActionRecommendations(input: {
   }
   if (input.optimizedCandidate.requireMicrostructureAlignment !== input.baselineCandidate.requireMicrostructureAlignment) {
     update.add(`Microstructure gate: require trend-family alignment = ${input.optimizedCandidate.requireMicrostructureAlignment}.`);
+  }
+  if (input.optimizedCandidate.requireTrendPullbackOrbConfluence !== input.baselineCandidate.requireTrendPullbackOrbConfluence) {
+    update.add(`Trend gate: require ORB + pullback confluence for trend_pullback = ${input.optimizedCandidate.requireTrendPullbackOrbConfluence}.`);
   }
   if (input.optimizedCandidate.minMicroAggressorSkewAbs !== input.baselineCandidate.minMicroAggressorSkewAbs) {
     update.add(`Microstructure threshold: aggressor skew >= ${input.optimizedCandidate.minMicroAggressorSkewAbs.toFixed(2)}.`);
@@ -2868,6 +2960,10 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
     requireEmaAlignment: profile.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profile.indicatorGate.requireVolumeRegimeAlignment,
     requireMicrostructureAlignment: profile.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
+    requireTrendPullbackOrbConfluence: normalizeMacroMicroPolicyEntry(
+      profile.macroMicroPolicy.bySetupType?.trend_pullback,
+      DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
+    ).requireOrbTrendConfluence === true,
     minMicroAggressorSkewAbs: profile.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
     minMicroImbalanceAbs: profile.macroMicroPolicy.defaultMinMicroImbalanceAbs,
     minMicroQuoteCoveragePct: profile.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
@@ -2991,6 +3087,10 @@ export async function runSPXOptimizerScan(input?: {
     requireEmaAlignment: profileForScan.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profileForScan.indicatorGate.requireVolumeRegimeAlignment,
     requireMicrostructureAlignment: profileForScan.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
+    requireTrendPullbackOrbConfluence: normalizeMacroMicroPolicyEntry(
+      profileForScan.macroMicroPolicy.bySetupType?.trend_pullback,
+      DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
+    ).requireOrbTrendConfluence === true,
     minMicroAggressorSkewAbs: profileForScan.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
     minMicroImbalanceAbs: profileForScan.macroMicroPolicy.defaultMinMicroImbalanceAbs,
     minMicroQuoteCoveragePct: profileForScan.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
@@ -3174,6 +3274,10 @@ export async function runSPXOptimizerScan(input?: {
   const mergedPausedSetupTypes = Array.from(
     new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
   ).sort();
+  const trendPullbackPolicy = normalizeMacroMicroPolicyEntry(
+    profileForScan.macroMicroPolicy.bySetupType?.trend_pullback,
+    DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
+  );
 
   const failClosedBlockedProfileMutation = dataQuality.failClosedActive && !dataQuality.gatePassed;
   const nextProfile: SPXOptimizationProfile = failClosedBlockedProfileMutation
@@ -3220,6 +3324,13 @@ export async function runSPXOptimizerScan(input?: {
         defaultMinMicroAggressorSkewAbs: activeCandidate.minMicroAggressorSkewAbs,
         defaultMinMicroImbalanceAbs: activeCandidate.minMicroImbalanceAbs,
         defaultMinMicroQuoteCoveragePct: activeCandidate.minMicroQuoteCoveragePct,
+        bySetupType: {
+          ...profileForScan.macroMicroPolicy.bySetupType,
+          trend_pullback: {
+            ...trendPullbackPolicy,
+            requireOrbTrendConfluence: activeCandidate.requireTrendPullbackOrbConfluence,
+          },
+        },
       },
       driftControl: {
         ...profileForScan.driftControl,
@@ -3353,6 +3464,284 @@ async function readOptimizerHistoryRow(historyId: number): Promise<PersistedOpti
   return (data || null) as PersistedOptimizerHistoryRow | null;
 }
 
+interface SlippageGuardrailWindow {
+  sampleCount: number;
+  avgEntrySlippagePts: number | null;
+  windowSignature: string | null;
+  tableAvailable: boolean;
+  reason: string | null;
+}
+
+interface SlippageGuardrailAdjustmentInput {
+  sampleCount: number;
+  minSamples: number;
+  avgEntrySlippagePts: number | null;
+  thresholdPts: number;
+  currentMinEvR: number;
+  bumpEvR: number;
+  maxMinEvR: number;
+  windowSignature: string | null;
+  lastAppliedWindowSignature: string | null;
+}
+
+interface SlippageGuardrailAdjustment {
+  shouldAdjust: boolean;
+  reason: string;
+  nextMinEvR: number;
+}
+
+function computeSlippageGuardrailAdjustment(input: SlippageGuardrailAdjustmentInput): SlippageGuardrailAdjustment {
+  if (input.sampleCount < input.minSamples) {
+    return {
+      shouldAdjust: false,
+      reason: `insufficient_samples:${input.sampleCount}<${input.minSamples}`,
+      nextMinEvR: input.currentMinEvR,
+    };
+  }
+
+  if (input.avgEntrySlippagePts == null || !Number.isFinite(input.avgEntrySlippagePts)) {
+    return {
+      shouldAdjust: false,
+      reason: 'avg_slippage_unavailable',
+      nextMinEvR: input.currentMinEvR,
+    };
+  }
+
+  if (input.avgEntrySlippagePts <= input.thresholdPts) {
+    return {
+      shouldAdjust: false,
+      reason: `below_threshold:${round(input.avgEntrySlippagePts, 4)}<=${round(input.thresholdPts, 4)}`,
+      nextMinEvR: input.currentMinEvR,
+    };
+  }
+
+  if (
+    input.windowSignature
+    && input.lastAppliedWindowSignature
+    && input.windowSignature === input.lastAppliedWindowSignature
+  ) {
+    return {
+      shouldAdjust: false,
+      reason: `window_already_applied:${input.windowSignature}`,
+      nextMinEvR: input.currentMinEvR,
+    };
+  }
+
+  const nextMinEvR = round(
+    clamp(input.currentMinEvR + input.bumpEvR, input.currentMinEvR, input.maxMinEvR),
+    4,
+  );
+  if (nextMinEvR <= input.currentMinEvR) {
+    return {
+      shouldAdjust: false,
+      reason: `min_evr_at_cap:${round(input.currentMinEvR, 4)}`,
+      nextMinEvR: input.currentMinEvR,
+    };
+  }
+
+  return {
+    shouldAdjust: true,
+    reason: `avg_entry_slippage:${round(input.avgEntrySlippagePts, 4)}>${round(input.thresholdPts, 4)}`,
+    nextMinEvR,
+  };
+}
+
+async function loadRecentEntrySlippageWindow(limit: number): Promise<SlippageGuardrailWindow> {
+  const safeLimit = Math.max(3, Math.floor(limit));
+  const { data, error } = await supabase
+    .from('spx_setup_execution_fills')
+    .select('id,side,source,slippage_points,executed_at')
+    .eq('side', 'entry')
+    .in('source', ['broker_tradier', 'broker_other'])
+    .not('slippage_points', 'is', null)
+    .order('executed_at', { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    if (isMissingTableError(error.message)) {
+      return {
+        sampleCount: 0,
+        avgEntrySlippagePts: null,
+        windowSignature: null,
+        tableAvailable: false,
+        reason: 'execution_fill_table_unavailable',
+      };
+    }
+
+    logger.warn('SPX optimizer slippage guardrail failed to load entry fills', {
+      error: error.message,
+    });
+    return {
+      sampleCount: 0,
+      avgEntrySlippagePts: null,
+      windowSignature: null,
+      tableAvailable: false,
+      reason: `execution_fill_query_failed:${error.message}`,
+    };
+  }
+
+  const rows = (data || []) as ExecutionFillRow[];
+  const entrySlippagePts = rows
+    .map((row) => toFiniteNumber(row.slippage_points))
+    .filter((value): value is number => value != null)
+    .map((value) => Math.abs(value))
+    .slice(0, safeLimit);
+
+  const sampleCount = entrySlippagePts.length;
+  const avgEntrySlippagePts = sampleCount > 0 ? round(mean(entrySlippagePts), 4) : null;
+  const signature = rows
+    .map((row) => {
+      const idPart = toFiniteNumber((row as { id?: unknown }).id);
+      if (idPart != null) return String(idPart);
+      const executedAt = typeof row.executed_at === 'string' ? row.executed_at : '';
+      const slippage = toFiniteNumber(row.slippage_points);
+      return `${executedAt}:${slippage ?? 'na'}`;
+    })
+    .slice(0, safeLimit)
+    .join('|');
+
+  return {
+    sampleCount,
+    avgEntrySlippagePts,
+    windowSignature: signature.length > 0 ? signature : null,
+    tableAvailable: true,
+    reason: null,
+  };
+}
+
+export async function applyExecutionSlippageGuardrail(input?: {
+  actor?: string | null;
+  reason?: string | null;
+  mode?: SPXOptimizerMode;
+}): Promise<SPXSlippageGuardrailResult> {
+  const mode = normalizeOptimizerMode(input?.mode || 'nightly_auto');
+  const profile = await getActiveSPXOptimizationProfile();
+  const currentMinEvR = round(profile.qualityGate.minEvR, 4);
+
+  if (!SLIPPAGE_GUARDRAIL_ENABLED) {
+    return {
+      applied: false,
+      reason: 'slippage_guardrail_disabled',
+      sampleCount: 0,
+      thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
+      avgEntrySlippagePts: null,
+      currentMinEvR,
+      nextMinEvR: currentMinEvR,
+      windowSignature: null,
+      historyEntryId: null,
+    };
+  }
+
+  const window = await loadRecentEntrySlippageWindow(SLIPPAGE_GUARDRAIL_WINDOW_SIZE);
+  if (!window.tableAvailable) {
+    return {
+      applied: false,
+      reason: window.reason || 'execution_fill_table_unavailable',
+      sampleCount: window.sampleCount,
+      thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
+      avgEntrySlippagePts: window.avgEntrySlippagePts,
+      currentMinEvR,
+      nextMinEvR: currentMinEvR,
+      windowSignature: window.windowSignature,
+      historyEntryId: null,
+    };
+  }
+
+  const adjustment = computeSlippageGuardrailAdjustment({
+    sampleCount: window.sampleCount,
+    minSamples: SLIPPAGE_GUARDRAIL_WINDOW_SIZE,
+    avgEntrySlippagePts: window.avgEntrySlippagePts,
+    thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
+    currentMinEvR,
+    bumpEvR: SLIPPAGE_GUARDRAIL_MIN_EVR_BUMP,
+    maxMinEvR: SLIPPAGE_GUARDRAIL_MAX_MIN_EVR,
+    windowSignature: window.windowSignature,
+    lastAppliedWindowSignature: profile.executionGuardrails?.lastSlippageWindowSignature || null,
+  });
+  if (!adjustment.shouldAdjust) {
+    return {
+      applied: false,
+      reason: adjustment.reason,
+      sampleCount: window.sampleCount,
+      thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
+      avgEntrySlippagePts: window.avgEntrySlippagePts,
+      currentMinEvR,
+      nextMinEvR: currentMinEvR,
+      windowSignature: window.windowSignature,
+      historyEntryId: null,
+    };
+  }
+
+  const persisted = await readPersistedOptimizerState();
+  const persistedScorecard = persisted?.scorecard && typeof persisted.scorecard === 'object' && !Array.isArray(persisted.scorecard)
+    ? persisted.scorecard as SPXOptimizerScorecard
+    : await getSPXOptimizerScorecard();
+  const generatedAt = new Date().toISOString();
+  const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
+    ...profile,
+    source: 'scan',
+    qualityGate: {
+      ...profile.qualityGate,
+      minEvR: adjustment.nextMinEvR,
+    },
+    executionGuardrails: {
+      lastSlippageAdjustmentAt: generatedAt,
+      lastSlippageWindowSignature: window.windowSignature,
+      lastObservedAvgEntrySlippagePts: window.avgEntrySlippagePts,
+      lastObservedSampleCount: window.sampleCount,
+    },
+  }, generatedAt);
+  const nextScorecard: SPXOptimizerScorecard = {
+    ...persistedScorecard,
+    generatedAt,
+    notes: [
+      `Execution slippage guardrail raised min EV(R): ${currentMinEvR.toFixed(2)} -> ${adjustment.nextMinEvR.toFixed(2)} (avg entry slippage=${window.avgEntrySlippagePts?.toFixed(4) ?? 'n/a'} pts over ${window.sampleCount} broker entry fills, threshold=${SLIPPAGE_GUARDRAIL_THRESHOLD_PTS.toFixed(4)}).`,
+      ...(Array.isArray(persistedScorecard.notes) ? persistedScorecard.notes : []),
+    ].slice(0, 20),
+  };
+  const { scanRange, trainingRange, validationRange } = resolvePersistedRange(persisted);
+
+  await persistOptimizerState({
+    profile: nextProfile,
+    scorecard: nextScorecard,
+    scanRange,
+    trainingRange,
+    validationRange,
+  });
+
+  const historyEntryId = await appendOptimizerHistory({
+    action: 'scan',
+    mode,
+    actor: input?.actor ?? null,
+    reason: input?.reason || `slippage_guardrail:${adjustment.reason}`,
+    optimizationApplied: true,
+    previousProfile: profile,
+    nextProfile,
+    scorecard: nextScorecard,
+    scanRange,
+    trainingRange,
+    validationRange,
+  });
+
+  try {
+    await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, nextProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
+  } catch {
+    // noop
+  }
+
+  return {
+    applied: true,
+    reason: adjustment.reason,
+    sampleCount: window.sampleCount,
+    thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
+    avgEntrySlippagePts: window.avgEntrySlippagePts,
+    currentMinEvR,
+    nextMinEvR: adjustment.nextMinEvR,
+    windowSignature: window.windowSignature,
+    historyEntryId,
+  };
+}
+
 function resolvePersistedRange(persisted: PersistedOptimizerStateRow | null): {
   scanRange: { from: string; to: string };
   trainingRange: { from: string; to: string };
@@ -3441,4 +3830,5 @@ export const __optimizerTestUtils = {
   wilsonIntervalPct,
   toMetrics,
   resolvePausedCombos,
+  computeSlippageGuardrailAdjustment,
 };

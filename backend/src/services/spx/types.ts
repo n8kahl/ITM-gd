@@ -143,6 +143,12 @@ export interface ContractRecommendation {
   healthTier?: 'green' | 'amber' | 'red';
   thetaRiskPer15m?: number;
   ivVsRealized?: number;
+  suggestedContracts?: number;
+  suggestedPositionCost?: number;
+  dayTradeBuyingPowerUsed?: number | null;
+  maxRiskDollarsUsed?: number | null;
+  sizingReason?: string;
+  zeroDteBlocked?: boolean;
   alternatives?: Array<{
     description: string;
     strike: number;

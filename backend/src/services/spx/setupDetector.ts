@@ -41,7 +41,7 @@ const FLOW_MIN_LOCAL_PREMIUM = 150_000;
 const FLOW_MIN_LOCAL_EVENTS = 2;
 const FLOW_QUALITY_MIN_EVENTS = 2;
 const FLOW_QUALITY_MIN_PREMIUM = 90_000;
-const ORB_MIN_FLOW_QUALITY_SCORE = 58;
+const ORB_MIN_FLOW_QUALITY_SCORE = 52;
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
 const MICROSTRUCTURE_STALE_WINDOW_MS = 3 * 60 * 1000;
 
@@ -141,13 +141,15 @@ const DEFAULT_TREND_PROMOTION_MIN_EV_R = 0.22;
 const DEFAULT_TREND_PROMOTION_MIN_MACRO_SCORE = 34;
 const DEFAULT_TREND_PROMOTION_MIN_MICRO_SCORE = 56;
 const DEFAULT_TREND_PROMOTION_REQUIRE_MICRO_ALIGNMENT = true;
+const ORB_TREND_CONFLUENCE_TOLERANCE_POINTS = 10;
+const ORB_TREND_CONFLUENCE_BREAK_CONFIRM_POINTS = 0.75;
 const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   fade_at_wall: 300,
   breakout_vacuum: 360,
   mean_reversion: 330,
   trend_continuation: 390,
   orb_breakout: 180,
-  trend_pullback: 360,
+  trend_pullback: 240,
   flip_reclaim: 360,
 };
 interface SetupSpecificGateFloor {
@@ -169,11 +171,11 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     maxFirstSeenMinuteEt: 330,
   },
   orb_breakout: {
-    minConfluenceScore: 4,
-    minPWinCalibrated: 0.61,
-    minEvR: 0.3,
+    minConfluenceScore: 3,
+    minPWinCalibrated: 0.58,
+    minEvR: 0.24,
     requireFlowConfirmation: true,
-    minAlignmentPct: 55,
+    minAlignmentPct: 50,
     requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
     maxFirstSeenMinuteEt: 165,
@@ -186,7 +188,7 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     minAlignmentPct: 50,
     requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
-    maxFirstSeenMinuteEt: 300,
+    maxFirstSeenMinuteEt: 240,
   },
   trend_continuation: {
     minConfluenceScore: 4,
@@ -301,6 +303,17 @@ interface SetupIndicatorContext {
   asOfTimestamp: string;
 }
 
+interface SetupOrbTrendConfluence {
+  available: boolean;
+  aligned: boolean;
+  orbLevel: number | null;
+  distanceToOrb: number | null;
+  breakConfirmed: boolean;
+  pullbackRetest: boolean;
+  reclaimed: boolean;
+  reasons: string[];
+}
+
 interface FlowQualitySummary {
   score: number;
   recentDirectionalEvents: number;
@@ -338,6 +351,7 @@ const CONFLUENCE_SOURCE_WEIGHTS: Record<string, number> = {
   ema_alignment: 0.85,
   volume_regime_alignment: 0.75,
   microstructure_alignment: 1.0,
+  orb_trend_confluence: 1.15,
   strike_flow_confluence: 0.9,
   intraday_gamma_pressure: 0.95,
 };
@@ -793,6 +807,93 @@ function inferSetupTypeForZone(input: {
   return fallback;
 }
 
+function evaluateOrbTrendConfluence(input: {
+  setupType: SetupType;
+  direction: 'bullish' | 'bearish';
+  currentPrice: number;
+  zoneCenter: number;
+  indicatorContext: SetupIndicatorContext | null;
+  emaAligned: boolean;
+  flowConfirmed: boolean;
+}): SetupOrbTrendConfluence {
+  if (input.setupType !== 'trend_pullback' && input.setupType !== 'orb_breakout') {
+    return {
+      available: false,
+      aligned: false,
+      orbLevel: null,
+      distanceToOrb: null,
+      breakConfirmed: false,
+      pullbackRetest: false,
+      reclaimed: false,
+      reasons: ['setup_type_not_orb_family'],
+    };
+  }
+
+  const context = input.indicatorContext;
+  if (!context) {
+    return {
+      available: false,
+      aligned: false,
+      orbLevel: null,
+      distanceToOrb: null,
+      breakConfirmed: false,
+      pullbackRetest: false,
+      reclaimed: false,
+      reasons: ['indicator_context_unavailable'],
+    };
+  }
+
+  const orbLevel = input.direction === 'bullish' ? context.orbHigh : context.orbLow;
+  if (!Number.isFinite(orbLevel)) {
+    return {
+      available: false,
+      aligned: false,
+      orbLevel: null,
+      distanceToOrb: null,
+      breakConfirmed: false,
+      pullbackRetest: false,
+      reclaimed: false,
+      reasons: ['orb_level_unavailable'],
+    };
+  }
+
+  const distanceToOrb = Math.abs(input.zoneCenter - orbLevel);
+  const breakConfirmed = input.direction === 'bullish'
+    ? input.currentPrice >= orbLevel + ORB_TREND_CONFLUENCE_BREAK_CONFIRM_POINTS
+    : input.currentPrice <= orbLevel - ORB_TREND_CONFLUENCE_BREAK_CONFIRM_POINTS;
+  const reclaimed = input.direction === 'bullish'
+    ? input.currentPrice >= orbLevel - ORB_RECLAIM_TOLERANCE_POINTS
+    : input.currentPrice <= orbLevel + ORB_RECLAIM_TOLERANCE_POINTS;
+  const pullbackRetest = distanceToOrb <= ORB_TREND_CONFLUENCE_TOLERANCE_POINTS;
+  const openingCarry = (
+    context.minutesSinceOpen <= 210
+    && breakConfirmed
+    && input.emaAligned
+    && (input.flowConfirmed || context.volumeTrend === 'rising')
+  );
+  const aligned = (pullbackRetest && reclaimed && breakConfirmed) || openingCarry;
+
+  const reasons: string[] = [];
+  if (aligned) {
+    reasons.push(openingCarry ? 'opening_orb_carry' : 'orb_retest_confirmed');
+  } else {
+    if (!pullbackRetest) reasons.push('orb_retest_missed');
+    if (!reclaimed) reasons.push('orb_not_reclaimed');
+    if (!breakConfirmed) reasons.push('orb_break_not_confirmed');
+  }
+
+  return {
+    available: true,
+    aligned,
+    orbLevel: round(orbLevel, 2),
+    distanceToOrb: round(distanceToOrb, 2),
+    breakConfirmed,
+    pullbackRetest,
+    reclaimed,
+    reasons,
+  };
+}
+
 function adjustTargetsForSetupType(input: {
   setupType: SetupType;
   direction: 'bullish' | 'bearish';
@@ -1048,6 +1149,7 @@ function calculateConfluence(input: {
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
   microstructureAligned: boolean;
+  orbTrendConfluenceAligned: boolean;
   strikeFlowConfluence: boolean;
   intradayGammaPressureAligned: boolean;
 }): {
@@ -1072,6 +1174,7 @@ function calculateConfluence(input: {
   if (input.emaAligned) sources.push('ema_alignment');
   if (input.volumeRegimeAligned) sources.push('volume_regime_alignment');
   if (input.microstructureAligned) sources.push('microstructure_alignment');
+  if (input.orbTrendConfluenceAligned) sources.push('orb_trend_confluence');
   if (input.strikeFlowConfluence) sources.push('strike_flow_confluence');
   if (input.intradayGammaPressureAligned) sources.push('intraday_gamma_pressure');
   const weightedScore = sources.reduce((sum, source) => {
@@ -2178,6 +2281,8 @@ function evaluateOptimizationGate(input: {
   volumeRegimeAligned: boolean;
   microstructureConfig: SetupMicrostructureConfig;
   microstructureAlignment: SetupMicrostructureAlignment;
+  orbTrendConfluence: SetupOrbTrendConfluence;
+  requireOrbTrendConfluence: boolean;
   pausedSetupTypes: Set<string>;
   pausedCombos: Set<string>;
   profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
@@ -2239,6 +2344,10 @@ function evaluateOptimizationGate(input: {
     && input.emaAligned
     && input.confluenceScore >= 3
   );
+  const orbTrendFusionGraceEligible = (
+    input.setupType === 'trend_pullback'
+    && input.orbTrendConfluence.aligned
+  );
   if (input.pausedSetupTypes.has(input.setupType)) {
     reasons.push(`setup_type_paused:${input.setupType}`);
   }
@@ -2254,20 +2363,35 @@ function evaluateOptimizationGate(input: {
   if (input.evR < minEvR) {
     reasons.push(`evr_below_floor:${round(input.evR, 3)}<${round(minEvR, 3)}`);
   }
-  if (requireFlowConfirmation && !input.flowConfirmed && !trendFamilyFlowGraceEligible) {
+  if (
+    requireFlowConfirmation
+    && !input.flowConfirmed
+    && !trendFamilyFlowGraceEligible
+    && !orbTrendFusionGraceEligible
+  ) {
     reasons.push('flow_confirmation_required');
   }
   if (input.flowAlignmentPct != null) {
     if (minAlignmentPct > 0 && input.flowAlignmentPct < minAlignmentPct) {
       reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${minAlignmentPct}`);
     }
-  } else if (requireFlowConfirmation && minAlignmentPct > 0 && !trendFamilyFlowGraceEligible) {
+  } else if (
+    requireFlowConfirmation
+    && minAlignmentPct > 0
+    && !trendFamilyFlowGraceEligible
+    && !orbTrendFusionGraceEligible
+  ) {
     reasons.push('flow_alignment_unavailable');
   }
   if (requireEmaAlignment && !input.emaAligned) {
     reasons.push('ema_alignment_required');
   }
-  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned && !trendFamilyVolumeGraceEligible) {
+  if (
+    requireVolumeRegimeAlignment
+    && !input.volumeRegimeAligned
+    && !trendFamilyVolumeGraceEligible
+    && !orbTrendFusionGraceEligible
+  ) {
     reasons.push('volume_regime_alignment_required');
   }
   const setupSpecificMaxMinute = setupFloors?.maxFirstSeenMinuteEt;
@@ -2298,25 +2422,40 @@ function evaluateOptimizationGate(input: {
   }
 
   if (input.setupType === 'orb_breakout') {
-    if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
-      reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
-    }
-    if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
-      reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
+    const hasDirectionalFlowSample = (
+      input.flowQuality.recentDirectionalEvents > 0
+      || input.flowQuality.recentDirectionalPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM
+    );
+    if (hasDirectionalFlowSample) {
+      if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
+        reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
+      }
+      if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
+        reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
+      }
+    } else if (!input.orbTrendConfluence.aligned) {
+      reasons.push('orb_flow_or_confluence_required');
     }
   }
 
   if (input.setupType === 'trend_pullback' && firstSeenMinute != null) {
     const trendTimingByRegime: Record<Regime, number> = {
-      breakout: 300,
-      trending: 320,
-      compression: 240,
-      ranging: 210,
+      breakout: 240,
+      trending: 260,
+      compression: 220,
+      ranging: 200,
     };
     const trendMaxMinute = trendTimingByRegime[input.regime];
     if (firstSeenMinute > trendMaxMinute) {
       reasons.push(`trend_timing_window:${firstSeenMinute}>${trendMaxMinute}`);
     }
+  }
+  if (
+    input.setupType === 'trend_pullback'
+    && input.requireOrbTrendConfluence
+    && !input.orbTrendConfluence.aligned
+  ) {
+    reasons.push('trend_orb_confluence_required');
   }
 
   if (
@@ -2751,6 +2890,19 @@ export async function detectActiveSetups(options?: {
       base: microstructureBaseConfig,
       policy: macroMicroPolicyEntry,
     });
+    const orbTrendConfluence = evaluateOrbTrendConfluence({
+      setupType,
+      direction,
+      currentPrice,
+      zoneCenter,
+      indicatorContext,
+      emaAligned,
+      flowConfirmed,
+    });
+    const requireOrbTrendConfluence = (
+      setupType === 'trend_pullback'
+      && macroMicroPolicyEntry.requireOrbTrendConfluence === true
+    );
     const microstructureAlignment = evaluateMicrostructureAlignment({
       direction,
       setupType,
@@ -2777,6 +2929,7 @@ export async function detectActiveSetups(options?: {
       emaAligned,
       volumeRegimeAligned,
       microstructureAligned: microstructureAlignment.aligned,
+      orbTrendConfluenceAligned: orbTrendConfluence.aligned,
       strikeFlowConfluence,
       intradayGammaPressureAligned: intradayGammaPressure.aligned,
     });
@@ -3004,6 +3157,8 @@ export async function detectActiveSetups(options?: {
       volumeRegimeAligned,
       microstructureConfig: setupMicrostructureConfig,
       microstructureAlignment,
+      orbTrendConfluence,
+      requireOrbTrendConfluence,
       pausedSetupTypes,
       pausedCombos,
       profile: optimizationProfile,
@@ -3093,6 +3248,7 @@ export async function detectActiveSetups(options?: {
       decisionDrivers: [
         ...(emaAligned ? ['EMA trend alignment'] : []),
         ...(volumeRegimeAligned ? ['Volume trend aligned with regime'] : []),
+        ...(orbTrendConfluence.aligned ? ['ORB + pullback confluence confirmed'] : []),
         ...(microstructureAlignment.aligned ? ['Microstructure aligned with direction'] : []),
         ...(intradayGammaPressure.aligned ? ['Intraday gamma pressure aligned'] : []),
         ...(macroAlignmentScore >= setupMacroFilterConfig.minAlignmentScore ? ['Macro alignment threshold satisfied'] : []),
@@ -3100,6 +3256,9 @@ export async function detectActiveSetups(options?: {
       decisionRisks: [
         ...(!emaAligned ? ['EMA trend misalignment'] : []),
         ...(!volumeRegimeAligned ? ['Volume trend not confirming regime'] : []),
+        ...(requireOrbTrendConfluence && !orbTrendConfluence.aligned
+          ? ['Trend pullback missing ORB confluence']
+          : []),
         ...(microstructureAlignment.available && !microstructureAlignment.aligned
           ? ['Microstructure conflict with setup direction']
           : []),

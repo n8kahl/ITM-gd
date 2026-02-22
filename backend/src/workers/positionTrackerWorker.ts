@@ -16,12 +16,22 @@ import {
   markWorkerStopped,
   registerWorker,
 } from '../services/workerHealth';
+import { reconcileTradierBrokerLedger } from '../services/positions/brokerLedgerReconciliation';
+import { applyExecutionSlippageGuardrail } from '../services/spx/optimizer';
 
 export const POSITION_TRACKER_POLL_INTERVAL_MARKET_OPEN = 15_000;
 export const POSITION_TRACKER_POLL_INTERVAL_MARKET_CLOSED = 60_000;
 export const POSITION_TRACKER_INITIAL_DELAY = 15_000;
 const POSITION_TRACKER_FETCH_LIMIT = 1000;
 const POSITION_ADVICE_COOLDOWN_MS = 120_000;
+const POSITION_RECONCILIATION_MIN_INTERVAL_MS = Math.max(
+  15_000,
+  Number.parseInt(process.env.TRADIER_POSITION_RECONCILIATION_INTERVAL_MS || '60000', 10) || 60_000,
+);
+const POSITION_SLIPPAGE_GUARDRAIL_MIN_INTERVAL_MS = Math.max(
+  30_000,
+  Number.parseInt(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_INTERVAL_MS || '60000', 10) || 60_000,
+);
 const WORKER_NAME = 'position_tracker_worker';
 
 registerWorker(WORKER_NAME);
@@ -29,6 +39,8 @@ registerWorker(WORKER_NAME);
 let pollingTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 const lastAdvicePublishedAt = new Map<string, number>();
+let lastPositionReconciliationAt = 0;
+let lastSlippageGuardrailAt = 0;
 
 function adviceCooldownKey(userId: string, adviceType: string, positionId: string): string {
   return `${userId}:${positionId}:${adviceType}`;
@@ -64,6 +76,31 @@ function snapshotCountByUsers(userSnapshots: Map<string, LivePositionSnapshot[]>
 async function runPositionTrackingCycle(): Promise<void> {
   const tracker = new LivePositionTracker();
   const advisor = new ExitAdvisor();
+  const nowMs = Date.now();
+
+  if ((nowMs - lastPositionReconciliationAt) >= POSITION_RECONCILIATION_MIN_INTERVAL_MS) {
+    lastPositionReconciliationAt = nowMs;
+    try {
+      const reconciliation = await reconcileTradierBrokerLedger();
+      if (
+        reconciliation.enabled
+        && (reconciliation.positionsForceClosed > 0 || reconciliation.positionsQuantitySynced > 0 || reconciliation.usersWithBrokerErrors > 0)
+      ) {
+        logger.info('Position tracker broker reconciliation completed', {
+          usersScanned: reconciliation.usersScanned,
+          usersWithCredentials: reconciliation.usersWithCredentials,
+          usersWithBrokerErrors: reconciliation.usersWithBrokerErrors,
+          openPositionsScanned: reconciliation.openPositionsScanned,
+          positionsForceClosed: reconciliation.positionsForceClosed,
+          positionsQuantitySynced: reconciliation.positionsQuantitySynced,
+        });
+      }
+    } catch (error) {
+      logger.warn('Position tracker broker reconciliation failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   const userSnapshots = await tracker.recalculateAllOpenPositions(POSITION_TRACKER_FETCH_LIMIT);
   const activePositionCount = snapshotCountByUsers(userSnapshots);
@@ -119,6 +156,31 @@ async function runPositionTrackingCycle(): Promise<void> {
       activePositionCount,
       uniqueUsers: userSnapshots.size,
     });
+  }
+
+  if ((nowMs - lastSlippageGuardrailAt) >= POSITION_SLIPPAGE_GUARDRAIL_MIN_INTERVAL_MS) {
+    lastSlippageGuardrailAt = nowMs;
+    try {
+      const slippageGuardrail = await applyExecutionSlippageGuardrail({
+        actor: WORKER_NAME,
+        reason: 'rolling execution slippage observed by position tracker',
+      });
+      if (slippageGuardrail.applied) {
+        logger.warn('SPX optimizer slippage guardrail adjusted minEvR', {
+          sampleCount: slippageGuardrail.sampleCount,
+          avgEntrySlippagePts: slippageGuardrail.avgEntrySlippagePts,
+          thresholdPts: slippageGuardrail.thresholdPts,
+          previousMinEvR: slippageGuardrail.currentMinEvR,
+          nextMinEvR: slippageGuardrail.nextMinEvR,
+          historyEntryId: slippageGuardrail.historyEntryId,
+          windowSignature: slippageGuardrail.windowSignature,
+        });
+      }
+    } catch (error) {
+      logger.warn('Position tracker slippage guardrail cycle failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

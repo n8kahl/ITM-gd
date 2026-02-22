@@ -16,6 +16,39 @@ function resolveDirection(
   return barDirection === 'up' ? 'short' : 'long';
 }
 
+function hasDirectionalPressure(
+  snapshot: DetectorSnapshot,
+  direction: SetupDirection,
+): boolean {
+  const micro = snapshot.microstructure;
+  if (!micro || !micro.available) return true;
+
+  const ratio = micro.askBidSizeRatio;
+  const imbalance = micro.bidAskImbalance;
+  const skew = micro.aggressorSkew;
+  const coverageOk = micro.quoteCoveragePct >= 40;
+  const spreadOk = micro.avgSpreadBps == null || micro.avgSpreadBps <= 30;
+  if (!coverageOk || !spreadOk) return false;
+
+  if (direction === 'short') {
+    return (
+      (typeof ratio === 'number' && ratio >= 3)
+      || (typeof imbalance === 'number' && imbalance <= -0.35)
+      || (typeof skew === 'number' && skew <= -0.08)
+    );
+  }
+
+  if (direction === 'long') {
+    return (
+      (typeof ratio === 'number' && ratio <= 0.33)
+      || (typeof imbalance === 'number' && imbalance >= 0.35)
+      || (typeof skew === 'number' && skew >= 0.08)
+    );
+  }
+
+  return true;
+}
+
 export function detectVolumeClimax(snapshot: DetectorSnapshot): SetupSignal | null {
   const bars = snapshot.intradayBars;
   if (bars.length < 22) {
@@ -48,6 +81,10 @@ export function detectVolumeClimax(snapshot: DetectorSnapshot): SetupSignal | nu
     barRange > avgRange * 1.8;
 
   const setupDirection = resolveDirection(barDirection, potentialExhaustion);
+  const directionalPressureConfirmed = hasDirectionalPressure(snapshot, setupDirection);
+  if (!directionalPressureConfirmed) {
+    return null;
+  }
   const atr = snapshot.levels.levels.indicators.atr14 ?? Math.max(snapshot.levels.currentPrice * 0.004, 1);
 
   const confidence = clampConfidence(
@@ -68,8 +105,19 @@ export function detectVolumeClimax(snapshot: DetectorSnapshot): SetupSignal | nu
       volumeRatio: Number(volumeRatio.toFixed(2)),
       barDirection,
       potentialExhaustion,
+      directionalPressureConfirmed,
       barRange: roundPrice(barRange),
       averageRange: roundPrice(avgRange),
+      microstructure: snapshot.microstructure
+        ? {
+          available: snapshot.microstructure.available,
+          quoteCoveragePct: snapshot.microstructure.quoteCoveragePct,
+          askBidSizeRatio: snapshot.microstructure.askBidSizeRatio,
+          bidAskImbalance: snapshot.microstructure.bidAskImbalance,
+          aggressorSkew: snapshot.microstructure.aggressorSkew,
+          avgSpreadBps: snapshot.microstructure.avgSpreadBps,
+        }
+        : null,
     },
     tradeSuggestion: buildTradeSuggestion({
       setupType: 'volume_climax',

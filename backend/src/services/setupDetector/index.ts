@@ -5,6 +5,7 @@ import { calculateLevels } from '../levels';
 import { fetchDailyData, fetchIntradayData } from '../levels/fetcher';
 import { getMarketStatus } from '../marketHours';
 import { fetchOptionsChain } from '../options/optionsChainFetcher';
+import { getRecentTicks } from '../tickCache';
 import {
   markWorkerCycleFailed,
   markWorkerCycleStarted,
@@ -16,7 +17,7 @@ import {
 } from '../workerHealth';
 import { detectSetupsFromSnapshot } from './detectors';
 import { detectGammaSqueeze } from './gammaSqueeze';
-import { SetupDirection, SetupSignal, toShortDirection } from './types';
+import { DetectorSnapshot, SetupDirection, SetupSignal, toShortDirection } from './types';
 
 interface WatchlistRow {
   user_id: string;
@@ -66,6 +67,106 @@ function sanitizeSymbols(input: unknown): string[] {
   return Array.from(new Set(symbols)).slice(0, MAX_SYMBOLS_PER_CYCLE);
 }
 
+function computeSnapshotMicrostructure(symbol: string): DetectorSnapshot['microstructure'] {
+  const ticks = getRecentTicks(symbol, 180);
+  if (ticks.length === 0) {
+    return {
+      source: 'tick_cache',
+      available: false,
+      sampleCount: 0,
+      quoteCoveragePct: 0,
+      buyVolume: 0,
+      sellVolume: 0,
+      neutralVolume: 0,
+      aggressorSkew: null,
+      bidAskImbalance: null,
+      askBidSizeRatio: null,
+      avgSpreadBps: null,
+      bidSizeAtClose: null,
+      askSizeAtClose: null,
+    };
+  }
+
+  let buyVolume = 0;
+  let sellVolume = 0;
+  let neutralVolume = 0;
+  let quoteSamples = 0;
+  let spreadBpsSum = 0;
+  let spreadBpsSamples = 0;
+  let imbalanceSum = 0;
+  let imbalanceSamples = 0;
+  let bidSizeAtClose: number | null = null;
+  let askSizeAtClose: number | null = null;
+
+  for (const tick of ticks) {
+    const volume = Math.max(0, Math.floor(tick.size || 0));
+    if (tick.aggressorSide === 'buyer') buyVolume += volume;
+    else if (tick.aggressorSide === 'seller') sellVolume += volume;
+    else neutralVolume += volume;
+
+    if (
+      typeof tick.bidSize === 'number'
+      && Number.isFinite(tick.bidSize)
+      && tick.bidSize >= 0
+      && typeof tick.askSize === 'number'
+      && Number.isFinite(tick.askSize)
+      && tick.askSize >= 0
+    ) {
+      quoteSamples += 1;
+      bidSizeAtClose = Math.floor(tick.bidSize);
+      askSizeAtClose = Math.floor(tick.askSize);
+      const depthSum = tick.bidSize + tick.askSize;
+      if (depthSum > 0) {
+        imbalanceSum += (tick.bidSize - tick.askSize) / depthSum;
+        imbalanceSamples += 1;
+      }
+    }
+
+    if (
+      typeof tick.bid === 'number'
+      && Number.isFinite(tick.bid)
+      && tick.bid > 0
+      && typeof tick.ask === 'number'
+      && Number.isFinite(tick.ask)
+      && tick.ask >= tick.bid
+    ) {
+      const mid = (tick.bid + tick.ask) / 2;
+      if (mid > 0) {
+        spreadBpsSum += ((tick.ask - tick.bid) / mid) * 10_000;
+        spreadBpsSamples += 1;
+      }
+    }
+  }
+
+  const directionalVolume = buyVolume + sellVolume;
+  const aggressorSkew = directionalVolume > 0
+    ? (buyVolume - sellVolume) / directionalVolume
+    : null;
+  const quoteCoveragePct = ticks.length > 0 ? quoteSamples / ticks.length : 0;
+  const bidAskImbalance = imbalanceSamples > 0 ? imbalanceSum / imbalanceSamples : null;
+  const askBidSizeRatio = bidSizeAtClose != null && bidSizeAtClose > 0 && askSizeAtClose != null
+    ? askSizeAtClose / bidSizeAtClose
+    : null;
+  const avgSpreadBps = spreadBpsSamples > 0 ? spreadBpsSum / spreadBpsSamples : null;
+  const available = quoteSamples >= 20 && directionalVolume > 0;
+
+  return {
+    source: 'tick_cache',
+    available,
+    sampleCount: ticks.length,
+    quoteCoveragePct: Number((quoteCoveragePct * 100).toFixed(2)),
+    buyVolume,
+    sellVolume,
+    neutralVolume,
+    aggressorSkew: aggressorSkew == null ? null : Number(aggressorSkew.toFixed(4)),
+    bidAskImbalance: bidAskImbalance == null ? null : Number(bidAskImbalance.toFixed(4)),
+    askBidSizeRatio: askBidSizeRatio == null ? null : Number(askBidSizeRatio.toFixed(4)),
+    avgSpreadBps: avgSpreadBps == null ? null : Number(avgSpreadBps.toFixed(4)),
+    bidSizeAtClose,
+    askSizeAtClose,
+  };
+}
+
 async function detectSetupsForSymbol(symbol: string, detectedAt: string): Promise<SetupSignal[]> {
   try {
     const [intradayBars, dailyBars, levels] = await Promise.all([
@@ -83,6 +184,7 @@ async function detectSetupsForSymbol(symbol: string, detectedAt: string): Promis
       intradayBars,
       dailyBars,
       levels,
+      microstructure: computeSnapshotMicrostructure(symbol),
       detectedAt,
     };
 

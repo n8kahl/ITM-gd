@@ -26,6 +26,8 @@ const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;
 const LATE_DAY_MIN_OPEN_INTEREST = 250;
 const STRICT_ZERO_DTE_MAX_ABS_THETA = 1.95;
 const RELAXED_ZERO_DTE_MAX_ABS_THETA = 2.35;
+const MIN_DTBP_FOR_ZERO_DTE = 25_000;
+const MAX_DTBP_USAGE_PCT = 0.90;
 const CONTRACT_EXPIRY_LOOKAHEAD_DAYS = 7;
 const CONTRACT_EXPIRY_LOOKAHEAD_MAX_PAGES = 2;
 const TREND_FAMILY_SETUP_TYPES: ReadonlySet<Setup['type']> = new Set([
@@ -44,6 +46,12 @@ interface ContractHealth {
   tier: 'green' | 'amber' | 'red';
   thetaRiskPer15m: number;
   ivVsRealized: number;
+}
+
+interface PortfolioRiskContext {
+  dayTradeBuyingPower?: number | null;
+  maxRiskDollars?: number | null;
+  pdtQualified?: boolean | null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -231,7 +239,15 @@ function scoreContract(setup: Setup, contract: OptionContract, now: Date): numbe
   return 100 - deltaPenalty - spreadPenalty - spreadAbsolutePenalty - thetaPenalty + liquidityBonus + gammaBonus;
 }
 
-function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[]): ContractRecommendation {
+function toContractRecommendation(
+  setup: Setup,
+  rankedContracts: RankedContract[],
+  portfolioRisk?: {
+    dayTradeBuyingPower: number | null;
+    maxRiskDollars: number | null;
+    zeroDteBlockedByPdt: boolean;
+  },
+): ContractRecommendation {
   const [{ contract, score }] = rankedContracts;
   const mid = getMid(contract);
   const entry = (setup.entryZone.low + setup.entryZone.high) / 2;
@@ -241,6 +257,11 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
   const liquidityScore = getLiquidityScore(contract);
   const dte = daysToExpiry(contract.expiry);
   const health = computeContractHealth(contract);
+  const sizing = computeSuggestedContracts({
+    ask: contract.ask,
+    dayTradeBuyingPower: portfolioRisk?.dayTradeBuyingPower ?? null,
+    maxRiskDollars: portfolioRisk?.maxRiskDollars ?? null,
+  });
 
   const projectedTarget1 = mid + (Math.abs(contract.delta || 0) * moveToTarget1 * 0.1) + ((contract.gamma || 0) * moveToTarget1 * 0.8);
   const projectedTarget2 = mid + (Math.abs(contract.delta || 0) * moveToTarget2 * 0.1) + ((contract.gamma || 0) * moveToTarget2 * 0.9);
@@ -334,6 +355,12 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
     healthTier: health.tier,
     thetaRiskPer15m: health.thetaRiskPer15m,
     ivVsRealized: health.ivVsRealized,
+    suggestedContracts: sizing.suggestedContracts ?? undefined,
+    suggestedPositionCost: sizing.suggestedPositionCost ?? undefined,
+    dayTradeBuyingPowerUsed: portfolioRisk?.dayTradeBuyingPower ?? null,
+    maxRiskDollarsUsed: portfolioRisk?.maxRiskDollars ?? null,
+    sizingReason: sizing.sizingReason,
+    zeroDteBlocked: portfolioRisk?.zeroDteBlockedByPdt === true,
     alternatives,
     reasoning: `Selected for ${setup.type} with model score ${round(score, 1)} and ${health.tier.toUpperCase()} contract health (${health.score}).`,
   };
@@ -449,42 +476,125 @@ function topRankedContracts(setup: Setup, contracts: OptionContract[], now: Date
   return ranked.slice(0, 4);
 }
 
-async function resolveTargetExpiry(symbol: string, now: Date): Promise<string | undefined> {
-  let expirations = await fetchExpirationDates(symbol, {
+async function resolveTargetExpiryWithPolicy(input: {
+  symbol: string;
+  now: Date;
+  allowZeroDte: boolean;
+}): Promise<string | undefined> {
+  let expirations = await fetchExpirationDates(input.symbol, {
     maxDaysAhead: CONTRACT_EXPIRY_LOOKAHEAD_DAYS,
     maxPages: CONTRACT_EXPIRY_LOOKAHEAD_MAX_PAGES,
   });
   if (expirations.length === 0) {
-    expirations = await fetchExpirationDates(symbol);
+    expirations = await fetchExpirationDates(input.symbol);
   }
   if (!Array.isArray(expirations) || expirations.length === 0) {
     return undefined;
   }
 
-  const todayEt = toEasternTime(now).dateStr;
+  const todayEt = toEasternTime(input.now).dateStr;
   const futureExpirations = expirations.filter((expiry) => expiry >= todayEt);
   if (futureExpirations.length === 0) {
     return undefined;
   }
 
   const nearestExpiry = futureExpirations[0];
-  if (!isTerminalZeroDte(nearestExpiry, now)) {
+  if (!input.allowZeroDte && nearestExpiry === todayEt) {
+    return futureExpirations[1];
+  }
+
+  if (!isTerminalZeroDte(nearestExpiry, input.now)) {
     return nearestExpiry;
   }
 
   return futureExpirations[1] || nearestExpiry;
 }
 
+function resolvePortfolioRiskContext(input?: PortfolioRiskContext): {
+  dayTradeBuyingPower: number | null;
+  maxRiskDollars: number | null;
+  zeroDteBlockedByPdt: boolean;
+} {
+  const dtbp = typeof input?.dayTradeBuyingPower === 'number' && Number.isFinite(input.dayTradeBuyingPower)
+    ? Math.max(0, input.dayTradeBuyingPower)
+    : null;
+  const maxRisk = typeof input?.maxRiskDollars === 'number' && Number.isFinite(input.maxRiskDollars)
+    ? Math.max(0, input.maxRiskDollars)
+    : null;
+  const pdtQualified = input?.pdtQualified;
+  const zeroDteBlockedByPdt = pdtQualified === false || (dtbp != null && dtbp < MIN_DTBP_FOR_ZERO_DTE);
+
+  return {
+    dayTradeBuyingPower: dtbp,
+    maxRiskDollars: maxRisk,
+    zeroDteBlockedByPdt,
+  };
+}
+
+function computeSuggestedContracts(input: {
+  ask: number;
+  dayTradeBuyingPower: number | null;
+  maxRiskDollars: number | null;
+}): {
+  suggestedContracts: number | null;
+  suggestedPositionCost: number | null;
+  sizingReason: string;
+} {
+  const perContractCost = Math.max(0, input.ask) * CONTRACT_MULTIPLIER;
+  if (!Number.isFinite(perContractCost) || perContractCost <= 0) {
+    return {
+      suggestedContracts: null,
+      suggestedPositionCost: null,
+      sizingReason: 'No sizing available: invalid option ask price.',
+    };
+  }
+
+  const budgets: number[] = [];
+  const reasons: string[] = [];
+  if (input.maxRiskDollars != null && input.maxRiskDollars > 0) {
+    budgets.push(input.maxRiskDollars);
+    reasons.push(`risk cap $${round(input.maxRiskDollars, 2)}`);
+  }
+  if (input.dayTradeBuyingPower != null && input.dayTradeBuyingPower > 0) {
+    budgets.push(input.dayTradeBuyingPower * MAX_DTBP_USAGE_PCT);
+    reasons.push(`DTBP cap ${(MAX_DTBP_USAGE_PCT * 100).toFixed(0)}% of $${round(input.dayTradeBuyingPower, 2)}`);
+  }
+
+  if (budgets.length === 0) {
+    return {
+      suggestedContracts: null,
+      suggestedPositionCost: null,
+      sizingReason: 'No sizing context provided (maxRiskDollars/dayTradeBuyingPower missing).',
+    };
+  }
+
+  const budget = Math.min(...budgets);
+  const suggestedContracts = Math.max(0, Math.floor(budget / perContractCost));
+  return {
+    suggestedContracts,
+    suggestedPositionCost: round(suggestedContracts * perContractCost, 2),
+    sizingReason: `Sized from ${reasons.join(' + ')}.`,
+  };
+}
+
 export async function getContractRecommendation(options?: {
   setupId?: string;
   setup?: Setup | null;
   forceRefresh?: boolean;
+  portfolioRisk?: PortfolioRiskContext;
 }): Promise<ContractRecommendation | null> {
   const setupId = options?.setupId || null;
-  const cacheKey = `spx_command_center:contract:${setupId || 'default'}`;
+  const portfolioRisk = resolvePortfolioRiskContext(options?.portfolioRisk);
+  const riskFingerprint = [
+    portfolioRisk.dayTradeBuyingPower != null ? round(portfolioRisk.dayTradeBuyingPower, 2) : 'na',
+    portfolioRisk.maxRiskDollars != null ? round(portfolioRisk.maxRiskDollars, 2) : 'na',
+    portfolioRisk.zeroDteBlockedByPdt ? 'pdt_blocked' : 'pdt_ok',
+  ].join(':');
+  const cacheKey = `spx_command_center:contract:${setupId || 'active'}:${riskFingerprint}`;
   const forceRefresh = options?.forceRefresh === true;
+  const cacheEligible = !forceRefresh && !options?.setup;
 
-  if (!forceRefresh) {
+  if (cacheEligible) {
     const cached = await cacheGet<ContractRecommendation>(cacheKey);
     if (cached) {
       return cached;
@@ -508,7 +618,18 @@ export async function getContractRecommendation(options?: {
   }
 
   const now = new Date();
-  const targetExpiry = await resolveTargetExpiry('SPX', now);
+  const targetExpiry = await resolveTargetExpiryWithPolicy({
+    symbol: 'SPX',
+    now,
+    allowZeroDte: !portfolioRisk.zeroDteBlockedByPdt,
+  });
+  if (!targetExpiry) {
+    logger.warn('SPX contract selector could not resolve target expiry', {
+      setupId: setup.id,
+      zeroDteBlockedByPdt: portfolioRisk.zeroDteBlockedByPdt,
+    });
+    return null;
+  }
   const chain = await fetchOptionsChain('SPX', targetExpiry, 20);
   const contracts = [...chain.options.calls, ...chain.options.puts];
   const rankedContracts = topRankedContracts(setup, contracts, now);
@@ -524,8 +645,10 @@ export async function getContractRecommendation(options?: {
     return null;
   }
 
-  const recommendation = toContractRecommendation(setup, rankedContracts);
-  await cacheSet(cacheKey, recommendation, CONTRACT_CACHE_TTL_SECONDS);
+  const recommendation = toContractRecommendation(setup, rankedContracts, portfolioRisk);
+  if (cacheEligible) {
+    await cacheSet(cacheKey, recommendation, CONTRACT_CACHE_TTL_SECONDS);
+  }
 
   return recommendation;
 }

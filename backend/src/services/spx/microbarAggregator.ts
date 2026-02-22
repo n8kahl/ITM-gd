@@ -20,6 +20,11 @@ export interface TickMicrobar {
   bidSize: number | null;
   askSize: number | null;
   bidAskImbalance: number | null;
+  bidSizeAtClose: number | null;
+  askSizeAtClose: number | null;
+  askBidSizeRatio: number | null;
+  quoteCoveragePct: number;
+  avgSpreadBps: number | null;
   updatedAtMs: number;
   finalized: boolean;
   source: 'tick';
@@ -43,6 +48,11 @@ interface WorkingMicrobar {
   askSizeSum: number;
   bidSizeSamples: number;
   askSizeSamples: number;
+  bidSizeAtClose: number | null;
+  askSizeAtClose: number | null;
+  quoteSamples: number;
+  spreadBpsSum: number;
+  spreadBpsSamples: number;
   updatedAtMs: number;
 }
 
@@ -58,6 +68,15 @@ function mapToReadonlyMicrobar(bar: WorkingMicrobar, finalized: boolean): TickMi
   const askSize = bar.askSizeSamples > 0 ? bar.askSizeSum / bar.askSizeSamples : null;
   const bidAskImbalance = bidSize != null && askSize != null && (bidSize + askSize) > 0
     ? (bidSize - askSize) / (bidSize + askSize)
+    : null;
+  const askBidSizeRatio = bar.bidSizeAtClose != null && bar.bidSizeAtClose > 0 && bar.askSizeAtClose != null
+    ? bar.askSizeAtClose / bar.bidSizeAtClose
+    : null;
+  const quoteCoveragePct = bar.trades > 0
+    ? bar.quoteSamples / bar.trades
+    : 0;
+  const avgSpreadBps = bar.spreadBpsSamples > 0
+    ? bar.spreadBpsSum / bar.spreadBpsSamples
     : null;
 
   return {
@@ -78,6 +97,11 @@ function mapToReadonlyMicrobar(bar: WorkingMicrobar, finalized: boolean): TickMi
     bidSize: bidSize == null ? null : Number(bidSize.toFixed(2)),
     askSize: askSize == null ? null : Number(askSize.toFixed(2)),
     bidAskImbalance: bidAskImbalance == null ? null : Number(bidAskImbalance.toFixed(4)),
+    bidSizeAtClose: bar.bidSizeAtClose,
+    askSizeAtClose: bar.askSizeAtClose,
+    askBidSizeRatio: askBidSizeRatio == null ? null : Number(askBidSizeRatio.toFixed(4)),
+    quoteCoveragePct: Number(quoteCoveragePct.toFixed(4)),
+    avgSpreadBps: avgSpreadBps == null ? null : Number(avgSpreadBps.toFixed(4)),
     updatedAtMs: bar.updatedAtMs,
     finalized,
     source: 'tick',
@@ -114,10 +138,37 @@ function applyTickToWorkingBar(bar: WorkingMicrobar, tick: NormalizedMarketTick)
   if (typeof tick.bidSize === 'number' && Number.isFinite(tick.bidSize) && tick.bidSize >= 0) {
     bar.bidSizeSum += tick.bidSize;
     bar.bidSizeSamples += 1;
+    bar.bidSizeAtClose = Math.floor(tick.bidSize);
   }
   if (typeof tick.askSize === 'number' && Number.isFinite(tick.askSize) && tick.askSize >= 0) {
     bar.askSizeSum += tick.askSize;
     bar.askSizeSamples += 1;
+    bar.askSizeAtClose = Math.floor(tick.askSize);
+  }
+  if (
+    typeof tick.bidSize === 'number'
+    && Number.isFinite(tick.bidSize)
+    && tick.bidSize >= 0
+    && typeof tick.askSize === 'number'
+    && Number.isFinite(tick.askSize)
+    && tick.askSize >= 0
+  ) {
+    bar.quoteSamples += 1;
+  }
+  if (
+    typeof tick.bid === 'number'
+    && Number.isFinite(tick.bid)
+    && tick.bid > 0
+    && typeof tick.ask === 'number'
+    && Number.isFinite(tick.ask)
+    && tick.ask >= tick.bid
+  ) {
+    const mid = (tick.ask + tick.bid) / 2;
+    if (mid > 0) {
+      const spreadBps = ((tick.ask - tick.bid) / mid) * 10_000;
+      bar.spreadBpsSum += spreadBps;
+      bar.spreadBpsSamples += 1;
+    }
   }
 }
 
@@ -149,6 +200,11 @@ export function ingestTickMicrobars(tick: NormalizedMarketTick): TickMicrobar[] 
         askSizeSum: 0,
         bidSizeSamples: 0,
         askSizeSamples: 0,
+        bidSizeAtClose: null,
+        askSizeAtClose: null,
+        quoteSamples: 0,
+        spreadBpsSum: 0,
+        spreadBpsSamples: 0,
         updatedAtMs: tick.timestamp,
       };
       applyTickToWorkingBar(created, tick);
@@ -182,6 +238,11 @@ export function ingestTickMicrobars(tick: NormalizedMarketTick): TickMicrobar[] 
         askSizeSum: 0,
         bidSizeSamples: 0,
         askSizeSamples: 0,
+        bidSizeAtClose: null,
+        askSizeAtClose: null,
+        quoteSamples: 0,
+        spreadBpsSum: 0,
+        spreadBpsSamples: 0,
         updatedAtMs: tick.timestamp,
       };
       applyTickToWorkingBar(rolled, tick);

@@ -141,82 +141,88 @@ function buildBaseMocks(currentPrice: number) {
   mockGetFlowEvents.mockResolvedValue([]);
 }
 
+function buildOptimizationProfile(input?: {
+  macroMicroBySetupType?: Record<string, Record<string, unknown>>;
+}) {
+  return {
+    source: 'default',
+    generatedAt: new Date().toISOString(),
+    qualityGate: {
+      minConfluenceScore: 0,
+      minPWinCalibrated: 0,
+      minEvR: -10,
+      actionableStatuses: ['forming', 'ready', 'triggered', 'invalidated', 'expired'],
+    },
+    flowGate: {
+      requireFlowConfirmation: false,
+      minAlignmentPct: 0,
+    },
+    indicatorGate: {
+      requireEmaAlignment: false,
+      requireVolumeRegimeAlignment: false,
+    },
+    timingGate: {
+      enabled: false,
+      maxFirstSeenMinuteBySetupType: {},
+    },
+    regimeGate: {
+      minTradesPerCombo: 999,
+      minT1WinRatePct: 0,
+      pausedCombos: [],
+    },
+    tradeManagement: {
+      partialAtT1Pct: 0.5,
+      moveStopToBreakeven: true,
+    },
+    geometryPolicy: {
+      bySetupType: {},
+      bySetupRegime: {},
+      bySetupRegimeTimeBucket: {},
+    },
+    macroMicroPolicy: {
+      defaultMinMacroAlignmentScore: 34,
+      defaultRequireTrendMicrostructureAlignment: true,
+      defaultFailClosedWhenUnavailable: false,
+      defaultMinMicroAggressorSkewAbs: 0.1,
+      defaultMinMicroImbalanceAbs: 0.06,
+      defaultMinMicroQuoteCoveragePct: 0.4,
+      defaultMaxMicroSpreadBps: 30,
+      bySetupType: input?.macroMicroBySetupType || {},
+      bySetupRegime: {},
+      bySetupRegimeTimeBucket: {},
+    },
+    walkForward: {
+      trainingDays: 20,
+      validationDays: 5,
+      minTrades: 12,
+      objectiveWeights: {
+        t1: 0.6,
+        t2: 0.4,
+        failurePenalty: 0.45,
+        expectancyR: 14,
+      },
+    },
+    driftControl: {
+      enabled: false,
+      shortWindowDays: 5,
+      longWindowDays: 20,
+      maxDropPct: 12,
+      minLongWindowTrades: 20,
+      autoQuarantineEnabled: false,
+      triggerRateWindowDays: 20,
+      minQuarantineOpportunities: 20,
+      minTriggerRatePct: 3,
+      pausedSetupTypes: [],
+    },
+  };
+}
+
 describe('spx/setupDetector', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCacheSet.mockResolvedValue(undefined as never);
     mockGetRecentTicks.mockReturnValue([]);
-    mockGetActiveSPXOptimizationProfile.mockResolvedValue({
-      source: 'default',
-      generatedAt: new Date().toISOString(),
-      qualityGate: {
-        minConfluenceScore: 0,
-        minPWinCalibrated: 0,
-        minEvR: -10,
-        actionableStatuses: ['forming', 'ready', 'triggered', 'invalidated', 'expired'],
-      },
-      flowGate: {
-        requireFlowConfirmation: false,
-        minAlignmentPct: 0,
-      },
-      indicatorGate: {
-        requireEmaAlignment: false,
-        requireVolumeRegimeAlignment: false,
-      },
-      timingGate: {
-        enabled: false,
-        maxFirstSeenMinuteBySetupType: {},
-      },
-      regimeGate: {
-        minTradesPerCombo: 999,
-        minT1WinRatePct: 0,
-        pausedCombos: [],
-      },
-      tradeManagement: {
-        partialAtT1Pct: 0.5,
-        moveStopToBreakeven: true,
-      },
-      geometryPolicy: {
-        bySetupType: {},
-        bySetupRegime: {},
-        bySetupRegimeTimeBucket: {},
-      },
-      macroMicroPolicy: {
-        defaultMinMacroAlignmentScore: 34,
-        defaultRequireTrendMicrostructureAlignment: true,
-        defaultFailClosedWhenUnavailable: false,
-        defaultMinMicroAggressorSkewAbs: 0.1,
-        defaultMinMicroImbalanceAbs: 0.06,
-        defaultMinMicroQuoteCoveragePct: 0.4,
-        defaultMaxMicroSpreadBps: 30,
-        bySetupType: {},
-        bySetupRegime: {},
-        bySetupRegimeTimeBucket: {},
-      },
-      walkForward: {
-        trainingDays: 20,
-        validationDays: 5,
-        minTrades: 12,
-        objectiveWeights: {
-          t1: 0.6,
-          t2: 0.4,
-          failurePenalty: 0.45,
-          expectancyR: 14,
-        },
-      },
-      driftControl: {
-        enabled: false,
-        shortWindowDays: 5,
-        longWindowDays: 20,
-        maxDropPct: 12,
-        minLongWindowTrades: 20,
-        autoQuarantineEnabled: false,
-        triggerRateWindowDays: 20,
-        minQuarantineOpportunities: 20,
-        minTriggerRatePct: 3,
-        pausedSetupTypes: [],
-      },
-    } as never);
+    mockGetActiveSPXOptimizationProfile.mockResolvedValue(buildOptimizationProfile() as never);
     mockLoadSetupPWinCalibrationModel.mockResolvedValue({
       generatedAt: '2026-02-15T14:40:00.000Z',
       asOfDateEt: '2026-02-15',
@@ -443,6 +449,86 @@ describe('spx/setupDetector', () => {
     expect(setup.microstructure?.available).toBe(true);
     expect(setup.microstructure?.aligned).toBe(true);
     expect(typeof setup.microstructureScore).toBe('number');
+  });
+
+  it('blocks trend pullback setups when ORB confluence is required but not present', async () => {
+    buildBaseMocks(105);
+    mockClassifyCurrentRegime.mockResolvedValue({
+      regime: 'trending',
+      direction: 'bullish',
+      probability: 70,
+      magnitude: 'medium',
+      confidence: 80,
+      timestamp: '2026-02-15T14:40:00.000Z',
+    });
+    mockGetActiveSPXOptimizationProfile.mockResolvedValueOnce(buildOptimizationProfile({
+      macroMicroBySetupType: {
+        trend_pullback: { requireOrbTrendConfluence: true },
+      },
+    }) as never);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      indicatorContext: {
+        emaFast: 102,
+        emaSlow: 100,
+        emaFastSlope: 0.25,
+        emaSlowSlope: 0.12,
+        volumeTrend: 'rising',
+        sessionOpenPrice: 100,
+        orbHigh: 130,
+        orbLow: 96,
+        minutesSinceOpen: 150,
+        sessionOpenTimestamp: '2026-02-15T14:30:00.000Z',
+        asOfTimestamp: '2026-02-15T17:00:00.000Z',
+      },
+    });
+
+    const trendPullback = setups.find((setup) => setup.type === 'trend_pullback');
+    expect(trendPullback).toBeTruthy();
+    expect(trendPullback?.gateStatus).toBe('blocked');
+    expect(trendPullback?.gateReasons).toContain('trend_orb_confluence_required');
+  });
+
+  it('keeps trend pullback eligible when ORB confluence is present', async () => {
+    buildBaseMocks(105);
+    mockClassifyCurrentRegime.mockResolvedValue({
+      regime: 'trending',
+      direction: 'bullish',
+      probability: 72,
+      magnitude: 'medium',
+      confidence: 82,
+      timestamp: '2026-02-15T14:40:00.000Z',
+    });
+    mockGetActiveSPXOptimizationProfile.mockResolvedValueOnce(buildOptimizationProfile({
+      macroMicroBySetupType: {
+        trend_pullback: { requireOrbTrendConfluence: true },
+      },
+    }) as never);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      indicatorContext: {
+        emaFast: 102,
+        emaSlow: 100,
+        emaFastSlope: 0.28,
+        emaSlowSlope: 0.14,
+        volumeTrend: 'rising',
+        sessionOpenPrice: 100,
+        orbHigh: 101,
+        orbLow: 96,
+        minutesSinceOpen: 150,
+        sessionOpenTimestamp: '2026-02-15T14:30:00.000Z',
+        asOfTimestamp: '2026-02-15T17:00:00.000Z',
+      },
+    });
+
+    const trendPullback = setups.find((setup) => setup.type === 'trend_pullback');
+    expect(trendPullback).toBeTruthy();
+    expect(trendPullback?.gateReasons?.includes('trend_orb_confluence_required')).toBe(false);
+    expect(trendPullback?.confluenceSources).toContain('orb_trend_confluence');
   });
 
   it('blocks new actionable setups when macro alignment score falls below kill-switch floor', async () => {

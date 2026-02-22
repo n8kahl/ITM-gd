@@ -1,6 +1,6 @@
 import { calculateVWAP } from '../levels/calculators/vwap';
 import { buildTradeSuggestion } from './tradeBuilder';
-import { DetectorSnapshot, SetupSignal, clampConfidence } from './types';
+import { DetectorSnapshot, SetupDirection, SetupSignal, clampConfidence } from './types';
 
 function roundPrice(value: number): number {
   return Number(value.toFixed(2));
@@ -16,6 +16,29 @@ function calculateVolumeWeightedStdDev(values: Array<{ price: number; volume: nu
   }, 0) / totalVolume;
 
   return Math.sqrt(variance);
+}
+
+function confirmMicrostructureDirection(snapshot: DetectorSnapshot, direction: SetupDirection): boolean {
+  const micro = snapshot.microstructure;
+  if (!micro || !micro.available) return true;
+
+  const coverageOk = micro.quoteCoveragePct >= 35;
+  const spreadOk = micro.avgSpreadBps == null || micro.avgSpreadBps <= 35;
+  if (!coverageOk || !spreadOk) return false;
+
+  const skew = micro.aggressorSkew ?? 0;
+  const imbalance = micro.bidAskImbalance ?? 0;
+  const ratio = micro.askBidSizeRatio;
+
+  if (direction === 'long') {
+    return skew >= 0.03 || imbalance >= 0.04 || (typeof ratio === 'number' && ratio < 1);
+  }
+
+  if (direction === 'short') {
+    return skew <= -0.03 || imbalance <= -0.04 || (typeof ratio === 'number' && ratio > 1);
+  }
+
+  return true;
 }
 
 export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
@@ -40,6 +63,7 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
   const deviationBand = stdDev > 0 ? deviation / stdDev : 0;
 
   if (previousBar.c <= vwap && lastBar.c > vwap && volumeRatio >= 1.1) {
+    if (!confirmMicrostructureDirection(snapshot, 'long')) return null;
     const confidence = clampConfidence(63 + (volumeRatio - 1.1) * 25 + Math.min(10, Math.abs(deviationBand) * 4));
     return {
       type: 'vwap_cross',
@@ -54,6 +78,16 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
         currentPrice: roundPrice(lastBar.c),
         volumeRatio: Number(volumeRatio.toFixed(2)),
         deviationBand: Number(deviationBand.toFixed(2)),
+        microstructure: snapshot.microstructure
+          ? {
+            available: snapshot.microstructure.available,
+            quoteCoveragePct: snapshot.microstructure.quoteCoveragePct,
+            askBidSizeRatio: snapshot.microstructure.askBidSizeRatio,
+            bidAskImbalance: snapshot.microstructure.bidAskImbalance,
+            aggressorSkew: snapshot.microstructure.aggressorSkew,
+            avgSpreadBps: snapshot.microstructure.avgSpreadBps,
+          }
+          : null,
       },
       tradeSuggestion: buildTradeSuggestion({
         setupType: 'vwap_cross',
@@ -68,6 +102,7 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
   }
 
   if (previousBar.c >= vwap && lastBar.c < vwap && volumeRatio >= 1.1) {
+    if (!confirmMicrostructureDirection(snapshot, 'short')) return null;
     const confidence = clampConfidence(63 + (volumeRatio - 1.1) * 25 + Math.min(10, Math.abs(deviationBand) * 4));
     return {
       type: 'vwap_cross',
@@ -82,6 +117,16 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
         currentPrice: roundPrice(lastBar.c),
         volumeRatio: Number(volumeRatio.toFixed(2)),
         deviationBand: Number(deviationBand.toFixed(2)),
+        microstructure: snapshot.microstructure
+          ? {
+            available: snapshot.microstructure.available,
+            quoteCoveragePct: snapshot.microstructure.quoteCoveragePct,
+            askBidSizeRatio: snapshot.microstructure.askBidSizeRatio,
+            bidAskImbalance: snapshot.microstructure.bidAskImbalance,
+            aggressorSkew: snapshot.microstructure.aggressorSkew,
+            avgSpreadBps: snapshot.microstructure.avgSpreadBps,
+          }
+          : null,
       },
       tradeSuggestion: buildTradeSuggestion({
         setupType: 'vwap_cross',
@@ -100,6 +145,7 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
   const maxRecentHigh = Math.max(...recentBars.map((bar) => bar.h));
 
   if (minRecentLow <= vwap + atr * 0.1 && lastBar.c >= vwap + atr * 0.3) {
+    if (!confirmMicrostructureDirection(snapshot, 'long')) return null;
     const confidence = clampConfidence(66 + Math.min(18, (lastBar.c - vwap) / Math.max(0.01, atr) * 12));
     return {
       type: 'vwap_bounce',
@@ -114,6 +160,16 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
         currentPrice: roundPrice(lastBar.c),
         touchedAt: roundPrice(minRecentLow),
         deviationBand: Number(deviationBand.toFixed(2)),
+        microstructure: snapshot.microstructure
+          ? {
+            available: snapshot.microstructure.available,
+            quoteCoveragePct: snapshot.microstructure.quoteCoveragePct,
+            askBidSizeRatio: snapshot.microstructure.askBidSizeRatio,
+            bidAskImbalance: snapshot.microstructure.bidAskImbalance,
+            aggressorSkew: snapshot.microstructure.aggressorSkew,
+            avgSpreadBps: snapshot.microstructure.avgSpreadBps,
+          }
+          : null,
       },
       tradeSuggestion: buildTradeSuggestion({
         setupType: 'vwap_bounce',
@@ -128,6 +184,7 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
   }
 
   if (maxRecentHigh >= vwap - atr * 0.1 && lastBar.c <= vwap - atr * 0.3) {
+    if (!confirmMicrostructureDirection(snapshot, 'short')) return null;
     const confidence = clampConfidence(66 + Math.min(18, (vwap - lastBar.c) / Math.max(0.01, atr) * 12));
     return {
       type: 'vwap_bounce',
@@ -142,6 +199,16 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
         currentPrice: roundPrice(lastBar.c),
         touchedAt: roundPrice(maxRecentHigh),
         deviationBand: Number(deviationBand.toFixed(2)),
+        microstructure: snapshot.microstructure
+          ? {
+            available: snapshot.microstructure.available,
+            quoteCoveragePct: snapshot.microstructure.quoteCoveragePct,
+            askBidSizeRatio: snapshot.microstructure.askBidSizeRatio,
+            bidAskImbalance: snapshot.microstructure.bidAskImbalance,
+            aggressorSkew: snapshot.microstructure.aggressorSkew,
+            avgSpreadBps: snapshot.microstructure.avgSpreadBps,
+          }
+          : null,
       },
       tradeSuggestion: buildTradeSuggestion({
         setupType: 'vwap_bounce',
@@ -158,6 +225,7 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
   const deviationMagnitude = Math.abs(deviationBand);
   if (deviationMagnitude >= 2 || Math.abs(deviation) >= atr * 1.2) {
     const meanReversionDirection = deviation > 0 ? 'short' : 'long';
+    if (!confirmMicrostructureDirection(snapshot, meanReversionDirection)) return null;
     const confidence = clampConfidence(62 + Math.min(25, deviationMagnitude * 8));
 
     return {
@@ -172,6 +240,16 @@ export function detectVWAPPlay(snapshot: DetectorSnapshot): SetupSignal | null {
         vwapPrice: roundPrice(vwap),
         currentPrice: roundPrice(lastBar.c),
         deviationBand: Number(deviationBand.toFixed(2)),
+        microstructure: snapshot.microstructure
+          ? {
+            available: snapshot.microstructure.available,
+            quoteCoveragePct: snapshot.microstructure.quoteCoveragePct,
+            askBidSizeRatio: snapshot.microstructure.askBidSizeRatio,
+            bidAskImbalance: snapshot.microstructure.bidAskImbalance,
+            aggressorSkew: snapshot.microstructure.aggressorSkew,
+            avgSpreadBps: snapshot.microstructure.avgSpreadBps,
+          }
+          : null,
       },
       tradeSuggestion: buildTradeSuggestion({
         setupType: 'vwap_deviation',

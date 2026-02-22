@@ -46,6 +46,15 @@ function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
 }
 
+function parseFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
 function parseISODateInput(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -669,9 +678,19 @@ router.get('/basis', async (req: Request, res: Response) => {
 router.get('/contract-select', async (req: Request, res: Response) => {
   try {
     const setupId = typeof req.query.setupId === 'string' ? req.query.setupId : undefined;
+    const dayTradeBuyingPower = parseFiniteNumber(req.query.dayTradeBuyingPower);
+    const maxRiskDollars = parseFiniteNumber(req.query.maxRiskDollars);
+    const pdtQualified = typeof req.query.pdtQualified === 'undefined'
+      ? undefined
+      : parseBoolean(req.query.pdtQualified);
     const recommendation = await getContractRecommendation({
       setupId,
       forceRefresh: parseBoolean(req.query.forceRefresh),
+      portfolioRisk: {
+        dayTradeBuyingPower,
+        maxRiskDollars,
+        pdtQualified,
+      },
     });
 
     if (!recommendation) {
@@ -698,10 +717,20 @@ router.post('/contract-select', async (req: Request, res: Response) => {
   try {
     const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
     const setup = parseSetupPayload(req.body?.setup);
+    const dayTradeBuyingPower = parseFiniteNumber(req.body?.dayTradeBuyingPower);
+    const maxRiskDollars = parseFiniteNumber(req.body?.maxRiskDollars);
+    const pdtQualified = typeof req.body?.pdtQualified === 'boolean'
+      ? req.body.pdtQualified
+      : undefined;
     const recommendation = await getContractRecommendation({
       setupId,
       setup,
       forceRefresh: parseBoolean(req.body?.forceRefresh),
+      portfolioRisk: {
+        dayTradeBuyingPower,
+        maxRiskDollars,
+        pdtQualified,
+      },
     });
 
     if (!recommendation) {
