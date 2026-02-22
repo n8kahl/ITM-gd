@@ -67,21 +67,23 @@ const FOCUS_MODES: Array<{ key: 'decision' | 'execution' | 'risk_only'; label: s
 
 export function ActionStrip(props: ActionStripProps) {
   const { selectedTimeframe, setChartTimeframe } = useSPXPriceContext()
-  const guidedMode = !props.showAdvancedHud
   const overlayCapability = props.overlayCapability || {}
   const sidebarToggleEnabled = props.sidebarToggleEnabled ?? true
   const immersiveToggleEnabled = props.immersiveToggleEnabled ?? true
-  const quickTimeframes: ChartTimeframe[] = guidedMode
-    ? (() => {
-      const base: ChartTimeframe[] = ['1m', '5m', '15m']
-      if (!base.includes(selectedTimeframe)) base.push(selectedTimeframe)
-      return base
-    })()
-    : TIMEFRAMES
+  const quickTimeframes: ChartTimeframe[] = (() => {
+    const base: ChartTimeframe[] = ['1m', '5m', '15m']
+    if (!base.includes(selectedTimeframe)) base.push(selectedTimeframe)
+    return base
+  })()
+  const decisionStateLabel = props.primaryActionMode === 'in_trade'
+    ? 'In Trade'
+    : props.primaryActionMode === 'evaluate'
+      ? (props.primaryActionEnabled ? 'Setup Ready' : 'Wait')
+      : 'Scanning'
 
   const overlayButtons = [
     {
-      label: 'Matrix',
+      label: 'Levels',
       key: 'M',
       testId: 'levels',
       active: props.showLevels,
@@ -151,186 +153,52 @@ export function ActionStrip(props: ActionStripProps) {
             </button>
           ))}
 
-          {!guidedMode && (
-            <>
-              <div className="mx-2 h-4 w-px bg-white/10" />
-
-              <button
-                type="button"
-                onClick={props.onToggleAllLevels}
-                className={cn(
-                  'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                  props.showAllLevels
-                    ? 'border-champagne/40 bg-champagne/12 text-champagne'
-                    : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-                )}
-              >
-                {props.showAllLevels ? 'All Levels' : 'Key Levels'}
-              </button>
-            </>
-          )}
-
           <button
             type="button"
-        disabled={!props.primaryActionEnabled}
-        onClick={props.onPrimaryAction}
-        data-testid="spx-action-primary-cta"
-        title={!props.primaryActionEnabled ? (props.primaryActionBlockedReason || 'Action unavailable') : undefined}
-        className={cn(
-          'ml-1 min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-          props.primaryActionMode === 'in_trade'
-            ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
+            disabled={!props.primaryActionEnabled}
+            onClick={props.onPrimaryAction}
+            data-testid="spx-action-primary-cta"
+            title={!props.primaryActionEnabled ? (props.primaryActionBlockedReason || 'Action unavailable') : undefined}
+            className={cn(
+              'ml-1 min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+              props.primaryActionMode === 'in_trade'
+                ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
                 : props.primaryActionMode === 'evaluate'
                   ? 'border-emerald-300/40 bg-emerald-500/16 text-emerald-100 hover:bg-emerald-500/24'
                   : 'border-champagne/40 bg-champagne/14 text-champagne hover:bg-champagne/20',
             )}
-      >
-        {props.primaryActionLabel}
-      </button>
-      <button
-        type="button"
-        onClick={props.onShowWhy}
-        data-testid="spx-action-primary-why"
-        className="min-h-[36px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
-      >
-        Why
-      </button>
-      {!props.primaryActionEnabled && props.primaryActionBlockedReason && (
-        <span
-          data-testid="spx-action-primary-cta-blocked-reason"
-          className="ml-1.5 rounded border border-amber-300/35 bg-amber-500/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-amber-100"
-        >
-          {props.primaryActionBlockedReason}
-        </span>
-      )}
-      {guidedMode && props.guidedStatusLabel && (
-        <span
-          data-testid="spx-action-guided-status"
-          className="ml-1.5 rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/75"
-        >
-          {props.guidedStatusLabel}
-        </span>
-      )}
-
-          {!guidedMode && (
-            <>
-              <div className="mx-2 h-4 w-px bg-white/10" />
-              <div className="flex items-center gap-1" data-testid="spx-action-focus-mode">
-                {FOCUS_MODES.map((mode) => {
-                  const active = props.focusMode === mode.key
-                  return (
-                    <button
-                      key={mode.key}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => props.onFocusModeChange(mode.key)}
-                      data-testid={`spx-action-focus-mode-${mode.key}`}
-                      className={cn(
-                        'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                        active
-                          ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
-                          : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-                      )}
-                    >
-                      {mode.label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="mx-2 h-4 w-px bg-white/10" />
-              <div className="flex items-center gap-1" data-testid="spx-action-replay-controls">
-                <button
-                  type="button"
-                  aria-pressed={props.replayEnabled}
-                  onClick={props.onToggleReplay}
-                  data-testid="spx-action-replay-toggle"
-                  className={cn(
-                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                    props.replayEnabled
-                      ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-100'
-                      : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
-                  )}
-                >
-                  {props.replayEnabled ? 'Replay On' : 'Replay'}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={props.replayPlaying}
-                  onClick={props.onToggleReplayPlayback}
-                  disabled={!props.replayEnabled}
-                  data-testid="spx-action-replay-playback"
-                  className={cn(
-                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-45',
-                    props.replayPlaying
-                      ? 'border-champagne/35 bg-champagne/12 text-champagne'
-                      : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
-                  )}
-                >
-                  {props.replayPlaying ? 'Pause' : 'Play'}
-                </button>
-                <button
-                  type="button"
-                  onClick={props.onCycleReplayWindow}
-                  disabled={!props.replayEnabled}
-                  data-testid="spx-action-replay-window"
-                  className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {props.replayWindowMinutes}m
-                </button>
-                <button
-                  type="button"
-                  onClick={props.onCycleReplaySpeed}
-                  disabled={!props.replayEnabled}
-                  data-testid="spx-action-replay-speed"
-                  className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {props.replaySpeed}x
-                </button>
-              </div>
-
-              {props.onSelectOverlayPreset && (
-                <>
-                  <div className="mx-2 h-4 w-px bg-white/10" />
-                  <div className="flex items-center gap-1">
-                    {OVERLAY_PRESETS.map((preset) => {
-                      const active = props.overlayPreset === preset
-                      return (
-                        <button
-                          key={preset}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => {
-                            props.onSelectOverlayPreset?.(preset)
-                          }}
-                          data-testid={`spx-action-preset-${preset}`}
-                          className={cn(
-                            'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                            active
-                              ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
-                              : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-                          )}
-                        >
-                          {preset}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-
-              {props.spatialThrottled && (
-                <>
-                  <div className="mx-2 h-4 w-px bg-white/10" />
-                  <div
-                    data-testid="spx-action-strip-throttle-indicator"
-                    className="rounded-md border border-amber-300/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-amber-100"
-                  >
-                    Spatial throttle active
-                  </div>
-                </>
-              )}
-            </>
+          >
+            {props.primaryActionLabel}
+          </button>
+          <button
+            type="button"
+            onClick={props.onShowWhy}
+            data-testid="spx-action-primary-why"
+            className="min-h-[36px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
+          >
+            Why
+          </button>
+          <span
+            data-testid="spx-action-decision-state"
+            className="ml-1.5 rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/78"
+          >
+            {decisionStateLabel}
+          </span>
+          {props.guidedStatusLabel && (
+            <span
+              data-testid="spx-action-guided-status"
+              className="ml-1.5 rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/75"
+            >
+              {props.guidedStatusLabel}
+            </span>
+          )}
+          {!props.primaryActionEnabled && props.primaryActionBlockedReason && (
+            <span
+              data-testid="spx-action-primary-cta-blocked-reason"
+              className="ml-1.5 rounded border border-amber-300/35 bg-amber-500/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-amber-100"
+            >
+              {props.primaryActionBlockedReason}
+            </span>
           )}
         </div>
 
@@ -411,7 +279,129 @@ export function ActionStrip(props: ActionStripProps) {
           <span className="text-[10px] uppercase tracking-[0.1em] text-white/55">Advanced Overlay HUD</span>
         </div>
 
+        <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1" data-testid="spx-action-focus-mode">
+            {FOCUS_MODES.map((mode) => {
+              const active = props.focusMode === mode.key
+              return (
+                <button
+                  key={mode.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => props.onFocusModeChange(mode.key)}
+                  data-testid={`spx-action-focus-mode-${mode.key}`}
+                  className={cn(
+                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                    active
+                      ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                      : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                  )}
+                >
+                  {mode.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mx-2 h-4 w-px bg-white/10" />
+          <div className="flex items-center gap-1" data-testid="spx-action-replay-controls">
+            <button
+              type="button"
+              aria-pressed={props.replayEnabled}
+              onClick={props.onToggleReplay}
+              data-testid="spx-action-replay-toggle"
+              className={cn(
+                'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                props.replayEnabled
+                  ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-100'
+                  : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
+              )}
+            >
+              {props.replayEnabled ? 'Replay On' : 'Replay'}
+            </button>
+            <button
+              type="button"
+              aria-pressed={props.replayPlaying}
+              onClick={props.onToggleReplayPlayback}
+              disabled={!props.replayEnabled}
+              data-testid="spx-action-replay-playback"
+              className={cn(
+                'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-45',
+                props.replayPlaying
+                  ? 'border-champagne/35 bg-champagne/12 text-champagne'
+                  : 'border-white/10 bg-white/[0.02] text-white/52 hover:text-white/80',
+              )}
+            >
+              {props.replayPlaying ? 'Pause' : 'Play'}
+            </button>
+            <button
+              type="button"
+              onClick={props.onCycleReplayWindow}
+              disabled={!props.replayEnabled}
+              data-testid="spx-action-replay-window"
+              className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {props.replayWindowMinutes}m
+            </button>
+            <button
+              type="button"
+              onClick={props.onCycleReplaySpeed}
+              disabled={!props.replayEnabled}
+              data-testid="spx-action-replay-speed"
+              className="min-h-[36px] rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-white/52 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {props.replaySpeed}x
+            </button>
+          </div>
+
+          <div className="mx-2 h-4 w-px bg-white/10" />
+          <button
+            type="button"
+            onClick={props.onToggleAllLevels}
+            className={cn(
+              'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+              props.showAllLevels
+                ? 'border-champagne/40 bg-champagne/12 text-champagne'
+                : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+            )}
+          >
+            {props.showAllLevels ? 'All Levels' : 'Key Levels'}
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center gap-1.5">
+          {props.onSelectOverlayPreset && OVERLAY_PRESETS.map((preset) => {
+            const active = props.overlayPreset === preset
+            return (
+              <button
+                key={preset}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  props.onSelectOverlayPreset?.(preset)
+                }}
+                data-testid={`spx-action-preset-${preset}`}
+                className={cn(
+                  'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                  active
+                    ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                    : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                )}
+              >
+                {preset}
+              </button>
+            )
+          })}
+
+          {props.spatialThrottled && (
+            <div
+              data-testid="spx-action-strip-throttle-indicator"
+              className="rounded-md border border-amber-300/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-amber-100"
+            >
+              Spatial throttle active
+            </div>
+          )}
+
           {overlayButtons.map((button) => (
             <button
               key={button.label}
