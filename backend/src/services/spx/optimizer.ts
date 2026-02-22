@@ -53,6 +53,10 @@ export interface SPXOptimizationProfile {
     longWindowDays: number;
     maxDropPct: number;
     minLongWindowTrades: number;
+    autoQuarantineEnabled: boolean;
+    triggerRateWindowDays: number;
+    minQuarantineOpportunities: number;
+    minTriggerRatePct: number;
     pausedSetupTypes: string[];
   };
 }
@@ -138,6 +142,16 @@ interface SPXDriftAlert {
   longT1Upper95Pct: number;
   dropPct: number;
   confidenceDropPct: number;
+  action: 'pause';
+}
+
+interface SPXTriggerRateQuarantineAlert {
+  setupType: string;
+  windowDays: number;
+  opportunities: number;
+  triggered: number;
+  triggerRatePct: number;
+  thresholdPct: number;
   action: 'pause';
 }
 
@@ -239,21 +253,21 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
   source: 'default',
   generatedAt: new Date(0).toISOString(),
   qualityGate: {
-    minConfluenceScore: 4,
-    minPWinCalibrated: 0.6,
-    minEvR: 0.25,
+    minConfluenceScore: 3,
+    minPWinCalibrated: 0.62,
+    minEvR: 0.2,
     actionableStatuses: ['ready', 'triggered'],
   },
   flowGate: {
-    requireFlowConfirmation: true,
-    minAlignmentPct: 55,
+    requireFlowConfirmation: false,
+    minAlignmentPct: 0,
   },
   indicatorGate: {
     requireEmaAlignment: false,
     requireVolumeRegimeAlignment: false,
   },
   timingGate: {
-    enabled: false,
+    enabled: true,
     maxFirstSeenMinuteBySetupType: { ...DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE },
   },
   regimeGate: {
@@ -282,6 +296,10 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     longWindowDays: 20,
     maxDropPct: 12,
     minLongWindowTrades: 20,
+    autoQuarantineEnabled: true,
+    triggerRateWindowDays: 20,
+    minQuarantineOpportunities: 20,
+    minTriggerRatePct: 3,
     pausedSetupTypes: ['breakout_vacuum'],
   },
 };
@@ -470,6 +488,16 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
       minLongWindowTrades: Math.max(10, Math.floor(
         toFiniteNumber(candidate.driftControl?.minLongWindowTrades) ?? DEFAULT_PROFILE.driftControl.minLongWindowTrades,
       )),
+      autoQuarantineEnabled: candidate.driftControl?.autoQuarantineEnabled !== false,
+      triggerRateWindowDays: Math.max(5, Math.floor(
+        toFiniteNumber(candidate.driftControl?.triggerRateWindowDays) ?? DEFAULT_PROFILE.driftControl.triggerRateWindowDays,
+      )),
+      minQuarantineOpportunities: Math.max(5, Math.floor(
+        toFiniteNumber(candidate.driftControl?.minQuarantineOpportunities) ?? DEFAULT_PROFILE.driftControl.minQuarantineOpportunities,
+      )),
+      minTriggerRatePct: Math.max(0, Math.min(100,
+        toFiniteNumber(candidate.driftControl?.minTriggerRatePct) ?? DEFAULT_PROFILE.driftControl.minTriggerRatePct,
+      )),
       pausedSetupTypes: Array.isArray(candidate.driftControl?.pausedSetupTypes)
         ? candidate.driftControl.pausedSetupTypes.filter((item): item is string => typeof item === 'string' && item.length > 0)
         : [],
@@ -587,6 +615,7 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       source: 'spx_setup_instances',
       resolution: 'second',
       includeRows: true,
+      includePausedSetups: true,
     });
 
     const map = new Map<string, OutcomeOverride>();
@@ -823,6 +852,41 @@ function passesCandidate(
   return true;
 }
 
+function passesCandidateOpportunity(
+  row: PreparedOptimizationRow,
+  candidate: ThresholdCandidate,
+  input: {
+    pausedSetupTypes?: Set<string>;
+    pausedCombos?: Set<string>;
+    timingMap?: Record<string, number>;
+  },
+): boolean {
+  if (row.tier === 'hidden') return false;
+  if (row.gateStatus === 'blocked') return false;
+  if (input.pausedSetupTypes?.has(row.setupType)) return false;
+  if (input.pausedCombos?.has(row.comboKey)) return false;
+  if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
+    const maxMinute = maxFirstSeenMinuteForSetup(
+      row.setupType,
+      input.timingMap || DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE,
+    );
+    if (row.firstSeenMinuteEt > maxMinute) return false;
+  }
+
+  if ((row.confluenceScore ?? -1) < candidate.minConfluenceScore) return false;
+  if ((row.pWinCalibrated ?? -1) < candidate.minPWinCalibrated) return false;
+  if ((row.evR ?? Number.NEGATIVE_INFINITY) < candidate.minEvR) return false;
+
+  if (candidate.requireFlowConfirmation) {
+    if (!row.flowConfirmed) return false;
+    if ((row.flowAlignmentPct ?? -1) < candidate.minAlignmentPct) return false;
+  }
+  if (candidate.requireEmaAlignment && !row.emaAligned) return false;
+  if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
+
+  return true;
+}
+
 function evaluateBuckets(
   rows: PreparedOptimizationRow[],
   keySelector: (row: PreparedOptimizationRow) => string,
@@ -917,11 +981,57 @@ function resolveDriftAlerts(
   return alerts;
 }
 
+function resolveTriggerRateQuarantines(
+  rows: PreparedOptimizationRow[],
+  profile: SPXOptimizationProfile,
+  toDate: string,
+): SPXTriggerRateQuarantineAlert[] {
+  if (!profile.driftControl.enabled || !profile.driftControl.autoQuarantineEnabled) return [];
+
+  const windowDays = profile.driftControl.triggerRateWindowDays;
+  const from = shiftDate(toDate, -(windowDays - 1));
+  const bySetupType = new Map<string, { opportunities: number; triggered: number }>();
+
+  for (const row of rows) {
+    if (row.sessionDate < from) continue;
+    const bucket = bySetupType.get(row.setupType) || { opportunities: 0, triggered: 0 };
+    bucket.opportunities += 1;
+    if (row.triggered) {
+      bucket.triggered += 1;
+    }
+    bySetupType.set(row.setupType, bucket);
+  }
+
+  const alerts: SPXTriggerRateQuarantineAlert[] = [];
+  for (const [setupType, bucket] of bySetupType.entries()) {
+    if (bucket.opportunities < profile.driftControl.minQuarantineOpportunities) continue;
+    const triggerRatePct = bucket.opportunities > 0
+      ? round((bucket.triggered / bucket.opportunities) * 100, 2)
+      : 0;
+    if (triggerRatePct > profile.driftControl.minTriggerRatePct) continue;
+    alerts.push({
+      setupType,
+      windowDays,
+      opportunities: bucket.opportunities,
+      triggered: bucket.triggered,
+      triggerRatePct,
+      thresholdPct: profile.driftControl.minTriggerRatePct,
+      action: 'pause',
+    });
+  }
+
+  return alerts.sort((a, b) => {
+    if (a.triggerRatePct !== b.triggerRatePct) return a.triggerRatePct - b.triggerRatePct;
+    return b.opportunities - a.opportunities;
+  });
+}
+
 function buildSetupActionRecommendations(input: {
   setupTypeBuckets: SPXPerformanceBucket[];
   setupComboBuckets: SPXPerformanceBucket[];
   pausedCombos: string[];
   driftAlerts: SPXDriftAlert[];
+  triggerRateQuarantines: SPXTriggerRateQuarantineAlert[];
   baselineCandidate: ThresholdCandidate;
   optimizedCandidate: ThresholdCandidate;
   toDate: string;
@@ -947,6 +1057,11 @@ function buildSetupActionRecommendations(input: {
   for (const alert of input.driftAlerts) {
     remove.add(
       `Pause ${alert.setupType}: ${alert.shortWindowDays}d T1 ${alert.shortT1WinRatePct}% (95% CI ${alert.shortT1Lower95Pct}-${alert.shortT1Upper95Pct}) dropped ${alert.dropPct} pts vs ${alert.longWindowDays}d baseline ${alert.longT1WinRatePct}% (95% CI ${alert.longT1Lower95Pct}-${alert.longT1Upper95Pct}).`,
+    );
+  }
+  for (const alert of input.triggerRateQuarantines) {
+    remove.add(
+      `Pause ${alert.setupType}: trigger rate ${alert.triggerRatePct}% (${alert.triggered}/${alert.opportunities}) over ${alert.windowDays}d is below quarantine floor ${alert.thresholdPct}%.`,
     );
   }
 
@@ -1316,11 +1431,21 @@ export async function runSPXOptimizerScan(input?: {
     validationTo,
     activeCandidate.partialAtT1Pct,
   );
+  const opportunityRowsForQuarantine = rows.filter((row) => passesCandidateOpportunity(row, activeCandidate, {
+    pausedCombos: new Set(pausedCombos),
+    timingMap,
+  }));
+  const triggerRateQuarantines = resolveTriggerRateQuarantines(
+    opportunityRowsForQuarantine,
+    profileForScan,
+    validationTo,
+  );
   const manualPausedSetupTypes = profileForScan.driftControl.pausedSetupTypes
     .filter((setupType) => typeof setupType === 'string' && setupType.length > 0);
   const driftPausedSetupTypes = Array.from(new Set(driftAlerts.map((alert) => alert.setupType))).sort();
+  const quarantinePausedSetupTypes = Array.from(new Set(triggerRateQuarantines.map((alert) => alert.setupType))).sort();
   const mergedPausedSetupTypes = Array.from(
-    new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes]),
+    new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
   ).sort();
 
   const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
@@ -1366,6 +1491,7 @@ export async function runSPXOptimizerScan(input?: {
     setupComboBuckets: setupComboPerformance,
     pausedCombos,
     driftAlerts,
+    triggerRateQuarantines,
     baselineCandidate,
     optimizedCandidate: activeCandidate,
     toDate: validationTo,
@@ -1405,7 +1531,8 @@ export async function runSPXOptimizerScan(input?: {
       `Indicator gates: require EMA alignment=${nextProfile.indicatorGate.requireEmaAlignment}, require volume-regime alignment=${nextProfile.indicatorGate.requireVolumeRegimeAlignment}.`,
       `Timing gate: enforce=${nextProfile.timingGate.enabled}.`,
       `Trade management policy: ${nextProfile.tradeManagement.partialAtT1Pct * 100}% at T1, stop to breakeven=${nextProfile.tradeManagement.moveStopToBreakeven}.`,
-      `Drift control paused ${mergedPausedSetupTypes.length} setup types and regime gate paused ${pausedCombos.length} setup/regime combos.`,
+      `Drift control paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine paused ${quarantinePausedSetupTypes.length} setup types; merged paused setup types=${mergedPausedSetupTypes.length}.`,
+      `Regime gate paused ${pausedCombos.length} setup/regime combos.`,
     ],
   };
 

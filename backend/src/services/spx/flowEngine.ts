@@ -1,6 +1,7 @@
 import { cacheGet, cacheSet } from '../../config/redis';
-import { getOptionsSnapshot, type OptionsSnapshot } from '../../config/massive';
+import { getAggregates, getOptionsSnapshot, type OptionsSnapshot } from '../../config/massive';
 import { logger } from '../../lib/logger';
+import { toEasternTime } from '../marketHours';
 import type { SPXFlowEvent } from './types';
 import { nowIso, round, stableId } from './utils';
 
@@ -10,7 +11,14 @@ const FLOW_FETCH_TIMEOUT_MS = 15000;
 let flowInFlight: Promise<SPXFlowEvent[]> | null = null;
 const MIN_FLOW_VOLUME = 10;
 const MIN_FLOW_PREMIUM = 10000;
-const MAX_FLOW_EVENTS = 20;
+const MAX_FLOW_EVENTS = 80;
+const FLOW_INTERVAL_LOOKBACK_MINUTES = 120;
+const FLOW_INTERVAL_MIN_VOLUME = 2;
+const FLOW_INTERVAL_MIN_PREMIUM = 25000;
+const FLOW_INTERVAL_SWEEP_VOLUME = 28;
+const FLOW_CONTRACT_SCAN_LIMIT = 24;
+const FLOW_BARS_BATCH_SIZE = 6;
+const FLOW_EXPIRY_WINDOW_DAYS = 7;
 
 function toIsoFromTimestamp(rawTimestamp: number | undefined): string {
   if (!rawTimestamp || !Number.isFinite(rawTimestamp) || rawTimestamp <= 0) {
@@ -101,6 +109,175 @@ function toFlowEvent(
   };
 }
 
+interface FlowContractCandidate {
+  ticker: string;
+  symbol: 'SPX' | 'SPY';
+  strike: number;
+  expiry: string;
+  contractType: 'call' | 'put';
+  dayVolume: number;
+  premiumEstimate: number;
+}
+
+function addDays(date: string, days: number): string {
+  const base = new Date(`${date}T12:00:00.000Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function isExpiryInWindow(expiry: string, sessionDate: string): boolean {
+  if (expiry < sessionDate) return false;
+  return expiry <= addDays(sessionDate, FLOW_EXPIRY_WINDOW_DAYS);
+}
+
+function toFlowContractCandidates(input: {
+  symbol: 'SPX' | 'SPY';
+  sessionDate: string;
+  snapshots: OptionsSnapshot[];
+}): FlowContractCandidate[] {
+  return input.snapshots
+    .map((snapshot) => {
+      const details = snapshot.details;
+      const ticker = typeof snapshot.ticker === 'string' ? snapshot.ticker.trim().toUpperCase() : '';
+      const strike = details?.strike_price;
+      const expiry = details?.expiration_date;
+      const contractType = details?.contract_type;
+      if (!ticker || typeof strike !== 'number' || typeof expiry !== 'string' || (contractType !== 'call' && contractType !== 'put')) {
+        return null;
+      }
+      if (!isExpiryInWindow(expiry, input.sessionDate)) return null;
+
+      const dayVolume = Math.max(0, snapshot.day?.volume || 0);
+      if (dayVolume < MIN_FLOW_VOLUME) return null;
+      const premiumEstimate = round(toMidPrice(snapshot) * dayVolume * 100, 2);
+      if (premiumEstimate < MIN_FLOW_PREMIUM) return null;
+
+      return {
+        ticker,
+        symbol: input.symbol,
+        strike: round(strike, 2),
+        expiry,
+        contractType,
+        dayVolume,
+        premiumEstimate,
+      } as FlowContractCandidate;
+    })
+    .filter((candidate): candidate is FlowContractCandidate => candidate !== null)
+    .sort((a, b) => {
+      if (b.premiumEstimate !== a.premiumEstimate) return b.premiumEstimate - a.premiumEstimate;
+      return b.dayVolume - a.dayVolume;
+    });
+}
+
+async function loadContractMinuteBars(input: {
+  ticker: string;
+  sessionDate: string;
+}): Promise<Array<{ t: number; c: number; v: number }>> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Flow interval bars timeout for ${input.ticker}`)), FLOW_FETCH_TIMEOUT_MS),
+  );
+  try {
+    const response = await Promise.race([
+      getAggregates(input.ticker, 1, 'minute', input.sessionDate, input.sessionDate),
+      timeout,
+    ]);
+    const rawBars = (response.results || [])
+      .filter((bar) => Number.isFinite(bar.t) && Number.isFinite(bar.c) && Number.isFinite(bar.v) && bar.c > 0 && bar.v >= FLOW_INTERVAL_MIN_VOLUME)
+      .map((bar) => ({ t: bar.t, c: bar.c, v: bar.v }));
+    if (rawBars.length === 0) return [];
+
+    const latestMs = rawBars[rawBars.length - 1].t;
+    const minMs = latestMs - (FLOW_INTERVAL_LOOKBACK_MINUTES * 60_000);
+    return rawBars.filter((bar) => bar.t >= minMs);
+  } catch (error) {
+    logger.warn('Flow interval contract bars unavailable', {
+      ticker: input.ticker,
+      sessionDate: input.sessionDate,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+function flowEventsFromIntervalBars(input: {
+  candidate: FlowContractCandidate;
+  bars: Array<{ t: number; c: number; v: number }>;
+}): SPXFlowEvent[] {
+  if (input.bars.length === 0) return [];
+
+  const premiums = input.bars.map((bar) => bar.c * bar.v * 100);
+  const avgPremium = premiums.reduce((sum, value) => sum + value, 0) / premiums.length;
+  const threshold = Math.max(FLOW_INTERVAL_MIN_PREMIUM, avgPremium * 1.35);
+
+  return input.bars
+    .map((bar) => {
+      const premium = round(bar.c * bar.v * 100, 2);
+      if (premium < threshold) return null;
+      const isSweep = bar.v >= FLOW_INTERVAL_SWEEP_VOLUME || premium >= Math.max(FLOW_INTERVAL_MIN_PREMIUM * 2, avgPremium * 2.1);
+      return {
+        id: stableId('spx_flow_interval', `${input.candidate.symbol}|${input.candidate.ticker}|${bar.t}|${bar.v}|${premium}`),
+        type: isSweep ? 'sweep' : 'block',
+        symbol: input.candidate.symbol,
+        strike: input.candidate.strike,
+        expiry: input.candidate.expiry,
+        size: Math.round(bar.v),
+        direction: input.candidate.contractType === 'call' ? 'bullish' : 'bearish',
+        premium,
+        timestamp: new Date(bar.t).toISOString(),
+      } satisfies SPXFlowEvent;
+    })
+    .filter((event): event is SPXFlowEvent => event !== null);
+}
+
+async function fetchFlowFromIntervalizedSnapshots(input: {
+  sessionDate: string;
+  spxSnapshots: OptionsSnapshot[];
+  spySnapshots: OptionsSnapshot[];
+}): Promise<SPXFlowEvent[]> {
+  const candidates = [
+    ...toFlowContractCandidates({
+      symbol: 'SPX',
+      sessionDate: input.sessionDate,
+      snapshots: input.spxSnapshots,
+    }),
+    ...toFlowContractCandidates({
+      symbol: 'SPY',
+      sessionDate: input.sessionDate,
+      snapshots: input.spySnapshots,
+    }),
+  ]
+    .sort((a, b) => b.premiumEstimate - a.premiumEstimate)
+    .slice(0, FLOW_CONTRACT_SCAN_LIMIT);
+
+  if (candidates.length === 0) return [];
+
+  const events: SPXFlowEvent[] = [];
+  for (let index = 0; index < candidates.length; index += FLOW_BARS_BATCH_SIZE) {
+    const batch = candidates.slice(index, index + FLOW_BARS_BATCH_SIZE);
+    const rows = await Promise.all(batch.map(async (candidate) => ({
+      candidate,
+      bars: await loadContractMinuteBars({
+        ticker: candidate.ticker,
+        sessionDate: input.sessionDate,
+      }),
+    })));
+    for (const row of rows) {
+      events.push(...flowEventsFromIntervalBars({
+        candidate: row.candidate,
+        bars: row.bars,
+      }));
+    }
+  }
+
+  return events
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return b.timestamp.localeCompare(a.timestamp);
+      if (b.premium !== a.premium) return b.premium - a.premium;
+      return b.size - a.size;
+    })
+    .slice(0, MAX_FLOW_EVENTS);
+}
+
 async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEvent[]> {
   const fetchWithTimeout = async (symbol: string): Promise<OptionsSnapshot[]> => {
     const timeout = new Promise<never>((_, reject) =>
@@ -121,6 +298,16 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
     fetchWithTimeout('SPX'),
     fetchWithTimeout('SPY'),
   ]);
+
+  const sessionDate = toEasternTime(new Date()).dateStr;
+  const intervalized = await fetchFlowFromIntervalizedSnapshots({
+    sessionDate,
+    spxSnapshots,
+    spySnapshots,
+  });
+  if (intervalized.length > 0) {
+    return intervalized;
+  }
 
   const events: SPXFlowEvent[] = [];
   for (const snapshot of spxSnapshots) {
