@@ -603,7 +603,6 @@ export function SPXChart({
 
   const marketDisplayedLevels = useMemo(() => {
     if (!renderLevelAnnotations) return []
-    if (focusMode === 'risk_only') return []
     if (focusMode === 'execution') return focusedLevelAnnotations
     return showAllRelevantLevels ? levelAnnotations : focusedLevelAnnotations
   }, [focusMode, focusedLevelAnnotations, levelAnnotations, renderLevelAnnotations, showAllRelevantLevels])

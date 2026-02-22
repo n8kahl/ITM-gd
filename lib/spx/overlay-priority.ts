@@ -75,7 +75,6 @@ export function resolveSPXOverlayPriorityPolicy(
 
   const allowCone = Boolean(
     input.showCone
-    && !isRiskOnly
     && tier !== 'critical',
   )
 

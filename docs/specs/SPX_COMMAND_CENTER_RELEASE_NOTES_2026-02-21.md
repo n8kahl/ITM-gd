@@ -22,6 +22,7 @@ Track: Production Recovery Autonomous Program
 10. Phase 11 slice P11-S6 complete: setup-specific runner policy (fade conditional no-BE), mean-reversion target/quality retune, and rebuilt strict last-week replay with improved T2 capture and expectancy.
 11. Phase 11 slice P11-S7 complete: actionable-only win-rate fidelity (hidden-tier exclusion), full intraday setup lifecycle preservation during historical reconstruction, regime trend-strength retune, and setup-type DB contract expansion for ORB/pullback families.
 12. Phase 11 slice P11-S8 complete: mean-reversion quality floor uplift, breakout-vacuum gate hardening, persistent manual optimizer setup pauses, and validated last-week strict replay improvement in T1/T2/failure/expectancy.
+13. Phase 11 slice P11-S9 complete: live-parity backtest filtering now excludes optimizer-paused setup types/combos by default, while optimizer/backfill research paths explicitly include paused setups for analysis continuity.
 
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).

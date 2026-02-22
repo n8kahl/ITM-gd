@@ -22,8 +22,8 @@ describe('overlay priority policy', () => {
 
   it('suppresses ghost cards and tightens label budget in tight tier', () => {
     const policy = resolveSPXOverlayPriorityPolicy({
-      viewportWidth: 1180,
-      viewportHeight: 720,
+      viewportWidth: 470,
+      viewportHeight: 380,
       focusMode: 'execution',
       spatialThrottled: false,
       showCone: true,
@@ -40,8 +40,8 @@ describe('overlay priority policy', () => {
 
   it('prioritizes risk clarity in critical tier', () => {
     const policy = resolveSPXOverlayPriorityPolicy({
-      viewportWidth: 1000,
-      viewportHeight: 560,
+      viewportWidth: 420,
+      viewportHeight: 330,
       focusMode: 'risk_only',
       spatialThrottled: false,
       showCone: true,
@@ -73,5 +73,21 @@ describe('overlay priority policy', () => {
     expect(policy.allowCone).toBe(false)
     expect(policy.allowSpatialCoach).toBe(true)
     expect(policy.allowGhostCards).toBe(false)
+  })
+
+  it('keeps cone available in non-critical risk mode when enabled', () => {
+    const policy = resolveSPXOverlayPriorityPolicy({
+      viewportWidth: 1500,
+      viewportHeight: 860,
+      focusMode: 'risk_only',
+      spatialThrottled: false,
+      showCone: true,
+      showSpatialCoach: true,
+      showSpatialGhostCards: false,
+    })
+
+    expect(policy.tier).toBe('normal')
+    expect(policy.allowCone).toBe(true)
+    expect(policy.allowSpatialCoach).toBe(false)
   })
 })

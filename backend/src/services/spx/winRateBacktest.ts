@@ -44,6 +44,12 @@ interface EvaluatedSetup {
   realizedR: number | null;
 }
 
+interface BacktestPauseFilters {
+  pausedSetupTypes: Set<string>;
+  pausedCombos: Set<string>;
+  notes: string[];
+}
+
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
 }
@@ -75,6 +81,12 @@ export interface SPXBacktestExecutionModel {
   commissionPerTradeR: number;
   partialAtT1Pct: number;
   moveStopToBreakevenAfterT1: boolean;
+}
+
+export interface SPXBacktestGeometryAdjustment {
+  stopScale?: number;
+  target1Scale?: number;
+  target2Scale?: number;
 }
 
 export interface SPXBacktestProfitabilityMetrics {
@@ -115,6 +127,66 @@ function resolveExecutionModel(
     commissionPerTradeR: Math.max(0, overrides?.commissionPerTradeR ?? DEFAULT_EXECUTION_MODEL.commissionPerTradeR),
     partialAtT1Pct: clamp(overrides?.partialAtT1Pct ?? DEFAULT_EXECUTION_MODEL.partialAtT1Pct, 0, 1),
     moveStopToBreakevenAfterT1: overrides?.moveStopToBreakevenAfterT1 ?? DEFAULT_EXECUTION_MODEL.moveStopToBreakevenAfterT1,
+  };
+}
+
+function applyGeometryAdjustment(
+  setup: BacktestSetupCandidate,
+  adjustment: SPXBacktestGeometryAdjustment | null | undefined,
+): BacktestSetupCandidate {
+  if (!adjustment) return setup;
+
+  const stopScale = clamp(
+    typeof adjustment.stopScale === 'number' && Number.isFinite(adjustment.stopScale)
+      ? adjustment.stopScale
+      : 1,
+    0.5,
+    2.0,
+  );
+  const target1Scale = clamp(
+    typeof adjustment.target1Scale === 'number' && Number.isFinite(adjustment.target1Scale)
+      ? adjustment.target1Scale
+      : 1,
+    0.5,
+    2.0,
+  );
+  const target2Scale = clamp(
+    typeof adjustment.target2Scale === 'number' && Number.isFinite(adjustment.target2Scale)
+      ? adjustment.target2Scale
+      : 1,
+    0.5,
+    2.5,
+  );
+
+  if (
+    Math.abs(stopScale - 1) < 0.0001
+    && Math.abs(target1Scale - 1) < 0.0001
+    && Math.abs(target2Scale - 1) < 0.0001
+  ) {
+    return setup;
+  }
+
+  const entryMid = (setup.entryLow + setup.entryHigh) / 2;
+  const directionMultiplier = setup.direction === 'bullish' ? 1 : -1;
+  const stopDistance = Math.max(0.25, Math.abs(entryMid - setup.stopPrice));
+  const target1Distance = Math.max(0.25, Math.abs(setup.target1Price - entryMid));
+  const fallbackTarget2Distance = target1Distance * 1.8;
+  const target2DistanceBase = setup.target2Price == null
+    ? fallbackTarget2Distance
+    : Math.max(0.3, Math.abs(setup.target2Price - entryMid));
+
+  const scaledStopDistance = Math.max(0.25, stopDistance * stopScale);
+  const scaledTarget1Distance = Math.max(0.25, target1Distance * target1Scale);
+  const scaledTarget2Distance = Math.max(
+    scaledTarget1Distance + 0.1,
+    target2DistanceBase * target2Scale,
+  );
+
+  return {
+    ...setup,
+    stopPrice: round(entryMid - (directionMultiplier * scaledStopDistance), 4),
+    target1Price: round(entryMid + (directionMultiplier * scaledTarget1Distance), 4),
+    target2Price: round(entryMid + (directionMultiplier * scaledTarget2Distance), 4),
   };
 }
 
@@ -176,6 +248,81 @@ function isMissingTableError(message: string): boolean {
   return normalized.includes('could not find the table') || normalized.includes('does not exist');
 }
 
+function parseStringSet(value: unknown): Set<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(
+    value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0),
+  );
+}
+
+async function loadBacktestPauseFilters(input: {
+  includePausedSetups: boolean;
+}): Promise<BacktestPauseFilters> {
+  if (input.includePausedSetups) {
+    return {
+      pausedSetupTypes: new Set(),
+      pausedCombos: new Set(),
+      notes: [],
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('spx_setup_optimizer_state')
+    .select('profile')
+    .eq('id', 'active')
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error.message)) {
+      return {
+        pausedSetupTypes: new Set(),
+        pausedCombos: new Set(),
+        notes: [
+          'SPX optimizer state table unavailable; paused setup filters were not applied to backtest rows.',
+        ],
+      };
+    }
+    logger.warn('SPX backtest failed to load optimizer pause filters', {
+      error: error.message,
+    });
+    return {
+      pausedSetupTypes: new Set(),
+      pausedCombos: new Set(),
+      notes: [
+        `Failed to load optimizer pause filters: ${error.message}`,
+      ],
+    };
+  }
+
+  const profile = data?.profile && typeof data.profile === 'object' && !Array.isArray(data.profile)
+    ? data.profile as Record<string, unknown>
+    : null;
+
+  if (!profile) {
+    return {
+      pausedSetupTypes: new Set(),
+      pausedCombos: new Set(),
+      notes: [],
+    };
+  }
+
+  const driftControl = profile.driftControl && typeof profile.driftControl === 'object' && !Array.isArray(profile.driftControl)
+    ? profile.driftControl as Record<string, unknown>
+    : null;
+  const regimeGate = profile.regimeGate && typeof profile.regimeGate === 'object' && !Array.isArray(profile.regimeGate)
+    ? profile.regimeGate as Record<string, unknown>
+    : null;
+
+  return {
+    pausedSetupTypes: parseStringSet(driftControl?.pausedSetupTypes),
+    pausedCombos: parseStringSet(regimeGate?.pausedCombos),
+    notes: [],
+  };
+}
+
 function normalizeDateInput(value: string): string {
   return value.trim().slice(0, 10);
 }
@@ -211,9 +358,12 @@ async function loadSetupsFromInstances(input: {
   to: string;
   includeBlockedSetups?: boolean;
   includeHiddenTiers?: boolean;
+  includePausedSetups?: boolean;
 }): Promise<{ setups: BacktestSetupCandidate[]; notes: string[]; tableMissing: boolean }> {
   const includeBlockedSetups = input.includeBlockedSetups === true;
   const includeHiddenTiers = input.includeHiddenTiers === true;
+  const includePausedSetups = input.includePausedSetups === true;
+  const pauseFilters = await loadBacktestPauseFilters({ includePausedSetups });
   const { data, error } = await supabase
     .from('spx_setup_instances')
     .select(
@@ -253,6 +403,8 @@ async function loadSetupsFromInstances(input: {
   let skipped = 0;
   let skippedBlocked = 0;
   let skippedHidden = 0;
+  let skippedPausedSetupType = 0;
+  let skippedPausedCombo = 0;
 
   for (const row of rows) {
     const direction = row.direction === 'bullish' || row.direction === 'bearish'
@@ -295,13 +447,23 @@ async function loadSetupsFromInstances(input: {
       skippedHidden += 1;
       continue;
     }
+    if (!includePausedSetups && pauseFilters.pausedSetupTypes.has(setupType)) {
+      skippedPausedSetupType += 1;
+      continue;
+    }
+    const regime = typeof row.regime === 'string' ? row.regime : null;
+    const comboKey = regime ? `${setupType}|${regime}` : null;
+    if (!includePausedSetups && comboKey && pauseFilters.pausedCombos.has(comboKey)) {
+      skippedPausedCombo += 1;
+      continue;
+    }
 
     setups.push({
       engineSetupId,
       sessionDate,
       setupType,
       direction,
-      regime: typeof row.regime === 'string' ? row.regime : null,
+      regime,
       tier: typeof row.tier === 'string' ? row.tier : null,
       gateStatus,
       entryLow,
@@ -315,7 +477,7 @@ async function loadSetupsFromInstances(input: {
     });
   }
 
-  const notes: string[] = [];
+  const notes: string[] = [...pauseFilters.notes];
   if (skipped > 0) {
     notes.push(`Skipped ${skipped} malformed spx_setup_instances rows during backtest setup load.`);
   }
@@ -324,6 +486,12 @@ async function loadSetupsFromInstances(input: {
   }
   if (skippedHidden > 0) {
     notes.push(`Skipped ${skippedHidden} hidden-tier spx_setup_instances rows (non-actionable).`);
+  }
+  if (skippedPausedSetupType > 0) {
+    notes.push(`Skipped ${skippedPausedSetupType} paused-setup-type rows via optimizer profile.`);
+  }
+  if (skippedPausedCombo > 0) {
+    notes.push(`Skipped ${skippedPausedCombo} paused setup/regime combo rows via optimizer profile.`);
   }
 
   return {
@@ -925,6 +1093,8 @@ export async function runSPXWinRateBacktest(input: {
   includeRows?: boolean;
   includeBlockedSetups?: boolean;
   includeHiddenTiers?: boolean;
+  includePausedSetups?: boolean;
+  geometryBySetupType?: Record<string, SPXBacktestGeometryAdjustment>;
   executionModel?: Partial<SPXBacktestExecutionModel>;
 }): Promise<SPXWinRateBacktestResult> {
   const from = normalizeDateInput(input.from);
@@ -938,6 +1108,7 @@ export async function runSPXWinRateBacktest(input: {
   let selectedSource: InternalBacktestSource | 'none' = 'none';
   let setups: BacktestSetupCandidate[] = [];
   let skippedSetupCount = 0;
+  let geometryAdjustedCount = 0;
 
   if (source === 'auto' || source === 'spx_setup_instances') {
     const instanceLoad = await loadSetupsFromInstances({
@@ -945,6 +1116,7 @@ export async function runSPXWinRateBacktest(input: {
       to,
       includeBlockedSetups: input.includeBlockedSetups,
       includeHiddenTiers: input.includeHiddenTiers,
+      includePausedSetups: input.includePausedSetups,
     });
     notes.push(...instanceLoad.notes);
 
@@ -984,6 +1156,30 @@ export async function runSPXWinRateBacktest(input: {
       analytics: emptyAnalytics,
       ...(includeRows ? { rows: [] } : {}),
     };
+  }
+
+  const geometryBySetupType = (
+    input.geometryBySetupType
+    && typeof input.geometryBySetupType === 'object'
+    && !Array.isArray(input.geometryBySetupType)
+  )
+    ? input.geometryBySetupType
+    : null;
+  if (geometryBySetupType) {
+    setups = setups.map((setup) => {
+      const adjusted = applyGeometryAdjustment(setup, geometryBySetupType[setup.setupType]);
+      if (
+        adjusted.stopPrice !== setup.stopPrice
+        || adjusted.target1Price !== setup.target1Price
+        || adjusted.target2Price !== setup.target2Price
+      ) {
+        geometryAdjustedCount += 1;
+      }
+      return adjusted;
+    });
+    if (geometryAdjustedCount > 0) {
+      notes.push(`Applied geometry adjustments to ${geometryAdjustedCount} setups via geometryBySetupType.`);
+    }
   }
 
   const {

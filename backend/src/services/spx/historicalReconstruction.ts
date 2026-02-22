@@ -1023,6 +1023,7 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
     source: 'spx_setup_instances',
     resolution: 'second',
     includeRows: true,
+    includePausedSetups: true,
   });
   await persistBacktestRowsForWinRate(backtest.rows || [], {
     observedAt: lastTimestampIso || `${asOfDate}T21:00:00.000Z`,
