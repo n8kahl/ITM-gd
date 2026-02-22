@@ -312,3 +312,38 @@ describe('spx/winRateBacktest options replay helpers', () => {
     expect(selected?.strike).toBe(6050);
   });
 });
+
+describe('spx/winRateBacktest hidden-tier filtering', () => {
+  it('keeps hidden-tier triggered eligible setups actionable in strict mode', () => {
+    const excluded = __testables.isBacktestHiddenTierExcluded({
+      includeHiddenTiers: false,
+      tier: 'hidden',
+      gateStatus: 'eligible',
+      triggeredAt: '2026-02-20T16:05:00.000Z',
+    });
+
+    expect(excluded).toBe(false);
+  });
+
+  it('excludes hidden-tier non-triggered setups when hidden tiers are disabled', () => {
+    const excluded = __testables.isBacktestHiddenTierExcluded({
+      includeHiddenTiers: false,
+      tier: 'hidden',
+      gateStatus: 'eligible',
+      triggeredAt: null,
+    });
+
+    expect(excluded).toBe(true);
+  });
+
+  it('always excludes blocked hidden-tier setups when hidden tiers are disabled', () => {
+    const excluded = __testables.isBacktestHiddenTierExcluded({
+      includeHiddenTiers: false,
+      tier: 'hidden',
+      gateStatus: 'blocked',
+      triggeredAt: '2026-02-20T16:05:00.000Z',
+    });
+
+    expect(excluded).toBe(true);
+  });
+});

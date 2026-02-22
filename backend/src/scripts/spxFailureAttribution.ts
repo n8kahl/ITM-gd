@@ -121,8 +121,8 @@ async function main() {
   const strictTriggered = rows.filter((row) => {
     if (!row.triggered_at || !row.final_outcome) return false;
     if (paused.has(row.setup_type)) return false;
-    if (row.tier === 'hidden') return false;
     const gateStatus = parseMetadataValue<string | null>(row.metadata, 'gateStatus', null);
+    if (row.tier === 'hidden' && gateStatus !== 'eligible') return false;
     return gateStatus === 'eligible';
   });
 

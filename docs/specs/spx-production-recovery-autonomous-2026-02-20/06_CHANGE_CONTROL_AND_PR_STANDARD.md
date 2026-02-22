@@ -1388,3 +1388,38 @@ PR can merge only when:
     - `SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_ENABLED=false`
 - Notes:
   - This slice closes the Phase 14 “execution reconciliation + drift calibration” backend objective with bounded automation controls.
+
+### Slice: P14-S5
+- Objective: Execute full Phase 14 promotion gates and determine production promotion posture from strict replay parity evidence.
+- Status: done (promotion blocked)
+- Scope:
+  - Run targeted Phase 14 test and compile gates.
+  - Run strict Massive historical backfill (`2026-02-10` -> `2026-02-22`).
+  - Run strict last-week replay (`instances`, `second`) and compare parity outcome.
+  - Document promotion decision and blocker attribution.
+- Out of scope:
+  - Policy/gating retune implementation.
+  - Additional setup detector feature changes.
+- Files:
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S5_2026-02-22.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/spx/__tests__/microbarAggregator.test.ts src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/vwap.test.ts src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/broker/tradier/__tests__/orderRouter.test.ts src/services/positions/__tests__/brokerLedgerReconciliation.test.ts src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:backfill-historical 2026-02-10 2026-02-22`
+  - `LOG_LEVEL=warn pnpm --dir backend backtest:last-week instances second`
+  - Result:
+    - tests/tsc: pass
+    - backfill: pass (`attemptedDays=9`, `successfulDays=9`, `failedDays=0`)
+    - strict replay: zero actionable trades (`95 blocked`, `62 hidden-tier`)
+- Risks introduced:
+  - None (reporting/governance slice only).
+- Promotion decision:
+  - Blocked pending throughput recovery: strict replay produced zero actionable/resolved trades.
+- Rollback:
+  - No runtime rollback required for this slice (documentation/evidence only).
+- Notes:
+  - Strict second-bar fidelity remained intact (`usedMassiveMinuteBars=false`) while throughput collapsed.
