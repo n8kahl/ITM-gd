@@ -104,15 +104,56 @@ export interface SPXOptimizerScheduleStatus {
   lastOptimizationApplied: boolean | null
 }
 
+export interface SPXOptimizerHistoryEntry {
+  id: number
+  createdAt: string
+  mode: 'manual' | 'weekly_auto' | 'nightly_auto' | 'revert'
+  action: 'scan' | 'revert'
+  optimizationApplied: boolean
+  actor: string | null
+  reason: string | null
+  revertedFromHistoryId: number | null
+  scanRange: { from: string | null; to: string | null }
+  trainingRange: { from: string | null; to: string | null }
+  validationRange: { from: string | null; to: string | null }
+  previousProfileGeneratedAt: string | null
+  nextProfileGeneratedAt: string | null
+  scorecardSummary: {
+    baselineTrades: number
+    optimizedTrades: number
+    t1Delta: number
+    t2Delta: number
+    expectancyDeltaR: number
+    objectiveConservativeDelta: number
+    optimizationApplied: boolean
+  } | null
+  notes: string[]
+}
+
 interface SPXOptimizerScanResponse {
   profile: Record<string, unknown>
   scorecard: SPXOptimizerScorecard
+}
+
+interface SPXOptimizerHistoryResponse {
+  history: SPXOptimizerHistoryEntry[]
+  count: number
+}
+
+interface SPXOptimizerRevertResponse {
+  profile: Record<string, unknown>
+  scorecard: SPXOptimizerScorecard
+  revertedFromHistoryId: number
+  historyEntryId: number | null
+  message: string
 }
 
 export function useSPXOptimizer() {
   const { session } = useMemberAuth()
   const [scanError, setScanError] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
+  const [revertError, setRevertError] = useState<string | null>(null)
+  const [isReverting, setIsReverting] = useState(false)
 
   const scorecardQuery = useSPXQuery<SPXOptimizerScorecard>('/api/spx/analytics/optimizer/scorecard', {
     refreshInterval: 30_000,
@@ -120,6 +161,10 @@ export function useSPXOptimizer() {
   })
   const scheduleQuery = useSPXQuery<SPXOptimizerScheduleStatus>('/api/spx/analytics/optimizer/schedule', {
     refreshInterval: 30_000,
+    revalidateOnFocus: false,
+  })
+  const historyQuery = useSPXQuery<SPXOptimizerHistoryResponse>('/api/spx/analytics/optimizer/history?limit=20', {
+    refreshInterval: 45_000,
     revalidateOnFocus: false,
   })
 
@@ -135,6 +180,7 @@ export function useSPXOptimizer() {
       const response = await postSPX<SPXOptimizerScanResponse>('/api/spx/analytics/optimizer/scan', token, {})
       await scorecardQuery.mutate(response.scorecard, { revalidate: false })
       await scheduleQuery.mutate()
+      await historyQuery.mutate()
       return response
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Optimizer scan failed'
@@ -143,19 +189,54 @@ export function useSPXOptimizer() {
     } finally {
       setIsScanning(false)
     }
-  }, [scheduleQuery, scorecardQuery, session?.access_token])
+  }, [historyQuery, scheduleQuery, scorecardQuery, session?.access_token])
+
+  const revertToHistory = useCallback(async (historyId: number, reason?: string) => {
+    const token = session?.access_token
+    if (!token) {
+      throw new Error('Session unavailable')
+    }
+
+    setIsReverting(true)
+    setRevertError(null)
+    try {
+      const response = await postSPX<SPXOptimizerRevertResponse>('/api/spx/analytics/optimizer/revert', token, {
+        historyId,
+        reason,
+      })
+      await scorecardQuery.mutate(response.scorecard, { revalidate: false })
+      await Promise.all([
+        scheduleQuery.mutate(),
+        historyQuery.mutate(),
+      ])
+      return response
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Optimizer revert failed'
+      setRevertError(message)
+      throw error
+    } finally {
+      setIsReverting(false)
+    }
+  }, [historyQuery, scheduleQuery, scorecardQuery, session?.access_token])
 
   return {
     scorecard: scorecardQuery.data || null,
     schedule: scheduleQuery.data || null,
+    history: historyQuery.data?.history || [],
     isLoading: scorecardQuery.isLoading,
     isScheduleLoading: scheduleQuery.isLoading,
+    isHistoryLoading: historyQuery.isLoading,
     error: scorecardQuery.error,
     scheduleError: scheduleQuery.error,
+    historyError: historyQuery.error,
     isScanning,
     scanError,
+    isReverting,
+    revertError,
     runScan,
+    revertToHistory,
     refresh: scorecardQuery.mutate,
     refreshSchedule: scheduleQuery.mutate,
+    refreshHistory: historyQuery.mutate,
   }
 }
