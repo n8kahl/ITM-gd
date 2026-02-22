@@ -18,6 +18,7 @@ Update this file at the end of each autonomous execution session.
 | 8 | Decision Intelligence and Risk Envelope | P1 | Done | Eng | 2026-02-21 | None |
 | 9 | Chart Interaction, Replay, Scenario Lanes | P1 | Done | Eng | 2026-02-21 | None |
 | 10 | Journal Automation and Governance | P2 | Done | Eng | 2026-02-21 | None |
+| 14 | Institutional Upgrade and Tradier Readiness | P0/P1 | In Progress | Eng | 2026-02-22 | None |
 
 ## 3. Session Log Template
 ```md
@@ -950,6 +951,32 @@ Update this file at the end of each autonomous execution session.
   - Recalibrate gating/mix policy to restore actionable throughput before promotion (focus: blocked/hidden/paused distribution and trend-family enablement).
 - Blockers:
   - Promotion criteria not met due throughput collapse; production promotion should remain blocked pending policy recalibration.
+
+### Session 2026-02-22 15:58 ET
+- Goal: Start Phase 14 spec-first delivery by resolving proposed institutional-upgrade spec gaps and implementing the first bounded microstructure slice.
+- Completed:
+  - Authored Phase 14 master spec with explicit gap resolutions:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_INSTITUTIONAL_UPGRADE_SPEC_2026-02-22.md`
+  - Implemented P14-S1 canonical microbar telemetry fields in:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/microbarAggregator.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/microbarAggregator.test.ts`
+  - Authored slice report:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S1_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint backend/src/services/spx/microbarAggregator.ts backend/src/services/spx/__tests__/microbarAggregator.test.ts backend/src/services/websocket.ts`
+- Risks found:
+  - Proposed ratio thresholds were ambiguous against existing normalized imbalance metric.
+  - Backend files are currently ignored by the top-level eslint invocation used in this session.
+- Risks mitigated:
+  - Added both normalized imbalance compatibility and explicit ratio/coverage/spread telemetry fields.
+  - Recorded lint caveat in slice report; typecheck + unit gate remains green.
+- Next slice:
+  - `P14-S2`: detector integration of new telemetry (`volumeClimax`, `vwap`) and optimizer blocker-mix visibility.
+- Blockers:
+  - None.
 
 ## 4. Blocking Gate Checklist
 1. [x] No open P0 defects.

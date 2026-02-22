@@ -1236,3 +1236,34 @@ PR can merge only when:
   - Promotion-gate backfill held at 5/5 successful sessions with strict second-resolution fidelity.
   - Last-week strict replay output: `T1 0.00%`, `T2 0.00%`, `expectancyR -1.04`, `triggeredCount=1`.
   - Baseline comparator from earlier strict run (`T1 76.47%`, `T2 70.59%`, `expectancyR +1.0587`) implies deltas of `-76.47pp`, `-70.59pp`, `-2.0987R`; throughput policy recalibration remains the blocking promotion issue.
+
+### Slice: P14-S1
+- Objective: Resolve spec ambiguity in microstructure math and add canonical close-quote telemetry to SPX microbars.
+- Status: done
+- Scope:
+  - Extend microbar contract with close-quote ratio/coverage/spread metrics.
+  - Preserve backward-compatible existing microbar fields.
+  - Fan out new telemetry through websocket microbar payloads.
+- Out of scope:
+  - Detector threshold policy changes.
+  - Broker/tradier routing and portfolio sync.
+  - Database migration work.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/microbarAggregator.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_INSTITUTIONAL_UPGRADE_SPEC_2026-02-22.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S1_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint backend/src/services/spx/microbarAggregator.ts backend/src/services/spx/__tests__/microbarAggregator.test.ts backend/src/services/websocket.ts`
+  - Result: unit pass, typecheck pass, eslint warning-only (backend sources matched ignore pattern).
+- Risks introduced:
+  - New telemetry fields can be misinterpreted if direction-normalization is not applied in detectors.
+- Mitigations:
+  - Preserved existing normalized imbalance metric and added explicit ratio fields for next-slice direction-aware gating.
+- Rollback:
+  - Revert P14-S1 files listed above and redeploy websocket service.
+- Notes:
+  - This slice intentionally limits change radius to telemetry contracts before detector-policy edits.
