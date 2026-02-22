@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SPXCommandController } from '@/hooks/use-spx-command-controller'
 import { FlowRibbon } from '@/components/spx-command-center/flow-ribbon'
 import { GEXAmbientGlow } from '@/components/spx-command-center/gex-ambient-glow'
@@ -111,12 +111,21 @@ export function SPXDesktopSpatialCanvas({
     viewport.width,
   ])
   const levelOverlaysEnabled = showLevelOverlay && !spatialThrottled
-  const showPriorityLevels = levelOverlaysEnabled
+  const showPriorityLevels = levelOverlaysEnabled && focusMode !== 'risk_only'
   const showRiskShadow = levelOverlaysEnabled && (focusMode === 'execution' || focusMode === 'risk_only')
   const showSetupLock = levelOverlaysEnabled && focusMode === 'execution'
-  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only' && !showPriorityLevels
+  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only'
   const showConeOverlay = overlayPolicy.allowCone && !spatialThrottled
   const showCoachOverlay = overlayPolicy.allowSpatialCoach && !spatialThrottled
+  const handlePriorityLevelCountsChange = useCallback((displayed: number, total: number) => {
+    onDisplayedLevelsChange(displayed, total)
+  }, [onDisplayedLevelsChange])
+
+  useEffect(() => {
+    if (!levelOverlaysEnabled) {
+      onDisplayedLevelsChange(0, 0)
+    }
+  }, [levelOverlaysEnabled, onDisplayedLevelsChange])
 
   return (
     <div
@@ -148,6 +157,7 @@ export function SPXDesktopSpatialCanvas({
           <SPXChart
             showAllRelevantLevels={showAllRelevantLevels}
             renderLevelAnnotations={false}
+            countReportingMode="disabled"
             onDisplayedLevelsChange={onDisplayedLevelsChange}
             onChartReady={onChartReady}
             onLatestBarTimeChange={onLatestBarTimeChange}
@@ -183,6 +193,7 @@ export function SPXDesktopSpatialCanvas({
               coordinatesRef={coordinatesRef}
               showAllRelevantLevels={showAllRelevantLevels}
               focusMode={focusMode}
+              onDisplayedLevelsChange={handlePriorityLevelCountsChange}
             />
           )}
         </div>

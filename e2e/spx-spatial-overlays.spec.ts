@@ -56,6 +56,7 @@ test.describe('SPX spatial overlays', () => {
     await expect(page.getByTestId('spx-probability-cone-path')).toHaveAttribute('d', /M.*Z/)
     await expect(page.getByTestId('spx-spatial-marker-legend')).toBeVisible()
     await expect(page.getByTestId('spx-priority-level-overlay')).toBeVisible()
+    await expect(page.getByTestId('spx-header-levels-chip')).toContainText(/[1-9]\d*\/\d+/)
     await expect(page.getByTestId('spx-topographic-ladder')).toHaveCount(0)
     await expect(page.getByTestId('spx-gamma-topography')).toBeVisible()
     await expect(page.getByTestId('spx-flow-ribbon')).toBeVisible()

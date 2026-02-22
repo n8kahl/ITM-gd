@@ -12,6 +12,7 @@ interface PriorityLevelOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
   showAllRelevantLevels: boolean
   focusMode: 'decision' | 'execution' | 'risk_only'
+  onDisplayedLevelsChange?: (displayed: number, total: number) => void
 }
 
 interface OverlayLevel {
@@ -107,6 +108,7 @@ export function PriorityLevelOverlay({
   coordinatesRef,
   showAllRelevantLevels,
   focusMode,
+  onDisplayedLevelsChange,
 }: PriorityLevelOverlayProps) {
   const { levels } = useSPXAnalyticsContext()
   const { selectedSetup, chartAnnotations, tradeMode } = useSPXSetupContext()
@@ -252,14 +254,15 @@ export function PriorityLevelOverlay({
 
   const visibleLevels = useMemo(() => {
     const livePrice = Number.isFinite(spxPrice) && spxPrice > 0 ? spxPrice : null
+    const includeAllRelevant = showAllRelevantLevels && focusMode !== 'execution'
     return resolveVisibleChartLevels(candidateLevels, {
       livePrice,
-      nearWindowPoints: 18,
-      nearLabelBudget: 8,
-      maxTotalLabels: 18,
-      minGapPoints: 1.1,
+      nearWindowPoints: includeAllRelevant ? Number.MAX_SAFE_INTEGER : 18,
+      nearLabelBudget: includeAllRelevant ? Math.max(candidateLevels.length, 32) : 8,
+      maxTotalLabels: includeAllRelevant ? Math.max(candidateLevels.length, 64) : 18,
+      minGapPoints: includeAllRelevant ? 0.01 : 1.1,
     }).levels
-  }, [candidateLevels, spxPrice])
+  }, [candidateLevels, focusMode, showAllRelevantLevels, spxPrice])
 
   const refreshRenderState = useCallback(() => {
     const coordinates = coordinatesRef.current
@@ -283,10 +286,11 @@ export function PriorityLevelOverlay({
       .filter((entry): entry is { level: OverlayLevel; y: number } => entry.y != null && Number.isFinite(entry.y))
       .sort((left, right) => left.y - right.y)
 
+    const allowDenseLines = showAllRelevantLevels && focusMode !== 'execution'
     const lines: RenderLine[] = []
     for (const entry of yProjected) {
       const collided = lines.some((accepted) => Math.abs(accepted.y - entry.y) < PIXEL_COLLISION_GAP)
-      if (collided) continue
+      if (collided && !allowDenseLines) continue
       lines.push({
         id: entry.level.id,
         y: clamp(entry.y, 0, height),
@@ -294,13 +298,13 @@ export function PriorityLevelOverlay({
         color: entry.level.color,
         lineStyle: entry.level.lineStyle,
         lineWidth: clamp(entry.level.lineWidth + 0.4, 1, 3),
-        showLabel: lines.length < MAX_LABELS,
+        showLabel: !collided && lines.length < MAX_LABELS,
       })
     }
 
     const nextState: RenderState = { width, lines }
     setRenderState((previous) => (renderStateEquals(previous, nextState) ? previous : nextState))
-  }, [coordinatesRef, visibleLevels])
+  }, [coordinatesRef, focusMode, showAllRelevantLevels, visibleLevels])
 
   useEffect(() => {
     let rafId = 0
@@ -314,6 +318,10 @@ export function PriorityLevelOverlay({
       if (rafId) window.cancelAnimationFrame(rafId)
     }
   }, [refreshRenderState])
+
+  useEffect(() => {
+    onDisplayedLevelsChange?.(renderState?.lines.length || 0, candidateLevels.length)
+  }, [candidateLevels.length, onDisplayedLevelsChange, renderState?.lines.length])
 
   if (!renderState || renderState.lines.length === 0) return null
 

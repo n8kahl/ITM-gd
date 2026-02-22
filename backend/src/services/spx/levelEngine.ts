@@ -127,6 +127,7 @@ function buildGexDerivedLevels(input: {
 }): SPXLevel[] {
   const { gex } = input;
   const optionsLevels: SPXLevel[] = [];
+  const isRenderablePrice = (price: number): boolean => Number.isFinite(price) && price > 0;
 
   const addLevel = (
     symbol: 'SPX' | 'SPY',
@@ -136,6 +137,16 @@ function buildGexDerivedLevels(input: {
     strength: SPXLevel['strength'] = 'critical',
     metadata: Record<string, unknown> = {},
   ): void => {
+    if (!isRenderablePrice(price)) {
+      logger.warn('Skipping non-renderable GEX-derived level', {
+        symbol,
+        category,
+        source,
+        price,
+      });
+      return;
+    }
+
     optionsLevels.push({
       id: uuid('spx_level'),
       symbol,
