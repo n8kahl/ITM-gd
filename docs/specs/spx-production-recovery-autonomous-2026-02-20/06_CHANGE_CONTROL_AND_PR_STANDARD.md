@@ -1301,3 +1301,48 @@ PR can merge only when:
   - Revert P14-S2 files listed above and rerun targeted tests.
 - Notes:
   - This slice improves live directional fidelity while preserving backward compatibility in sparse quote conditions.
+
+### Slice: P14-S3
+- Objective: Add Tradier adapter foundations, DTBP-aware sizing hooks, and portfolio snapshot sync plumbing behind explicit flags.
+- Status: done
+- Scope:
+  - Add Tradier OCC symbol formatter/parser, REST client, and order payload router helpers.
+  - Add portfolio sync service + worker and wire worker lifecycle in backend server.
+  - Add DTBP/PDT-aware sizing context in SPX contract selector + route input parsing.
+  - Add additive Supabase migration for broker credentials, portfolio snapshots, and execution-fidelity setup-instance columns.
+- Out of scope:
+  - Live execution state transitions in setup lifecycle.
+  - Broker/internal position reconciliation and slippage feedback loop.
+  - UI execution controls (flatten/routing pulses) in this backend slice.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/occFormatter.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/orderRouter.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/__tests__/occFormatter.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/__tests__/orderRouter.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/portfolio/portfolioSync.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/portfolioSyncWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/spx.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/supabase/migrations/20260326000000_institutional_upgrade.sql`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S3_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/broker/tradier/__tests__/orderRouter.test.ts src/services/spx/__tests__/contractSelector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint backend/src/services/broker/tradier/client.ts backend/src/services/broker/tradier/orderRouter.ts backend/src/services/broker/tradier/occFormatter.ts backend/src/services/broker/tradier/__tests__/occFormatter.test.ts backend/src/services/broker/tradier/__tests__/orderRouter.test.ts backend/src/services/portfolio/portfolioSync.ts backend/src/workers/portfolioSyncWorker.ts backend/src/services/spx/contractSelector.ts backend/src/routes/spx.ts backend/src/server.ts backend/src/services/spx/types.ts`
+  - Result: tests/typecheck pass; eslint warning-only because backend files are ignored by root config.
+- Risks introduced:
+  - Credential decryption remains placeholder in this foundation slice (`access_token_ciphertext` pass-through).
+  - Risk-context cache cardinality increases due new DTBP/PDT fingerprint.
+- Mitigations:
+  - Worker defaults to disabled and sandbox-first env posture.
+  - Missing migration tables fail-safe with warn-and-skip behavior in portfolio sync.
+  - Cache key now includes risk fingerprint and ad-hoc setup requests bypass cache to prevent stale sizing leakage.
+- Rollback:
+  - Revert P14-S3 files listed above.
+  - Keep `TRADIER_PORTFOLIO_SYNC_ENABLED=false` to disable runtime sync.
+- Notes:
+  - This slice is intentionally backend-foundational; live broker reconciliation remains `P14-S4`.

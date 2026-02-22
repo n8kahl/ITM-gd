@@ -1005,6 +1005,45 @@ Update this file at the end of each autonomous execution session.
 - Blockers:
   - None.
 
+### Session 2026-02-22 17:35 ET
+- Goal: Execute `P14-S3` Tradier adapter foundation and DTBP-aware contract sizing integration with governance updates.
+- Completed:
+  - Added Tradier adapter foundation:
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/occFormatter.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/orderRouter.ts`
+  - Added broker adapter tests:
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/__tests__/occFormatter.test.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/__tests__/orderRouter.test.ts`
+  - Added portfolio sync plumbing + worker lifecycle wiring:
+    - `/Users/natekahl/ITM-gd/backend/src/services/portfolio/portfolioSync.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/workers/portfolioSyncWorker.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/server.ts`
+  - Added DTBP/PDT-aware sizing and 0DTE policy hooks:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/routes/spx.ts`
+  - Added additive database migration:
+    - `/Users/natekahl/ITM-gd/supabase/migrations/20260326000000_institutional_upgrade.sql`
+  - Fixed contract recommendation cache scoping to include risk context and bypass ad-hoc setup caching.
+  - Authored slice report:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S3_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/broker/tradier/__tests__/orderRouter.test.ts src/services/spx/__tests__/contractSelector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint backend/src/services/broker/tradier/client.ts backend/src/services/broker/tradier/orderRouter.ts backend/src/services/broker/tradier/occFormatter.ts backend/src/services/broker/tradier/__tests__/occFormatter.test.ts backend/src/services/broker/tradier/__tests__/orderRouter.test.ts backend/src/services/portfolio/portfolioSync.ts backend/src/workers/portfolioSyncWorker.ts backend/src/services/spx/contractSelector.ts backend/src/routes/spx.ts backend/src/server.ts backend/src/services/spx/types.ts`
+- Risks found:
+  - Credential decryption remains placeholder pass-through in this foundation slice.
+  - Backend lint invocation remains warning-only due root ignore policy.
+- Risks mitigated:
+  - Portfolio sync defaults to disabled and sandbox-first posture.
+  - Missing migration tables handled with warn-and-skip behavior.
+  - Cache correctness improved with risk-context keying and ad-hoc bypass.
+- Next slice:
+  - `P14-S4`: broker/internal position reconciliation and slippage-feedback loop into optimizer guardrails.
+- Blockers:
+  - None.
+
 ## 4. Blocking Gate Checklist
 1. [x] No open P0 defects.
 2. [x] No open P1 defects.
