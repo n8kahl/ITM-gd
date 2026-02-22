@@ -116,6 +116,18 @@ A workstream is complete only when all are true:
 4. Change control + risk/decision log + tracker are current.
 5. Production deploy approval is explicitly recorded.
 
+## Collaboration Notes: SPX Optimization (2026-02-22)
+Use these defaults for this user/workstream unless explicitly overridden:
+1. Prioritize measurable win-rate and R:R outcomes over feature breadth.
+2. Prefer Massive second-bar historical replay as canonical backtest fidelity (`usedMassiveMinuteBars=false` target for strict runs).
+3. Avoid fallback-mode conclusions when the request is for true Massive historical coverage; fail closed and report data-quality gaps explicitly.
+4. Keep optimizer governance visible in-product: nightly automation status, manual `Run Scan & Optimize`, audit history, and profile revert controls.
+5. Present optimizer outcomes with actionable detail (by-strategy and setup/regime breakdowns, weighted averages, objective/expectancy deltas), not only headline T1/T2.
+6. Maintain spec-driven cadence for substantial changes: slice spec first, bounded implementation, gates, then governance doc updates.
+7. For performance claims, always include exact date range, sample counts/trades, and whether results come from strict replay vs mixed/fallback paths.
+8. Keep collaboration loop tight: frequent progress updates, direct answers to accuracy questions, and explicit next-step recommendations tied to measurable impact.
+9. For optimizer credibility, always report execution-actual coverage and slippage (non-proxy vs proxy) so users can see how much evidence is based on real fills.
+
 ## Profile Hub
 * **Route:** `/members/profile`
 * **Purpose:** Trader identity and account control center.

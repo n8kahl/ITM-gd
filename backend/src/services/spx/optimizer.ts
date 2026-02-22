@@ -176,6 +176,26 @@ export interface SPXOptimizerDataQuality {
   overrideRows: number;
   overrideMatchedRows: number;
   overrideCoveragePct: number;
+  optionsReplayAvailable: boolean;
+  optionsReplayCoveragePct: number | null;
+  optionsReplayCoverageFloorPct: number;
+  optionsReplayCoverageValid: boolean | null;
+  optionsReplayReplayedTrades: number;
+  optionsReplayUniverse: number;
+  executionFillTableAvailable: boolean;
+  executionTriggeredTradeCount: number;
+  executionTradesWithAnyFill: number;
+  executionTradesWithEntryFill: number;
+  executionTradesWithExitFill: number;
+  executionTradesWithNonProxyFill: number;
+  executionCoveragePct: number;
+  executionEntryCoveragePct: number;
+  executionExitCoveragePct: number;
+  executionNonProxyCoveragePct: number;
+  executionEntryAvgSlippagePts: number | null;
+  executionExitAvgSlippagePts: number | null;
+  executionEntryAvgSlippageBps: number | null;
+  executionExitAvgSlippageBps: number | null;
 }
 
 export interface SPXOptimizationMetrics {
@@ -280,7 +300,45 @@ interface OutcomeOverrideLoadResult {
   error: string | null;
 }
 
+interface SPXOptionsReplayDataQuality {
+  available: boolean;
+  replayUniverse: number;
+  replayedTrades: number;
+  coveragePct: number;
+  minimumCoveragePct: number;
+  coverageValid: boolean;
+  error: string | null;
+}
+
+interface ExecutionFillRow {
+  engine_setup_id: string;
+  session_date: string;
+  side: 'entry' | 'partial' | 'exit';
+  source: 'proxy' | 'manual' | 'broker_tradier' | 'broker_other';
+  slippage_points: number | string | null;
+  slippage_bps: number | string | null;
+}
+
+interface SPXExecutionActualsDataQuality {
+  tableAvailable: boolean;
+  triggeredTradeCount: number;
+  tradesWithAnyFill: number;
+  tradesWithEntryFill: number;
+  tradesWithExitFill: number;
+  tradesWithNonProxyFill: number;
+  coveragePct: number;
+  entryCoveragePct: number;
+  exitCoveragePct: number;
+  nonProxyCoveragePct: number;
+  entryAvgSlippagePts: number | null;
+  exitAvgSlippagePts: number | null;
+  entryAvgSlippageBps: number | null;
+  exitAvgSlippageBps: number | null;
+  error: string | null;
+}
+
 interface PreparedOptimizationRow {
+  setupId: string;
   sessionDate: string;
   setupType: string;
   regime: string;
@@ -557,10 +615,18 @@ const DB_PAGE_SIZE = 1000;
 const FAIL_CLOSED_AUTOMATED_ENABLED = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_AUTOMATED || 'true').toLowerCase() !== 'false';
 const FAIL_CLOSED_REQUIRE_SECOND_RESOLUTION = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_SECOND_BARS || 'true').toLowerCase() !== 'false';
 const FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE || 'true').toLowerCase() !== 'false';
+const FAIL_CLOSED_REQUIRE_OPTIONS_REPLAY_COVERAGE = String(
+  process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_OPTIONS_REPLAY_COVERAGE || 'true',
+).toLowerCase() !== 'false';
 const FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT = (() => {
   const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT || '');
   if (!Number.isFinite(parsed)) return 95;
   return clamp(parsed, 50, 100);
+})();
+const FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT = (() => {
+  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT || '');
+  if (!Number.isFinite(parsed)) return 60;
+  return clamp(parsed, 30, 100);
 })();
 const FAIL_CLOSED_MAX_FALLBACK_SESSIONS = (() => {
   const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MAX_FALLBACK_SESSIONS || '', 10);
@@ -779,7 +845,18 @@ function maxFirstSeenMinuteForSetup(
 
 function isMissingTableError(message: string): boolean {
   const normalized = message.toLowerCase();
-  return normalized.includes('could not find the table') || normalized.includes('does not exist');
+  return (
+    normalized.includes('could not find the table')
+    || /relation\s+["'`a-z0-9_.]+\s+does not exist/.test(normalized)
+    || /table\s+["'`a-z0-9_.]+\s+does not exist/.test(normalized)
+  );
+}
+
+function isMissingColumnError(message: string, column?: string): boolean {
+  const normalized = message.toLowerCase();
+  if (!normalized.includes('column') || !normalized.includes('does not exist')) return false;
+  if (!column) return true;
+  return normalized.includes(column.toLowerCase());
 }
 
 function normalizeDateInput(value: string): string {
@@ -976,6 +1053,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   }
 
   return {
+    setupId: row.engine_setup_id,
     sessionDate: row.session_date,
     setupType,
     regime,
@@ -1060,12 +1138,201 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
   }
 }
 
+async function loadOptionsReplayDataQuality(from: string, to: string): Promise<SPXOptionsReplayDataQuality> {
+  try {
+    const backtest = await runSPXWinRateBacktest({
+      from,
+      to,
+      source: 'spx_setup_instances',
+      resolution: 'second',
+      executionBasis: 'options_contract',
+      includeBlockedSetups: true,
+      includeHiddenTiers: true,
+      includePausedSetups: true,
+      optionsReplay: {
+        strictBars: true,
+      },
+    });
+
+    const replay = backtest.optionsReplay;
+    if (!replay) {
+      return {
+        available: false,
+        replayUniverse: 0,
+        replayedTrades: 0,
+        coveragePct: 0,
+        minimumCoveragePct: FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT,
+        coverageValid: false,
+        error: 'Options replay payload missing from backtest result.',
+      };
+    }
+
+    return {
+      available: true,
+      replayUniverse: replay.replayUniverse,
+      replayedTrades: replay.replayedTrades,
+      coveragePct: replay.coveragePct,
+      minimumCoveragePct: replay.minimumCoveragePct,
+      coverageValid: replay.coverageValid,
+      error: null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('SPX optimizer failed to load options replay data quality', {
+      from,
+      to,
+      error: message,
+    });
+    return {
+      available: false,
+      replayUniverse: 0,
+      replayedTrades: 0,
+      coveragePct: 0,
+      minimumCoveragePct: FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT,
+      coverageValid: false,
+      error: message,
+    };
+  }
+}
+
+function emptyExecutionActualsDataQuality(
+  triggeredTradeCount: number,
+  tableAvailable = true,
+  error: string | null = null,
+): SPXExecutionActualsDataQuality {
+  return {
+    tableAvailable,
+    triggeredTradeCount,
+    tradesWithAnyFill: 0,
+    tradesWithEntryFill: 0,
+    tradesWithExitFill: 0,
+    tradesWithNonProxyFill: 0,
+    coveragePct: 0,
+    entryCoveragePct: 0,
+    exitCoveragePct: 0,
+    nonProxyCoveragePct: 0,
+    entryAvgSlippagePts: null,
+    exitAvgSlippagePts: null,
+    entryAvgSlippageBps: null,
+    exitAvgSlippageBps: null,
+    error,
+  };
+}
+
+async function loadExecutionActualsDataQuality(input: {
+  from: string;
+  to: string;
+  rows: PreparedOptimizationRow[];
+}): Promise<SPXExecutionActualsDataQuality> {
+  const triggeredRows = input.rows.filter((row) => row.triggered);
+  const triggeredTradeCount = triggeredRows.length;
+  if (triggeredTradeCount === 0) {
+    return emptyExecutionActualsDataQuality(0, true, null);
+  }
+
+  const triggeredKeys = new Set(
+    triggeredRows.map((row) => optimizationRowKey(row.setupId, row.sessionDate)),
+  );
+
+  const fillRows: ExecutionFillRow[] = [];
+  let page = 0;
+  while (true) {
+    const fromIndex = page * DB_PAGE_SIZE;
+    const toIndex = fromIndex + DB_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('spx_setup_execution_fills')
+      .select('engine_setup_id,session_date,side,source,slippage_points,slippage_bps')
+      .gte('session_date', input.from)
+      .lte('session_date', input.to)
+      .order('session_date', { ascending: true })
+      .order('engine_setup_id', { ascending: true })
+      .range(fromIndex, toIndex);
+
+    if (error) {
+      if (isMissingTableError(error.message)) {
+        return emptyExecutionActualsDataQuality(
+          triggeredTradeCount,
+          false,
+          'spx_setup_execution_fills table is unavailable.',
+        );
+      }
+
+      const message = `Failed to load spx_setup_execution_fills: ${error.message}`;
+      logger.warn('SPX optimizer failed to load execution actuals quality', {
+        from: input.from,
+        to: input.to,
+        error: message,
+      });
+      return emptyExecutionActualsDataQuality(triggeredTradeCount, false, message);
+    }
+
+    const pageRows = (data || []) as ExecutionFillRow[];
+    fillRows.push(...pageRows);
+    if (pageRows.length < DB_PAGE_SIZE) break;
+    page += 1;
+  }
+
+  const anyFillKeys = new Set<string>();
+  const entryFillKeys = new Set<string>();
+  const exitFillKeys = new Set<string>();
+  const nonProxyFillKeys = new Set<string>();
+  const entrySlippagePts: number[] = [];
+  const exitSlippagePts: number[] = [];
+  const entrySlippageBps: number[] = [];
+  const exitSlippageBps: number[] = [];
+
+  for (const fill of fillRows) {
+    const key = optimizationRowKey(fill.engine_setup_id, fill.session_date);
+    if (!triggeredKeys.has(key)) continue;
+
+    anyFillKeys.add(key);
+    if (fill.side === 'entry') {
+      entryFillKeys.add(key);
+    } else if (fill.side === 'exit') {
+      exitFillKeys.add(key);
+    }
+
+    if (fill.source === 'proxy') continue;
+    nonProxyFillKeys.add(key);
+
+    const slippagePoints = toFiniteNumber(fill.slippage_points);
+    const slippageBps = toFiniteNumber(fill.slippage_bps);
+    if (fill.side === 'entry') {
+      if (slippagePoints != null) entrySlippagePts.push(slippagePoints);
+      if (slippageBps != null) entrySlippageBps.push(slippageBps);
+    } else if (fill.side === 'exit') {
+      if (slippagePoints != null) exitSlippagePts.push(slippagePoints);
+      if (slippageBps != null) exitSlippageBps.push(slippageBps);
+    }
+  }
+
+  return {
+    tableAvailable: true,
+    triggeredTradeCount,
+    tradesWithAnyFill: anyFillKeys.size,
+    tradesWithEntryFill: entryFillKeys.size,
+    tradesWithExitFill: exitFillKeys.size,
+    tradesWithNonProxyFill: nonProxyFillKeys.size,
+    coveragePct: round((anyFillKeys.size / triggeredTradeCount) * 100, 2),
+    entryCoveragePct: round((entryFillKeys.size / triggeredTradeCount) * 100, 2),
+    exitCoveragePct: round((exitFillKeys.size / triggeredTradeCount) * 100, 2),
+    nonProxyCoveragePct: round((nonProxyFillKeys.size / triggeredTradeCount) * 100, 2),
+    entryAvgSlippagePts: entrySlippagePts.length > 0 ? round(mean(entrySlippagePts), 4) : null,
+    exitAvgSlippagePts: exitSlippagePts.length > 0 ? round(mean(exitSlippagePts), 4) : null,
+    entryAvgSlippageBps: entrySlippageBps.length > 0 ? round(mean(entrySlippageBps), 2) : null,
+    exitAvgSlippageBps: exitSlippageBps.length > 0 ? round(mean(exitSlippageBps), 2) : null,
+    error: null,
+  };
+}
+
 function summarizeOptimizerDataQuality(input: {
   automatedMode: boolean;
   optimizerRows: number;
   overrideRows: number;
   overrideMatchedRows: number;
   backtest: OutcomeOverrideLoadResult['backtest'];
+  optionsReplay: SPXOptionsReplayDataQuality | null;
+  executionActuals: SPXExecutionActualsDataQuality | null;
   error: string | null;
 }): SPXOptimizerDataQuality {
   const overrideCoveragePct = input.overrideRows > 0
@@ -1116,6 +1383,33 @@ function summarizeOptimizerDataQuality(input: {
       `Override coverage ${overrideCoveragePct}% below floor ${FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT}%.`,
     );
   }
+  const optionsReplayAvailable = input.optionsReplay?.available === true;
+  const optionsReplayCoveragePct = optionsReplayAvailable
+    ? input.optionsReplay?.coveragePct ?? 0
+    : null;
+  const optionsReplayCoverageFloorPct = FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT;
+  const optionsReplayCoverageValid = optionsReplayAvailable
+    ? (input.optionsReplay?.coverageValid ?? false) && (optionsReplayCoveragePct ?? 0) >= optionsReplayCoverageFloorPct
+    : null;
+  const optionsReplayReplayedTrades = input.optionsReplay?.replayedTrades ?? 0;
+  const optionsReplayUniverse = input.optionsReplay?.replayUniverse ?? 0;
+  const executionActuals = input.executionActuals
+    || emptyExecutionActualsDataQuality(input.backtest?.evaluatedSetupCount ?? 0, false, null);
+
+  if (input.optionsReplay?.error) {
+    reasons.push(`Options replay quality load failed: ${input.optionsReplay.error}`);
+  }
+  if (FAIL_CLOSED_REQUIRE_OPTIONS_REPLAY_COVERAGE) {
+    if (!optionsReplayAvailable) {
+      reasons.push('Options replay coverage data is required but unavailable.');
+    } else if (optionsReplayUniverse <= 0) {
+      reasons.push('Options replay coverage data is required but replay universe is zero.');
+    } else if ((optionsReplayCoveragePct ?? 0) < optionsReplayCoverageFloorPct) {
+      reasons.push(
+        `Options replay coverage ${optionsReplayCoveragePct}% below floor ${optionsReplayCoverageFloorPct}%.`,
+      );
+    }
+  }
 
   const failClosedActive = input.automatedMode && FAIL_CLOSED_AUTOMATED_ENABLED;
   return {
@@ -1134,6 +1428,26 @@ function summarizeOptimizerDataQuality(input: {
     overrideRows: input.overrideRows,
     overrideMatchedRows: input.overrideMatchedRows,
     overrideCoveragePct,
+    optionsReplayAvailable,
+    optionsReplayCoveragePct,
+    optionsReplayCoverageFloorPct,
+    optionsReplayCoverageValid,
+    optionsReplayReplayedTrades,
+    optionsReplayUniverse,
+    executionFillTableAvailable: executionActuals.tableAvailable,
+    executionTriggeredTradeCount: executionActuals.triggeredTradeCount,
+    executionTradesWithAnyFill: executionActuals.tradesWithAnyFill,
+    executionTradesWithEntryFill: executionActuals.tradesWithEntryFill,
+    executionTradesWithExitFill: executionActuals.tradesWithExitFill,
+    executionTradesWithNonProxyFill: executionActuals.tradesWithNonProxyFill,
+    executionCoveragePct: executionActuals.coveragePct,
+    executionEntryCoveragePct: executionActuals.entryCoveragePct,
+    executionExitCoveragePct: executionActuals.exitCoveragePct,
+    executionNonProxyCoveragePct: executionActuals.nonProxyCoveragePct,
+    executionEntryAvgSlippagePts: executionActuals.entryAvgSlippagePts,
+    executionExitAvgSlippagePts: executionActuals.exitAvgSlippagePts,
+    executionEntryAvgSlippageBps: executionActuals.entryAvgSlippageBps,
+    executionExitAvgSlippageBps: executionActuals.exitAvgSlippageBps,
   };
 }
 
@@ -1619,36 +1933,95 @@ async function loadOptimizationRows(
   to: string,
   outcomeOverrides?: Map<string, OutcomeOverride>,
 ): Promise<OptimizationRowsLoadResult> {
-  const rows: OptimizationRow[] = [];
-  let page = 0;
+  type RowSelectVariantKey =
+    | 'full'
+    | 'legacy_no_entry_fill'
+    | 'legacy_no_tier_or_entry_fill';
 
-  while (true) {
-    const fromIndex = page * DB_PAGE_SIZE;
-    const toIndex = fromIndex + DB_PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from('spx_setup_instances')
-      .select('engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata')
-      .gte('session_date', from)
-      .lte('session_date', to)
-      .order('session_date', { ascending: true })
-      .order('engine_setup_id', { ascending: true })
-      .range(fromIndex, toIndex);
+  const selectVariants: Array<{ key: RowSelectVariantKey; select: string }> = [
+    {
+      key: 'full',
+      select: 'engine_setup_id,session_date,setup_type,direction,regime,tier,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,entry_fill_price,p_win_calibrated,ev_r,metadata',
+    },
+    {
+      key: 'legacy_no_entry_fill',
+      select: 'engine_setup_id,session_date,setup_type,direction,regime,tier,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata',
+    },
+    {
+      key: 'legacy_no_tier_or_entry_fill',
+      select: 'engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata',
+    },
+  ];
 
-    if (error) {
-      if (isMissingTableError(error.message)) {
-        logger.warn('SPX optimizer skipped row load because spx_setup_instances is missing');
-        return {
-          rows: [],
-          overrideMatchedRows: 0,
-        };
+  let rows: OptimizationRow[] = [];
+  let selectedVariant: RowSelectVariantKey | null = null;
+  let fallbackReason: string | null = null;
+
+  for (const variant of selectVariants) {
+    const variantRows: OptimizationRow[] = [];
+    let page = 0;
+    let shouldTryNextVariant = false;
+
+    while (true) {
+      const fromIndex = page * DB_PAGE_SIZE;
+      const toIndex = fromIndex + DB_PAGE_SIZE - 1;
+      const { data, error } = await supabase
+        .from('spx_setup_instances')
+        .select(variant.select)
+        .gte('session_date', from)
+        .lte('session_date', to)
+        .order('session_date', { ascending: true })
+        .order('engine_setup_id', { ascending: true })
+        .range(fromIndex, toIndex);
+
+      if (error) {
+        if (isMissingTableError(error.message)) {
+          logger.warn('SPX optimizer skipped row load because spx_setup_instances is missing', {
+            error: error.message,
+          });
+          return {
+            rows: [],
+            overrideMatchedRows: 0,
+          };
+        }
+
+        const missingEntryFill = isMissingColumnError(error.message, 'entry_fill_price');
+        const missingTier = isMissingColumnError(error.message, 'tier');
+        if (missingEntryFill || missingTier) {
+          shouldTryNextVariant = true;
+          fallbackReason = error.message;
+          break;
+        }
+
+        throw new Error(`Failed to load optimizer rows: ${error.message}`);
       }
-      throw new Error(`Failed to load optimizer rows: ${error.message}`);
+
+      const pageRows = (data || []) as unknown as OptimizationRow[];
+      variantRows.push(...pageRows);
+      if (pageRows.length < DB_PAGE_SIZE) break;
+      page += 1;
     }
 
-    const pageRows = (data || []) as OptimizationRow[];
-    rows.push(...pageRows);
-    if (pageRows.length < DB_PAGE_SIZE) break;
-    page += 1;
+    if (shouldTryNextVariant) {
+      continue;
+    }
+
+    rows = variantRows;
+    selectedVariant = variant.key;
+    break;
+  }
+
+  if (!selectedVariant) {
+    throw new Error(
+      `Failed to load optimizer rows: unsupported schema for spx_setup_instances.${fallbackReason ? ` Last error: ${fallbackReason}` : ''}`,
+    );
+  }
+
+  if (selectedVariant !== 'full') {
+    logger.warn('SPX optimizer is using legacy row-select variant due schema drift', {
+      selectedVariant,
+      reason: fallbackReason,
+    });
   }
 
   let overrideMatchedRows = 0;
@@ -1932,12 +2305,19 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
   const outcomeOverrideLoad = await loadOutcomeOverridesFromBacktest(from, to);
   const rowLoad = await loadOptimizationRows(from, to, outcomeOverrideLoad.overrides);
   const rows = rowLoad.rows;
+  const executionActuals = await loadExecutionActualsDataQuality({
+    from,
+    to,
+    rows,
+  });
   const dataQuality = summarizeOptimizerDataQuality({
     automatedMode: false,
     optimizerRows: rows.length,
     overrideRows: outcomeOverrideLoad.overrides.size,
     overrideMatchedRows: rowLoad.overrideMatchedRows,
     backtest: outcomeOverrideLoad.backtest,
+    optionsReplay: null,
+    executionActuals,
     error: outcomeOverrideLoad.error,
   });
   const baselineCandidate: ThresholdCandidate = {
@@ -1993,7 +2373,7 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
     dataQuality,
     notes: [
       'Optimizer scorecard is using baseline profile defaults.',
-      `Data quality snapshot: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, overrideCoverage=${dataQuality.overrideCoveragePct}%.`,
+      `Data quality snapshot: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, overrideCoverage=${dataQuality.overrideCoveragePct}%, optionsCoverage=${dataQuality.optionsReplayCoveragePct ?? 'n/a'}%, executionAnyFill=${dataQuality.executionCoveragePct}%, executionNonProxy=${dataQuality.executionNonProxyCoveragePct}%.`,
     ],
   };
 }
@@ -2021,15 +2401,25 @@ export async function runSPXOptimizerScan(input?: {
   const trainingTo = shiftDate(validationFrom, -1);
   const trainingFrom = shiftDate(trainingTo, -(trainingDays - 1));
 
-  const outcomeOverrideLoad = await loadOutcomeOverridesFromBacktest(trainingFrom, validationTo);
+  const [outcomeOverrideLoad, optionsReplayQuality] = await Promise.all([
+    loadOutcomeOverridesFromBacktest(trainingFrom, validationTo),
+    loadOptionsReplayDataQuality(validationFrom, validationTo),
+  ]);
   const rowLoad = await loadOptimizationRows(trainingFrom, validationTo, outcomeOverrideLoad.overrides);
   const rows = rowLoad.rows;
+  const executionActuals = await loadExecutionActualsDataQuality({
+    from: trainingFrom,
+    to: validationTo,
+    rows,
+  });
   const dataQuality = summarizeOptimizerDataQuality({
     automatedMode,
     optimizerRows: rows.length,
     overrideRows: outcomeOverrideLoad.overrides.size,
     overrideMatchedRows: rowLoad.overrideMatchedRows,
     backtest: outcomeOverrideLoad.backtest,
+    optionsReplay: optionsReplayQuality,
+    executionActuals,
     error: outcomeOverrideLoad.error,
   });
   const trainingRows = rows.filter((row) => row.sessionDate >= trainingFrom && row.sessionDate <= trainingTo);
@@ -2268,10 +2658,11 @@ export async function runSPXOptimizerScan(input?: {
       `Drift control paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine paused ${quarantinePausedSetupTypes.length} setup types; merged paused setup types=${mergedPausedSetupTypes.length}.`,
       `Regime gate paused ${pausedCombos.length} setup/regime combos.`,
       `Fail-closed gate active=${dataQuality.failClosedActive}, passed=${dataQuality.gatePassed}.`,
+      `Execution actuals: table=${dataQuality.executionFillTableAvailable}, anyFillCoverage=${dataQuality.executionCoveragePct}%, nonProxyCoverage=${dataQuality.executionNonProxyCoveragePct}%, entryCoverage=${dataQuality.executionEntryCoveragePct}%, exitCoverage=${dataQuality.executionExitCoveragePct}%, entrySlip=${dataQuality.executionEntryAvgSlippagePts ?? 'n/a'} pts (${dataQuality.executionEntryAvgSlippageBps ?? 'n/a'} bps), exitSlip=${dataQuality.executionExitAvgSlippagePts ?? 'n/a'} pts (${dataQuality.executionExitAvgSlippageBps ?? 'n/a'} bps).`,
       ...(failClosedBlockedProfileMutation
         ? ['Fail-closed policy retained the previously active profile; no guard/profile mutations were applied.']
         : []),
-      `Data quality: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, fallbackSessions=${dataQuality.fallbackSessionCount}, missingBarsSessions=${dataQuality.missingBarsSessionCount}, overrideCoverage=${dataQuality.overrideCoveragePct}%.`,
+      `Data quality: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, fallbackSessions=${dataQuality.fallbackSessionCount}, missingBarsSessions=${dataQuality.missingBarsSessionCount}, overrideCoverage=${dataQuality.overrideCoveragePct}%, optionsCoverage=${dataQuality.optionsReplayCoveragePct ?? 'n/a'}% (floor ${dataQuality.optionsReplayCoverageFloorPct}%, valid=${String(dataQuality.optionsReplayCoverageValid)}).`,
       ...(
         dataQuality.reasons.length > 0
           ? dataQuality.reasons.map((reason) => `Fail-closed reason: ${reason}`)

@@ -52,6 +52,7 @@ import {
   type SetupTransitionEvent,
 } from './spx/tickEvaluator';
 import { persistSetupTransitionsForWinRate } from './spx/outcomeTracker';
+import { buildExecutionCoachMessageFromTransition } from './spx/executionCoach';
 import {
   subscribeSetupPushEvents,
   type SetupDetectedUpdate,
@@ -63,7 +64,7 @@ import {
   type PositionLiveUpdate,
 } from './positionPushChannel';
 import { getSPXSnapshot } from './spx';
-import type { SPXSnapshot, Setup } from './spx/types';
+import type { CoachMessage, SPXSnapshot, Setup } from './spx/types';
 
 // ============================================
 // TYPES
@@ -468,8 +469,27 @@ function coachMessageSignature(messages: SPXSnapshot['coachMessages']): string {
   if (messages.length === 0) return '';
   return messages
     .slice(0, 3)
-    .map((msg) => `${msg.type}|${msg.priority}|${msg.setupId || 'none'}|${msg.content}`)
+    .map((msg) => `${msg.id}|${msg.type}|${msg.priority}|${msg.setupId || 'none'}|${msg.timestamp}|${msg.content}`)
     .join(';');
+}
+
+function toCoachChannelPayload(message: CoachMessage, source: 'snapshot' | 'transition'): Record<string, unknown> {
+  const structuredData = message.structuredData && typeof message.structuredData === 'object'
+    ? message.structuredData
+    : {};
+
+  return {
+    id: message.id,
+    type: message.type,
+    content: message.content,
+    setupId: message.setupId,
+    priority: message.priority,
+    structuredData: {
+      ...structuredData,
+      transportSource: source,
+    },
+    timestamp: message.timestamp,
+  };
 }
 
 function diffLevels(
@@ -710,6 +730,14 @@ function broadcastSetupTransition(event: SetupTransitionEvent): void {
   });
 }
 
+function broadcastExecutionDirective(event: SetupTransitionEvent): void {
+  if (!hasSubscribersForChannel('coach:message')) return;
+  const directiveMessage = buildExecutionCoachMessageFromTransition(event);
+  if (!directiveMessage) return;
+
+  broadcastChannelMessage('coach:message', 'spx_coach', toCoachChannelPayload(directiveMessage, 'transition'));
+}
+
 function broadcastSetupUpdate(update: SetupStatusUpdate): void {
   const channel = toSetupChannel(update.userId);
   const message = JSON.stringify({
@@ -948,12 +976,7 @@ async function sendInitialSPXChannelSnapshot(
   if (channels.has('coach:message')) {
     const latest = snapshot.coachMessages[0];
     if (latest) {
-      sendChannelPayloadToClient(ws, 'coach:message', 'spx_coach', {
-        type: latest.type,
-        content: latest.content,
-        setupId: latest.setupId,
-        priority: latest.priority,
-      });
+      sendChannelPayloadToClient(ws, 'coach:message', 'spx_coach', toCoachChannelPayload(latest, 'snapshot'));
     }
   }
 }
@@ -1236,12 +1259,7 @@ async function broadcastSPXChannels(): Promise<void> {
   if (hasSubscribersForChannel('coach:message') && nextCoachSignature !== lastCoachMessageSignature) {
     const latest = snapshotWithTickSetups.coachMessages[0];
     if (latest) {
-      broadcastChannelMessage('coach:message', 'spx_coach', {
-        type: latest.type,
-        content: latest.content,
-        setupId: latest.setupId,
-        priority: latest.priority,
-      });
+      broadcastChannelMessage('coach:message', 'spx_coach', toCoachChannelPayload(latest, 'snapshot'));
     }
     lastCoachMessageSignature = nextCoachSignature;
   }
@@ -1414,6 +1432,7 @@ export function initWebSocket(server: HTTPServer): void {
     const transitions = evaluateTickSetupTransitions(tick);
     for (const transition of transitions) {
       broadcastSetupTransition(transition);
+      broadcastExecutionDirective(transition);
     }
     void persistSetupTransitionsForWinRate(transitions).catch((error) => {
       logger.warn('Failed to persist SPX setup transitions for win-rate tracking', {

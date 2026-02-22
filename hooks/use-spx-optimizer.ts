@@ -57,6 +57,44 @@ export interface SPXOptimizerDriftAlert {
   action: 'pause'
 }
 
+export interface SPXOptimizerDataQuality {
+  failClosedActive: boolean
+  gatePassed: boolean
+  reasons: string[]
+  sourceUsed: 'spx_setup_instances' | 'ai_coach_tracked_setups' | 'none' | 'unknown'
+  requestedResolution: 'second'
+  resolutionUsed: 'second' | 'minute' | 'none' | 'unknown'
+  fallbackSessionCount: number
+  missingBarsSessionCount: number
+  setupCount: number
+  evaluatedSetupCount: number
+  skippedSetupCount: number
+  optimizerRows: number
+  overrideRows: number
+  overrideMatchedRows: number
+  overrideCoveragePct: number
+  optionsReplayAvailable: boolean
+  optionsReplayCoveragePct: number | null
+  optionsReplayCoverageFloorPct: number
+  optionsReplayCoverageValid: boolean | null
+  optionsReplayReplayedTrades: number
+  optionsReplayUniverse: number
+  executionFillTableAvailable: boolean
+  executionTriggeredTradeCount: number
+  executionTradesWithAnyFill: number
+  executionTradesWithEntryFill: number
+  executionTradesWithExitFill: number
+  executionTradesWithNonProxyFill: number
+  executionCoveragePct: number
+  executionEntryCoveragePct: number
+  executionExitCoveragePct: number
+  executionNonProxyCoveragePct: number
+  executionEntryAvgSlippagePts: number | null
+  executionExitAvgSlippagePts: number | null
+  executionEntryAvgSlippageBps: number | null
+  executionExitAvgSlippageBps: number | null
+}
+
 export interface SPXOptimizerScorecard {
   generatedAt: string
   scanRange: { from: string; to: string }
@@ -80,6 +118,7 @@ export interface SPXOptimizerScorecard {
     remove: string[]
   }
   optimizationApplied: boolean
+  dataQuality?: SPXOptimizerDataQuality
   notes: string[]
 }
 

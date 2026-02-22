@@ -1,4 +1,5 @@
 import {
+  type SPXBacktestExecutionBasis,
   runSPXWinRateBacktest,
   type SPXBacktestPriceResolution,
   type SPXWinRateBacktestSource,
@@ -26,6 +27,8 @@ function getLastCompletedWeekRangeET(now: Date = new Date()): { from: string; to
 async function main() {
   const sourceArg = (process.argv[2] || 'instances').trim().toLowerCase();
   const resolutionArg = (process.argv[3] || 'second').trim().toLowerCase();
+  const basisArg = (process.argv[4] || 'underlying').trim().toLowerCase();
+  const strictBarsArg = (process.argv[5] || 'true').trim().toLowerCase();
   const source: SPXWinRateBacktestSource = sourceArg === 'instances'
     ? 'spx_setup_instances'
     : sourceArg === 'legacy'
@@ -36,6 +39,12 @@ async function main() {
     : resolutionArg === 'minute'
       ? 'minute'
       : 'auto';
+  const executionBasis: SPXBacktestExecutionBasis = basisArg === 'options'
+    || basisArg === 'options_contract'
+    || basisArg === 'contract'
+    ? 'options_contract'
+    : 'underlying';
+  const strictBars = strictBarsArg === 'false' ? false : true;
 
   const { from, to } = getLastCompletedWeekRangeET();
   const optimizerProfile = await getActiveSPXOptimizationProfile();
@@ -44,9 +53,13 @@ async function main() {
     to,
     source,
     resolution,
+    executionBasis,
     executionModel: {
       partialAtT1Pct: optimizerProfile.tradeManagement.partialAtT1Pct,
       moveStopToBreakevenAfterT1: optimizerProfile.tradeManagement.moveStopToBreakeven,
+    },
+    optionsReplay: {
+      strictBars,
     },
   });
 

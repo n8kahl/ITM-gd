@@ -68,6 +68,50 @@ interface RealtimeMicrobar {
 }
 
 type TradeMode = 'scan' | 'in_trade'
+type ExecutionFillSide = 'entry' | 'partial' | 'exit'
+type ExecutionFillSource = 'proxy' | 'manual' | 'broker_tradier' | 'broker_other'
+type ExecutionTransitionPhase = 'triggered' | 'target1_hit' | 'target2_hit' | 'invalidated' | 'expired'
+
+interface ExecutionFillReference {
+  transitionEventId: string
+  phase: ExecutionTransitionPhase
+  reason: 'entry' | 'stop' | 'target1' | 'target2'
+  price: number
+  timestamp: string
+}
+
+interface ExecutionFillReconciliation {
+  persisted: boolean
+  tableAvailable: boolean
+  fillId: number | null
+  setupId: string
+  sessionDate: string
+  side: ExecutionFillSide
+  phase: ExecutionTransitionPhase | null
+  source: ExecutionFillSource
+  fillPrice: number
+  fillQuantity: number | null
+  executedAt: string
+  direction: Setup['direction'] | null
+  reference: ExecutionFillReference | null
+  slippagePoints: number | null
+  slippageBps: number | null
+}
+
+interface SPXBrokerFillEventDetail {
+  setupId?: string
+  side?: ExecutionFillSide
+  fillPrice?: number
+  fillQuantity?: number
+  phase?: ExecutionTransitionPhase
+  direction?: Setup['direction']
+  source?: ExecutionFillSource | 'tradier'
+  executedAt?: string
+  transitionEventId?: string
+  brokerOrderId?: string
+  brokerExecutionId?: string
+  metadata?: Record<string, unknown>
+}
 
 interface SPXCommandCenterState {
   dataHealth: 'healthy' | 'degraded' | 'stale'
@@ -468,6 +512,62 @@ function setupAlertSummary(setup: Setup): string {
   return `${side} ${humanizeSetupType(setup.type)} | entry ${entry} | stop ${setup.stop.toFixed(2)} | T1 ${setup.target1.price.toFixed(2)} | T2 ${setup.target2.price.toFixed(2)}`
 }
 
+type ExecutionSlippageSide = ExecutionFillSide
+
+function computeDirectionalSlippagePoints(input: {
+  side: ExecutionSlippageSide
+  direction: Setup['direction']
+  referencePrice: number
+  actualPrice: number
+}): number {
+  const sideMultiplier = input.side === 'entry' ? 1 : -1
+  const directionalMove = input.direction === 'bullish'
+    ? input.actualPrice - input.referencePrice
+    : input.referencePrice - input.actualPrice
+  return roundTo(directionalMove * sideMultiplier, 2)
+}
+
+function signedPointLabel(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
+}
+
+function resolveExitReference(setup: Setup, exitPrice: number): { label: string; price: number } {
+  if (setup.status === 'invalidated') {
+    return { label: 'stop', price: setup.stop }
+  }
+  if (setup.status === 'expired') {
+    return { label: setup.target2.label || 'T2', price: setup.target2.price }
+  }
+
+  const candidates = [
+    { label: 'stop', price: setup.stop },
+    { label: setup.target1.label || 'T1', price: setup.target1.price },
+    { label: setup.target2.label || 'T2', price: setup.target2.price },
+  ]
+
+  return candidates.reduce((best, candidate) => (
+    Math.abs(candidate.price - exitPrice) < Math.abs(best.price - exitPrice) ? candidate : best
+  ))
+}
+
+function defaultPhaseForSide(side: ExecutionFillSide): ExecutionTransitionPhase {
+  if (side === 'entry') return 'triggered'
+  if (side === 'partial') return 'target1_hit'
+  return 'target2_hit'
+}
+
+function phaseLabel(phase: ExecutionTransitionPhase | null | undefined): string {
+  if (!phase) return 'reference'
+  return phase.replace(/_/g, ' ')
+}
+
+function sourceLabel(source: ExecutionFillSource): string {
+  if (source === 'broker_tradier') return 'Tradier'
+  if (source === 'broker_other') return 'Broker'
+  if (source === 'manual') return 'Manual'
+  return 'Proxy'
+}
+
 const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null)
 
 export function SPXCommandCenterProvider({ children }: { children: React.ReactNode }) {
@@ -650,11 +750,19 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         : ''
       if (!content) return
 
-      const timestamp = typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString()
+      const payloadStructuredData = (payload as { structuredData?: unknown }).structuredData
+      const normalizedStructuredData = payloadStructuredData && typeof payloadStructuredData === 'object' && !Array.isArray(payloadStructuredData)
+        ? (payloadStructuredData as Record<string, unknown>)
+        : {}
+      const timestamp = typeof (payload as { timestamp?: unknown }).timestamp === 'string'
+        ? (payload as { timestamp: string }).timestamp
+        : (typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString())
       const setupId = typeof (payload as { setupId?: unknown }).setupId === 'string'
         ? (payload as { setupId: string }).setupId
         : null
-      const messageId = `coach_ws_${timestamp}_${setupId || 'global'}_${content.slice(0, 24)}`
+      const messageId = typeof (payload as { id?: unknown }).id === 'string' && (payload as { id: string }).id.trim().length > 0
+        ? (payload as { id: string }).id
+        : `coach_ws_${timestamp}_${setupId || 'global'}_${content.slice(0, 24)}`
 
       const coachMessage: CoachMessage = {
         id: messageId,
@@ -665,7 +773,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         setupId,
         content,
         structuredData: {
-          source: 'ws',
+          ...normalizedStructuredData,
+          source: typeof normalizedStructuredData.source === 'string' ? normalizedStructuredData.source : 'ws',
+          transport: 'websocket',
           channel: typeof message.channel === 'string' ? message.channel : 'coach:message',
         },
         timestamp,
@@ -1176,6 +1286,199 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       .filter((level) => (showSPYDerived ? true : level.category !== 'spy_derived'))
   }, [allLevels, showSPYDerived, visibleLevelCategories])
 
+  const appendEphemeralCoachMessage = useCallback((message: CoachMessage) => {
+    setEphemeralCoachMessages((previous) => {
+      const deduped = new Map<string, CoachMessage>()
+      for (const item of [message, ...previous]) {
+        if (!item?.id) continue
+        deduped.set(item.id, item)
+      }
+      return Array.from(deduped.values())
+        .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+        .slice(0, 80)
+    })
+  }, [])
+
+  const reportExecutionFill = useCallback(async (input: {
+    setupId: string
+    side: ExecutionFillSide
+    fillPrice: number
+    fillQuantity?: number
+    direction?: Setup['direction']
+    phase?: ExecutionTransitionPhase
+    source: ExecutionFillSource
+    executedAt?: string
+    transitionEventId?: string
+    brokerOrderId?: string
+    brokerExecutionId?: string
+    metadata?: Record<string, unknown>
+  }): Promise<ExecutionFillReconciliation | null> => {
+    if (!accessToken) {
+      return null
+    }
+
+    try {
+      const reconciliation = await postSPX<ExecutionFillReconciliation>('/api/spx/execution/fills', accessToken, {
+        setupId: input.setupId,
+        side: input.side,
+        fillPrice: input.fillPrice,
+        fillQuantity: input.fillQuantity,
+        direction: input.direction,
+        phase: input.phase,
+        source: input.source,
+        executedAt: input.executedAt,
+        transitionEventId: input.transitionEventId,
+        brokerOrderId: input.brokerOrderId,
+        brokerExecutionId: input.brokerExecutionId,
+        metadata: input.metadata,
+      })
+
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.EXECUTION_FILL_REPORTED, {
+        setupId: input.setupId,
+        side: input.side,
+        source: input.source,
+        persisted: reconciliation.persisted,
+        tableAvailable: reconciliation.tableAvailable,
+        reconciled: Boolean(reconciliation.reference),
+        slippagePoints: reconciliation.slippagePoints,
+      }, { persist: true })
+
+      if (reconciliation.reference && reconciliation.slippagePoints != null) {
+        trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.EXECUTION_FILL_RECONCILED, {
+          setupId: input.setupId,
+          side: input.side,
+          source: input.source,
+          phase: reconciliation.reference.phase,
+          slippagePoints: reconciliation.slippagePoints,
+          slippageBps: reconciliation.slippageBps,
+        }, { persist: true })
+      }
+
+      return reconciliation
+    } catch (error) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.EXECUTION_FILL_REPORT_FAILED, {
+        setupId: input.setupId,
+        side: input.side,
+        source: input.source,
+        message: error instanceof Error ? error.message : 'execution_fill_report_failed',
+      }, { level: 'warning', persist: true })
+      return null
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleBrokerFill = (event: Event) => {
+      const detail = (event as CustomEvent<SPXBrokerFillEventDetail>).detail
+      if (!detail || typeof detail !== 'object') return
+
+      const setupId = typeof detail.setupId === 'string' ? detail.setupId.trim() : ''
+      if (!setupId) return
+
+      const side: ExecutionFillSide = detail.side === 'entry' || detail.side === 'partial' || detail.side === 'exit'
+        ? detail.side
+        : 'entry'
+
+      const fillPrice = typeof detail.fillPrice === 'number' && Number.isFinite(detail.fillPrice) && detail.fillPrice > 0
+        ? detail.fillPrice
+        : null
+      if (fillPrice == null) return
+
+      const setup = activeSetupsRef.current.find((candidate) => candidate.id === setupId)
+        || (inTradeSetupRef.current?.id === setupId ? inTradeSetupRef.current : null)
+      const direction = detail.direction === 'bullish' || detail.direction === 'bearish'
+        ? detail.direction
+        : setup?.direction
+      if (!direction) return
+
+      const phase = detail.phase || defaultPhaseForSide(side)
+      const source: ExecutionFillSource = detail.source === 'broker_other'
+        ? 'broker_other'
+        : detail.source === 'manual'
+          ? 'manual'
+          : detail.source === 'proxy'
+            ? 'proxy'
+            : 'broker_tradier'
+      const executedAt = typeof detail.executedAt === 'string' && detail.executedAt.trim().length > 0
+        ? detail.executedAt
+        : new Date().toISOString()
+
+      if (side === 'entry' && inTradeSetupIdRef.current === setupId) {
+        setTradeEntryPrice(fillPrice)
+        setTradeEnteredAt(executedAt)
+      }
+
+      void (async () => {
+        const fallbackReferencePrice = setup
+          ? (
+            side === 'entry'
+              ? (setup.entryZone.low + setup.entryZone.high) / 2
+              : side === 'partial'
+                ? setup.target1.price
+                : resolveExitReference(setup, fillPrice).price
+          )
+          : fillPrice
+        const fallbackSlippagePoints = computeDirectionalSlippagePoints({
+          side,
+          direction,
+          referencePrice: fallbackReferencePrice,
+          actualPrice: fillPrice,
+        })
+
+        const reconciliation = await reportExecutionFill({
+          setupId,
+          side,
+          fillPrice,
+          fillQuantity: typeof detail.fillQuantity === 'number' && Number.isFinite(detail.fillQuantity)
+            ? detail.fillQuantity
+            : undefined,
+          direction,
+          phase,
+          source,
+          executedAt,
+          transitionEventId: typeof detail.transitionEventId === 'string' ? detail.transitionEventId : undefined,
+          brokerOrderId: typeof detail.brokerOrderId === 'string' ? detail.brokerOrderId : undefined,
+          brokerExecutionId: typeof detail.brokerExecutionId === 'string' ? detail.brokerExecutionId : undefined,
+          metadata: detail.metadata,
+        })
+
+        const referencePrice = reconciliation?.reference?.price ?? fallbackReferencePrice
+        const slippagePoints = reconciliation?.slippagePoints ?? fallbackSlippagePoints
+        const referencePhase = reconciliation?.reference?.phase || phase
+        const fillSource = reconciliation?.source || source
+
+        appendEphemeralCoachMessage({
+          id: `coach_exec_broker_fill_${setupId}_${side}_${Date.now()}`,
+          type: side === 'entry' ? 'in_trade' : 'post_trade',
+          priority: 'setup',
+          setupId,
+          content: `Execution reconciled (${sourceLabel(fillSource)}): ${side.toUpperCase()} fill ${fillPrice.toFixed(2)} vs ${phaseLabel(referencePhase).toUpperCase()} reference ${referencePrice.toFixed(2)} (${signedPointLabel(slippagePoints)} pts slippage).`,
+          structuredData: {
+            source: 'execution_reconciliation',
+            action: 'broker_fill_reconciled',
+            setupId,
+            side,
+            direction,
+            actualPrice: roundTo(fillPrice, 2),
+            referencePrice: roundTo(referencePrice, 2),
+            referencePhase,
+            slippagePoints: roundTo(slippagePoints, 2),
+            slippageBps: reconciliation?.slippageBps ?? null,
+            fillSource,
+            reconciliation,
+          },
+          timestamp: reconciliation?.executedAt || executedAt,
+        })
+      })()
+    }
+
+    window.addEventListener('spx:broker-fill', handleBrokerFill as EventListener)
+    return () => {
+      window.removeEventListener('spx:broker-fill', handleBrokerFill as EventListener)
+    }
+  }, [appendEphemeralCoachMessage, reportExecutionFill])
+
   const coachMessages = useMemo(() => {
     const snapshotMessages = snapshotData?.coachMessages || []
     const deduped = new Map<string, CoachMessage>()
@@ -1557,6 +1860,59 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       contractMid: entryContractMid,
     }, { persist: true })
 
+    void (async () => {
+      const fallbackReferencePrice = (target.entryZone.low + target.entryZone.high) / 2
+      const fallbackSlippagePoints = computeDirectionalSlippagePoints({
+        side: 'entry',
+        direction: target.direction,
+        referencePrice: fallbackReferencePrice,
+        actualPrice: entryPrice,
+      })
+
+      const reconciliation = await reportExecutionFill({
+        setupId: target.id,
+        side: 'entry',
+        fillPrice: entryPrice,
+        direction: target.direction,
+        phase: 'triggered',
+        source: 'proxy',
+        executedAt: enteredAt,
+        metadata: {
+          trigger: 'trade_focus_enter',
+          setupType: target.type,
+          setupStatus: target.status,
+        },
+      })
+
+      const referencePrice = reconciliation?.reference?.price ?? fallbackReferencePrice
+      const slippagePoints = reconciliation?.slippagePoints ?? fallbackSlippagePoints
+      const referencePhase = reconciliation?.reference?.phase || defaultPhaseForSide('entry')
+      const fillSource = reconciliation?.source || 'proxy'
+
+      appendEphemeralCoachMessage({
+        id: `coach_exec_confirm_enter_${target.id}_${Date.now()}`,
+        type: 'in_trade',
+        priority: 'setup',
+        setupId: target.id,
+        content: `Execution confirmed (${sourceLabel(fillSource)}): ENTER at ${entryPrice.toFixed(2)} vs ${phaseLabel(referencePhase).toUpperCase()} reference ${referencePrice.toFixed(2)} (${signedPointLabel(slippagePoints)} pts slippage).`,
+        structuredData: {
+          source: 'execution_confirmation',
+          action: 'enter_confirmed',
+          setupId: target.id,
+          setupDirection: target.direction,
+          setupType: target.type,
+          actualPrice: roundTo(entryPrice, 2),
+          referencePrice: roundTo(referencePrice, 2),
+          referencePhase,
+          slippagePoints: roundTo(slippagePoints, 2),
+          slippageBps: reconciliation?.slippageBps ?? null,
+          fillSource,
+          reconciliation,
+        },
+        timestamp: reconciliation?.executedAt || enteredAt,
+      })
+    })()
+
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_MOBILE_FOCUS_CHANGED, {
         action: 'enter',
@@ -1565,7 +1921,15 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
         mobileFullTradeFocusEnabled: uxFlags.mobileFullTradeFocus,
       }, { persist: true })
     }
-  }, [selectedContractBySetupId, selectedSetup, selectedSetupContract, spxPrice, uxFlags.mobileFullTradeFocus])
+  }, [
+    appendEphemeralCoachMessage,
+    reportExecutionFill,
+    selectedContractBySetupId,
+    selectedSetup,
+    selectedSetupContract,
+    spxPrice,
+    uxFlags.mobileFullTradeFocus,
+  ])
 
   const exitTrade = useCallback(() => {
     if (!inTradeSetupId) return
@@ -1588,6 +1952,66 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       coachDecision: exitDecision,
     })
     persistSPXTradeJournalArtifact(artifact)
+
+    if (exitingSetup && exitPrice != null) {
+      const exitTimestamp = new Date().toISOString()
+      void (async () => {
+        const fallbackReference = resolveExitReference(exitingSetup, exitPrice)
+        const fallbackSlippagePoints = computeDirectionalSlippagePoints({
+          side: 'exit',
+          direction: exitingSetup.direction,
+          referencePrice: fallbackReference.price,
+          actualPrice: exitPrice,
+        })
+
+        const fallbackPhase: ExecutionTransitionPhase = exitingSetup.status === 'invalidated'
+          ? 'invalidated'
+          : 'target2_hit'
+
+        const reconciliation = await reportExecutionFill({
+          setupId: exitingSetupId,
+          side: 'exit',
+          fillPrice: exitPrice,
+          direction: exitingSetup.direction,
+          phase: fallbackPhase,
+          source: 'proxy',
+          executedAt: exitTimestamp,
+          metadata: {
+            trigger: 'trade_focus_exit',
+            setupType: exitingSetup.type,
+            setupStatus: exitingSetup.status,
+          },
+        })
+
+        const referencePrice = reconciliation?.reference?.price ?? fallbackReference.price
+        const slippagePoints = reconciliation?.slippagePoints ?? fallbackSlippagePoints
+        const referencePhase = reconciliation?.reference?.phase || fallbackPhase
+        const fillSource = reconciliation?.source || 'proxy'
+
+        appendEphemeralCoachMessage({
+          id: `coach_exec_confirm_exit_${exitingSetupId}_${Date.now()}`,
+          type: 'post_trade',
+          priority: 'setup',
+          setupId: exitingSetupId,
+          content: `Execution confirmed (${sourceLabel(fillSource)}): EXIT at ${exitPrice.toFixed(2)} vs ${phaseLabel(referencePhase).toUpperCase()} reference ${referencePrice.toFixed(2)} (${signedPointLabel(slippagePoints)} pts slippage).`,
+          structuredData: {
+            source: 'execution_confirmation',
+            action: 'exit_confirmed',
+            setupId: exitingSetupId,
+            setupDirection: exitingSetup.direction,
+            setupType: exitingSetup.type,
+            actualPrice: roundTo(exitPrice, 2),
+            referenceLabel: phaseLabel(referencePhase),
+            referencePrice: roundTo(referencePrice, 2),
+            slippagePoints: roundTo(slippagePoints, 2),
+            slippageBps: reconciliation?.slippageBps ?? null,
+            fillSource,
+            reconciliation,
+          },
+          timestamp: reconciliation?.executedAt || exitTimestamp,
+        })
+      })()
+    }
 
     setInTradeSetupId(null)
     setInTradeContract(null)
@@ -1617,7 +2041,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       }, { persist: true })
     }
   }, [
+    appendEphemeralCoachMessage,
     inTradeSetupId,
+    reportExecutionFill,
     selectedTimeframe,
     spxPrice,
     tradeEnteredAt,

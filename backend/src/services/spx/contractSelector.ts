@@ -22,6 +22,8 @@ const LATE_DAY_FILTER_MINUTE_ET = 14 * 60;
 const LATE_DAY_MAX_SPREAD_PCT = 0.18;
 const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;
 const LATE_DAY_MIN_OPEN_INTEREST = 250;
+const CONTRACT_EXPIRY_LOOKAHEAD_DAYS = 7;
+const CONTRACT_EXPIRY_LOOKAHEAD_MAX_PAGES = 2;
 interface RankedContract {
   contract: OptionContract;
   score: number;
@@ -400,7 +402,13 @@ function topRankedContracts(setup: Setup, contracts: OptionContract[], now: Date
 }
 
 async function resolveTargetExpiry(symbol: string, now: Date): Promise<string | undefined> {
-  const expirations = await fetchExpirationDates(symbol);
+  let expirations = await fetchExpirationDates(symbol, {
+    maxDaysAhead: CONTRACT_EXPIRY_LOOKAHEAD_DAYS,
+    maxPages: CONTRACT_EXPIRY_LOOKAHEAD_MAX_PAGES,
+  });
+  if (expirations.length === 0) {
+    expirations = await fetchExpirationDates(symbol);
+  }
   if (!Array.isArray(expirations) || expirations.length === 0) {
     return undefined;
   }

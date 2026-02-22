@@ -125,6 +125,24 @@ function buildCacheKey(symbol: string, options: Required<Pick<CalculateGEXOption
   return `options:gex:${symbol}:${options.expiry || 'multi'}:${options.strikeRange}:${options.maxExpirations}`;
 }
 
+async function resolveExpirationsForGex(symbol: string, maxExpirations: number): Promise<string[]> {
+  if (maxExpirations <= 1) {
+    const fastPath = await fetchExpirationDates(symbol, {
+      maxDaysAhead: 7,
+      maxPages: 1,
+    });
+    if (fastPath.length > 0) {
+      return fastPath.slice(0, 1);
+    }
+  }
+
+  const standard = await fetchExpirationDates(symbol, {
+    maxDaysAhead: 30,
+    maxPages: 4,
+  });
+  return standard.slice(0, maxExpirations);
+}
+
 export async function calculateGEXProfile(
   symbolInput: string,
   options?: CalculateGEXOptions,
@@ -148,7 +166,7 @@ export async function calculateGEXProfile(
 
   const expirations = options?.expiry
     ? [options.expiry]
-    : (await fetchExpirationDates(symbol)).slice(0, maxExpirations);
+    : await resolveExpirationsForGex(symbol, maxExpirations);
 
   if (expirations.length === 0) {
     throw new Error(`No options expirations found for ${symbol}`);

@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import dotenv from 'dotenv';
 import { logger } from '../lib/logger';
 import { formatMassiveTicker } from '../lib/symbols';
@@ -95,6 +95,9 @@ export interface MassiveGroupedDailyResult {
 }
 
 const MASSIVE_BASE_URL = 'https://api.massive.com';
+const MASSIVE_RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
+const MASSIVE_DEFAULT_MAX_ATTEMPTS = 3;
+const MASSIVE_DEFAULT_RETRY_BASE_DELAY_MS = 300;
 
 let benzingaAvailabilityCached: boolean | null = null;
 let benzingaAvailabilityCheckPromise: Promise<boolean> | null = null;
@@ -130,6 +133,12 @@ massiveClient.interceptors.request.use(
 
 function getCurrentEasternDate(now: Date = new Date()): string {
   return toEasternTime(now).dateStr;
+}
+
+function addDaysToEasternDate(dateStr: string, days: number): string {
+  const base = new Date(`${dateStr}T12:00:00.000Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
 }
 
 function normalizeOptionsUnderlyingTicker(underlyingTicker: string): string {
@@ -168,6 +177,79 @@ massiveClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableMassiveError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as {
+    code?: string;
+    response?: {
+      status?: number;
+    };
+  };
+
+  const status = maybeError.response?.status;
+  if (typeof status === 'number' && MASSIVE_RETRYABLE_HTTP_STATUS.has(status)) {
+    return true;
+  }
+
+  const code = (maybeError.code || '').toUpperCase();
+  return (
+    code === 'ECONNABORTED'
+    || code === 'ECONNRESET'
+    || code === 'ETIMEDOUT'
+    || code === 'EAI_AGAIN'
+    || code === 'ENOTFOUND'
+  );
+}
+
+async function massiveGetWithRetry<T>(
+  url: string,
+  config?: AxiosRequestConfig,
+  options?: {
+    maxAttempts?: number;
+    baseDelayMs?: number;
+    context?: Record<string, unknown>;
+  },
+): Promise<AxiosResponse<T>> {
+  const maxAttempts = Number.isFinite(options?.maxAttempts)
+    ? Math.max(1, Math.floor(options?.maxAttempts as number))
+    : MASSIVE_DEFAULT_MAX_ATTEMPTS;
+  const baseDelayMs = Number.isFinite(options?.baseDelayMs)
+    ? Math.max(50, Math.floor(options?.baseDelayMs as number))
+    : MASSIVE_DEFAULT_RETRY_BASE_DELAY_MS;
+  let attempt = 1;
+
+  while (true) {
+    try {
+      return await massiveClient.get<T>(url, config);
+    } catch (error) {
+      if (attempt >= maxAttempts || !isRetryableMassiveError(error)) {
+        throw error;
+      }
+
+      const delayMs = baseDelayMs * (2 ** (attempt - 1)) + Math.floor(Math.random() * 120);
+      logger.warn('Massive.com API request retrying', {
+        url,
+        attempt,
+        maxAttempts,
+        delayMs,
+        status: (error as any)?.response?.status,
+        code: (error as any)?.code,
+        ...(options?.context || {}),
+      });
+
+      await sleep(delayMs);
+      attempt += 1;
+    }
+  }
+}
 
 export interface MassiveEarnings {
   ticker: string;
@@ -279,7 +361,7 @@ export async function getAggregates(
   to: string
 ): Promise<MassiveAggregatesResponse> {
   try {
-    const response = await massiveClient.get<MassiveAggregatesResponse>(
+    const response = await massiveGetWithRetry<MassiveAggregatesResponse>(
       `/v2/aggs/ticker/${ticker}/range/${multiplier}/${timespan}/${from}/${to}`,
       {
         params: {
@@ -287,7 +369,10 @@ export async function getAggregates(
           sort: 'asc',
           limit: 50000
         }
-      }
+      },
+      {
+        context: { ticker, multiplier, timespan, from, to },
+      },
     );
     return response.data;
   } catch (error: any) {
@@ -618,6 +703,19 @@ export interface OptionsSnapshotResponse {
   next_url?: string;
 }
 
+export interface OptionsSnapshotQueryOptions {
+  limit?: number;
+  maxPages?: number;
+  expirationDateGte?: string;
+  expirationDateLte?: string;
+}
+
+export interface OptionsExpirationsQueryOptions {
+  asOfDate?: string;
+  maxDaysAhead?: number;
+  maxPages?: number;
+}
+
 export interface MassiveTickerReference {
   ticker: string;
   name?: string;
@@ -637,7 +735,8 @@ interface MassiveTickerSearchResponse {
 export async function getOptionsContracts(
   underlyingTicker: string,
   expirationDate?: string,
-  limit: number = 250
+  limit: number = 250,
+  asOfDate?: string,
 ): Promise<OptionsContract[]> {
   try {
     const normalizedUnderlyingTicker = normalizeOptionsUnderlyingTicker(underlyingTicker);
@@ -652,10 +751,21 @@ export async function getOptionsContracts(
     if (expirationDate) {
       params.expiration_date = expirationDate;
     }
+    if (asOfDate) {
+      params.as_of = asOfDate;
+    }
 
-    const response = await massiveClient.get<OptionsContractsResponse>(
+    const response = await massiveGetWithRetry<OptionsContractsResponse>(
       '/v3/reference/options/contracts',
-      { params }
+      { params },
+      {
+        context: {
+          endpoint: 'options/contracts',
+          underlyingTicker: normalizedUnderlyingTicker,
+          expirationDate: expirationDate || null,
+          asOfDate: asOfDate || null,
+        },
+      },
     );
 
     // Without a specific expiry we only need a single page in most call-sites.
@@ -669,7 +779,19 @@ export async function getOptionsContracts(
     let page = 1;
 
     while (nextUrl && page < MAX_PAGES) {
-      const nextResponse = await massiveClient.get<OptionsContractsResponse>(nextUrl);
+      const nextResponse = await massiveGetWithRetry<OptionsContractsResponse>(
+        nextUrl,
+        undefined,
+        {
+          context: {
+            endpoint: 'options/contracts',
+            underlyingTicker: normalizedUnderlyingTicker,
+            expirationDate: expirationDate || null,
+            asOfDate: asOfDate || null,
+            page: page + 1,
+          },
+        },
+      );
       contracts.push(...(nextResponse.data.results || []));
       nextUrl = nextResponse.data.next_url;
       page += 1;
@@ -692,11 +814,17 @@ export async function getOptionsContracts(
 // Get options snapshot (price, Greeks, IV)
 export async function getOptionsSnapshot(
   underlyingTicker: string,
-  optionTicker?: string
+  optionTicker?: string,
+  queryOptions?: OptionsSnapshotQueryOptions,
 ): Promise<OptionsSnapshot[]> {
   try {
     const snapshotUnderlyingTicker = toOptionsSnapshotUnderlyingTicker(underlyingTicker);
-    const maxPages = getOptionsSnapshotMaxPages();
+    const maxPages = Number.isFinite(queryOptions?.maxPages)
+      ? Math.min(Math.max(Math.floor(queryOptions?.maxPages as number), 1), 1000)
+      : getOptionsSnapshotMaxPages();
+    const safeLimit = Number.isFinite(queryOptions?.limit)
+      ? Math.min(Math.max(Math.floor(queryOptions?.limit as number), 1), 250)
+      : 250;
     const normalizeResults = (results: OptionsSnapshot[] | OptionsSnapshot | null | undefined): OptionsSnapshot[] => {
       if (!results) return [];
       return Array.isArray(results) ? results : [results];
@@ -707,11 +835,25 @@ export async function getOptionsSnapshot(
       ? `/v3/snapshot/options/${snapshotUnderlyingTicker}/${optionTicker}`
       : `/v3/snapshot/options/${snapshotUnderlyingTicker}`;
 
-    const response = await massiveClient.get<OptionsSnapshotResponse>(url, optionTicker ? undefined : {
-      params: {
-        limit: 250,
+    const response = await massiveGetWithRetry<OptionsSnapshotResponse>(
+      url,
+      optionTicker ? undefined : {
+        params: {
+          limit: safeLimit,
+          ...(queryOptions?.expirationDateGte ? { 'expiration_date.gte': queryOptions.expirationDateGte } : {}),
+          ...(queryOptions?.expirationDateLte ? { 'expiration_date.lte': queryOptions.expirationDateLte } : {}),
+        },
       },
-    });
+      {
+        context: {
+          endpoint: 'snapshot/options',
+          underlyingTicker: snapshotUnderlyingTicker,
+          optionTicker: optionTicker || null,
+          expirationDateGte: queryOptions?.expirationDateGte || null,
+          expirationDateLte: queryOptions?.expirationDateLte || null,
+        },
+      },
+    );
 
     const firstPage = normalizeResults(response.data.results);
     if (optionTicker) {
@@ -723,7 +865,17 @@ export async function getOptionsSnapshot(
     let page = 1;
 
     while (nextUrl && page < maxPages) {
-      const nextResponse = await massiveClient.get<OptionsSnapshotResponse>(nextUrl);
+      const nextResponse = await massiveGetWithRetry<OptionsSnapshotResponse>(
+        nextUrl,
+        undefined,
+        {
+          context: {
+            endpoint: 'snapshot/options',
+            underlyingTicker: snapshotUnderlyingTicker,
+            page: page + 1,
+          },
+        },
+      );
       snapshots.push(...normalizeResults(nextResponse.data.results));
       nextUrl = nextResponse.data.next_url;
       page += 1;
@@ -769,9 +921,20 @@ export async function getOptionsSnapshotAtDate(
       baseParams.limit = 250;
     }
 
-    const response = await massiveClient.get<OptionsSnapshotResponse>(url, {
-      params: baseParams,
-    });
+    const response = await massiveGetWithRetry<OptionsSnapshotResponse>(
+      url,
+      {
+        params: baseParams,
+      },
+      {
+        context: {
+          endpoint: 'snapshot/options/as_of',
+          underlyingTicker: snapshotUnderlyingTicker,
+          optionTicker: optionTicker || null,
+          asOfDate,
+        },
+      },
+    );
 
     const firstPage = normalizeResults(response.data.results);
     if (optionTicker) {
@@ -783,7 +946,18 @@ export async function getOptionsSnapshotAtDate(
     let page = 1;
 
     while (nextUrl && page < maxPages) {
-      const nextResponse = await massiveClient.get<OptionsSnapshotResponse>(nextUrl);
+      const nextResponse = await massiveGetWithRetry<OptionsSnapshotResponse>(
+        nextUrl,
+        undefined,
+        {
+          context: {
+            endpoint: 'snapshot/options/as_of',
+            underlyingTicker: snapshotUnderlyingTicker,
+            asOfDate,
+            page: page + 1,
+          },
+        },
+      );
       snapshots.push(...normalizeResults(nextResponse.data.results));
       nextUrl = nextResponse.data.next_url;
       page += 1;
@@ -809,12 +983,21 @@ export async function getOptionsSnapshotAtDate(
 
 // Get available expiration dates for an underlying
 export async function getOptionsExpirations(
-  underlyingTicker: string
+  underlyingTicker: string,
+  options?: OptionsExpirationsQueryOptions,
 ): Promise<string[]> {
   try {
     const normalizedUnderlyingTicker = normalizeOptionsUnderlyingTicker(underlyingTicker);
-    const today = getCurrentEasternDate();
-    const MAX_PAGES = 20;
+    const today = options?.asOfDate || getCurrentEasternDate();
+    const maxPages = Number.isFinite(options?.maxPages)
+      ? Math.min(Math.max(Math.floor(options?.maxPages as number), 1), 100)
+      : 20;
+    const maxDaysAhead = Number.isFinite(options?.maxDaysAhead)
+      ? Math.max(Math.floor(options?.maxDaysAhead as number), 0)
+      : null;
+    const expirationUpperBound = maxDaysAhead != null
+      ? addDaysToEasternDate(today, maxDaysAhead)
+      : null;
     const expirations = new Set<string>();
 
     let page = 0;
@@ -822,7 +1005,7 @@ export async function getOptionsExpirations(
 
     do {
       const response = page === 0
-        ? await massiveClient.get<OptionsContractsResponse>(
+        ? await massiveGetWithRetry<OptionsContractsResponse>(
           '/v3/reference/options/contracts',
           {
             params: {
@@ -830,26 +1013,51 @@ export async function getOptionsExpirations(
               sort: 'expiration_date',
               order: 'asc',
               'expiration_date.gte': today,
+              ...(expirationUpperBound ? { 'expiration_date.lte': expirationUpperBound } : {}),
               limit: 1000,
             },
           },
+          {
+            context: {
+              endpoint: 'options/contracts/expirations',
+              underlyingTicker: normalizedUnderlyingTicker,
+              asOfDate: today,
+              maxDaysAhead,
+            },
+          },
         )
-        : await massiveClient.get<OptionsContractsResponse>(nextUrl as string);
+        : await massiveGetWithRetry<OptionsContractsResponse>(
+          nextUrl as string,
+          undefined,
+          {
+            context: {
+              endpoint: 'options/contracts/expirations',
+              underlyingTicker: normalizedUnderlyingTicker,
+              asOfDate: today,
+              maxDaysAhead,
+              page: page + 1,
+            },
+          },
+        );
 
       for (const contract of response.data.results || []) {
-        if (contract.expiration_date >= today) {
+        if (
+          contract.expiration_date >= today
+          && (!expirationUpperBound || contract.expiration_date <= expirationUpperBound)
+        ) {
           expirations.add(contract.expiration_date);
         }
       }
 
       nextUrl = response.data.next_url;
       page += 1;
-    } while (nextUrl && page < MAX_PAGES);
+    } while (nextUrl && page < maxPages);
 
     if (nextUrl) {
       logger.warn(`Options expirations pagination truncated for ${normalizedUnderlyingTicker}`, {
         pagesFetched: page,
-        maxPages: MAX_PAGES,
+        maxPages,
+        maxDaysAhead,
       });
     }
 
@@ -866,7 +1074,7 @@ export async function getNearestOptionsExpiration(
   try {
     const normalizedUnderlyingTicker = normalizeOptionsUnderlyingTicker(underlyingTicker);
     const today = getCurrentEasternDate();
-    const response = await massiveClient.get<OptionsContractsResponse>(
+    const response = await massiveGetWithRetry<OptionsContractsResponse>(
       '/v3/reference/options/contracts',
       {
         params: {
@@ -875,6 +1083,13 @@ export async function getNearestOptionsExpiration(
           order: 'asc',
           limit: 1,
           'expiration_date.gte': today,
+        },
+      },
+      {
+        context: {
+          endpoint: 'options/contracts/nearest-expiry',
+          underlyingTicker: normalizedUnderlyingTicker,
+          asOfDate: today,
         },
       },
     );

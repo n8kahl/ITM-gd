@@ -11,7 +11,7 @@ const COACH_CACHE_KEY = 'spx_command_center:coach_state';
 const COACH_CACHE_TTL_SECONDS = 15;
 const COACH_SETUP_TIMEOUT_MS = 3_500;
 const COACH_PREDICTION_TIMEOUT_MS = 2_500;
-const COACH_CONTRACT_TIMEOUT_MS = 1_500;
+const COACH_CONTRACT_TIMEOUT_MS = 2_500;
 let coachInFlight: Promise<{
   messages: CoachMessage[];
   generatedAt: string;
@@ -241,17 +241,20 @@ export async function getCoachState(options?: {
   const messages: CoachMessage[] = [];
 
   if (readySetup) {
-    const contract = await withTimeout(
-      getContractRecommendation({ setupId: readySetup.id, setup: readySetup, forceRefresh }),
-      COACH_CONTRACT_TIMEOUT_MS,
-      'getContractRecommendation',
-    ).catch((error) => {
-      logger.warn('SPX coach contract recommendation skipped due timeout/failure', {
-        setupId: readySetup.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    });
+    const shouldRecommendContract = readySetup.status === 'ready';
+    const contract = shouldRecommendContract
+      ? await withTimeout(
+        getContractRecommendation({ setupId: readySetup.id, setup: readySetup, forceRefresh }),
+        COACH_CONTRACT_TIMEOUT_MS,
+        'getContractRecommendation',
+      ).catch((error) => {
+        logger.warn('SPX coach contract recommendation skipped due timeout/failure', {
+          setupId: readySetup.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      })
+      : null;
 
     const setupMessage = createPreTradeMessage({
       ...readySetup,

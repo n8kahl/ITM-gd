@@ -77,7 +77,10 @@ describe('gexCalculator', () => {
     expect(profile.maxGEXStrike).not.toBeNull();
     expect(profile.regime === 'positive_gamma' || profile.regime === 'negative_gamma').toBe(true);
 
-    expect(mockFetchExpirationDates).toHaveBeenCalledWith('SPX');
+    expect(mockFetchExpirationDates).toHaveBeenCalledWith('SPX', {
+      maxDaysAhead: 30,
+      maxPages: 4,
+    });
     expect(mockFetchOptionsChain).toHaveBeenCalledTimes(2);
     expect(mockCacheSet).toHaveBeenCalledTimes(1);
   });
@@ -121,6 +124,30 @@ describe('gexCalculator', () => {
 
     const profile = await calculateGEXProfile('AAPL');
     expect(profile.symbol).toBe('AAPL');
-    expect(mockFetchExpirationDates).toHaveBeenCalledWith('AAPL');
+    expect(mockFetchExpirationDates).toHaveBeenCalledWith('AAPL', {
+      maxDaysAhead: 30,
+      maxPages: 4,
+    });
+  });
+
+  it('uses fast-path expiration lookup when only one expiry is requested', async () => {
+    mockFetchExpirationDates.mockResolvedValue(['2026-02-10']);
+    mockFetchOptionsChain.mockResolvedValue({
+      symbol: 'SPX',
+      currentPrice: 6000,
+      expiry: '2026-02-10',
+      daysToExpiry: 0,
+      options: {
+        calls: [{ strike: 6000, openInterest: 1000, gamma: 0.01 }],
+        puts: [{ strike: 6000, openInterest: 900, gamma: 0.009 }],
+      },
+    } as any);
+
+    await calculateGEXProfile('SPX', { maxExpirations: 1 });
+
+    expect(mockFetchExpirationDates).toHaveBeenCalledWith('SPX', {
+      maxDaysAhead: 7,
+      maxPages: 1,
+    });
   });
 });
