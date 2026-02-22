@@ -2287,10 +2287,12 @@ function evaluateOptimizationGate(input: {
   pausedCombos: Set<string>;
   profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
   direction: 'bullish' | 'bearish';
-}): string[] {
+}): { reasons: string[]; effectiveFlowConfirmed: boolean; effectiveVolumeAligned: boolean } {
   const actionableStatuses = new Set(input.profile.qualityGate.actionableStatuses);
   const isNewActionable = (input.status === 'ready' || input.status === 'triggered') && !input.wasPreviouslyTriggered;
-  if (!isNewActionable || !actionableStatuses.has(input.status)) return [];
+  if (!isNewActionable || !actionableStatuses.has(input.status)) {
+    return { reasons: [], effectiveFlowConfirmed: input.flowConfirmed, effectiveVolumeAligned: input.volumeRegimeAligned };
+  }
 
   const reasons: string[] = [];
   const useSetupSpecificFloors = parseBooleanEnv(
@@ -2346,22 +2348,48 @@ function evaluateOptimizationGate(input: {
   const trendFamilyVolumeGraceEligible = (
     input.setupType === 'trend_pullback'
     && firstSeenMinute != null
-    && firstSeenMinute <= 240
+    && firstSeenMinute <= 300
     && input.emaAligned
     && input.confluenceScore >= 3
   );
   const orbVolumeGraceEligible = (
     input.setupType === 'orb_breakout'
     && firstSeenMinute != null
-    && firstSeenMinute <= 180
+    && firstSeenMinute <= 240
     && input.emaAligned
     && input.confluenceScore >= 3
     && input.orbTrendConfluence.aligned
+  );
+  const volumeGraceExpandedEnabled = parseBooleanEnv(
+    process.env.SPX_VOLUME_GRACE_EXPANDED_ENABLED,
+    true,
+  );
+  const expandedVolumeGraceEligible = (
+    volumeGraceExpandedEnabled
+    && TREND_SETUP_TYPES.has(input.setupType)
+    && input.volumeRegimeAligned === false
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(3, minConfluenceScore)
   );
   const flowAlignmentUnavailable = input.flowAlignmentPct == null;
   const flowDataSparse = (
     input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS
     && input.flowQuality.recentDirectionalPremium < FLOW_MIN_DIRECTIONAL_PREMIUM
+  );
+  const flowAvailability: 'available' | 'sparse' | 'unavailable' = (
+    !flowAlignmentUnavailable ? 'available'
+    : !flowDataSparse ? 'sparse'
+    : 'unavailable'
+  );
+  const flowUnavailableGraceEnabled = parseBooleanEnv(
+    process.env.SPX_FLOW_UNAVAILABLE_GRACE_ENABLED,
+    true,
+  );
+  const flowUnavailableGraceActive = (
+    flowUnavailableGraceEnabled
+    && flowAvailability !== 'available'
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(3, minConfluenceScore)
   );
   const trendFlowUnavailableGraceEligible = (
     TREND_SETUP_TYPES.has(input.setupType)
@@ -2392,6 +2420,7 @@ function evaluateOptimizationGate(input: {
   if (
     requireFlowConfirmation
     && !input.flowConfirmed
+    && !flowUnavailableGraceActive
     && !trendFamilyFlowGraceEligible
     && !orbFlowGraceEligible
     && !trendFlowUnavailableGraceEligible
@@ -2406,6 +2435,7 @@ function evaluateOptimizationGate(input: {
   } else if (
     requireFlowConfirmation
     && minAlignmentPct > 0
+    && !flowUnavailableGraceActive
     && !trendFamilyFlowGraceEligible
     && !orbFlowGraceEligible
     && !trendFlowUnavailableGraceEligible
@@ -2419,6 +2449,7 @@ function evaluateOptimizationGate(input: {
   if (
     requireVolumeRegimeAlignment
     && !input.volumeRegimeAligned
+    && !expandedVolumeGraceEligible
     && !trendFamilyVolumeGraceEligible
     && !orbVolumeGraceEligible
     && !orbTrendFusionGraceEligible
@@ -2452,19 +2483,29 @@ function evaluateOptimizationGate(input: {
     }
   }
 
+  const hasDirectionalFlowSample = (
+    input.flowQuality.recentDirectionalEvents > 0
+    || input.flowQuality.recentDirectionalPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM
+  );
+  const orbSparseFlowGrace = (
+    input.setupType === 'orb_breakout'
+    && !hasDirectionalFlowSample
+    && flowAvailability !== 'available'
+    && input.emaAligned
+    && input.confluenceScore >= 3
+  );
   if (input.setupType === 'orb_breakout') {
-    const hasDirectionalFlowSample = (
-      input.flowQuality.recentDirectionalEvents > 0
-      || input.flowQuality.recentDirectionalPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM
-    );
-    if (hasDirectionalFlowSample) {
+    if (hasDirectionalFlowSample && !orbSparseFlowGrace) {
       if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
         reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
       }
-      if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
-        reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
+      const effectiveOrbMinFlowQuality = flowAvailability === 'sparse'
+        ? ORB_MIN_FLOW_QUALITY_SCORE - 7
+        : ORB_MIN_FLOW_QUALITY_SCORE;
+      if (input.flowQuality.score < effectiveOrbMinFlowQuality) {
+        reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${effectiveOrbMinFlowQuality}`);
       }
-    } else if (!input.orbTrendConfluence.aligned) {
+    } else if (!input.orbTrendConfluence.aligned && !orbSparseFlowGrace) {
       reasons.push('orb_flow_or_confluence_required');
     }
   }
@@ -2510,7 +2551,33 @@ function evaluateOptimizationGate(input: {
     }
   }
 
-  return reasons;
+  // Compute grace-aware effective booleans for optimizer parity.
+  // When a flow/volume grace allows a setup through the gate, the optimizer's
+  // passesCandidate must also see these as effectively satisfied.
+  const flowGraceApplied = (
+    requireFlowConfirmation
+    && !input.flowConfirmed
+    && (flowUnavailableGraceActive
+      || trendFamilyFlowGraceEligible
+      || orbFlowGraceEligible
+      || trendFlowUnavailableGraceEligible
+      || orbTrendFusionGraceEligible
+      || orbSparseFlowGrace)
+  );
+  const volumeGraceApplied = (
+    requireVolumeRegimeAlignment
+    && !input.volumeRegimeAligned
+    && (expandedVolumeGraceEligible
+      || trendFamilyVolumeGraceEligible
+      || orbVolumeGraceEligible
+      || orbTrendFusionGraceEligible)
+  );
+
+  return {
+    reasons,
+    effectiveFlowConfirmed: input.flowConfirmed || flowGraceApplied,
+    effectiveVolumeAligned: input.volumeRegimeAligned || volumeGraceApplied,
+  };
 }
 
 function setupSemanticKey(setup: Setup): string {
@@ -3170,7 +3237,7 @@ export async function detectActiveSetups(options?: {
     const costR = 0.08 + (flowConfirmed ? 0 : 0.03) + (lifecycle.status === 'forming' ? 0.05 : 0);
     const evR = (pWinCalibrated * rBlended) - ((1 - pWinCalibrated) * 1.0) - costR;
     const flowAlignmentPct = alignmentPct == null ? null : round(alignmentPct, 2);
-    const gateReasons = evaluateOptimizationGate({
+    const { reasons: gateReasons, effectiveFlowConfirmed, effectiveVolumeAligned } = evaluateOptimizationGate({
       status: lifecycle.status,
       wasPreviouslyTriggered: Boolean(previous?.triggeredAt),
       setupType,
@@ -3273,6 +3340,10 @@ export async function detectActiveSetups(options?: {
         }
         : undefined,
       flowConfirmed,
+      effectiveFlowConfirmed,
+      emaAligned,
+      volumeRegimeAligned,
+      effectiveVolumeAligned,
       confidenceTrend: emaAligned
         ? ((indicatorContext?.emaFastSlope || 0) > EMA_MIN_SLOPE_POINTS ? 'up' : 'flat')
         : ((indicatorContext?.emaFastSlope || 0) < -EMA_MIN_SLOPE_POINTS ? 'down' : 'flat'),
@@ -3467,3 +3538,7 @@ export function __resetSetupDetectorStateForTests(): void {
   historicalSecondBarsCache.clear();
   setupsInFlight = null;
 }
+
+export const __testables = {
+  evaluateOptimizationGate,
+};

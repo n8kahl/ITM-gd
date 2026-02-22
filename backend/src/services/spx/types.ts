@@ -203,6 +203,10 @@ export interface Setup {
     reasons: string[];
   };
   flowConfirmed?: boolean;
+  effectiveFlowConfirmed?: boolean;
+  emaAligned?: boolean;
+  volumeRegimeAligned?: boolean;
+  effectiveVolumeAligned?: boolean;
   gateStatus?: 'eligible' | 'blocked';
   gateReasons?: string[];
   tradeManagement?: {

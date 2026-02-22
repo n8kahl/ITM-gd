@@ -126,6 +126,89 @@ async function main() {
     return gateStatus === 'eligible';
   });
 
+  // --- P15-S1: Full-population blocker analysis (all rows, not just strict triggered) ---
+  const gateReasonCounter = new Map<string, number>();
+  const setupTypeBlockerCounter = new Map<string, Map<string, number>>();
+  const multiBlockerCombos = new Map<string, number>();
+  const flowAvailabilityByDate = new Map<string, { total: number; flowAvailable: number; flowConfirmed: number; totalDirectionalEvents: number }>();
+  const tierStatusSummary = { total: rows.length, blocked: 0, eligible: 0, hidden: 0, triggered: 0, noGateStatus: 0 };
+
+  for (const row of rows) {
+    const gateStatus = parseMetadataValue<string | null>(row.metadata, 'gateStatus', null);
+    const gateReasonsRaw = parseMetadataValue<string[] | null>(row.metadata, 'gateReasons', null);
+    const flowAlignmentRaw = parseMetadataValue<number | null>(row.metadata, 'flowAlignmentPct', null);
+    const flowConfirmedVal = parseMetadataValue<boolean>(row.metadata, 'flowConfirmed', false);
+    const directionalEvents = parseMetadataValue<number>(row.metadata, 'flowRecentDirectionalEvents', 0);
+
+    if (gateStatus === 'blocked') tierStatusSummary.blocked += 1;
+    else if (gateStatus === 'eligible') tierStatusSummary.eligible += 1;
+    else tierStatusSummary.noGateStatus += 1;
+    if (row.tier === 'hidden') tierStatusSummary.hidden += 1;
+    if (row.triggered_at) tierStatusSummary.triggered += 1;
+
+    // Per-reason counting
+    const reasons = Array.isArray(gateReasonsRaw) ? gateReasonsRaw : [];
+    const normalizedReasons: string[] = [];
+    for (const reason of reasons) {
+      const normalized = reason.includes(':') ? reason.split(':')[0] : reason;
+      normalizedReasons.push(normalized);
+      gateReasonCounter.set(normalized, (gateReasonCounter.get(normalized) || 0) + 1);
+
+      // Per-setup-type x per-blocker
+      if (!setupTypeBlockerCounter.has(row.setup_type)) {
+        setupTypeBlockerCounter.set(row.setup_type, new Map());
+      }
+      const typeMap = setupTypeBlockerCounter.get(row.setup_type)!;
+      typeMap.set(normalized, (typeMap.get(normalized) || 0) + 1);
+    }
+
+    // Multi-blocker overlap
+    if (normalizedReasons.length > 0) {
+      const comboKey = normalizedReasons.sort().join(' + ');
+      multiBlockerCombos.set(comboKey, (multiBlockerCombos.get(comboKey) || 0) + 1);
+    }
+
+    // Flow data availability by date
+    const date = row.session_date;
+    if (!flowAvailabilityByDate.has(date)) {
+      flowAvailabilityByDate.set(date, { total: 0, flowAvailable: 0, flowConfirmed: 0, totalDirectionalEvents: 0 });
+    }
+    const dateStats = flowAvailabilityByDate.get(date)!;
+    dateStats.total += 1;
+    if (typeof flowAlignmentRaw === 'number') dateStats.flowAvailable += 1;
+    if (flowConfirmedVal) dateStats.flowConfirmed += 1;
+    dateStats.totalDirectionalEvents += (typeof directionalEvents === 'number' ? directionalEvents : 0);
+  }
+
+  // Format blocker analysis results
+  const topBlockers = Array.from(gateReasonCounter.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => ({ reason, count, pctOfTotal: round((count / rows.length) * 100) }));
+
+  const blockersBySetupType: Record<string, Array<{ reason: string; count: number }>> = {};
+  for (const [setupType, blockerMap] of setupTypeBlockerCounter) {
+    blockersBySetupType[setupType] = Array.from(blockerMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([reason, count]) => ({ reason, count }));
+  }
+
+  const topMultiBlockerCombos = Array.from(multiBlockerCombos.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([combo, count]) => ({ combo, count }));
+
+  const flowAvailabilityByDateSorted = Array.from(flowAvailabilityByDate.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, stats]) => ({
+      date,
+      rows: stats.total,
+      flowAvailablePct: round(stats.total > 0 ? (stats.flowAvailable / stats.total) * 100 : 0),
+      flowConfirmedPct: round(stats.total > 0 ? (stats.flowConfirmed / stats.total) * 100 : 0),
+      avgDirectionalEvents: round(stats.total > 0 ? stats.totalDirectionalEvents / stats.total : 0),
+    }));
+
+  // --- Original strict-triggered analysis ---
   const bySetup = new Map<string, BucketStats>();
   const byRegime = new Map<string, BucketStats>();
   const byFirstSeenBucket = new Map<string, BucketStats>();
@@ -163,6 +246,13 @@ async function main() {
     range: { from, to },
     setupTypes: setupTypesFilter,
     pausedSetupTypes: Array.from(paused),
+    // P15-S1 blocker analysis (full population)
+    population: tierStatusSummary,
+    topBlockers,
+    blockersBySetupType,
+    topMultiBlockerCombos,
+    flowAvailabilityByDate: flowAvailabilityByDateSorted,
+    // Original strict-triggered analysis
     strictTriggeredCount: strictTriggered.length,
     summaryBySetup: sortBuckets(bySetup, 1),
     topFailureDrivers: {
