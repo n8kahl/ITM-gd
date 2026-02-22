@@ -83,15 +83,6 @@ export function ActionStrip(props: ActionStripProps) {
 
   const overlayButtons = [
     {
-      label: 'Levels',
-      key: 'M',
-      testId: 'levels',
-      active: props.showLevels,
-      enabled: overlayCapability.levels ?? true,
-      onClick: props.onToggleLevels,
-      event: SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION,
-    },
-    {
       label: 'Cone',
       key: 'C',
       testId: 'cone',
@@ -152,6 +143,38 @@ export function ActionStrip(props: ActionStripProps) {
               {timeframe}
             </button>
           ))}
+
+          <button
+            type="button"
+            aria-pressed={props.showLevels}
+            disabled={!(overlayCapability.levels ?? true)}
+            title={(overlayCapability.levels ?? true) ? undefined : 'Available in Spatial HUD view'}
+            onClick={() => {
+              if (!(overlayCapability.levels ?? true)) {
+                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
+                  surface: 'action_strip',
+                  overlay: 'levels',
+                  reason: 'view_mode_unavailable',
+                })
+                return
+              }
+              props.onToggleLevels()
+              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+                surface: 'action_strip_primary',
+                nextState: !props.showLevels,
+              })
+            }}
+            data-testid="spx-action-overlay-levels"
+            className={cn(
+              'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+              props.showLevels
+                ? 'border-champagne/30 bg-champagne/10 text-champagne'
+                : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+              !(overlayCapability.levels ?? true) && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
+            )}
+          >
+            Levels
+          </button>
 
           <button
             type="button"

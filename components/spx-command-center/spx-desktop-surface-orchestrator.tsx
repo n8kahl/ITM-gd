@@ -101,6 +101,8 @@ export function SPXDesktopSurfaceOrchestrator({
     <>
       <SPXHeader
         onOpenCommandPalette={onOpenCommandPalette}
+        onToggleLevelOverlay={() => onRunActionStripCommand('toggle-level-overlay')}
+        showLevelOverlay={showLevelOverlay}
         showAllLevels={showAllRelevantLevels}
         displayedLevelsCount={displayedLevelsCount}
         totalLevelsCount={totalLevelsCount}

@@ -5,12 +5,12 @@ import type { SPXCommandController } from '@/hooks/use-spx-command-controller'
 import { FlowRibbon } from '@/components/spx-command-center/flow-ribbon'
 import { GEXAmbientGlow } from '@/components/spx-command-center/gex-ambient-glow'
 import { GammaTopographyOverlay } from '@/components/spx-command-center/gamma-topography-overlay'
-import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
 import { ProbabilityConeSVG } from '@/components/spx-command-center/probability-cone-svg'
 import { PriorityLevelOverlay } from '@/components/spx-command-center/priority-level-overlay'
 import { RiskRewardShadowOverlay } from '@/components/spx-command-center/risk-reward-shadow-overlay'
 import { SetupLockOverlay } from '@/components/spx-command-center/setup-lock-overlay'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
+import { SpatialMarkerLegend } from '@/components/spx-command-center/spatial-marker-legend'
 import { SpatialCoachGhostLayer } from '@/components/spx-command-center/spatial-coach-ghost-layer'
 import { SpatialCoachLayer } from '@/components/spx-command-center/spatial-coach-layer'
 import { TopographicPriceLadder } from '@/components/spx-command-center/topographic-price-ladder'
@@ -37,7 +37,6 @@ export type SPXDesktopSpatialCanvasProps = {
   latestChartBarTimeSec: number | null
   showSpatialCoach: boolean
   showLevelOverlay: boolean
-  onCloseLevelOverlay: () => void
   onRequestSidebarOpen?: () => void
 }
 
@@ -64,7 +63,6 @@ export function SPXDesktopSpatialCanvas({
   latestChartBarTimeSec,
   showSpatialCoach,
   showLevelOverlay,
-  onCloseLevelOverlay,
   onRequestSidebarOpen,
 }: SPXDesktopSpatialCanvasProps) {
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -111,6 +109,13 @@ export function SPXDesktopSpatialCanvas({
     viewport.height,
     viewport.width,
   ])
+  const levelOverlaysEnabled = showLevelOverlay && !spatialThrottled
+  const showPriorityLevels = levelOverlaysEnabled && focusMode !== 'risk_only'
+  const showRiskShadow = levelOverlaysEnabled && (focusMode === 'execution' || focusMode === 'risk_only')
+  const showSetupLock = levelOverlaysEnabled && focusMode === 'execution'
+  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only'
+  const showConeOverlay = overlayPolicy.allowCone && !spatialThrottled
+  const showCoachOverlay = overlayPolicy.allowSpatialCoach && !spatialThrottled
 
   return (
     <div
@@ -134,8 +139,14 @@ export function SPXDesktopSpatialCanvas({
           {showGEXGlow && <GEXAmbientGlow intensity="boosted" />}
           {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
           <FlowRibbon className="absolute left-4 top-[74px] z-[24] w-[320px] max-w-[46vw]" />
+          <SpatialMarkerLegend
+            className="absolute left-4 top-[122px] z-[24]"
+            showCone={showConeOverlay}
+            showCoach={showCoachOverlay}
+          />
           <SPXChart
             showAllRelevantLevels={showAllRelevantLevels}
+            renderLevelAnnotations={false}
             onDisplayedLevelsChange={onDisplayedLevelsChange}
             onChartReady={onChartReady}
             onLatestBarTimeChange={onLatestBarTimeChange}
@@ -148,10 +159,10 @@ export function SPXDesktopSpatialCanvas({
             levelVisibilityBudget={overlayPolicy.levelVisibilityBudget}
             className="h-full w-full"
           />
-          {!spatialThrottled && overlayPolicy.allowTopographicLadder && <TopographicPriceLadder coordinatesRef={coordinatesRef} />}
-          {!spatialThrottled && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
-          {!spatialThrottled && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
-          {overlayPolicy.allowCone && !spatialThrottled && (
+          {showTopographicLadder && <TopographicPriceLadder coordinatesRef={coordinatesRef} />}
+          {showRiskShadow && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
+          {showSetupLock && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
+          {showConeOverlay && (
             <ProbabilityConeSVG
               coordinatesRef={coordinatesRef}
               anchorTimestampSec={latestChartBarTimeSec}
@@ -160,36 +171,20 @@ export function SPXDesktopSpatialCanvas({
           {overlayPolicy.allowGhostCards && !spatialThrottled && (
             <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
           )}
-          {overlayPolicy.allowSpatialCoach && !spatialThrottled && (
+          {showCoachOverlay && (
             <SpatialCoachLayer
               coordinatesRef={coordinatesRef}
               onRequestSidebarOpen={onRequestSidebarOpen}
             />
           )}
-          <PriorityLevelOverlay
-            coordinatesRef={coordinatesRef}
-            showAllRelevantLevels={showAllRelevantLevels}
-            focusMode={focusMode}
-          />
+          {showPriorityLevels && (
+            <PriorityLevelOverlay
+              coordinatesRef={coordinatesRef}
+              showAllRelevantLevels={showAllRelevantLevels}
+              focusMode={focusMode}
+            />
+          )}
         </div>
-
-        {showLevelOverlay && (
-          <div className="absolute inset-0 z-50 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
-            <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
-                <button
-                  type="button"
-                  onClick={onCloseLevelOverlay}
-                  className="min-h-[36px] rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white"
-                >
-                  Close
-                </button>
-              </div>
-              <LevelMatrix />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

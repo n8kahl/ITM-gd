@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils'
 
 interface SPXHeaderProps {
   onOpenCommandPalette: () => void
+  onToggleLevelOverlay?: () => void
+  showLevelOverlay?: boolean
   showAllLevels: boolean
   displayedLevelsCount: number
   totalLevelsCount: number
@@ -43,6 +45,8 @@ function feedTone(stage: 'live_stream' | 'poll_fallback' | 'snapshot_fallback' |
 
 export function SPXHeader({
   onOpenCommandPalette,
+  onToggleLevelOverlay,
+  showLevelOverlay = true,
   showAllLevels,
   displayedLevelsCount,
   totalLevelsCount,
@@ -117,12 +121,17 @@ export function SPXHeader({
             {feedLabel(feedFallbackStage, spxPriceSource)}
           </div>
         </div>
-        <div data-testid="spx-header-levels-chip" className="rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right">
+        <button
+          type="button"
+          onClick={onToggleLevelOverlay}
+          data-testid="spx-header-levels-chip"
+          className="rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+        >
           <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Levels</div>
           <div className="font-mono text-[11px] text-white/78">
-            {displayedLevelsCount}/{totalLevelsCount} {showAllLevels ? 'All' : 'Key'}
+            {displayedLevelsCount}/{totalLevelsCount} {showAllLevels ? 'All' : 'Key'} · {showLevelOverlay ? 'On' : 'Off'}
           </div>
-        </div>
+        </button>
         <button
           type="button"
           onClick={onOpenCommandPalette}
