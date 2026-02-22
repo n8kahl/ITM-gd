@@ -62,6 +62,19 @@ interface BacktestPauseFilters {
   notes: string[];
 }
 
+function isBacktestHiddenTierExcluded(input: {
+  includeHiddenTiers: boolean;
+  tier: string | null;
+  gateStatus: 'eligible' | 'blocked' | null;
+  triggeredAt: string | null;
+}): boolean {
+  if (input.includeHiddenTiers) return false;
+  if (input.tier !== 'hidden') return false;
+  if (input.gateStatus === 'blocked') return true;
+  if (typeof input.triggeredAt === 'string' && input.triggeredAt.length > 0) return false;
+  return true;
+}
+
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
 }
@@ -594,7 +607,13 @@ async function loadSetupsFromInstances(input: {
       skippedBlocked += 1;
       continue;
     }
-    if (!includeHiddenTiers && tier === 'hidden') {
+    const triggeredAt = typeof row.triggered_at === 'string' ? row.triggered_at : null;
+    if (isBacktestHiddenTierExcluded({
+      includeHiddenTiers,
+      tier,
+      gateStatus,
+      triggeredAt,
+    })) {
       skippedHidden += 1;
       continue;
     }
@@ -623,7 +642,7 @@ async function loadSetupsFromInstances(input: {
       target1Price,
       target2Price,
       firstSeenAt: typeof row.first_seen_at === 'string' ? row.first_seen_at : null,
-      triggeredAt: typeof row.triggered_at === 'string' ? row.triggered_at : null,
+      triggeredAt,
       tradeManagement,
     });
   }
@@ -636,7 +655,7 @@ async function loadSetupsFromInstances(input: {
     notes.push(`Skipped ${skippedBlocked} gate-blocked spx_setup_instances rows (non-actionable).`);
   }
   if (skippedHidden > 0) {
-    notes.push(`Skipped ${skippedHidden} hidden-tier spx_setup_instances rows (non-actionable).`);
+    notes.push(`Skipped ${skippedHidden} hidden-tier non-triggered spx_setup_instances rows (non-actionable).`);
   }
   if (skippedPausedSetupType > 0) {
     notes.push(`Skipped ${skippedPausedSetupType} paused-setup-type rows via optimizer profile.`);
@@ -2146,4 +2165,5 @@ export const __testables = {
   buildBarPath,
   chooseHistoricalOptionContract,
   findBarCloseAtOrAfter,
+  isBacktestHiddenTierExcluded,
 };

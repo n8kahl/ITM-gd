@@ -2337,12 +2337,38 @@ function evaluateOptimizationGate(input: {
     && input.emaAligned
     && input.confluenceScore >= Math.max(3, minConfluenceScore - 1)
   );
+  const orbFlowGraceEligible = (
+    input.setupType === 'orb_breakout'
+    && input.orbTrendConfluence.aligned
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(3, minConfluenceScore)
+  );
   const trendFamilyVolumeGraceEligible = (
     input.setupType === 'trend_pullback'
     && firstSeenMinute != null
     && firstSeenMinute <= 240
     && input.emaAligned
     && input.confluenceScore >= 3
+  );
+  const orbVolumeGraceEligible = (
+    input.setupType === 'orb_breakout'
+    && firstSeenMinute != null
+    && firstSeenMinute <= 180
+    && input.emaAligned
+    && input.confluenceScore >= 3
+    && input.orbTrendConfluence.aligned
+  );
+  const flowAlignmentUnavailable = input.flowAlignmentPct == null;
+  const flowDataSparse = (
+    input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS
+    && input.flowQuality.recentDirectionalPremium < FLOW_MIN_DIRECTIONAL_PREMIUM
+  );
+  const trendFlowUnavailableGraceEligible = (
+    TREND_SETUP_TYPES.has(input.setupType)
+    && flowAlignmentUnavailable
+    && flowDataSparse
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(3, minConfluenceScore)
   );
   const orbTrendFusionGraceEligible = (
     input.setupType === 'trend_pullback'
@@ -2367,6 +2393,8 @@ function evaluateOptimizationGate(input: {
     requireFlowConfirmation
     && !input.flowConfirmed
     && !trendFamilyFlowGraceEligible
+    && !orbFlowGraceEligible
+    && !trendFlowUnavailableGraceEligible
     && !orbTrendFusionGraceEligible
   ) {
     reasons.push('flow_confirmation_required');
@@ -2379,6 +2407,8 @@ function evaluateOptimizationGate(input: {
     requireFlowConfirmation
     && minAlignmentPct > 0
     && !trendFamilyFlowGraceEligible
+    && !orbFlowGraceEligible
+    && !trendFlowUnavailableGraceEligible
     && !orbTrendFusionGraceEligible
   ) {
     reasons.push('flow_alignment_unavailable');
@@ -2390,6 +2420,7 @@ function evaluateOptimizationGate(input: {
     requireVolumeRegimeAlignment
     && !input.volumeRegimeAligned
     && !trendFamilyVolumeGraceEligible
+    && !orbVolumeGraceEligible
     && !orbTrendFusionGraceEligible
   ) {
     reasons.push('volume_regime_alignment_required');
