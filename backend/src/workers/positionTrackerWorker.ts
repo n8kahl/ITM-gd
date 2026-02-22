@@ -89,6 +89,7 @@ async function runPositionTrackingCycle(): Promise<void> {
         symbol: snapshot.symbol,
         type: snapshot.type,
         quantity: snapshot.quantity,
+        entryPrice: snapshot.entryPrice,
         strike: snapshot.strike,
         expiry: snapshot.expiry,
         currentPrice: snapshot.currentPrice,

@@ -17,13 +17,23 @@ const MAX_CONTRACT_RISK_STRICT = 2_500;
 const MAX_CONTRACT_RISK_RELAXED = 3_500;
 const MAX_DELTA_STRICT = 0.65;
 const MAX_DELTA_RELAXED = 0.80;
-const ZERO_DTE_ROLLOVER_MINUTE_ET = 13 * 60;
+const ZERO_DTE_ROLLOVER_MINUTE_ET_DEFAULT = 13 * 60;
+const ZERO_DTE_ROLLOVER_MINUTE_ET_TREND = (12 * 60) + 45;
+const ZERO_DTE_ROLLOVER_MINUTE_ET_MEAN = (13 * 60) + 20;
 const LATE_DAY_FILTER_MINUTE_ET = 14 * 60;
 const LATE_DAY_MAX_SPREAD_PCT = 0.18;
 const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;
 const LATE_DAY_MIN_OPEN_INTEREST = 250;
+const STRICT_ZERO_DTE_MAX_ABS_THETA = 1.95;
+const RELAXED_ZERO_DTE_MAX_ABS_THETA = 2.35;
 const CONTRACT_EXPIRY_LOOKAHEAD_DAYS = 7;
 const CONTRACT_EXPIRY_LOOKAHEAD_MAX_PAGES = 2;
+const TREND_FAMILY_SETUP_TYPES: ReadonlySet<Setup['type']> = new Set([
+  'orb_breakout',
+  'trend_pullback',
+  'trend_continuation',
+  'breakout_vacuum',
+]);
 interface RankedContract {
   contract: OptionContract;
   score: number;
@@ -52,7 +62,41 @@ function isSameEtDate(expiry: string, now: Date): boolean {
 
 function isTerminalZeroDte(expiry: string, now: Date): boolean {
   if (!isSameEtDate(expiry, now)) return false;
-  return sessionMinuteEt(now) >= ZERO_DTE_ROLLOVER_MINUTE_ET;
+  return sessionMinuteEt(now) >= ZERO_DTE_ROLLOVER_MINUTE_ET_DEFAULT;
+}
+
+function zeroDteRolloverMinuteEtForSetup(setup: Pick<Setup, 'type'>): number {
+  if (TREND_FAMILY_SETUP_TYPES.has(setup.type)) {
+    return ZERO_DTE_ROLLOVER_MINUTE_ET_TREND;
+  }
+  if (setup.type === 'fade_at_wall' || setup.type === 'mean_reversion' || setup.type === 'flip_reclaim') {
+    return ZERO_DTE_ROLLOVER_MINUTE_ET_MEAN;
+  }
+  return ZERO_DTE_ROLLOVER_MINUTE_ET_DEFAULT;
+}
+
+function isTerminalZeroDteForSetup(
+  setup: Pick<Setup, 'type'>,
+  expiry: string,
+  now: Date,
+): boolean {
+  if (!isSameEtDate(expiry, now)) return false;
+  return sessionMinuteEt(now) >= zeroDteRolloverMinuteEtForSetup(setup);
+}
+
+function deltaBandForSetup(
+  setup: Pick<Setup, 'type' | 'regime'>,
+  relaxed: boolean,
+): { min: number; max: number } {
+  const target = deltaTargetForSetup(setup);
+  const tolerance = relaxed
+    ? 0.22
+    : (setup.regime === 'breakout' || setup.regime === 'trending' ? 0.12 : 0.14);
+  const minFloor = relaxed ? 0.02 : 0.05;
+  const maxCap = relaxed ? MAX_DELTA_RELAXED : MAX_DELTA_STRICT;
+  const min = clamp(target - tolerance, minFloor, maxCap);
+  const max = clamp(target + tolerance, Math.min(maxCap, min + 0.02), maxCap);
+  return { min, max };
 }
 
 function applyRegimeDeltaAdjustment(setup: Pick<Setup, 'type' | 'regime'>, baseDelta: number): number {
@@ -340,16 +384,20 @@ export function filterCandidates(
   const minOI = relaxed ? 10 : MIN_OPEN_INTEREST;
   const minVol = relaxed ? 1 : MIN_VOLUME;
   const maxSpread = relaxed ? 0.42 : MAX_SPREAD_PCT;
-  const minDelta = relaxed ? 0.02 : 0.05;
-  const maxDelta = relaxed ? MAX_DELTA_RELAXED : MAX_DELTA_STRICT;
+  const deltaBand = deltaBandForSetup(setup, relaxed);
   const maxRisk = relaxed ? MAX_CONTRACT_RISK_RELAXED : MAX_CONTRACT_RISK_STRICT;
 
   return contracts.filter((contract) => {
     if (contract.type !== desiredType) return false;
     if (!(contract.bid > 0 && contract.ask > contract.bid)) return false;
-    if (isTerminalZeroDte(contract.expiry, now)) return false;
+    if (isTerminalZeroDteForSetup(setup, contract.expiry, now)) return false;
     const absDelta = Math.abs(contract.delta || 0);
-    if (!Number.isFinite(absDelta) || absDelta < minDelta || absDelta > maxDelta) return false;
+    if (!Number.isFinite(absDelta) || absDelta < deltaBand.min || absDelta > deltaBand.max) return false;
+    const dte = daysToExpiry(contract.expiry, now);
+    const absTheta = Math.abs(contract.theta || 0);
+    if (dte === 0 && absTheta > (relaxed ? RELAXED_ZERO_DTE_MAX_ABS_THETA : STRICT_ZERO_DTE_MAX_ABS_THETA)) {
+      return false;
+    }
     if ((contract.openInterest || 0) < minOI && (contract.volume || 0) < minVol) return false;
     const spreadPct = getSpreadPct(contract);
     if (!Number.isFinite(spreadPct) || spreadPct > maxSpread) return false;

@@ -101,6 +101,13 @@ interface MicrobarUpdate {
   close: number;
   volume: number;
   trades: number;
+  buyVolume: number;
+  sellVolume: number;
+  neutralVolume: number;
+  deltaVolume: number;
+  bidSize: number | null;
+  askSize: number | null;
+  bidAskImbalance: number | null;
   finalized: boolean;
   timestamp: string;
   source: 'tick';
@@ -706,6 +713,13 @@ function broadcastTickMicrobars(tick: NormalizedMarketTick): void {
       close: Number(microbar.close.toFixed(2)),
       volume: microbar.volume,
       trades: microbar.trades,
+      buyVolume: microbar.buyVolume,
+      sellVolume: microbar.sellVolume,
+      neutralVolume: microbar.neutralVolume,
+      deltaVolume: microbar.deltaVolume,
+      bidSize: microbar.bidSize,
+      askSize: microbar.askSize,
+      bidAskImbalance: microbar.bidAskImbalance,
       finalized: microbar.finalized,
       timestamp: new Date(microbar.updatedAtMs).toISOString(),
       source: 'tick',

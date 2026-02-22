@@ -1,15 +1,20 @@
 import { cacheGet, cacheSet } from '../../config/redis';
-import { getMinuteAggregates } from '../../config/massive';
+import { getAggregates, getMinuteAggregates, type MassiveAggregate } from '../../config/massive';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import { getFibLevels } from './fibEngine';
 import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
-import { getActiveSPXOptimizationProfile, type SPXGeometryPolicyEntry } from './optimizer';
+import {
+  getActiveSPXOptimizationProfile,
+  type SPXGeometryPolicyEntry,
+  type SPXMacroMicroPolicyEntry,
+} from './optimizer';
 import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
 import { loadSetupPWinCalibrationModel } from './setupCalibration';
+import { getRecentTicks, type NormalizedMarketTick } from '../tickCache';
 import type {
   ClusterZone,
   FibLevel,
@@ -28,6 +33,7 @@ import { ema, round, stableId } from './utils';
 const SETUPS_CACHE_KEY = 'spx_command_center:setups';
 const SETUPS_CACHE_TTL_SECONDS = 10;
 let setupsInFlight: Promise<Setup[]> | null = null;
+const historicalSecondBarsCache = new Map<string, MassiveAggregate[]>();
 const FLOW_CONFIRMATION_WINDOW_MS = 20 * 60 * 1000;
 const FLOW_ZONE_TOLERANCE_POINTS = 12;
 const FLOW_MIN_DIRECTIONAL_PREMIUM = 75_000;
@@ -37,6 +43,7 @@ const FLOW_QUALITY_MIN_EVENTS = 2;
 const FLOW_QUALITY_MIN_PREMIUM = 90_000;
 const ORB_MIN_FLOW_QUALITY_SCORE = 58;
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
+const MICROSTRUCTURE_STALE_WINDOW_MS = 3 * 60 * 1000;
 
 const DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
 const DEFAULT_FLOW_DIVERGENCE_ALIGNMENT_THRESHOLD = 38;
@@ -52,6 +59,7 @@ const DEFAULT_SNIPER_PRIMARY_PWIN = 0.58;
 const DEFAULT_SNIPER_SECONDARY_PWIN = 0.54;
 const DEFAULT_SNIPER_PRIMARY_EV_R = 0.35;
 const DEFAULT_SNIPER_SECONDARY_EV_R = 0.2;
+const DEFAULT_MACRO_ALIGNMENT_MIN_SCORE = 34;
 const EMA_FAST_PERIOD = 21;
 const EMA_SLOW_PERIOD = 55;
 const EMA_MIN_BARS = 8;
@@ -84,6 +92,13 @@ const ORB_BREAKOUT_T2_R_MIN_MULTIPLIER = 1.9;
 const ORB_BREAKOUT_T2_R_MAX_MULTIPLIER = 3.8;
 const MEAN_FADE_TARGET_SCALE = 0.95;
 const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
+const DEFAULT_MICROSTRUCTURE_LOOKBACK_TICKS = 180;
+const DEFAULT_MICROSTRUCTURE_MIN_TICKS = 24;
+const DEFAULT_MICROSTRUCTURE_MIN_DIRECTIONAL_VOLUME = 120;
+const DEFAULT_MICROSTRUCTURE_MIN_QUOTE_COVERAGE_PCT = 0.35;
+const DEFAULT_MICROSTRUCTURE_MIN_AGGRESSOR_SKEW = 0.1;
+const DEFAULT_MICROSTRUCTURE_MIN_IMBALANCE = 0.06;
+const DEFAULT_MICROSTRUCTURE_MAX_SPREAD_BPS = 30;
 const GEOMETRY_BUCKET_OPENING_MAX_MINUTE = 90;
 const GEOMETRY_BUCKET_MIDDAY_MAX_MINUTE = 240;
 const FALLBACK_GEOMETRY_POLICY: SPXGeometryPolicyEntry = {
@@ -105,8 +120,27 @@ const DIVERSIFICATION_PREFERRED_SETUP_TYPES: ReadonlySet<SetupType> = new Set([
   'orb_breakout',
   'trend_pullback',
 ]);
+const TREND_MICROSTRUCTURE_REQUIRED_SETUP_TYPES: ReadonlySet<SetupType> = new Set([
+  'orb_breakout',
+  'trend_pullback',
+  'trend_continuation',
+  'breakout_vacuum',
+]);
+const TREND_SETUP_TYPES: ReadonlySet<SetupType> = new Set([
+  'orb_breakout',
+  'trend_pullback',
+  'trend_continuation',
+  'breakout_vacuum',
+]);
 const DEFAULT_FADE_READY_MAX_SHARE = 0.5;
 const DEFAULT_MIN_ALTERNATIVE_READY_SETUPS = 1;
+const DEFAULT_MIN_TREND_READY_SETUPS = 1;
+const DEFAULT_TREND_PROMOTION_MIN_SCORE = 66;
+const DEFAULT_TREND_PROMOTION_MIN_PWIN = 0.57;
+const DEFAULT_TREND_PROMOTION_MIN_EV_R = 0.22;
+const DEFAULT_TREND_PROMOTION_MIN_MACRO_SCORE = 34;
+const DEFAULT_TREND_PROMOTION_MIN_MICRO_SCORE = 56;
+const DEFAULT_TREND_PROMOTION_REQUIRE_MICRO_ALIGNMENT = true;
 const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   fade_at_wall: 300,
   breakout_vacuum: 360,
@@ -203,6 +237,54 @@ interface SetupDiversificationConfig {
   allowRecoveryCombos: boolean;
   fadeReadyMaxShare: number;
   minAlternativeReadySetups: number;
+  minTrendReadySetups: number;
+  trendPromotionMinScore: number;
+  trendPromotionMinPWin: number;
+  trendPromotionMinEvR: number;
+  trendPromotionMinMacroScore: number;
+  trendPromotionMinMicroScore: number;
+  trendPromotionRequireMicroAlignment: boolean;
+}
+
+interface SetupMacroFilterConfig {
+  enabled: boolean;
+  minAlignmentScore: number;
+}
+
+interface SetupMicrostructureConfig {
+  enabled: boolean;
+  lookbackTicks: number;
+  minTicks: number;
+  minDirectionalVolume: number;
+  minQuoteCoveragePct: number;
+  minAggressorSkewAbs: number;
+  minImbalanceAbs: number;
+  maxSpreadBps: number;
+  requireTrendAlignment: boolean;
+  failClosedWhenUnavailable: boolean;
+}
+
+interface SetupMicrostructureSummary {
+  source: 'live_tick_cache' | 'historical_second_bars' | 'historical_ticks_injected';
+  sampleCount: number;
+  quoteCoveragePct: number;
+  buyVolume: number;
+  sellVolume: number;
+  neutralVolume: number;
+  directionalVolume: number;
+  aggressorSkew: number | null;
+  bidAskImbalance: number | null;
+  avgSpreadBps: number | null;
+  latestTimestampMs: number | null;
+  available: boolean;
+}
+
+interface SetupMicrostructureAlignment {
+  available: boolean;
+  aligned: boolean;
+  conflict: boolean;
+  score: number | null;
+  reasons: string[];
 }
 
 interface SetupIndicatorContext {
@@ -225,6 +307,7 @@ interface FlowQualitySummary {
   recentDirectionalPremium: number;
   localDirectionalEvents: number;
   localDirectionalPremium: number;
+  localCoveragePct: number;
 }
 
 interface SetupContextState {
@@ -245,6 +328,18 @@ const WIN_RATE_BY_SCORE: Record<number, number> = {
   3: 58,
   4: 71,
   5: 82,
+};
+const CONFLUENCE_SOURCE_WEIGHTS: Record<string, number> = {
+  level_quality: 1.35,
+  gex_alignment: 1.2,
+  flow_confirmation: 1.2,
+  fibonacci_touch: 0.55,
+  regime_alignment: 0.95,
+  ema_alignment: 0.85,
+  volume_regime_alignment: 0.75,
+  microstructure_alignment: 1.0,
+  strike_flow_confluence: 0.9,
+  intraday_gamma_pressure: 0.95,
 };
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
@@ -366,6 +461,182 @@ function getSetupDiversificationConfig(): SetupDiversificationConfig {
       DEFAULT_MIN_ALTERNATIVE_READY_SETUPS,
       0,
     ),
+    minTrendReadySetups: parseIntEnv(
+      process.env.SPX_SETUP_MIN_TREND_READY_SETUPS,
+      DEFAULT_MIN_TREND_READY_SETUPS,
+      0,
+    ),
+    trendPromotionMinScore: Math.min(100, Math.max(0, parseFloatEnv(
+      process.env.SPX_SETUP_TREND_PROMOTION_MIN_SCORE,
+      DEFAULT_TREND_PROMOTION_MIN_SCORE,
+      0,
+    ))),
+    trendPromotionMinPWin: Math.min(1, Math.max(0, parseFloatEnv(
+      process.env.SPX_SETUP_TREND_PROMOTION_MIN_PWIN,
+      DEFAULT_TREND_PROMOTION_MIN_PWIN,
+      0,
+    ))),
+    trendPromotionMinEvR: parseFloatEnv(
+      process.env.SPX_SETUP_TREND_PROMOTION_MIN_EV_R,
+      DEFAULT_TREND_PROMOTION_MIN_EV_R,
+      -2,
+    ),
+    trendPromotionMinMacroScore: Math.min(100, Math.max(0, parseFloatEnv(
+      process.env.SPX_SETUP_TREND_PROMOTION_MIN_MACRO_SCORE,
+      DEFAULT_TREND_PROMOTION_MIN_MACRO_SCORE,
+      0,
+    ))),
+    trendPromotionMinMicroScore: Math.min(100, Math.max(0, parseFloatEnv(
+      process.env.SPX_SETUP_TREND_PROMOTION_MIN_MICRO_SCORE,
+      DEFAULT_TREND_PROMOTION_MIN_MICRO_SCORE,
+      0,
+    ))),
+    trendPromotionRequireMicroAlignment: parseBooleanEnv(
+      process.env.SPX_SETUP_TREND_PROMOTION_REQUIRE_MICRO_ALIGNMENT,
+      DEFAULT_TREND_PROMOTION_REQUIRE_MICRO_ALIGNMENT,
+    ),
+  };
+}
+
+function getSetupMacroFilterConfig(): SetupMacroFilterConfig {
+  return {
+    enabled: parseBooleanEnv(process.env.SPX_SETUP_MACRO_KILLSWITCH_ENABLED, true),
+    minAlignmentScore: parseFloatEnv(
+      process.env.SPX_SETUP_MACRO_MIN_ALIGNMENT_SCORE,
+      DEFAULT_MACRO_ALIGNMENT_MIN_SCORE,
+      0,
+    ),
+  };
+}
+
+function getSetupMicrostructureConfig(): SetupMicrostructureConfig {
+  return {
+    enabled: parseBooleanEnv(process.env.SPX_SETUP_MICROSTRUCTURE_ENABLED, true),
+    lookbackTicks: parseIntEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_LOOKBACK_TICKS,
+      DEFAULT_MICROSTRUCTURE_LOOKBACK_TICKS,
+      10,
+    ),
+    minTicks: parseIntEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_MIN_TICKS,
+      DEFAULT_MICROSTRUCTURE_MIN_TICKS,
+      1,
+    ),
+    minDirectionalVolume: parseIntEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_MIN_DIRECTIONAL_VOLUME,
+      DEFAULT_MICROSTRUCTURE_MIN_DIRECTIONAL_VOLUME,
+      1,
+    ),
+    minQuoteCoveragePct: Math.min(1, parseFloatEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_MIN_QUOTE_COVERAGE_PCT,
+      DEFAULT_MICROSTRUCTURE_MIN_QUOTE_COVERAGE_PCT,
+      0,
+    )),
+    minAggressorSkewAbs: Math.min(1, parseFloatEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_MIN_AGGRESSOR_SKEW,
+      DEFAULT_MICROSTRUCTURE_MIN_AGGRESSOR_SKEW,
+      0,
+    )),
+    minImbalanceAbs: Math.min(1, parseFloatEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_MIN_IMBALANCE,
+      DEFAULT_MICROSTRUCTURE_MIN_IMBALANCE,
+      0,
+    )),
+    maxSpreadBps: parseFloatEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_MAX_SPREAD_BPS,
+      DEFAULT_MICROSTRUCTURE_MAX_SPREAD_BPS,
+      0,
+    ),
+    requireTrendAlignment: parseBooleanEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_REQUIRE_TREND_ALIGNMENT,
+      true,
+    ),
+    failClosedWhenUnavailable: parseBooleanEnv(
+      process.env.SPX_SETUP_MICROSTRUCTURE_FAIL_CLOSED_WHEN_UNAVAILABLE,
+      false,
+    ),
+  };
+}
+
+function normalizeMacroMicroPolicyEntry(
+  value: unknown,
+): SPXMacroMicroPolicyEntry {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as SPXMacroMicroPolicyEntry;
+}
+
+function resolveSetupMacroMicroPolicyEntry(input: {
+  setupType: SetupType;
+  regime: Regime;
+  firstSeenMinuteEt: number | null;
+  profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
+}): SPXMacroMicroPolicyEntry {
+  const policy = input.profile.macroMicroPolicy;
+  if (!policy) return {};
+  const bucket = toGeometryBucket(input.firstSeenMinuteEt);
+  return {
+    minMacroAlignmentScore: policy.defaultMinMacroAlignmentScore,
+    requireMicrostructureAlignment: (
+      policy.defaultRequireTrendMicrostructureAlignment
+      && TREND_MICROSTRUCTURE_REQUIRED_SETUP_TYPES.has(input.setupType)
+    ),
+    failClosedWhenUnavailable: policy.defaultFailClosedWhenUnavailable,
+    minMicroAggressorSkewAbs: policy.defaultMinMicroAggressorSkewAbs,
+    minMicroImbalanceAbs: policy.defaultMinMicroImbalanceAbs,
+    minMicroQuoteCoveragePct: policy.defaultMinMicroQuoteCoveragePct,
+    maxMicroSpreadBps: policy.defaultMaxMicroSpreadBps,
+    ...normalizeMacroMicroPolicyEntry(policy.bySetupType?.[input.setupType]),
+    ...normalizeMacroMicroPolicyEntry(policy.bySetupRegime?.[`${input.setupType}|${input.regime}`]),
+    ...normalizeMacroMicroPolicyEntry(policy.bySetupRegimeTimeBucket?.[
+      `${input.setupType}|${input.regime}|${bucket}`
+    ]),
+  };
+}
+
+function resolveSetupMacroFilterConfig(input: {
+  base: SetupMacroFilterConfig;
+  policy: SPXMacroMicroPolicyEntry;
+}): SetupMacroFilterConfig {
+  const explicitEnvFloor = typeof process.env.SPX_SETUP_MACRO_MIN_ALIGNMENT_SCORE === 'string'
+    && process.env.SPX_SETUP_MACRO_MIN_ALIGNMENT_SCORE.trim().length > 0;
+  const policyFloor = typeof input.policy.minMacroAlignmentScore === 'number' && Number.isFinite(input.policy.minMacroAlignmentScore)
+    ? input.policy.minMacroAlignmentScore
+    : null;
+  return {
+    enabled: input.base.enabled,
+    minAlignmentScore: explicitEnvFloor
+      ? Math.max(input.base.minAlignmentScore, policyFloor ?? input.base.minAlignmentScore)
+      : policyFloor ?? input.base.minAlignmentScore,
+  };
+}
+
+function resolveSetupMicrostructureConfig(input: {
+  setupType: SetupType;
+  base: SetupMicrostructureConfig;
+  policy: SPXMacroMicroPolicyEntry;
+}): SetupMicrostructureConfig {
+  const defaultRequireAlignment = input.base.requireTrendAlignment
+    && TREND_MICROSTRUCTURE_REQUIRED_SETUP_TYPES.has(input.setupType);
+  return {
+    ...input.base,
+    minAggressorSkewAbs: typeof input.policy.minMicroAggressorSkewAbs === 'number' && Number.isFinite(input.policy.minMicroAggressorSkewAbs)
+      ? Math.max(0, Math.min(1, input.policy.minMicroAggressorSkewAbs))
+      : input.base.minAggressorSkewAbs,
+    minImbalanceAbs: typeof input.policy.minMicroImbalanceAbs === 'number' && Number.isFinite(input.policy.minMicroImbalanceAbs)
+      ? Math.max(0, Math.min(1, input.policy.minMicroImbalanceAbs))
+      : input.base.minImbalanceAbs,
+    minQuoteCoveragePct: typeof input.policy.minMicroQuoteCoveragePct === 'number' && Number.isFinite(input.policy.minMicroQuoteCoveragePct)
+      ? Math.max(0, Math.min(1, input.policy.minMicroQuoteCoveragePct))
+      : input.base.minQuoteCoveragePct,
+    maxSpreadBps: typeof input.policy.maxMicroSpreadBps === 'number' && Number.isFinite(input.policy.maxMicroSpreadBps)
+      ? Math.max(0, input.policy.maxMicroSpreadBps)
+      : input.base.maxSpreadBps,
+    requireTrendAlignment: typeof input.policy.requireMicrostructureAlignment === 'boolean'
+      ? input.policy.requireMicrostructureAlignment
+      : defaultRequireAlignment,
+    failClosedWhenUnavailable: typeof input.policy.failClosedWhenUnavailable === 'boolean'
+      ? input.policy.failClosedWhenUnavailable
+      : input.base.failClosedWhenUnavailable,
   };
 }
 
@@ -776,7 +1047,14 @@ function calculateConfluence(input: {
   flowConfirmed: boolean;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
-}): { score: number; sources: string[] } {
+  microstructureAligned: boolean;
+  strikeFlowConfluence: boolean;
+  intradayGammaPressureAligned: boolean;
+}): {
+  score: number;
+  sources: string[];
+  gexAligned: boolean;
+} {
   const sources: string[] = [];
 
   if (input.zone.type === 'fortress' || input.zone.type === 'defended') {
@@ -793,10 +1071,17 @@ function calculateConfluence(input: {
   if (input.regimeAligned) sources.push('regime_alignment');
   if (input.emaAligned) sources.push('ema_alignment');
   if (input.volumeRegimeAligned) sources.push('volume_regime_alignment');
+  if (input.microstructureAligned) sources.push('microstructure_alignment');
+  if (input.strikeFlowConfluence) sources.push('strike_flow_confluence');
+  if (input.intradayGammaPressureAligned) sources.push('intraday_gamma_pressure');
+  const weightedScore = sources.reduce((sum, source) => {
+    return sum + (CONFLUENCE_SOURCE_WEIGHTS[source] || 0.5);
+  }, 0);
 
   return {
-    score: Math.min(5, sources.length),
+    score: round(Math.min(5, weightedScore), 2),
     sources,
+    gexAligned,
   };
 }
 
@@ -876,6 +1161,7 @@ function evaluateFlowQuality(input: {
     recentDirectionalPremium: round(recentDirectionalPremium, 2),
     localDirectionalEvents: localDirectional.length,
     localDirectionalPremium: round(localDirectionalPremium, 2),
+    localCoveragePct: round(localCoverage * 100, 2),
   };
 }
 
@@ -901,6 +1187,375 @@ function flowAlignmentPercent(input: {
 
   const alignedPremium = input.direction === 'bullish' ? bullishPremium : bearishPremium;
   return (alignedPremium / totalPremium) * 100;
+}
+
+function classifyAggressorSideFromTick(tick: NormalizedMarketTick): 'buyer' | 'seller' | 'neutral' {
+  if (tick.aggressorSide === 'buyer' || tick.aggressorSide === 'seller' || tick.aggressorSide === 'neutral') {
+    return tick.aggressorSide;
+  }
+  if (tick.ask != null && tick.price >= tick.ask) return 'buyer';
+  if (tick.bid != null && tick.price <= tick.bid) return 'seller';
+  return 'neutral';
+}
+
+function bidAskImbalanceFromTick(tick: NormalizedMarketTick): number | null {
+  if (
+    typeof tick.bidSize !== 'number'
+    || !Number.isFinite(tick.bidSize)
+    || typeof tick.askSize !== 'number'
+    || !Number.isFinite(tick.askSize)
+  ) {
+    return null;
+  }
+  const denominator = tick.bidSize + tick.askSize;
+  if (denominator <= 0) return null;
+  return (tick.bidSize - tick.askSize) / denominator;
+}
+
+function spreadBpsFromTick(tick: NormalizedMarketTick): number | null {
+  if (
+    typeof tick.bid !== 'number'
+    || !Number.isFinite(tick.bid)
+    || typeof tick.ask !== 'number'
+    || !Number.isFinite(tick.ask)
+    || tick.ask < tick.bid
+  ) {
+    return null;
+  }
+
+  const mid = (tick.bid + tick.ask) / 2;
+  if (mid <= 0) return null;
+  return ((tick.ask - tick.bid) / mid) * 10_000;
+}
+
+function secondBarToSyntheticTick(
+  bar: MassiveAggregate,
+  symbol: string,
+): NormalizedMarketTick | null {
+  if (!Number.isFinite(bar.t) || !Number.isFinite(bar.c) || bar.c <= 0) return null;
+  const high = Number.isFinite(bar.h) ? bar.h : bar.c;
+  const low = Number.isFinite(bar.l) ? bar.l : bar.c;
+  const open = Number.isFinite(bar.o) ? bar.o : bar.c;
+  const spreadPoints = Math.max(0.01, Math.abs(high - low));
+  const bid = Math.max(0.01, bar.c - (spreadPoints / 2));
+  const ask = Math.max(bid + 0.01, bar.c + (spreadPoints / 2));
+  const size = Math.max(0, Math.floor(Number.isFinite(bar.v) ? bar.v : 0));
+  const aggressorSide: NormalizedMarketTick['aggressorSide'] = bar.c > open
+    ? 'buyer'
+    : bar.c < open
+      ? 'seller'
+      : 'neutral';
+  const bidSize = size <= 0
+    ? 0
+    : aggressorSide === 'buyer'
+      ? Math.max(1, Math.round(size * 0.62))
+      : aggressorSide === 'seller'
+        ? Math.max(1, Math.round(size * 0.38))
+        : Math.max(1, Math.round(size * 0.5));
+  const askSize = size <= 0
+    ? 0
+    : Math.max(1, size - bidSize);
+
+  return {
+    symbol,
+    rawSymbol: `I:${symbol}`,
+    price: bar.c,
+    size,
+    timestamp: Math.floor(bar.t),
+    sequence: null,
+    bid,
+    ask,
+    bidSize,
+    askSize,
+    aggressorSide,
+  };
+}
+
+async function loadHistoricalSecondBars(dateStr: string): Promise<MassiveAggregate[]> {
+  const cached = historicalSecondBarsCache.get(dateStr);
+  if (cached) return cached;
+  try {
+    const response = await getAggregates('I:SPX', 1, 'second', dateStr, dateStr);
+    const bars = (response.results || [])
+      .filter((bar) => Number.isFinite(bar.t) && Number.isFinite(bar.c))
+      .sort((a, b) => a.t - b.t);
+    historicalSecondBarsCache.set(dateStr, bars);
+    return bars;
+  } catch (error) {
+    logger.warn('SPX setup detector failed to load historical second bars for microstructure parity', {
+      date: dateStr,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+async function loadMicrostructureSummary(input: {
+  symbol: string;
+  nowMs: number;
+  hasHistoricalTimestamp: boolean;
+  historicalTimestampIso?: string;
+  historicalTicks?: NormalizedMarketTick[];
+  config: SetupMicrostructureConfig;
+}): Promise<SetupMicrostructureSummary | null> {
+  if (!input.config.enabled) return null;
+
+  let tickWindow: NormalizedMarketTick[] = [];
+  let summarySource: SetupMicrostructureSummary['source'] = 'live_tick_cache';
+  if (input.hasHistoricalTimestamp) {
+    if (Array.isArray(input.historicalTicks) && input.historicalTicks.length > 0) {
+      tickWindow = input.historicalTicks;
+      summarySource = 'historical_ticks_injected';
+    } else {
+      const dateStr = input.historicalTimestampIso
+        ? toEasternTime(new Date(input.historicalTimestampIso)).dateStr
+        : toEasternTime(new Date(input.nowMs)).dateStr;
+      const bars = await loadHistoricalSecondBars(dateStr);
+      const limitedBars = bars
+        .filter((bar) => bar.t <= input.nowMs)
+        .slice(-Math.max(input.config.lookbackTicks * 4, 720));
+      tickWindow = limitedBars
+        .map((bar) => secondBarToSyntheticTick(bar, input.symbol))
+        .filter((tick): tick is NormalizedMarketTick => tick !== null);
+      summarySource = 'historical_second_bars';
+    }
+  } else {
+    tickWindow = getRecentTicks(input.symbol, input.config.lookbackTicks);
+    summarySource = 'live_tick_cache';
+  }
+
+  const recentTicks = tickWindow.filter((tick) => (
+    Number.isFinite(tick.timestamp)
+    && tick.timestamp > 0
+    && input.nowMs >= tick.timestamp
+    && (input.nowMs - tick.timestamp) <= MICROSTRUCTURE_STALE_WINDOW_MS
+  ));
+
+  if (recentTicks.length === 0) return null;
+
+  let buyVolume = 0;
+  let sellVolume = 0;
+  let neutralVolume = 0;
+  let quoteSamples = 0;
+  let imbalanceSamples = 0;
+  let imbalanceSum = 0;
+  let spreadSamples = 0;
+  let spreadSum = 0;
+  let latestTimestampMs: number | null = null;
+
+  for (const tick of recentTicks) {
+    const volume = Math.max(0, Math.floor(tick.size));
+    const side = classifyAggressorSideFromTick(tick);
+    if (side === 'buyer') buyVolume += volume;
+    else if (side === 'seller') sellVolume += volume;
+    else neutralVolume += volume;
+
+    if (
+      typeof tick.bid === 'number'
+      && Number.isFinite(tick.bid)
+      && typeof tick.ask === 'number'
+      && Number.isFinite(tick.ask)
+      && tick.ask >= tick.bid
+    ) {
+      quoteSamples += 1;
+    }
+
+    const imbalance = bidAskImbalanceFromTick(tick);
+    if (imbalance != null) {
+      imbalanceSamples += 1;
+      imbalanceSum += imbalance;
+    }
+
+    const spreadBps = spreadBpsFromTick(tick);
+    if (spreadBps != null) {
+      spreadSamples += 1;
+      spreadSum += spreadBps;
+    }
+
+    latestTimestampMs = latestTimestampMs == null
+      ? tick.timestamp
+      : Math.max(latestTimestampMs, tick.timestamp);
+  }
+
+  const sampleCount = recentTicks.length;
+  const directionalVolume = buyVolume + sellVolume;
+  const quoteCoveragePct = sampleCount > 0 ? quoteSamples / sampleCount : 0;
+  const aggressorSkew = directionalVolume > 0
+    ? (buyVolume - sellVolume) / directionalVolume
+    : null;
+  const bidAskImbalance = imbalanceSamples > 0 ? (imbalanceSum / imbalanceSamples) : null;
+  const avgSpreadBps = spreadSamples > 0 ? (spreadSum / spreadSamples) : null;
+  const available = (
+    sampleCount >= input.config.minTicks
+    && directionalVolume >= input.config.minDirectionalVolume
+    && quoteCoveragePct >= input.config.minQuoteCoveragePct
+  );
+
+  return {
+    source: summarySource,
+    sampleCount,
+    quoteCoveragePct: round(quoteCoveragePct * 100, 2),
+    buyVolume,
+    sellVolume,
+    neutralVolume,
+    directionalVolume,
+    aggressorSkew: aggressorSkew == null ? null : round(aggressorSkew, 4),
+    bidAskImbalance: bidAskImbalance == null ? null : round(bidAskImbalance, 4),
+    avgSpreadBps: avgSpreadBps == null ? null : round(avgSpreadBps, 2),
+    latestTimestampMs,
+    available,
+  };
+}
+
+function evaluateMicrostructureAlignment(input: {
+  direction: 'bullish' | 'bearish';
+  setupType: SetupType;
+  summary: SetupMicrostructureSummary | null;
+  config: SetupMicrostructureConfig;
+}): SetupMicrostructureAlignment {
+  if (!input.summary || !input.summary.available) {
+    return {
+      available: false,
+      aligned: false,
+      conflict: false,
+      score: null,
+      reasons: ['microstructure_unavailable'],
+    };
+  }
+
+  const directional = input.direction === 'bullish' ? 1 : -1;
+  let score = 50;
+  const reasons: string[] = [];
+
+  if (typeof input.summary.aggressorSkew === 'number') {
+    const directionalSkew = directional * input.summary.aggressorSkew;
+    if (directionalSkew >= input.config.minAggressorSkewAbs) {
+      score += 24;
+      reasons.push('aggressor_skew_aligned');
+    } else if (directionalSkew <= -input.config.minAggressorSkewAbs) {
+      score -= 24;
+      reasons.push('aggressor_skew_conflict');
+    }
+  }
+
+  if (typeof input.summary.bidAskImbalance === 'number') {
+    const directionalImbalance = directional * input.summary.bidAskImbalance;
+    if (directionalImbalance >= input.config.minImbalanceAbs) {
+      score += 14;
+      reasons.push('orderbook_imbalance_aligned');
+    } else if (directionalImbalance <= -input.config.minImbalanceAbs) {
+      score -= 14;
+      reasons.push('orderbook_imbalance_conflict');
+    }
+  }
+
+  if (typeof input.summary.avgSpreadBps === 'number') {
+    if (input.summary.avgSpreadBps <= input.config.maxSpreadBps) {
+      score += 8;
+      reasons.push('spread_within_floor');
+    } else {
+      score -= 10;
+      reasons.push('spread_too_wide');
+    }
+  }
+
+  if (
+    TREND_MICROSTRUCTURE_REQUIRED_SETUP_TYPES.has(input.setupType)
+    && input.summary.quoteCoveragePct >= 55
+  ) {
+    score += 6;
+  }
+
+  const finalScore = clamp(score);
+  return {
+    available: true,
+    aligned: finalScore >= 60,
+    conflict: finalScore <= 35,
+    score: round(finalScore, 2),
+    reasons,
+  };
+}
+
+function hasStrikeFlowConfluence(flowQuality: FlowQualitySummary): boolean {
+  return (
+    flowQuality.recentDirectionalEvents >= FLOW_QUALITY_MIN_EVENTS
+    && flowQuality.localDirectionalEvents >= 1
+    && flowQuality.localCoveragePct >= 35
+  );
+}
+
+function evaluateIntradayGammaPressure(input: {
+  flowEvents: SPXFlowEvent[];
+  direction: 'bullish' | 'bearish';
+  nowMs: number;
+  flipPoint: number;
+}): { score: number | null; aligned: boolean; skew: number | null } {
+  const directional = input.direction === 'bullish' ? 1 : -1;
+  const weighted = input.flowEvents
+    .filter((event) => isRecentFlowEvent(event, input.nowMs))
+    .map((event) => {
+      const distance = Math.abs(event.strike - input.flipPoint);
+      const distanceWeight = 1 / Math.max(1, distance / 8);
+      return {
+        premium: event.premium * distanceWeight,
+        signedPremium: (event.direction === 'bullish' ? 1 : -1) * event.premium * distanceWeight,
+      };
+    });
+
+  const totalWeightedPremium = weighted.reduce((sum, event) => sum + Math.max(0, event.premium), 0);
+  if (totalWeightedPremium < FLOW_MIN_DIRECTIONAL_PREMIUM) {
+    return { score: null, aligned: false, skew: null };
+  }
+
+  const signed = weighted.reduce((sum, event) => sum + event.signedPremium, 0);
+  const skew = signed / totalWeightedPremium;
+  const directionalSkew = directional * skew;
+  const score = clamp(50 + (directionalSkew * 45));
+  return {
+    score: round(score, 2),
+    aligned: directionalSkew >= 0.12,
+    skew: round(skew, 4),
+  };
+}
+
+function calculateMacroAlignmentScore(input: {
+  regimeAligned: boolean;
+  regimeConflict: boolean;
+  flowConfirmed: boolean;
+  flowAlignmentPct: number | null;
+  flowDivergence: boolean;
+  emaAligned: boolean;
+  volumeRegimeAligned: boolean;
+  gexAligned: boolean;
+  gammaPressureAligned: boolean;
+  microstructureScore: number | null;
+}): number {
+  const flowComponent = input.flowAlignmentPct != null
+    ? Math.min(35, Math.max(0, input.flowAlignmentPct * 0.35))
+    : (input.flowConfirmed ? 20 : 12);
+  const regimeComponent = input.regimeAligned ? 24 : 10;
+  const emaComponent = input.emaAligned ? 14 : 6;
+  const volumeComponent = input.volumeRegimeAligned ? 11 : 5;
+  const gexComponent = input.gexAligned ? 10 : 4;
+  const gammaComponent = input.gammaPressureAligned ? 8 : 3;
+  const microAdj = input.microstructureScore == null
+    ? 0
+    : ((input.microstructureScore - 50) * 0.18);
+  const penalties = (
+    (input.regimeConflict ? 18 : 0)
+    + (input.flowDivergence ? 14 : 0)
+  );
+
+  return round(clamp(
+    regimeComponent
+      + flowComponent
+      + emaComponent
+      + volumeComponent
+      + gexComponent
+      + gammaComponent
+      + microAdj
+      - penalties,
+  ), 2);
 }
 
 function volumeTrendFromBars(bars: Array<{ v: number }>): 'rising' | 'flat' | 'falling' {
@@ -1517,8 +2172,12 @@ function evaluateOptimizationGate(input: {
   flowConfirmed: boolean;
   flowAlignmentPct: number | null;
   flowQuality: FlowQualitySummary;
+  macroAlignmentScore: number;
+  macroFilterConfig: SetupMacroFilterConfig;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
+  microstructureConfig: SetupMicrostructureConfig;
+  microstructureAlignment: SetupMicrostructureAlignment;
   pausedSetupTypes: Set<string>;
   pausedCombos: Set<string>;
   profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
@@ -1660,6 +2319,27 @@ function evaluateOptimizationGate(input: {
     }
   }
 
+  if (
+    input.macroFilterConfig.enabled
+    && input.macroAlignmentScore < input.macroFilterConfig.minAlignmentScore
+  ) {
+    reasons.push(
+      `macro_alignment_below_floor:${round(input.macroAlignmentScore, 2)}<${round(input.macroFilterConfig.minAlignmentScore, 2)}`
+    );
+  }
+
+  const requireMicrostructureAlignment = input.microstructureConfig.requireTrendAlignment;
+  if (requireMicrostructureAlignment) {
+    if (input.microstructureAlignment.available && !input.microstructureAlignment.aligned) {
+      reasons.push('microstructure_alignment_required');
+    } else if (!input.microstructureAlignment.available && input.microstructureConfig.failClosedWhenUnavailable) {
+      reasons.push('microstructure_unavailable');
+    }
+    if (input.microstructureAlignment.conflict) {
+      reasons.push('microstructure_conflict');
+    }
+  }
+
   return reasons;
 }
 
@@ -1702,6 +2382,45 @@ function withReadyByMixPromotion(setup: Setup, nowMs: number): Setup {
       : setup.gateReasons,
     statusUpdatedAt: setup.statusUpdatedAt || new Date(nowMs).toISOString(),
   };
+}
+
+function trendTelemetryScore(setup: Setup): number {
+  const macro = typeof setup.macroAlignmentScore === 'number' ? clamp(setup.macroAlignmentScore) : 0;
+  const microScore = typeof setup.microstructureScore === 'number'
+    ? clamp(setup.microstructureScore)
+    : (typeof setup.microstructure?.score === 'number' ? clamp(setup.microstructure.score) : 0);
+  const microAlignedBonus = setup.microstructure?.aligned ? 10 : 0;
+  const confluence = clamp((setup.confluenceScore / 5) * 100);
+  const setupScore = clamp(setup.score || 0);
+  const ev = clamp(((setup.evR || 0.0) + 1) * 50);
+  return round(
+    (macro * 0.28)
+    + (microScore * 0.28)
+    + (confluence * 0.16)
+    + (setupScore * 0.16)
+    + (ev * 0.12)
+    + microAlignedBonus,
+    2,
+  );
+}
+
+function isTrendPromotionCandidate(
+  setup: Setup,
+  config: SetupDiversificationConfig,
+): boolean {
+  if (!TREND_SETUP_TYPES.has(setup.type)) return false;
+  if ((setup.score || 0) < config.trendPromotionMinScore) return false;
+  if ((setup.pWinCalibrated || 0) < config.trendPromotionMinPWin) return false;
+  if ((setup.evR || 0) < config.trendPromotionMinEvR) return false;
+  if ((setup.macroAlignmentScore ?? Number.NEGATIVE_INFINITY) < config.trendPromotionMinMacroScore) return false;
+  if (!config.trendPromotionRequireMicroAlignment) return true;
+  if (setup.microstructure?.available !== true) return false;
+  if (setup.microstructure?.aligned !== true) return false;
+  const microScore = typeof setup.microstructureScore === 'number'
+    ? setup.microstructureScore
+    : (typeof setup.microstructure?.score === 'number' ? setup.microstructure.score : null);
+  if (microScore != null && microScore < config.trendPromotionMinMicroScore) return false;
+  return true;
 }
 
 function applySetupMixPolicy(input: {
@@ -1756,12 +2475,46 @@ function applySetupMixPolicy(input: {
       && (setup.score || 0) >= 62
       && (setup.pWinCalibrated || 0) >= 0.56
       && (setup.evR || 0) >= 0.2
+      && (!TREND_SETUP_TYPES.has(setup.type) || isTrendPromotionCandidate(setup, input.config))
     ))
-    .sort((a, b) => (b.setup.score || 0) - (a.setup.score || 0));
+    .sort((a, b) => {
+      const telemetryDelta = trendTelemetryScore(b.setup) - trendTelemetryScore(a.setup);
+      if (telemetryDelta !== 0) return telemetryDelta;
+      return (b.setup.score || 0) - (a.setup.score || 0);
+    });
 
   const promoteCount = Math.min(neededAlternative, promotableAlternatives.length);
   for (let i = 0; i < promoteCount; i += 1) {
     const candidate = promotableAlternatives[i];
+    setups[candidate.index] = withReadyByMixPromotion(setups[candidate.index], input.nowMs);
+  }
+
+  const refreshedAfterAlternativePromotion = setups
+    .map((setup, index) => ({ setup, index }))
+    .filter(({ setup }) => setup.status === 'ready' && setup.gateStatus !== 'blocked');
+  const trendReady = refreshedAfterAlternativePromotion.filter(({ setup }) => TREND_SETUP_TYPES.has(setup.type));
+  const neededTrendReady = Math.max(0, input.config.minTrendReadySetups - trendReady.length);
+  if (neededTrendReady <= 0) {
+    return setups;
+  }
+
+  const promotableTrends = setups
+    .map((setup, index) => ({ setup, index }))
+    .filter(({ setup }) => (
+      setup.status === 'forming'
+      && setup.gateStatus !== 'blocked'
+      && isTrendPromotionCandidate(setup, input.config)
+    ))
+    .sort((a, b) => {
+      const telemetryDelta = trendTelemetryScore(b.setup) - trendTelemetryScore(a.setup);
+      if (telemetryDelta !== 0) return telemetryDelta;
+      if ((b.setup.score || 0) !== (a.setup.score || 0)) return (b.setup.score || 0) - (a.setup.score || 0);
+      return (b.setup.evR || 0) - (a.setup.evR || 0);
+    });
+
+  const trendPromoteCount = Math.min(neededTrendReady, promotableTrends.length);
+  for (let i = 0; i < trendPromoteCount; i += 1) {
+    const candidate = promotableTrends[i];
     setups[candidate.index] = withReadyByMixPromotion(setups[candidate.index], input.nowMs);
   }
 
@@ -1823,6 +2576,7 @@ export async function detectActiveSetups(options?: {
   regimeState?: RegimeState;
   flowEvents?: SPXFlowEvent[];
   indicatorContext?: SetupIndicatorContext | null;
+  historicalTicks?: NormalizedMarketTick[];
   previousSetups?: Setup[];
 }): Promise<Setup[]> {
   const levelData = options?.levelData;
@@ -1849,6 +2603,7 @@ export async function detectActiveSetups(options?: {
     || regimeStateProvided
     || flowEventsProvided
     || indicatorContextProvided !== undefined
+    || (options?.historicalTicks && options.historicalTicks.length > 0)
   );
   if (shouldUseCache && !forceRefresh && setupsInFlight) {
     return setupsInFlight;
@@ -1904,6 +2659,16 @@ export async function detectActiveSetups(options?: {
   const lifecycleConfig = getSetupLifecycleConfig();
   const scoringConfig = getSetupScoringConfig();
   const diversificationConfig = getSetupDiversificationConfig();
+  const macroFilterConfig = getSetupMacroFilterConfig();
+  const microstructureBaseConfig = getSetupMicrostructureConfig();
+  const microstructureSummary = await loadMicrostructureSummary({
+    symbol: 'SPX',
+    nowMs,
+    hasHistoricalTimestamp,
+    historicalTimestampIso: hasHistoricalTimestamp ? evaluationIso : undefined,
+    historicalTicks: options?.historicalTicks,
+    config: microstructureBaseConfig,
+  });
   const pausedSetupTypes = new Set(optimizationProfile.driftControl.pausedSetupTypes);
   const pausedCombos = new Set(
     optimizationProfile.regimeGate.pausedCombos.filter((combo) => (
@@ -1960,6 +2725,45 @@ export async function detectActiveSetups(options?: {
       volumeRegimeAligned,
     });
     const regimeAligned = isRegimeAligned(setupType, regimeState.regime);
+    const setupIdSeed = [
+      sessionDate,
+      setupType,
+      zone.id,
+      round(zone.priceLow, 2),
+      round(zone.priceHigh, 2),
+    ].join('|');
+    const setupId = stableId('spx_setup', setupIdSeed);
+    const previous = previousById.get(setupId) || null;
+    const createdAt = previous?.createdAt || evaluationIso;
+    const firstSeenMinuteEt = toSessionMinuteEt(createdAt);
+    const macroMicroPolicyEntry = resolveSetupMacroMicroPolicyEntry({
+      setupType,
+      regime: regimeState.regime,
+      firstSeenMinuteEt,
+      profile: optimizationProfile,
+    });
+    const setupMacroFilterConfig = resolveSetupMacroFilterConfig({
+      base: macroFilterConfig,
+      policy: macroMicroPolicyEntry,
+    });
+    const setupMicrostructureConfig = resolveSetupMicrostructureConfig({
+      setupType,
+      base: microstructureBaseConfig,
+      policy: macroMicroPolicyEntry,
+    });
+    const microstructureAlignment = evaluateMicrostructureAlignment({
+      direction,
+      setupType,
+      summary: microstructureSummary,
+      config: setupMicrostructureConfig,
+    });
+    const strikeFlowConfluence = hasStrikeFlowConfluence(flowQuality);
+    const intradayGammaPressure = evaluateIntradayGammaPressure({
+      flowEvents,
+      direction,
+      nowMs,
+      flipPoint: gex.combined.flipPoint,
+    });
 
     const confluence = calculateConfluence({
       zone,
@@ -1972,22 +2776,26 @@ export async function detectActiveSetups(options?: {
       flowConfirmed,
       emaAligned,
       volumeRegimeAligned,
+      microstructureAligned: microstructureAlignment.aligned,
+      strikeFlowConfluence,
+      intradayGammaPressureAligned: intradayGammaPressure.aligned,
+    });
+    const macroAlignmentScore = calculateMacroAlignmentScore({
+      regimeAligned,
+      regimeConflict,
+      flowConfirmed,
+      flowAlignmentPct: alignmentPct,
+      flowDivergence,
+      emaAligned,
+      volumeRegimeAligned,
+      gexAligned: confluence.gexAligned,
+      gammaPressureAligned: intradayGammaPressure.aligned,
+      microstructureScore: microstructureAlignment.score,
     });
 
     const fallbackDistance = Math.max(6, Math.abs(gex.combined.callWall - gex.combined.putWall) / 4);
     const entryLow = round(zone.priceLow, 2);
     const entryHigh = round(zone.priceHigh, 2);
-    const setupIdSeed = [
-      sessionDate,
-      setupType,
-      zone.id,
-      round(zone.priceLow, 2),
-      round(zone.priceHigh, 2),
-    ].join('|');
-    const setupId = stableId('spx_setup', setupIdSeed);
-    const previous = previousById.get(setupId) || null;
-    const createdAt = previous?.createdAt || evaluationIso;
-    const firstSeenMinuteEt = toSessionMinuteEt(createdAt);
     const geometryPolicy = resolveSetupGeometryPolicy({
       setupType,
       regime: regimeState.regime,
@@ -2190,8 +2998,12 @@ export async function detectActiveSetups(options?: {
       flowConfirmed,
       flowAlignmentPct,
       flowQuality,
+      macroAlignmentScore,
+      macroFilterConfig: setupMacroFilterConfig,
       emaAligned,
       volumeRegimeAligned,
+      microstructureConfig: setupMicrostructureConfig,
+      microstructureAlignment,
       pausedSetupTypes,
       pausedCombos,
       profile: optimizationProfile,
@@ -2249,6 +3061,31 @@ export async function detectActiveSetups(options?: {
       status: gatedLifecycle.status,
       score: round(finalScore, 2),
       alignmentScore: flowAlignmentPct ?? undefined,
+      macroAlignmentScore: round(macroAlignmentScore, 2),
+      microstructureScore: microstructureAlignment.score == null
+        ? undefined
+        : round(microstructureAlignment.score, 2),
+      microstructure: microstructureSummary
+        ? {
+          source: microstructureSummary.source,
+          available: microstructureSummary.available,
+          sampleCount: microstructureSummary.sampleCount,
+          quoteCoveragePct: microstructureSummary.quoteCoveragePct,
+          buyVolume: microstructureSummary.buyVolume,
+          sellVolume: microstructureSummary.sellVolume,
+          neutralVolume: microstructureSummary.neutralVolume,
+          directionalVolume: microstructureSummary.directionalVolume,
+          aggressorSkew: microstructureSummary.aggressorSkew,
+          bidAskImbalance: microstructureSummary.bidAskImbalance,
+          avgSpreadBps: microstructureSummary.avgSpreadBps,
+          latestTimestamp: microstructureSummary.latestTimestampMs == null
+            ? null
+            : new Date(microstructureSummary.latestTimestampMs).toISOString(),
+          aligned: microstructureAlignment.aligned,
+          score: microstructureAlignment.score,
+          reasons: microstructureAlignment.reasons,
+        }
+        : undefined,
       flowConfirmed,
       confidenceTrend: emaAligned
         ? ((indicatorContext?.emaFastSlope || 0) > EMA_MIN_SLOPE_POINTS ? 'up' : 'flat')
@@ -2256,10 +3093,19 @@ export async function detectActiveSetups(options?: {
       decisionDrivers: [
         ...(emaAligned ? ['EMA trend alignment'] : []),
         ...(volumeRegimeAligned ? ['Volume trend aligned with regime'] : []),
+        ...(microstructureAlignment.aligned ? ['Microstructure aligned with direction'] : []),
+        ...(intradayGammaPressure.aligned ? ['Intraday gamma pressure aligned'] : []),
+        ...(macroAlignmentScore >= setupMacroFilterConfig.minAlignmentScore ? ['Macro alignment threshold satisfied'] : []),
       ],
       decisionRisks: [
         ...(!emaAligned ? ['EMA trend misalignment'] : []),
         ...(!volumeRegimeAligned ? ['Volume trend not confirming regime'] : []),
+        ...(microstructureAlignment.available && !microstructureAlignment.aligned
+          ? ['Microstructure conflict with setup direction']
+          : []),
+        ...(macroAlignmentScore < setupMacroFilterConfig.minAlignmentScore
+          ? [`Macro alignment below floor (${round(macroAlignmentScore, 2)})`]
+          : []),
       ],
       gateStatus,
       gateReasons,
@@ -2348,6 +3194,11 @@ export async function detectActiveSetups(options?: {
       acc[reason] = (acc[reason] || 0) + 1;
       return acc;
     }, {});
+  const microstructureAvailableCount = rankedSetups.filter((setup) => setup.microstructure?.available === true).length;
+  const microstructureAlignedCount = rankedSetups.filter((setup) => setup.microstructure?.aligned === true).length;
+  const macroBlockedCount = rankedSetups.filter((setup) => (
+    (setup.gateReasons || []).some((reason) => reason.startsWith('macro_alignment_below_floor'))
+  )).length;
 
   if (lifecycleConfig.telemetryEnabled) {
     logger.info('SPX setup lifecycle telemetry', {
@@ -2356,6 +3207,13 @@ export async function detectActiveSetups(options?: {
       contextInvalidationStreak: lifecycleConfig.contextInvalidationStreak,
       stopConfirmationTicks: lifecycleConfig.stopConfirmationTicks,
       invalidationReasons,
+      macroKillSwitchEnabled: macroFilterConfig.enabled,
+      macroAlignmentMinScore: macroFilterConfig.minAlignmentScore,
+      macroBlockedCount,
+      microstructureEnabled: microstructureBaseConfig.enabled,
+      microstructureAvailableCount,
+      microstructureAlignedCount,
+      microstructureSummary,
     });
   }
 
@@ -2374,9 +3232,22 @@ export async function detectActiveSetups(options?: {
     diversificationRecoveryCombosEnabled: diversificationConfig.allowRecoveryCombos,
     diversificationFadeReadyMaxShare: diversificationConfig.fadeReadyMaxShare,
     diversificationMinAlternativeReady: diversificationConfig.minAlternativeReadySetups,
+    diversificationMinTrendReady: diversificationConfig.minTrendReadySetups,
+    diversificationTrendPromotionMinScore: diversificationConfig.trendPromotionMinScore,
+    diversificationTrendPromotionMinPWin: diversificationConfig.trendPromotionMinPWin,
+    diversificationTrendPromotionMinEvR: diversificationConfig.trendPromotionMinEvR,
+    diversificationTrendPromotionMinMacroScore: diversificationConfig.trendPromotionMinMacroScore,
+    diversificationTrendPromotionMinMicroScore: diversificationConfig.trendPromotionMinMicroScore,
+    diversificationTrendPromotionRequireMicroAlignment: diversificationConfig.trendPromotionRequireMicroAlignment,
     optimizerPausedSetupTypes: optimizationProfile.driftControl.pausedSetupTypes,
     optimizerPausedCombos: optimizationProfile.regimeGate.pausedCombos,
     invalidationReasons,
+    macroKillSwitchEnabled: macroFilterConfig.enabled,
+    macroAlignmentMinScore: macroFilterConfig.minAlignmentScore,
+    macroBlockedCount,
+    microstructureEnabled: microstructureBaseConfig.enabled,
+    microstructureAvailableCount,
+    microstructureAlignedCount,
     lifecycleEnabled: lifecycleConfig.lifecycleEnabled,
     evTieringEnabled: scoringConfig.evTieringEnabled,
   });
@@ -2403,5 +3274,6 @@ export async function getSetupById(id: string, options?: { forceRefresh?: boolea
 
 export function __resetSetupDetectorStateForTests(): void {
   setupContextStateById.clear();
+  historicalSecondBarsCache.clear();
   setupsInFlight = null;
 }

@@ -1086,3 +1086,153 @@ PR can merge only when:
   - Zero calibration blend weights to restore heuristic-only behavior temporarily.
 - Notes:
   - Last-week strict second-bar backtest remained strong after slice (`T1 76.47%`, `T2 70.59%`, `expectancyR +1.0587`).
+
+### Slice: P13-S1
+- Objective: Add quote microstructure fidelity to tick and microbar aggregation without breaking existing consumers.
+- Status: done
+- Scope:
+  - Extend normalized ticks with bid/ask sizes and aggressor proxy.
+  - Extend microbars with side-volume, delta-volume, and bid/ask imbalance fields.
+  - Wire additive websocket microbar payload fields.
+- Out of scope:
+  - Detector-level gate logic and macro filters.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/config/env.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/backend/src/services/tickCache.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/massiveTickStream.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/microbarAggregator.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/tickCache.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/__tests__/massiveTickStream.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S1_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/__tests__/massiveTickStream.test.ts`
+  - `pnpm --dir backend test -- src/services/__tests__/tickCache.test.ts`
+  - `pnpm --dir backend test -- src/services/spx/__tests__/microbarAggregator.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - Result: all listed gates passed.
+- Risks introduced:
+  - Quote sparsity can make aggressor/imbalance fields unavailable for some symbols/time windows.
+- Mitigations:
+  - Feature flag fallback (`ENABLE_L2_MICROSTRUCTURE`) and nullable additive fields.
+- Rollback:
+  - Set `ENABLE_L2_MICROSTRUCTURE=false` or revert slice commit.
+- Notes:
+  - Microstructure contract is now available for detector and optimizer layers.
+
+### Slice: P13-S2
+- Objective: Integrate macro + microstructure fidelity into production SPX setup scoring and gating.
+- Status: done
+- Scope:
+  - Add macro kill-switch score and gate reason.
+  - Add tick-derived microstructure summary/alignment and trend-family enforcement.
+  - Add strike-flow and intraday gamma-pressure confluence signals.
+  - Persist macro/microstructure diagnostics to setup metadata.
+- Out of scope:
+  - Legacy detector stack under `backend/src/services/setupDetector/*`.
+  - Contract selection and exit advisor refactor slices.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/setupDetector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/outcomeTracker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/setupDetector.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S2_2026-02-22.md`
+- Tests run:
+  - `pnpm exec eslint --no-ignore backend/src/services/spx/setupDetector.ts backend/src/services/spx/types.ts backend/src/services/spx/outcomeTracker.ts backend/src/services/spx/__tests__/setupDetector.test.ts`
+  - `pnpm --dir backend test -- src/services/spx/__tests__/setupDetector.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - Result: all listed gates passed.
+- Risks introduced:
+  - Overly strict macro floor or trend microstructure rule can suppress setup throughput.
+- Mitigations:
+  - Full env controls for floors/strictness and fail-open default when microstructure is unavailable.
+  - Historical timestamp runs ignore live tick-cache microstructure to avoid replay contamination.
+- Rollback:
+  - Disable filters (`SPX_SETUP_MACRO_KILLSWITCH_ENABLED=false`, `SPX_SETUP_MICROSTRUCTURE_ENABLED=false`) or revert slice commit.
+- Notes:
+  - Gate reasons now explicitly expose macro/microstructure blockers for optimizer governance and UI audit.
+
+### Slice: P13-S3
+- Objective: Move macro/microstructure optimization from static/env behavior to profile-driven learning with replay parity and governance guardrails.
+- Status: done
+- Scope:
+  - Extend optimizer row prep/candidate evaluation with macro/micro metadata.
+  - Add profile-driven macro/micro policy maps by setup/regime/time bucket.
+  - Replace confluence source-count saturation with weighted confluence.
+  - Add historical microstructure parity in replay via Massive second-bar-derived synthetic ticks.
+  - Add optimizer blocker-mix scorecard and trigger-throughput guardrail.
+- Out of scope:
+  - Contract selector and exit-advisor behavior changes.
+  - New setup families.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/optimizer.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/setupDetector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/historicalReconstruction.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/setupDetector.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/nightlyReplayOptimizer.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/__tests__/integration/spx-api.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S3_2026-02-22.md`
+- Tests run:
+  - `pnpm exec eslint --no-ignore backend/src/services/spx/optimizer.ts backend/src/services/spx/setupDetector.ts backend/src/services/spx/historicalReconstruction.ts backend/src/services/spx/types.ts backend/src/services/spx/__tests__/setupDetector.test.ts backend/src/services/spx/__tests__/nightlyReplayOptimizer.test.ts backend/src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/services/spx/__tests__/setupDetector.test.ts src/services/spx/__tests__/optimizer-confidence.test.ts src/services/spx/__tests__/nightlyReplayOptimizer.test.ts src/workers/__tests__/spxOptimizerWorker.test.ts`
+  - `pnpm --dir backend test -- src/services/__tests__/massiveTickStream.test.ts src/services/spx/__tests__/microbarAggregator.test.ts src/services/spx/__tests__/contractSelector.test.ts src/services/positions/__tests__/exitAdvisor.test.ts`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:backfill-historical 2026-02-16 2026-02-20`
+  - `LOG_LEVEL=warn pnpm --dir backend backtest:last-week instances second`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:optimizer-weekly`
+  - Result: all listed gates passed.
+- Risks introduced:
+  - Macro/micro gates can still over-suppress throughput if floors are too strict.
+  - Historical microstructure parity is based on synthetic quote fields from second bars (not native quote tape).
+- Mitigations:
+  - New throughput guardrail in optimizer promotion path.
+  - Blocker-mix telemetry in scorecard by setup/regime/time bucket.
+  - Fail-open default for unavailable microstructure remains enabled.
+- Rollback:
+  - Revert profile via optimizer history endpoint.
+  - Temporarily relax macro/micro gates via env (`SPX_SETUP_MACRO_KILLSWITCH_ENABLED=false`, `SPX_SETUP_MICROSTRUCTURE_ENABLED=false`) if incident response requires immediate throughput recovery.
+- Notes:
+  - Promotion gate backfill succeeded 5/5 sessions with strict second-bar fidelity (`usedMassiveMinuteBars=false`).
+  - Last-week strict replay remained low-throughput (`triggeredCount=1`), now explicitly observable in blocker/throughput governance outputs.
+
+### Slice: P13-S4
+- Objective: Implement contract/exit mechanics refinements for institutional execution discipline while preserving strict replay fidelity.
+- Status: done
+- Scope:
+  - Add setup/regime-aware delta banding and setup-family 0DTE rollover discipline in contract selection.
+  - Add deterministic 1R/2R scale-out mechanics and pivot-style runner trailing in exit advisor.
+  - Wire entry-price context from position tracker into advisor risk-unit model.
+- Out of scope:
+  - New setup families and optimizer threshold policy redesign.
+  - Brokerage execution/routing integration.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/exitAdvisor.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/__tests__/exitAdvisor.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S4_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/services/__tests__/massiveTickStream.test.ts src/services/spx/__tests__/microbarAggregator.test.ts src/services/spx/__tests__/contractSelector.test.ts src/services/positions/__tests__/exitAdvisor.test.ts`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:backfill-historical 2026-02-16 2026-02-20`
+  - `LOG_LEVEL=warn pnpm --dir backend backtest:last-week instances second`
+- Risks introduced:
+  - Contract candidate pool can shrink if delta/theta strictness is miscalibrated.
+  - Deterministic scale-outs can conflict with discretionary trader workflow expectations.
+- Mitigations:
+  - Relaxed filter fallback remains available in selector path.
+  - Advisor actions remain guidance (not forced broker automation) and include explicit milestone metadata.
+- Rollback:
+  - Revert this slice commit.
+  - Temporarily relax contract strictness by reverting delta-band/theta filters if starvation is observed.
+- Notes:
+  - Promotion-gate backfill held at 5/5 successful sessions with strict second-resolution fidelity.
+  - Last-week strict replay output: `T1 0.00%`, `T2 0.00%`, `expectancyR -1.04`, `triggeredCount=1`.
+  - Baseline comparator from earlier strict run (`T1 76.47%`, `T2 70.59%`, `expectancyR +1.0587`) implies deltas of `-76.47pp`, `-70.59pp`, `-2.0987R`; throughput policy recalibration remains the blocking promotion issue.

@@ -48,6 +48,13 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function isL2MicrostructureEnabled(): boolean {
+  const raw = process.env.ENABLE_L2_MICROSTRUCTURE;
+  if (typeof raw !== 'string') return true;
+  const normalized = raw.trim().toLowerCase();
+  return normalized !== 'false' && normalized !== '0' && normalized !== 'off';
+}
+
 function parseSymbols(symbolsCsv: string): string[] {
   const symbols = symbolsCsv
     .split(',')
@@ -153,6 +160,32 @@ function parseTickPayload(payload: unknown): NormalizedMarketTick | null {
   const size = getObjectNumber(event, ['size', 's', 'volume']) || 0;
   const timestampRaw = getObjectNumber(event, ['timestamp', 'ts', 't', 'y']) || Date.now();
   const sequence = getObjectNumber(event, ['sequence', 'seq', 'q']);
+  const microstructureEnabled = isL2MicrostructureEnabled();
+
+  const bidRaw = microstructureEnabled
+    ? getObjectNumber(event, ['bid', 'b', 'bp', 'bidPrice', 'bid_price', 'bidprice'])
+    : null;
+  const askRaw = microstructureEnabled
+    ? getObjectNumber(event, ['ask', 'a', 'ap', 'askPrice', 'ask_price', 'askprice'])
+    : null;
+  const bidSizeRaw = microstructureEnabled
+    ? getObjectNumber(event, ['bidSize', 'bs', 'bid_size', 'bidsize', 'bid_volume'])
+    : null;
+  const askSizeRaw = microstructureEnabled
+    ? getObjectNumber(event, ['askSize', 'as', 'ask_size', 'asksize', 'ask_volume'])
+    : null;
+
+  const bid = bidRaw != null && bidRaw > 0 ? bidRaw : null;
+  const ask = askRaw != null && askRaw > 0 ? askRaw : null;
+  const bidSize = bidSizeRaw != null && bidSizeRaw >= 0 ? Math.floor(bidSizeRaw) : null;
+  const askSize = askSizeRaw != null && askSizeRaw >= 0 ? Math.floor(askSizeRaw) : null;
+  const aggressorSide: NormalizedMarketTick['aggressorSide'] = !microstructureEnabled
+    ? 'neutral'
+    : ask != null && price >= ask
+      ? 'buyer'
+      : bid != null && price <= bid
+        ? 'seller'
+        : 'neutral';
 
   return {
     symbol,
@@ -161,6 +194,11 @@ function parseTickPayload(payload: unknown): NormalizedMarketTick | null {
     size: Math.max(0, Math.floor(size)),
     timestamp: normalizeTimestamp(timestampRaw),
     sequence: sequence === null ? null : Math.floor(sequence),
+    bid,
+    ask,
+    bidSize,
+    askSize,
+    aggressorSide,
   };
 }
 

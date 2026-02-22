@@ -70,6 +70,7 @@ function chartLevelLabel(level: SPXLevel): string {
 interface SPXChartProps {
   showAllRelevantLevels: boolean
   renderLevelAnnotations?: boolean
+  countReportingMode?: 'enabled' | 'disabled'
   mobileExpanded?: boolean
   futureOffsetBars?: number
   className?: string
@@ -87,6 +88,7 @@ interface SPXChartProps {
 export function SPXChart({
   showAllRelevantLevels,
   renderLevelAnnotations = true,
+  countReportingMode = 'enabled',
   mobileExpanded = false,
   futureOffsetBars,
   className,
@@ -601,6 +603,28 @@ export function SPXChart({
     }))
   }, [scenarioLanes])
 
+  const expandedBudget = useMemo<SPXLevelVisibilityBudget | undefined>(() => {
+    if (focusMode === 'execution' || !showAllRelevantLevels) {
+      return levelVisibilityBudget
+    }
+    const base = levelVisibilityBudget || {
+      nearWindowPoints: 16,
+      nearLabelBudget: 7,
+      maxTotalLabels: 16,
+      minGapPoints: 1.2,
+      pixelCollisionGap: 16,
+    }
+
+    return {
+      ...base,
+      nearWindowPoints: Number.MAX_SAFE_INTEGER,
+      nearLabelBudget: Math.max(base.nearLabelBudget, 256),
+      maxTotalLabels: Math.max(base.maxTotalLabels, 512),
+      minGapPoints: 0.01,
+      pixelCollisionGap: 0,
+    }
+  }, [focusMode, levelVisibilityBudget, showAllRelevantLevels])
+
   const marketDisplayedLevels = useMemo(() => {
     if (!renderLevelAnnotations) return []
     if (focusMode === 'execution') return focusedLevelAnnotations
@@ -608,6 +632,7 @@ export function SPXChart({
   }, [focusMode, focusedLevelAnnotations, levelAnnotations, renderLevelAnnotations, showAllRelevantLevels])
 
   useEffect(() => {
+    if (countReportingMode === 'disabled') return
     if (!renderLevelAnnotations) {
       onDisplayedLevelsChange?.(0, levelAnnotations.length + setupAnnotations.length + scenarioLaneAnnotations.length)
       return
@@ -619,6 +644,7 @@ export function SPXChart({
   }, [
     levelAnnotations.length,
     marketDisplayedLevels.length,
+    countReportingMode,
     onDisplayedLevelsChange,
     renderLevelAnnotations,
     scenarioLaneAnnotations.length,
@@ -743,7 +769,7 @@ export function SPXChart({
             levels={renderLevelAnnotations ? [...marketDisplayedLevels, ...setupAnnotations, ...scenarioLaneAnnotations] : []}
             futureOffsetBars={futureOffsetBars}
             isLoading={isLoading}
-            levelVisibilityBudget={levelVisibilityBudget}
+            levelVisibilityBudget={expandedBudget}
             onChartReady={onChartReady}
             onCrosshairSnapshot={setCrosshairSnapshot}
             onLevelLayoutStats={handleLevelLayoutStats}

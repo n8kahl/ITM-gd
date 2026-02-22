@@ -35,7 +35,29 @@ describe('tickCache', () => {
       size: 20,
       timestamp: 1700000000000,
       sequence: 10,
+      bid: null,
+      ask: null,
+      bidSize: null,
+      askSize: null,
+      aggressorSide: 'neutral',
     });
+  });
+
+  it('derives aggressor side from bid/ask quotes', () => {
+    expect(ingestTick({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 6030.25,
+      size: 8,
+      timestamp: 1700000001000,
+      sequence: 11,
+      bid: 6030,
+      ask: 6030.25,
+      bidSize: 20,
+      askSize: 18,
+    })).toBe(true);
+
+    expect(getLatestTick('SPX')?.aggressorSide).toBe('buyer');
   });
 
   it('drops duplicate and out-of-order sequence ticks', () => {
@@ -102,4 +124,3 @@ describe('tickCache', () => {
     expect(ticks[2].price).toBe(6003);
   });
 });
-

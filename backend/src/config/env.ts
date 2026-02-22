@@ -50,6 +50,7 @@ const envSchema = z.object({
   MASSIVE_TICK_FANOUT_THROTTLE_MS: z.string().default('150').transform(Number),
   MASSIVE_MICROBAR_FANOUT_THROTTLE_MS: z.string().default('250').transform(Number),
   MASSIVE_TICK_STALE_MS: z.string().default('5000').transform(Number),
+  ENABLE_L2_MICROSTRUCTURE: booleanFromEnv.default(true),
   SPX_SETUP_LIFECYCLE_ENABLED: booleanFromEnv.default(true),
   SPX_SETUP_TRANSITION_TELEMETRY_ENABLED: booleanFromEnv.default(true),
   SPX_SETUP_DEMOTION_STREAK: z.string().default('2').transform(Number),

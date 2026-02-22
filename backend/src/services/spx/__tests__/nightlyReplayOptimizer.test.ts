@@ -49,7 +49,25 @@ describe('spx/nightlyReplayOptimizer', () => {
       scorecard: {
         optimizationApplied: true,
         optimized: { tradeCount: 12 },
-        improvementPct: { t1WinRateDelta: 4.2, t2WinRateDelta: 2.1 },
+        improvementPct: {
+          t1WinRateDelta: 4.2,
+          t2WinRateDelta: 2.1,
+          objectiveDelta: 2,
+          objectiveConservativeDelta: 1.5,
+          expectancyRDelta: 0.2,
+        },
+        blockerMix: {
+          totalOpportunityCount: 0,
+          macroBlockedCount: 0,
+          microBlockedCount: 0,
+          macroBlockedPct: 0,
+          microBlockedPct: 0,
+          baselineTriggerRatePct: 0,
+          optimizedTriggerRatePct: 0,
+          triggerRateDeltaPct: 0,
+          triggerRateGuardrailPassed: true,
+          bySetupRegimeTimeBucket: [],
+        },
       },
     });
   });

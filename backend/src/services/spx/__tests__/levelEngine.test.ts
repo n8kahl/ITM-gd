@@ -146,4 +146,61 @@ describe('spx/levelEngine', () => {
     expect(mockCalculateLevels).toHaveBeenCalledTimes(2);
     expect(mockCacheSet).toHaveBeenCalled();
   });
+
+  it('skips non-renderable options levels when GEX prices are invalid', async () => {
+    mockComputeUnifiedGEXLandscape.mockResolvedValueOnce({
+      spx: {
+        symbol: 'SPX',
+        spotPrice: 0,
+        netGex: 0,
+        flipPoint: 0,
+        callWall: 0,
+        putWall: 0,
+        zeroGamma: 0,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-15T14:40:00.000Z',
+      },
+      spy: {
+        symbol: 'SPY',
+        spotPrice: 0,
+        netGex: 0,
+        flipPoint: 0,
+        callWall: 0,
+        putWall: 0,
+        zeroGamma: 0,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-15T14:40:00.000Z',
+      },
+      combined: {
+        symbol: 'COMBINED',
+        spotPrice: 0,
+        netGex: 0,
+        flipPoint: 0,
+        callWall: 0,
+        putWall: 0,
+        zeroGamma: 0,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-15T14:40:00.000Z',
+      },
+    });
+
+    const data = await getMergedLevels({ forceRefresh: true });
+    const gexDerived = data.levels.filter((level) => (
+      level.source === 'spx_call_wall'
+      || level.source === 'spx_put_wall'
+      || level.source === 'spx_flip_point'
+      || level.source === 'spy_call_wall'
+      || level.source === 'spy_put_wall'
+      || level.source === 'spy_flip_point'
+    ));
+
+    expect(gexDerived.length).toBe(0);
+    expect(data.levels.every((level) => Number.isFinite(level.price) && level.price > 0)).toBe(true);
+  });
 });

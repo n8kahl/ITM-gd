@@ -16,6 +16,7 @@ export interface PositionAdviceInput {
   symbol: string;
   type: PositionAnalysis['position']['type'];
   quantity: number;
+  entryPrice?: number;
   strike?: number;
   expiry?: string;
   currentPrice: number;
@@ -24,6 +25,8 @@ export interface PositionAdviceInput {
   pnlPct: number;
   daysToExpiry?: number;
   breakeven?: number;
+  pivotSupport?: number;
+  pivotResistance?: number;
   maxLoss?: number | string;
   greeks?: PositionAnalysis['greeks'];
 }
@@ -38,6 +41,7 @@ function toAdviceInput(analysis: PositionAnalysis): PositionAdviceInput {
     symbol: analysis.position.symbol,
     type: analysis.position.type,
     quantity: analysis.position.quantity,
+    entryPrice: analysis.position.entryPrice,
     strike: analysis.position.strike,
     expiry: analysis.position.expiry,
     currentPrice: Number(inferredCurrentPrice.toFixed(4)),
@@ -72,9 +76,24 @@ function toFiniteNumber(value: unknown): number | null {
   return value;
 }
 
+function contractMultiplier(input: PositionAdviceInput): number {
+  return input.type === 'stock' ? 1 : 100;
+}
+
+function positionUnitCount(input: PositionAdviceInput): number {
+  return Math.max(1, Math.abs(input.quantity));
+}
+
 function estimateRiskUnit(input: PositionAdviceInput): number {
   const maxLoss = toFiniteNumber(input.maxLoss);
   if (maxLoss && maxLoss > 0) return maxLoss;
+
+  const entryPrice = toFiniteNumber(input.entryPrice);
+  const breakeven = toFiniteNumber(input.breakeven);
+  if (entryPrice != null && breakeven != null && Math.abs(entryPrice - breakeven) >= 0.01) {
+    const structureRisk = Math.abs(entryPrice - breakeven) * positionUnitCount(input) * contractMultiplier(input);
+    return Math.max(150, structureRisk);
+  }
 
   const impliedCostBasis = Math.max(1, input.currentValue - input.pnl);
   return Math.max(250, impliedCostBasis * 0.4);
@@ -84,20 +103,27 @@ function inferDirection(input: PositionAdviceInput): 'long' | 'short' {
   return input.quantity >= 0 ? 'long' : 'short';
 }
 
-function suggestedTrailStop(input: PositionAdviceInput, rMultiple: number): number {
+function suggestedPivotTrailStop(input: PositionAdviceInput, rMultiple: number): number {
   const direction = inferDirection(input);
   const breakeven = toFiniteNumber(input.breakeven);
-  const rawTrailPct = rMultiple >= 2 ? 0.09 : 0.14;
-  const dtePenalty = (input.daysToExpiry ?? 999) <= 1 ? 0.04 : 0;
-  const trailPct = Math.min(0.2, Math.max(0.05, rawTrailPct - dtePenalty));
+  const riskUnit = estimateRiskUnit(input);
+  const riskPerContract = Math.max(
+    0.05,
+    riskUnit / (positionUnitCount(input) * contractMultiplier(input)),
+  );
+  const trailRiskMultiplier = rMultiple >= 2 ? 0.45 : 0.7;
+  const fallbackPivot = direction === 'long'
+    ? input.currentPrice - (riskPerContract * trailRiskMultiplier)
+    : input.currentPrice + (riskPerContract * trailRiskMultiplier);
+  const structuralPivot = direction === 'long'
+    ? toFiniteNumber(input.pivotSupport)
+    : toFiniteNumber(input.pivotResistance);
+  const pivotAnchor = structuralPivot ?? fallbackPivot;
 
   if (direction === 'long') {
-    const trailingStop = input.currentPrice * (1 - trailPct);
-    return Number(Math.max(breakeven ?? 0, trailingStop).toFixed(2));
+    return Number(Math.max(breakeven ?? 0, pivotAnchor).toFixed(2));
   }
-
-  const trailingStop = input.currentPrice * (1 + trailPct);
-  return Number(Math.min(breakeven ?? trailingStop, trailingStop).toFixed(2));
+  return Number(Math.min(breakeven ?? pivotAnchor, pivotAnchor).toFixed(2));
 }
 
 export class ExitAdvisor {
@@ -125,11 +151,13 @@ export class ExitAdvisor {
         input.positionId,
         'take_profit',
         'high',
-        `Position has reached ${rMultiple.toFixed(2)}R. Scale out to lock gains and keep a runner.`,
+        `Position has reached ${rMultiple.toFixed(2)}R. Execute the 2R scale: take additional size off and protect the runner behind pivots.`,
         {
           action: 'scale_out',
-          closePct: 60,
+          closePct: 25,
           milestone: '2R',
+          priorMilestone: '1R',
+          retainedRunnerPct: 10,
           rMultiple: Number(rMultiple.toFixed(2)),
         },
       ));
@@ -137,18 +165,19 @@ export class ExitAdvisor {
       advice.push(buildAdvice(
         input.positionId,
         'take_profit',
-        'medium',
-        `Position has reached ${rMultiple.toFixed(2)}R. Consider taking first scale at 1R.`,
+        'high',
+        `Position has reached ${rMultiple.toFixed(2)}R. Execute first scale at 1R and move stop to breakeven.`,
         {
           action: 'scale_out',
-          closePct: 35,
+          closePct: 65,
           milestone: '1R',
+          moveStopToBreakeven: true,
           rMultiple: Number(rMultiple.toFixed(2)),
         },
       ));
     }
 
-    if (input.pnlPct >= 100) {
+    if (rMultiple < 1 && input.pnlPct >= 100) {
       advice.push(buildAdvice(
         input.positionId,
         'take_profit',
@@ -159,7 +188,7 @@ export class ExitAdvisor {
           closePct: 75,
         },
       ));
-    } else if (input.pnlPct >= 50) {
+    } else if (rMultiple < 1 && input.pnlPct >= 50) {
       advice.push(buildAdvice(
         input.positionId,
         'take_profit',
@@ -231,16 +260,19 @@ export class ExitAdvisor {
     }
 
     if (rMultiple >= 1 && input.type !== 'stock') {
-      const protectiveStop = suggestedTrailStop(input, rMultiple);
+      const protectiveStop = suggestedPivotTrailStop(input, rMultiple);
       advice.push(buildAdvice(
         input.positionId,
         'stop_loss',
         'medium',
-        `Position is at ${rMultiple.toFixed(2)}R. Trail stop behind structure to protect runner.`,
+        `Position is at ${rMultiple.toFixed(2)}R. Trail stop using pivot structure to protect the runner.`,
         {
           action: 'trail_stop',
           suggestedStop: protectiveStop,
-          trailModel: rMultiple >= 2 ? 'tight_runner' : 'balanced',
+          trailModel: rMultiple >= 2 ? 'pivot_runner_tight' : 'pivot_runner',
+          anchor: input.pivotSupport != null || input.pivotResistance != null
+            ? 'explicit_pivot'
+            : 'risk_proxy_pivot',
           rMultiple: Number(rMultiple.toFixed(2)),
         },
       ));
