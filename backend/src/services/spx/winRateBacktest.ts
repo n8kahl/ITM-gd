@@ -115,6 +115,7 @@ const DEFAULT_EXECUTION_MODEL: SPXBacktestExecutionModel = {
   partialAtT1Pct: clamp(parseFloatEnv(process.env.SPX_BACKTEST_PARTIAL_AT_T1_PCT, 0.5, 0), 0, 1),
   moveStopToBreakevenAfterT1: parseBooleanEnv(process.env.SPX_BACKTEST_MOVE_STOP_TO_BREAKEVEN_AFTER_T1, true),
 };
+const DB_PAGE_SIZE = 1000;
 
 function resolveExecutionModel(
   overrides?: Partial<SPXBacktestExecutionModel>,
@@ -402,41 +403,54 @@ async function loadSetupsFromInstances(input: {
   const includeHiddenTiers = input.includeHiddenTiers === true;
   const includePausedSetups = input.includePausedSetups === true;
   const pauseFilters = await loadBacktestPauseFilters({ includePausedSetups });
-  const { data, error } = await supabase
-    .from('spx_setup_instances')
-    .select(
-      [
-        'engine_setup_id',
-        'session_date',
-        'setup_type',
-        'direction',
-        'regime',
-        'tier',
-        'entry_zone_low',
-        'entry_zone_high',
-        'stop_price',
-        'target_1_price',
-        'target_2_price',
-        'first_seen_at',
-        'triggered_at',
-        'metadata',
-      ].join(','),
-    )
-    .gte('session_date', input.from)
-    .lte('session_date', input.to);
+  const rows: Record<string, unknown>[] = [];
+  let page = 0;
+  while (true) {
+    const fromIndex = page * DB_PAGE_SIZE;
+    const toIndex = fromIndex + DB_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('spx_setup_instances')
+      .select(
+        [
+          'engine_setup_id',
+          'session_date',
+          'setup_type',
+          'direction',
+          'regime',
+          'tier',
+          'entry_zone_low',
+          'entry_zone_high',
+          'stop_price',
+          'target_1_price',
+          'target_2_price',
+          'first_seen_at',
+          'triggered_at',
+          'metadata',
+        ].join(','),
+      )
+      .gte('session_date', input.from)
+      .lte('session_date', input.to)
+      .order('session_date', { ascending: true })
+      .order('engine_setup_id', { ascending: true })
+      .range(fromIndex, toIndex);
 
-  if (error) {
-    const tableMissing = isMissingTableError(error.message);
-    return {
-      setups: [],
-      notes: [tableMissing
-        ? 'spx_setup_instances table is not available in the connected Supabase project.'
-        : `Failed to load spx_setup_instances: ${error.message}`],
-      tableMissing,
-    };
+    if (error) {
+      const tableMissing = isMissingTableError(error.message);
+      return {
+        setups: [],
+        notes: [tableMissing
+          ? 'spx_setup_instances table is not available in the connected Supabase project.'
+          : `Failed to load spx_setup_instances: ${error.message}`],
+        tableMissing,
+      };
+    }
+
+    const pageRows = (Array.isArray(data) ? data : []) as unknown as Record<string, unknown>[];
+    rows.push(...pageRows);
+    if (pageRows.length < DB_PAGE_SIZE) break;
+    page += 1;
   }
 
-  const rows = (Array.isArray(data) ? data : []) as unknown as Record<string, unknown>[];
   const setups: BacktestSetupCandidate[] = [];
   let skipped = 0;
   let skippedBlocked = 0;

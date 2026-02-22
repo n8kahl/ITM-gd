@@ -133,6 +133,15 @@ async function runCycle(): Promise<void> {
 
       const result = await runSPXOptimizerScan({ mode: 'nightly_auto' });
       lastRunDateEt = schedule.dateEt;
+
+      const dataQuality = result.scorecard.dataQuality;
+      if (dataQuality?.failClosedActive && !dataQuality.gatePassed) {
+        throw new Error([
+          'SPX optimizer fail-closed guardrail blocked nightly promotion.',
+          ...dataQuality.reasons.slice(0, 4),
+        ].join(' '));
+      }
+
       lastSuccessAt = new Date().toISOString();
       lastErrorMessage = null;
       await persistSPXOptimizerNightlyStatus({
