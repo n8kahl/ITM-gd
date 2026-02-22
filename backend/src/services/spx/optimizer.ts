@@ -4,7 +4,10 @@ import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import type { SetupStatus, SetupType } from './types';
 import type { SetupFinalOutcome } from './outcomeTracker';
-import { runSPXWinRateBacktest } from './winRateBacktest';
+import {
+  runSPXWinRateBacktest,
+  type SPXWinRateBacktestResult,
+} from './winRateBacktest';
 
 export interface SPXGeometryPolicyEntry {
   stopScale: number;
@@ -153,7 +156,26 @@ export interface SPXOptimizerScorecard {
     remove: string[];
   };
   optimizationApplied: boolean;
+  dataQuality?: SPXOptimizerDataQuality;
   notes: string[];
+}
+
+export interface SPXOptimizerDataQuality {
+  failClosedActive: boolean;
+  gatePassed: boolean;
+  reasons: string[];
+  sourceUsed: 'spx_setup_instances' | 'ai_coach_tracked_setups' | 'none' | 'unknown';
+  requestedResolution: 'second';
+  resolutionUsed: 'second' | 'minute' | 'none' | 'unknown';
+  fallbackSessionCount: number;
+  missingBarsSessionCount: number;
+  setupCount: number;
+  evaluatedSetupCount: number;
+  skippedSetupCount: number;
+  optimizerRows: number;
+  overrideRows: number;
+  overrideMatchedRows: number;
+  overrideCoveragePct: number;
 }
 
 export interface SPXOptimizationMetrics {
@@ -241,6 +263,23 @@ interface OutcomeOverride {
   stopHitAt: string | null;
 }
 
+interface OutcomeOverrideLoadResult {
+  overrides: Map<string, OutcomeOverride>;
+  backtest: Pick<
+    SPXWinRateBacktestResult,
+    | 'sourceUsed'
+    | 'requestedResolution'
+    | 'resolutionUsed'
+    | 'resolutionFallbackSessions'
+    | 'missingBarsSessions'
+    | 'setupCount'
+    | 'evaluatedSetupCount'
+    | 'skippedSetupCount'
+    | 'notes'
+  > | null;
+  error: string | null;
+}
+
 interface PreparedOptimizationRow {
   sessionDate: string;
   setupType: string;
@@ -263,6 +302,11 @@ interface PreparedOptimizationRow {
   flowConfirmed: boolean;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
+}
+
+interface OptimizationRowsLoadResult {
+  rows: PreparedOptimizationRow[];
+  overrideMatchedRows: number;
 }
 
 interface ThresholdCandidate {
@@ -509,6 +553,25 @@ const PROMOTION_MIN_EXPECTANCY_DELTA_R = 0.10;
 const PROMOTION_MAX_FAILURE_DELTA_PCT = 1;
 const WILSON_Z_95 = 1.96;
 const ADD_SETUP_MIN_T1_LOWER_BOUND_PCT = 52;
+const DB_PAGE_SIZE = 1000;
+const FAIL_CLOSED_AUTOMATED_ENABLED = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_AUTOMATED || 'true').toLowerCase() !== 'false';
+const FAIL_CLOSED_REQUIRE_SECOND_RESOLUTION = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_SECOND_BARS || 'true').toLowerCase() !== 'false';
+const FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE || 'true').toLowerCase() !== 'false';
+const FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT = (() => {
+  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT || '');
+  if (!Number.isFinite(parsed)) return 95;
+  return clamp(parsed, 50, 100);
+})();
+const FAIL_CLOSED_MAX_FALLBACK_SESSIONS = (() => {
+  const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MAX_FALLBACK_SESSIONS || '', 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+})();
+const FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS = (() => {
+  const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS || '', 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+})();
 
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
@@ -941,7 +1004,7 @@ function optimizationRowKey(engineSetupId: string, sessionDate: string): string 
   return `${engineSetupId}:${sessionDate}`;
 }
 
-async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promise<Map<string, OutcomeOverride>> {
+async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promise<OutcomeOverrideLoadResult> {
   try {
     const backtest = await runSPXWinRateBacktest({
       from,
@@ -949,6 +1012,8 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       source: 'spx_setup_instances',
       resolution: 'second',
       includeRows: true,
+      includeBlockedSetups: true,
+      includeHiddenTiers: true,
       includePausedSetups: true,
     });
 
@@ -965,15 +1030,111 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       });
     }
 
-    return map;
+    return {
+      overrides: map,
+      backtest: {
+        sourceUsed: backtest.sourceUsed,
+        requestedResolution: backtest.requestedResolution,
+        resolutionUsed: backtest.resolutionUsed,
+        resolutionFallbackSessions: backtest.resolutionFallbackSessions,
+        missingBarsSessions: backtest.missingBarsSessions,
+        setupCount: backtest.setupCount,
+        evaluatedSetupCount: backtest.evaluatedSetupCount,
+        skippedSetupCount: backtest.skippedSetupCount,
+        notes: backtest.notes,
+      },
+      error: null,
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     logger.warn('SPX optimizer failed to load outcome overrides from backtest', {
       from,
       to,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     });
-    return new Map();
+    return {
+      overrides: new Map(),
+      backtest: null,
+      error: message,
+    };
   }
+}
+
+function summarizeOptimizerDataQuality(input: {
+  automatedMode: boolean;
+  optimizerRows: number;
+  overrideRows: number;
+  overrideMatchedRows: number;
+  backtest: OutcomeOverrideLoadResult['backtest'];
+  error: string | null;
+}): SPXOptimizerDataQuality {
+  const overrideCoveragePct = input.overrideRows > 0
+    ? round((input.overrideMatchedRows / input.overrideRows) * 100, 2)
+    : input.optimizerRows > 0 ? 0 : 100;
+  const sourceUsed = input.backtest?.sourceUsed ?? 'unknown';
+  const resolutionUsed = input.backtest?.resolutionUsed ?? 'unknown';
+  const fallbackSessionCount = input.backtest?.resolutionFallbackSessions.length ?? 0;
+  const missingBarsSessionCount = input.backtest?.missingBarsSessions.length ?? 0;
+  const setupCount = input.backtest?.setupCount ?? 0;
+  const evaluatedSetupCount = input.backtest?.evaluatedSetupCount ?? 0;
+  const skippedSetupCount = input.backtest?.skippedSetupCount ?? 0;
+  const reasons: string[] = [];
+
+  if (input.error) {
+    reasons.push(`Backtest override load failed: ${input.error}`);
+  }
+  if (!input.backtest) {
+    reasons.push('Backtest quality metadata is unavailable.');
+  }
+  if (input.optimizerRows > 0 && input.overrideRows === 0) {
+    reasons.push('Backtest returned zero override rows while optimizer rows are present.');
+  }
+  if (
+    FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE
+    && sourceUsed !== 'spx_setup_instances'
+  ) {
+    reasons.push(`Backtest source must be spx_setup_instances (received ${sourceUsed}).`);
+  }
+  if (
+    FAIL_CLOSED_REQUIRE_SECOND_RESOLUTION
+    && resolutionUsed !== 'second'
+  ) {
+    reasons.push(`Massive second-bar resolution required (received ${resolutionUsed}).`);
+  }
+  if (fallbackSessionCount > FAIL_CLOSED_MAX_FALLBACK_SESSIONS) {
+    reasons.push(
+      `Resolution fallback sessions ${fallbackSessionCount} exceed max ${FAIL_CLOSED_MAX_FALLBACK_SESSIONS}.`,
+    );
+  }
+  if (missingBarsSessionCount > FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS) {
+    reasons.push(
+      `Missing-bars sessions ${missingBarsSessionCount} exceed max ${FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS}.`,
+    );
+  }
+  if (input.overrideRows > 0 && overrideCoveragePct < FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT) {
+    reasons.push(
+      `Override coverage ${overrideCoveragePct}% below floor ${FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT}%.`,
+    );
+  }
+
+  const failClosedActive = input.automatedMode && FAIL_CLOSED_AUTOMATED_ENABLED;
+  return {
+    failClosedActive,
+    gatePassed: !failClosedActive || reasons.length === 0,
+    reasons,
+    sourceUsed,
+    requestedResolution: 'second',
+    resolutionUsed,
+    fallbackSessionCount,
+    missingBarsSessionCount,
+    setupCount,
+    evaluatedSetupCount,
+    skippedSetupCount,
+    optimizerRows: input.optimizerRows,
+    overrideRows: input.overrideRows,
+    overrideMatchedRows: input.overrideMatchedRows,
+    overrideCoveragePct,
+  };
 }
 
 function emptyMetrics(): SPXOptimizationMetrics {
@@ -1457,24 +1618,44 @@ async function loadOptimizationRows(
   from: string,
   to: string,
   outcomeOverrides?: Map<string, OutcomeOverride>,
-): Promise<PreparedOptimizationRow[]> {
-  const { data, error } = await supabase
-    .from('spx_setup_instances')
-    .select('engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata')
-    .gte('session_date', from)
-    .lte('session_date', to);
+): Promise<OptimizationRowsLoadResult> {
+  const rows: OptimizationRow[] = [];
+  let page = 0;
 
-  if (error) {
-    if (isMissingTableError(error.message)) {
-      logger.warn('SPX optimizer skipped row load because spx_setup_instances is missing');
-      return [];
+  while (true) {
+    const fromIndex = page * DB_PAGE_SIZE;
+    const toIndex = fromIndex + DB_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('spx_setup_instances')
+      .select('engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata')
+      .gte('session_date', from)
+      .lte('session_date', to)
+      .order('session_date', { ascending: true })
+      .order('engine_setup_id', { ascending: true })
+      .range(fromIndex, toIndex);
+
+    if (error) {
+      if (isMissingTableError(error.message)) {
+        logger.warn('SPX optimizer skipped row load because spx_setup_instances is missing');
+        return {
+          rows: [],
+          overrideMatchedRows: 0,
+        };
+      }
+      throw new Error(`Failed to load optimizer rows: ${error.message}`);
     }
-    throw new Error(`Failed to load optimizer rows: ${error.message}`);
+
+    const pageRows = (data || []) as OptimizationRow[];
+    rows.push(...pageRows);
+    if (pageRows.length < DB_PAGE_SIZE) break;
+    page += 1;
   }
 
-  return ((data || []) as OptimizationRow[]).map((row) => {
+  let overrideMatchedRows = 0;
+  const preparedRows = rows.map((row) => {
     const override = outcomeOverrides?.get(optimizationRowKey(row.engine_setup_id, row.session_date));
     if (!override) return toPreparedRow(row);
+    overrideMatchedRows += 1;
 
     return toPreparedRow({
       ...row,
@@ -1484,6 +1665,11 @@ async function loadOptimizationRows(
       stop_hit_at: override.stopHitAt,
     });
   });
+
+  return {
+    rows: preparedRows,
+    overrideMatchedRows,
+  };
 }
 
 async function readPersistedOptimizerState(): Promise<PersistedOptimizerStateRow | null> {
@@ -1743,8 +1929,17 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
 
   const profile = await getActiveSPXOptimizationProfile();
   const { from, to } = defaultScanRange(profile);
-  const outcomeOverrides = await loadOutcomeOverridesFromBacktest(from, to);
-  const rows = await loadOptimizationRows(from, to, outcomeOverrides);
+  const outcomeOverrideLoad = await loadOutcomeOverridesFromBacktest(from, to);
+  const rowLoad = await loadOptimizationRows(from, to, outcomeOverrideLoad.overrides);
+  const rows = rowLoad.rows;
+  const dataQuality = summarizeOptimizerDataQuality({
+    automatedMode: false,
+    optimizerRows: rows.length,
+    overrideRows: outcomeOverrideLoad.overrides.size,
+    overrideMatchedRows: rowLoad.overrideMatchedRows,
+    backtest: outcomeOverrideLoad.backtest,
+    error: outcomeOverrideLoad.error,
+  });
   const baselineCandidate: ThresholdCandidate = {
     requireFlowConfirmation: profile.flowGate.requireFlowConfirmation,
     minConfluenceScore: profile.qualityGate.minConfluenceScore,
@@ -1795,7 +1990,11 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
       remove: [],
     },
     optimizationApplied: false,
-    notes: ['Optimizer scorecard is using baseline profile defaults.'],
+    dataQuality,
+    notes: [
+      'Optimizer scorecard is using baseline profile defaults.',
+      `Data quality snapshot: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, overrideCoverage=${dataQuality.overrideCoveragePct}%.`,
+    ],
   };
 }
 
@@ -1822,8 +2021,17 @@ export async function runSPXOptimizerScan(input?: {
   const trainingTo = shiftDate(validationFrom, -1);
   const trainingFrom = shiftDate(trainingTo, -(trainingDays - 1));
 
-  const outcomeOverrides = await loadOutcomeOverridesFromBacktest(trainingFrom, validationTo);
-  const rows = await loadOptimizationRows(trainingFrom, validationTo, outcomeOverrides);
+  const outcomeOverrideLoad = await loadOutcomeOverridesFromBacktest(trainingFrom, validationTo);
+  const rowLoad = await loadOptimizationRows(trainingFrom, validationTo, outcomeOverrideLoad.overrides);
+  const rows = rowLoad.rows;
+  const dataQuality = summarizeOptimizerDataQuality({
+    automatedMode,
+    optimizerRows: rows.length,
+    overrideRows: outcomeOverrideLoad.overrides.size,
+    overrideMatchedRows: rowLoad.overrideMatchedRows,
+    backtest: outcomeOverrideLoad.backtest,
+    error: outcomeOverrideLoad.error,
+  });
   const trainingRows = rows.filter((row) => row.sessionDate >= trainingFrom && row.sessionDate <= trainingTo);
   const validationRows = rows.filter((row) => row.sessionDate >= validationFrom && row.sessionDate <= validationTo);
 
@@ -1919,6 +2127,7 @@ export async function runSPXOptimizerScan(input?: {
     )
     && weeklyGuardrailPassed
     && promotionGuardrailPassed
+    && dataQuality.gatePassed
   );
 
   const activeCandidate = optimizationApplied ? bestCandidate : baselineCandidate;
@@ -1963,43 +2172,49 @@ export async function runSPXOptimizerScan(input?: {
     new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
   ).sort();
 
-  const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
-    ...profileForScan,
-    source: 'scan',
-    qualityGate: {
-      ...profileForScan.qualityGate,
-      minConfluenceScore: activeCandidate.minConfluenceScore,
-      minPWinCalibrated: activeCandidate.minPWinCalibrated,
-      minEvR: activeCandidate.minEvR,
-    },
-    flowGate: {
-      ...profileForScan.flowGate,
-      minAlignmentPct: activeCandidate.minAlignmentPct,
-      requireFlowConfirmation: activeCandidate.requireFlowConfirmation,
-    },
-    indicatorGate: {
-      ...profileForScan.indicatorGate,
-      requireEmaAlignment: activeCandidate.requireEmaAlignment,
-      requireVolumeRegimeAlignment: activeCandidate.requireVolumeRegimeAlignment,
-    },
-    timingGate: {
-      ...profileForScan.timingGate,
-      enabled: activeCandidate.enforceTimingGate,
-    },
-    regimeGate: {
-      ...profileForScan.regimeGate,
-      pausedCombos,
-    },
-    tradeManagement: {
-      ...profileForScan.tradeManagement,
-      partialAtT1Pct: activeCandidate.partialAtT1Pct,
-      moveStopToBreakeven: true,
-    },
-    driftControl: {
-      ...profileForScan.driftControl,
-      pausedSetupTypes: mergedPausedSetupTypes,
-    },
-  }, new Date().toISOString());
+  const failClosedBlockedProfileMutation = dataQuality.failClosedActive && !dataQuality.gatePassed;
+  const nextProfile: SPXOptimizationProfile = failClosedBlockedProfileMutation
+    ? withDateRangeProfile({
+      ...profileForScan,
+      source: 'scan',
+    }, new Date().toISOString())
+    : withDateRangeProfile({
+      ...profileForScan,
+      source: 'scan',
+      qualityGate: {
+        ...profileForScan.qualityGate,
+        minConfluenceScore: activeCandidate.minConfluenceScore,
+        minPWinCalibrated: activeCandidate.minPWinCalibrated,
+        minEvR: activeCandidate.minEvR,
+      },
+      flowGate: {
+        ...profileForScan.flowGate,
+        minAlignmentPct: activeCandidate.minAlignmentPct,
+        requireFlowConfirmation: activeCandidate.requireFlowConfirmation,
+      },
+      indicatorGate: {
+        ...profileForScan.indicatorGate,
+        requireEmaAlignment: activeCandidate.requireEmaAlignment,
+        requireVolumeRegimeAlignment: activeCandidate.requireVolumeRegimeAlignment,
+      },
+      timingGate: {
+        ...profileForScan.timingGate,
+        enabled: activeCandidate.enforceTimingGate,
+      },
+      regimeGate: {
+        ...profileForScan.regimeGate,
+        pausedCombos,
+      },
+      tradeManagement: {
+        ...profileForScan.tradeManagement,
+        partialAtT1Pct: activeCandidate.partialAtT1Pct,
+        moveStopToBreakeven: true,
+      },
+      driftControl: {
+        ...profileForScan.driftControl,
+        pausedSetupTypes: mergedPausedSetupTypes,
+      },
+    }, new Date().toISOString());
 
   const setupActions = buildSetupActionRecommendations({
     setupTypeBuckets: setupTypePerformance,
@@ -2033,6 +2248,7 @@ export async function runSPXOptimizerScan(input?: {
     setupComboPerformance,
     setupActions,
     optimizationApplied,
+    dataQuality,
     notes: [
       optimizationApplied
         ? `Walk-forward optimization applied to active profile (validation trades=${optimizedValidationMetrics.tradeCount}, minimum required=${requiredValidationTrades}).`
@@ -2051,6 +2267,16 @@ export async function runSPXOptimizerScan(input?: {
       `Geometry policy: setupType=${Object.keys(nextProfile.geometryPolicy.bySetupType).length}, setupRegime=${Object.keys(nextProfile.geometryPolicy.bySetupRegime).length}, setupRegimeTimeBucket=${Object.keys(nextProfile.geometryPolicy.bySetupRegimeTimeBucket).length}.`,
       `Drift control paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine paused ${quarantinePausedSetupTypes.length} setup types; merged paused setup types=${mergedPausedSetupTypes.length}.`,
       `Regime gate paused ${pausedCombos.length} setup/regime combos.`,
+      `Fail-closed gate active=${dataQuality.failClosedActive}, passed=${dataQuality.gatePassed}.`,
+      ...(failClosedBlockedProfileMutation
+        ? ['Fail-closed policy retained the previously active profile; no guard/profile mutations were applied.']
+        : []),
+      `Data quality: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, fallbackSessions=${dataQuality.fallbackSessionCount}, missingBarsSessions=${dataQuality.missingBarsSessionCount}, overrideCoverage=${dataQuality.overrideCoveragePct}%.`,
+      ...(
+        dataQuality.reasons.length > 0
+          ? dataQuality.reasons.map((reason) => `Fail-closed reason: ${reason}`)
+          : ['Fail-closed data-quality guardrail passed.']
+      ),
     ],
   };
 
