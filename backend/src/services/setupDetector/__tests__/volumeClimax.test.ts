@@ -66,4 +66,48 @@ describe('detectVolumeClimax', () => {
 
     expect(detectVolumeClimax(snapshot)).toBeNull();
   });
+
+  it('blocks setup when microstructure conflicts with direction', () => {
+    const snapshot = createSnapshot();
+    snapshot.microstructure = {
+      source: 'tick_cache',
+      available: true,
+      sampleCount: 120,
+      quoteCoveragePct: 88,
+      buyVolume: 2600,
+      sellVolume: 900,
+      neutralVolume: 400,
+      aggressorSkew: 0.48,
+      bidAskImbalance: 0.52,
+      askBidSizeRatio: 0.28,
+      avgSpreadBps: 9.2,
+      bidSizeAtClose: 240,
+      askSizeAtClose: 68,
+    };
+
+    expect(detectVolumeClimax(snapshot)).toBeNull();
+  });
+
+  it('allows setup when microstructure confirms directional pressure', () => {
+    const snapshot = createSnapshot();
+    snapshot.microstructure = {
+      source: 'tick_cache',
+      available: true,
+      sampleCount: 130,
+      quoteCoveragePct: 90,
+      buyVolume: 1300,
+      sellVolume: 2900,
+      neutralVolume: 300,
+      aggressorSkew: -0.38,
+      bidAskImbalance: -0.46,
+      askBidSizeRatio: 3.72,
+      avgSpreadBps: 8.4,
+      bidSizeAtClose: 54,
+      askSizeAtClose: 201,
+    };
+
+    const signal = detectVolumeClimax(snapshot);
+    expect(signal).toBeTruthy();
+    expect(signal?.direction).toBe('short');
+  });
 });

@@ -43,6 +43,21 @@ export interface DetectorSnapshot {
   intradayBars: MassiveAggregate[];
   dailyBars: MassiveAggregate[];
   levels: LevelsResponse;
+  microstructure?: {
+    source: 'tick_cache';
+    available: boolean;
+    sampleCount: number;
+    quoteCoveragePct: number;
+    buyVolume: number;
+    sellVolume: number;
+    neutralVolume: number;
+    aggressorSkew: number | null;
+    bidAskImbalance: number | null;
+    askBidSizeRatio: number | null;
+    avgSpreadBps: number | null;
+    bidSizeAtClose: number | null;
+    askSizeAtClose: number | null;
+  };
   detectedAt: string;
 }
 

@@ -1267,3 +1267,37 @@ PR can merge only when:
   - Revert P14-S1 files listed above and redeploy websocket service.
 - Notes:
   - This slice intentionally limits change radius to telemetry contracts before detector-policy edits.
+
+### Slice: P14-S2
+- Objective: Integrate directional microstructure confirmation into setup-detector `volumeClimax` and `vwap` logic.
+- Status: done
+- Scope:
+  - Extend setup-detector snapshot contract with optional microstructure telemetry.
+  - Build microstructure summary from live tick cache in setup-detector service.
+  - Apply directional pressure confirmation in `volumeClimax` and `vwap` detectors.
+  - Add targeted unit tests for microstructure conflict/confirm behavior.
+- Out of scope:
+  - Optimizer scorecard/blocker-mix changes for this detector pipeline.
+  - SPX core setup-detector threshold/gating changes.
+  - Broker routing or reconciliation work.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/index.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/volumeClimax.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/vwap.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/volumeClimax.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/setupDetector/__tests__/vwap.test.ts`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S2_2026-02-22.md`
+- Tests run:
+  - `pnpm --dir backend test -- src/services/setupDetector/__tests__/volumeClimax.test.ts src/services/setupDetector/__tests__/vwap.test.ts src/services/setupDetector/__tests__/detectors.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - Result: all pass.
+- Risks introduced:
+  - Static directional microstructure thresholds may require regime tuning.
+- Mitigations:
+  - Fail-open behavior retained when microstructure unavailable.
+  - Signal payload now carries microstructure evidence for later optimization/governance.
+- Rollback:
+  - Revert P14-S2 files listed above and rerun targeted tests.
+- Notes:
+  - This slice improves live directional fidelity while preserving backward compatibility in sparse quote conditions.
