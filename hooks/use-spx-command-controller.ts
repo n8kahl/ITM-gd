@@ -73,7 +73,7 @@ export function useSPXCommandController() {
   } = useSPXSetupContext()
 
   const [mobileTab, setMobileTab] = useState<MobilePanelTab>('chart')
-  const [showLevelOverlay, setShowLevelOverlay] = useState(false)
+  const [showLevelOverlay, setShowLevelOverlay] = useState(true)
   const [showAdvancedHud, setShowAdvancedHud] = useState(false)
   const [initialSkeletonExpired, setInitialSkeletonExpired] = useState(false)
   const [showShortcutHelp, setShowShortcutHelp] = useState(false)
@@ -176,20 +176,20 @@ export function useSPXCommandController() {
   }, [feedFallbackReasonCode, primaryActionMode, primaryEntryRiskGate.allowEntry, primaryEntryRiskGate.reasonCode])
   const primaryActionGuidance = useMemo(() => {
     if (primaryActionMode === 'in_trade') {
-      return 'Trade active: manage risk and exits.'
+      return 'Manage active trade.'
     }
     if (!primaryActionTargetSetup) {
-      return 'No actionable setup: wait for alignment.'
+      return 'No actionable setup.'
     }
     if (primaryActionMode === 'scan') {
-      return `Best setup: ${primaryActionTargetSetup.direction} ${primaryActionTargetSetup.regime}.`
+      return 'Select best setup.'
     }
     if (!primaryEntryRiskGate.allowEntry) {
       return primaryActionBlockedReason
-        ? `Hold: ${primaryActionBlockedReason}.`
-        : 'Hold: entry gate is blocking staging.'
+        ? `Wait: ${primaryActionBlockedReason}.`
+        : 'Wait: entry blocked.'
     }
-    return `Ready to stage: ${primaryActionTargetSetup.direction} ${primaryActionTargetSetup.regime}.`
+    return 'Ready to stage.'
   }, [
     primaryActionBlockedReason,
     primaryActionMode,
@@ -321,23 +321,11 @@ export function useSPXCommandController() {
   }, [])
 
   const handleToggleAdvancedHud = useCallback(() => {
-    setShowAdvancedHud((previous) => {
-      const next = !previous
-      if (next) {
-        setShowLevelOverlay(false)
-      }
-      return next
-    })
+    setShowAdvancedHud((previous) => !previous)
   }, [])
 
   const handleToggleLevelOverlay = useCallback((_: 'action_strip' | 'command' | 'shortcut') => {
-    setShowLevelOverlay((previous) => {
-      const next = !previous
-      if (next) {
-        setShowAdvancedHud(false)
-      }
-      return next
-    })
+    setShowLevelOverlay((previous) => !previous)
   }, [])
 
   const { commandPaletteCommands, runKeyboardShortcut, runCommandById } = useSPXCommandRegistry({
@@ -554,17 +542,15 @@ export function useSPXCommandController() {
 
   useEffect(() => {
     if (!showAdvancedHud) return
-    if (showLevelOverlay || showCommandPalette || !sidebarOpen || isMobile) {
-      setShowAdvancedHud(false)
+    if (showCommandPalette || !sidebarOpen || isMobile) {
+      const rafId = window.requestAnimationFrame(() => {
+        setShowAdvancedHud(false)
+      })
+      return () => {
+        window.cancelAnimationFrame(rafId)
+      }
     }
-  }, [isMobile, showAdvancedHud, showCommandPalette, showLevelOverlay, sidebarOpen])
-
-  useEffect(() => {
-    if (!showLevelOverlay) return
-    if (showCommandPalette || isMobile) {
-      setShowLevelOverlay(false)
-    }
-  }, [isMobile, showCommandPalette, showLevelOverlay])
+  }, [isMobile, showAdvancedHud, showCommandPalette, sidebarOpen])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
