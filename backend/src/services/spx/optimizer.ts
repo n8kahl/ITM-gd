@@ -22,6 +22,7 @@ export interface SPXGeometryPolicyEntry {
 export interface SPXMacroMicroPolicyEntry {
   minMacroAlignmentScore?: number;
   requireMicrostructureAlignment?: boolean;
+  requireOrbTrendConfluence?: boolean;
   failClosedWhenUnavailable?: boolean;
   minMicroAggressorSkewAbs?: number;
   minMicroImbalanceAbs?: number;
@@ -414,6 +415,7 @@ interface PreparedOptimizationRow {
   microBidAskImbalance: number | null;
   microQuoteCoveragePct: number | null;
   microAvgSpreadBps: number | null;
+  orbTrendConfluence: boolean;
 }
 
 interface OptimizationRowsLoadResult {
@@ -431,6 +433,7 @@ interface ThresholdCandidate {
   requireEmaAlignment: boolean;
   requireVolumeRegimeAlignment: boolean;
   requireMicrostructureAlignment: boolean;
+  requireTrendPullbackOrbConfluence: boolean;
   minMicroAggressorSkewAbs: number;
   minMicroImbalanceAbs: number;
   minMicroQuoteCoveragePct: number;
@@ -488,7 +491,7 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   mean_reversion: 330,
   trend_continuation: 390,
   orb_breakout: 180,
-  trend_pullback: 360,
+  trend_pullback: 240,
   flip_reclaim: 360,
 };
 const FALLBACK_GEOMETRY_POLICY_ENTRY: SPXGeometryPolicyEntry = {
@@ -619,6 +622,7 @@ const DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE: Record<string, SPXMacroMicroPoli
   trend_pullback: {
     minMacroAlignmentScore: 34,
     requireMicrostructureAlignment: true,
+    requireOrbTrendConfluence: true,
     minMicroAggressorSkewAbs: 0.1,
     minMicroImbalanceAbs: 0.06,
     minMicroQuoteCoveragePct: 0.4,
@@ -936,6 +940,14 @@ function normalizeMacroMicroPolicyEntry(
     normalized.requireMicrostructureAlignment = typeof candidate.requireMicrostructureAlignment === 'boolean'
       ? candidate.requireMicrostructureAlignment
       : (fallback.requireMicrostructureAlignment === true);
+  }
+  if (
+    typeof candidate.requireOrbTrendConfluence === 'boolean'
+    || typeof fallback.requireOrbTrendConfluence === 'boolean'
+  ) {
+    normalized.requireOrbTrendConfluence = typeof candidate.requireOrbTrendConfluence === 'boolean'
+      ? candidate.requireOrbTrendConfluence
+      : (fallback.requireOrbTrendConfluence === true);
   }
   if (
     typeof candidate.failClosedWhenUnavailable === 'boolean'
@@ -1289,6 +1301,7 @@ function resolveMacroMicroPolicyForRow(
       policy.defaultRequireTrendMicrostructureAlignment
       && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType)
     ),
+    requireOrbTrendConfluence: false,
     failClosedWhenUnavailable: policy.defaultFailClosedWhenUnavailable,
     minMicroAggressorSkewAbs: policy.defaultMinMicroAggressorSkewAbs,
     minMicroImbalanceAbs: policy.defaultMinMicroImbalanceAbs,
@@ -1327,6 +1340,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   const gateReasons = toMetadataStringArray(metadata.gateReasons);
   const emaAligned = metadata.emaAligned === true || confluenceSources.includes('ema_alignment');
   const volumeRegimeAligned = metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
+  const orbTrendConfluence = confluenceSources.includes('orb_trend_confluence');
   const macroAlignmentScore = toFiniteNumber(metadata.macroAlignmentScore);
   const microstructureScore = toFiniteNumber(metadata.microstructureScore);
   const microstructureMetadata = (
@@ -1404,6 +1418,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
     microBidAskImbalance,
     microQuoteCoveragePct,
     microAvgSpreadBps,
+    orbTrendConfluence,
   };
 }
 
@@ -1954,23 +1969,26 @@ function candidateGrid(): ThresholdCandidate[] {
               for (const requireEmaAlignment of [false, true]) {
                 for (const requireVolumeRegimeAlignment of [false, true]) {
                   for (const enforceTimingGate of [true, false]) {
-                    for (const partialAtT1Pct of partialTakeGrid) {
-                      candidates.push({
-                        requireFlowConfirmation,
-                        minConfluenceScore,
-                        minPWinCalibrated,
-                        minEvR,
-                        minMacroAlignmentScore: macroMicro.minMacroAlignmentScore,
-                        minAlignmentPct,
-                        requireEmaAlignment,
-                        requireVolumeRegimeAlignment,
-                        requireMicrostructureAlignment: macroMicro.requireMicrostructureAlignment,
-                        minMicroAggressorSkewAbs: macroMicro.minMicroAggressorSkewAbs,
-                        minMicroImbalanceAbs: macroMicro.minMicroImbalanceAbs,
-                        minMicroQuoteCoveragePct: macroMicro.minMicroQuoteCoveragePct,
-                        enforceTimingGate,
-                        partialAtT1Pct,
-                      });
+                    for (const requireTrendPullbackOrbConfluence of [true, false]) {
+                      for (const partialAtT1Pct of partialTakeGrid) {
+                        candidates.push({
+                          requireFlowConfirmation,
+                          minConfluenceScore,
+                          minPWinCalibrated,
+                          minEvR,
+                          minMacroAlignmentScore: macroMicro.minMacroAlignmentScore,
+                          minAlignmentPct,
+                          requireEmaAlignment,
+                          requireVolumeRegimeAlignment,
+                          requireMicrostructureAlignment: macroMicro.requireMicrostructureAlignment,
+                          requireTrendPullbackOrbConfluence,
+                          minMicroAggressorSkewAbs: macroMicro.minMicroAggressorSkewAbs,
+                          minMicroImbalanceAbs: macroMicro.minMicroImbalanceAbs,
+                          minMicroQuoteCoveragePct: macroMicro.minMicroQuoteCoveragePct,
+                          enforceTimingGate,
+                          partialAtT1Pct,
+                        });
+                      }
                     }
                   }
                 }
@@ -1995,8 +2013,6 @@ function passesCandidate(
   },
 ): boolean {
   if (!row.triggered) return false;
-  if (row.tier === 'hidden') return false;
-  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -2018,6 +2034,10 @@ function passesCandidate(
     candidate.requireMicrostructureAlignment
     || rowPolicy.requireMicrostructureAlignment === true
   ) && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType);
+  const requireTrendPullbackOrbConfluence = (
+    candidate.requireTrendPullbackOrbConfluence
+    || rowPolicy.requireOrbTrendConfluence === true
+  ) && row.setupType === 'trend_pullback';
   const minMicroAggressorSkewAbs = Math.max(
     candidate.minMicroAggressorSkewAbs,
     rowPolicy.minMicroAggressorSkewAbs ?? 0,
@@ -2044,6 +2064,7 @@ function passesCandidate(
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
+  if (requireTrendPullbackOrbConfluence && !row.orbTrendConfluence) return false;
   if (requireMicrostructureAlignment) {
     if (!row.microstructureAvailable) {
       if (failClosedWhenUnavailable) return false;
@@ -2071,8 +2092,6 @@ function passesCandidateOpportunity(
     profile?: SPXOptimizationProfile;
   },
 ): boolean {
-  if (row.tier === 'hidden') return false;
-  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -2094,6 +2113,10 @@ function passesCandidateOpportunity(
     candidate.requireMicrostructureAlignment
     || rowPolicy.requireMicrostructureAlignment === true
   ) && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType);
+  const requireTrendPullbackOrbConfluence = (
+    candidate.requireTrendPullbackOrbConfluence
+    || rowPolicy.requireOrbTrendConfluence === true
+  ) && row.setupType === 'trend_pullback';
   const minMicroAggressorSkewAbs = Math.max(
     candidate.minMicroAggressorSkewAbs,
     rowPolicy.minMicroAggressorSkewAbs ?? 0,
@@ -2120,6 +2143,7 @@ function passesCandidateOpportunity(
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
+  if (requireTrendPullbackOrbConfluence && !row.orbTrendConfluence) return false;
   if (requireMicrostructureAlignment) {
     if (!row.microstructureAvailable) {
       if (failClosedWhenUnavailable) return false;
@@ -2419,6 +2443,9 @@ function buildSetupActionRecommendations(input: {
   }
   if (input.optimizedCandidate.requireMicrostructureAlignment !== input.baselineCandidate.requireMicrostructureAlignment) {
     update.add(`Microstructure gate: require trend-family alignment = ${input.optimizedCandidate.requireMicrostructureAlignment}.`);
+  }
+  if (input.optimizedCandidate.requireTrendPullbackOrbConfluence !== input.baselineCandidate.requireTrendPullbackOrbConfluence) {
+    update.add(`Trend gate: require ORB + pullback confluence for trend_pullback = ${input.optimizedCandidate.requireTrendPullbackOrbConfluence}.`);
   }
   if (input.optimizedCandidate.minMicroAggressorSkewAbs !== input.baselineCandidate.minMicroAggressorSkewAbs) {
     update.add(`Microstructure threshold: aggressor skew >= ${input.optimizedCandidate.minMicroAggressorSkewAbs.toFixed(2)}.`);
@@ -2868,6 +2895,10 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
     requireEmaAlignment: profile.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profile.indicatorGate.requireVolumeRegimeAlignment,
     requireMicrostructureAlignment: profile.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
+    requireTrendPullbackOrbConfluence: normalizeMacroMicroPolicyEntry(
+      profile.macroMicroPolicy.bySetupType?.trend_pullback,
+      DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
+    ).requireOrbTrendConfluence === true,
     minMicroAggressorSkewAbs: profile.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
     minMicroImbalanceAbs: profile.macroMicroPolicy.defaultMinMicroImbalanceAbs,
     minMicroQuoteCoveragePct: profile.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
@@ -2991,6 +3022,10 @@ export async function runSPXOptimizerScan(input?: {
     requireEmaAlignment: profileForScan.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profileForScan.indicatorGate.requireVolumeRegimeAlignment,
     requireMicrostructureAlignment: profileForScan.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
+    requireTrendPullbackOrbConfluence: normalizeMacroMicroPolicyEntry(
+      profileForScan.macroMicroPolicy.bySetupType?.trend_pullback,
+      DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
+    ).requireOrbTrendConfluence === true,
     minMicroAggressorSkewAbs: profileForScan.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
     minMicroImbalanceAbs: profileForScan.macroMicroPolicy.defaultMinMicroImbalanceAbs,
     minMicroQuoteCoveragePct: profileForScan.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
@@ -3174,6 +3209,10 @@ export async function runSPXOptimizerScan(input?: {
   const mergedPausedSetupTypes = Array.from(
     new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
   ).sort();
+  const trendPullbackPolicy = normalizeMacroMicroPolicyEntry(
+    profileForScan.macroMicroPolicy.bySetupType?.trend_pullback,
+    DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
+  );
 
   const failClosedBlockedProfileMutation = dataQuality.failClosedActive && !dataQuality.gatePassed;
   const nextProfile: SPXOptimizationProfile = failClosedBlockedProfileMutation
@@ -3220,6 +3259,13 @@ export async function runSPXOptimizerScan(input?: {
         defaultMinMicroAggressorSkewAbs: activeCandidate.minMicroAggressorSkewAbs,
         defaultMinMicroImbalanceAbs: activeCandidate.minMicroImbalanceAbs,
         defaultMinMicroQuoteCoveragePct: activeCandidate.minMicroQuoteCoveragePct,
+        bySetupType: {
+          ...profileForScan.macroMicroPolicy.bySetupType,
+          trend_pullback: {
+            ...trendPullbackPolicy,
+            requireOrbTrendConfluence: activeCandidate.requireTrendPullbackOrbConfluence,
+          },
+        },
       },
       driftControl: {
         ...profileForScan.driftControl,
