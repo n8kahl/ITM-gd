@@ -55,8 +55,9 @@ const EMA_MIN_SLOPE_POINTS = 0.05;
 const EMA_PRICE_TOLERANCE_POINTS = 4;
 const ORB_WINDOW_MINUTES = 30;
 const ORB_ACTIVE_WINDOW_MINUTES = 120;
-const ORB_RECLAIM_TOLERANCE_POINTS = 4;
-const TREND_PULLBACK_EMA_DISTANCE_POINTS = 6;
+const ORB_RECLAIM_TOLERANCE_POINTS = 8;
+const ORB_BREAK_CONFIRM_POINTS = 1.5;
+const TREND_PULLBACK_EMA_DISTANCE_POINTS = 10;
 const FLIP_RECLAIM_TOLERANCE_POINTS = 6;
 const LATE_DAY_FADE_CUTOFF_MINUTES = 300;
 const SESSION_OPEN_MINUTE_ET = 9 * 60 + 30;
@@ -68,6 +69,14 @@ const MEAN_REVERSION_T1_R_MAX_MULTIPLIER = 1.85;
 const MEAN_REVERSION_T2_R_MAX_MULTIPLIER = 2.7;
 const FLIP_RECLAIM_T1_R_MULTIPLIER = 1.55;
 const FLIP_RECLAIM_T2_R_MULTIPLIER = 2.55;
+const TREND_PULLBACK_T1_R_MIN_MULTIPLIER = 1.1;
+const TREND_PULLBACK_T1_R_MAX_MULTIPLIER = 2.2;
+const TREND_PULLBACK_T2_R_MIN_MULTIPLIER = 1.75;
+const TREND_PULLBACK_T2_R_MAX_MULTIPLIER = 3.4;
+const ORB_BREAKOUT_T1_R_MIN_MULTIPLIER = 1.15;
+const ORB_BREAKOUT_T1_R_MAX_MULTIPLIER = 2.4;
+const ORB_BREAKOUT_T2_R_MIN_MULTIPLIER = 1.9;
+const ORB_BREAKOUT_T2_R_MAX_MULTIPLIER = 3.8;
 const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
 const DIVERSIFICATION_RECOVERY_COMBOS: ReadonlySet<string> = new Set([
   'mean_reversion|ranging',
@@ -119,11 +128,11 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     maxFirstSeenMinuteEt: 165,
   },
   trend_pullback: {
-    minConfluenceScore: 4,
-    minPWinCalibrated: 0.62,
-    minEvR: 0.32,
+    minConfluenceScore: 3,
+    minPWinCalibrated: 0.58,
+    minEvR: 0.24,
     requireFlowConfirmation: true,
-    minAlignmentPct: 58,
+    minAlignmentPct: 50,
     requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
     maxFirstSeenMinuteEt: 300,
@@ -405,10 +414,16 @@ function inferSetupTypeForZone(input: {
     : (Number.isFinite(orbLow)
       && Math.abs(input.zoneCenter - (orbLow as number)) <= ORB_RECLAIM_TOLERANCE_POINTS
       && input.currentPrice <= (orbLow as number) + ORB_RECLAIM_TOLERANCE_POINTS);
+  const openingRangeBreakConfirmed = input.direction === 'bullish'
+    ? (Number.isFinite(orbHigh) && input.currentPrice >= (orbHigh as number) + ORB_BREAK_CONFIRM_POINTS)
+    : (Number.isFinite(orbLow) && input.currentPrice <= (orbLow as number) - ORB_BREAK_CONFIRM_POINTS);
   const nearFastEma = input.indicatorContext
     ? Math.abs(input.currentPrice - input.indicatorContext.emaFast) <= TREND_PULLBACK_EMA_DISTANCE_POINTS
     : false;
-  const openingMomentumConfirmed = inMomentumState || (directionalMomentum && volumeTrend === 'rising');
+  const openingMomentumConfirmed = inMomentumState || (
+    directionalMomentum
+    && (volumeTrend === 'rising' || (minutesSinceOpen <= 75 && volumeTrend === 'flat'))
+  );
   const intradayTrendStructure = (
     hasIndicatorContext
     && nearFastEma
@@ -426,7 +441,7 @@ function inferSetupTypeForZone(input: {
     hasIndicatorContext
     && 
     inOpeningWindow
-    && nearOpeningRangeEdge
+    && (nearOpeningRangeEdge || openingRangeBreakConfirmed)
     && openingMomentumConfirmed
     && (
       input.regime === 'breakout'
@@ -493,6 +508,47 @@ function adjustTargetsForSetupType(input: {
   flipPoint: number;
   indicatorContext: SetupIndicatorContext | null;
 }): { target1: number; target2: number } {
+  if (
+    input.setupType === 'trend_pullback'
+    || input.setupType === 'orb_breakout'
+    || input.setupType === 'trend_continuation'
+  ) {
+    const entryMid = (input.entryLow + input.entryHigh) / 2;
+    const risk = Math.max(0.5, Math.abs(entryMid - input.stop));
+    const directionMultiplier = input.direction === 'bullish' ? 1 : -1;
+    const t1MinMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T1_R_MIN_MULTIPLIER
+      : TREND_PULLBACK_T1_R_MIN_MULTIPLIER;
+    const t1MaxMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T1_R_MAX_MULTIPLIER
+      : TREND_PULLBACK_T1_R_MAX_MULTIPLIER;
+    const t2MinMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T2_R_MIN_MULTIPLIER
+      : TREND_PULLBACK_T2_R_MIN_MULTIPLIER;
+    const t2MaxMultiplier = input.setupType === 'orb_breakout'
+      ? ORB_BREAKOUT_T2_R_MAX_MULTIPLIER
+      : TREND_PULLBACK_T2_R_MAX_MULTIPLIER;
+
+    const existingT1Distance = Math.max(0.25, Math.abs(input.target1 - entryMid));
+    const existingT2Distance = Math.max(0.4, Math.abs(input.target2 - entryMid));
+    const boundedT1Distance = Math.max(
+      risk * t1MinMultiplier,
+      Math.min(risk * t1MaxMultiplier, existingT1Distance),
+    );
+    const boundedT2Distance = Math.max(
+      boundedT1Distance + Math.max(0.35, risk * 0.55),
+      Math.max(
+        risk * t2MinMultiplier,
+        Math.min(risk * t2MaxMultiplier, existingT2Distance),
+      ),
+    );
+
+    return {
+      target1: round(entryMid + (directionMultiplier * boundedT1Distance), 2),
+      target2: round(entryMid + (directionMultiplier * boundedT2Distance), 2),
+    };
+  }
+
   if (
     input.setupType !== 'fade_at_wall'
     && input.setupType !== 'mean_reversion'
@@ -1237,6 +1293,21 @@ function evaluateOptimizationGate(input: {
     || setupFloors?.requireVolumeRegimeAlignment === true
   );
   const comboKey = `${input.setupType}|${input.regime}`;
+  const firstSeenMinute = toSessionMinuteEt(input.firstSeenAtIso);
+  const trendFamilyFlowGraceEligible = (
+    input.setupType === 'trend_pullback'
+    && firstSeenMinute != null
+    && firstSeenMinute <= 300
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(3, minConfluenceScore - 1)
+  );
+  const trendFamilyVolumeGraceEligible = (
+    input.setupType === 'trend_pullback'
+    && firstSeenMinute != null
+    && firstSeenMinute <= 240
+    && input.emaAligned
+    && input.confluenceScore >= 3
+  );
   if (input.pausedSetupTypes.has(input.setupType)) {
     reasons.push(`setup_type_paused:${input.setupType}`);
   }
@@ -1252,26 +1323,25 @@ function evaluateOptimizationGate(input: {
   if (input.evR < minEvR) {
     reasons.push(`evr_below_floor:${round(input.evR, 3)}<${round(minEvR, 3)}`);
   }
-  if (requireFlowConfirmation && !input.flowConfirmed) {
+  if (requireFlowConfirmation && !input.flowConfirmed && !trendFamilyFlowGraceEligible) {
     reasons.push('flow_confirmation_required');
   }
   if (input.flowAlignmentPct != null) {
     if (minAlignmentPct > 0 && input.flowAlignmentPct < minAlignmentPct) {
       reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${minAlignmentPct}`);
     }
-  } else if (requireFlowConfirmation && minAlignmentPct > 0) {
+  } else if (requireFlowConfirmation && minAlignmentPct > 0 && !trendFamilyFlowGraceEligible) {
     reasons.push('flow_alignment_unavailable');
   }
   if (requireEmaAlignment && !input.emaAligned) {
     reasons.push('ema_alignment_required');
   }
-  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned) {
+  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned && !trendFamilyVolumeGraceEligible) {
     reasons.push('volume_regime_alignment_required');
   }
   const setupSpecificMaxMinute = setupFloors?.maxFirstSeenMinuteEt;
   const timingGateEnabled = input.profile.timingGate.enabled || Number.isFinite(setupSpecificMaxMinute);
   if (timingGateEnabled) {
-    const firstSeenMinute = toSessionMinuteEt(input.firstSeenAtIso);
     const profileMaxMinute = input.profile.timingGate.enabled
       ? maxFirstSeenMinuteForSetup(input.setupType, input.profile)
       : 390;
@@ -1825,7 +1895,11 @@ export async function detectActiveSetups(options?: {
         config: scoringConfig,
       })
       : (gatedStatus === 'ready' || gatedStatus === 'triggered') ? 'watchlist' : 'hidden';
-    const gatedTier = gateStatus === 'blocked' ? 'hidden' : tier;
+    const gatedTier = gateStatus === 'blocked'
+      ? 'hidden'
+      : (gatedStatus === 'triggered' && tier === 'hidden')
+        ? 'watchlist'
+        : tier;
     const tradeManagementPolicy = resolveTradeManagementForSetup({
       setupType,
       regime: regimeState.regime,
