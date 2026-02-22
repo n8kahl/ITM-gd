@@ -73,7 +73,11 @@ function dateRangeInclusive(from: string, to: string): string[] {
   const dates: string[] = [];
   const cursor = new Date(start);
   while (cursor <= end) {
-    dates.push(cursor.toISOString().slice(0, 10));
+    const day = cursor.getUTCDay();
+    // Skip weekend dates to avoid unnecessary historical snapshot requests.
+    if (day !== 0 && day !== 6) {
+      dates.push(cursor.toISOString().slice(0, 10));
+    }
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
@@ -543,6 +547,26 @@ function volumeTrendFromBars(bars: Array<{ v: number }>): 'rising' | 'flat' | 'f
   return 'flat';
 }
 
+function trendStrengthFromBars(
+  bars: Array<{ c: number }>,
+): number {
+  const closes = bars
+    .map((bar) => bar.c)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (closes.length < 8) return 0;
+
+  const emaFast = ema(closes, Math.min(EMA_FAST_PERIOD, closes.length));
+  const emaSlow = ema(closes, Math.min(EMA_SLOW_PERIOD, closes.length));
+  const priorCloses = closes.slice(0, -3);
+  const emaFastPrior = priorCloses.length > 0
+    ? ema(priorCloses, Math.min(EMA_FAST_PERIOD, priorCloses.length))
+    : emaFast;
+
+  const spreadScore = Math.max(0, Math.min(1, Math.abs(emaFast - emaSlow) / 8));
+  const slopeScore = Math.max(0, Math.min(1, Math.abs(emaFast - emaFastPrior) / 2.4));
+  return round((spreadScore * 0.55) + (slopeScore * 0.45), 4);
+}
+
 function toBarHigh(bar: { h?: number; o?: number; c: number }): number {
   if (typeof bar.h === 'number' && Number.isFinite(bar.h)) return bar.h;
   if (typeof bar.o === 'number' && Number.isFinite(bar.o)) return Math.max(bar.o, bar.c);
@@ -715,6 +739,34 @@ function resolveInitialSpotFromBars(
   return fallback;
 }
 
+function toEpochMs(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeObservedSetup(existing: Setup | undefined, incoming: Setup): Setup {
+  if (!existing) return incoming;
+
+  const existingTerminal = existing.status === 'expired' || existing.status === 'invalidated';
+  const incomingTerminal = incoming.status === 'expired' || incoming.status === 'invalidated';
+  const statusUpdatedExisting = toEpochMs(existing.statusUpdatedAt || existing.createdAt);
+  const statusUpdatedIncoming = toEpochMs(incoming.statusUpdatedAt || incoming.createdAt);
+  const preferIncoming = incomingTerminal
+    || (!existingTerminal && statusUpdatedIncoming >= statusUpdatedExisting);
+  const base = preferIncoming ? incoming : existing;
+
+  const createdAt = toEpochMs(existing.createdAt) > 0 && toEpochMs(existing.createdAt) < toEpochMs(incoming.createdAt)
+    ? existing.createdAt
+    : incoming.createdAt;
+
+  return {
+    ...base,
+    createdAt,
+    triggeredAt: existing.triggeredAt || incoming.triggeredAt,
+  };
+}
+
 async function purgeHistoricalSetupRows(from: string, to: string): Promise<void> {
   const { error } = await supabase
     .from('spx_setup_instances')
@@ -796,19 +848,24 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
   setupsGenerated: number;
   setupsTriggeredAtGeneration: number;
 }> {
-  const [spxMinuteBarsRaw, spyMinuteBarsRaw, spxSnapshots, spySnapshots] = await Promise.all([
+  const [spxMinuteBarsRaw, spyMinuteBarsRaw] = await Promise.all([
     getMinuteAggregates('I:SPX', asOfDate),
     getMinuteAggregates('SPY', asOfDate),
-    getOptionsSnapshotAtDate('SPX', asOfDate),
-    getOptionsSnapshotAtDate('SPY', asOfDate),
   ]);
 
   const spxMinuteBars = sortBarsByTimestamp(spxMinuteBarsRaw);
   if (spxMinuteBars.length === 0) {
+    logger.info('Historical SPX reconstruction skipped (no SPX bars for date)', {
+      asOfDate,
+    });
     return { setupsGenerated: 0, setupsTriggeredAtGeneration: 0 };
   }
 
   const spyMinuteBars = sortBarsByTimestamp(spyMinuteBarsRaw);
+  const [spxSnapshots, spySnapshots] = await Promise.all([
+    getOptionsSnapshotAtDate('SPX', asOfDate),
+    getOptionsSnapshotAtDate('SPY', asOfDate),
+  ]);
   const initialSpxSpot = resolveInitialSpotFromBars(spxMinuteBars, spxMinuteBars[0]?.o || 0);
   if (!Number.isFinite(initialSpxSpot) || initialSpxSpot <= 0) {
     return { setupsGenerated: 0, setupsTriggeredAtGeneration: 0 };
@@ -880,6 +937,7 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
     .sort((a, b) => a.timestampMs - b.timestampMs);
 
   let previousSetups: Setup[] = [];
+  const observedSetupsById = new Map<string, Setup>();
   let spyIndex = 0;
   let flowIndex = 0;
   const flowEventsSeen: SPXFlowEvent[] = [];
@@ -921,11 +979,14 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
       basisCurrent: basisAtBar,
       referenceLevels: referenceFibLevels,
     });
+    const volumeTrendAtBar = volumeTrendFromBars(spxBarsToNow);
+    const trendStrengthAtBar = trendStrengthFromBars(spxBarsToNow);
     const regimeState: RegimeState = await classifyCurrentRegime({
       forceRefresh: true,
       gexLandscape: gexAtBar,
       levelData,
-      volumeTrend: volumeTrendFromBars(spxBarsToNow),
+      volumeTrend: volumeTrendAtBar,
+      trendStrength: trendStrengthAtBar,
     });
 
     previousSetups = await detectActiveSetups({
@@ -943,10 +1004,17 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
         asOfTimestamp: timestampIso,
       }),
     });
+    for (const setup of previousSetups) {
+      observedSetupsById.set(
+        setup.id,
+        mergeObservedSetup(observedSetupsById.get(setup.id), setup),
+      );
+    }
     simulatedBars += 1;
   }
 
-  await persistSetupInstancesForWinRate(previousSetups, {
+  const observedSetups = Array.from(observedSetupsById.values());
+  await persistSetupInstancesForWinRate(observedSetups, {
     observedAt: lastTimestampIso || `${asOfDate}T21:00:00.000Z`,
   });
   const backtest = await runSPXWinRateBacktest({
@@ -963,14 +1031,14 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
   logger.info('Historical SPX setup reconstruction replay complete', {
     asOfDate,
     simulatedBars,
-    finalSetupCount: previousSetups.length,
+    finalSetupCount: observedSetups.length,
     backtestTriggeredCount: backtest.analytics.triggeredCount,
     backtestT1WinRatePct: backtest.analytics.t1WinRatePct,
     backtestT2WinRatePct: backtest.analytics.t2WinRatePct,
   });
 
   return {
-    setupsGenerated: previousSetups.length,
+    setupsGenerated: observedSetups.length,
     setupsTriggeredAtGeneration: backtest.analytics.triggeredCount,
   };
 }

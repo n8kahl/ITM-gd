@@ -16,6 +16,12 @@ Track: Production Recovery Autonomous Program
 4. Phase 10 complete: journal automation and governance hardening.
 5. Phase 11 slice P11-S1 complete: regime-aware contract selector hardening, R:R feasibility gate in trade suggestions, and mechanical 1R/2R trailing exit advisories.
 6. Phase 11 slice P11-S2 complete: ranging setup hardening and fade target/stop geometry recalibration, improving strict last-week SPX backtest win-rate and expectancy.
+7. Phase 11 slice P11-S3 complete: setup-mix diversification caps/recovery controls and actionable-only strict backtest fidelity (gate-blocked setups excluded by default).
+8. Phase 11 slice P11-S4 complete: confidence-aware optimizer scoring and promotion guardrails (95% Wilson intervals + conservative objective), with scorecard CI transparency to reduce low-sample overfitting.
+9. Phase 11 slice P11-S5 complete: corrected realized-R runner accounting after T1 (including no-BE stop paths and mark-to-close runner legs), then re-ran YTD Massive second-bar policy sweeps for SL/TP decision fidelity.
+10. Phase 11 slice P11-S6 complete: setup-specific runner policy (fade conditional no-BE), mean-reversion target/quality retune, and rebuilt strict last-week replay with improved T2 capture and expectancy.
+11. Phase 11 slice P11-S7 complete: actionable-only win-rate fidelity (hidden-tier exclusion), full intraday setup lifecycle preservation during historical reconstruction, regime trend-strength retune, and setup-type DB contract expansion for ORB/pullback families.
+12. Phase 11 slice P11-S8 complete: mean-reversion quality floor uplift, breakout-vacuum gate hardening, persistent manual optimizer setup pauses, and validated last-week strict replay improvement in T1/T2/failure/expectancy.
 
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).

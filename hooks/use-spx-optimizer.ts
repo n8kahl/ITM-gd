@@ -4,6 +4,13 @@ import { useCallback, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { postSPX, useSPXQuery } from '@/hooks/use-spx-api'
 
+export interface SPXOptimizerConfidenceInterval {
+  sampleSize: number
+  pointPct: number
+  lowerPct: number
+  upperPct: number
+}
+
 export interface SPXOptimizerMetrics {
   tradeCount: number
   resolvedCount: number
@@ -13,7 +20,14 @@ export interface SPXOptimizerMetrics {
   t1WinRatePct: number
   t2WinRatePct: number
   failureRatePct: number
+  expectancyR: number
+  expectancyLowerBoundR: number
+  positiveRealizedRatePct: number
   objectiveScore: number
+  objectiveScoreConservative: number
+  t1Confidence95: SPXOptimizerConfidenceInterval
+  t2Confidence95: SPXOptimizerConfidenceInterval
+  failureConfidence95: SPXOptimizerConfidenceInterval
 }
 
 export interface SPXOptimizerPerformanceBucket {
@@ -23,6 +37,9 @@ export interface SPXOptimizerPerformanceBucket {
   t1WinRatePct: number
   t2WinRatePct: number
   failureRatePct: number
+  t1Confidence95: SPXOptimizerConfidenceInterval
+  t2Confidence95: SPXOptimizerConfidenceInterval
+  failureConfidence95: SPXOptimizerConfidenceInterval
 }
 
 export interface SPXOptimizerDriftAlert {
@@ -30,8 +47,13 @@ export interface SPXOptimizerDriftAlert {
   shortWindowDays: number
   longWindowDays: number
   shortT1WinRatePct: number
+  shortT1Lower95Pct: number
+  shortT1Upper95Pct: number
   longT1WinRatePct: number
+  longT1Lower95Pct: number
+  longT1Upper95Pct: number
   dropPct: number
+  confidenceDropPct: number
   action: 'pause'
 }
 
@@ -46,6 +68,8 @@ export interface SPXOptimizerScorecard {
     t1WinRateDelta: number
     t2WinRateDelta: number
     objectiveDelta: number
+    objectiveConservativeDelta: number
+    expectancyRDelta: number
   }
   driftAlerts: SPXOptimizerDriftAlert[]
   setupTypePerformance: SPXOptimizerPerformanceBucket[]

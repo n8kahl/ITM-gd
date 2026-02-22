@@ -192,6 +192,7 @@ describe('spx/setupDetector', () => {
       SPX_SETUP_TTL_FORMING_MS: String(20 * 60 * 1000),
       SPX_SETUP_TTL_READY_MS: String(25 * 60 * 1000),
       SPX_SETUP_TTL_TRIGGERED_MS: String(90 * 60 * 1000),
+      SPX_SETUP_SPECIFIC_GATES_ENABLED: 'false',
     };
   });
 

@@ -29,6 +29,7 @@ function baseSetup(overrides: Partial<Candidate> = {}): Candidate {
     target2Price: 105,
     firstSeenAt: '2026-02-20T14:30:00.000Z',
     triggeredAt: null,
+    tradeManagement: null,
     ...overrides,
   };
 }
@@ -121,5 +122,84 @@ describe('spx/winRateBacktest evaluateSetupAgainstBars', () => {
     expect(result.row.realized_r).not.toBeNull();
     expect(result.row.final_outcome).toBe('t2_before_stop');
     expect((result.row.realized_r || 0)).toBeGreaterThan(0);
+  });
+
+  it('accounts for runner loss after T1 when breakeven move is disabled', () => {
+    const setup = baseSetup();
+    const result = __testables.evaluateSetupAgainstBars(
+      setup,
+      [
+        bar('2026-02-20T14:30:00.000Z', 99.8, 100.2, 99.7, 100.1),
+        bar('2026-02-20T14:31:00.000Z', 100.1, 103.2, 100.0, 102.9),
+        bar('2026-02-20T14:32:00.000Z', 102.9, 103.0, 97.8, 98.2),
+      ],
+      {
+        enabled: true,
+        entrySlipPoints: 0,
+        targetSlipPoints: 0,
+        stopSlipPoints: 0,
+        commissionPerTradeR: 0,
+        partialAtT1Pct: 0.5,
+        moveStopToBreakevenAfterT1: false,
+      },
+    );
+
+    expect(result.row.final_outcome).toBe('t1_before_stop');
+    expect(result.row.stop_hit_at).toBeTruthy();
+    expect(result.row.realized_r).toBeCloseTo(0.25, 4);
+  });
+
+  it('marks runner to close when T1 is hit but neither stop nor T2 is hit', () => {
+    const setup = baseSetup();
+    const result = __testables.evaluateSetupAgainstBars(
+      setup,
+      [
+        bar('2026-02-20T14:30:00.000Z', 99.8, 100.2, 99.7, 100.1),
+        bar('2026-02-20T14:31:00.000Z', 100.1, 103.2, 100.0, 102.9),
+        bar('2026-02-20T14:32:00.000Z', 102.9, 103.4, 102.1, 102.5),
+      ],
+      {
+        enabled: true,
+        entrySlipPoints: 0,
+        targetSlipPoints: 0,
+        stopSlipPoints: 0,
+        commissionPerTradeR: 0,
+        partialAtT1Pct: 0.5,
+        moveStopToBreakevenAfterT1: true,
+      },
+    );
+
+    expect(result.row.final_outcome).toBe('t1_before_stop');
+    expect(result.row.stop_hit_at).toBeNull();
+    expect(result.row.realized_r).toBeCloseTo(1.375, 4);
+  });
+
+  it('honors setup-level trade management overrides in backtest execution', () => {
+    const setup = baseSetup({
+      tradeManagement: {
+        partialAtT1Pct: 0.8,
+        moveStopToBreakeven: false,
+      },
+    });
+    const result = __testables.evaluateSetupAgainstBars(
+      setup,
+      [
+        bar('2026-02-20T14:30:00.000Z', 99.8, 100.2, 99.7, 100.1),
+        bar('2026-02-20T14:31:00.000Z', 100.1, 103.2, 100.0, 102.9),
+        bar('2026-02-20T14:32:00.000Z', 102.9, 103.0, 97.8, 98.2),
+      ],
+      {
+        enabled: true,
+        entrySlipPoints: 0,
+        targetSlipPoints: 0,
+        stopSlipPoints: 0,
+        commissionPerTradeR: 0,
+        partialAtT1Pct: 0.5,
+        moveStopToBreakevenAfterT1: true,
+      },
+    );
+
+    expect(result.row.final_outcome).toBe('t1_before_stop');
+    expect(result.row.realized_r).toBeCloseTo(1.0, 4);
   });
 });

@@ -82,7 +82,7 @@ function isInsideEntryZone(setup: Setup, price: number): boolean {
 }
 
 function stopBreached(setup: Setup, price: number, phase: TransitionPhase): boolean {
-  const moveStopToBreakeven = parseBooleanEnv(
+  const moveStopToBreakeven = setup.tradeManagement?.moveStopToBreakeven ?? parseBooleanEnv(
     process.env.SPX_SETUP_MOVE_STOP_TO_BREAKEVEN_AFTER_T1,
     DEFAULT_MOVE_STOP_TO_BREAKEVEN_AFTER_T1,
   );

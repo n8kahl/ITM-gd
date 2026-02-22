@@ -44,6 +44,7 @@ export interface SPXOptimizationProfile {
       t1: number;
       t2: number;
       failurePenalty: number;
+      expectancyR: number;
     };
   };
   driftControl: {
@@ -61,6 +62,13 @@ export interface SPXOptimizationScanResult {
   scorecard: SPXOptimizerScorecard;
 }
 
+export interface SPXConfidenceInterval {
+  sampleSize: number;
+  pointPct: number;
+  lowerPct: number;
+  upperPct: number;
+}
+
 export interface SPXOptimizerScorecard {
   generatedAt: string;
   scanRange: { from: string; to: string };
@@ -72,6 +80,8 @@ export interface SPXOptimizerScorecard {
     t1WinRateDelta: number;
     t2WinRateDelta: number;
     objectiveDelta: number;
+    objectiveConservativeDelta: number;
+    expectancyRDelta: number;
   };
   driftAlerts: SPXDriftAlert[];
   setupTypePerformance: SPXPerformanceBucket[];
@@ -94,7 +104,14 @@ export interface SPXOptimizationMetrics {
   t1WinRatePct: number;
   t2WinRatePct: number;
   failureRatePct: number;
+  expectancyR: number;
+  expectancyLowerBoundR: number;
+  positiveRealizedRatePct: number;
   objectiveScore: number;
+  objectiveScoreConservative: number;
+  t1Confidence95: SPXConfidenceInterval;
+  t2Confidence95: SPXConfidenceInterval;
+  failureConfidence95: SPXConfidenceInterval;
 }
 
 export interface SPXPerformanceBucket {
@@ -104,6 +121,9 @@ export interface SPXPerformanceBucket {
   t1WinRatePct: number;
   t2WinRatePct: number;
   failureRatePct: number;
+  t1Confidence95: SPXConfidenceInterval;
+  t2Confidence95: SPXConfidenceInterval;
+  failureConfidence95: SPXConfidenceInterval;
 }
 
 interface SPXDriftAlert {
@@ -111,8 +131,13 @@ interface SPXDriftAlert {
   shortWindowDays: number;
   longWindowDays: number;
   shortT1WinRatePct: number;
+  shortT1Lower95Pct: number;
+  shortT1Upper95Pct: number;
   longT1WinRatePct: number;
+  longT1Lower95Pct: number;
+  longT1Upper95Pct: number;
   dropPct: number;
+  confidenceDropPct: number;
   action: 'pause';
 }
 
@@ -120,10 +145,19 @@ interface OptimizationRow {
   engine_setup_id: string;
   session_date: string;
   setup_type: string;
+  direction: 'bullish' | 'bearish' | null;
   regime: string | null;
+  tier: string | null;
   first_seen_at: string | null;
   triggered_at: string | null;
   final_outcome: SetupFinalOutcome | null;
+  stop_hit_at?: string | null;
+  entry_zone_low: number | string | null;
+  entry_zone_high: number | string | null;
+  stop_price: number | string | null;
+  target_1_price: number | string | null;
+  target_2_price: number | string | null;
+  entry_fill_price?: number | string | null;
   p_win_calibrated: number | string | null;
   ev_r: number | string | null;
   metadata: Record<string, unknown> | null;
@@ -132,6 +166,8 @@ interface OptimizationRow {
 interface OutcomeOverride {
   triggeredAt: string | null;
   finalOutcome: SetupFinalOutcome | null;
+  entryFillPrice: number | null;
+  stopHitAt: string | null;
 }
 
 interface PreparedOptimizationRow {
@@ -139,12 +175,18 @@ interface PreparedOptimizationRow {
   setupType: string;
   regime: string;
   comboKey: string;
+  tier: string | null;
+  gateStatus: 'eligible' | 'blocked' | null;
   firstSeenAt: string | null;
   firstSeenMinuteEt: number | null;
   triggered: boolean;
   finalOutcome: SetupFinalOutcome | null;
   pWinCalibrated: number | null;
   evR: number | null;
+  target1R: number | null;
+  target2R: number | null;
+  stopHit: boolean;
+  moveStopToBreakeven: boolean;
   confluenceScore: number | null;
   flowAlignmentPct: number | null;
   flowConfirmed: boolean;
@@ -161,6 +203,7 @@ interface ThresholdCandidate {
   requireEmaAlignment: boolean;
   requireVolumeRegimeAlignment: boolean;
   enforceTimingGate: boolean;
+  partialAtT1Pct: number;
 }
 
 interface PersistedOptimizerStateRow {
@@ -219,7 +262,7 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     pausedCombos: [],
   },
   tradeManagement: {
-    partialAtT1Pct: 0.5,
+    partialAtT1Pct: 0.65,
     moveStopToBreakeven: true,
   },
   walkForward: {
@@ -227,9 +270,10 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     validationDays: 5,
     minTrades: 12,
     objectiveWeights: {
-      t1: 0.6,
-      t2: 0.4,
-      failurePenalty: 0.45,
+      t1: 0.62,
+      t2: 0.38,
+      failurePenalty: 0.5,
+      expectancyR: 14,
     },
   },
   driftControl: {
@@ -238,12 +282,14 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     longWindowDays: 20,
     maxDropPct: 12,
     minLongWindowTrades: 20,
-    pausedSetupTypes: [],
+    pausedSetupTypes: ['breakout_vacuum'],
   },
 };
 const WEEKLY_AUTO_MIN_VALIDATION_TRADES = 12;
 const WEEKLY_AUTO_MIN_OBJECTIVE_DELTA = 0.5;
 const WEEKLY_AUTO_MAX_T2_DROP_PCT = 2;
+const WILSON_Z_95 = 1.96;
+const ADD_SETUP_MIN_T1_LOWER_BOUND_PCT = 52;
 
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
@@ -256,6 +302,40 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function emptyConfidenceInterval(): SPXConfidenceInterval {
+  return {
+    sampleSize: 0,
+    pointPct: 0,
+    lowerPct: 0,
+    upperPct: 100,
+  };
+}
+
+function wilsonIntervalPct(successes: number, sampleSize: number, z = WILSON_Z_95): SPXConfidenceInterval {
+  if (sampleSize <= 0) {
+    return emptyConfidenceInterval();
+  }
+
+  const p = successes / sampleSize;
+  const z2 = z * z;
+  const denominator = 1 + (z2 / sampleSize);
+  const center = (p + (z2 / (2 * sampleSize))) / denominator;
+  const margin = (
+    z
+    * Math.sqrt(
+      ((p * (1 - p)) / sampleSize)
+      + (z2 / (4 * sampleSize * sampleSize)),
+    )
+  ) / denominator;
+
+  return {
+    sampleSize,
+    pointPct: round(p * 100, 2),
+    lowerPct: round(Math.max(0, (center - margin) * 100), 2),
+    upperPct: round(Math.min(100, (center + margin) * 100), 2),
+  };
 }
 
 function toSessionMinuteEt(value: string | null | undefined): number | null {
@@ -330,7 +410,7 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
   }
 
   const candidate = raw as Partial<SPXOptimizationProfile>;
-  return {
+  const normalized: SPXOptimizationProfile = {
     source: candidate.source === 'scan' ? 'scan' : 'default',
     generatedAt: typeof candidate.generatedAt === 'string' ? candidate.generatedAt : new Date().toISOString(),
     qualityGate: {
@@ -363,7 +443,10 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         : [],
     },
     tradeManagement: {
-      partialAtT1Pct: toFiniteNumber(candidate.tradeManagement?.partialAtT1Pct) ?? DEFAULT_PROFILE.tradeManagement.partialAtT1Pct,
+      partialAtT1Pct: Math.min(0.9, Math.max(
+        0.1,
+        toFiniteNumber(candidate.tradeManagement?.partialAtT1Pct) ?? DEFAULT_PROFILE.tradeManagement.partialAtT1Pct,
+      )),
       moveStopToBreakeven: candidate.tradeManagement?.moveStopToBreakeven !== false,
     },
     walkForward: {
@@ -375,6 +458,8 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         t2: toFiniteNumber(candidate.walkForward?.objectiveWeights?.t2) ?? DEFAULT_PROFILE.walkForward.objectiveWeights.t2,
         failurePenalty: toFiniteNumber(candidate.walkForward?.objectiveWeights?.failurePenalty)
           ?? DEFAULT_PROFILE.walkForward.objectiveWeights.failurePenalty,
+        expectancyR: toFiniteNumber(candidate.walkForward?.objectiveWeights?.expectancyR)
+          ?? DEFAULT_PROFILE.walkForward.objectiveWeights.expectancyR,
       },
     },
     driftControl: {
@@ -390,6 +475,23 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         : [],
     },
   };
+
+  const legacyWeightShape = (
+    Math.abs(normalized.walkForward.objectiveWeights.t1 - 0.6) < 0.0001
+    && Math.abs(normalized.walkForward.objectiveWeights.t2 - 0.4) < 0.0001
+    && Math.abs(normalized.walkForward.objectiveWeights.failurePenalty - 0.45) < 0.0001
+  );
+  if (legacyWeightShape) {
+    normalized.walkForward.objectiveWeights = {
+      ...DEFAULT_PROFILE.walkForward.objectiveWeights,
+    };
+  }
+  const legacyPartialShape = Math.abs(normalized.tradeManagement.partialAtT1Pct - 0.5) < 0.0001;
+  if (legacyPartialShape) {
+    normalized.tradeManagement.partialAtT1Pct = DEFAULT_PROFILE.tradeManagement.partialAtT1Pct;
+  }
+
+  return normalized;
 }
 
 function toMetadataObject(value: unknown): Record<string, unknown> {
@@ -407,22 +509,64 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   const confluenceSources = Array.isArray(metadata.confluenceSources)
     ? metadata.confluenceSources.filter((item): item is string => typeof item === 'string')
     : [];
+  const tradeManagement = (
+    metadata.tradeManagement
+    && typeof metadata.tradeManagement === 'object'
+    && !Array.isArray(metadata.tradeManagement)
+  )
+    ? metadata.tradeManagement as Record<string, unknown>
+    : null;
+  const moveStopToBreakeven = typeof tradeManagement?.moveStopToBreakeven === 'boolean'
+    ? tradeManagement.moveStopToBreakeven
+    : true;
+  const gateStatusRaw = metadata.gateStatus;
+  const gateStatus = gateStatusRaw === 'blocked'
+    ? 'blocked'
+    : gateStatusRaw === 'eligible'
+      ? 'eligible'
+      : null;
   const emaAligned = metadata.emaAligned === true || confluenceSources.includes('ema_alignment');
   const volumeRegimeAligned = metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
   const regime = typeof row.regime === 'string' && row.regime.length > 0 ? row.regime : 'unknown';
   const setupType = typeof row.setup_type === 'string' && row.setup_type.length > 0 ? row.setup_type : 'unknown';
+  const entryLow = toFiniteNumber(row.entry_zone_low);
+  const entryHigh = toFiniteNumber(row.entry_zone_high);
+  const stopPrice = toFiniteNumber(row.stop_price);
+  const target1Price = toFiniteNumber(row.target_1_price);
+  const target2Price = toFiniteNumber(row.target_2_price);
+  const entryMid = entryLow != null && entryHigh != null
+    ? (entryLow + entryHigh) / 2
+    : null;
+  const entryFillPrice = toFiniteNumber(row.entry_fill_price);
+  const entryPrice = entryFillPrice ?? entryMid;
+
+  let target1R: number | null = null;
+  let target2R: number | null = null;
+  if (entryPrice != null && stopPrice != null && target1Price != null) {
+    const riskR = Math.max(0.25, Math.abs(entryPrice - stopPrice));
+    target1R = Math.abs(target1Price - entryPrice) / riskR;
+    target2R = target2Price != null
+      ? Math.abs(target2Price - entryPrice) / riskR
+      : target1R;
+  }
 
   return {
     sessionDate: row.session_date,
     setupType,
     regime,
     comboKey: `${setupType}|${regime}`,
+    tier: typeof row.tier === 'string' ? row.tier : null,
+    gateStatus,
     firstSeenAt: row.first_seen_at,
     firstSeenMinuteEt: toSessionMinuteEt(row.first_seen_at),
     triggered: typeof row.triggered_at === 'string' && row.triggered_at.length > 0,
     finalOutcome: row.final_outcome,
     pWinCalibrated: toFiniteNumber(row.p_win_calibrated),
     evR: toFiniteNumber(row.ev_r),
+    target1R: target1R != null ? round(target1R, 4) : null,
+    target2R: target2R != null ? round(target2R, 4) : null,
+    stopHit: typeof row.stop_hit_at === 'string' && row.stop_hit_at.length > 0,
+    moveStopToBreakeven,
     confluenceScore,
     flowAlignmentPct,
     flowConfirmed,
@@ -451,6 +595,10 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       map.set(key, {
         triggeredAt: row.triggered_at,
         finalOutcome: row.final_outcome,
+        entryFillPrice: toFiniteNumber((row as Record<string, unknown>).entry_fill_price),
+        stopHitAt: typeof (row as Record<string, unknown>).stop_hit_at === 'string'
+          ? (row as Record<string, unknown>).stop_hit_at as string
+          : null,
       });
     }
 
@@ -475,15 +623,74 @@ function emptyMetrics(): SPXOptimizationMetrics {
     t1WinRatePct: 0,
     t2WinRatePct: 0,
     failureRatePct: 0,
+    expectancyR: 0,
+    expectancyLowerBoundR: 0,
+    positiveRealizedRatePct: 0,
     objectiveScore: 0,
+    objectiveScoreConservative: 0,
+    t1Confidence95: emptyConfidenceInterval(),
+    t2Confidence95: emptyConfidenceInterval(),
+    failureConfidence95: emptyConfidenceInterval(),
   };
+}
+
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values: number[]): number {
+  if (values.length <= 1) return 0;
+  const avg = mean(values);
+  const variance = values.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / (values.length - 1);
+  return Math.sqrt(Math.max(0, variance));
+}
+
+function confidenceLowerBoundMean(values: number[], z = WILSON_Z_95): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0];
+  const avg = mean(values);
+  const stdev = standardDeviation(values);
+  const margin = z * (stdev / Math.sqrt(values.length));
+  return avg - margin;
+}
+
+function realizedRForOutcome(
+  row: PreparedOptimizationRow,
+  partialAtT1Pct: number,
+  commissionR = 0.04,
+): number | null {
+  if (!row.finalOutcome) return null;
+  const target1R = row.target1R;
+  const target2R = row.target2R ?? target1R;
+  if (target1R == null || !Number.isFinite(target1R)) return null;
+
+  if (row.finalOutcome === 't2_before_stop') {
+    const runnerR = target2R != null && Number.isFinite(target2R) ? target2R : target1R;
+    return (partialAtT1Pct * target1R) + ((1 - partialAtT1Pct) * runnerR) - commissionR;
+  }
+  if (row.finalOutcome === 't1_before_stop') {
+    const runnerR = row.stopHit
+      ? (row.moveStopToBreakeven ? 0 : -1)
+      : 0;
+    return (partialAtT1Pct * target1R) + ((1 - partialAtT1Pct) * runnerR) - commissionR;
+  }
+  if (row.finalOutcome === 'stop_before_t1') {
+    return -1 - commissionR;
+  }
+  if (row.finalOutcome === 'expired_unresolved') {
+    return -commissionR;
+  }
+  return null;
 }
 
 function toMetrics(
   rows: PreparedOptimizationRow[],
   weights: SPXOptimizationProfile['walkForward']['objectiveWeights'],
+  candidate: Pick<ThresholdCandidate, 'partialAtT1Pct'>,
 ): SPXOptimizationMetrics {
   const metrics = emptyMetrics();
+  const realizedRows: number[] = [];
 
   for (const row of rows) {
     if (!row.triggered) continue;
@@ -495,14 +702,15 @@ function toMetrics(
     if (row.finalOutcome === 't2_before_stop') {
       metrics.t2Wins += 1;
       metrics.t1Wins += 1;
-      continue;
-    }
-    if (row.finalOutcome === 't1_before_stop') {
+    } else if (row.finalOutcome === 't1_before_stop') {
       metrics.t1Wins += 1;
-      continue;
-    }
-    if (row.finalOutcome === 'stop_before_t1') {
+    } else if (row.finalOutcome === 'stop_before_t1') {
       metrics.stopsBeforeT1 += 1;
+    }
+
+    const realized = realizedRForOutcome(row, candidate.partialAtT1Pct);
+    if (realized != null && Number.isFinite(realized)) {
+      realizedRows.push(realized);
     }
   }
 
@@ -510,12 +718,32 @@ function toMetrics(
   metrics.t1WinRatePct = denominator > 0 ? round((metrics.t1Wins / denominator) * 100, 2) : 0;
   metrics.t2WinRatePct = denominator > 0 ? round((metrics.t2Wins / denominator) * 100, 2) : 0;
   metrics.failureRatePct = denominator > 0 ? round((metrics.stopsBeforeT1 / denominator) * 100, 2) : 0;
+  metrics.expectancyR = realizedRows.length > 0 ? round(mean(realizedRows), 4) : 0;
+  metrics.expectancyLowerBoundR = realizedRows.length > 0
+    ? round(confidenceLowerBoundMean(realizedRows), 4)
+    : 0;
+  metrics.positiveRealizedRatePct = realizedRows.length > 0
+    ? round((realizedRows.filter((value) => value > 0).length / realizedRows.length) * 100, 2)
+    : 0;
+  metrics.t1Confidence95 = wilsonIntervalPct(metrics.t1Wins, denominator);
+  metrics.t2Confidence95 = wilsonIntervalPct(metrics.t2Wins, denominator);
+  metrics.failureConfidence95 = wilsonIntervalPct(metrics.stopsBeforeT1, denominator);
   metrics.objectiveScore = round(
     (metrics.t1WinRatePct * weights.t1)
     + (metrics.t2WinRatePct * weights.t2)
     - (metrics.failureRatePct * weights.failurePenalty),
     2,
-  );
+  ) + round(metrics.expectancyR * weights.expectancyR, 2);
+  metrics.objectiveScore = round(metrics.objectiveScore, 2);
+  metrics.objectiveScoreConservative = denominator > 0
+    ? round(
+      (metrics.t1Confidence95.lowerPct * weights.t1)
+      + (metrics.t2Confidence95.lowerPct * weights.t2)
+      - (metrics.failureConfidence95.upperPct * weights.failurePenalty)
+      + (metrics.expectancyLowerBoundR * weights.expectancyR),
+      2,
+    )
+    : round(metrics.expectancyLowerBoundR * weights.expectancyR, 2);
 
   return metrics;
 }
@@ -523,27 +751,31 @@ function toMetrics(
 function candidateGrid(): ThresholdCandidate[] {
   const candidates: ThresholdCandidate[] = [];
   const alignmentGridByFlowGate: Record<'true' | 'false', number[]> = {
-    true: [50, 55, 60],
+    true: [52, 55, 58, 60],
     false: [0],
   };
+  const partialTakeGrid = [0.35, 0.5, 0.65, 0.7, 0.8];
   for (const minConfluenceScore of [3, 4, 5]) {
-    for (const minPWinCalibrated of [0.58, 0.6, 0.62]) {
-      for (const minEvR of [0.2, 0.25, 0.3]) {
+    for (const minPWinCalibrated of [0.58, 0.6, 0.62, 0.64]) {
+      for (const minEvR of [0.18, 0.22, 0.25, 0.3, 0.35, 0.4]) {
         for (const requireFlowConfirmation of [true, false]) {
           for (const minAlignmentPct of alignmentGridByFlowGate[String(requireFlowConfirmation) as 'true' | 'false']) {
             for (const requireEmaAlignment of [false, true]) {
               for (const requireVolumeRegimeAlignment of [false, true]) {
                 for (const enforceTimingGate of [true, false]) {
-                  candidates.push({
-                    requireFlowConfirmation,
-                    minConfluenceScore,
-                    minPWinCalibrated,
-                    minEvR,
-                    minAlignmentPct,
-                    requireEmaAlignment,
-                    requireVolumeRegimeAlignment,
-                    enforceTimingGate,
-                  });
+                  for (const partialAtT1Pct of partialTakeGrid) {
+                    candidates.push({
+                      requireFlowConfirmation,
+                      minConfluenceScore,
+                      minPWinCalibrated,
+                      minEvR,
+                      minAlignmentPct,
+                      requireEmaAlignment,
+                      requireVolumeRegimeAlignment,
+                      enforceTimingGate,
+                      partialAtT1Pct,
+                    });
+                  }
                 }
               }
             }
@@ -565,6 +797,8 @@ function passesCandidate(
   },
 ): boolean {
   if (!row.triggered) return false;
+  if (row.tier === 'hidden') return false;
+  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -593,6 +827,7 @@ function evaluateBuckets(
   rows: PreparedOptimizationRow[],
   keySelector: (row: PreparedOptimizationRow) => string,
   weights: SPXOptimizationProfile['walkForward']['objectiveWeights'],
+  partialAtT1Pct: number,
 ): SPXPerformanceBucket[] {
   const byKey = new Map<string, PreparedOptimizationRow[]>();
 
@@ -606,7 +841,7 @@ function evaluateBuckets(
 
   return Array.from(byKey.entries())
     .map(([key, keyRows]) => {
-      const metrics = toMetrics(keyRows, weights);
+      const metrics = toMetrics(keyRows, weights, { partialAtT1Pct });
       return {
         key,
         tradeCount: metrics.tradeCount,
@@ -614,6 +849,9 @@ function evaluateBuckets(
         t1WinRatePct: metrics.t1WinRatePct,
         t2WinRatePct: metrics.t2WinRatePct,
         failureRatePct: metrics.failureRatePct,
+        t1Confidence95: metrics.t1Confidence95,
+        t2Confidence95: metrics.t2Confidence95,
+        failureConfidence95: metrics.failureConfidence95,
       };
     })
     .sort((a, b) => b.tradeCount - a.tradeCount || a.key.localeCompare(b.key));
@@ -627,6 +865,7 @@ function resolvePausedCombos(
     .filter((bucket) => (
       bucket.tradeCount >= profile.regimeGate.minTradesPerCombo
       && bucket.t1WinRatePct < profile.regimeGate.minT1WinRatePct
+      && bucket.t1Confidence95.upperPct < profile.regimeGate.minT1WinRatePct
     ))
     .map((bucket) => bucket.key)
     .sort();
@@ -636,6 +875,7 @@ function resolveDriftAlerts(
   rows: PreparedOptimizationRow[],
   profile: SPXOptimizationProfile,
   toDate: string,
+  partialAtT1Pct: number,
 ): SPXDriftAlert[] {
   if (!profile.driftControl.enabled) return [];
 
@@ -648,20 +888,28 @@ function resolveDriftAlerts(
     const shortRows = rows.filter((row) => row.setupType === setupType && row.sessionDate >= shortFrom);
     const longRows = rows.filter((row) => row.setupType === setupType && row.sessionDate >= longFrom);
 
-    const shortMetrics = toMetrics(shortRows, profile.walkForward.objectiveWeights);
-    const longMetrics = toMetrics(longRows, profile.walkForward.objectiveWeights);
+    const shortMetrics = toMetrics(shortRows, profile.walkForward.objectiveWeights, { partialAtT1Pct });
+    const longMetrics = toMetrics(longRows, profile.walkForward.objectiveWeights, { partialAtT1Pct });
     if (longMetrics.tradeCount < profile.driftControl.minLongWindowTrades) continue;
+    if (shortMetrics.tradeCount < Math.max(3, profile.walkForward.validationDays)) continue;
 
     const drop = round(longMetrics.t1WinRatePct - shortMetrics.t1WinRatePct, 2);
+    const confidenceDrop = round(longMetrics.t1Confidence95.lowerPct - shortMetrics.t1Confidence95.upperPct, 2);
     if (drop < profile.driftControl.maxDropPct) continue;
+    if (confidenceDrop <= 0) continue;
 
     alerts.push({
       setupType,
       shortWindowDays: profile.driftControl.shortWindowDays,
       longWindowDays: profile.driftControl.longWindowDays,
       shortT1WinRatePct: shortMetrics.t1WinRatePct,
+      shortT1Lower95Pct: shortMetrics.t1Confidence95.lowerPct,
+      shortT1Upper95Pct: shortMetrics.t1Confidence95.upperPct,
       longT1WinRatePct: longMetrics.t1WinRatePct,
+      longT1Lower95Pct: longMetrics.t1Confidence95.lowerPct,
+      longT1Upper95Pct: longMetrics.t1Confidence95.upperPct,
       dropPct: drop,
+      confidenceDropPct: confidenceDrop,
       action: 'pause',
     });
   }
@@ -671,6 +919,7 @@ function resolveDriftAlerts(
 
 function buildSetupActionRecommendations(input: {
   setupTypeBuckets: SPXPerformanceBucket[];
+  setupComboBuckets: SPXPerformanceBucket[];
   pausedCombos: string[];
   driftAlerts: SPXDriftAlert[];
   baselineCandidate: ThresholdCandidate;
@@ -682,14 +931,22 @@ function buildSetupActionRecommendations(input: {
   const remove = new Set<string>();
   const add = new Set<string>();
   const update = new Set<string>();
+  const comboBucketByKey = new Map(input.setupComboBuckets.map((bucket) => [bucket.key, bucket]));
 
   for (const combo of input.pausedCombos) {
-    remove.add(`Pause ${combo}: T1 win rate below ${input.profile.regimeGate.minT1WinRatePct}% with sufficient sample.`);
+    const comboMetrics = comboBucketByKey.get(combo);
+    if (comboMetrics) {
+      remove.add(
+        `Pause ${combo}: T1 ${comboMetrics.t1WinRatePct}% (95% CI ${comboMetrics.t1Confidence95.lowerPct}-${comboMetrics.t1Confidence95.upperPct}) remains below floor ${input.profile.regimeGate.minT1WinRatePct}%.`,
+      );
+    } else {
+      remove.add(`Pause ${combo}: T1 win rate below ${input.profile.regimeGate.minT1WinRatePct}% with sufficient sample.`);
+    }
   }
 
   for (const alert of input.driftAlerts) {
     remove.add(
-      `Pause ${alert.setupType}: ${alert.shortWindowDays}d T1 win (${alert.shortT1WinRatePct}%) dropped ${alert.dropPct} pts vs ${alert.longWindowDays}d baseline (${alert.longT1WinRatePct}%).`,
+      `Pause ${alert.setupType}: ${alert.shortWindowDays}d T1 ${alert.shortT1WinRatePct}% (95% CI ${alert.shortT1Lower95Pct}-${alert.shortT1Upper95Pct}) dropped ${alert.dropPct} pts vs ${alert.longWindowDays}d baseline ${alert.longT1WinRatePct}% (95% CI ${alert.longT1Lower95Pct}-${alert.longT1Upper95Pct}).`,
     );
   }
 
@@ -720,17 +977,24 @@ function buildSetupActionRecommendations(input: {
   if (input.optimizedCandidate.enforceTimingGate !== input.baselineCandidate.enforceTimingGate) {
     update.add(`Timing gate: enforce late-session discipline = ${input.optimizedCandidate.enforceTimingGate}.`);
   }
-  update.add('Trade management: take 50% at T1 and move stop to breakeven on remainder.');
+  if (input.optimizedCandidate.partialAtT1Pct !== input.baselineCandidate.partialAtT1Pct) {
+    update.add(`Trade management: take ${(input.optimizedCandidate.partialAtT1Pct * 100).toFixed(0)}% at T1 and run ${(100 - (input.optimizedCandidate.partialAtT1Pct * 100)).toFixed(0)}%.`);
+  } else {
+    update.add(`Trade management: keep ${(input.optimizedCandidate.partialAtT1Pct * 100).toFixed(0)}% at T1 with breakeven runner policy.`);
+  }
 
   const shortFrom = shiftDate(input.toDate, -4);
   for (const bucket of input.setupTypeBuckets) {
     if (bucket.tradeCount < input.profile.walkForward.minTrades) continue;
     if (bucket.t1WinRatePct < 58) continue;
+    if (bucket.t1Confidence95.lowerPct < ADD_SETUP_MIN_T1_LOWER_BOUND_PCT) continue;
     const recentTrades = input.rows.filter(
       (row) => row.setupType === bucket.key && row.sessionDate >= shortFrom && row.triggered,
     ).length;
     if (recentTrades > 0) continue;
-    add.add(`Add/enable ${bucket.key}: strong historical edge (${bucket.t1WinRatePct}% T1) but no recent deployment.`);
+    add.add(
+      `Add/enable ${bucket.key}: strong historical edge (${bucket.t1WinRatePct}% T1, 95% CI ${bucket.t1Confidence95.lowerPct}-${bucket.t1Confidence95.upperPct}) but no recent deployment.`,
+    );
   }
 
   return {
@@ -747,7 +1011,7 @@ async function loadOptimizationRows(
 ): Promise<PreparedOptimizationRow[]> {
   const { data, error } = await supabase
     .from('spx_setup_instances')
-    .select('engine_setup_id,session_date,setup_type,regime,first_seen_at,triggered_at,final_outcome,p_win_calibrated,ev_r,metadata')
+    .select('engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata')
     .gte('session_date', from)
     .lte('session_date', to);
 
@@ -767,6 +1031,8 @@ async function loadOptimizationRows(
       ...row,
       triggered_at: override.triggeredAt,
       final_outcome: override.finalOutcome,
+      entry_fill_price: override.entryFillPrice,
+      stop_hit_at: override.stopHitAt,
     });
   });
 }
@@ -870,10 +1136,13 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
     requireEmaAlignment: profile.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profile.indicatorGate.requireVolumeRegimeAlignment,
     enforceTimingGate: profile.timingGate.enabled,
+    partialAtT1Pct: profile.tradeManagement.partialAtT1Pct,
   };
   const timingMap = profile.timingGate.maxFirstSeenMinuteBySetupType;
   const eligibleRows = rows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap }));
-  const metrics = toMetrics(eligibleRows, profile.walkForward.objectiveWeights);
+  const metrics = toMetrics(eligibleRows, profile.walkForward.objectiveWeights, {
+    partialAtT1Pct: baselineCandidate.partialAtT1Pct,
+  });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -886,10 +1155,22 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
       t1WinRateDelta: 0,
       t2WinRateDelta: 0,
       objectiveDelta: 0,
+      objectiveConservativeDelta: 0,
+      expectancyRDelta: 0,
     },
     driftAlerts: [],
-    setupTypePerformance: evaluateBuckets(eligibleRows, (row) => row.setupType, profile.walkForward.objectiveWeights),
-    setupComboPerformance: evaluateBuckets(eligibleRows, (row) => row.comboKey, profile.walkForward.objectiveWeights),
+    setupTypePerformance: evaluateBuckets(
+      eligibleRows,
+      (row) => row.setupType,
+      profile.walkForward.objectiveWeights,
+      baselineCandidate.partialAtT1Pct,
+    ),
+    setupComboPerformance: evaluateBuckets(
+      eligibleRows,
+      (row) => row.comboKey,
+      profile.walkForward.objectiveWeights,
+      baselineCandidate.partialAtT1Pct,
+    ),
     setupActions: {
       add: [],
       update: ['Run Scan & Optimize to generate walk-forward recommendations.'],
@@ -934,6 +1215,7 @@ export async function runSPXOptimizerScan(input?: {
     requireEmaAlignment: profileForScan.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profileForScan.indicatorGate.requireVolumeRegimeAlignment,
     enforceTimingGate: profileForScan.timingGate.enabled,
+    partialAtT1Pct: profileForScan.tradeManagement.partialAtT1Pct,
   };
   const timingMap = profileForScan.timingGate.maxFirstSeenMinuteBySetupType;
 
@@ -941,14 +1223,20 @@ export async function runSPXOptimizerScan(input?: {
   let bestTrainingMetrics = toMetrics(
     trainingRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
+    { partialAtT1Pct: baselineCandidate.partialAtT1Pct },
   );
   let hasQualifiedTrainingCandidate = bestTrainingMetrics.tradeCount >= profileForScan.walkForward.minTrades;
 
   for (const candidate of candidateGrid()) {
     const eligible = trainingRows.filter((row) => passesCandidate(row, candidate, { timingMap }));
-    const metrics = toMetrics(eligible, profileForScan.walkForward.objectiveWeights);
+    const metrics = toMetrics(eligible, profileForScan.walkForward.objectiveWeights, {
+      partialAtT1Pct: candidate.partialAtT1Pct,
+    });
     if (metrics.tradeCount < profileForScan.walkForward.minTrades) continue;
-    if (hasQualifiedTrainingCandidate && metrics.objectiveScore <= bestTrainingMetrics.objectiveScore) continue;
+    if (
+      hasQualifiedTrainingCandidate
+      && metrics.objectiveScoreConservative <= bestTrainingMetrics.objectiveScoreConservative
+    ) continue;
 
     bestCandidate = candidate;
     bestTrainingMetrics = metrics;
@@ -958,11 +1246,13 @@ export async function runSPXOptimizerScan(input?: {
   const baselineValidationMetrics = toMetrics(
     validationRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
+    { partialAtT1Pct: baselineCandidate.partialAtT1Pct },
   );
 
   const optimizedValidationMetrics = toMetrics(
     validationRows.filter((row) => passesCandidate(row, bestCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
+    { partialAtT1Pct: bestCandidate.partialAtT1Pct },
   );
 
   const baselineValidationQualified = baselineValidationMetrics.tradeCount >= profileForScan.walkForward.minTrades;
@@ -975,20 +1265,27 @@ export async function runSPXOptimizerScan(input?: {
     : baseRequiredValidationTrades;
   const baselineHasValidationTrades = baselineValidationMetrics.tradeCount > 0;
   const objectiveDelta = round(optimizedValidationMetrics.objectiveScore - baselineValidationMetrics.objectiveScore, 2);
+  const objectiveConservativeDelta = round(
+    optimizedValidationMetrics.objectiveScoreConservative - baselineValidationMetrics.objectiveScoreConservative,
+    2,
+  );
+  const expectancyRDelta = round(optimizedValidationMetrics.expectancyR - baselineValidationMetrics.expectancyR, 4);
   const t1WinRateDelta = round(optimizedValidationMetrics.t1WinRatePct - baselineValidationMetrics.t1WinRatePct, 2);
   const t2WinRateDelta = round(optimizedValidationMetrics.t2WinRatePct - baselineValidationMetrics.t2WinRatePct, 2);
   const weeklyGuardrailPassed = !weeklyAutoMode || (
     objectiveDelta >= WEEKLY_AUTO_MIN_OBJECTIVE_DELTA
+    && objectiveConservativeDelta >= 0
+    && expectancyRDelta >= 0
     && t1WinRateDelta >= 0
     && t2WinRateDelta >= -WEEKLY_AUTO_MAX_T2_DROP_PCT
   );
   const optimizationApplied = (
     optimizedValidationMetrics.tradeCount >= requiredValidationTrades
     && (
-      optimizedValidationMetrics.objectiveScore > baselineValidationMetrics.objectiveScore
+      optimizedValidationMetrics.objectiveScoreConservative > baselineValidationMetrics.objectiveScoreConservative
       || (
         !baselineHasValidationTrades
-        && optimizedValidationMetrics.objectiveScore > 0
+        && optimizedValidationMetrics.objectiveScoreConservative > 0
       )
     )
     && weeklyGuardrailPassed
@@ -1000,11 +1297,13 @@ export async function runSPXOptimizerScan(input?: {
     rows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
     (row) => row.setupType,
     profileForScan.walkForward.objectiveWeights,
+    activeCandidate.partialAtT1Pct,
   );
   const setupComboPerformance = evaluateBuckets(
     rows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
     (row) => row.comboKey,
     profileForScan.walkForward.objectiveWeights,
+    activeCandidate.partialAtT1Pct,
   );
 
   const pausedCombos = resolvePausedCombos(setupComboPerformance, profileForScan);
@@ -1015,8 +1314,14 @@ export async function runSPXOptimizerScan(input?: {
     })),
     profileForScan,
     validationTo,
+    activeCandidate.partialAtT1Pct,
   );
+  const manualPausedSetupTypes = profileForScan.driftControl.pausedSetupTypes
+    .filter((setupType) => typeof setupType === 'string' && setupType.length > 0);
   const driftPausedSetupTypes = Array.from(new Set(driftAlerts.map((alert) => alert.setupType))).sort();
+  const mergedPausedSetupTypes = Array.from(
+    new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes]),
+  ).sort();
 
   const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
     ...profileForScan,
@@ -1047,17 +1352,18 @@ export async function runSPXOptimizerScan(input?: {
     },
     tradeManagement: {
       ...profileForScan.tradeManagement,
-      partialAtT1Pct: 0.5,
+      partialAtT1Pct: activeCandidate.partialAtT1Pct,
       moveStopToBreakeven: true,
     },
     driftControl: {
       ...profileForScan.driftControl,
-      pausedSetupTypes: driftPausedSetupTypes,
+      pausedSetupTypes: mergedPausedSetupTypes,
     },
   }, new Date().toISOString());
 
   const setupActions = buildSetupActionRecommendations({
     setupTypeBuckets: setupTypePerformance,
+    setupComboBuckets: setupComboPerformance,
     pausedCombos,
     driftAlerts,
     baselineCandidate,
@@ -1078,6 +1384,8 @@ export async function runSPXOptimizerScan(input?: {
       t1WinRateDelta,
       t2WinRateDelta,
       objectiveDelta,
+      objectiveConservativeDelta,
+      expectancyRDelta,
     },
     driftAlerts,
     setupTypePerformance,
@@ -1089,13 +1397,15 @@ export async function runSPXOptimizerScan(input?: {
         ? `Walk-forward optimization applied to active profile (validation trades=${optimizedValidationMetrics.tradeCount}, minimum required=${requiredValidationTrades}).`
         : 'Candidate thresholds did not beat baseline on validation window; baseline retained.',
       weeklyAutoMode
-        ? `Weekly auto guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
+        ? `Weekly auto guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
         : 'Weekly auto guardrails not enforced for this scan mode.',
+      `Validation objective: baseline ${baselineValidationMetrics.objectiveScore} (conservative ${baselineValidationMetrics.objectiveScoreConservative}) vs optimized ${optimizedValidationMetrics.objectiveScore} (conservative ${optimizedValidationMetrics.objectiveScoreConservative}).`,
+      `Validation expectancy(R): baseline ${baselineValidationMetrics.expectancyR} (lower bound ${baselineValidationMetrics.expectancyLowerBoundR}) vs optimized ${optimizedValidationMetrics.expectancyR} (lower bound ${optimizedValidationMetrics.expectancyLowerBoundR}).`,
       `Flow gate: require flow confirmation=${nextProfile.flowGate.requireFlowConfirmation}, alignment floor=${nextProfile.flowGate.minAlignmentPct}.`,
       `Indicator gates: require EMA alignment=${nextProfile.indicatorGate.requireEmaAlignment}, require volume-regime alignment=${nextProfile.indicatorGate.requireVolumeRegimeAlignment}.`,
       `Timing gate: enforce=${nextProfile.timingGate.enabled}.`,
       `Trade management policy: ${nextProfile.tradeManagement.partialAtT1Pct * 100}% at T1, stop to breakeven=${nextProfile.tradeManagement.moveStopToBreakeven}.`,
-      `Drift control paused ${driftPausedSetupTypes.length} setup types and regime gate paused ${pausedCombos.length} setup/regime combos.`,
+      `Drift control paused ${mergedPausedSetupTypes.length} setup types and regime gate paused ${pausedCombos.length} setup/regime combos.`,
     ],
   };
 
@@ -1118,3 +1428,9 @@ export async function runSPXOptimizerScan(input?: {
     scorecard,
   };
 }
+
+export const __optimizerTestUtils = {
+  wilsonIntervalPct,
+  toMetrics,
+  resolvePausedCombos,
+};

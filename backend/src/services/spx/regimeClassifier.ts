@@ -5,7 +5,7 @@ import { toEasternTime } from '../marketHours';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import type { ClusterZone, RegimeState, SPXLevel, UnifiedGEXLandscape } from './types';
-import { classifyRegimeFromSignals, nowIso, round } from './utils';
+import { classifyRegimeFromSignals, ema, nowIso, round } from './utils';
 
 const REGIME_CACHE_KEY = 'spx_command_center:regime';
 const REGIME_CACHE_TTL_SECONDS = 15;
@@ -15,30 +15,77 @@ type LevelData = {
   clusters: ClusterZone[];
   generatedAt: string;
 };
+interface SessionTrendContext {
+  volumeTrend: 'rising' | 'flat' | 'falling';
+  trendStrength: number;
+}
+
+const REGIME_EMA_FAST_PERIOD = 21;
+const REGIME_EMA_SLOW_PERIOD = 55;
+const REGIME_TREND_SPREAD_POINTS = 8;
+const REGIME_TREND_SLOPE_POINTS = 2.4;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 function getDateKey(): string {
   return toEasternTime(new Date()).dateStr;
 }
 
-async function getVolumeTrend(): Promise<'rising' | 'flat' | 'falling'> {
+function trendStrengthFromBars(bars: Array<{ c: number }>): number {
+  const closes = bars
+    .map((bar) => bar.c)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (closes.length < 8) return 0;
+
+  const emaFast = ema(closes, Math.min(REGIME_EMA_FAST_PERIOD, closes.length));
+  const emaSlow = ema(closes, Math.min(REGIME_EMA_SLOW_PERIOD, closes.length));
+
+  const priorCloses = closes.slice(0, -3);
+  const emaFastPrior = priorCloses.length > 0
+    ? ema(priorCloses, Math.min(REGIME_EMA_FAST_PERIOD, priorCloses.length))
+    : emaFast;
+
+  const spreadScore = clamp(Math.abs(emaFast - emaSlow) / REGIME_TREND_SPREAD_POINTS, 0, 1);
+  const slopeScore = clamp(Math.abs(emaFast - emaFastPrior) / REGIME_TREND_SLOPE_POINTS, 0, 1);
+  return round((spreadScore * 0.55) + (slopeScore * 0.45), 4);
+}
+
+function volumeTrendFromBars(bars: Array<{ v: number }>): 'rising' | 'flat' | 'falling' {
+  if (bars.length < 15) return 'flat';
+
+  const last = bars.slice(-5).reduce((sum, bar) => sum + bar.v, 0) / 5;
+  const prior = bars.slice(-10, -5).reduce((sum, bar) => sum + bar.v, 0) / 5;
+  if (!Number.isFinite(last) || !Number.isFinite(prior) || prior <= 0) {
+    return 'flat';
+  }
+
+  const ratio = last / prior;
+  if (ratio > 1.2) return 'rising';
+  if (ratio < 0.85) return 'falling';
+  return 'flat';
+}
+
+async function getSessionTrendContext(): Promise<SessionTrendContext> {
   try {
     const bars = await getMinuteAggregates('I:SPX', getDateKey());
-    if (!Array.isArray(bars) || bars.length < 15) {
-      return 'flat';
+    if (!Array.isArray(bars) || bars.length < 8) {
+      return {
+        volumeTrend: 'flat',
+        trendStrength: 0,
+      };
     }
 
-    const last = bars.slice(-5).reduce((sum, bar) => sum + bar.v, 0) / 5;
-    const prior = bars.slice(-10, -5).reduce((sum, bar) => sum + bar.v, 0) / 5;
-    if (!Number.isFinite(last) || !Number.isFinite(prior) || prior <= 0) {
-      return 'flat';
-    }
-
-    const ratio = last / prior;
-    if (ratio > 1.2) return 'rising';
-    if (ratio < 0.85) return 'falling';
-    return 'flat';
+    return {
+      volumeTrend: volumeTrendFromBars(bars),
+      trendStrength: trendStrengthFromBars(bars),
+    };
   } catch {
-    return 'flat';
+    return {
+      volumeTrend: 'flat',
+      trendStrength: 0,
+    };
   }
 }
 
@@ -86,12 +133,19 @@ export async function classifyCurrentRegime(options?: {
   gexLandscape?: UnifiedGEXLandscape;
   levelData?: LevelData;
   volumeTrend?: 'rising' | 'flat' | 'falling';
+  trendStrength?: number;
 }): Promise<RegimeState> {
   const gexLandscape = options?.gexLandscape;
   const levelData = options?.levelData;
   const providedVolumeTrend = options?.volumeTrend;
+  const providedTrendStrength = options?.trendStrength;
   const forceRefresh = options?.forceRefresh === true;
-  const hasPrecomputedDependencies = Boolean(gexLandscape || levelData || providedVolumeTrend);
+  const hasPrecomputedDependencies = Boolean(
+    gexLandscape
+      || levelData
+      || providedVolumeTrend
+      || Number.isFinite(providedTrendStrength),
+  );
   if (!forceRefresh && regimeInFlight) {
     return regimeInFlight;
   }
@@ -104,17 +158,19 @@ export async function classifyCurrentRegime(options?: {
     }
   }
 
-  const [gex, levels, volumeTrend] = await Promise.all([
+  const [gex, levels, trendContext] = await Promise.all([
     gexLandscape
       ? Promise.resolve(gexLandscape)
       : computeUnifiedGEXLandscape({ forceRefresh }),
     levelData
       ? Promise.resolve(levelData)
       : getMergedLevels({ forceRefresh }),
-    providedVolumeTrend
-      ? Promise.resolve(providedVolumeTrend)
-      : getVolumeTrend(),
+    getSessionTrendContext(),
   ]);
+  const volumeTrend = providedVolumeTrend ?? trendContext.volumeTrend;
+  const trendStrength = Number.isFinite(providedTrendStrength)
+    ? clamp(providedTrendStrength as number, 0, 1)
+    : trendContext.trendStrength;
 
   const spot = gex.spx.spotPrice;
   const netGex = gex.combined.netGex;
@@ -139,6 +195,7 @@ export async function classifyCurrentRegime(options?: {
     rangeCompression,
     breakoutStrength,
     zoneContainment,
+    trendStrength,
   });
 
   const directionStats = computeDirectionProbability({
@@ -163,6 +220,7 @@ export async function classifyCurrentRegime(options?: {
     direction: state.direction,
     probability: state.probability,
     confidence: state.confidence,
+    trendStrength: round(trendStrength, 4),
   });
 
   return state;

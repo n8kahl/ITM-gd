@@ -37,6 +37,7 @@ export type SPXDesktopSpatialCanvasProps = {
   latestChartBarTimeSec: number | null
   showSpatialCoach: boolean
   showLevelOverlay: boolean
+  onCloseLevelOverlay?: () => void
   onRequestSidebarOpen?: () => void
 }
 
