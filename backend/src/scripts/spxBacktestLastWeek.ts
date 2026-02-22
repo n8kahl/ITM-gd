@@ -4,6 +4,7 @@ import {
   type SPXWinRateBacktestSource,
 } from '../services/spx/winRateBacktest';
 import { toEasternTime } from '../services/marketHours';
+import { getActiveSPXOptimizationProfile } from '../services/spx/optimizer';
 
 function shiftDate(dateStr: string, days: number): string {
   const date = new Date(`${dateStr}T12:00:00.000Z`);
@@ -37,7 +38,17 @@ async function main() {
       : 'auto';
 
   const { from, to } = getLastCompletedWeekRangeET();
-  const result = await runSPXWinRateBacktest({ from, to, source, resolution });
+  const optimizerProfile = await getActiveSPXOptimizationProfile();
+  const result = await runSPXWinRateBacktest({
+    from,
+    to,
+    source,
+    resolution,
+    executionModel: {
+      partialAtT1Pct: optimizerProfile.tradeManagement.partialAtT1Pct,
+      moveStopToBreakevenAfterT1: optimizerProfile.tradeManagement.moveStopToBreakeven,
+    },
+  });
 
   // Emit machine-readable JSON so CI/reporting can consume this directly.
   console.log(JSON.stringify(result, null, 2));

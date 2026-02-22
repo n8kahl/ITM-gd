@@ -163,4 +163,42 @@ describe('spx/tickEvaluator', () => {
     expect(secondBreach[0].reason).toBe('stop');
     expect(secondBreach[0].setup.invalidationReason).toBe('stop_breach_confirmed');
   });
+
+  it('respects setup-level runner policy and can keep original stop after target1', () => {
+    process.env.SPX_SETUP_MOVE_STOP_TO_BREAKEVEN_AFTER_T1 = 'true';
+    syncTickEvaluatorSetups([
+      makeSetup({
+        status: 'triggered',
+        triggeredAt: '2026-02-17T12:01:00.000Z',
+        tradeManagement: {
+          partialAtT1Pct: 0.65,
+          moveStopToBreakeven: false,
+        },
+      }),
+    ]);
+
+    const targetHit = evaluateTickSetupTransitions({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 6004,
+      size: 1,
+      timestamp: 1700000000000,
+      sequence: 1,
+    });
+    expect(targetHit).toHaveLength(1);
+    expect(targetHit[0].toPhase).toBe('target1_hit');
+
+    const pullback = evaluateTickSetupTransitions({
+      symbol: 'SPX',
+      rawSymbol: 'I:SPX',
+      price: 6000.25,
+      size: 1,
+      timestamp: 1700000002000,
+      sequence: 2,
+    }, {
+      minStopBreachTicks: 1,
+    });
+
+    expect(pullback).toHaveLength(0);
+  });
 });

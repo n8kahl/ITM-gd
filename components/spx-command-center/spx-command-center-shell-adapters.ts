@@ -2,10 +2,6 @@
 
 import type { ReactNode } from 'react'
 import type { SPXCommandController } from '@/hooks/use-spx-command-controller'
-import {
-  SPX_TELEMETRY_EVENT,
-  trackSPXTelemetryEvent,
-} from '@/lib/spx/telemetry'
 import type {
   SPXDesktopMainSurfaceProps,
   SPXDesktopSidebarSurfaceProps,
@@ -135,7 +131,6 @@ export function createSpatialDesktopSurfaceOrchestratorProps(
 
 export function createDesktopMainSurfaceProps(
   controller: SPXCommandController,
-  onCloseLevelOverlay: () => void,
 ): SPXDesktopMainSurfaceProps {
   return {
     showAllRelevantLevels: controller.showAllRelevantLevels,
@@ -149,7 +144,6 @@ export function createDesktopMainSurfaceProps(
     stateDrivenLayoutEnabled: controller.stateDrivenLayoutEnabled,
     layoutMode: controller.layoutMode,
     showLevelOverlay: controller.showLevelOverlay,
-    onCloseLevelOverlay,
   }
 }
 
@@ -207,7 +201,6 @@ export function createSpatialSidebarContentProps(
 
 export function createDesktopSpatialCanvasProps(
   controller: SPXCommandController,
-  onCloseLevelOverlay: () => void,
 ): SPXDesktopSpatialCanvasProps {
   return {
     sidebarOpen: controller.sidebarOpen,
@@ -230,7 +223,6 @@ export function createDesktopSpatialCanvasProps(
     latestChartBarTimeSec: controller.latestChartBarTimeSec,
     showSpatialCoach: controller.showSpatialCoach,
     showLevelOverlay: controller.showLevelOverlay,
-    onCloseLevelOverlay,
     onRequestSidebarOpen: () => controller.setSidebarCollapsed(false),
   }
 }
@@ -245,17 +237,5 @@ export function createSpatialSidebarPanelConfig(
     layoutMode: controller.layoutMode,
     onClose: () => controller.setSidebarCollapsed(true),
     content,
-  }
-}
-
-export function createCloseLevelOverlayHandler(
-  controller: SPXCommandController,
-): () => void {
-  return () => {
-    controller.setShowLevelOverlay(false)
-    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
-      action: 'overlay_close',
-      surface: 'desktop',
-    })
   }
 }

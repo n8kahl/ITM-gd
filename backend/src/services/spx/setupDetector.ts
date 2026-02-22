@@ -62,10 +62,13 @@ const LATE_DAY_FADE_CUTOFF_MINUTES = 300;
 const SESSION_OPEN_MINUTE_ET = 9 * 60 + 30;
 const FADE_ALIGNMENT_MAX_PCT = 84;
 const FADE_STOP_BUFFER_POINTS = 2.25;
-const MEAN_REVERSION_T1_R_MULTIPLIER = 1.45;
-const MEAN_REVERSION_T2_R_MULTIPLIER = 2.35;
+const MEAN_REVERSION_T1_R_MULTIPLIER = 1.2;
+const MEAN_REVERSION_T2_R_MULTIPLIER = 1.9;
+const MEAN_REVERSION_T1_R_MAX_MULTIPLIER = 1.85;
+const MEAN_REVERSION_T2_R_MAX_MULTIPLIER = 2.7;
 const FLIP_RECLAIM_T1_R_MULTIPLIER = 1.55;
 const FLIP_RECLAIM_T2_R_MULTIPLIER = 2.55;
+const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
 const DIVERSIFICATION_RECOVERY_COMBOS: ReadonlySet<string> = new Set([
   'mean_reversion|ranging',
   'flip_reclaim|ranging',
@@ -86,6 +89,64 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   orb_breakout: 180,
   trend_pullback: 360,
   flip_reclaim: 360,
+};
+interface SetupSpecificGateFloor {
+  minConfluenceScore?: number;
+  minPWinCalibrated?: number;
+  minEvR?: number;
+  requireFlowConfirmation?: boolean;
+  minAlignmentPct?: number;
+  requireEmaAlignment?: boolean;
+  requireVolumeRegimeAlignment?: boolean;
+  maxFirstSeenMinuteEt?: number;
+}
+const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFloor>> = {
+  mean_reversion: {
+    // Mean reversion underperformed in historical replay unless calibrated pWin is higher.
+    minConfluenceScore: 3,
+    minPWinCalibrated: 0.66,
+    minEvR: 0.2,
+    maxFirstSeenMinuteEt: 330,
+  },
+  orb_breakout: {
+    minConfluenceScore: 4,
+    minPWinCalibrated: 0.61,
+    minEvR: 0.3,
+    requireFlowConfirmation: true,
+    minAlignmentPct: 55,
+    requireEmaAlignment: true,
+    requireVolumeRegimeAlignment: true,
+    maxFirstSeenMinuteEt: 165,
+  },
+  trend_pullback: {
+    minConfluenceScore: 4,
+    minPWinCalibrated: 0.62,
+    minEvR: 0.32,
+    requireFlowConfirmation: true,
+    minAlignmentPct: 58,
+    requireEmaAlignment: true,
+    requireVolumeRegimeAlignment: true,
+    maxFirstSeenMinuteEt: 300,
+  },
+  trend_continuation: {
+    minConfluenceScore: 4,
+    minPWinCalibrated: 0.6,
+    minEvR: 0.28,
+    requireFlowConfirmation: true,
+    minAlignmentPct: 54,
+    requireEmaAlignment: true,
+    requireVolumeRegimeAlignment: true,
+  },
+  breakout_vacuum: {
+    minConfluenceScore: 5,
+    minPWinCalibrated: 0.7,
+    minEvR: 0.4,
+    requireFlowConfirmation: true,
+    minAlignmentPct: 60,
+    requireEmaAlignment: true,
+    requireVolumeRegimeAlignment: true,
+    maxFirstSeenMinuteEt: 225,
+  },
 };
 
 interface SetupLifecycleConfig {
@@ -293,13 +354,21 @@ function isRegimeAligned(type: SetupType, regime: Regime): boolean {
     return type === 'fade_at_wall' || type === 'mean_reversion' || type === 'flip_reclaim';
   }
   if (regime === 'compression') {
-    return type === 'mean_reversion' || type === 'breakout_vacuum' || type === 'orb_breakout' || type === 'flip_reclaim';
+    return type === 'mean_reversion'
+      || type === 'breakout_vacuum'
+      || type === 'orb_breakout'
+      || type === 'flip_reclaim'
+      || type === 'trend_pullback';
   }
   if (regime === 'trending') {
     return type === 'trend_continuation' || type === 'breakout_vacuum' || type === 'trend_pullback';
   }
   if (regime === 'breakout') {
-    return type === 'breakout_vacuum' || type === 'trend_continuation' || type === 'orb_breakout' || type === 'flip_reclaim';
+    return type === 'breakout_vacuum'
+      || type === 'trend_continuation'
+      || type === 'orb_breakout'
+      || type === 'flip_reclaim'
+      || type === 'trend_pullback';
   }
   return false;
 }
@@ -339,6 +408,14 @@ function inferSetupTypeForZone(input: {
   const nearFastEma = input.indicatorContext
     ? Math.abs(input.currentPrice - input.indicatorContext.emaFast) <= TREND_PULLBACK_EMA_DISTANCE_POINTS
     : false;
+  const openingMomentumConfirmed = inMomentumState || (directionalMomentum && volumeTrend === 'rising');
+  const intradayTrendStructure = (
+    hasIndicatorContext
+    && nearFastEma
+    && input.emaAligned
+    && directionalMomentum
+    && volumeTrend !== 'falling'
+  );
   const flipReclaim = input.direction === 'bullish'
     ? (input.currentPrice >= input.gexLandscape.combined.flipPoint - FLIP_RECLAIM_TOLERANCE_POINTS
       && input.zoneCenter <= input.gexLandscape.combined.flipPoint + FLIP_RECLAIM_TOLERANCE_POINTS)
@@ -350,19 +427,25 @@ function inferSetupTypeForZone(input: {
     && 
     inOpeningWindow
     && nearOpeningRangeEdge
-    && (inMomentumState || volumeTrend === 'rising')
-    && (input.regime === 'breakout' || input.regime === 'compression' || input.regime === 'trending')
+    && openingMomentumConfirmed
+    && (
+      input.regime === 'breakout'
+      || input.regime === 'compression'
+      || input.regime === 'trending'
+      || input.regime === 'ranging'
+    )
   ) {
     return 'orb_breakout';
   }
 
   if (input.regime === 'breakout') {
+    if (intradayTrendStructure && minutesSinceOpen <= 300) return 'trend_pullback';
     if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
     return inMomentumState ? 'trend_continuation' : 'breakout_vacuum';
   }
 
   if (input.regime === 'trending') {
-    if (hasIndicatorContext && nearFastEma && input.emaAligned && volumeTrend !== 'falling') return 'trend_pullback';
+    if (intradayTrendStructure) return 'trend_pullback';
     if (inMomentumState) return 'trend_continuation';
     if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
     if (nearFlip || netGexNegative) return 'breakout_vacuum';
@@ -370,6 +453,7 @@ function inferSetupTypeForZone(input: {
   }
 
   if (input.regime === 'compression') {
+    if (intradayTrendStructure && minutesSinceOpen <= 240) return 'trend_pullback';
     if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
     if (volumeTrend === 'rising' && (nearFlip || netGexNegative)) return 'breakout_vacuum';
     return 'mean_reversion';
@@ -377,6 +461,13 @@ function inferSetupTypeForZone(input: {
 
   if (input.regime === 'ranging') {
     const distanceToZone = Math.abs(input.currentPrice - input.zoneCenter);
+    if (
+      intradayTrendStructure
+      && minutesSinceOpen <= 210
+      && (nearFlip || distanceToZone <= 14)
+    ) {
+      return 'trend_pullback';
+    }
     if (hasIndicatorContext && minutesSinceOpen >= LATE_DAY_FADE_CUTOFF_MINUTES && distanceToZone >= 24) {
       return flipReclaim ? 'flip_reclaim' : 'mean_reversion';
     }
@@ -468,9 +559,69 @@ function adjustTargetsForSetupType(input: {
     }
   }
 
+  if (input.setupType === 'mean_reversion') {
+    const maxT1Distance = risk * MEAN_REVERSION_T1_R_MAX_MULTIPLIER;
+    const maxT2Distance = risk * MEAN_REVERSION_T2_R_MAX_MULTIPLIER;
+    if (input.direction === 'bullish') {
+      target1 = Math.min(target1, entryMid + maxT1Distance);
+      target2 = Math.min(target2, entryMid + maxT2Distance);
+      if (target2 <= target1 + 0.25) {
+        target2 = target1 + Math.max(risk * 0.8, 1.25);
+      }
+    } else {
+      target1 = Math.max(target1, entryMid - maxT1Distance);
+      target2 = Math.max(target2, entryMid - maxT2Distance);
+      if (target2 >= target1 - 0.25) {
+        target2 = target1 - Math.max(risk * 0.8, 1.25);
+      }
+    }
+  }
+
   return {
     target1: round(target1, 2),
     target2: round(target2, 2),
+  };
+}
+
+function resolveTradeManagementForSetup(input: {
+  setupType: SetupType;
+  regime: Regime;
+  confluenceScore: number;
+  flowConfirmed: boolean;
+  basePolicy: {
+    partialAtT1Pct: number;
+    moveStopToBreakeven: boolean;
+  };
+}): {
+  partialAtT1Pct: number;
+  moveStopToBreakeven: boolean;
+} {
+  const basePartial = Math.min(0.9, Math.max(0.1, input.basePolicy.partialAtT1Pct));
+  const baseMoveToBreakeven = input.basePolicy.moveStopToBreakeven !== false;
+
+  if (input.setupType === 'mean_reversion') {
+    return {
+      partialAtT1Pct: Math.max(basePartial, MEAN_REVERSION_PARTIAL_AT_T1_MIN),
+      moveStopToBreakeven: true,
+    };
+  }
+
+  const fadeRunnerHold = (
+    input.setupType === 'fade_at_wall'
+    && input.regime === 'ranging'
+    && input.confluenceScore >= 4
+    && (input.flowConfirmed || input.confluenceScore >= 5)
+  );
+  if (fadeRunnerHold) {
+    return {
+      partialAtT1Pct: Math.max(basePartial, 0.65),
+      moveStopToBreakeven: false,
+    };
+  }
+
+  return {
+    partialAtT1Pct: basePartial,
+    moveStopToBreakeven: baseMoveToBreakeven,
   };
 }
 
@@ -1050,6 +1201,41 @@ function evaluateOptimizationGate(input: {
   if (!isNewActionable || !actionableStatuses.has(input.status)) return [];
 
   const reasons: string[] = [];
+  const useSetupSpecificFloors = parseBooleanEnv(
+    process.env.SPX_SETUP_SPECIFIC_GATES_ENABLED,
+    true,
+  );
+  const setupFloors = useSetupSpecificFloors
+    ? SETUP_SPECIFIC_GATE_FLOORS[input.setupType]
+    : undefined;
+  const minConfluenceScore = Math.max(
+    input.profile.qualityGate.minConfluenceScore,
+    setupFloors?.minConfluenceScore ?? 0,
+  );
+  const minPWinCalibrated = Math.max(
+    input.profile.qualityGate.minPWinCalibrated,
+    setupFloors?.minPWinCalibrated ?? 0,
+  );
+  const minEvR = Math.max(
+    input.profile.qualityGate.minEvR,
+    setupFloors?.minEvR ?? Number.NEGATIVE_INFINITY,
+  );
+  const requireFlowConfirmation = (
+    input.profile.flowGate.requireFlowConfirmation
+    || setupFloors?.requireFlowConfirmation === true
+  );
+  const minAlignmentPct = Math.max(
+    requireFlowConfirmation ? input.profile.flowGate.minAlignmentPct : 0,
+    setupFloors?.minAlignmentPct ?? 0,
+  );
+  const requireEmaAlignment = (
+    input.profile.indicatorGate.requireEmaAlignment
+    || setupFloors?.requireEmaAlignment === true
+  );
+  const requireVolumeRegimeAlignment = (
+    input.profile.indicatorGate.requireVolumeRegimeAlignment
+    || setupFloors?.requireVolumeRegimeAlignment === true
+  );
   const comboKey = `${input.setupType}|${input.regime}`;
   if (input.pausedSetupTypes.has(input.setupType)) {
     reasons.push(`setup_type_paused:${input.setupType}`);
@@ -1057,34 +1243,42 @@ function evaluateOptimizationGate(input: {
   if (input.pausedCombos.has(comboKey)) {
     reasons.push(`regime_combo_paused:${comboKey}`);
   }
-  if (input.confluenceScore < input.profile.qualityGate.minConfluenceScore) {
-    reasons.push(`confluence_below_floor:${input.confluenceScore}<${input.profile.qualityGate.minConfluenceScore}`);
+  if (input.confluenceScore < minConfluenceScore) {
+    reasons.push(`confluence_below_floor:${input.confluenceScore}<${minConfluenceScore}`);
   }
-  if (input.pWinCalibrated < input.profile.qualityGate.minPWinCalibrated) {
-    reasons.push(`pwin_below_floor:${round(input.pWinCalibrated, 4)}<${input.profile.qualityGate.minPWinCalibrated}`);
+  if (input.pWinCalibrated < minPWinCalibrated) {
+    reasons.push(`pwin_below_floor:${round(input.pWinCalibrated, 4)}<${minPWinCalibrated}`);
   }
-  if (input.evR < input.profile.qualityGate.minEvR) {
-    reasons.push(`evr_below_floor:${round(input.evR, 3)}<${input.profile.qualityGate.minEvR}`);
+  if (input.evR < minEvR) {
+    reasons.push(`evr_below_floor:${round(input.evR, 3)}<${round(minEvR, 3)}`);
   }
-  if (input.profile.flowGate.requireFlowConfirmation && !input.flowConfirmed) {
+  if (requireFlowConfirmation && !input.flowConfirmed) {
     reasons.push('flow_confirmation_required');
   }
   if (input.flowAlignmentPct != null) {
-    if (input.flowAlignmentPct < input.profile.flowGate.minAlignmentPct) {
-      reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${input.profile.flowGate.minAlignmentPct}`);
+    if (minAlignmentPct > 0 && input.flowAlignmentPct < minAlignmentPct) {
+      reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${minAlignmentPct}`);
     }
-  } else if (input.profile.flowGate.requireFlowConfirmation && input.profile.flowGate.minAlignmentPct > 0) {
+  } else if (requireFlowConfirmation && minAlignmentPct > 0) {
     reasons.push('flow_alignment_unavailable');
   }
-  if (input.profile.indicatorGate.requireEmaAlignment && !input.emaAligned) {
+  if (requireEmaAlignment && !input.emaAligned) {
     reasons.push('ema_alignment_required');
   }
-  if (input.profile.indicatorGate.requireVolumeRegimeAlignment && !input.volumeRegimeAligned) {
+  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned) {
     reasons.push('volume_regime_alignment_required');
   }
-  if (input.profile.timingGate.enabled) {
+  const setupSpecificMaxMinute = setupFloors?.maxFirstSeenMinuteEt;
+  const timingGateEnabled = input.profile.timingGate.enabled || Number.isFinite(setupSpecificMaxMinute);
+  if (timingGateEnabled) {
     const firstSeenMinute = toSessionMinuteEt(input.firstSeenAtIso);
-    const maxMinute = maxFirstSeenMinuteForSetup(input.setupType, input.profile);
+    const profileMaxMinute = input.profile.timingGate.enabled
+      ? maxFirstSeenMinuteForSetup(input.setupType, input.profile)
+      : 390;
+    const maxMinute = Math.min(
+      profileMaxMinute,
+      Number.isFinite(setupSpecificMaxMinute) ? (setupSpecificMaxMinute as number) : 390,
+    );
     if (firstSeenMinute != null && firstSeenMinute > maxMinute) {
       reasons.push(`timing_gate_blocked:${firstSeenMinute}>${maxMinute}`);
     }
@@ -1194,8 +1388,10 @@ function applySetupMixPolicy(input: {
       setup.status === 'forming'
       && setup.gateStatus !== 'blocked'
       && DIVERSIFICATION_PREFERRED_SETUP_TYPES.has(setup.type)
-      && setup.confluenceScore >= 2
-      && (setup.score || 0) >= 58
+      && setup.confluenceScore >= 3
+      && (setup.score || 0) >= 62
+      && (setup.pWinCalibrated || 0) >= 0.56
+      && (setup.evR || 0) >= 0.2
     ))
     .sort((a, b) => (b.setup.score || 0) - (a.setup.score || 0));
 
@@ -1435,8 +1631,8 @@ export async function detectActiveSetups(options?: {
     const target2 = tunedTargets.target2;
 
     const readyConfluenceThreshold = (
-      (setupType === 'mean_reversion' && regimeState.regime === 'ranging')
-      || (setupType === 'flip_reclaim' && regimeState.regime === 'ranging')
+      setupType === 'flip_reclaim'
+      && regimeState.regime === 'ranging'
     )
       ? 2
       : 3;
@@ -1630,6 +1826,13 @@ export async function detectActiveSetups(options?: {
       })
       : (gatedStatus === 'ready' || gatedStatus === 'triggered') ? 'watchlist' : 'hidden';
     const gatedTier = gateStatus === 'blocked' ? 'hidden' : tier;
+    const tradeManagementPolicy = resolveTradeManagementForSetup({
+      setupType,
+      regime: regimeState.regime,
+      confluenceScore: confluence.score,
+      flowConfirmed,
+      basePolicy: optimizationProfile.tradeManagement,
+    });
 
     return {
       id: setupId,
@@ -1660,7 +1863,7 @@ export async function detectActiveSetups(options?: {
       ],
       gateStatus,
       gateReasons,
-      tradeManagement: optimizationProfile.tradeManagement,
+      tradeManagement: tradeManagementPolicy,
       pWinCalibrated: round(pWinCalibrated, 4),
       evR: round(evR, 3),
       tier: gatedTier,

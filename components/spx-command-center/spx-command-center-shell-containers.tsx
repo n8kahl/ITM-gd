@@ -5,7 +5,6 @@ import { motion } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   createClassicDesktopSurfaceOrchestratorProps,
-  createCloseLevelOverlayHandler,
   createDesktopClassicLayoutPolicy,
   createDesktopMainSurfaceProps,
   createDesktopSidebarSurfaceProps,
@@ -49,14 +48,10 @@ export function SPXDesktopSurfaceContainer({
   controller,
   coachPreviewFallback,
 }: DesktopSurfaceContainerProps) {
-  const handleCloseLevelOverlay = createCloseLevelOverlayHandler(controller)
   const desktopViewPolicy = createDesktopViewPolicy(controller)
   const classicDesktopOrchestratorProps = createClassicDesktopSurfaceOrchestratorProps(controller)
   const classicDesktopLayoutPolicy = createDesktopClassicLayoutPolicy(controller)
-  const desktopMainSurfaceProps = createDesktopMainSurfaceProps(
-    controller,
-    handleCloseLevelOverlay,
-  )
+  const desktopMainSurfaceProps = createDesktopMainSurfaceProps(controller)
   const desktopSidebarSurfaceProps = createDesktopSidebarSurfaceProps(
     controller,
     coachPreviewFallback,
@@ -70,10 +65,7 @@ export function SPXDesktopSurfaceContainer({
     controller,
     spatialSidebarPanelConfig,
   )
-  const desktopSpatialCanvasProps = createDesktopSpatialCanvasProps(
-    controller,
-    handleCloseLevelOverlay,
-  )
+  const desktopSpatialCanvasProps = createDesktopSpatialCanvasProps(controller)
 
   return (
     <motion.div variants={controller.itemVariants} className="relative h-[calc(100vh-56px)] overflow-hidden">

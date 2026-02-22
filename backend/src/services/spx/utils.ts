@@ -76,24 +76,49 @@ export function classifyRegimeFromSignals(input: {
   rangeCompression: number;
   breakoutStrength: number;
   zoneContainment: number;
+  trendStrength?: number;
 }): Regime {
-  if (input.breakoutStrength >= 0.7 && input.volumeTrend === 'rising') {
+  const trendStrength = Math.max(0, Math.min(1, input.trendStrength ?? 0));
+  const momentumTape = input.volumeTrend === 'rising' || trendStrength >= 0.45;
+
+  if (
+    input.breakoutStrength >= 0.62
+    && momentumTape
+    && input.volumeTrend !== 'falling'
+  ) {
     return 'breakout';
   }
 
-  if (input.rangeCompression >= 0.65 && input.volumeTrend !== 'rising') {
+  if (
+    input.rangeCompression >= 0.7
+    && input.volumeTrend !== 'rising'
+    && trendStrength < 0.4
+  ) {
     return 'compression';
   }
 
-  if (input.netGex < 0 && (input.breakoutStrength >= 0.45 || input.volumeTrend === 'rising')) {
+  if (
+    (input.netGex < 0 && (input.breakoutStrength >= 0.38 || momentumTape))
+    || (
+      trendStrength >= 0.62
+      && input.breakoutStrength >= 0.28
+      && input.volumeTrend !== 'falling'
+    )
+  ) {
     return 'trending';
   }
 
-  if (input.zoneContainment >= 0.55 && input.netGex >= 0) {
+  if (
+    input.zoneContainment >= 0.55
+    && input.netGex >= 0
+    && trendStrength < 0.55
+  ) {
     return 'ranging';
   }
 
-  return input.netGex < 0 ? 'trending' : 'ranging';
+  return (input.netGex < 0 || trendStrength >= 0.58)
+    ? 'trending'
+    : 'ranging';
 }
 
 export function sleep(ms: number): Promise<void> {

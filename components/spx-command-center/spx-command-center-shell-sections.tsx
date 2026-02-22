@@ -36,7 +36,6 @@ export type SPXDesktopMainSurfaceProps = {
   stateDrivenLayoutEnabled: boolean
   layoutMode: SPXLayoutMode
   showLevelOverlay: boolean
-  onCloseLevelOverlay: () => void
 }
 
 export function SPXDesktopMainSurface({
@@ -52,12 +51,12 @@ export function SPXDesktopMainSurface({
   stateDrivenLayoutEnabled,
   layoutMode,
   showLevelOverlay,
-  onCloseLevelOverlay,
 }: SPXDesktopMainSurfaceProps) {
   return (
     <div className={cn('relative h-full space-y-2.5', className)}>
       <SPXChart
         showAllRelevantLevels={showAllRelevantLevels}
+        renderLevelAnnotations={showLevelOverlay}
         onDisplayedLevelsChange={onDisplayedLevelsChange}
         onLatestBarTimeChange={onLatestBarTimeChange}
         focusMode={focusMode}
@@ -68,24 +67,6 @@ export function SPXDesktopMainSurface({
       />
       <FlowTicker />
       {(focusMode !== 'execution' && (!stateDrivenLayoutEnabled || layoutMode !== 'in_trade')) && <DecisionContext />}
-
-      {showLevelOverlay && (
-        <div className="absolute inset-0 z-50 flex items-start justify-end bg-black/50 p-3 backdrop-blur-[2px]">
-          <div className="max-h-full w-[460px] overflow-auto rounded-xl border border-white/15 bg-[#090B0F]/95 p-3 shadow-2xl">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-white/65">Level Matrix</p>
-              <button
-                type="button"
-                onClick={onCloseLevelOverlay}
-                className="rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-white/65 hover:text-white"
-              >
-                Close
-              </button>
-            </div>
-            <LevelMatrix />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -273,7 +254,7 @@ export function SPXKeyboardShortcutsOverlay({
           <p><span className="font-mono text-emerald-200">Enter</span> stage trade on selected actionable setup</p>
           <p><span className="font-mono text-emerald-200">Esc</span> exit trade or clear selection</p>
           <p><span className="font-mono text-emerald-200">1-4</span> coach quick actions</p>
-          <p><span className="font-mono text-emerald-200">M</span> toggle level matrix</p>
+          <p><span className="font-mono text-emerald-200">M</span> toggle level overlay</p>
           <p><span className="font-mono text-emerald-200">F</span> toggle flow expansion</p>
           <p><span className="font-mono text-emerald-200">I</span> toggle immersive mode</p>
           <p><span className="font-mono text-emerald-200">S</span> toggle sidebar</p>

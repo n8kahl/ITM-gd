@@ -227,8 +227,8 @@ export function useSPXCommandRegistry(input: UseSPXCommandRegistryInput): {
 
     next.push({
       id: 'toggle-level-overlay',
-      label: input.showLevelOverlay ? 'Hide level matrix' : 'Show level matrix',
-      keywords: ['level', 'overlay', 'matrix'],
+      label: input.showLevelOverlay ? 'Hide level overlay' : 'Show level overlay',
+      keywords: ['level', 'overlay', 'matrix', 'labels'],
       shortcut: 'M',
       group: 'View',
       run: (source, keyboardKey) => {

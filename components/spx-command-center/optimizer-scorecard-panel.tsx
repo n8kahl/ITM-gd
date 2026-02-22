@@ -20,6 +20,16 @@ function formatObjective(value: number): string {
   return value.toFixed(2)
 }
 
+function formatR(value: number): string {
+  if (!Number.isFinite(value)) return '--'
+  return value.toFixed(3)
+}
+
+function formatCI(value: { lowerPct: number; upperPct: number } | null | undefined): string {
+  if (!value || !Number.isFinite(value.lowerPct) || !Number.isFinite(value.upperPct)) return '--'
+  return `${value.lowerPct.toFixed(1)}-${value.upperPct.toFixed(1)}%`
+}
+
 function deltaTone(value: number): string {
   if (value > 0) return 'text-emerald-200'
   if (value < 0) return 'text-rose-200'
@@ -132,22 +142,26 @@ export function SPXOptimizerScorecardPanel({ compact = false }: SPXOptimizerScor
             <div className="rounded border border-white/10 bg-black/30 px-2 py-1.5">
               <p className="text-[9px] uppercase tracking-[0.08em] text-white/55">Baseline T1</p>
               <p className="font-mono text-white/88">{formatPct(scorecard.baseline.t1WinRatePct)}</p>
+              <p className="text-[9px] text-white/50">95% CI {formatCI(scorecard.baseline.t1Confidence95)}</p>
             </div>
             <div className="rounded border border-white/10 bg-black/30 px-2 py-1.5">
               <p className="text-[9px] uppercase tracking-[0.08em] text-white/55">Optimized T1</p>
               <p className="font-mono text-white/88">{formatPct(scorecard.optimized.t1WinRatePct)}</p>
+              <p className="text-[9px] text-white/50">95% CI {formatCI(scorecard.optimized.t1Confidence95)}</p>
             </div>
             <div className="rounded border border-white/10 bg-black/30 px-2 py-1.5">
               <p className="text-[9px] uppercase tracking-[0.08em] text-white/55">Baseline T2</p>
               <p className="font-mono text-white/88">{formatPct(scorecard.baseline.t2WinRatePct)}</p>
+              <p className="text-[9px] text-white/50">95% CI {formatCI(scorecard.baseline.t2Confidence95)}</p>
             </div>
             <div className="rounded border border-white/10 bg-black/30 px-2 py-1.5">
               <p className="text-[9px] uppercase tracking-[0.08em] text-white/55">Optimized T2</p>
               <p className="font-mono text-white/88">{formatPct(scorecard.optimized.t2WinRatePct)}</p>
+              <p className="text-[9px] text-white/50">95% CI {formatCI(scorecard.optimized.t2Confidence95)}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 rounded border border-white/10 bg-black/25 px-2 py-1.5">
+          <div className="grid grid-cols-4 gap-2 rounded border border-white/10 bg-black/25 px-2 py-1.5">
             <div>
               <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">T1 Delta</p>
               <p className={cn('font-mono', deltaTone(scorecard.improvementPct.t1WinRateDelta))}>
@@ -166,6 +180,12 @@ export function SPXOptimizerScorecardPanel({ compact = false }: SPXOptimizerScor
                 {formatDelta(scorecard.improvementPct.objectiveDelta)}
               </p>
             </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Conservative</p>
+              <p className={cn('font-mono', deltaTone(scorecard.improvementPct.objectiveConservativeDelta))}>
+                {formatDelta(scorecard.improvementPct.objectiveConservativeDelta)}
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -179,6 +199,12 @@ export function SPXOptimizerScorecardPanel({ compact = false }: SPXOptimizerScor
               <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Objective Score</p>
               <p className="font-mono text-white/82">
                 {formatObjective(scorecard.baseline.objectiveScore)} → {formatObjective(scorecard.optimized.objectiveScore)}
+              </p>
+              <p className="font-mono text-[9px] text-white/55">
+                Conservative {formatObjective(scorecard.baseline.objectiveScoreConservative)} → {formatObjective(scorecard.optimized.objectiveScoreConservative)}
+              </p>
+              <p className="font-mono text-[9px] text-white/55">
+                Expectancy(R) {formatR(scorecard.baseline.expectancyR)} → {formatR(scorecard.optimized.expectancyR)} ({formatDelta(scorecard.improvementPct.expectancyRDelta, 'R')})
               </p>
             </div>
           </div>

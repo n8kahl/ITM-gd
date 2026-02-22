@@ -109,9 +109,13 @@ export function PriorityLevelOverlay({
   focusMode,
 }: PriorityLevelOverlayProps) {
   const { levels } = useSPXAnalyticsContext()
-  const { selectedSetup, chartAnnotations } = useSPXSetupContext()
+  const { selectedSetup, chartAnnotations, tradeMode } = useSPXSetupContext()
   const { spxPrice } = useSPXPriceContext()
   const [renderState, setRenderState] = useState<RenderState | null>(null)
+  const actionableSetupVisible = useMemo(() => {
+    if (!selectedSetup) return false
+    return tradeMode === 'in_trade' || selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'
+  }, [selectedSetup, tradeMode])
 
   const marketLevelAnnotations = useMemo<OverlayLevel[]>(() => {
     return levels.map((level) => ({
@@ -176,7 +180,7 @@ export function PriorityLevelOverlay({
   }, [marketLevelAnnotations, selectedSetup, spxPrice])
 
   const setupAnnotations = useMemo<OverlayLevel[]>(() => {
-    if (!selectedSetup) return []
+    if (!actionableSetupVisible) return []
     const overlays: OverlayLevel[] = []
     for (const annotation of chartAnnotations) {
       if (annotation.type === 'entry_zone' && annotation.priceLow != null && annotation.priceHigh != null) {
@@ -217,9 +221,10 @@ export function PriorityLevelOverlay({
       })
     }
     return overlays
-  }, [chartAnnotations, selectedSetup])
+  }, [actionableSetupVisible, chartAnnotations])
 
   const scenarioAnnotations = useMemo<OverlayLevel[]>(() => {
+    if (!actionableSetupVisible) return []
     const referencePrice = Number.isFinite(spxPrice) && spxPrice > 0 ? spxPrice : null
     const lanes = buildSPXScenarioLanes(selectedSetup, referencePrice)
     return lanes.map((lane) => ({
@@ -236,7 +241,7 @@ export function PriorityLevelOverlay({
       axisLabelVisible: true,
       type: `scenario_${lane.type}`,
     }))
-  }, [selectedSetup, spxPrice])
+  }, [actionableSetupVisible, selectedSetup, spxPrice])
 
   const candidateLevels = useMemo<OverlayLevel[]>(() => {
     const marketDisplayed = focusMode === 'risk_only'

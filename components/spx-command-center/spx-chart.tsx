@@ -69,6 +69,7 @@ function chartLevelLabel(level: SPXLevel): string {
 
 interface SPXChartProps {
   showAllRelevantLevels: boolean
+  renderLevelAnnotations?: boolean
   mobileExpanded?: boolean
   futureOffsetBars?: number
   className?: string
@@ -85,6 +86,7 @@ interface SPXChartProps {
 
 export function SPXChart({
   showAllRelevantLevels,
+  renderLevelAnnotations = true,
   mobileExpanded = false,
   futureOffsetBars,
   className,
@@ -100,7 +102,7 @@ export function SPXChart({
 }: SPXChartProps) {
   const { session } = useMemberAuth()
   const { levels } = useSPXAnalyticsContext()
-  const { selectedSetup, chartAnnotations } = useSPXSetupContext()
+  const { selectedSetup, chartAnnotations, tradeMode } = useSPXSetupContext()
   const {
     spxPrice,
     spxTickTimestamp,
@@ -347,10 +349,17 @@ export function SPXChart({
 
   const renderedBars = replayFrame?.visibleBars || bars
 
+  const actionableSetupVisible = useMemo(() => {
+    if (!selectedSetup) return false
+    return tradeMode === 'in_trade' || selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'
+  }, [selectedSetup, tradeMode])
+
   const scenarioLanes = useMemo(() => {
+    if (!renderLevelAnnotations) return []
+    if (!actionableSetupVisible) return []
     const referencePrice = renderedBars[renderedBars.length - 1]?.close ?? (spxPrice > 0 ? spxPrice : null)
     return buildSPXScenarioLanes(selectedSetup, referencePrice)
-  }, [renderedBars, selectedSetup, spxPrice])
+  }, [actionableSetupVisible, renderLevelAnnotations, renderedBars, selectedSetup, spxPrice])
 
   useEffect(() => {
     const signature = scenarioLanes.map((lane) => `${lane.type}:${lane.price}`).join('|')
@@ -532,7 +541,7 @@ export function SPXChart({
   }, [focusedLevelCandidates, stableFocusedLevelKeys, targetFocusedLevelCount, toLevelKey])
 
   const setupAnnotations = useMemo<LevelAnnotation[]>(() => {
-    if (!selectedSetup) return []
+    if (!actionableSetupVisible) return []
 
     return chartAnnotations.reduce<LevelAnnotation[]>((acc, annotation) => {
       if (annotation.type === 'entry_zone' && annotation.priceLow != null && annotation.priceHigh != null) {
@@ -573,7 +582,7 @@ export function SPXChart({
 
       return acc
     }, [])
-  }, [chartAnnotations, selectedSetup])
+  }, [actionableSetupVisible, chartAnnotations])
 
   const scenarioLaneAnnotations = useMemo<LevelAnnotation[]>(() => {
     return scenarioLanes.map((lane) => ({
@@ -593,12 +602,17 @@ export function SPXChart({
   }, [scenarioLanes])
 
   const marketDisplayedLevels = useMemo(() => {
+    if (!renderLevelAnnotations) return []
     if (focusMode === 'risk_only') return []
     if (focusMode === 'execution') return focusedLevelAnnotations
     return showAllRelevantLevels ? levelAnnotations : focusedLevelAnnotations
-  }, [focusMode, focusedLevelAnnotations, levelAnnotations, showAllRelevantLevels])
+  }, [focusMode, focusedLevelAnnotations, levelAnnotations, renderLevelAnnotations, showAllRelevantLevels])
 
   useEffect(() => {
+    if (!renderLevelAnnotations) {
+      onDisplayedLevelsChange?.(0, levelAnnotations.length + setupAnnotations.length + scenarioLaneAnnotations.length)
+      return
+    }
     onDisplayedLevelsChange?.(
       marketDisplayedLevels.length + setupAnnotations.length + scenarioLaneAnnotations.length,
       levelAnnotations.length + setupAnnotations.length + scenarioLaneAnnotations.length,
@@ -607,6 +621,7 @@ export function SPXChart({
     levelAnnotations.length,
     marketDisplayedLevels.length,
     onDisplayedLevelsChange,
+    renderLevelAnnotations,
     scenarioLaneAnnotations.length,
     setupAnnotations.length,
   ])
@@ -726,7 +741,7 @@ export function SPXChart({
             symbol="SPX"
             timeframe={selectedTimeframe}
             bars={renderedBars}
-            levels={[...marketDisplayedLevels, ...setupAnnotations, ...scenarioLaneAnnotations]}
+            levels={renderLevelAnnotations ? [...marketDisplayedLevels, ...setupAnnotations, ...scenarioLaneAnnotations] : []}
             futureOffsetBars={futureOffsetBars}
             isLoading={isLoading}
             levelVisibilityBudget={levelVisibilityBudget}

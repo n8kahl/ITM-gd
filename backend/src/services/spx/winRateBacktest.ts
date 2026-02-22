@@ -31,6 +31,10 @@ interface BacktestSetupCandidate {
   target2Price: number | null;
   firstSeenAt: string | null;
   triggeredAt: string | null;
+  tradeManagement: {
+    partialAtT1Pct: number;
+    moveStopToBreakeven: boolean;
+  } | null;
 }
 
 interface EvaluatedSetup {
@@ -153,6 +157,20 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
+function parseSetupTradeManagement(value: unknown): BacktestSetupCandidate['tradeManagement'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const partialRaw = toFiniteNumber(candidate.partialAtT1Pct);
+  const partialAtT1Pct = partialRaw == null ? null : clamp(partialRaw, 0, 1);
+  const moveStopRaw = candidate.moveStopToBreakeven;
+  const moveStopToBreakeven = typeof moveStopRaw === 'boolean' ? moveStopRaw : null;
+  if (partialAtT1Pct == null || moveStopToBreakeven == null) return null;
+  return {
+    partialAtT1Pct,
+    moveStopToBreakeven,
+  };
+}
+
 function isMissingTableError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('could not find the table') || normalized.includes('does not exist');
@@ -192,8 +210,10 @@ async function loadSetupsFromInstances(input: {
   from: string;
   to: string;
   includeBlockedSetups?: boolean;
+  includeHiddenTiers?: boolean;
 }): Promise<{ setups: BacktestSetupCandidate[]; notes: string[]; tableMissing: boolean }> {
   const includeBlockedSetups = input.includeBlockedSetups === true;
+  const includeHiddenTiers = input.includeHiddenTiers === true;
   const { data, error } = await supabase
     .from('spx_setup_instances')
     .select(
@@ -232,6 +252,7 @@ async function loadSetupsFromInstances(input: {
   const setups: BacktestSetupCandidate[] = [];
   let skipped = 0;
   let skippedBlocked = 0;
+  let skippedHidden = 0;
 
   for (const row of rows) {
     const direction = row.direction === 'bullish' || row.direction === 'bearish'
@@ -251,6 +272,7 @@ async function loadSetupsFromInstances(input: {
     const engineSetupId = typeof row.engine_setup_id === 'string' ? row.engine_setup_id : '';
     const sessionDate = typeof row.session_date === 'string' ? row.session_date : '';
     const setupType = typeof row.setup_type === 'string' ? row.setup_type : 'unknown';
+    const tier = typeof row.tier === 'string' ? row.tier : null;
     if (!engineSetupId || !sessionDate) {
       skipped += 1;
       continue;
@@ -259,6 +281,7 @@ async function loadSetupsFromInstances(input: {
     const metadata = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
       ? row.metadata as Record<string, unknown>
       : {};
+    const tradeManagement = parseSetupTradeManagement(metadata.tradeManagement);
     const gateStatus = metadata.gateStatus === 'blocked'
       ? 'blocked'
       : metadata.gateStatus === 'eligible'
@@ -266,6 +289,10 @@ async function loadSetupsFromInstances(input: {
         : null;
     if (!includeBlockedSetups && gateStatus === 'blocked') {
       skippedBlocked += 1;
+      continue;
+    }
+    if (!includeHiddenTiers && tier === 'hidden') {
+      skippedHidden += 1;
       continue;
     }
 
@@ -284,6 +311,7 @@ async function loadSetupsFromInstances(input: {
       target2Price,
       firstSeenAt: typeof row.first_seen_at === 'string' ? row.first_seen_at : null,
       triggeredAt: typeof row.triggered_at === 'string' ? row.triggered_at : null,
+      tradeManagement,
     });
   }
 
@@ -293,6 +321,9 @@ async function loadSetupsFromInstances(input: {
   }
   if (skippedBlocked > 0) {
     notes.push(`Skipped ${skippedBlocked} gate-blocked spx_setup_instances rows (non-actionable).`);
+  }
+  if (skippedHidden > 0) {
+    notes.push(`Skipped ${skippedHidden} hidden-tier spx_setup_instances rows (non-actionable).`);
   }
 
   return {
@@ -400,6 +431,7 @@ async function loadSetupsFromLegacyTrackedSetups(input: {
       target2Price: null,
       firstSeenAt: trackedAt,
       triggeredAt: typeof row.triggered_at === 'string' ? row.triggered_at : null,
+      tradeManagement: null,
     });
   }
 
@@ -497,6 +529,11 @@ function evaluateSetupAgainstBars(
   executionModel: SPXBacktestExecutionModel = resolveExecutionModel({ enabled: false }),
   options?: { respectPersistedTriggeredAt?: boolean },
 ): EvaluatedSetup {
+  const effectiveExecutionModel = resolveExecutionModel({
+    ...executionModel,
+    partialAtT1Pct: setup.tradeManagement?.partialAtT1Pct ?? executionModel.partialAtT1Pct,
+    moveStopToBreakevenAfterT1: setup.tradeManagement?.moveStopToBreakeven ?? executionModel.moveStopToBreakevenAfterT1,
+  });
   let triggeredAt = options?.respectPersistedTriggeredAt === true
     ? setup.triggeredAt
     : null;
@@ -513,18 +550,18 @@ function evaluateSetupAgainstBars(
   let lastObservedPrice: number | null = null;
   let entryFillPrice: number | null = null;
   const entryMidPrice = round((setup.entryLow + setup.entryHigh) / 2, 2);
-  const target1PriceEffective = effectiveTargetPrice(setup.direction, setup.target1Price, executionModel);
+  const target1PriceEffective = effectiveTargetPrice(setup.direction, setup.target1Price, effectiveExecutionModel);
   const target2PriceEffective = setup.target2Price == null
     ? null
-    : effectiveTargetPrice(setup.direction, setup.target2Price, executionModel);
-  const initialStopPriceEffective = effectiveInitialStopPrice(setup.direction, setup.stopPrice, executionModel);
+    : effectiveTargetPrice(setup.direction, setup.target2Price, effectiveExecutionModel);
+  const initialStopPriceEffective = effectiveInitialStopPrice(setup.direction, setup.stopPrice, effectiveExecutionModel);
 
   if (triggered) {
     entryFillPrice = entryMidPrice;
   }
 
   const activeStopPrice = (): number => {
-    if (t1HitAt && executionModel.moveStopToBreakevenAfterT1) {
+    if (t1HitAt && effectiveExecutionModel.moveStopToBreakevenAfterT1) {
       return entryFillPrice ?? entryMidPrice;
     }
     return initialStopPriceEffective;
@@ -636,7 +673,7 @@ function evaluateSetupAgainstBars(
 
         triggered = true;
         triggeredAt = triggeredAt || barIso;
-        entryFillPrice = applyEntryFillPrice(setup.direction, triggerPrice, executionModel);
+        entryFillPrice = applyEntryFillPrice(setup.direction, triggerPrice, effectiveExecutionModel);
         segmentStart = triggerPrice;
       }
 
@@ -677,22 +714,29 @@ function evaluateSetupAgainstBars(
     const target2R = setup.target2Price == null
       ? null
       : Math.abs(setup.target2Price - entryPrice) / riskR;
-    const commissionR = executionModel.enabled ? executionModel.commissionPerTradeR : 0;
-    const partialAtT1Pct = executionModel.enabled ? executionModel.partialAtT1Pct : 0.5;
+    const commissionR = effectiveExecutionModel.enabled ? effectiveExecutionModel.commissionPerTradeR : 0;
+    const partialAtT1Pct = effectiveExecutionModel.enabled ? effectiveExecutionModel.partialAtT1Pct : 0.5;
+    const runnerWeight = 1 - partialAtT1Pct;
+    const runnerMarkToCloseR = (): number => {
+      const markPrice = lastObservedPrice ?? entryPrice;
+      const directionalMove = setup.direction === 'bullish'
+        ? markPrice - entryPrice
+        : entryPrice - markPrice;
+      return directionalMove / riskR;
+    };
 
     if (outcome === 't2_before_stop') {
       const r2 = target2R ?? target1R;
       realizedR = (partialAtT1Pct * target1R) + ((1 - partialAtT1Pct) * r2) - commissionR;
     } else if (outcome === 't1_before_stop') {
-      realizedR = (partialAtT1Pct * target1R) - commissionR;
+      const runnerR = stopHitAt
+        ? (effectiveExecutionModel.moveStopToBreakevenAfterT1 ? 0 : -1)
+        : runnerMarkToCloseR();
+      realizedR = (partialAtT1Pct * target1R) + (runnerWeight * runnerR) - commissionR;
     } else if (outcome === 'stop_before_t1') {
       realizedR = -1 - commissionR;
     } else if (outcome === 'expired_unresolved') {
-      const markPrice = lastObservedPrice ?? entryPrice;
-      const directionalMove = setup.direction === 'bullish'
-        ? markPrice - entryPrice
-        : entryPrice - markPrice;
-      realizedR = (directionalMove / riskR) - commissionR;
+      realizedR = runnerMarkToCloseR() - commissionR;
     } else {
       realizedR = -commissionR;
     }
@@ -880,6 +924,7 @@ export async function runSPXWinRateBacktest(input: {
   resolution?: SPXBacktestPriceResolution;
   includeRows?: boolean;
   includeBlockedSetups?: boolean;
+  includeHiddenTiers?: boolean;
   executionModel?: Partial<SPXBacktestExecutionModel>;
 }): Promise<SPXWinRateBacktestResult> {
   const from = normalizeDateInput(input.from);
@@ -899,6 +944,7 @@ export async function runSPXWinRateBacktest(input: {
       from,
       to,
       includeBlockedSetups: input.includeBlockedSetups,
+      includeHiddenTiers: input.includeHiddenTiers,
     });
     notes.push(...instanceLoad.notes);
 

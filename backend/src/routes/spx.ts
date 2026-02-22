@@ -16,6 +16,7 @@ import { getMergedLevels } from '../services/spx/levelEngine';
 import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
 import {
   getSPXOptimizerScorecard,
+  getActiveSPXOptimizationProfile,
   runSPXOptimizerScan,
 } from '../services/spx/optimizer';
 import {
@@ -133,7 +134,17 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
       });
     }
 
-    const backtest = await runSPXWinRateBacktest({ from, to, source, resolution });
+    const optimizerProfile = await getActiveSPXOptimizationProfile();
+    const backtest = await runSPXWinRateBacktest({
+      from,
+      to,
+      source,
+      resolution,
+      executionModel: {
+        partialAtT1Pct: optimizerProfile.tradeManagement.partialAtT1Pct,
+        moveStopToBreakevenAfterT1: optimizerProfile.tradeManagement.moveStopToBreakeven,
+      },
+    });
     return res.json(backtest);
   } catch (error) {
     logger.error('SPX win-rate backtest endpoint failed', {
