@@ -2,7 +2,6 @@ import {
   getAggregates,
   getMinuteAggregates,
   getOptionsSnapshotAtDate,
-  type MassiveAggregate,
   type OptionsSnapshot,
 } from '../../config/massive';
 import { supabase } from '../../config/database';
@@ -26,7 +25,6 @@ import type {
   Setup,
   UnifiedGEXLandscape,
 } from './types';
-import type { NormalizedMarketTick } from '../tickCache';
 import { ema, round, stableId } from './utils';
 
 const SPY_TO_SPX_STRIKE = 10;
@@ -731,48 +729,6 @@ function sortBarsByTimestamp<T extends { t: number }>(bars: T[]): T[] {
   return [...bars].sort((a, b) => a.t - b.t);
 }
 
-function secondBarToHistoricalTick(
-  bar: MassiveAggregate,
-  symbol: string,
-): NormalizedMarketTick | null {
-  if (!Number.isFinite(bar.t) || !Number.isFinite(bar.c) || bar.c <= 0) return null;
-  const high = Number.isFinite(bar.h) ? bar.h : bar.c;
-  const low = Number.isFinite(bar.l) ? bar.l : bar.c;
-  const open = Number.isFinite(bar.o) ? bar.o : bar.c;
-  const spreadPoints = Math.max(0.01, Math.abs(high - low));
-  const bid = Math.max(0.01, bar.c - (spreadPoints / 2));
-  const ask = Math.max(bid + 0.01, bar.c + (spreadPoints / 2));
-  const size = Math.max(0, Math.floor(Number.isFinite(bar.v) ? bar.v : 0));
-  const aggressorSide: NormalizedMarketTick['aggressorSide'] = bar.c > open
-    ? 'buyer'
-    : bar.c < open
-      ? 'seller'
-      : 'neutral';
-  const bidSize = size <= 0
-    ? 0
-    : aggressorSide === 'buyer'
-      ? Math.max(1, Math.round(size * 0.62))
-      : aggressorSide === 'seller'
-        ? Math.max(1, Math.round(size * 0.38))
-        : Math.max(1, Math.round(size * 0.5));
-  const askSize = size <= 0
-    ? 0
-    : Math.max(1, size - bidSize);
-  return {
-    symbol,
-    rawSymbol: `I:${symbol}`,
-    price: bar.c,
-    size,
-    timestamp: Math.floor(bar.t),
-    sequence: null,
-    bid,
-    ask,
-    bidSize,
-    askSize,
-    aggressorSide,
-  };
-}
-
 function resolveInitialSpotFromBars(
   bars: Array<{ c: number }>,
   fallback: number,
@@ -892,20 +848,12 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
   setupsGenerated: number;
   setupsTriggeredAtGeneration: number;
 }> {
-  const [spxMinuteBarsRaw, spyMinuteBarsRaw, spxSecondBarsResponse] = await Promise.all([
+  const [spxMinuteBarsRaw, spyMinuteBarsRaw] = await Promise.all([
     getMinuteAggregates('I:SPX', asOfDate),
     getMinuteAggregates('SPY', asOfDate),
-    getAggregates('I:SPX', 1, 'second', asOfDate, asOfDate).catch((error) => {
-      logger.warn('Historical SPX reconstruction failed to load second bars for microstructure parity', {
-        asOfDate,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { results: [] } as { results: MassiveAggregate[] };
-    }),
   ]);
 
   const spxMinuteBars = sortBarsByTimestamp(spxMinuteBarsRaw);
-  const spxSecondBars = sortBarsByTimestamp((spxSecondBarsResponse.results || []) as MassiveAggregate[]);
   if (spxMinuteBars.length === 0) {
     logger.info('Historical SPX reconstruction skipped (no SPX bars for date)', {
       asOfDate,
@@ -993,8 +941,6 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
   let spyIndex = 0;
   let flowIndex = 0;
   const flowEventsSeen: SPXFlowEvent[] = [];
-  const historicalTicksSeen: NormalizedMarketTick[] = [];
-  let secondIndex = 0;
   let simulatedBars = 0;
   let lastTimestampIso: string | null = null;
 
@@ -1012,11 +958,6 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
 
     const timestampIso = new Date(spxBar.t).toISOString();
     lastTimestampIso = timestampIso;
-    while (secondIndex < spxSecondBars.length && spxSecondBars[secondIndex].t <= spxBar.t) {
-      const syntheticTick = secondBarToHistoricalTick(spxSecondBars[secondIndex], 'SPX');
-      if (syntheticTick) historicalTicksSeen.push(syntheticTick);
-      secondIndex += 1;
-    }
     while (flowIndex < flowEventsByTimestamp.length && flowEventsByTimestamp[flowIndex].timestampMs <= spxBar.t) {
       flowEventsSeen.push(flowEventsByTimestamp[flowIndex].event);
       flowIndex += 1;
@@ -1058,7 +999,6 @@ export async function reconstructHistoricalSPXSetupsForDate(asOfDate: string): P
       fibLevels: fibLevelsAtBar,
       regimeState,
       flowEvents: flowEventsSeen,
-      historicalTicks: historicalTicksSeen.slice(-900),
       indicatorContext: buildHistoricalIndicatorContext({
         bars: spxBarsToNow,
         asOfTimestamp: timestampIso,

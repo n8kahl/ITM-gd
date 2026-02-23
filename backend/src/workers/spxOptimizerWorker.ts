@@ -1,10 +1,6 @@
 import { logger } from '../lib/logger';
 import { isTradingDay, toEasternTime } from '../services/marketHours';
-import {
-  getSPXOptimizerNightlyStatus,
-  persistSPXOptimizerNightlyStatus,
-} from '../services/spx/optimizer';
-import { runSPXNightlyReplayOptimizerCycle } from '../services/spx/nightlyReplayOptimizer';
+import { runSPXOptimizerScan } from '../services/spx/optimizer';
 import {
   markWorkerCycleFailed,
   markWorkerCycleStarted,
@@ -55,7 +51,7 @@ function dayOffset(date: Date, days: number): Date {
   return new Date(date.getTime() + (days * 86_400_000));
 }
 
-function computeNextEligibleRun(now: Date, priorRunDateEt: string | null): { date: string; atEt: string } | null {
+function computeNextEligibleRun(now: Date): { date: string; atEt: string } | null {
   for (let offset = 0; offset <= 10; offset += 1) {
     const candidate = dayOffset(now, offset);
     if (!isTradingDay(candidate)) continue;
@@ -64,7 +60,7 @@ function computeNextEligibleRun(now: Date, priorRunDateEt: string | null): { dat
     if (offset === 0) {
       const nowEt = toEasternTime(now);
       const nowMinute = nowEt.hour * 60 + nowEt.minute;
-      const alreadyRan = priorRunDateEt === nowEt.dateStr;
+      const alreadyRan = lastRunDateEt === nowEt.dateStr;
       if (!alreadyRan && nowMinute < TARGET_MINUTE_ET) {
         return { date: nowEt.dateStr, atEt: `${nowEt.dateStr} ${formatMinuteEt(TARGET_MINUTE_ET)} ET` };
       }
@@ -123,44 +119,13 @@ async function runCycle(): Promise<void> {
 
     if (schedule.shouldRun) {
       lastAttemptAt = now.toISOString();
-      lastErrorMessage = null;
-      await persistSPXOptimizerNightlyStatus({
-        lastRunDateEt,
-        lastAttemptAt,
-        lastSuccessAt,
-        lastErrorMessage,
-      });
-
-      const cycleResult = await runSPXNightlyReplayOptimizerCycle({
-        asOfDateEt: schedule.dateEt,
-        mode: 'nightly_auto',
-      });
+      const result = await runSPXOptimizerScan({ mode: 'nightly_auto' });
       lastRunDateEt = schedule.dateEt;
-      const result = cycleResult.optimizerResult;
-
-      const dataQuality = result.scorecard.dataQuality;
-      if (dataQuality?.failClosedActive && !dataQuality.gatePassed) {
-        throw new Error([
-          'SPX optimizer fail-closed guardrail blocked nightly promotion.',
-          ...dataQuality.reasons.slice(0, 4),
-        ].join(' '));
-      }
-
       lastSuccessAt = new Date().toISOString();
       lastErrorMessage = null;
-      await persistSPXOptimizerNightlyStatus({
-        lastRunDateEt,
-        lastAttemptAt,
-        lastSuccessAt,
-        lastErrorMessage,
-      });
 
       logger.info('SPX optimizer nightly run complete', {
         dateEt: schedule.dateEt,
-        replayEnabled: cycleResult.replayEnabled,
-        replayFrom: cycleResult.replayRange.from,
-        replayTo: cycleResult.replayRange.to,
-        replayFailedDays: cycleResult.replaySummary?.failedDays ?? 0,
         applied: result.scorecard.optimizationApplied,
         validationTrades: result.scorecard.optimized.tradeCount,
         t1Delta: result.scorecard.improvementPct.t1WinRateDelta,
@@ -172,12 +137,6 @@ async function runCycle(): Promise<void> {
   } catch (error) {
     lastAttemptAt = new Date().toISOString();
     lastErrorMessage = error instanceof Error ? error.message : String(error);
-    await persistSPXOptimizerNightlyStatus({
-      lastRunDateEt,
-      lastAttemptAt,
-      lastSuccessAt,
-      lastErrorMessage,
-    });
     markWorkerCycleFailed(WORKER_NAME, cycleStartedAt, error);
     logger.error('SPX optimizer nightly cycle failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -240,18 +199,13 @@ export interface SPXOptimizerWorkerStatus {
   nextEligibleRunAtEt: string | null;
 }
 
-export async function getSPXOptimizerWorkerStatus(now: Date = new Date()): Promise<SPXOptimizerWorkerStatus> {
-  const persisted = await getSPXOptimizerNightlyStatus();
-  const effectiveLastRunDateEt = lastRunDateEt ?? persisted.lastRunDateEt;
-  const effectiveLastAttemptAt = lastAttemptAt ?? persisted.lastAttemptAt;
-  const effectiveLastSuccessAt = lastSuccessAt ?? persisted.lastSuccessAt;
-  const effectiveLastErrorMessage = lastErrorMessage ?? persisted.lastErrorMessage;
-  const nextEligible = NIGHTLY_ENABLED ? computeNextEligibleRun(now, effectiveLastRunDateEt) : null;
-  const lastAttemptAtEt = effectiveLastAttemptAt
-    ? formatIsoToEtLabel(effectiveLastAttemptAt)
+export function getSPXOptimizerWorkerStatus(now: Date = new Date()): SPXOptimizerWorkerStatus {
+  const nextEligible = NIGHTLY_ENABLED ? computeNextEligibleRun(now) : null;
+  const lastAttemptAtEt = lastAttemptAt
+    ? formatIsoToEtLabel(lastAttemptAt)
     : null;
-  const lastSuccessAtEt = effectiveLastSuccessAt
-    ? formatIsoToEtLabel(effectiveLastSuccessAt)
+  const lastSuccessAtEt = lastSuccessAt
+    ? formatIsoToEtLabel(lastSuccessAt)
     : null;
 
   return {
@@ -262,12 +216,12 @@ export async function getSPXOptimizerWorkerStatus(now: Date = new Date()): Promi
     targetMinuteEt: TARGET_MINUTE_ET,
     targetTimeEt: formatMinuteEt(TARGET_MINUTE_ET),
     checkIntervalMs: CHECK_INTERVAL_MS,
-    lastRunDateEt: effectiveLastRunDateEt,
-    lastAttemptAt: effectiveLastAttemptAt,
+    lastRunDateEt,
+    lastAttemptAt,
     lastAttemptAtEt,
-    lastSuccessAt: effectiveLastSuccessAt,
+    lastSuccessAt,
     lastSuccessAtEt,
-    lastErrorMessage: effectiveLastErrorMessage,
+    lastErrorMessage,
     nextEligibleRunDateEt: nextEligible?.date || null,
     nextEligibleRunAtEt: nextEligible?.atEt || null,
   };

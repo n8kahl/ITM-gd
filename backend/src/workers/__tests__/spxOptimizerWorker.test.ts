@@ -1,6 +1,4 @@
-const mockGetSPXOptimizerNightlyStatus = jest.fn();
-const mockPersistSPXOptimizerNightlyStatus = jest.fn();
-const mockRunSPXNightlyReplayOptimizerCycle = jest.fn();
+const mockRunSPXOptimizerScan = jest.fn();
 
 jest.mock('../../lib/logger', () => ({
   logger: {
@@ -12,69 +10,41 @@ jest.mock('../../lib/logger', () => ({
 }));
 
 jest.mock('../../services/spx/optimizer', () => ({
-  getSPXOptimizerNightlyStatus: (...args: any[]) => mockGetSPXOptimizerNightlyStatus(...args),
-  persistSPXOptimizerNightlyStatus: (...args: any[]) => mockPersistSPXOptimizerNightlyStatus(...args),
+  runSPXOptimizerScan: (...args: any[]) => mockRunSPXOptimizerScan(...args),
 }));
 
-jest.mock('../../services/spx/nightlyReplayOptimizer', () => ({
-  runSPXNightlyReplayOptimizerCycle: (...args: any[]) => mockRunSPXNightlyReplayOptimizerCycle(...args),
-}));
+const originalNightlyEnabled = process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED;
 
-import {
-  getSPXOptimizerWorkerStatus,
-  shouldRunSPXOptimizerNightly,
-  startSPXOptimizerWorker,
-  stopSPXOptimizerWorker,
-} from '../spxOptimizerWorker';
+let getSPXOptimizerWorkerStatus: typeof import('../spxOptimizerWorker').getSPXOptimizerWorkerStatus;
+let shouldRunSPXOptimizerNightly: typeof import('../spxOptimizerWorker').shouldRunSPXOptimizerNightly;
+let startSPXOptimizerWorker: typeof import('../spxOptimizerWorker').startSPXOptimizerWorker;
+let stopSPXOptimizerWorker: typeof import('../spxOptimizerWorker').stopSPXOptimizerWorker;
 
 describe('SPX optimizer nightly worker', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    jest.resetModules();
+    process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED = 'true';
+    ({
+      getSPXOptimizerWorkerStatus,
+      shouldRunSPXOptimizerNightly,
+      startSPXOptimizerWorker,
+      stopSPXOptimizerWorker,
+    } = await import('../spxOptimizerWorker'));
     jest.clearAllMocks();
     jest.useFakeTimers();
-    mockRunSPXNightlyReplayOptimizerCycle.mockResolvedValue({
-      asOfDateEt: '2026-02-17',
-      replayEnabled: true,
-      replayRange: { from: '2026-01-20', to: '2026-02-17', lookbackDays: 20 },
-      replaySummary: null,
-      optimizerResult: {
-        scorecard: {
-          optimizationApplied: false,
-          optimized: { tradeCount: 0 },
-          improvementPct: {
-            t1WinRateDelta: 0,
-            t2WinRateDelta: 0,
-            objectiveDelta: 0,
-            objectiveConservativeDelta: 0,
-            expectancyRDelta: 0,
-          },
-          blockerMix: {
-            totalOpportunityCount: 0,
-            macroBlockedCount: 0,
-            microBlockedCount: 0,
-            macroBlockedPct: 0,
-            microBlockedPct: 0,
-            baselineTriggerRatePct: 0,
-            optimizedTriggerRatePct: 0,
-            triggerRateDeltaPct: 0,
-            triggerRateGuardrailPassed: true,
-            bySetupRegimeTimeBucket: [],
-          },
-          dataQuality: { failClosedActive: false, gatePassed: true, reasons: [] },
-        },
-      },
-    });
-    mockGetSPXOptimizerNightlyStatus.mockResolvedValue({
-      lastRunDateEt: null,
-      lastAttemptAt: null,
-      lastSuccessAt: null,
-      lastErrorMessage: null,
-    });
-    mockPersistSPXOptimizerNightlyStatus.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     stopSPXOptimizerWorker();
     jest.useRealTimers();
+  });
+
+  afterAll(() => {
+    if (originalNightlyEnabled == null) {
+      delete process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED;
+      return;
+    }
+    process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED = originalNightlyEnabled;
   });
 
   it('runs once after target minute ET on a trading day', () => {
@@ -100,8 +70,8 @@ describe('SPX optimizer nightly worker', () => {
     expect(result.shouldRun).toBe(false);
   });
 
-  it('reports schedule metadata for settings UI', async () => {
-    const status = await getSPXOptimizerWorkerStatus(new Date('2026-02-17T23:30:00.000Z'));
+  it('reports schedule metadata for settings UI', () => {
+    const status = getSPXOptimizerWorkerStatus(new Date('2026-02-17T23:30:00.000Z'));
 
     expect(status.mode).toBe('nightly_auto');
     expect(status.timezone).toBe('America/New_York');
