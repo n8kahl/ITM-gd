@@ -20,6 +20,12 @@ export interface TradierScaleOrderInput {
   tag?: string;
 }
 
+export interface TradierMarketExitOrderInput {
+  symbol: string;
+  quantity: number;
+  tag?: string;
+}
+
 export interface TradierStopOrderInput {
   symbol: string;
   quantity: number;
@@ -52,6 +58,19 @@ export function buildTradierScaleOrder(input: TradierScaleOrderInput): TradierOr
     type: 'limit',
     duration: 'day',
     price: Number(input.limitPrice.toFixed(2)),
+    tag: input.tag,
+  };
+}
+
+export function buildTradierMarketExitOrder(input: TradierMarketExitOrderInput): TradierOrderPayload {
+  return {
+    class: 'option',
+    symbol: underlyingFromOcc(input.symbol),
+    option_symbol: input.symbol,
+    side: 'sell_to_close',
+    quantity: Math.max(1, Math.floor(input.quantity)),
+    type: 'market',
+    duration: 'day',
     tag: input.tag,
   };
 }
