@@ -4,10 +4,7 @@ import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import type { SetupStatus, SetupType } from './types';
 import type { SetupFinalOutcome } from './outcomeTracker';
-import {
-  runSPXWinRateBacktest,
-  type SPXWinRateBacktestResult,
-} from './winRateBacktest';
+import { runSPXWinRateBacktest } from './winRateBacktest';
 
 export interface SPXGeometryPolicyEntry {
   stopScale: number;
@@ -17,30 +14,6 @@ export interface SPXGeometryPolicyEntry {
   t1MaxR: number;
   t2MinR: number;
   t2MaxR: number;
-}
-
-export interface SPXMacroMicroPolicyEntry {
-  minMacroAlignmentScore?: number;
-  requireMicrostructureAlignment?: boolean;
-  requireOrbTrendConfluence?: boolean;
-  failClosedWhenUnavailable?: boolean;
-  minMicroAggressorSkewAbs?: number;
-  minMicroImbalanceAbs?: number;
-  minMicroQuoteCoveragePct?: number;
-  maxMicroSpreadBps?: number;
-}
-
-export interface SPXMacroMicroPolicy {
-  defaultMinMacroAlignmentScore: number;
-  defaultRequireTrendMicrostructureAlignment: boolean;
-  defaultFailClosedWhenUnavailable: boolean;
-  defaultMinMicroAggressorSkewAbs: number;
-  defaultMinMicroImbalanceAbs: number;
-  defaultMinMicroQuoteCoveragePct: number;
-  defaultMaxMicroSpreadBps: number;
-  bySetupType: Record<string, SPXMacroMicroPolicyEntry>;
-  bySetupRegime: Record<string, SPXMacroMicroPolicyEntry>;
-  bySetupRegimeTimeBucket: Record<string, SPXMacroMicroPolicyEntry>;
 }
 
 export interface SPXOptimizationProfile {
@@ -78,7 +51,6 @@ export interface SPXOptimizationProfile {
     bySetupRegime: Record<string, Partial<SPXGeometryPolicyEntry>>;
     bySetupRegimeTimeBucket: Record<string, Partial<SPXGeometryPolicyEntry>>;
   };
-  macroMicroPolicy: SPXMacroMicroPolicy;
   walkForward: {
     trainingDays: number;
     validationDays: number;
@@ -102,71 +74,11 @@ export interface SPXOptimizationProfile {
     minTriggerRatePct: number;
     pausedSetupTypes: string[];
   };
-  executionGuardrails?: {
-    lastSlippageAdjustmentAt: string | null;
-    lastSlippageWindowSignature: string | null;
-    lastObservedAvgEntrySlippagePts: number | null;
-    lastObservedSampleCount: number;
-  };
 }
 
 export interface SPXOptimizationScanResult {
   profile: SPXOptimizationProfile;
   scorecard: SPXOptimizerScorecard;
-}
-
-export type SPXOptimizerMode = 'manual' | 'weekly_auto' | 'nightly_auto' | 'revert';
-
-export interface SPXOptimizerHistoryEntry {
-  id: number;
-  createdAt: string;
-  mode: SPXOptimizerMode;
-  action: 'scan' | 'revert';
-  optimizationApplied: boolean;
-  actor: string | null;
-  reason: string | null;
-  revertedFromHistoryId: number | null;
-  scanRange: { from: string | null; to: string | null };
-  trainingRange: { from: string | null; to: string | null };
-  validationRange: { from: string | null; to: string | null };
-  previousProfileGeneratedAt: string | null;
-  nextProfileGeneratedAt: string | null;
-  scorecardSummary: {
-    baselineTrades: number;
-    optimizedTrades: number;
-    t1Delta: number;
-    t2Delta: number;
-    expectancyDeltaR: number;
-    objectiveConservativeDelta: number;
-    optimizationApplied: boolean;
-  } | null;
-  notes: string[];
-}
-
-export interface SPXOptimizerNightlyStatus {
-  lastRunDateEt: string | null;
-  lastAttemptAt: string | null;
-  lastSuccessAt: string | null;
-  lastErrorMessage: string | null;
-}
-
-export interface SPXOptimizerRevertResult {
-  profile: SPXOptimizationProfile;
-  scorecard: SPXOptimizerScorecard;
-  revertedFromHistoryId: number;
-  historyEntryId: number | null;
-}
-
-export interface SPXSlippageGuardrailResult {
-  applied: boolean;
-  reason: string;
-  sampleCount: number;
-  thresholdPts: number;
-  avgEntrySlippagePts: number | null;
-  currentMinEvR: number;
-  nextMinEvR: number;
-  windowSignature: string | null;
-  historyEntryId: number | null;
 }
 
 export interface SPXConfidenceInterval {
@@ -198,67 +110,8 @@ export interface SPXOptimizerScorecard {
     update: string[];
     remove: string[];
   };
-  blockerMix: {
-    totalOpportunityCount: number;
-    macroBlockedCount: number;
-    microBlockedCount: number;
-    macroBlockedPct: number;
-    microBlockedPct: number;
-    baselineTriggerRatePct: number;
-    optimizedTriggerRatePct: number;
-    triggerRateDeltaPct: number;
-    triggerRateGuardrailPassed: boolean;
-    bySetupRegimeTimeBucket: Array<{
-      key: string;
-      totalOpportunityCount: number;
-      macroBlockedCount: number;
-      microBlockedCount: number;
-      macroBlockedPct: number;
-      microBlockedPct: number;
-      blockedPct: number;
-    }>;
-  };
   optimizationApplied: boolean;
-  dataQuality?: SPXOptimizerDataQuality;
   notes: string[];
-}
-
-export interface SPXOptimizerDataQuality {
-  failClosedActive: boolean;
-  gatePassed: boolean;
-  reasons: string[];
-  sourceUsed: 'spx_setup_instances' | 'ai_coach_tracked_setups' | 'none' | 'unknown';
-  requestedResolution: 'second';
-  resolutionUsed: 'second' | 'minute' | 'none' | 'unknown';
-  fallbackSessionCount: number;
-  missingBarsSessionCount: number;
-  setupCount: number;
-  evaluatedSetupCount: number;
-  skippedSetupCount: number;
-  optimizerRows: number;
-  overrideRows: number;
-  overrideMatchedRows: number;
-  overrideCoveragePct: number;
-  optionsReplayAvailable: boolean;
-  optionsReplayCoveragePct: number | null;
-  optionsReplayCoverageFloorPct: number;
-  optionsReplayCoverageValid: boolean | null;
-  optionsReplayReplayedTrades: number;
-  optionsReplayUniverse: number;
-  executionFillTableAvailable: boolean;
-  executionTriggeredTradeCount: number;
-  executionTradesWithAnyFill: number;
-  executionTradesWithEntryFill: number;
-  executionTradesWithExitFill: number;
-  executionTradesWithNonProxyFill: number;
-  executionCoveragePct: number;
-  executionEntryCoveragePct: number;
-  executionExitCoveragePct: number;
-  executionNonProxyCoveragePct: number;
-  executionEntryAvgSlippagePts: number | null;
-  executionExitAvgSlippagePts: number | null;
-  executionEntryAvgSlippageBps: number | null;
-  executionExitAvgSlippageBps: number | null;
 }
 
 export interface SPXOptimizationMetrics {
@@ -346,74 +199,15 @@ interface OutcomeOverride {
   stopHitAt: string | null;
 }
 
-interface OutcomeOverrideLoadResult {
-  overrides: Map<string, OutcomeOverride>;
-  backtest: Pick<
-    SPXWinRateBacktestResult,
-    | 'sourceUsed'
-    | 'requestedResolution'
-    | 'resolutionUsed'
-    | 'resolutionFallbackSessions'
-    | 'missingBarsSessions'
-    | 'setupCount'
-    | 'evaluatedSetupCount'
-    | 'skippedSetupCount'
-    | 'notes'
-  > | null;
-  error: string | null;
-}
-
-interface SPXOptionsReplayDataQuality {
-  available: boolean;
-  replayUniverse: number;
-  replayedTrades: number;
-  coveragePct: number;
-  minimumCoveragePct: number;
-  coverageValid: boolean;
-  error: string | null;
-}
-
-interface ExecutionFillRow {
-  id?: number;
-  engine_setup_id: string;
-  session_date: string;
-  side: 'entry' | 'partial' | 'exit';
-  source: 'proxy' | 'manual' | 'broker_tradier' | 'broker_other';
-  slippage_points: number | string | null;
-  slippage_bps: number | string | null;
-  executed_at?: string;
-}
-
-interface SPXExecutionActualsDataQuality {
-  tableAvailable: boolean;
-  triggeredTradeCount: number;
-  tradesWithAnyFill: number;
-  tradesWithEntryFill: number;
-  tradesWithExitFill: number;
-  tradesWithNonProxyFill: number;
-  coveragePct: number;
-  entryCoveragePct: number;
-  exitCoveragePct: number;
-  nonProxyCoveragePct: number;
-  entryAvgSlippagePts: number | null;
-  exitAvgSlippagePts: number | null;
-  entryAvgSlippageBps: number | null;
-  exitAvgSlippageBps: number | null;
-  error: string | null;
-}
-
 interface PreparedOptimizationRow {
-  setupId: string;
   sessionDate: string;
   setupType: string;
   regime: string;
   comboKey: string;
   tier: string | null;
   gateStatus: 'eligible' | 'blocked' | null;
-  gateReasons: string[];
   firstSeenAt: string | null;
   firstSeenMinuteEt: number | null;
-  timeBucket: 'opening' | 'midday' | 'late';
   triggered: boolean;
   finalOutcome: SetupFinalOutcome | null;
   pWinCalibrated: number | null;
@@ -427,20 +221,6 @@ interface PreparedOptimizationRow {
   flowConfirmed: boolean;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
-  macroAlignmentScore: number | null;
-  microstructureScore: number | null;
-  microstructureAvailable: boolean;
-  microstructureAligned: boolean;
-  microAggressorSkew: number | null;
-  microBidAskImbalance: number | null;
-  microQuoteCoveragePct: number | null;
-  microAvgSpreadBps: number | null;
-  orbTrendConfluence: boolean;
-}
-
-interface OptimizationRowsLoadResult {
-  rows: PreparedOptimizationRow[];
-  overrideMatchedRows: number;
 }
 
 interface ThresholdCandidate {
@@ -448,15 +228,9 @@ interface ThresholdCandidate {
   minConfluenceScore: number;
   minPWinCalibrated: number;
   minEvR: number;
-  minMacroAlignmentScore: number;
   minAlignmentPct: number;
   requireEmaAlignment: boolean;
   requireVolumeRegimeAlignment: boolean;
-  requireMicrostructureAlignment: boolean;
-  requireTrendPullbackOrbConfluence: boolean;
-  minMicroAggressorSkewAbs: number;
-  minMicroImbalanceAbs: number;
-  minMicroQuoteCoveragePct: number;
   enforceTimingGate: boolean;
   partialAtT1Pct: number;
 }
@@ -471,35 +245,10 @@ interface PersistedOptimizerStateRow {
   training_to: string | null;
   validation_from: string | null;
   validation_to: string | null;
-  last_nightly_run_date_et: string | null;
-  last_nightly_attempt_at: string | null;
-  last_nightly_success_at: string | null;
-  last_nightly_error_message: string | null;
   updated_at: string;
 }
 
-interface PersistedOptimizerHistoryRow {
-  id: number;
-  action: 'scan' | 'revert' | null;
-  mode: string | null;
-  actor: string | null;
-  reason: string | null;
-  optimization_applied: boolean | null;
-  previous_profile: unknown;
-  next_profile: unknown;
-  scorecard: unknown;
-  scan_range_from: string | null;
-  scan_range_to: string | null;
-  training_from: string | null;
-  training_to: string | null;
-  validation_from: string | null;
-  validation_to: string | null;
-  reverted_from_history_id: number | null;
-  created_at: string;
-}
-
 const OPTIMIZER_STATE_TABLE = 'spx_setup_optimizer_state';
-const OPTIMIZER_HISTORY_TABLE = 'spx_setup_optimizer_history';
 const OPTIMIZER_STATE_ROW_ID = 'active';
 const OPTIMIZER_PROFILE_CACHE_KEY = 'spx_command_center:optimizer_profile';
 const OPTIMIZER_PROFILE_CACHE_TTL_SECONDS = 30;
@@ -511,7 +260,7 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
   mean_reversion: 330,
   trend_continuation: 390,
   orb_breakout: 180,
-  trend_pullback: 240,
+  trend_pullback: 360,
   flip_reclaim: 360,
 };
 const FALLBACK_GEOMETRY_POLICY_ENTRY: SPXGeometryPolicyEntry = {
@@ -624,71 +373,6 @@ const DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET: Record<string, Partial<SPXGe
     target2Scale: 0.98,
   },
 };
-const TREND_FAMILY_SETUP_TYPES = new Set<SetupType>([
-  'trend_continuation',
-  'trend_pullback',
-  'orb_breakout',
-  'breakout_vacuum',
-]);
-const DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE: Record<string, SPXMacroMicroPolicyEntry> = {
-  orb_breakout: {
-    minMacroAlignmentScore: 34,
-    requireMicrostructureAlignment: true,
-    minMicroAggressorSkewAbs: 0.1,
-    minMicroImbalanceAbs: 0.06,
-    minMicroQuoteCoveragePct: 0.4,
-    maxMicroSpreadBps: 30,
-  },
-  trend_pullback: {
-    minMacroAlignmentScore: 34,
-    requireMicrostructureAlignment: true,
-    requireOrbTrendConfluence: true,
-    minMicroAggressorSkewAbs: 0.1,
-    minMicroImbalanceAbs: 0.06,
-    minMicroQuoteCoveragePct: 0.4,
-    maxMicroSpreadBps: 30,
-  },
-  trend_continuation: {
-    minMacroAlignmentScore: 34,
-    requireMicrostructureAlignment: true,
-    minMicroAggressorSkewAbs: 0.1,
-    minMicroImbalanceAbs: 0.06,
-    minMicroQuoteCoveragePct: 0.4,
-    maxMicroSpreadBps: 30,
-  },
-  breakout_vacuum: {
-    minMacroAlignmentScore: 34,
-    requireMicrostructureAlignment: true,
-    minMicroAggressorSkewAbs: 0.1,
-    minMicroImbalanceAbs: 0.06,
-    minMicroQuoteCoveragePct: 0.4,
-    maxMicroSpreadBps: 30,
-  },
-};
-const DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_REGIME: Record<string, SPXMacroMicroPolicyEntry> = {
-  'orb_breakout|breakout': {
-    minMacroAlignmentScore: 36,
-  },
-  'trend_pullback|breakout': {
-    minMacroAlignmentScore: 36,
-  },
-  'trend_continuation|trending': {
-    minMacroAlignmentScore: 35,
-  },
-};
-const DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_REGIME_TIME_BUCKET: Record<string, SPXMacroMicroPolicyEntry> = {
-  'orb_breakout|breakout|opening': {
-    minMacroAlignmentScore: 34,
-    requireMicrostructureAlignment: true,
-  },
-  'trend_pullback|breakout|late': {
-    minMacroAlignmentScore: 38,
-    requireMicrostructureAlignment: true,
-    minMicroAggressorSkewAbs: 0.13,
-  },
-};
-const THROUGHPUT_GUARDRAIL_MIN_TRADE_RATIO = 0.6;
-const THROUGHPUT_GUARDRAIL_MIN_OPPORTUNITY_RATIO = 0.65;
 
 const DEFAULT_PROFILE: SPXOptimizationProfile = {
   source: 'default',
@@ -725,18 +409,6 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     bySetupRegime: { ...DEFAULT_GEOMETRY_BY_SETUP_REGIME },
     bySetupRegimeTimeBucket: { ...DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET },
   },
-  macroMicroPolicy: {
-    defaultMinMacroAlignmentScore: 34,
-    defaultRequireTrendMicrostructureAlignment: true,
-    defaultFailClosedWhenUnavailable: false,
-    defaultMinMicroAggressorSkewAbs: 0.1,
-    defaultMinMicroImbalanceAbs: 0.06,
-    defaultMinMicroQuoteCoveragePct: 0.4,
-    defaultMaxMicroSpreadBps: 30,
-    bySetupType: { ...DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE },
-    bySetupRegime: { ...DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_REGIME },
-    bySetupRegimeTimeBucket: { ...DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_REGIME_TIME_BUCKET },
-  },
   walkForward: {
     trainingDays: 20,
     validationDays: 5,
@@ -760,12 +432,6 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     minTriggerRatePct: 3,
     pausedSetupTypes: ['breakout_vacuum'],
   },
-  executionGuardrails: {
-    lastSlippageAdjustmentAt: null,
-    lastSlippageWindowSignature: null,
-    lastObservedAvgEntrySlippagePts: null,
-    lastObservedSampleCount: 0,
-  },
 };
 const WEEKLY_AUTO_MIN_VALIDATION_TRADES = 12;
 const WEEKLY_AUTO_MIN_OBJECTIVE_DELTA = 0.5;
@@ -776,56 +442,6 @@ const PROMOTION_MIN_EXPECTANCY_DELTA_R = 0.10;
 const PROMOTION_MAX_FAILURE_DELTA_PCT = 1;
 const WILSON_Z_95 = 1.96;
 const ADD_SETUP_MIN_T1_LOWER_BOUND_PCT = 52;
-const DB_PAGE_SIZE = 1000;
-const FAIL_CLOSED_AUTOMATED_ENABLED = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_AUTOMATED || 'true').toLowerCase() !== 'false';
-const FAIL_CLOSED_REQUIRE_SECOND_RESOLUTION = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_SECOND_BARS || 'true').toLowerCase() !== 'false';
-const FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE = String(process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE || 'true').toLowerCase() !== 'false';
-const FAIL_CLOSED_REQUIRE_OPTIONS_REPLAY_COVERAGE = String(
-  process.env.SPX_OPTIMIZER_FAIL_CLOSED_REQUIRE_OPTIONS_REPLAY_COVERAGE || 'true',
-).toLowerCase() !== 'false';
-const FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT = (() => {
-  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT || '');
-  if (!Number.isFinite(parsed)) return 95;
-  return clamp(parsed, 50, 100);
-})();
-const FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT = (() => {
-  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT || '');
-  if (!Number.isFinite(parsed)) return 60;
-  return clamp(parsed, 30, 100);
-})();
-const FAIL_CLOSED_MAX_FALLBACK_SESSIONS = (() => {
-  const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MAX_FALLBACK_SESSIONS || '', 10);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, parsed);
-})();
-const FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS = (() => {
-  const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS || '', 10);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, parsed);
-})();
-const SLIPPAGE_GUARDRAIL_ENABLED = String(
-  process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_ENABLED || 'true',
-).toLowerCase() !== 'false';
-const SLIPPAGE_GUARDRAIL_WINDOW_SIZE = (() => {
-  const parsed = Number.parseInt(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_WINDOW || '', 10);
-  if (Number.isFinite(parsed) && parsed >= 3) return parsed;
-  return 5;
-})();
-const SLIPPAGE_GUARDRAIL_THRESHOLD_PTS = (() => {
-  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_THRESHOLD_PTS || '');
-  if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  return 0.25;
-})();
-const SLIPPAGE_GUARDRAIL_MIN_EVR_BUMP = (() => {
-  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_EVR_BUMP || '');
-  if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  return 0.05;
-})();
-const SLIPPAGE_GUARDRAIL_MAX_MIN_EVR = (() => {
-  const parsed = Number.parseFloat(process.env.SPX_OPTIMIZER_SLIPPAGE_GUARDRAIL_MAX_MIN_EVR || '');
-  if (Number.isFinite(parsed) && parsed >= 0.2) return parsed;
-  return 0.8;
-})();
 
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
@@ -842,13 +458,6 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
-}
-
-function normalizeOptimizerMode(value: unknown): SPXOptimizerMode {
-  if (value === 'manual' || value === 'weekly_auto' || value === 'nightly_auto' || value === 'revert') {
-    return value;
-  }
-  return 'manual';
 }
 
 function normalizeGeometryPolicyEntry(
@@ -962,94 +571,6 @@ function normalizeGeometryPolicyPatchMap(
   return normalized;
 }
 
-function normalizeMacroMicroPolicyEntry(
-  raw: unknown,
-  fallback: SPXMacroMicroPolicyEntry = {},
-): SPXMacroMicroPolicyEntry {
-  const candidate = raw && typeof raw === 'object' && !Array.isArray(raw)
-    ? raw as Record<string, unknown>
-    : {};
-  const normalized: SPXMacroMicroPolicyEntry = {};
-  const minMacroAlignmentScore = toFiniteNumber(candidate.minMacroAlignmentScore);
-  const minMicroAggressorSkewAbs = toFiniteNumber(candidate.minMicroAggressorSkewAbs);
-  const minMicroImbalanceAbs = toFiniteNumber(candidate.minMicroImbalanceAbs);
-  const minMicroQuoteCoveragePct = toFiniteNumber(candidate.minMicroQuoteCoveragePct);
-  const maxMicroSpreadBps = toFiniteNumber(candidate.maxMicroSpreadBps);
-
-  if (minMacroAlignmentScore != null || fallback.minMacroAlignmentScore != null) {
-    normalized.minMacroAlignmentScore = round(
-      clamp(minMacroAlignmentScore ?? fallback.minMacroAlignmentScore ?? 34, 0, 100),
-      2,
-    );
-  }
-  if (
-    typeof candidate.requireMicrostructureAlignment === 'boolean'
-    || typeof fallback.requireMicrostructureAlignment === 'boolean'
-  ) {
-    normalized.requireMicrostructureAlignment = typeof candidate.requireMicrostructureAlignment === 'boolean'
-      ? candidate.requireMicrostructureAlignment
-      : (fallback.requireMicrostructureAlignment === true);
-  }
-  if (
-    typeof candidate.requireOrbTrendConfluence === 'boolean'
-    || typeof fallback.requireOrbTrendConfluence === 'boolean'
-  ) {
-    normalized.requireOrbTrendConfluence = typeof candidate.requireOrbTrendConfluence === 'boolean'
-      ? candidate.requireOrbTrendConfluence
-      : (fallback.requireOrbTrendConfluence === true);
-  }
-  if (
-    typeof candidate.failClosedWhenUnavailable === 'boolean'
-    || typeof fallback.failClosedWhenUnavailable === 'boolean'
-  ) {
-    normalized.failClosedWhenUnavailable = typeof candidate.failClosedWhenUnavailable === 'boolean'
-      ? candidate.failClosedWhenUnavailable
-      : (fallback.failClosedWhenUnavailable === true);
-  }
-  if (minMicroAggressorSkewAbs != null || fallback.minMicroAggressorSkewAbs != null) {
-    normalized.minMicroAggressorSkewAbs = round(
-      clamp(minMicroAggressorSkewAbs ?? fallback.minMicroAggressorSkewAbs ?? 0.1, 0, 1),
-      4,
-    );
-  }
-  if (minMicroImbalanceAbs != null || fallback.minMicroImbalanceAbs != null) {
-    normalized.minMicroImbalanceAbs = round(
-      clamp(minMicroImbalanceAbs ?? fallback.minMicroImbalanceAbs ?? 0.06, 0, 1),
-      4,
-    );
-  }
-  if (minMicroQuoteCoveragePct != null || fallback.minMicroQuoteCoveragePct != null) {
-    normalized.minMicroQuoteCoveragePct = round(
-      clamp(minMicroQuoteCoveragePct ?? fallback.minMicroQuoteCoveragePct ?? 0.4, 0, 1),
-      4,
-    );
-  }
-  if (maxMicroSpreadBps != null || fallback.maxMicroSpreadBps != null) {
-    normalized.maxMicroSpreadBps = round(
-      clamp(maxMicroSpreadBps ?? fallback.maxMicroSpreadBps ?? 30, 0, 400),
-      2,
-    );
-  }
-  return normalized;
-}
-
-function normalizeMacroMicroPolicyMap(
-  raw: unknown,
-  defaults: Record<string, SPXMacroMicroPolicyEntry>,
-): Record<string, SPXMacroMicroPolicyEntry> {
-  const normalized: Record<string, SPXMacroMicroPolicyEntry> = Object.fromEntries(
-    Object.entries(defaults).map(([key, value]) => [key, normalizeMacroMicroPolicyEntry(value)]),
-  );
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return normalized;
-  }
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    const fallback = normalized[key] || {};
-    normalized[key] = normalizeMacroMicroPolicyEntry(value, fallback);
-  }
-  return normalized;
-}
-
 function emptyConfidenceInterval(): SPXConfidenceInterval {
   return {
     sampleSize: 0,
@@ -1092,13 +613,6 @@ function toSessionMinuteEt(value: string | null | undefined): number | null {
   return Math.max(0, (et.hour * 60 + et.minute) - SESSION_OPEN_MINUTE_ET);
 }
 
-function toTimeBucket(minuteSinceOpen: number | null): 'opening' | 'midday' | 'late' {
-  if (minuteSinceOpen == null) return 'midday';
-  if (minuteSinceOpen <= 90) return 'opening';
-  if (minuteSinceOpen <= 240) return 'midday';
-  return 'late';
-}
-
 function normalizeTimingMap(
   value: unknown,
 ): Record<string, number> {
@@ -1128,18 +642,7 @@ function maxFirstSeenMinuteForSetup(
 
 function isMissingTableError(message: string): boolean {
   const normalized = message.toLowerCase();
-  return (
-    normalized.includes('could not find the table')
-    || /relation\s+["'`a-z0-9_.]+\s+does not exist/.test(normalized)
-    || /table\s+["'`a-z0-9_.]+\s+does not exist/.test(normalized)
-  );
-}
-
-function isMissingColumnError(message: string, column?: string): boolean {
-  const normalized = message.toLowerCase();
-  if (!normalized.includes('column') || !normalized.includes('does not exist')) return false;
-  if (!column) return true;
-  return normalized.includes(column.toLowerCase());
+  return normalized.includes('could not find the table') || normalized.includes('does not exist');
 }
 
 function normalizeDateInput(value: string): string {
@@ -1224,54 +727,6 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET,
       ),
     },
-    macroMicroPolicy: {
-      defaultMinMacroAlignmentScore: round(clamp(
-        toFiniteNumber(candidate.macroMicroPolicy?.defaultMinMacroAlignmentScore)
-          ?? DEFAULT_PROFILE.macroMicroPolicy.defaultMinMacroAlignmentScore,
-        0,
-        100,
-      ), 2),
-      defaultRequireTrendMicrostructureAlignment: candidate.macroMicroPolicy?.defaultRequireTrendMicrostructureAlignment
-        ?? DEFAULT_PROFILE.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
-      defaultFailClosedWhenUnavailable: candidate.macroMicroPolicy?.defaultFailClosedWhenUnavailable
-        ?? DEFAULT_PROFILE.macroMicroPolicy.defaultFailClosedWhenUnavailable,
-      defaultMinMicroAggressorSkewAbs: round(clamp(
-        toFiniteNumber(candidate.macroMicroPolicy?.defaultMinMicroAggressorSkewAbs)
-          ?? DEFAULT_PROFILE.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
-        0,
-        1,
-      ), 4),
-      defaultMinMicroImbalanceAbs: round(clamp(
-        toFiniteNumber(candidate.macroMicroPolicy?.defaultMinMicroImbalanceAbs)
-          ?? DEFAULT_PROFILE.macroMicroPolicy.defaultMinMicroImbalanceAbs,
-        0,
-        1,
-      ), 4),
-      defaultMinMicroQuoteCoveragePct: round(clamp(
-        toFiniteNumber(candidate.macroMicroPolicy?.defaultMinMicroQuoteCoveragePct)
-          ?? DEFAULT_PROFILE.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
-        0,
-        1,
-      ), 4),
-      defaultMaxMicroSpreadBps: round(clamp(
-        toFiniteNumber(candidate.macroMicroPolicy?.defaultMaxMicroSpreadBps)
-          ?? DEFAULT_PROFILE.macroMicroPolicy.defaultMaxMicroSpreadBps,
-        0,
-        400,
-      ), 2),
-      bySetupType: normalizeMacroMicroPolicyMap(
-        candidate.macroMicroPolicy?.bySetupType,
-        DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE,
-      ),
-      bySetupRegime: normalizeMacroMicroPolicyMap(
-        candidate.macroMicroPolicy?.bySetupRegime,
-        DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_REGIME,
-      ),
-      bySetupRegimeTimeBucket: normalizeMacroMicroPolicyMap(
-        candidate.macroMicroPolicy?.bySetupRegimeTimeBucket,
-        DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_REGIME_TIME_BUCKET,
-      ),
-    },
     walkForward: {
       trainingDays: Math.max(5, Math.floor(toFiniteNumber(candidate.walkForward?.trainingDays) ?? DEFAULT_PROFILE.walkForward.trainingDays)),
       validationDays: Math.max(3, Math.floor(toFiniteNumber(candidate.walkForward?.validationDays) ?? DEFAULT_PROFILE.walkForward.validationDays)),
@@ -1307,22 +762,6 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
         ? candidate.driftControl.pausedSetupTypes.filter((item): item is string => typeof item === 'string' && item.length > 0)
         : [],
     },
-    executionGuardrails: {
-      lastSlippageAdjustmentAt: typeof candidate.executionGuardrails?.lastSlippageAdjustmentAt === 'string'
-        ? candidate.executionGuardrails.lastSlippageAdjustmentAt
-        : DEFAULT_PROFILE.executionGuardrails?.lastSlippageAdjustmentAt ?? null,
-      lastSlippageWindowSignature: typeof candidate.executionGuardrails?.lastSlippageWindowSignature === 'string'
-        ? candidate.executionGuardrails.lastSlippageWindowSignature
-        : DEFAULT_PROFILE.executionGuardrails?.lastSlippageWindowSignature ?? null,
-      lastObservedAvgEntrySlippagePts: toFiniteNumber(candidate.executionGuardrails?.lastObservedAvgEntrySlippagePts)
-        ?? DEFAULT_PROFILE.executionGuardrails?.lastObservedAvgEntrySlippagePts
-        ?? null,
-      lastObservedSampleCount: Math.max(0, Math.floor(
-        toFiniteNumber(candidate.executionGuardrails?.lastObservedSampleCount)
-        ?? DEFAULT_PROFILE.executionGuardrails?.lastObservedSampleCount
-        ?? 0,
-      )),
-    },
   };
 
   const legacyWeightShape = (
@@ -1350,39 +789,11 @@ function toMetadataObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function toMetadataStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string');
-}
-
-function resolveMacroMicroPolicyForRow(
-  row: Pick<PreparedOptimizationRow, 'setupType' | 'regime' | 'timeBucket'>,
-  profile: SPXOptimizationProfile,
-): SPXMacroMicroPolicyEntry {
-  const policy = profile.macroMicroPolicy;
-  return normalizeMacroMicroPolicyEntry({
-    minMacroAlignmentScore: policy.defaultMinMacroAlignmentScore,
-    requireMicrostructureAlignment: (
-      policy.defaultRequireTrendMicrostructureAlignment
-      && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType)
-    ),
-    requireOrbTrendConfluence: false,
-    failClosedWhenUnavailable: policy.defaultFailClosedWhenUnavailable,
-    minMicroAggressorSkewAbs: policy.defaultMinMicroAggressorSkewAbs,
-    minMicroImbalanceAbs: policy.defaultMinMicroImbalanceAbs,
-    minMicroQuoteCoveragePct: policy.defaultMinMicroQuoteCoveragePct,
-    maxMicroSpreadBps: policy.defaultMaxMicroSpreadBps,
-    ...(policy.bySetupType[row.setupType] || {}),
-    ...(policy.bySetupRegime[`${row.setupType}|${row.regime}`] || {}),
-    ...(policy.bySetupRegimeTimeBucket[`${row.setupType}|${row.regime}|${row.timeBucket}`] || {}),
-  });
-}
-
 function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   const metadata = toMetadataObject(row.metadata);
   const confluenceScore = toFiniteNumber(metadata.confluenceScore);
   const flowAlignmentPct = toFiniteNumber(metadata.flowAlignmentPct) ?? toFiniteNumber(metadata.alignmentScore);
-  const flowConfirmed = metadata.effectiveFlowConfirmed === true || metadata.flowConfirmed === true;
+  const flowConfirmed = metadata.flowConfirmed === true;
   const confluenceSources = Array.isArray(metadata.confluenceSources)
     ? metadata.confluenceSources.filter((item): item is string => typeof item === 'string')
     : [];
@@ -1402,30 +813,8 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
     : gateStatusRaw === 'eligible'
       ? 'eligible'
       : null;
-  const gateReasons = toMetadataStringArray(metadata.gateReasons);
   const emaAligned = metadata.emaAligned === true || confluenceSources.includes('ema_alignment');
-  const volumeRegimeAligned = metadata.effectiveVolumeAligned === true || metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
-  const orbTrendConfluence = confluenceSources.includes('orb_trend_confluence');
-  const macroAlignmentScore = toFiniteNumber(metadata.macroAlignmentScore);
-  const microstructureScore = toFiniteNumber(metadata.microstructureScore);
-  const microstructureMetadata = (
-    metadata.microstructure
-    && typeof metadata.microstructure === 'object'
-    && !Array.isArray(metadata.microstructure)
-  )
-    ? metadata.microstructure as Record<string, unknown>
-    : {};
-  const microstructureAvailable = microstructureMetadata.available === true;
-  const microstructureAligned = microstructureMetadata.aligned === true;
-  const microAggressorSkew = toFiniteNumber(microstructureMetadata.aggressorSkew);
-  const microBidAskImbalance = toFiniteNumber(microstructureMetadata.bidAskImbalance);
-  const microQuoteCoveragePctRaw = toFiniteNumber(microstructureMetadata.quoteCoveragePct);
-  const microQuoteCoveragePct = microQuoteCoveragePctRaw == null
-    ? null
-    : microQuoteCoveragePctRaw > 1
-      ? round(clamp(microQuoteCoveragePctRaw / 100, 0, 1), 4)
-      : round(clamp(microQuoteCoveragePctRaw, 0, 1), 4);
-  const microAvgSpreadBps = toFiniteNumber(microstructureMetadata.avgSpreadBps);
+  const volumeRegimeAligned = metadata.volumeRegimeAligned === true || confluenceSources.includes('volume_regime_alignment');
   const regime = typeof row.regime === 'string' && row.regime.length > 0 ? row.regime : 'unknown';
   const setupType = typeof row.setup_type === 'string' && row.setup_type.length > 0 ? row.setup_type : 'unknown';
   const entryLow = toFiniteNumber(row.entry_zone_low);
@@ -1438,7 +827,6 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
     : null;
   const entryFillPrice = toFiniteNumber(row.entry_fill_price);
   const entryPrice = entryFillPrice ?? entryMid;
-  const firstSeenMinuteEt = toSessionMinuteEt(row.first_seen_at);
 
   let target1R: number | null = null;
   let target2R: number | null = null;
@@ -1451,17 +839,14 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   }
 
   return {
-    setupId: row.engine_setup_id,
     sessionDate: row.session_date,
     setupType,
     regime,
     comboKey: `${setupType}|${regime}`,
     tier: typeof row.tier === 'string' ? row.tier : null,
     gateStatus,
-    gateReasons,
     firstSeenAt: row.first_seen_at,
-    firstSeenMinuteEt,
-    timeBucket: toTimeBucket(firstSeenMinuteEt),
+    firstSeenMinuteEt: toSessionMinuteEt(row.first_seen_at),
     triggered: typeof row.triggered_at === 'string' && row.triggered_at.length > 0,
     finalOutcome: row.final_outcome,
     pWinCalibrated: toFiniteNumber(row.p_win_calibrated),
@@ -1475,15 +860,6 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
     flowConfirmed,
     emaAligned,
     volumeRegimeAligned,
-    macroAlignmentScore,
-    microstructureScore,
-    microstructureAvailable,
-    microstructureAligned,
-    microAggressorSkew,
-    microBidAskImbalance,
-    microQuoteCoveragePct,
-    microAvgSpreadBps,
-    orbTrendConfluence,
   };
 }
 
@@ -1491,7 +867,7 @@ function optimizationRowKey(engineSetupId: string, sessionDate: string): string 
   return `${engineSetupId}:${sessionDate}`;
 }
 
-async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promise<OutcomeOverrideLoadResult> {
+async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promise<Map<string, OutcomeOverride>> {
   try {
     const backtest = await runSPXWinRateBacktest({
       from,
@@ -1499,8 +875,6 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       source: 'spx_setup_instances',
       resolution: 'second',
       includeRows: true,
-      includeBlockedSetups: true,
-      includeHiddenTiers: true,
       includePausedSetups: true,
     });
 
@@ -1517,347 +891,15 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       });
     }
 
-    return {
-      overrides: map,
-      backtest: {
-        sourceUsed: backtest.sourceUsed,
-        requestedResolution: backtest.requestedResolution,
-        resolutionUsed: backtest.resolutionUsed,
-        resolutionFallbackSessions: backtest.resolutionFallbackSessions,
-        missingBarsSessions: backtest.missingBarsSessions,
-        setupCount: backtest.setupCount,
-        evaluatedSetupCount: backtest.evaluatedSetupCount,
-        skippedSetupCount: backtest.skippedSetupCount,
-        notes: backtest.notes,
-      },
-      error: null,
-    };
+    return map;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     logger.warn('SPX optimizer failed to load outcome overrides from backtest', {
       from,
       to,
-      error: message,
+      error: error instanceof Error ? error.message : String(error),
     });
-    return {
-      overrides: new Map(),
-      backtest: null,
-      error: message,
-    };
+    return new Map();
   }
-}
-
-async function loadOptionsReplayDataQuality(from: string, to: string): Promise<SPXOptionsReplayDataQuality> {
-  try {
-    const backtest = await runSPXWinRateBacktest({
-      from,
-      to,
-      source: 'spx_setup_instances',
-      resolution: 'second',
-      executionBasis: 'options_contract',
-      includeBlockedSetups: true,
-      includeHiddenTiers: true,
-      includePausedSetups: true,
-      optionsReplay: {
-        strictBars: true,
-      },
-    });
-
-    const replay = backtest.optionsReplay;
-    if (!replay) {
-      return {
-        available: false,
-        replayUniverse: 0,
-        replayedTrades: 0,
-        coveragePct: 0,
-        minimumCoveragePct: FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT,
-        coverageValid: false,
-        error: 'Options replay payload missing from backtest result.',
-      };
-    }
-
-    return {
-      available: true,
-      replayUniverse: replay.replayUniverse,
-      replayedTrades: replay.replayedTrades,
-      coveragePct: replay.coveragePct,
-      minimumCoveragePct: replay.minimumCoveragePct,
-      coverageValid: replay.coverageValid,
-      error: null,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.warn('SPX optimizer failed to load options replay data quality', {
-      from,
-      to,
-      error: message,
-    });
-    return {
-      available: false,
-      replayUniverse: 0,
-      replayedTrades: 0,
-      coveragePct: 0,
-      minimumCoveragePct: FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT,
-      coverageValid: false,
-      error: message,
-    };
-  }
-}
-
-function emptyExecutionActualsDataQuality(
-  triggeredTradeCount: number,
-  tableAvailable = true,
-  error: string | null = null,
-): SPXExecutionActualsDataQuality {
-  return {
-    tableAvailable,
-    triggeredTradeCount,
-    tradesWithAnyFill: 0,
-    tradesWithEntryFill: 0,
-    tradesWithExitFill: 0,
-    tradesWithNonProxyFill: 0,
-    coveragePct: 0,
-    entryCoveragePct: 0,
-    exitCoveragePct: 0,
-    nonProxyCoveragePct: 0,
-    entryAvgSlippagePts: null,
-    exitAvgSlippagePts: null,
-    entryAvgSlippageBps: null,
-    exitAvgSlippageBps: null,
-    error,
-  };
-}
-
-async function loadExecutionActualsDataQuality(input: {
-  from: string;
-  to: string;
-  rows: PreparedOptimizationRow[];
-}): Promise<SPXExecutionActualsDataQuality> {
-  const triggeredRows = input.rows.filter((row) => row.triggered);
-  const triggeredTradeCount = triggeredRows.length;
-  if (triggeredTradeCount === 0) {
-    return emptyExecutionActualsDataQuality(0, true, null);
-  }
-
-  const triggeredKeys = new Set(
-    triggeredRows.map((row) => optimizationRowKey(row.setupId, row.sessionDate)),
-  );
-
-  const fillRows: ExecutionFillRow[] = [];
-  let page = 0;
-  while (true) {
-    const fromIndex = page * DB_PAGE_SIZE;
-    const toIndex = fromIndex + DB_PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from('spx_setup_execution_fills')
-      .select('engine_setup_id,session_date,side,source,slippage_points,slippage_bps')
-      .gte('session_date', input.from)
-      .lte('session_date', input.to)
-      .order('session_date', { ascending: true })
-      .order('engine_setup_id', { ascending: true })
-      .range(fromIndex, toIndex);
-
-    if (error) {
-      if (isMissingTableError(error.message)) {
-        return emptyExecutionActualsDataQuality(
-          triggeredTradeCount,
-          false,
-          'spx_setup_execution_fills table is unavailable.',
-        );
-      }
-
-      const message = `Failed to load spx_setup_execution_fills: ${error.message}`;
-      logger.warn('SPX optimizer failed to load execution actuals quality', {
-        from: input.from,
-        to: input.to,
-        error: message,
-      });
-      return emptyExecutionActualsDataQuality(triggeredTradeCount, false, message);
-    }
-
-    const pageRows = (data || []) as ExecutionFillRow[];
-    fillRows.push(...pageRows);
-    if (pageRows.length < DB_PAGE_SIZE) break;
-    page += 1;
-  }
-
-  const anyFillKeys = new Set<string>();
-  const entryFillKeys = new Set<string>();
-  const exitFillKeys = new Set<string>();
-  const nonProxyFillKeys = new Set<string>();
-  const entrySlippagePts: number[] = [];
-  const exitSlippagePts: number[] = [];
-  const entrySlippageBps: number[] = [];
-  const exitSlippageBps: number[] = [];
-
-  for (const fill of fillRows) {
-    const key = optimizationRowKey(fill.engine_setup_id, fill.session_date);
-    if (!triggeredKeys.has(key)) continue;
-
-    anyFillKeys.add(key);
-    if (fill.side === 'entry') {
-      entryFillKeys.add(key);
-    } else if (fill.side === 'exit') {
-      exitFillKeys.add(key);
-    }
-
-    if (fill.source === 'proxy') continue;
-    nonProxyFillKeys.add(key);
-
-    const slippagePoints = toFiniteNumber(fill.slippage_points);
-    const slippageBps = toFiniteNumber(fill.slippage_bps);
-    if (fill.side === 'entry') {
-      if (slippagePoints != null) entrySlippagePts.push(slippagePoints);
-      if (slippageBps != null) entrySlippageBps.push(slippageBps);
-    } else if (fill.side === 'exit') {
-      if (slippagePoints != null) exitSlippagePts.push(slippagePoints);
-      if (slippageBps != null) exitSlippageBps.push(slippageBps);
-    }
-  }
-
-  return {
-    tableAvailable: true,
-    triggeredTradeCount,
-    tradesWithAnyFill: anyFillKeys.size,
-    tradesWithEntryFill: entryFillKeys.size,
-    tradesWithExitFill: exitFillKeys.size,
-    tradesWithNonProxyFill: nonProxyFillKeys.size,
-    coveragePct: round((anyFillKeys.size / triggeredTradeCount) * 100, 2),
-    entryCoveragePct: round((entryFillKeys.size / triggeredTradeCount) * 100, 2),
-    exitCoveragePct: round((exitFillKeys.size / triggeredTradeCount) * 100, 2),
-    nonProxyCoveragePct: round((nonProxyFillKeys.size / triggeredTradeCount) * 100, 2),
-    entryAvgSlippagePts: entrySlippagePts.length > 0 ? round(mean(entrySlippagePts), 4) : null,
-    exitAvgSlippagePts: exitSlippagePts.length > 0 ? round(mean(exitSlippagePts), 4) : null,
-    entryAvgSlippageBps: entrySlippageBps.length > 0 ? round(mean(entrySlippageBps), 2) : null,
-    exitAvgSlippageBps: exitSlippageBps.length > 0 ? round(mean(exitSlippageBps), 2) : null,
-    error: null,
-  };
-}
-
-function summarizeOptimizerDataQuality(input: {
-  automatedMode: boolean;
-  optimizerRows: number;
-  overrideRows: number;
-  overrideMatchedRows: number;
-  backtest: OutcomeOverrideLoadResult['backtest'];
-  optionsReplay: SPXOptionsReplayDataQuality | null;
-  executionActuals: SPXExecutionActualsDataQuality | null;
-  error: string | null;
-}): SPXOptimizerDataQuality {
-  const overrideCoveragePct = input.overrideRows > 0
-    ? round((input.overrideMatchedRows / input.overrideRows) * 100, 2)
-    : input.optimizerRows > 0 ? 0 : 100;
-  const sourceUsed = input.backtest?.sourceUsed ?? 'unknown';
-  const resolutionUsed = input.backtest?.resolutionUsed ?? 'unknown';
-  const fallbackSessionCount = input.backtest?.resolutionFallbackSessions.length ?? 0;
-  const missingBarsSessionCount = input.backtest?.missingBarsSessions.length ?? 0;
-  const setupCount = input.backtest?.setupCount ?? 0;
-  const evaluatedSetupCount = input.backtest?.evaluatedSetupCount ?? 0;
-  const skippedSetupCount = input.backtest?.skippedSetupCount ?? 0;
-  const reasons: string[] = [];
-
-  if (input.error) {
-    reasons.push(`Backtest override load failed: ${input.error}`);
-  }
-  if (!input.backtest) {
-    reasons.push('Backtest quality metadata is unavailable.');
-  }
-  if (input.optimizerRows > 0 && input.overrideRows === 0) {
-    reasons.push('Backtest returned zero override rows while optimizer rows are present.');
-  }
-  if (
-    FAIL_CLOSED_REQUIRE_INSTANCE_SOURCE
-    && sourceUsed !== 'spx_setup_instances'
-  ) {
-    reasons.push(`Backtest source must be spx_setup_instances (received ${sourceUsed}).`);
-  }
-  if (
-    FAIL_CLOSED_REQUIRE_SECOND_RESOLUTION
-    && resolutionUsed !== 'second'
-  ) {
-    reasons.push(`Massive second-bar resolution required (received ${resolutionUsed}).`);
-  }
-  if (fallbackSessionCount > FAIL_CLOSED_MAX_FALLBACK_SESSIONS) {
-    reasons.push(
-      `Resolution fallback sessions ${fallbackSessionCount} exceed max ${FAIL_CLOSED_MAX_FALLBACK_SESSIONS}.`,
-    );
-  }
-  if (missingBarsSessionCount > FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS) {
-    reasons.push(
-      `Missing-bars sessions ${missingBarsSessionCount} exceed max ${FAIL_CLOSED_MAX_MISSING_BARS_SESSIONS}.`,
-    );
-  }
-  if (input.overrideRows > 0 && overrideCoveragePct < FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT) {
-    reasons.push(
-      `Override coverage ${overrideCoveragePct}% below floor ${FAIL_CLOSED_MIN_OVERRIDE_COVERAGE_PCT}%.`,
-    );
-  }
-  const optionsReplayAvailable = input.optionsReplay?.available === true;
-  const optionsReplayCoveragePct = optionsReplayAvailable
-    ? input.optionsReplay?.coveragePct ?? 0
-    : null;
-  const optionsReplayCoverageFloorPct = FAIL_CLOSED_MIN_OPTIONS_REPLAY_COVERAGE_PCT;
-  const optionsReplayCoverageValid = optionsReplayAvailable
-    ? (input.optionsReplay?.coverageValid ?? false) && (optionsReplayCoveragePct ?? 0) >= optionsReplayCoverageFloorPct
-    : null;
-  const optionsReplayReplayedTrades = input.optionsReplay?.replayedTrades ?? 0;
-  const optionsReplayUniverse = input.optionsReplay?.replayUniverse ?? 0;
-  const executionActuals = input.executionActuals
-    || emptyExecutionActualsDataQuality(input.backtest?.evaluatedSetupCount ?? 0, false, null);
-
-  if (input.optionsReplay?.error) {
-    reasons.push(`Options replay quality load failed: ${input.optionsReplay.error}`);
-  }
-  if (FAIL_CLOSED_REQUIRE_OPTIONS_REPLAY_COVERAGE) {
-    if (!optionsReplayAvailable) {
-      reasons.push('Options replay coverage data is required but unavailable.');
-    } else if (optionsReplayUniverse <= 0) {
-      reasons.push('Options replay coverage data is required but replay universe is zero.');
-    } else if ((optionsReplayCoveragePct ?? 0) < optionsReplayCoverageFloorPct) {
-      reasons.push(
-        `Options replay coverage ${optionsReplayCoveragePct}% below floor ${optionsReplayCoverageFloorPct}%.`,
-      );
-    }
-  }
-
-  const failClosedActive = input.automatedMode && FAIL_CLOSED_AUTOMATED_ENABLED;
-  return {
-    failClosedActive,
-    gatePassed: !failClosedActive || reasons.length === 0,
-    reasons,
-    sourceUsed,
-    requestedResolution: 'second',
-    resolutionUsed,
-    fallbackSessionCount,
-    missingBarsSessionCount,
-    setupCount,
-    evaluatedSetupCount,
-    skippedSetupCount,
-    optimizerRows: input.optimizerRows,
-    overrideRows: input.overrideRows,
-    overrideMatchedRows: input.overrideMatchedRows,
-    overrideCoveragePct,
-    optionsReplayAvailable,
-    optionsReplayCoveragePct,
-    optionsReplayCoverageFloorPct,
-    optionsReplayCoverageValid,
-    optionsReplayReplayedTrades,
-    optionsReplayUniverse,
-    executionFillTableAvailable: executionActuals.tableAvailable,
-    executionTriggeredTradeCount: executionActuals.triggeredTradeCount,
-    executionTradesWithAnyFill: executionActuals.tradesWithAnyFill,
-    executionTradesWithEntryFill: executionActuals.tradesWithEntryFill,
-    executionTradesWithExitFill: executionActuals.tradesWithExitFill,
-    executionTradesWithNonProxyFill: executionActuals.tradesWithNonProxyFill,
-    executionCoveragePct: executionActuals.coveragePct,
-    executionEntryCoveragePct: executionActuals.entryCoveragePct,
-    executionExitCoveragePct: executionActuals.exitCoveragePct,
-    executionNonProxyCoveragePct: executionActuals.nonProxyCoveragePct,
-    executionEntryAvgSlippagePts: executionActuals.entryAvgSlippagePts,
-    executionExitAvgSlippagePts: executionActuals.exitAvgSlippagePts,
-    executionEntryAvgSlippageBps: executionActuals.entryAvgSlippageBps,
-    executionExitAvgSlippageBps: executionActuals.exitAvgSlippageBps,
-  };
 }
 
 function emptyMetrics(): SPXOptimizationMetrics {
@@ -1878,21 +920,6 @@ function emptyMetrics(): SPXOptimizationMetrics {
     t1Confidence95: emptyConfidenceInterval(),
     t2Confidence95: emptyConfidenceInterval(),
     failureConfidence95: emptyConfidenceInterval(),
-  };
-}
-
-function emptyBlockerMix(): SPXOptimizerScorecard['blockerMix'] {
-  return {
-    totalOpportunityCount: 0,
-    macroBlockedCount: 0,
-    microBlockedCount: 0,
-    macroBlockedPct: 0,
-    microBlockedPct: 0,
-    baselineTriggerRatePct: 0,
-    optimizedTriggerRatePct: 0,
-    triggerRateDeltaPct: 0,
-    triggerRateGuardrailPassed: true,
-    bySetupRegimeTimeBucket: [],
   };
 }
 
@@ -2013,48 +1040,30 @@ function toMetrics(
 function candidateGrid(): ThresholdCandidate[] {
   const candidates: ThresholdCandidate[] = [];
   const alignmentGridByFlowGate: Record<'true' | 'false', number[]> = {
-    true: [55, 60],
+    true: [52, 55, 58, 60],
     false: [0],
   };
-  const partialTakeGrid = [0.5, 0.65, 0.7];
-  const macroMicroSweep = [
-    { minMacroAlignmentScore: 30, requireMicrostructureAlignment: false, minMicroAggressorSkewAbs: 0.07, minMicroImbalanceAbs: 0.04, minMicroQuoteCoveragePct: 0.3 },
-    { minMacroAlignmentScore: 34, requireMicrostructureAlignment: false, minMicroAggressorSkewAbs: 0.1, minMicroImbalanceAbs: 0.06, minMicroQuoteCoveragePct: 0.4 },
-    { minMacroAlignmentScore: 38, requireMicrostructureAlignment: false, minMicroAggressorSkewAbs: 0.13, minMicroImbalanceAbs: 0.08, minMicroQuoteCoveragePct: 0.5 },
-    { minMacroAlignmentScore: 34, requireMicrostructureAlignment: true, minMicroAggressorSkewAbs: 0.1, minMicroImbalanceAbs: 0.06, minMicroQuoteCoveragePct: 0.4 },
-    { minMacroAlignmentScore: 38, requireMicrostructureAlignment: true, minMicroAggressorSkewAbs: 0.13, minMicroImbalanceAbs: 0.08, minMicroQuoteCoveragePct: 0.5 },
-  ] as const;
-
-  for (const minConfluenceScore of [3, 4]) {
-    for (const minPWinCalibrated of [0.6, 0.62, 0.64]) {
-      for (const minEvR of [0.22, 0.3, 0.4]) {
-        for (const macroMicro of macroMicroSweep) {
-          for (const requireFlowConfirmation of [true, false]) {
-            for (const minAlignmentPct of alignmentGridByFlowGate[String(requireFlowConfirmation) as 'true' | 'false']) {
-              for (const requireEmaAlignment of [false, true]) {
-                for (const requireVolumeRegimeAlignment of [false, true]) {
-                  for (const enforceTimingGate of [true, false]) {
-                    for (const requireTrendPullbackOrbConfluence of [true, false]) {
-                      for (const partialAtT1Pct of partialTakeGrid) {
-                        candidates.push({
-                          requireFlowConfirmation,
-                          minConfluenceScore,
-                          minPWinCalibrated,
-                          minEvR,
-                          minMacroAlignmentScore: macroMicro.minMacroAlignmentScore,
-                          minAlignmentPct,
-                          requireEmaAlignment,
-                          requireVolumeRegimeAlignment,
-                          requireMicrostructureAlignment: macroMicro.requireMicrostructureAlignment,
-                          requireTrendPullbackOrbConfluence,
-                          minMicroAggressorSkewAbs: macroMicro.minMicroAggressorSkewAbs,
-                          minMicroImbalanceAbs: macroMicro.minMicroImbalanceAbs,
-                          minMicroQuoteCoveragePct: macroMicro.minMicroQuoteCoveragePct,
-                          enforceTimingGate,
-                          partialAtT1Pct,
-                        });
-                      }
-                    }
+  const partialTakeGrid = [0.35, 0.5, 0.65, 0.7, 0.8];
+  for (const minConfluenceScore of [3, 4, 5]) {
+    for (const minPWinCalibrated of [0.58, 0.6, 0.62, 0.64]) {
+      for (const minEvR of [0.18, 0.22, 0.25, 0.3, 0.35, 0.4]) {
+        for (const requireFlowConfirmation of [true, false]) {
+          for (const minAlignmentPct of alignmentGridByFlowGate[String(requireFlowConfirmation) as 'true' | 'false']) {
+            for (const requireEmaAlignment of [false, true]) {
+              for (const requireVolumeRegimeAlignment of [false, true]) {
+                for (const enforceTimingGate of [true, false]) {
+                  for (const partialAtT1Pct of partialTakeGrid) {
+                    candidates.push({
+                      requireFlowConfirmation,
+                      minConfluenceScore,
+                      minPWinCalibrated,
+                      minEvR,
+                      minAlignmentPct,
+                      requireEmaAlignment,
+                      requireVolumeRegimeAlignment,
+                      enforceTimingGate,
+                      partialAtT1Pct,
+                    });
                   }
                 }
               }
@@ -2074,10 +1083,11 @@ function passesCandidate(
     pausedSetupTypes?: Set<string>;
     pausedCombos?: Set<string>;
     timingMap?: Record<string, number>;
-    profile?: SPXOptimizationProfile;
   },
 ): boolean {
   if (!row.triggered) return false;
+  if (row.tier === 'hidden') return false;
+  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -2088,63 +1098,16 @@ function passesCandidate(
     if (row.firstSeenMinuteEt > maxMinute) return false;
   }
 
-  const rowPolicy = input.profile
-    ? resolveMacroMicroPolicyForRow(row, input.profile)
-    : {};
-  const minMacroAlignmentScore = Math.max(
-    candidate.minMacroAlignmentScore,
-    rowPolicy.minMacroAlignmentScore ?? 0,
-  );
-  const requireMicrostructureAlignment = (
-    candidate.requireMicrostructureAlignment
-    || rowPolicy.requireMicrostructureAlignment === true
-  ) && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType);
-  const requireTrendPullbackOrbConfluence = (
-    candidate.requireTrendPullbackOrbConfluence
-    || rowPolicy.requireOrbTrendConfluence === true
-  ) && row.setupType === 'trend_pullback';
-  const minMicroAggressorSkewAbs = Math.max(
-    candidate.minMicroAggressorSkewAbs,
-    rowPolicy.minMicroAggressorSkewAbs ?? 0,
-  );
-  const minMicroImbalanceAbs = Math.max(
-    candidate.minMicroImbalanceAbs,
-    rowPolicy.minMicroImbalanceAbs ?? 0,
-  );
-  const minMicroQuoteCoveragePct = Math.max(
-    candidate.minMicroQuoteCoveragePct,
-    rowPolicy.minMicroQuoteCoveragePct ?? 0,
-  );
-  const maxMicroSpreadBps = rowPolicy.maxMicroSpreadBps;
-  const failClosedWhenUnavailable = rowPolicy.failClosedWhenUnavailable === true;
-
   if ((row.confluenceScore ?? -1) < candidate.minConfluenceScore) return false;
   if ((row.pWinCalibrated ?? -1) < candidate.minPWinCalibrated) return false;
   if ((row.evR ?? Number.NEGATIVE_INFINITY) < candidate.minEvR) return false;
-  if (row.macroAlignmentScore != null && row.macroAlignmentScore < minMacroAlignmentScore) return false;
 
   if (candidate.requireFlowConfirmation) {
     if (!row.flowConfirmed) return false;
-    // When flow was admitted via grace (effectiveFlowConfirmed), raw alignment may be null.
-    // Skip alignment floor when alignment data is unavailable but flow is effectively confirmed.
-    if (row.flowAlignmentPct != null && row.flowAlignmentPct < candidate.minAlignmentPct) return false;
+    if ((row.flowAlignmentPct ?? -1) < candidate.minAlignmentPct) return false;
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
-  if (requireTrendPullbackOrbConfluence && !row.orbTrendConfluence) return false;
-  if (requireMicrostructureAlignment) {
-    if (!row.microstructureAvailable) {
-      if (failClosedWhenUnavailable) return false;
-    } else {
-      if (!row.microstructureAligned) return false;
-      if ((Math.abs(row.microAggressorSkew ?? 0)) < minMicroAggressorSkewAbs) return false;
-      if ((Math.abs(row.microBidAskImbalance ?? 0)) < minMicroImbalanceAbs) return false;
-      if ((row.microQuoteCoveragePct ?? 0) < minMicroQuoteCoveragePct) return false;
-      if (maxMicroSpreadBps != null && (row.microAvgSpreadBps ?? Number.POSITIVE_INFINITY) > maxMicroSpreadBps) {
-        return false;
-      }
-    }
-  }
 
   return true;
 }
@@ -2156,9 +1119,10 @@ function passesCandidateOpportunity(
     pausedSetupTypes?: Set<string>;
     pausedCombos?: Set<string>;
     timingMap?: Record<string, number>;
-    profile?: SPXOptimizationProfile;
   },
 ): boolean {
+  if (row.tier === 'hidden') return false;
+  if (row.gateStatus === 'blocked') return false;
   if (input.pausedSetupTypes?.has(row.setupType)) return false;
   if (input.pausedCombos?.has(row.comboKey)) return false;
   if (candidate.enforceTimingGate && row.firstSeenMinuteEt != null) {
@@ -2169,140 +1133,18 @@ function passesCandidateOpportunity(
     if (row.firstSeenMinuteEt > maxMinute) return false;
   }
 
-  const rowPolicy = input.profile
-    ? resolveMacroMicroPolicyForRow(row, input.profile)
-    : {};
-  const minMacroAlignmentScore = Math.max(
-    candidate.minMacroAlignmentScore,
-    rowPolicy.minMacroAlignmentScore ?? 0,
-  );
-  const requireMicrostructureAlignment = (
-    candidate.requireMicrostructureAlignment
-    || rowPolicy.requireMicrostructureAlignment === true
-  ) && TREND_FAMILY_SETUP_TYPES.has(row.setupType as SetupType);
-  const requireTrendPullbackOrbConfluence = (
-    candidate.requireTrendPullbackOrbConfluence
-    || rowPolicy.requireOrbTrendConfluence === true
-  ) && row.setupType === 'trend_pullback';
-  const minMicroAggressorSkewAbs = Math.max(
-    candidate.minMicroAggressorSkewAbs,
-    rowPolicy.minMicroAggressorSkewAbs ?? 0,
-  );
-  const minMicroImbalanceAbs = Math.max(
-    candidate.minMicroImbalanceAbs,
-    rowPolicy.minMicroImbalanceAbs ?? 0,
-  );
-  const minMicroQuoteCoveragePct = Math.max(
-    candidate.minMicroQuoteCoveragePct,
-    rowPolicy.minMicroQuoteCoveragePct ?? 0,
-  );
-  const maxMicroSpreadBps = rowPolicy.maxMicroSpreadBps;
-  const failClosedWhenUnavailable = rowPolicy.failClosedWhenUnavailable === true;
-
   if ((row.confluenceScore ?? -1) < candidate.minConfluenceScore) return false;
   if ((row.pWinCalibrated ?? -1) < candidate.minPWinCalibrated) return false;
   if ((row.evR ?? Number.NEGATIVE_INFINITY) < candidate.minEvR) return false;
-  if (row.macroAlignmentScore != null && row.macroAlignmentScore < minMacroAlignmentScore) return false;
 
   if (candidate.requireFlowConfirmation) {
     if (!row.flowConfirmed) return false;
-    // When flow was admitted via grace (effectiveFlowConfirmed), raw alignment may be null.
-    // Skip alignment floor when alignment data is unavailable but flow is effectively confirmed.
-    if (row.flowAlignmentPct != null && row.flowAlignmentPct < candidate.minAlignmentPct) return false;
+    if ((row.flowAlignmentPct ?? -1) < candidate.minAlignmentPct) return false;
   }
   if (candidate.requireEmaAlignment && !row.emaAligned) return false;
   if (candidate.requireVolumeRegimeAlignment && !row.volumeRegimeAligned) return false;
-  if (requireTrendPullbackOrbConfluence && !row.orbTrendConfluence) return false;
-  if (requireMicrostructureAlignment) {
-    if (!row.microstructureAvailable) {
-      if (failClosedWhenUnavailable) return false;
-    } else {
-      if (!row.microstructureAligned) return false;
-      if ((Math.abs(row.microAggressorSkew ?? 0)) < minMicroAggressorSkewAbs) return false;
-      if ((Math.abs(row.microBidAskImbalance ?? 0)) < minMicroImbalanceAbs) return false;
-      if ((row.microQuoteCoveragePct ?? 0) < minMicroQuoteCoveragePct) return false;
-      if (maxMicroSpreadBps != null && (row.microAvgSpreadBps ?? Number.POSITIVE_INFINITY) > maxMicroSpreadBps) {
-        return false;
-      }
-    }
-  }
 
   return true;
-}
-
-function hasMacroBlocker(row: Pick<PreparedOptimizationRow, 'gateReasons'>): boolean {
-  return row.gateReasons.some((reason) => reason.startsWith('macro_alignment_below_floor'));
-}
-
-function hasMicroBlocker(row: Pick<PreparedOptimizationRow, 'gateReasons'>): boolean {
-  return row.gateReasons.some((reason) => (
-    reason === 'microstructure_alignment_required'
-    || reason === 'microstructure_unavailable'
-    || reason === 'microstructure_conflict'
-    || reason.startsWith('microstructure_score_below_floor')
-  ));
-}
-
-function evaluateBlockerMix(rows: PreparedOptimizationRow[]): SPXOptimizerScorecard['blockerMix'] {
-  const actionableRows = rows.filter((row) => row.gateStatus === 'eligible' || row.gateStatus === 'blocked');
-  const totalOpportunityCount = actionableRows.length;
-  if (totalOpportunityCount <= 0) {
-    return {
-      totalOpportunityCount: 0,
-      macroBlockedCount: 0,
-      microBlockedCount: 0,
-      macroBlockedPct: 0,
-      microBlockedPct: 0,
-      baselineTriggerRatePct: 0,
-      optimizedTriggerRatePct: 0,
-      triggerRateDeltaPct: 0,
-      triggerRateGuardrailPassed: true,
-      bySetupRegimeTimeBucket: [],
-    };
-  }
-
-  const macroBlockedCount = actionableRows.filter((row) => hasMacroBlocker(row)).length;
-  const microBlockedCount = actionableRows.filter((row) => hasMicroBlocker(row)).length;
-  const bucketMap = new Map<string, { total: number; macro: number; micro: number; blocked: number }>();
-  for (const row of actionableRows) {
-    const key = `${row.setupType}|${row.regime}|${row.timeBucket}`;
-    const bucket = bucketMap.get(key) || {
-      total: 0,
-      macro: 0,
-      micro: 0,
-      blocked: 0,
-    };
-    const macroBlocked = hasMacroBlocker(row);
-    const microBlocked = hasMicroBlocker(row);
-    bucket.total += 1;
-    if (macroBlocked) bucket.macro += 1;
-    if (microBlocked) bucket.micro += 1;
-    if (macroBlocked || microBlocked) bucket.blocked += 1;
-    bucketMap.set(key, bucket);
-  }
-
-  return {
-    totalOpportunityCount,
-    macroBlockedCount,
-    microBlockedCount,
-    macroBlockedPct: round((macroBlockedCount / totalOpportunityCount) * 100, 2),
-    microBlockedPct: round((microBlockedCount / totalOpportunityCount) * 100, 2),
-    baselineTriggerRatePct: 0,
-    optimizedTriggerRatePct: 0,
-    triggerRateDeltaPct: 0,
-    triggerRateGuardrailPassed: true,
-    bySetupRegimeTimeBucket: Array.from(bucketMap.entries())
-      .map(([key, value]) => ({
-        key,
-        totalOpportunityCount: value.total,
-        macroBlockedCount: value.macro,
-        microBlockedCount: value.micro,
-        macroBlockedPct: value.total > 0 ? round((value.macro / value.total) * 100, 2) : 0,
-        microBlockedPct: value.total > 0 ? round((value.micro / value.total) * 100, 2) : 0,
-        blockedPct: value.total > 0 ? round((value.blocked / value.total) * 100, 2) : 0,
-      }))
-      .sort((a, b) => b.totalOpportunityCount - a.totalOpportunityCount || a.key.localeCompare(b.key)),
-  };
 }
 
 function evaluateBuckets(
@@ -2492,9 +1334,6 @@ function buildSetupActionRecommendations(input: {
   if (input.optimizedCandidate.minEvR !== input.baselineCandidate.minEvR) {
     update.add(`Quality gate: set EV(R) >= ${input.optimizedCandidate.minEvR.toFixed(2)}.`);
   }
-  if (input.optimizedCandidate.minMacroAlignmentScore !== input.baselineCandidate.minMacroAlignmentScore) {
-    update.add(`Macro gate: set alignment score floor >= ${input.optimizedCandidate.minMacroAlignmentScore.toFixed(0)}.`);
-  }
   if (input.optimizedCandidate.requireFlowConfirmation !== input.baselineCandidate.requireFlowConfirmation) {
     update.add(`Flow gate: require flow confirmation = ${input.optimizedCandidate.requireFlowConfirmation}.`);
   }
@@ -2509,21 +1348,6 @@ function buildSetupActionRecommendations(input: {
   }
   if (input.optimizedCandidate.requireVolumeRegimeAlignment !== input.baselineCandidate.requireVolumeRegimeAlignment) {
     update.add(`Indicator gate: require volume-regime alignment = ${input.optimizedCandidate.requireVolumeRegimeAlignment}.`);
-  }
-  if (input.optimizedCandidate.requireMicrostructureAlignment !== input.baselineCandidate.requireMicrostructureAlignment) {
-    update.add(`Microstructure gate: require trend-family alignment = ${input.optimizedCandidate.requireMicrostructureAlignment}.`);
-  }
-  if (input.optimizedCandidate.requireTrendPullbackOrbConfluence !== input.baselineCandidate.requireTrendPullbackOrbConfluence) {
-    update.add(`Trend gate: require ORB + pullback confluence for trend_pullback = ${input.optimizedCandidate.requireTrendPullbackOrbConfluence}.`);
-  }
-  if (input.optimizedCandidate.minMicroAggressorSkewAbs !== input.baselineCandidate.minMicroAggressorSkewAbs) {
-    update.add(`Microstructure threshold: aggressor skew >= ${input.optimizedCandidate.minMicroAggressorSkewAbs.toFixed(2)}.`);
-  }
-  if (input.optimizedCandidate.minMicroImbalanceAbs !== input.baselineCandidate.minMicroImbalanceAbs) {
-    update.add(`Microstructure threshold: orderbook imbalance >= ${input.optimizedCandidate.minMicroImbalanceAbs.toFixed(2)}.`);
-  }
-  if (input.optimizedCandidate.minMicroQuoteCoveragePct !== input.baselineCandidate.minMicroQuoteCoveragePct) {
-    update.add(`Microstructure threshold: quote coverage >= ${(input.optimizedCandidate.minMicroQuoteCoveragePct * 100).toFixed(0)}%.`);
   }
   if (input.optimizedCandidate.enforceTimingGate !== input.baselineCandidate.enforceTimingGate) {
     update.add(`Timing gate: enforce late-session discipline = ${input.optimizedCandidate.enforceTimingGate}.`);
@@ -2559,103 +1383,24 @@ async function loadOptimizationRows(
   from: string,
   to: string,
   outcomeOverrides?: Map<string, OutcomeOverride>,
-): Promise<OptimizationRowsLoadResult> {
-  type RowSelectVariantKey =
-    | 'full'
-    | 'legacy_no_entry_fill'
-    | 'legacy_no_tier_or_entry_fill';
+): Promise<PreparedOptimizationRow[]> {
+  const { data, error } = await supabase
+    .from('spx_setup_instances')
+    .select('engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata')
+    .gte('session_date', from)
+    .lte('session_date', to);
 
-  const selectVariants: Array<{ key: RowSelectVariantKey; select: string }> = [
-    {
-      key: 'full',
-      select: 'engine_setup_id,session_date,setup_type,direction,regime,tier,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,entry_fill_price,p_win_calibrated,ev_r,metadata',
-    },
-    {
-      key: 'legacy_no_entry_fill',
-      select: 'engine_setup_id,session_date,setup_type,direction,regime,tier,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata',
-    },
-    {
-      key: 'legacy_no_tier_or_entry_fill',
-      select: 'engine_setup_id,session_date,setup_type,direction,regime,first_seen_at,triggered_at,final_outcome,stop_hit_at,entry_zone_low,entry_zone_high,stop_price,target_1_price,target_2_price,p_win_calibrated,ev_r,metadata',
-    },
-  ];
-
-  let rows: OptimizationRow[] = [];
-  let selectedVariant: RowSelectVariantKey | null = null;
-  let fallbackReason: string | null = null;
-
-  for (const variant of selectVariants) {
-    const variantRows: OptimizationRow[] = [];
-    let page = 0;
-    let shouldTryNextVariant = false;
-
-    while (true) {
-      const fromIndex = page * DB_PAGE_SIZE;
-      const toIndex = fromIndex + DB_PAGE_SIZE - 1;
-      const { data, error } = await supabase
-        .from('spx_setup_instances')
-        .select(variant.select)
-        .gte('session_date', from)
-        .lte('session_date', to)
-        .order('session_date', { ascending: true })
-        .order('engine_setup_id', { ascending: true })
-        .range(fromIndex, toIndex);
-
-      if (error) {
-        if (isMissingTableError(error.message)) {
-          logger.warn('SPX optimizer skipped row load because spx_setup_instances is missing', {
-            error: error.message,
-          });
-          return {
-            rows: [],
-            overrideMatchedRows: 0,
-          };
-        }
-
-        const missingEntryFill = isMissingColumnError(error.message, 'entry_fill_price');
-        const missingTier = isMissingColumnError(error.message, 'tier');
-        if (missingEntryFill || missingTier) {
-          shouldTryNextVariant = true;
-          fallbackReason = error.message;
-          break;
-        }
-
-        throw new Error(`Failed to load optimizer rows: ${error.message}`);
-      }
-
-      const pageRows = (data || []) as unknown as OptimizationRow[];
-      variantRows.push(...pageRows);
-      if (pageRows.length < DB_PAGE_SIZE) break;
-      page += 1;
+  if (error) {
+    if (isMissingTableError(error.message)) {
+      logger.warn('SPX optimizer skipped row load because spx_setup_instances is missing');
+      return [];
     }
-
-    if (shouldTryNextVariant) {
-      continue;
-    }
-
-    rows = variantRows;
-    selectedVariant = variant.key;
-    break;
+    throw new Error(`Failed to load optimizer rows: ${error.message}`);
   }
 
-  if (!selectedVariant) {
-    throw new Error(
-      `Failed to load optimizer rows: unsupported schema for spx_setup_instances.${fallbackReason ? ` Last error: ${fallbackReason}` : ''}`,
-    );
-  }
-
-  if (selectedVariant !== 'full') {
-    logger.warn('SPX optimizer is using legacy row-select variant due schema drift', {
-      selectedVariant,
-      reason: fallbackReason,
-    });
-  }
-
-  let overrideMatchedRows = 0;
-  const preparedRows = rows.map((row) => {
+  return ((data || []) as OptimizationRow[]).map((row) => {
     const override = outcomeOverrides?.get(optimizationRowKey(row.engine_setup_id, row.session_date));
     if (!override) return toPreparedRow(row);
-    overrideMatchedRows += 1;
 
     return toPreparedRow({
       ...row,
@@ -2665,17 +1410,12 @@ async function loadOptimizationRows(
       stop_hit_at: override.stopHitAt,
     });
   });
-
-  return {
-    rows: preparedRows,
-    overrideMatchedRows,
-  };
 }
 
 async function readPersistedOptimizerState(): Promise<PersistedOptimizerStateRow | null> {
   const { data, error } = await supabase
     .from(OPTIMIZER_STATE_TABLE)
-    .select('id,profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,last_nightly_run_date_et,last_nightly_attempt_at,last_nightly_success_at,last_nightly_error_message,updated_at')
+    .select('id,profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,updated_at')
     .eq('id', OPTIMIZER_STATE_ROW_ID)
     .maybeSingle();
 
@@ -2723,175 +1463,6 @@ async function persistOptimizerState(input: {
   }
 }
 
-function summarizeHistoryScorecard(scorecard: unknown): SPXOptimizerHistoryEntry['scorecardSummary'] {
-  if (!scorecard || typeof scorecard !== 'object' || Array.isArray(scorecard)) return null;
-  const record = scorecard as Record<string, unknown>;
-  const baseline = record.baseline && typeof record.baseline === 'object' && !Array.isArray(record.baseline)
-    ? record.baseline as Record<string, unknown>
-    : null;
-  const optimized = record.optimized && typeof record.optimized === 'object' && !Array.isArray(record.optimized)
-    ? record.optimized as Record<string, unknown>
-    : null;
-  const improvement = record.improvementPct && typeof record.improvementPct === 'object' && !Array.isArray(record.improvementPct)
-    ? record.improvementPct as Record<string, unknown>
-    : null;
-  if (!baseline || !optimized || !improvement) return null;
-
-  return {
-    baselineTrades: toFiniteNumber(baseline.tradeCount) ?? 0,
-    optimizedTrades: toFiniteNumber(optimized.tradeCount) ?? 0,
-    t1Delta: round(toFiniteNumber(improvement.t1WinRateDelta) ?? 0, 2),
-    t2Delta: round(toFiniteNumber(improvement.t2WinRateDelta) ?? 0, 2),
-    expectancyDeltaR: round(toFiniteNumber(improvement.expectancyRDelta) ?? 0, 4),
-    objectiveConservativeDelta: round(toFiniteNumber(improvement.objectiveConservativeDelta) ?? 0, 2),
-    optimizationApplied: record.optimizationApplied === true,
-  };
-}
-
-function extractProfileGeneratedAt(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const generatedAt = (value as Record<string, unknown>).generatedAt;
-  return typeof generatedAt === 'string' && generatedAt.length > 0 ? generatedAt : null;
-}
-
-function toHistoryNotes(scorecard: unknown): string[] {
-  if (!scorecard || typeof scorecard !== 'object' || Array.isArray(scorecard)) return [];
-  const notes = (scorecard as Record<string, unknown>).notes;
-  if (!Array.isArray(notes)) return [];
-  return notes.filter((note): note is string => typeof note === 'string').slice(0, 8);
-}
-
-function toHistoryEntry(row: PersistedOptimizerHistoryRow): SPXOptimizerHistoryEntry {
-  return {
-    id: row.id,
-    createdAt: row.created_at,
-    mode: normalizeOptimizerMode(row.mode),
-    action: row.action === 'revert' ? 'revert' : 'scan',
-    optimizationApplied: row.optimization_applied === true,
-    actor: row.actor,
-    reason: row.reason,
-    revertedFromHistoryId: row.reverted_from_history_id,
-    scanRange: {
-      from: row.scan_range_from,
-      to: row.scan_range_to,
-    },
-    trainingRange: {
-      from: row.training_from,
-      to: row.training_to,
-    },
-    validationRange: {
-      from: row.validation_from,
-      to: row.validation_to,
-    },
-    previousProfileGeneratedAt: extractProfileGeneratedAt(row.previous_profile),
-    nextProfileGeneratedAt: extractProfileGeneratedAt(row.next_profile),
-    scorecardSummary: summarizeHistoryScorecard(row.scorecard),
-    notes: toHistoryNotes(row.scorecard),
-  };
-}
-
-async function appendOptimizerHistory(input: {
-  action: 'scan' | 'revert';
-  mode: SPXOptimizerMode;
-  actor?: string | null;
-  reason?: string | null;
-  optimizationApplied: boolean;
-  previousProfile: SPXOptimizationProfile;
-  nextProfile: SPXOptimizationProfile;
-  scorecard: SPXOptimizerScorecard;
-  scanRange: { from: string; to: string };
-  trainingRange: { from: string; to: string };
-  validationRange: { from: string; to: string };
-  revertedFromHistoryId?: number | null;
-}): Promise<number | null> {
-  const row = {
-    action: input.action,
-    mode: input.mode,
-    actor: input.actor || null,
-    reason: input.reason || null,
-    optimization_applied: input.optimizationApplied,
-    previous_profile: input.previousProfile,
-    next_profile: input.nextProfile,
-    scorecard: input.scorecard,
-    scan_range_from: input.scanRange.from,
-    scan_range_to: input.scanRange.to,
-    training_from: input.trainingRange.from,
-    training_to: input.trainingRange.to,
-    validation_from: input.validationRange.from,
-    validation_to: input.validationRange.to,
-    reverted_from_history_id: input.revertedFromHistoryId || null,
-  };
-
-  const { data, error } = await supabase
-    .from(OPTIMIZER_HISTORY_TABLE)
-    .insert(row)
-    .select('id')
-    .single();
-
-  if (error) {
-    if (isMissingTableError(error.message)) {
-      logger.warn('SPX optimizer history table missing; skipping history append');
-      return null;
-    }
-    logger.warn('SPX optimizer failed to append history', { error: error.message });
-    return null;
-  }
-
-  const id = toFiniteNumber((data as Record<string, unknown>).id);
-  return id != null ? Math.trunc(id) : null;
-}
-
-export async function getSPXOptimizerHistory(limit = 20): Promise<SPXOptimizerHistoryEntry[]> {
-  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-  const { data, error } = await supabase
-    .from(OPTIMIZER_HISTORY_TABLE)
-    .select('id,action,mode,actor,reason,optimization_applied,previous_profile,next_profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,reverted_from_history_id,created_at')
-    .order('id', { ascending: false })
-    .limit(safeLimit);
-
-  if (error) {
-    if (isMissingTableError(error.message)) return [];
-    logger.warn('SPX optimizer failed to read history', { error: error.message });
-    return [];
-  }
-
-  return ((data || []) as PersistedOptimizerHistoryRow[]).map((row) => toHistoryEntry(row));
-}
-
-export async function getSPXOptimizerNightlyStatus(): Promise<SPXOptimizerNightlyStatus> {
-  const persisted = await readPersistedOptimizerState();
-  return {
-    lastRunDateEt: persisted?.last_nightly_run_date_et ?? null,
-    lastAttemptAt: persisted?.last_nightly_attempt_at ?? null,
-    lastSuccessAt: persisted?.last_nightly_success_at ?? null,
-    lastErrorMessage: persisted?.last_nightly_error_message ?? null,
-  };
-}
-
-export async function persistSPXOptimizerNightlyStatus(input: SPXOptimizerNightlyStatus): Promise<void> {
-  const row = {
-    id: OPTIMIZER_STATE_ROW_ID,
-    status: 'active',
-    last_nightly_run_date_et: input.lastRunDateEt,
-    last_nightly_attempt_at: input.lastAttemptAt,
-    last_nightly_success_at: input.lastSuccessAt,
-    last_nightly_error_message: input.lastErrorMessage,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase
-    .from(OPTIMIZER_STATE_TABLE)
-    .upsert(row, { onConflict: 'id' });
-
-  if (error) {
-    if (isMissingTableError(error.message)) {
-      logger.warn('SPX optimizer state table missing; skipping nightly status persistence');
-      return;
-    }
-    logger.warn('SPX optimizer failed to persist nightly status', { error: error.message });
-  }
-}
-
 function withDateRangeProfile(base: SPXOptimizationProfile, generatedAt: string): SPXOptimizationProfile {
   return {
     ...base,
@@ -2924,73 +1495,29 @@ export async function getActiveSPXOptimizationProfile(): Promise<SPXOptimization
 export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard> {
   const persisted = await readPersistedOptimizerState();
   if (persisted?.scorecard && typeof persisted.scorecard === 'object' && !Array.isArray(persisted.scorecard)) {
-    const scorecard = persisted.scorecard as SPXOptimizerScorecard;
-    if (!scorecard.blockerMix) {
-      return {
-        ...scorecard,
-        blockerMix: emptyBlockerMix(),
-      };
-    }
-    return scorecard;
+    return persisted.scorecard as SPXOptimizerScorecard;
   }
 
   const profile = await getActiveSPXOptimizationProfile();
   const { from, to } = defaultScanRange(profile);
-  const outcomeOverrideLoad = await loadOutcomeOverridesFromBacktest(from, to);
-  const rowLoad = await loadOptimizationRows(from, to, outcomeOverrideLoad.overrides);
-  const rows = rowLoad.rows;
-  const executionActuals = await loadExecutionActualsDataQuality({
-    from,
-    to,
-    rows,
-  });
-  const dataQuality = summarizeOptimizerDataQuality({
-    automatedMode: false,
-    optimizerRows: rows.length,
-    overrideRows: outcomeOverrideLoad.overrides.size,
-    overrideMatchedRows: rowLoad.overrideMatchedRows,
-    backtest: outcomeOverrideLoad.backtest,
-    optionsReplay: null,
-    executionActuals,
-    error: outcomeOverrideLoad.error,
-  });
+  const outcomeOverrides = await loadOutcomeOverridesFromBacktest(from, to);
+  const rows = await loadOptimizationRows(from, to, outcomeOverrides);
   const baselineCandidate: ThresholdCandidate = {
     requireFlowConfirmation: profile.flowGate.requireFlowConfirmation,
     minConfluenceScore: profile.qualityGate.minConfluenceScore,
     minPWinCalibrated: profile.qualityGate.minPWinCalibrated,
     minEvR: profile.qualityGate.minEvR,
-    minMacroAlignmentScore: profile.macroMicroPolicy.defaultMinMacroAlignmentScore,
     minAlignmentPct: profile.flowGate.minAlignmentPct,
     requireEmaAlignment: profile.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profile.indicatorGate.requireVolumeRegimeAlignment,
-    requireMicrostructureAlignment: profile.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
-    requireTrendPullbackOrbConfluence: normalizeMacroMicroPolicyEntry(
-      profile.macroMicroPolicy.bySetupType?.trend_pullback,
-      DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
-    ).requireOrbTrendConfluence === true,
-    minMicroAggressorSkewAbs: profile.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
-    minMicroImbalanceAbs: profile.macroMicroPolicy.defaultMinMicroImbalanceAbs,
-    minMicroQuoteCoveragePct: profile.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
     enforceTimingGate: profile.timingGate.enabled,
     partialAtT1Pct: profile.tradeManagement.partialAtT1Pct,
   };
   const timingMap = profile.timingGate.maxFirstSeenMinuteBySetupType;
-  const eligibleRows = rows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap, profile }));
-  const baselineOpportunityCount = rows.filter((row) => passesCandidateOpportunity(row, baselineCandidate, {
-    timingMap,
-    profile,
-  })).length;
-  const baselineTriggerRatePct = baselineOpportunityCount > 0
-    ? round((eligibleRows.length / baselineOpportunityCount) * 100, 2)
-    : 0;
+  const eligibleRows = rows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap }));
   const metrics = toMetrics(eligibleRows, profile.walkForward.objectiveWeights, {
     partialAtT1Pct: baselineCandidate.partialAtT1Pct,
   });
-  const blockerMix = evaluateBlockerMix(rows);
-  blockerMix.baselineTriggerRatePct = baselineTriggerRatePct;
-  blockerMix.optimizedTriggerRatePct = baselineTriggerRatePct;
-  blockerMix.triggerRateDeltaPct = 0;
-  blockerMix.triggerRateGuardrailPassed = true;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -3024,29 +1551,21 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
       update: ['Run Scan & Optimize to generate walk-forward recommendations.'],
       remove: [],
     },
-    blockerMix,
     optimizationApplied: false,
-    dataQuality,
-    notes: [
-      'Optimizer scorecard is using baseline profile defaults.',
-      `Data quality snapshot: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, overrideCoverage=${dataQuality.overrideCoveragePct}%, optionsCoverage=${dataQuality.optionsReplayCoveragePct ?? 'n/a'}%, executionAnyFill=${dataQuality.executionCoveragePct}%, executionNonProxy=${dataQuality.executionNonProxyCoveragePct}%.`,
-    ],
+    notes: ['Optimizer scorecard is using baseline profile defaults.'],
   };
 }
 
 export async function runSPXOptimizerScan(input?: {
   from?: string;
   to?: string;
-  mode?: SPXOptimizerMode;
-  actor?: string | null;
-  reason?: string | null;
+  mode?: 'manual' | 'weekly_auto' | 'nightly_auto';
 }): Promise<SPXOptimizationScanResult> {
   const currentProfile = await getActiveSPXOptimizationProfile();
   const fallbackRange = defaultScanRange(currentProfile);
   const scanFrom = normalizeDateInput(input?.from || fallbackRange.from);
   const scanTo = normalizeDateInput(input?.to || fallbackRange.to);
-  const scanMode = normalizeOptimizerMode(input?.mode || 'manual');
-  const automatedMode = scanMode === 'weekly_auto' || scanMode === 'nightly_auto';
+  const automatedMode = input?.mode === 'weekly_auto' || input?.mode === 'nightly_auto';
 
   const profileForScan = normalizeProfile(currentProfile);
   const trainingDays = profileForScan.walkForward.trainingDays;
@@ -3057,27 +1576,8 @@ export async function runSPXOptimizerScan(input?: {
   const trainingTo = shiftDate(validationFrom, -1);
   const trainingFrom = shiftDate(trainingTo, -(trainingDays - 1));
 
-  const [outcomeOverrideLoad, optionsReplayQuality] = await Promise.all([
-    loadOutcomeOverridesFromBacktest(trainingFrom, validationTo),
-    loadOptionsReplayDataQuality(validationFrom, validationTo),
-  ]);
-  const rowLoad = await loadOptimizationRows(trainingFrom, validationTo, outcomeOverrideLoad.overrides);
-  const rows = rowLoad.rows;
-  const executionActuals = await loadExecutionActualsDataQuality({
-    from: trainingFrom,
-    to: validationTo,
-    rows,
-  });
-  const dataQuality = summarizeOptimizerDataQuality({
-    automatedMode,
-    optimizerRows: rows.length,
-    overrideRows: outcomeOverrideLoad.overrides.size,
-    overrideMatchedRows: rowLoad.overrideMatchedRows,
-    backtest: outcomeOverrideLoad.backtest,
-    optionsReplay: optionsReplayQuality,
-    executionActuals,
-    error: outcomeOverrideLoad.error,
-  });
+  const outcomeOverrides = await loadOutcomeOverridesFromBacktest(trainingFrom, validationTo);
+  const rows = await loadOptimizationRows(trainingFrom, validationTo, outcomeOverrides);
   const trainingRows = rows.filter((row) => row.sessionDate >= trainingFrom && row.sessionDate <= trainingTo);
   const validationRows = rows.filter((row) => row.sessionDate >= validationFrom && row.sessionDate <= validationTo);
 
@@ -3086,18 +1586,9 @@ export async function runSPXOptimizerScan(input?: {
     minConfluenceScore: profileForScan.qualityGate.minConfluenceScore,
     minPWinCalibrated: profileForScan.qualityGate.minPWinCalibrated,
     minEvR: profileForScan.qualityGate.minEvR,
-    minMacroAlignmentScore: profileForScan.macroMicroPolicy.defaultMinMacroAlignmentScore,
     minAlignmentPct: profileForScan.flowGate.minAlignmentPct,
     requireEmaAlignment: profileForScan.indicatorGate.requireEmaAlignment,
     requireVolumeRegimeAlignment: profileForScan.indicatorGate.requireVolumeRegimeAlignment,
-    requireMicrostructureAlignment: profileForScan.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment,
-    requireTrendPullbackOrbConfluence: normalizeMacroMicroPolicyEntry(
-      profileForScan.macroMicroPolicy.bySetupType?.trend_pullback,
-      DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
-    ).requireOrbTrendConfluence === true,
-    minMicroAggressorSkewAbs: profileForScan.macroMicroPolicy.defaultMinMicroAggressorSkewAbs,
-    minMicroImbalanceAbs: profileForScan.macroMicroPolicy.defaultMinMicroImbalanceAbs,
-    minMicroQuoteCoveragePct: profileForScan.macroMicroPolicy.defaultMinMicroQuoteCoveragePct,
     enforceTimingGate: profileForScan.timingGate.enabled,
     partialAtT1Pct: profileForScan.tradeManagement.partialAtT1Pct,
   };
@@ -3105,20 +1596,14 @@ export async function runSPXOptimizerScan(input?: {
 
   let bestCandidate = baselineCandidate;
   let bestTrainingMetrics = toMetrics(
-    trainingRows.filter((row) => passesCandidate(row, baselineCandidate, {
-      timingMap,
-      profile: profileForScan,
-    })),
+    trainingRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
     { partialAtT1Pct: baselineCandidate.partialAtT1Pct },
   );
   let hasQualifiedTrainingCandidate = bestTrainingMetrics.tradeCount >= profileForScan.walkForward.minTrades;
 
   for (const candidate of candidateGrid()) {
-    const eligible = trainingRows.filter((row) => passesCandidate(row, candidate, {
-      timingMap,
-      profile: profileForScan,
-    }));
+    const eligible = trainingRows.filter((row) => passesCandidate(row, candidate, { timingMap }));
     const metrics = toMetrics(eligible, profileForScan.walkForward.objectiveWeights, {
       partialAtT1Pct: candidate.partialAtT1Pct,
     });
@@ -3134,37 +1619,16 @@ export async function runSPXOptimizerScan(input?: {
   }
 
   const baselineValidationMetrics = toMetrics(
-    validationRows.filter((row) => passesCandidate(row, baselineCandidate, {
-      timingMap,
-      profile: profileForScan,
-    })),
+    validationRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
     { partialAtT1Pct: baselineCandidate.partialAtT1Pct },
   );
 
   const optimizedValidationMetrics = toMetrics(
-    validationRows.filter((row) => passesCandidate(row, bestCandidate, {
-      timingMap,
-      profile: profileForScan,
-    })),
+    validationRows.filter((row) => passesCandidate(row, bestCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
     { partialAtT1Pct: bestCandidate.partialAtT1Pct },
   );
-  const baselineOpportunityCount = validationRows.filter((row) => passesCandidateOpportunity(row, baselineCandidate, {
-    timingMap,
-    profile: profileForScan,
-  })).length;
-  const optimizedOpportunityCount = validationRows.filter((row) => passesCandidateOpportunity(row, bestCandidate, {
-    timingMap,
-    profile: profileForScan,
-  })).length;
-  const baselineTriggerRatePct = baselineOpportunityCount > 0
-    ? round((baselineValidationMetrics.tradeCount / baselineOpportunityCount) * 100, 2)
-    : 0;
-  const optimizedTriggerRatePct = optimizedOpportunityCount > 0
-    ? round((optimizedValidationMetrics.tradeCount / optimizedOpportunityCount) * 100, 2)
-    : 0;
-  const triggerRateDeltaPct = round(optimizedTriggerRatePct - baselineTriggerRatePct, 2);
 
   const baselineValidationQualified = baselineValidationMetrics.tradeCount >= profileForScan.walkForward.minTrades;
   const fallbackValidationMinTrades = Math.max(3, Math.min(8, profileForScan.walkForward.validationDays));
@@ -3184,22 +1648,6 @@ export async function runSPXOptimizerScan(input?: {
   const t1WinRateDelta = round(optimizedValidationMetrics.t1WinRatePct - baselineValidationMetrics.t1WinRatePct, 2);
   const t2WinRateDelta = round(optimizedValidationMetrics.t2WinRatePct - baselineValidationMetrics.t2WinRatePct, 2);
   const failureRateDelta = round(optimizedValidationMetrics.failureRatePct - baselineValidationMetrics.failureRatePct, 2);
-  const throughputGuardrailPassed = (
-    baselineValidationMetrics.tradeCount <= 0
-    || (
-      optimizedValidationMetrics.tradeCount >= Math.max(
-        3,
-        Math.floor(baselineValidationMetrics.tradeCount * THROUGHPUT_GUARDRAIL_MIN_TRADE_RATIO),
-      )
-      && (
-        baselineOpportunityCount <= 0
-        || optimizedOpportunityCount >= Math.max(
-          3,
-          Math.floor(baselineOpportunityCount * THROUGHPUT_GUARDRAIL_MIN_OPPORTUNITY_RATIO),
-        )
-      )
-    )
-  );
   const weeklyGuardrailPassed = !automatedMode || (
     objectiveDelta >= WEEKLY_AUTO_MIN_OBJECTIVE_DELTA
     && objectiveConservativeDelta >= 0
@@ -3225,26 +1673,18 @@ export async function runSPXOptimizerScan(input?: {
     )
     && weeklyGuardrailPassed
     && promotionGuardrailPassed
-    && throughputGuardrailPassed
-    && dataQuality.gatePassed
   );
 
   const activeCandidate = optimizationApplied ? bestCandidate : baselineCandidate;
 
   const setupTypePerformance = evaluateBuckets(
-    rows.filter((row) => passesCandidate(row, activeCandidate, {
-      timingMap,
-      profile: profileForScan,
-    })),
+    rows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
     (row) => row.setupType,
     profileForScan.walkForward.objectiveWeights,
     activeCandidate.partialAtT1Pct,
   );
   const setupComboPerformance = evaluateBuckets(
-    rows.filter((row) => passesCandidate(row, activeCandidate, {
-      timingMap,
-      profile: profileForScan,
-    })),
+    rows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
     (row) => row.comboKey,
     profileForScan.walkForward.objectiveWeights,
     activeCandidate.partialAtT1Pct,
@@ -3255,7 +1695,6 @@ export async function runSPXOptimizerScan(input?: {
     rows.filter((row) => passesCandidate(row, activeCandidate, {
       pausedCombos: new Set(pausedCombos),
       timingMap,
-      profile: profileForScan,
     })),
     profileForScan,
     validationTo,
@@ -3264,7 +1703,6 @@ export async function runSPXOptimizerScan(input?: {
   const opportunityRowsForQuarantine = rows.filter((row) => passesCandidateOpportunity(row, activeCandidate, {
     pausedCombos: new Set(pausedCombos),
     timingMap,
-    profile: profileForScan,
   }));
   const triggerRateQuarantines = resolveTriggerRateQuarantines(
     opportunityRowsForQuarantine,
@@ -3278,69 +1716,44 @@ export async function runSPXOptimizerScan(input?: {
   const mergedPausedSetupTypes = Array.from(
     new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
   ).sort();
-  const trendPullbackPolicy = normalizeMacroMicroPolicyEntry(
-    profileForScan.macroMicroPolicy.bySetupType?.trend_pullback,
-    DEFAULT_MACRO_MICRO_POLICY_BY_SETUP_TYPE.trend_pullback,
-  );
 
-  const failClosedBlockedProfileMutation = dataQuality.failClosedActive && !dataQuality.gatePassed;
-  const nextProfile: SPXOptimizationProfile = failClosedBlockedProfileMutation
-    ? withDateRangeProfile({
-      ...profileForScan,
-      source: 'scan',
-    }, new Date().toISOString())
-    : withDateRangeProfile({
-      ...profileForScan,
-      source: 'scan',
-      qualityGate: {
-        ...profileForScan.qualityGate,
-        minConfluenceScore: activeCandidate.minConfluenceScore,
-        minPWinCalibrated: activeCandidate.minPWinCalibrated,
-        minEvR: activeCandidate.minEvR,
-      },
-      flowGate: {
-        ...profileForScan.flowGate,
-        minAlignmentPct: activeCandidate.minAlignmentPct,
-        requireFlowConfirmation: activeCandidate.requireFlowConfirmation,
-      },
-      indicatorGate: {
-        ...profileForScan.indicatorGate,
-        requireEmaAlignment: activeCandidate.requireEmaAlignment,
-        requireVolumeRegimeAlignment: activeCandidate.requireVolumeRegimeAlignment,
-      },
-      timingGate: {
-        ...profileForScan.timingGate,
-        enabled: activeCandidate.enforceTimingGate,
-      },
-      regimeGate: {
-        ...profileForScan.regimeGate,
-        pausedCombos,
-      },
-      tradeManagement: {
-        ...profileForScan.tradeManagement,
-        partialAtT1Pct: activeCandidate.partialAtT1Pct,
-        moveStopToBreakeven: true,
-      },
-      macroMicroPolicy: {
-        ...profileForScan.macroMicroPolicy,
-        defaultMinMacroAlignmentScore: activeCandidate.minMacroAlignmentScore,
-        defaultRequireTrendMicrostructureAlignment: activeCandidate.requireMicrostructureAlignment,
-        defaultMinMicroAggressorSkewAbs: activeCandidate.minMicroAggressorSkewAbs,
-        defaultMinMicroImbalanceAbs: activeCandidate.minMicroImbalanceAbs,
-        defaultMinMicroQuoteCoveragePct: activeCandidate.minMicroQuoteCoveragePct,
-        bySetupType: {
-          ...profileForScan.macroMicroPolicy.bySetupType,
-          trend_pullback: {
-            ...trendPullbackPolicy,
-            requireOrbTrendConfluence: activeCandidate.requireTrendPullbackOrbConfluence,
-          },
-        },
-      },
-      driftControl: {
-        ...profileForScan.driftControl,
-        pausedSetupTypes: mergedPausedSetupTypes,
-      },
-    }, new Date().toISOString());
+  const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
+    ...profileForScan,
+    source: 'scan',
+    qualityGate: {
+      ...profileForScan.qualityGate,
+      minConfluenceScore: activeCandidate.minConfluenceScore,
+      minPWinCalibrated: activeCandidate.minPWinCalibrated,
+      minEvR: activeCandidate.minEvR,
+    },
+    flowGate: {
+      ...profileForScan.flowGate,
+      minAlignmentPct: activeCandidate.minAlignmentPct,
+      requireFlowConfirmation: activeCandidate.requireFlowConfirmation,
+    },
+    indicatorGate: {
+      ...profileForScan.indicatorGate,
+      requireEmaAlignment: activeCandidate.requireEmaAlignment,
+      requireVolumeRegimeAlignment: activeCandidate.requireVolumeRegimeAlignment,
+    },
+    timingGate: {
+      ...profileForScan.timingGate,
+      enabled: activeCandidate.enforceTimingGate,
+    },
+    regimeGate: {
+      ...profileForScan.regimeGate,
+      pausedCombos,
+    },
+    tradeManagement: {
+      ...profileForScan.tradeManagement,
+      partialAtT1Pct: activeCandidate.partialAtT1Pct,
+      moveStopToBreakeven: true,
+    },
+    driftControl: {
+      ...profileForScan.driftControl,
+      pausedSetupTypes: mergedPausedSetupTypes,
+    },
+  }, new Date().toISOString());
 
   const setupActions = buildSetupActionRecommendations({
     setupTypeBuckets: setupTypePerformance,
@@ -3354,11 +1767,6 @@ export async function runSPXOptimizerScan(input?: {
     profile: profileForScan,
     rows,
   });
-  const blockerMix = evaluateBlockerMix(rows);
-  blockerMix.baselineTriggerRatePct = baselineTriggerRatePct;
-  blockerMix.optimizedTriggerRatePct = optimizedTriggerRatePct;
-  blockerMix.triggerRateDeltaPct = triggerRateDeltaPct;
-  blockerMix.triggerRateGuardrailPassed = throughputGuardrailPassed;
 
   const scorecard: SPXOptimizerScorecard = {
     generatedAt: new Date().toISOString(),
@@ -3378,9 +1786,7 @@ export async function runSPXOptimizerScan(input?: {
     setupTypePerformance,
     setupComboPerformance,
     setupActions,
-    blockerMix,
     optimizationApplied,
-    dataQuality,
     notes: [
       optimizationApplied
         ? `Walk-forward optimization applied to active profile (validation trades=${optimizedValidationMetrics.tradeCount}, minimum required=${requiredValidationTrades}).`
@@ -3388,31 +1794,17 @@ export async function runSPXOptimizerScan(input?: {
       automatedMode
         ? `Automated guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
         : 'Automated guardrails not enforced for this scan mode.',
-      `Trigger-rate guardrail: baseline ${baselineTriggerRatePct}% (${baselineValidationMetrics.tradeCount}/${baselineOpportunityCount}) vs optimized ${optimizedTriggerRatePct}% (${optimizedValidationMetrics.tradeCount}/${optimizedOpportunityCount}), delta=${triggerRateDeltaPct}, passed=${throughputGuardrailPassed}.`,
       `Promotion guardrails: T1 delta >= ${PROMOTION_MIN_T1_DELTA_PCT}, T2 delta >= ${PROMOTION_MIN_T2_DELTA_PCT}, expectancy delta >= ${PROMOTION_MIN_EXPECTANCY_DELTA_R}, failure delta <= ${PROMOTION_MAX_FAILURE_DELTA_PCT}, conservative objective delta >= 0.`,
       `Validation objective: baseline ${baselineValidationMetrics.objectiveScore} (conservative ${baselineValidationMetrics.objectiveScoreConservative}) vs optimized ${optimizedValidationMetrics.objectiveScore} (conservative ${optimizedValidationMetrics.objectiveScoreConservative}).`,
       `Validation expectancy(R): baseline ${baselineValidationMetrics.expectancyR} (lower bound ${baselineValidationMetrics.expectancyLowerBoundR}) vs optimized ${optimizedValidationMetrics.expectancyR} (lower bound ${optimizedValidationMetrics.expectancyLowerBoundR}).`,
       `Validation win/failure deltas: T1 ${t1WinRateDelta}, T2 ${t2WinRateDelta}, failure ${failureRateDelta}.`,
       `Flow gate: require flow confirmation=${nextProfile.flowGate.requireFlowConfirmation}, alignment floor=${nextProfile.flowGate.minAlignmentPct}.`,
       `Indicator gates: require EMA alignment=${nextProfile.indicatorGate.requireEmaAlignment}, require volume-regime alignment=${nextProfile.indicatorGate.requireVolumeRegimeAlignment}.`,
-      `Macro/micro gates: macro floor=${nextProfile.macroMicroPolicy.defaultMinMacroAlignmentScore}, require trend-family micro alignment=${nextProfile.macroMicroPolicy.defaultRequireTrendMicrostructureAlignment}, minSkew=${nextProfile.macroMicroPolicy.defaultMinMicroAggressorSkewAbs}, minImbalance=${nextProfile.macroMicroPolicy.defaultMinMicroImbalanceAbs}, minQuoteCoverage=${nextProfile.macroMicroPolicy.defaultMinMicroQuoteCoveragePct}.`,
       `Timing gate: enforce=${nextProfile.timingGate.enabled}.`,
       `Trade management policy: ${nextProfile.tradeManagement.partialAtT1Pct * 100}% at T1, stop to breakeven=${nextProfile.tradeManagement.moveStopToBreakeven}.`,
       `Geometry policy: setupType=${Object.keys(nextProfile.geometryPolicy.bySetupType).length}, setupRegime=${Object.keys(nextProfile.geometryPolicy.bySetupRegime).length}, setupRegimeTimeBucket=${Object.keys(nextProfile.geometryPolicy.bySetupRegimeTimeBucket).length}.`,
       `Drift control paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine paused ${quarantinePausedSetupTypes.length} setup types; merged paused setup types=${mergedPausedSetupTypes.length}.`,
       `Regime gate paused ${pausedCombos.length} setup/regime combos.`,
-      `Blocker mix: macro=${blockerMix.macroBlockedPct}% (${blockerMix.macroBlockedCount}/${blockerMix.totalOpportunityCount}), micro=${blockerMix.microBlockedPct}% (${blockerMix.microBlockedCount}/${blockerMix.totalOpportunityCount}).`,
-      `Fail-closed gate active=${dataQuality.failClosedActive}, passed=${dataQuality.gatePassed}.`,
-      `Execution actuals: table=${dataQuality.executionFillTableAvailable}, anyFillCoverage=${dataQuality.executionCoveragePct}%, nonProxyCoverage=${dataQuality.executionNonProxyCoveragePct}%, entryCoverage=${dataQuality.executionEntryCoveragePct}%, exitCoverage=${dataQuality.executionExitCoveragePct}%, entrySlip=${dataQuality.executionEntryAvgSlippagePts ?? 'n/a'} pts (${dataQuality.executionEntryAvgSlippageBps ?? 'n/a'} bps), exitSlip=${dataQuality.executionExitAvgSlippagePts ?? 'n/a'} pts (${dataQuality.executionExitAvgSlippageBps ?? 'n/a'} bps).`,
-      ...(failClosedBlockedProfileMutation
-        ? ['Fail-closed policy retained the previously active profile; no guard/profile mutations were applied.']
-        : []),
-      `Data quality: source=${dataQuality.sourceUsed}, resolution=${dataQuality.resolutionUsed}, fallbackSessions=${dataQuality.fallbackSessionCount}, missingBarsSessions=${dataQuality.missingBarsSessionCount}, overrideCoverage=${dataQuality.overrideCoveragePct}%, optionsCoverage=${dataQuality.optionsReplayCoveragePct ?? 'n/a'}% (floor ${dataQuality.optionsReplayCoverageFloorPct}%, valid=${String(dataQuality.optionsReplayCoverageValid)}).`,
-      ...(
-        dataQuality.reasons.length > 0
-          ? dataQuality.reasons.map((reason) => `Fail-closed reason: ${reason}`)
-          : ['Fail-closed data-quality guardrail passed.']
-      ),
     ],
   };
 
@@ -3424,20 +1816,6 @@ export async function runSPXOptimizerScan(input?: {
     validationRange: { from: validationFrom, to: validationTo },
   });
 
-  await appendOptimizerHistory({
-    action: 'scan',
-    mode: scanMode,
-    actor: input?.actor ?? null,
-    reason: input?.reason ?? null,
-    optimizationApplied,
-    previousProfile: profileForScan,
-    nextProfile,
-    scorecard,
-    scanRange: { from: scanFrom, to: scanTo },
-    trainingRange: { from: trainingFrom, to: trainingTo },
-    validationRange: { from: validationFrom, to: validationTo },
-  });
-
   try {
     await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, nextProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
   } catch {
@@ -3447,386 +1825,6 @@ export async function runSPXOptimizerScan(input?: {
   return {
     profile: nextProfile,
     scorecard,
-  };
-}
-
-async function readOptimizerHistoryRow(historyId: number): Promise<PersistedOptimizerHistoryRow | null> {
-  const normalizedId = Math.trunc(historyId);
-  if (!Number.isFinite(normalizedId) || normalizedId <= 0) return null;
-
-  const { data, error } = await supabase
-    .from(OPTIMIZER_HISTORY_TABLE)
-    .select('id,action,mode,actor,reason,optimization_applied,previous_profile,next_profile,scorecard,scan_range_from,scan_range_to,training_from,training_to,validation_from,validation_to,reverted_from_history_id,created_at')
-    .eq('id', normalizedId)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingTableError(error.message)) return null;
-    throw new Error(`Failed to load optimizer history row ${normalizedId}: ${error.message}`);
-  }
-
-  return (data || null) as PersistedOptimizerHistoryRow | null;
-}
-
-interface SlippageGuardrailWindow {
-  sampleCount: number;
-  avgEntrySlippagePts: number | null;
-  windowSignature: string | null;
-  tableAvailable: boolean;
-  reason: string | null;
-}
-
-interface SlippageGuardrailAdjustmentInput {
-  sampleCount: number;
-  minSamples: number;
-  avgEntrySlippagePts: number | null;
-  thresholdPts: number;
-  currentMinEvR: number;
-  bumpEvR: number;
-  maxMinEvR: number;
-  windowSignature: string | null;
-  lastAppliedWindowSignature: string | null;
-}
-
-interface SlippageGuardrailAdjustment {
-  shouldAdjust: boolean;
-  reason: string;
-  nextMinEvR: number;
-}
-
-function computeSlippageGuardrailAdjustment(input: SlippageGuardrailAdjustmentInput): SlippageGuardrailAdjustment {
-  if (input.sampleCount < input.minSamples) {
-    return {
-      shouldAdjust: false,
-      reason: `insufficient_samples:${input.sampleCount}<${input.minSamples}`,
-      nextMinEvR: input.currentMinEvR,
-    };
-  }
-
-  if (input.avgEntrySlippagePts == null || !Number.isFinite(input.avgEntrySlippagePts)) {
-    return {
-      shouldAdjust: false,
-      reason: 'avg_slippage_unavailable',
-      nextMinEvR: input.currentMinEvR,
-    };
-  }
-
-  if (input.avgEntrySlippagePts <= input.thresholdPts) {
-    return {
-      shouldAdjust: false,
-      reason: `below_threshold:${round(input.avgEntrySlippagePts, 4)}<=${round(input.thresholdPts, 4)}`,
-      nextMinEvR: input.currentMinEvR,
-    };
-  }
-
-  if (
-    input.windowSignature
-    && input.lastAppliedWindowSignature
-    && input.windowSignature === input.lastAppliedWindowSignature
-  ) {
-    return {
-      shouldAdjust: false,
-      reason: `window_already_applied:${input.windowSignature}`,
-      nextMinEvR: input.currentMinEvR,
-    };
-  }
-
-  const nextMinEvR = round(
-    clamp(input.currentMinEvR + input.bumpEvR, input.currentMinEvR, input.maxMinEvR),
-    4,
-  );
-  if (nextMinEvR <= input.currentMinEvR) {
-    return {
-      shouldAdjust: false,
-      reason: `min_evr_at_cap:${round(input.currentMinEvR, 4)}`,
-      nextMinEvR: input.currentMinEvR,
-    };
-  }
-
-  return {
-    shouldAdjust: true,
-    reason: `avg_entry_slippage:${round(input.avgEntrySlippagePts, 4)}>${round(input.thresholdPts, 4)}`,
-    nextMinEvR,
-  };
-}
-
-async function loadRecentEntrySlippageWindow(limit: number): Promise<SlippageGuardrailWindow> {
-  const safeLimit = Math.max(3, Math.floor(limit));
-  const { data, error } = await supabase
-    .from('spx_setup_execution_fills')
-    .select('id,side,source,slippage_points,executed_at')
-    .eq('side', 'entry')
-    .in('source', ['broker_tradier', 'broker_other'])
-    .not('slippage_points', 'is', null)
-    .order('executed_at', { ascending: false })
-    .limit(safeLimit);
-
-  if (error) {
-    if (isMissingTableError(error.message)) {
-      return {
-        sampleCount: 0,
-        avgEntrySlippagePts: null,
-        windowSignature: null,
-        tableAvailable: false,
-        reason: 'execution_fill_table_unavailable',
-      };
-    }
-
-    logger.warn('SPX optimizer slippage guardrail failed to load entry fills', {
-      error: error.message,
-    });
-    return {
-      sampleCount: 0,
-      avgEntrySlippagePts: null,
-      windowSignature: null,
-      tableAvailable: false,
-      reason: `execution_fill_query_failed:${error.message}`,
-    };
-  }
-
-  const rows = (data || []) as ExecutionFillRow[];
-  const entrySlippagePts = rows
-    .map((row) => toFiniteNumber(row.slippage_points))
-    .filter((value): value is number => value != null)
-    .map((value) => Math.abs(value))
-    .slice(0, safeLimit);
-
-  const sampleCount = entrySlippagePts.length;
-  const avgEntrySlippagePts = sampleCount > 0 ? round(mean(entrySlippagePts), 4) : null;
-  const signature = rows
-    .map((row) => {
-      const idPart = toFiniteNumber((row as { id?: unknown }).id);
-      if (idPart != null) return String(idPart);
-      const executedAt = typeof row.executed_at === 'string' ? row.executed_at : '';
-      const slippage = toFiniteNumber(row.slippage_points);
-      return `${executedAt}:${slippage ?? 'na'}`;
-    })
-    .slice(0, safeLimit)
-    .join('|');
-
-  return {
-    sampleCount,
-    avgEntrySlippagePts,
-    windowSignature: signature.length > 0 ? signature : null,
-    tableAvailable: true,
-    reason: null,
-  };
-}
-
-export async function applyExecutionSlippageGuardrail(input?: {
-  actor?: string | null;
-  reason?: string | null;
-  mode?: SPXOptimizerMode;
-}): Promise<SPXSlippageGuardrailResult> {
-  const mode = normalizeOptimizerMode(input?.mode || 'nightly_auto');
-  const profile = await getActiveSPXOptimizationProfile();
-  const currentMinEvR = round(profile.qualityGate.minEvR, 4);
-
-  if (!SLIPPAGE_GUARDRAIL_ENABLED) {
-    return {
-      applied: false,
-      reason: 'slippage_guardrail_disabled',
-      sampleCount: 0,
-      thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
-      avgEntrySlippagePts: null,
-      currentMinEvR,
-      nextMinEvR: currentMinEvR,
-      windowSignature: null,
-      historyEntryId: null,
-    };
-  }
-
-  const window = await loadRecentEntrySlippageWindow(SLIPPAGE_GUARDRAIL_WINDOW_SIZE);
-  if (!window.tableAvailable) {
-    return {
-      applied: false,
-      reason: window.reason || 'execution_fill_table_unavailable',
-      sampleCount: window.sampleCount,
-      thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
-      avgEntrySlippagePts: window.avgEntrySlippagePts,
-      currentMinEvR,
-      nextMinEvR: currentMinEvR,
-      windowSignature: window.windowSignature,
-      historyEntryId: null,
-    };
-  }
-
-  const adjustment = computeSlippageGuardrailAdjustment({
-    sampleCount: window.sampleCount,
-    minSamples: SLIPPAGE_GUARDRAIL_WINDOW_SIZE,
-    avgEntrySlippagePts: window.avgEntrySlippagePts,
-    thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
-    currentMinEvR,
-    bumpEvR: SLIPPAGE_GUARDRAIL_MIN_EVR_BUMP,
-    maxMinEvR: SLIPPAGE_GUARDRAIL_MAX_MIN_EVR,
-    windowSignature: window.windowSignature,
-    lastAppliedWindowSignature: profile.executionGuardrails?.lastSlippageWindowSignature || null,
-  });
-  if (!adjustment.shouldAdjust) {
-    return {
-      applied: false,
-      reason: adjustment.reason,
-      sampleCount: window.sampleCount,
-      thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
-      avgEntrySlippagePts: window.avgEntrySlippagePts,
-      currentMinEvR,
-      nextMinEvR: currentMinEvR,
-      windowSignature: window.windowSignature,
-      historyEntryId: null,
-    };
-  }
-
-  const persisted = await readPersistedOptimizerState();
-  const persistedScorecard = persisted?.scorecard && typeof persisted.scorecard === 'object' && !Array.isArray(persisted.scorecard)
-    ? persisted.scorecard as SPXOptimizerScorecard
-    : await getSPXOptimizerScorecard();
-  const generatedAt = new Date().toISOString();
-  const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
-    ...profile,
-    source: 'scan',
-    qualityGate: {
-      ...profile.qualityGate,
-      minEvR: adjustment.nextMinEvR,
-    },
-    executionGuardrails: {
-      lastSlippageAdjustmentAt: generatedAt,
-      lastSlippageWindowSignature: window.windowSignature,
-      lastObservedAvgEntrySlippagePts: window.avgEntrySlippagePts,
-      lastObservedSampleCount: window.sampleCount,
-    },
-  }, generatedAt);
-  const nextScorecard: SPXOptimizerScorecard = {
-    ...persistedScorecard,
-    generatedAt,
-    notes: [
-      `Execution slippage guardrail raised min EV(R): ${currentMinEvR.toFixed(2)} -> ${adjustment.nextMinEvR.toFixed(2)} (avg entry slippage=${window.avgEntrySlippagePts?.toFixed(4) ?? 'n/a'} pts over ${window.sampleCount} broker entry fills, threshold=${SLIPPAGE_GUARDRAIL_THRESHOLD_PTS.toFixed(4)}).`,
-      ...(Array.isArray(persistedScorecard.notes) ? persistedScorecard.notes : []),
-    ].slice(0, 20),
-  };
-  const { scanRange, trainingRange, validationRange } = resolvePersistedRange(persisted);
-
-  await persistOptimizerState({
-    profile: nextProfile,
-    scorecard: nextScorecard,
-    scanRange,
-    trainingRange,
-    validationRange,
-  });
-
-  const historyEntryId = await appendOptimizerHistory({
-    action: 'scan',
-    mode,
-    actor: input?.actor ?? null,
-    reason: input?.reason || `slippage_guardrail:${adjustment.reason}`,
-    optimizationApplied: true,
-    previousProfile: profile,
-    nextProfile,
-    scorecard: nextScorecard,
-    scanRange,
-    trainingRange,
-    validationRange,
-  });
-
-  try {
-    await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, nextProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
-  } catch {
-    // noop
-  }
-
-  return {
-    applied: true,
-    reason: adjustment.reason,
-    sampleCount: window.sampleCount,
-    thresholdPts: SLIPPAGE_GUARDRAIL_THRESHOLD_PTS,
-    avgEntrySlippagePts: window.avgEntrySlippagePts,
-    currentMinEvR,
-    nextMinEvR: adjustment.nextMinEvR,
-    windowSignature: window.windowSignature,
-    historyEntryId,
-  };
-}
-
-function resolvePersistedRange(persisted: PersistedOptimizerStateRow | null): {
-  scanRange: { from: string; to: string };
-  trainingRange: { from: string; to: string };
-  validationRange: { from: string; to: string };
-} {
-  const fallback = defaultScanRange(DEFAULT_PROFILE);
-  const scanRange = persisted?.scan_range_from && persisted?.scan_range_to
-    ? { from: persisted.scan_range_from, to: persisted.scan_range_to }
-    : fallback;
-  const trainingRange = persisted?.training_from && persisted?.training_to
-    ? { from: persisted.training_from, to: persisted.training_to }
-    : scanRange;
-  const validationRange = persisted?.validation_from && persisted?.validation_to
-    ? { from: persisted.validation_from, to: persisted.validation_to }
-    : scanRange;
-  return { scanRange, trainingRange, validationRange };
-}
-
-export async function revertSPXOptimizerToHistory(input: {
-  historyId: number;
-  actor?: string | null;
-  reason?: string | null;
-}): Promise<SPXOptimizerRevertResult> {
-  const targetRow = await readOptimizerHistoryRow(input.historyId);
-  if (!targetRow) {
-    throw new Error(`Optimizer history entry ${input.historyId} was not found.`);
-  }
-
-  const persisted = await readPersistedOptimizerState();
-  const currentProfile = normalizeProfile(persisted?.profile || DEFAULT_PROFILE);
-  const targetProfile = normalizeProfile(targetRow.previous_profile || DEFAULT_PROFILE);
-  const persistedScorecard = persisted?.scorecard && typeof persisted.scorecard === 'object' && !Array.isArray(persisted.scorecard)
-    ? persisted.scorecard as SPXOptimizerScorecard
-    : await getSPXOptimizerScorecard();
-  const generatedAt = new Date().toISOString();
-  const revertedScorecard: SPXOptimizerScorecard = {
-    ...persistedScorecard,
-    generatedAt,
-    blockerMix: persistedScorecard.blockerMix || emptyBlockerMix(),
-    optimizationApplied: false,
-    notes: [
-      `Profile reverted to optimizer history #${targetRow.id}. Run Scan & Optimize to refresh scorecard under reverted profile.`,
-      ...(Array.isArray(persistedScorecard.notes) ? persistedScorecard.notes : []),
-    ].slice(0, 16),
-  };
-
-  const { scanRange, trainingRange, validationRange } = resolvePersistedRange(persisted);
-  await persistOptimizerState({
-    profile: targetProfile,
-    scorecard: revertedScorecard,
-    scanRange,
-    trainingRange,
-    validationRange,
-  });
-
-  const historyEntryId = await appendOptimizerHistory({
-    action: 'revert',
-    mode: 'revert',
-    actor: input.actor ?? null,
-    reason: input.reason ?? null,
-    optimizationApplied: false,
-    previousProfile: currentProfile,
-    nextProfile: targetProfile,
-    scorecard: revertedScorecard,
-    scanRange,
-    trainingRange,
-    validationRange,
-    revertedFromHistoryId: targetRow.id,
-  });
-
-  try {
-    await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, targetProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
-  } catch {
-    // noop
-  }
-
-  return {
-    profile: targetProfile,
-    scorecard: revertedScorecard,
-    revertedFromHistoryId: targetRow.id,
-    historyEntryId,
   };
 }
 
@@ -3834,5 +1832,4 @@ export const __optimizerTestUtils = {
   wilsonIntervalPct,
   toMetrics,
   resolvePausedCombos,
-  computeSlippageGuardrailAdjustment,
 };

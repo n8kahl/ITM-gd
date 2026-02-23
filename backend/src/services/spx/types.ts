@@ -143,12 +143,6 @@ export interface ContractRecommendation {
   healthTier?: 'green' | 'amber' | 'red';
   thetaRiskPer15m?: number;
   ivVsRealized?: number;
-  suggestedContracts?: number;
-  suggestedPositionCost?: number;
-  dayTradeBuyingPowerUsed?: number | null;
-  maxRiskDollarsUsed?: number | null;
-  sizingReason?: string;
-  zeroDteBlocked?: boolean;
   alternatives?: Array<{
     description: string;
     strike: number;
@@ -183,30 +177,7 @@ export interface Setup {
   status: SetupStatus;
   score?: number;
   alignmentScore?: number;
-  macroAlignmentScore?: number;
-  microstructureScore?: number;
-  microstructure?: {
-    source?: 'live_tick_cache' | 'historical_second_bars' | 'historical_ticks_injected';
-    available: boolean;
-    sampleCount: number;
-    quoteCoveragePct: number;
-    buyVolume: number;
-    sellVolume: number;
-    neutralVolume: number;
-    directionalVolume: number;
-    aggressorSkew: number | null;
-    bidAskImbalance: number | null;
-    avgSpreadBps: number | null;
-    latestTimestamp: string | null;
-    aligned: boolean;
-    score: number | null;
-    reasons: string[];
-  };
   flowConfirmed?: boolean;
-  effectiveFlowConfirmed?: boolean;
-  emaAligned?: boolean;
-  volumeRegimeAligned?: boolean;
-  effectiveVolumeAligned?: boolean;
   gateStatus?: 'eligible' | 'blocked';
   gateReasons?: string[];
   tradeManagement?: {

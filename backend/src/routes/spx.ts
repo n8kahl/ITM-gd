@@ -15,23 +15,13 @@ import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
 import {
-  getExecutionReconciliationHistory,
-  recordExecutionFill,
-  type ExecutionFillSide,
-  type ExecutionFillSource,
-  type ExecutionTransitionPhase,
-} from '../services/spx/executionReconciliation';
-import {
-  getSPXOptimizerHistory,
   getSPXOptimizerScorecard,
-  revertSPXOptimizerToHistory,
   getActiveSPXOptimizationProfile,
   runSPXOptimizerScan,
 } from '../services/spx/optimizer';
 import { getSPXOptimizerWorkerStatus } from '../workers/spxOptimizerWorker';
 import {
   runSPXWinRateBacktest,
-  type SPXBacktestExecutionBasis,
   type SPXBacktestPriceResolution,
   type SPXWinRateBacktestSource,
 } from '../services/spx/winRateBacktest';
@@ -44,15 +34,6 @@ const router = Router();
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
-}
-
-function parseFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return undefined;
 }
 
 function parseISODateInput(value: unknown): string | null {
@@ -80,48 +61,6 @@ function parseBacktestResolution(value: unknown): SPXBacktestPriceResolution {
   if (normalized === 'second' || normalized === '1s') return 'second';
   if (normalized === 'minute' || normalized === '1m') return 'minute';
   return 'second';
-}
-
-function parseBacktestExecutionBasis(value: unknown): SPXBacktestExecutionBasis {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'options_contract' || normalized === 'options' || normalized === 'contract') {
-    return 'options_contract';
-  }
-  return 'underlying';
-}
-
-function parseExecutionFillSide(value: unknown): ExecutionFillSide | null {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'entry') return 'entry';
-  if (normalized === 'partial') return 'partial';
-  if (normalized === 'exit') return 'exit';
-  return null;
-}
-
-function parseExecutionFillSource(value: unknown): ExecutionFillSource {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'proxy') return 'proxy';
-  if (normalized === 'broker_tradier' || normalized === 'tradier') return 'broker_tradier';
-  if (normalized === 'broker_other' || normalized === 'broker') return 'broker_other';
-  if (normalized === 'manual') return 'manual';
-  return 'manual';
-}
-
-function parseExecutionTransitionPhase(value: unknown): ExecutionTransitionPhase | undefined {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'triggered') return 'triggered';
-  if (normalized === 'target1_hit') return 'target1_hit';
-  if (normalized === 'target2_hit') return 'target2_hit';
-  if (normalized === 'invalidated') return 'invalidated';
-  if (normalized === 'expired') return 'expired';
-  return undefined;
-}
-
-function parseSetupDirection(value: unknown): Setup['direction'] | undefined {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'bullish') return 'bullish';
-  if (normalized === 'bearish') return 'bearish';
-  return undefined;
 }
 
 function parseSetupPayload(value: unknown): Setup | null {
@@ -188,10 +127,6 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
     const from = parseISODateInput(req.query.from) || dateDaysAgoET(29);
     const source = parseBacktestSource(req.query.source);
     const resolution = parseBacktestResolution(req.query.resolution);
-    const executionBasis = parseBacktestExecutionBasis(req.query.executionBasis);
-    const strictOptionsBars = req.query.strictOptionsBars == null
-      ? true
-      : parseBoolean(req.query.strictOptionsBars);
 
     if (from > to) {
       return res.status(400).json({
@@ -206,13 +141,9 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
       to,
       source,
       resolution,
-      executionBasis,
       executionModel: {
         partialAtT1Pct: optimizerProfile.tradeManagement.partialAtT1Pct,
         moveStopToBreakevenAfterT1: optimizerProfile.tradeManagement.moveStopToBreakeven,
-      },
-      optionsReplay: {
-        strictBars: strictOptionsBars,
       },
     });
     return res.json(backtest);
@@ -223,116 +154,6 @@ router.get('/analytics/win-rate/backtest', async (req: Request, res: Response) =
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to run SPX win-rate backtest.',
-      retryAfter: 10,
-    });
-  }
-});
-
-router.post('/execution/fills', async (req: Request, res: Response) => {
-  try {
-    const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId.trim() : '';
-    if (!setupId) {
-      return res.status(400).json({
-        error: 'Invalid input',
-        message: 'setupId is required.',
-      });
-    }
-
-    const side = parseExecutionFillSide(req.body?.side);
-    if (!side) {
-      return res.status(400).json({
-        error: 'Invalid input',
-        message: 'side must be one of entry, partial, or exit.',
-      });
-    }
-
-    const fillPrice = Number(req.body?.fillPrice);
-    if (!Number.isFinite(fillPrice) || fillPrice <= 0) {
-      return res.status(400).json({
-        error: 'Invalid input',
-        message: 'fillPrice must be a positive number.',
-      });
-    }
-
-    const fillQuantity = req.body?.fillQuantity == null ? undefined : Number(req.body.fillQuantity);
-    if (fillQuantity != null && (!Number.isFinite(fillQuantity) || fillQuantity <= 0)) {
-      return res.status(400).json({
-        error: 'Invalid input',
-        message: 'fillQuantity must be a positive number when provided.',
-      });
-    }
-
-    const source = parseExecutionFillSource(req.body?.source);
-    const phase = parseExecutionTransitionPhase(req.body?.phase);
-    const direction = parseSetupDirection(req.body?.direction);
-    const executedAt = typeof req.body?.executedAt === 'string' ? req.body.executedAt : undefined;
-    const transitionEventId = typeof req.body?.transitionEventId === 'string' && req.body.transitionEventId.trim().length > 0
-      ? req.body.transitionEventId.trim()
-      : undefined;
-    const brokerOrderId = typeof req.body?.brokerOrderId === 'string' && req.body.brokerOrderId.trim().length > 0
-      ? req.body.brokerOrderId.trim().slice(0, 120)
-      : undefined;
-    const brokerExecutionId = typeof req.body?.brokerExecutionId === 'string' && req.body.brokerExecutionId.trim().length > 0
-      ? req.body.brokerExecutionId.trim().slice(0, 120)
-      : undefined;
-    const metadata = req.body?.metadata && typeof req.body.metadata === 'object' && !Array.isArray(req.body.metadata)
-      ? req.body.metadata as Record<string, unknown>
-      : undefined;
-    const userId = typeof req.user?.id === 'string' ? req.user.id : undefined;
-
-    const reconciliation = await recordExecutionFill({
-      setupId,
-      side,
-      fillPrice,
-      fillQuantity,
-      source,
-      phase,
-      direction,
-      executedAt,
-      transitionEventId,
-      brokerOrderId,
-      brokerExecutionId,
-      userId,
-      metadata,
-    });
-
-    return res.json(reconciliation);
-  } catch (error) {
-    logger.error('SPX execution fill ingestion endpoint failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return res.status(503).json({
-      error: 'Data unavailable',
-      message: 'Unable to record SPX execution fill.',
-      retryAfter: 10,
-    });
-  }
-});
-
-router.get('/execution/reconciliation', async (req: Request, res: Response) => {
-  try {
-    const setupId = typeof req.query.setupId === 'string' ? req.query.setupId.trim() : '';
-    if (!setupId) {
-      return res.status(400).json({
-        error: 'Invalid input',
-        message: 'setupId query parameter is required.',
-      });
-    }
-
-    const sessionDate = parseISODateInput(req.query.sessionDate) || undefined;
-    const history = await getExecutionReconciliationHistory({
-      setupId,
-      sessionDate,
-    });
-
-    return res.json(history);
-  } catch (error) {
-    logger.error('SPX execution reconciliation endpoint failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return res.status(503).json({
-      error: 'Data unavailable',
-      message: 'Unable to load SPX execution reconciliation.',
       retryAfter: 10,
     });
   }
@@ -357,7 +178,7 @@ router.get('/analytics/optimizer/scorecard', async (_req: Request, res: Response
 router.get('/analytics/optimizer/schedule', async (_req: Request, res: Response) => {
   try {
     const scorecard = await getSPXOptimizerScorecard();
-    const schedule = await getSPXOptimizerWorkerStatus();
+    const schedule = getSPXOptimizerWorkerStatus();
     return res.json({
       ...schedule,
       lastOptimizationGeneratedAt: scorecard.generatedAt,
@@ -376,41 +197,12 @@ router.get('/analytics/optimizer/schedule', async (_req: Request, res: Response)
   }
 });
 
-router.get('/analytics/optimizer/history', async (req: Request, res: Response) => {
-  try {
-    const rawLimit = Number(req.query.limit || 20);
-    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.trunc(rawLimit))) : 20;
-    const history = await getSPXOptimizerHistory(limit);
-    return res.json({
-      history,
-      count: history.length,
-    });
-  } catch (error) {
-    logger.error('SPX optimizer history endpoint failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return res.status(503).json({
-      error: 'Data unavailable',
-      message: 'Unable to load SPX optimizer history.',
-      retryAfter: 10,
-    });
-  }
-});
-
 router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => {
   try {
     const from = parseISODateInput(req.body?.from) || undefined;
     const to = parseISODateInput(req.body?.to) || undefined;
-    const actor = typeof (req as Request & { user?: { id?: string } }).user?.id === 'string'
-      ? (req as Request & { user?: { id?: string } }).user?.id || null
-      : null;
 
-    const result = await runSPXOptimizerScan({
-      from,
-      to,
-      mode: 'manual',
-      actor,
-    });
+    const result = await runSPXOptimizerScan({ from, to });
     return res.json(result);
   } catch (error) {
     logger.error('SPX optimizer scan endpoint failed', {
@@ -419,45 +211,6 @@ router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => 
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to run SPX optimizer scan.',
-      retryAfter: 10,
-    });
-  }
-});
-
-router.post('/analytics/optimizer/revert', async (req: Request, res: Response) => {
-  try {
-    const historyIdRaw = Number(req.body?.historyId);
-    const historyId = Number.isFinite(historyIdRaw) ? Math.trunc(historyIdRaw) : NaN;
-    if (!Number.isFinite(historyId) || historyId <= 0) {
-      return res.status(400).json({
-        error: 'Invalid input',
-        message: 'historyId must be a positive integer.',
-      });
-    }
-
-    const reason = typeof req.body?.reason === 'string' && req.body.reason.trim().length > 0
-      ? req.body.reason.trim().slice(0, 240)
-      : null;
-    const actor = typeof (req as Request & { user?: { id?: string } }).user?.id === 'string'
-      ? (req as Request & { user?: { id?: string } }).user?.id || null
-      : null;
-    const result = await revertSPXOptimizerToHistory({
-      historyId,
-      actor,
-      reason,
-    });
-
-    return res.json({
-      ...result,
-      message: `Optimizer profile reverted to history entry ${historyId}.`,
-    });
-  } catch (error) {
-    logger.error('SPX optimizer revert endpoint failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return res.status(503).json({
-      error: 'Data unavailable',
-      message: 'Unable to revert SPX optimizer profile.',
       retryAfter: 10,
     });
   }
@@ -678,19 +431,9 @@ router.get('/basis', async (req: Request, res: Response) => {
 router.get('/contract-select', async (req: Request, res: Response) => {
   try {
     const setupId = typeof req.query.setupId === 'string' ? req.query.setupId : undefined;
-    const dayTradeBuyingPower = parseFiniteNumber(req.query.dayTradeBuyingPower);
-    const maxRiskDollars = parseFiniteNumber(req.query.maxRiskDollars);
-    const pdtQualified = typeof req.query.pdtQualified === 'undefined'
-      ? undefined
-      : parseBoolean(req.query.pdtQualified);
     const recommendation = await getContractRecommendation({
       setupId,
       forceRefresh: parseBoolean(req.query.forceRefresh),
-      portfolioRisk: {
-        dayTradeBuyingPower,
-        maxRiskDollars,
-        pdtQualified,
-      },
     });
 
     if (!recommendation) {
@@ -717,20 +460,10 @@ router.post('/contract-select', async (req: Request, res: Response) => {
   try {
     const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
     const setup = parseSetupPayload(req.body?.setup);
-    const dayTradeBuyingPower = parseFiniteNumber(req.body?.dayTradeBuyingPower);
-    const maxRiskDollars = parseFiniteNumber(req.body?.maxRiskDollars);
-    const pdtQualified = typeof req.body?.pdtQualified === 'boolean'
-      ? req.body.pdtQualified
-      : undefined;
     const recommendation = await getContractRecommendation({
       setupId,
       setup,
       forceRefresh: parseBoolean(req.body?.forceRefresh),
-      portfolioRisk: {
-        dayTradeBuyingPower,
-        maxRiskDollars,
-        pdtQualified,
-      },
     });
 
     if (!recommendation) {

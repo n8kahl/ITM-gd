@@ -1,6 +1,4 @@
-const mockGetSPXOptimizerNightlyStatus = jest.fn();
-const mockPersistSPXOptimizerNightlyStatus = jest.fn();
-const mockRunSPXNightlyReplayOptimizerCycle = jest.fn();
+const mockRunSPXOptimizerScan = jest.fn();
 
 jest.mock('../../lib/logger', () => ({
   logger: {
@@ -12,12 +10,7 @@ jest.mock('../../lib/logger', () => ({
 }));
 
 jest.mock('../../services/spx/optimizer', () => ({
-  getSPXOptimizerNightlyStatus: (...args: any[]) => mockGetSPXOptimizerNightlyStatus(...args),
-  persistSPXOptimizerNightlyStatus: (...args: any[]) => mockPersistSPXOptimizerNightlyStatus(...args),
-}));
-
-jest.mock('../../services/spx/nightlyReplayOptimizer', () => ({
-  runSPXNightlyReplayOptimizerCycle: (...args: any[]) => mockRunSPXNightlyReplayOptimizerCycle(...args),
+  runSPXOptimizerScan: (...args: any[]) => mockRunSPXOptimizerScan(...args),
 }));
 
 import {
@@ -31,45 +24,6 @@ describe('SPX optimizer nightly worker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
-    mockRunSPXNightlyReplayOptimizerCycle.mockResolvedValue({
-      asOfDateEt: '2026-02-17',
-      replayEnabled: true,
-      replayRange: { from: '2026-01-20', to: '2026-02-17', lookbackDays: 20 },
-      replaySummary: null,
-      optimizerResult: {
-        scorecard: {
-          optimizationApplied: false,
-          optimized: { tradeCount: 0 },
-          improvementPct: {
-            t1WinRateDelta: 0,
-            t2WinRateDelta: 0,
-            objectiveDelta: 0,
-            objectiveConservativeDelta: 0,
-            expectancyRDelta: 0,
-          },
-          blockerMix: {
-            totalOpportunityCount: 0,
-            macroBlockedCount: 0,
-            microBlockedCount: 0,
-            macroBlockedPct: 0,
-            microBlockedPct: 0,
-            baselineTriggerRatePct: 0,
-            optimizedTriggerRatePct: 0,
-            triggerRateDeltaPct: 0,
-            triggerRateGuardrailPassed: true,
-            bySetupRegimeTimeBucket: [],
-          },
-          dataQuality: { failClosedActive: false, gatePassed: true, reasons: [] },
-        },
-      },
-    });
-    mockGetSPXOptimizerNightlyStatus.mockResolvedValue({
-      lastRunDateEt: null,
-      lastAttemptAt: null,
-      lastSuccessAt: null,
-      lastErrorMessage: null,
-    });
-    mockPersistSPXOptimizerNightlyStatus.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -100,8 +54,8 @@ describe('SPX optimizer nightly worker', () => {
     expect(result.shouldRun).toBe(false);
   });
 
-  it('reports schedule metadata for settings UI', async () => {
-    const status = await getSPXOptimizerWorkerStatus(new Date('2026-02-17T23:30:00.000Z'));
+  it('reports schedule metadata for settings UI', () => {
+    const status = getSPXOptimizerWorkerStatus(new Date('2026-02-17T23:30:00.000Z'));
 
     expect(status.mode).toBe('nightly_auto');
     expect(status.timezone).toBe('America/New_York');

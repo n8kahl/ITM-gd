@@ -19,7 +19,6 @@ const FLOW_INTERVAL_SWEEP_VOLUME = 28;
 const FLOW_CONTRACT_SCAN_LIMIT = 24;
 const FLOW_BARS_BATCH_SIZE = 6;
 const FLOW_EXPIRY_WINDOW_DAYS = 7;
-const FLOW_SNAPSHOT_MAX_PAGES = 12;
 
 function toIsoFromTimestamp(rawTimestamp: number | undefined): string {
   if (!rawTimestamp || !Number.isFinite(rawTimestamp) || rawTimestamp <= 0) {
@@ -280,22 +279,12 @@ async function fetchFlowFromIntervalizedSnapshots(input: {
 }
 
 async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEvent[]> {
-  const sessionDate = toEasternTime(new Date()).dateStr;
-  const expiryWindowEnd = addDays(sessionDate, FLOW_EXPIRY_WINDOW_DAYS);
-
   const fetchWithTimeout = async (symbol: string): Promise<OptionsSnapshot[]> => {
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Flow snapshot timeout for ${symbol}`)), FLOW_FETCH_TIMEOUT_MS),
     );
     try {
-      return await Promise.race([
-        getOptionsSnapshot(symbol, undefined, {
-          expirationDateGte: sessionDate,
-          expirationDateLte: expiryWindowEnd,
-          maxPages: FLOW_SNAPSHOT_MAX_PAGES,
-        }),
-        timeout,
-      ]);
+      return await Promise.race([getOptionsSnapshot(symbol), timeout]);
     } catch (error) {
       logger.warn('Flow snapshot fetch failed or timed out', {
         symbol,
@@ -310,6 +299,7 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
     fetchWithTimeout('SPY'),
   ]);
 
+  const sessionDate = toEasternTime(new Date()).dateStr;
   const intervalized = await fetchFlowFromIntervalizedSnapshots({
     sessionDate,
     spxSnapshots,

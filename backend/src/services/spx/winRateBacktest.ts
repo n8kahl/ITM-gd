@@ -1,10 +1,6 @@
-import type {
-  MassiveAggregate,
-  OptionsContract as MassiveOptionsContract,
-} from '../../config/massive';
+import type { MassiveAggregate } from '../../config/massive';
 import { getAggregates } from '../../config/massive';
 import { getMinuteAggregates } from '../../config/massive';
-import { getOptionsContracts } from '../../config/massive';
 import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
@@ -19,7 +15,6 @@ type InternalBacktestSource = 'spx_setup_instances' | 'ai_coach_tracked_setups';
 
 export type SPXWinRateBacktestSource = 'auto' | InternalBacktestSource;
 export type SPXBacktestPriceResolution = 'auto' | 'minute' | 'second';
-export type SPXBacktestExecutionBasis = 'underlying' | 'options_contract';
 
 interface BacktestSetupCandidate {
   engineSetupId: string;
@@ -49,30 +44,10 @@ interface EvaluatedSetup {
   realizedR: number | null;
 }
 
-interface HistoricalOptionContractChoice {
-  ticker: string;
-  expiry: string;
-  strike: number;
-  type: 'call' | 'put';
-}
-
 interface BacktestPauseFilters {
   pausedSetupTypes: Set<string>;
   pausedCombos: Set<string>;
   notes: string[];
-}
-
-function isBacktestHiddenTierExcluded(input: {
-  includeHiddenTiers: boolean;
-  tier: string | null;
-  gateStatus: 'eligible' | 'blocked' | null;
-  triggeredAt: string | null;
-}): boolean {
-  if (input.includeHiddenTiers) return false;
-  if (input.tier !== 'hidden') return false;
-  if (input.gateStatus === 'blocked') return true;
-  if (typeof input.triggeredAt === 'string' && input.triggeredAt.length > 0) return false;
-  return true;
 }
 
 function round(value: number, decimals = 2): number {
@@ -131,71 +106,6 @@ export interface SPXBacktestProfitabilityMetrics {
   }>;
 }
 
-export interface SPXContractReplayTradeResult {
-  engineSetupId: string;
-  sessionDate: string;
-  setupType: string;
-  direction: 'bullish' | 'bearish';
-  contractTicker: string | null;
-  contractType: 'call' | 'put' | null;
-  strike: number | null;
-  expiry: string | null;
-  entryTimestamp: string | null;
-  exitTimestamp: string | null;
-  entryPremium: number | null;
-  exitPremium: number | null;
-  returnPct: number | null;
-  pnlOneContract: number | null;
-  status:
-    | 'ok'
-    | 'not_triggered'
-    | 'missing_snapshot'
-    | 'missing_contract'
-    | 'missing_bars'
-    | 'missing_entry_price'
-    | 'missing_exit_price';
-  resolutionUsed: 'second' | 'minute' | 'none';
-  usedMinuteFallback: boolean;
-}
-
-export interface SPXContractReplaySummary {
-  executionBasis: SPXBacktestExecutionBasis;
-  strictBars: boolean;
-  requestedResolution: SPXBacktestPriceResolution;
-  resolutionUsed: 'second' | 'minute' | 'mixed' | 'none';
-  replayUniverse: number;
-  replayedTrades: number;
-  skippedTrades: number;
-  coveragePct: number;
-  minimumCoveragePct: number;
-  coverageValid: boolean;
-  missingSnapshotCount: number;
-  missingContractCount: number;
-  missingBarsCount: number;
-  missingEntryPriceCount: number;
-  missingExitPriceCount: number;
-  usedMinuteFallback: boolean;
-  positiveTrades: number;
-  nonPositiveTrades: number;
-  winRatePct: number;
-  averageReturnPct: number;
-  medianReturnPct: number;
-  cumulativeReturnPct: number;
-  cumulativePnlOneContract: number;
-  bySetupType: Array<{
-    key: string;
-    tradeCount: number;
-    winRatePct: number;
-    averageReturnPct: number;
-    cumulativePnlOneContract: number;
-  }>;
-  trades?: SPXContractReplayTradeResult[];
-}
-
-export interface SPXBacktestOptionsReplayConfig {
-  strictBars?: boolean;
-}
-
 const DEFAULT_EXECUTION_MODEL: SPXBacktestExecutionModel = {
   enabled: parseBooleanEnv(process.env.SPX_BACKTEST_EXECUTION_MODEL_ENABLED, true),
   entrySlipPoints: parseFloatEnv(process.env.SPX_BACKTEST_ENTRY_SLIP_POINTS, 0.2, 0),
@@ -205,27 +115,6 @@ const DEFAULT_EXECUTION_MODEL: SPXBacktestExecutionModel = {
   partialAtT1Pct: clamp(parseFloatEnv(process.env.SPX_BACKTEST_PARTIAL_AT_T1_PCT, 0.5, 0), 0, 1),
   moveStopToBreakevenAfterT1: parseBooleanEnv(process.env.SPX_BACKTEST_MOVE_STOP_TO_BREAKEVEN_AFTER_T1, true),
 };
-const DEFAULT_OPTIONS_REPLAY_STRICT_BARS = parseBooleanEnv(
-  process.env.SPX_BACKTEST_OPTIONS_REPLAY_STRICT_BARS,
-  true,
-);
-const DEFAULT_OPTIONS_REPLAY_LATE_DAY_CUTOFF_MINUTES_ET = (() => {
-  const raw = process.env.SPX_BACKTEST_OPTIONS_REPLAY_ZERO_DTE_CUTOFF_ET || '14:45';
-  const [hourRaw, minuteRaw] = raw.split(':');
-  const hour = Number.parseInt(hourRaw || '', 10);
-  const minute = Number.parseInt(minuteRaw || '', 10);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return (14 * 60) + 45;
-  return Math.max(0, Math.min((23 * 60) + 59, (hour * 60) + minute));
-})();
-const OPTIONS_REPLAY_MAX_EXPIRY_LOOKAHEAD_DAYS = 5;
-const OPTIONS_REPLAY_MAX_CANDIDATE_CONTRACTS = 20;
-const OPTIONS_REPLAY_MAX_STRIKE_DISTANCE_POINTS = 260;
-const OPTIONS_REPLAY_MIN_COVERAGE_PCT = clamp(
-  parseFloatEnv(process.env.SPX_BACKTEST_OPTIONS_REPLAY_MIN_COVERAGE_PCT, 60, 0),
-  0,
-  100,
-);
-const DB_PAGE_SIZE = 1000;
 
 function resolveExecutionModel(
   overrides?: Partial<SPXBacktestExecutionModel>,
@@ -342,7 +231,6 @@ function resolveGeometryAdjustmentForSetup(
 export interface SPXWinRateBacktestResult {
   dateRange: { from: string; to: string };
   sourceUsed: InternalBacktestSource | 'none';
-  executionBasis: SPXBacktestExecutionBasis;
   setupCount: number;
   evaluatedSetupCount: number;
   skippedSetupCount: number;
@@ -355,7 +243,6 @@ export interface SPXWinRateBacktestResult {
   usedMassiveMinuteBars: boolean;
   executionModel: SPXBacktestExecutionModel;
   profitability: SPXBacktestProfitabilityMetrics;
-  optionsReplay?: SPXContractReplaySummary;
   notes: string[];
   analytics: SPXWinRateAnalytics;
   rows?: SetupInstanceRow[];
@@ -515,54 +402,41 @@ async function loadSetupsFromInstances(input: {
   const includeHiddenTiers = input.includeHiddenTiers === true;
   const includePausedSetups = input.includePausedSetups === true;
   const pauseFilters = await loadBacktestPauseFilters({ includePausedSetups });
-  const rows: Record<string, unknown>[] = [];
-  let page = 0;
-  while (true) {
-    const fromIndex = page * DB_PAGE_SIZE;
-    const toIndex = fromIndex + DB_PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from('spx_setup_instances')
-      .select(
-        [
-          'engine_setup_id',
-          'session_date',
-          'setup_type',
-          'direction',
-          'regime',
-          'tier',
-          'entry_zone_low',
-          'entry_zone_high',
-          'stop_price',
-          'target_1_price',
-          'target_2_price',
-          'first_seen_at',
-          'triggered_at',
-          'metadata',
-        ].join(','),
-      )
-      .gte('session_date', input.from)
-      .lte('session_date', input.to)
-      .order('session_date', { ascending: true })
-      .order('engine_setup_id', { ascending: true })
-      .range(fromIndex, toIndex);
+  const { data, error } = await supabase
+    .from('spx_setup_instances')
+    .select(
+      [
+        'engine_setup_id',
+        'session_date',
+        'setup_type',
+        'direction',
+        'regime',
+        'tier',
+        'entry_zone_low',
+        'entry_zone_high',
+        'stop_price',
+        'target_1_price',
+        'target_2_price',
+        'first_seen_at',
+        'triggered_at',
+        'metadata',
+      ].join(','),
+    )
+    .gte('session_date', input.from)
+    .lte('session_date', input.to);
 
-    if (error) {
-      const tableMissing = isMissingTableError(error.message);
-      return {
-        setups: [],
-        notes: [tableMissing
-          ? 'spx_setup_instances table is not available in the connected Supabase project.'
-          : `Failed to load spx_setup_instances: ${error.message}`],
-        tableMissing,
-      };
-    }
-
-    const pageRows = (Array.isArray(data) ? data : []) as unknown as Record<string, unknown>[];
-    rows.push(...pageRows);
-    if (pageRows.length < DB_PAGE_SIZE) break;
-    page += 1;
+  if (error) {
+    const tableMissing = isMissingTableError(error.message);
+    return {
+      setups: [],
+      notes: [tableMissing
+        ? 'spx_setup_instances table is not available in the connected Supabase project.'
+        : `Failed to load spx_setup_instances: ${error.message}`],
+      tableMissing,
+    };
   }
 
+  const rows = (Array.isArray(data) ? data : []) as unknown as Record<string, unknown>[];
   const setups: BacktestSetupCandidate[] = [];
   let skipped = 0;
   let skippedBlocked = 0;
@@ -607,13 +481,7 @@ async function loadSetupsFromInstances(input: {
       skippedBlocked += 1;
       continue;
     }
-    const triggeredAt = typeof row.triggered_at === 'string' ? row.triggered_at : null;
-    if (isBacktestHiddenTierExcluded({
-      includeHiddenTiers,
-      tier,
-      gateStatus,
-      triggeredAt,
-    })) {
+    if (!includeHiddenTiers && tier === 'hidden') {
       skippedHidden += 1;
       continue;
     }
@@ -642,7 +510,7 @@ async function loadSetupsFromInstances(input: {
       target1Price,
       target2Price,
       firstSeenAt: typeof row.first_seen_at === 'string' ? row.first_seen_at : null,
-      triggeredAt,
+      triggeredAt: typeof row.triggered_at === 'string' ? row.triggered_at : null,
       tradeManagement,
     });
   }
@@ -655,7 +523,7 @@ async function loadSetupsFromInstances(input: {
     notes.push(`Skipped ${skippedBlocked} gate-blocked spx_setup_instances rows (non-actionable).`);
   }
   if (skippedHidden > 0) {
-    notes.push(`Skipped ${skippedHidden} hidden-tier non-triggered spx_setup_instances rows (non-actionable).`);
+    notes.push(`Skipped ${skippedHidden} hidden-tier spx_setup_instances rows (non-actionable).`);
   }
   if (skippedPausedSetupType > 0) {
     notes.push(`Skipped ${skippedPausedSetupType} paused-setup-type rows via optimizer profile.`);
@@ -1255,720 +1123,22 @@ function buildProfitabilityMetrics(evaluated: EvaluatedSetup[]): SPXBacktestProf
   };
 }
 
-function toBacktestSetupKey(input: { engineSetupId: string; sessionDate: string }): string {
-  return `${input.engineSetupId}:${input.sessionDate}`;
-}
-
-function contractTypeForDirection(direction: 'bullish' | 'bearish'): 'call' | 'put' {
-  return direction === 'bullish' ? 'call' : 'put';
-}
-
-function etMinuteOfDay(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const epoch = Date.parse(iso);
-  if (!Number.isFinite(epoch)) return null;
-  const et = toEasternTime(new Date(epoch));
-  return (et.hour * 60) + et.minute;
-}
-
-function candidateExpiryDates(sessionDate: string, preferNextExpiry: boolean): string[] {
-  const dates: string[] = [];
-  let cursor = sessionDate;
-  for (let day = 0; day <= OPTIONS_REPLAY_MAX_EXPIRY_LOOKAHEAD_DAYS; day += 1) {
-    if (day > 0) {
-      cursor = nextDate(cursor);
-    }
-    dates.push(cursor);
-  }
-
-  if (!preferNextExpiry) return dates;
-  const [today, ...rest] = dates;
-  return [...rest, today];
-}
-
-function toOptionExpiryDistanceDays(expiry: string, reference: string): number {
-  const expiryEpoch = Date.parse(`${expiry}T00:00:00.000Z`);
-  const referenceEpoch = Date.parse(`${reference}T00:00:00.000Z`);
-  if (!Number.isFinite(expiryEpoch) || !Number.isFinite(referenceEpoch)) return 0;
-  return Math.max(0, Math.round((expiryEpoch - referenceEpoch) / 86400000));
-}
-
-function normalizeContractTicker(ticker: string | null | undefined): string | null {
-  if (typeof ticker !== 'string') return null;
-  const normalized = ticker.trim().toUpperCase();
-  return normalized || null;
-}
-
-async function loadCandidateContractsForSetup(input: {
-  setup: BacktestSetupCandidate;
-  row: SetupInstanceRow;
-  contractsByExpiry: Map<string, MassiveOptionsContract[]>;
-}): Promise<HistoricalOptionContractChoice[]> {
-  const desiredType = contractTypeForDirection(input.setup.direction);
-  const underlyingEntry = typeof input.row.entry_fill_price === 'number' && Number.isFinite(input.row.entry_fill_price)
-    ? input.row.entry_fill_price
-    : (input.setup.entryLow + input.setup.entryHigh) / 2;
-  if (!(underlyingEntry > 0)) return [];
-
-  const triggerMinutesEt = etMinuteOfDay(input.row.triggered_at || input.setup.firstSeenAt);
-  const preferNextExpiry = triggerMinutesEt != null
-    && triggerMinutesEt >= DEFAULT_OPTIONS_REPLAY_LATE_DAY_CUTOFF_MINUTES_ET;
-  const expiries = candidateExpiryDates(input.setup.sessionDate, preferNextExpiry);
-  const seen = new Set<string>();
-  const collected: Array<HistoricalOptionContractChoice & { strikeDistance: number; expiryDistance: number }> = [];
-
-  for (const expiry of expiries) {
-    const cacheKey = `${input.setup.sessionDate}:${expiry}`;
-    if (!input.contractsByExpiry.has(cacheKey)) {
-      try {
-        const contracts = await getOptionsContracts('SPX', expiry, 1000, input.setup.sessionDate);
-        input.contractsByExpiry.set(cacheKey, contracts);
-      } catch (error) {
-        logger.warn('SPX options replay historical contracts load failed', {
-          sessionDate: input.setup.sessionDate,
-          expiry,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        input.contractsByExpiry.set(cacheKey, []);
-      }
-    }
-
-    const contracts = input.contractsByExpiry.get(cacheKey) || [];
-    for (const contract of contracts) {
-      const ticker = normalizeContractTicker(contract.ticker);
-      if (!ticker || seen.has(ticker)) continue;
-      if (contract.contract_type !== desiredType) continue;
-      if (contract.expiration_date < input.setup.sessionDate) continue;
-      const strike = typeof contract.strike_price === 'number' ? contract.strike_price : Number.NaN;
-      if (!Number.isFinite(strike)) continue;
-      const strikeDistance = Math.abs(strike - underlyingEntry);
-      if (strikeDistance > OPTIONS_REPLAY_MAX_STRIKE_DISTANCE_POINTS) continue;
-
-      seen.add(ticker);
-      collected.push({
-        ticker,
-        expiry: contract.expiration_date,
-        strike,
-        type: contract.contract_type,
-        strikeDistance,
-        expiryDistance: toOptionExpiryDistanceDays(contract.expiration_date, input.setup.sessionDate),
-      });
-    }
-
-    if (collected.length >= OPTIONS_REPLAY_MAX_CANDIDATE_CONTRACTS) break;
-  }
-
-  return collected
-    .sort((a, b) => (
-      a.expiryDistance - b.expiryDistance
-      || a.strikeDistance - b.strikeDistance
-      || a.strike - b.strike
-    ))
-    .slice(0, OPTIONS_REPLAY_MAX_CANDIDATE_CONTRACTS)
-    .map((contract) => ({
-      ticker: contract.ticker,
-      expiry: contract.expiry,
-      strike: round(contract.strike, 2),
-      type: contract.type,
-    }));
-}
-
-function rankHistoricalOptionContracts(input: {
-  setup: BacktestSetupCandidate;
-  row: SetupInstanceRow;
-  contracts: HistoricalOptionContractChoice[];
-}): HistoricalOptionContractChoice[] {
-  const underlyingEntry = typeof input.row.entry_fill_price === 'number' && Number.isFinite(input.row.entry_fill_price)
-    ? input.row.entry_fill_price
-    : (input.setup.entryLow + input.setup.entryHigh) / 2;
-  if (!(underlyingEntry > 0)) return [];
-  if (input.contracts.length === 0) return [];
-
-  const triggerMinutesEt = etMinuteOfDay(input.row.triggered_at || input.setup.firstSeenAt);
-  const preferNextExpiry = triggerMinutesEt != null
-    && triggerMinutesEt >= DEFAULT_OPTIONS_REPLAY_LATE_DAY_CUTOFF_MINUTES_ET;
-  const setupKey = input.setup.setupType.toLowerCase();
-  const preferMomentumMoneyness = setupKey.includes('trend') || setupKey.includes('orb') || setupKey.includes('breakout');
-
-  const expiries = Array.from(new Set(input.contracts.map((row) => row.expiry))).sort();
-  const preferredExpiry = (() => {
-    if (preferNextExpiry) {
-      const next = expiries.find((expiry) => expiry > input.setup.sessionDate);
-      return next || expiries[0];
-    }
-    const sameDay = expiries.find((expiry) => expiry === input.setup.sessionDate);
-    if (sameDay) return sameDay;
-    return expiries[0];
-  })();
-
-  const scored = input.contracts.map((contract) => {
-    const strikeDistance = Math.abs(contract.strike - underlyingEntry);
-    const strikeDistancePct = strikeDistance / Math.max(underlyingEntry, 1);
-    const expiryDistancePenalty = Math.abs(
-      toOptionExpiryDistanceDays(contract.expiry, input.setup.sessionDate)
-      - toOptionExpiryDistanceDays(preferredExpiry, input.setup.sessionDate),
-    ) * 0.03;
-
-    let directionalPenalty = 0;
-    if (preferMomentumMoneyness) {
-      if (contract.type === 'call' && contract.strike < underlyingEntry) directionalPenalty += 0.04;
-      if (contract.type === 'put' && contract.strike > underlyingEntry) directionalPenalty += 0.04;
-    } else {
-      directionalPenalty += strikeDistancePct * 0.2;
-    }
-
-    const score = (strikeDistancePct * 100) + expiryDistancePenalty + directionalPenalty;
-    return { ...contract, score };
-  });
-  const scoped = scored
-    .filter((row) => row.expiry === preferredExpiry)
-    .sort((a, b) => a.score - b.score || a.strike - b.strike);
-  const ordered = scoped.length > 0
-    ? scoped
-    : scored.sort((a, b) => a.score - b.score || a.strike - b.strike);
-
-  return ordered.map((contract) => ({
-    ticker: contract.ticker,
-    expiry: contract.expiry,
-    strike: round(contract.strike, 2),
-    type: contract.type,
-  }));
-}
-
-function chooseHistoricalOptionContract(input: {
-  setup: BacktestSetupCandidate;
-  row: SetupInstanceRow;
-  contracts: HistoricalOptionContractChoice[];
-}): HistoricalOptionContractChoice | null {
-  const ranked = rankHistoricalOptionContracts(input);
-  const best = ranked[0];
-  if (!best) return null;
-
-  return {
-    ticker: best.ticker,
-    expiry: best.expiry,
-    strike: round(best.strike, 2),
-    type: best.type,
-  };
-}
-
-async function loadOptionBarsForReplay(input: {
-  optionTicker: string;
-  sessionDate: string;
-  requestedResolution: SPXBacktestPriceResolution;
-  strictBars: boolean;
-}): Promise<{
-  bars: MassiveAggregate[];
-  resolutionUsed: 'second' | 'minute' | 'none';
-  usedMinuteFallback: boolean;
-}> {
-  const shouldTrySecond = input.requestedResolution === 'second' || input.requestedResolution === 'auto';
-  const shouldTryMinute = input.requestedResolution === 'minute'
-    || input.requestedResolution === 'auto'
-    || !input.strictBars;
-
-  if (shouldTrySecond) {
-    try {
-      const secondBars = await getAggregates(input.optionTicker, 1, 'second', input.sessionDate, input.sessionDate);
-      const rows = (secondBars.results || []).sort((a, b) => a.t - b.t);
-      if (rows.length > 0) {
-        return {
-          bars: rows,
-          resolutionUsed: 'second',
-          usedMinuteFallback: false,
-        };
-      }
-    } catch (error) {
-      logger.warn('SPX options replay failed to load option second bars', {
-        optionTicker: input.optionTicker,
-        sessionDate: input.sessionDate,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  if (shouldTryMinute) {
-    try {
-      const minuteBars = await getMinuteAggregates(input.optionTicker, input.sessionDate);
-      const rows = (minuteBars || []).sort((a, b) => a.t - b.t);
-      if (rows.length > 0) {
-        return {
-          bars: rows,
-          resolutionUsed: 'minute',
-          usedMinuteFallback: shouldTrySecond,
-        };
-      }
-    } catch (error) {
-      logger.warn('SPX options replay failed to load option minute bars', {
-        optionTicker: input.optionTicker,
-        sessionDate: input.sessionDate,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return {
-    bars: [],
-    resolutionUsed: 'none',
-    usedMinuteFallback: false,
-  };
-}
-
-function findBarCloseAtOrAfter(bars: MassiveAggregate[], timestampIso: string | null | undefined): number | null {
-  const timestampMs = toEpochMs(timestampIso);
-  if (timestampMs == null || bars.length === 0) return null;
-
-  if (timestampMs <= bars[0].t) return bars[0].c;
-  if (timestampMs >= bars[bars.length - 1].t) return bars[bars.length - 1].c;
-
-  let left = 0;
-  let right = bars.length - 1;
-  while (left < right) {
-    const mid = Math.floor((left + right) / 2);
-    if (bars[mid].t >= timestampMs) {
-      right = mid;
-    } else {
-      left = mid + 1;
-    }
-  }
-
-  const bar = bars[left];
-  return Number.isFinite(bar?.c) ? bar.c : null;
-}
-
-function oneContractPnl(entryPremium: number, exitPremium: number): number {
-  return (exitPremium - entryPremium) * 100;
-}
-
-function buildEmptyOptionsReplaySummary(input: {
-  requestedResolution: SPXBacktestPriceResolution;
-  strictBars: boolean;
-  includeTrades: boolean;
-}): SPXContractReplaySummary {
-  return {
-    executionBasis: 'options_contract',
-    strictBars: input.strictBars,
-    requestedResolution: input.requestedResolution,
-    resolutionUsed: 'none',
-    replayUniverse: 0,
-    replayedTrades: 0,
-    skippedTrades: 0,
-    coveragePct: 0,
-    minimumCoveragePct: OPTIONS_REPLAY_MIN_COVERAGE_PCT,
-    coverageValid: true,
-    missingSnapshotCount: 0,
-    missingContractCount: 0,
-    missingBarsCount: 0,
-    missingEntryPriceCount: 0,
-    missingExitPriceCount: 0,
-    usedMinuteFallback: false,
-    positiveTrades: 0,
-    nonPositiveTrades: 0,
-    winRatePct: 0,
-    averageReturnPct: 0,
-    medianReturnPct: 0,
-    cumulativeReturnPct: 0,
-    cumulativePnlOneContract: 0,
-    bySetupType: [],
-    ...(input.includeTrades ? { trades: [] } : {}),
-  };
-}
-
-async function buildOptionsContractReplaySummary(input: {
-  evaluated: EvaluatedSetup[];
-  setupByKey: Map<string, BacktestSetupCandidate>;
-  barsBySession: Map<string, MassiveAggregate[]>;
-  requestedResolution: SPXBacktestPriceResolution;
-  strictBars: boolean;
-  executionModel: SPXBacktestExecutionModel;
-  includeTrades: boolean;
-}): Promise<SPXContractReplaySummary> {
-  const summary = buildEmptyOptionsReplaySummary({
-    requestedResolution: input.requestedResolution,
-    strictBars: input.strictBars,
-    includeTrades: input.includeTrades,
-  });
-
-  const triggeredRows = input.evaluated.filter((entry) => Boolean(entry.row.triggered_at));
-  if (triggeredRows.length === 0) {
-    return summary;
-  }
-
-  summary.replayUniverse = triggeredRows.length;
-  const contractsByExpiry = new Map<string, MassiveOptionsContract[]>();
-
-  const barCache = new Map<string, {
-    bars: MassiveAggregate[];
-    resolutionUsed: 'second' | 'minute' | 'none';
-    usedMinuteFallback: boolean;
-  }>();
-  const replayRows: SPXContractReplayTradeResult[] = [];
-
-  for (const entry of triggeredRows) {
-    const row = entry.row;
-    const setupKey = toBacktestSetupKey({
-      engineSetupId: row.engine_setup_id,
-      sessionDate: row.session_date,
-    });
-    const setup = input.setupByKey.get(setupKey);
-    if (!setup) continue;
-
-    const contracts = await loadCandidateContractsForSetup({
-      setup,
-      row,
-      contractsByExpiry,
-    });
-    if (contracts.length === 0) {
-      summary.missingContractCount += 1;
-      replayRows.push({
-        engineSetupId: row.engine_setup_id,
-        sessionDate: row.session_date,
-        setupType: row.setup_type,
-        direction: row.direction,
-        contractTicker: null,
-        contractType: null,
-        strike: null,
-        expiry: null,
-        entryTimestamp: row.triggered_at,
-        exitTimestamp: null,
-        entryPremium: null,
-        exitPremium: null,
-        returnPct: null,
-        pnlOneContract: null,
-        status: 'missing_contract',
-        resolutionUsed: 'none',
-        usedMinuteFallback: false,
-      });
-      continue;
-    }
-
-    const rankedContracts = rankHistoricalOptionContracts({
-      setup,
-      row,
-      contracts,
-    });
-    if (rankedContracts.length === 0) {
-      summary.missingContractCount += 1;
-      replayRows.push({
-        engineSetupId: row.engine_setup_id,
-        sessionDate: row.session_date,
-        setupType: row.setup_type,
-        direction: row.direction,
-        contractTicker: null,
-        contractType: null,
-        strike: null,
-        expiry: null,
-        entryTimestamp: row.triggered_at,
-        exitTimestamp: null,
-        entryPremium: null,
-        exitPremium: null,
-        returnPct: null,
-        pnlOneContract: null,
-        status: 'missing_contract',
-        resolutionUsed: 'none',
-        usedMinuteFallback: false,
-      });
-      continue;
-    }
-
-    const primaryContract = rankedContracts[0];
-    let contract: HistoricalOptionContractChoice | null = null;
-    let barState: {
-      bars: MassiveAggregate[];
-      resolutionUsed: 'second' | 'minute' | 'none';
-      usedMinuteFallback: boolean;
-    } | null = null;
-    let entryPremium: number | null = null;
-    let hasBarsForAnyCandidate = false;
-    let firstContractWithBars: HistoricalOptionContractChoice | null = null;
-    let firstBarStateWithBars: {
-      bars: MassiveAggregate[];
-      resolutionUsed: 'second' | 'minute' | 'none';
-      usedMinuteFallback: boolean;
-    } | null = null;
-
-    for (const candidate of rankedContracts) {
-      const barCacheKey = `${row.session_date}:${candidate.ticker}`;
-      if (!barCache.has(barCacheKey)) {
-        barCache.set(barCacheKey, await loadOptionBarsForReplay({
-          optionTicker: candidate.ticker,
-          sessionDate: row.session_date,
-          requestedResolution: input.requestedResolution,
-          strictBars: input.strictBars,
-        }));
-      }
-
-      const candidateBarState = barCache.get(barCacheKey) || {
-        bars: [],
-        resolutionUsed: 'none' as const,
-        usedMinuteFallback: false,
-      };
-      if (candidateBarState.bars.length === 0) {
-        continue;
-      }
-
-      if (!hasBarsForAnyCandidate) {
-        hasBarsForAnyCandidate = true;
-        firstContractWithBars = candidate;
-        firstBarStateWithBars = candidateBarState;
-      }
-
-      const candidateEntryPremium = findBarCloseAtOrAfter(candidateBarState.bars, row.triggered_at);
-      if (!(typeof candidateEntryPremium === 'number' && Number.isFinite(candidateEntryPremium) && candidateEntryPremium > 0)) {
-        continue;
-      }
-
-      contract = candidate;
-      barState = candidateBarState;
-      entryPremium = candidateEntryPremium;
-      break;
-    }
-
-    if (!hasBarsForAnyCandidate) {
-      summary.missingBarsCount += 1;
-      replayRows.push({
-        engineSetupId: row.engine_setup_id,
-        sessionDate: row.session_date,
-        setupType: row.setup_type,
-        direction: row.direction,
-        contractTicker: primaryContract?.ticker || null,
-        contractType: primaryContract?.type || null,
-        strike: primaryContract?.strike || null,
-        expiry: primaryContract?.expiry || null,
-        entryTimestamp: row.triggered_at,
-        exitTimestamp: null,
-        entryPremium: null,
-        exitPremium: null,
-        returnPct: null,
-        pnlOneContract: null,
-        status: 'missing_bars',
-        resolutionUsed: 'none',
-        usedMinuteFallback: false,
-      });
-      continue;
-    }
-
-    if (!contract || !barState || entryPremium == null) {
-      summary.missingEntryPriceCount += 1;
-      replayRows.push({
-        engineSetupId: row.engine_setup_id,
-        sessionDate: row.session_date,
-        setupType: row.setup_type,
-        direction: row.direction,
-        contractTicker: firstContractWithBars?.ticker || primaryContract?.ticker || null,
-        contractType: firstContractWithBars?.type || primaryContract?.type || null,
-        strike: firstContractWithBars?.strike || primaryContract?.strike || null,
-        expiry: firstContractWithBars?.expiry || primaryContract?.expiry || null,
-        entryTimestamp: row.triggered_at,
-        exitTimestamp: null,
-        entryPremium: null,
-        exitPremium: null,
-        returnPct: null,
-        pnlOneContract: null,
-        status: 'missing_entry_price',
-        resolutionUsed: firstBarStateWithBars?.resolutionUsed || 'none',
-        usedMinuteFallback: firstBarStateWithBars?.usedMinuteFallback || false,
-      });
-      continue;
-    }
-
-    const sessionBars = input.barsBySession.get(row.session_date) || [];
-    const sessionCloseIso = sessionBars.length > 0
-      ? new Date(sessionBars[sessionBars.length - 1].t).toISOString()
-      : row.triggered_at;
-    const t1Timestamp = row.t1_hit_at;
-    const t2Timestamp = row.t2_hit_at;
-    const stopTimestamp = row.stop_hit_at;
-    const finalOutcome = row.final_outcome;
-    const fallbackExitTimestamp = stopTimestamp || t2Timestamp || t1Timestamp || sessionCloseIso;
-    const exitTimestamp = finalOutcome === 't2_before_stop'
-      ? (t2Timestamp || fallbackExitTimestamp)
-      : finalOutcome === 'stop_before_t1'
-        ? (stopTimestamp || fallbackExitTimestamp)
-        : finalOutcome === 't1_before_stop'
-          ? (stopTimestamp || sessionCloseIso || fallbackExitTimestamp)
-          : (sessionCloseIso || fallbackExitTimestamp);
-
-    const t1Premium = findBarCloseAtOrAfter(barState.bars, t1Timestamp);
-    const t2Premium = findBarCloseAtOrAfter(barState.bars, t2Timestamp);
-    const stopPremium = findBarCloseAtOrAfter(barState.bars, stopTimestamp);
-    const sessionClosePremium = findBarCloseAtOrAfter(barState.bars, sessionCloseIso);
-    const exitPremiumRaw = findBarCloseAtOrAfter(barState.bars, exitTimestamp);
-
-    let returnPct: number | null = null;
-    let exitPremium: number | null = null;
-    const partial = input.executionModel.partialAtT1Pct;
-    const runner = 1 - partial;
-
-    if (finalOutcome === 't2_before_stop') {
-      if (!(typeof t2Premium === 'number' && t2Premium > 0)) {
-        summary.missingExitPriceCount += 1;
-      } else {
-        const t1Resolved = typeof t1Premium === 'number' && t1Premium > 0 ? t1Premium : t2Premium;
-        const t1Return = (t1Resolved - entryPremium) / entryPremium;
-        const t2Return = (t2Premium - entryPremium) / entryPremium;
-        returnPct = (partial * t1Return) + (runner * t2Return);
-        exitPremium = t2Premium;
-      }
-    } else if (finalOutcome === 't1_before_stop') {
-      if (!(typeof t1Premium === 'number' && t1Premium > 0)) {
-        summary.missingExitPriceCount += 1;
-      } else {
-        const runnerExit = (typeof stopPremium === 'number' && stopPremium > 0)
-          ? stopPremium
-          : (typeof sessionClosePremium === 'number' && sessionClosePremium > 0)
-            ? sessionClosePremium
-            : exitPremiumRaw;
-        if (!(typeof runnerExit === 'number' && runnerExit > 0)) {
-          summary.missingExitPriceCount += 1;
-        } else {
-          const t1Return = (t1Premium - entryPremium) / entryPremium;
-          const runnerReturn = (runnerExit - entryPremium) / entryPremium;
-          returnPct = (partial * t1Return) + (runner * runnerReturn);
-          exitPremium = runnerExit;
-        }
-      }
-    } else if (finalOutcome === 'stop_before_t1') {
-      if (!(typeof stopPremium === 'number' && stopPremium > 0)) {
-        summary.missingExitPriceCount += 1;
-      } else {
-        returnPct = (stopPremium - entryPremium) / entryPremium;
-        exitPremium = stopPremium;
-      }
-    } else {
-      const fallbackExit = (typeof sessionClosePremium === 'number' && sessionClosePremium > 0)
-        ? sessionClosePremium
-        : exitPremiumRaw;
-      if (!(typeof fallbackExit === 'number' && fallbackExit > 0)) {
-        summary.missingExitPriceCount += 1;
-      } else {
-        returnPct = (fallbackExit - entryPremium) / entryPremium;
-        exitPremium = fallbackExit;
-      }
-    }
-
-    if (returnPct == null || exitPremium == null) {
-      replayRows.push({
-        engineSetupId: row.engine_setup_id,
-        sessionDate: row.session_date,
-        setupType: row.setup_type,
-        direction: row.direction,
-        contractTicker: contract.ticker,
-        contractType: contract.type,
-        strike: contract.strike,
-        expiry: contract.expiry,
-        entryTimestamp: row.triggered_at,
-        exitTimestamp,
-        entryPremium: round(entryPremium, 4),
-        exitPremium: null,
-        returnPct: null,
-        pnlOneContract: null,
-        status: 'missing_exit_price',
-        resolutionUsed: barState.resolutionUsed,
-        usedMinuteFallback: barState.usedMinuteFallback,
-      });
-      continue;
-    }
-
-    const pnlOneContract = oneContractPnl(entryPremium, exitPremium);
-    replayRows.push({
-      engineSetupId: row.engine_setup_id,
-      sessionDate: row.session_date,
-      setupType: row.setup_type,
-      direction: row.direction,
-      contractTicker: contract.ticker,
-      contractType: contract.type,
-      strike: contract.strike,
-      expiry: contract.expiry,
-      entryTimestamp: row.triggered_at,
-      exitTimestamp,
-      entryPremium: round(entryPremium, 4),
-      exitPremium: round(exitPremium, 4),
-      returnPct: round(returnPct * 100, 4),
-      pnlOneContract: round(pnlOneContract, 2),
-      status: 'ok',
-      resolutionUsed: barState.resolutionUsed,
-      usedMinuteFallback: barState.usedMinuteFallback,
-    });
-  }
-
-  const okRows = replayRows.filter((row) => row.status === 'ok');
-  const returnPcts = okRows
-    .map((row) => row.returnPct)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  const pnlValues = okRows
-    .map((row) => row.pnlOneContract)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  const positiveTrades = returnPcts.filter((value) => value > 0).length;
-  const resolutionSet = new Set(okRows.map((row) => row.resolutionUsed).filter((value) => value !== 'none'));
-
-  const bySetupTypeMap = new Map<string, { tradeCount: number; wins: number; cumulativeReturnPct: number; cumulativePnl: number }>();
-  for (const row of okRows) {
-    const key = row.setupType || 'unknown';
-    const bucket = bySetupTypeMap.get(key) || { tradeCount: 0, wins: 0, cumulativeReturnPct: 0, cumulativePnl: 0 };
-    bucket.tradeCount += 1;
-    const returnPct = row.returnPct || 0;
-    bucket.cumulativeReturnPct += returnPct;
-    bucket.cumulativePnl += row.pnlOneContract || 0;
-    if (returnPct > 0) bucket.wins += 1;
-    bySetupTypeMap.set(key, bucket);
-  }
-
-  summary.replayedTrades = okRows.length;
-  summary.skippedTrades = triggeredRows.length - okRows.length;
-  summary.coveragePct = triggeredRows.length > 0
-    ? round((summary.replayedTrades / triggeredRows.length) * 100, 2)
-    : 0;
-  summary.coverageValid = summary.coveragePct >= summary.minimumCoveragePct;
-  summary.positiveTrades = positiveTrades;
-  summary.nonPositiveTrades = Math.max(okRows.length - positiveTrades, 0);
-  summary.winRatePct = okRows.length > 0 ? round((positiveTrades / okRows.length) * 100, 2) : 0;
-  summary.averageReturnPct = returnPcts.length > 0
-    ? round(returnPcts.reduce((sum, value) => sum + value, 0) / returnPcts.length, 4)
-    : 0;
-  summary.medianReturnPct = round(median(returnPcts), 4);
-  summary.cumulativeReturnPct = round(returnPcts.reduce((sum, value) => sum + value, 0), 4);
-  summary.cumulativePnlOneContract = round(pnlValues.reduce((sum, value) => sum + value, 0), 2);
-  summary.usedMinuteFallback = replayRows.some((row) => row.usedMinuteFallback);
-  summary.resolutionUsed = resolutionSet.size === 0
-    ? 'none'
-    : resolutionSet.size === 1
-      ? (Array.from(resolutionSet)[0] as 'second' | 'minute')
-      : 'mixed';
-  summary.bySetupType = Array.from(bySetupTypeMap.entries())
-    .map(([key, bucket]) => ({
-      key,
-      tradeCount: bucket.tradeCount,
-      winRatePct: bucket.tradeCount > 0 ? round((bucket.wins / bucket.tradeCount) * 100, 2) : 0,
-      averageReturnPct: bucket.tradeCount > 0 ? round(bucket.cumulativeReturnPct / bucket.tradeCount, 4) : 0,
-      cumulativePnlOneContract: round(bucket.cumulativePnl, 2),
-    }))
-    .sort((a, b) => b.tradeCount - a.tradeCount || a.key.localeCompare(b.key));
-  summary.trades = input.includeTrades ? replayRows : undefined;
-
-  return summary;
-}
-
 export async function runSPXWinRateBacktest(input: {
   from: string;
   to: string;
   source?: SPXWinRateBacktestSource;
   resolution?: SPXBacktestPriceResolution;
-  executionBasis?: SPXBacktestExecutionBasis;
   includeRows?: boolean;
   includeBlockedSetups?: boolean;
   includeHiddenTiers?: boolean;
   includePausedSetups?: boolean;
   geometryBySetupType?: Record<string, SPXBacktestGeometryAdjustment>;
   executionModel?: Partial<SPXBacktestExecutionModel>;
-  optionsReplay?: SPXBacktestOptionsReplayConfig;
 }): Promise<SPXWinRateBacktestResult> {
   const from = normalizeDateInput(input.from);
   const to = normalizeDateInput(input.to);
   const source = input.source || 'spx_setup_instances';
   const resolution = input.resolution || 'second';
-  const executionBasis = input.executionBasis || 'underlying';
-  const optionsReplayStrictBars = input.optionsReplay?.strictBars ?? DEFAULT_OPTIONS_REPLAY_STRICT_BARS;
   const includeRows = input.includeRows === true;
   const executionModel = resolveExecutionModel(input.executionModel);
   const notes: string[] = [];
@@ -2008,7 +1178,6 @@ export async function runSPXWinRateBacktest(input: {
     return {
       dateRange: { from, to },
       sourceUsed: selectedSource,
-      executionBasis,
       setupCount: 0,
       evaluatedSetupCount: 0,
       skippedSetupCount: 0,
@@ -2021,15 +1190,6 @@ export async function runSPXWinRateBacktest(input: {
       usedMassiveMinuteBars: false,
       executionModel,
       profitability: emptyProfitabilityMetrics(),
-      ...(executionBasis === 'options_contract'
-        ? {
-          optionsReplay: buildEmptyOptionsReplaySummary({
-            requestedResolution: resolution,
-            strictBars: optionsReplayStrictBars,
-            includeTrades: includeRows,
-          }),
-        }
-        : {}),
       notes,
       analytics: emptyAnalytics,
       ...(includeRows ? { rows: [] } : {}),
@@ -2086,9 +1246,6 @@ export async function runSPXWinRateBacktest(input: {
   }
 
   const rows = evaluated.map((entry) => entry.row);
-  const setupByKey = new Map<string, BacktestSetupCandidate>(
-    setups.map((setup) => [toBacktestSetupKey(setup), setup]),
-  );
   const analytics = summarizeSPXWinRateRows(rows, { from, to });
   const profitability = buildProfitabilityMetrics(evaluated);
   const ambiguousBarCount = evaluated.reduce((sum, row) => sum + row.ambiguityCount, 0);
@@ -2104,42 +1261,9 @@ export async function runSPXWinRateBacktest(input: {
     notes.push(`Second bars unavailable for ${resolutionFallbackSessions.length} sessions; used minute bars fallback.`);
   }
 
-  let optionsReplay: SPXContractReplaySummary | undefined;
-  if (executionBasis === 'options_contract') {
-    optionsReplay = await buildOptionsContractReplaySummary({
-      evaluated,
-      setupByKey,
-      barsBySession,
-      requestedResolution: resolution,
-      strictBars: optionsReplayStrictBars,
-      executionModel,
-      includeTrades: includeRows,
-    });
-    const replayUniverse = optionsReplay.replayedTrades + optionsReplay.skippedTrades;
-    notes.push(
-      `Options contract replay: ${optionsReplay.replayedTrades}/${replayUniverse} trades resolved from Massive option bars (win rate ${optionsReplay.winRatePct}%).`,
-    );
-    notes.push('Options contract selection uses historical contract reference data + trigger-time tradability checks from Massive bars (no snapshot chain dependency).');
-    notes.push(
-      `Options replay coverage: ${optionsReplay.coveragePct}% (minimum ${optionsReplay.minimumCoveragePct}% => ${optionsReplay.coverageValid ? 'valid' : 'invalid'}).`,
-    );
-    if (!optionsReplay.coverageValid) {
-      notes.push('Options replay coverage is below institutional threshold; do not use this run for optimization decisions.');
-    }
-    if (optionsReplay.missingBarsCount > 0) {
-      notes.push(`Options replay missing bars for ${optionsReplay.missingBarsCount} trades.`);
-    }
-    if (optionsReplay.missingEntryPriceCount > 0 || optionsReplay.missingExitPriceCount > 0) {
-      notes.push(
-        `Options replay missing pricing points: entry=${optionsReplay.missingEntryPriceCount}, exit=${optionsReplay.missingExitPriceCount}.`,
-      );
-    }
-  }
-
   return {
     dateRange: { from, to },
     sourceUsed: selectedSource,
-    executionBasis,
     setupCount: setups.length,
     evaluatedSetupCount: evaluated.length,
     skippedSetupCount,
@@ -2152,7 +1276,6 @@ export async function runSPXWinRateBacktest(input: {
     usedMassiveMinuteBars,
     executionModel,
     profitability,
-    ...(optionsReplay ? { optionsReplay } : {}),
     notes,
     analytics,
     ...(includeRows ? { rows } : {}),
@@ -2163,7 +1286,4 @@ export const __testables = {
   evaluateSetupAgainstBars,
   findEntryTriggerPrice,
   buildBarPath,
-  chooseHistoricalOptionContract,
-  findBarCloseAtOrAfter,
-  isBacktestHiddenTierExcluded,
 };

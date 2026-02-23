@@ -4,10 +4,9 @@ import { getContractRecommendation } from './contractSelector';
 import { getBasisState, getSpyImpactState } from './crossReference';
 import { getFibLevels } from './fibEngine';
 import { getFlowEvents } from './flowEngine';
-import { computeUnifiedGEXLandscape, getCachedUnifiedGEXLandscape } from './gexEngine';
+import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { logger } from '../../lib/logger';
-import { cacheGet, cacheSet } from '../../config/redis';
 import { classifyCurrentRegime } from './regimeClassifier';
 import { detectActiveSetups } from './setupDetector';
 import type {
@@ -25,10 +24,8 @@ let snapshotInFlight: Promise<SPXSnapshot> | null = null;
 const SNAPSHOT_CONTRACT_ENRICHMENT_BUDGET_MS = 2500;
 const SNAPSHOT_MAX_INLINE_RECOMMENDATIONS = 2;
 const SNAPSHOT_BACKGROUND_REFRESH_MS = 20_000;
-const SNAPSHOT_REDIS_CACHE_KEY = 'spx_command_center:snapshot:last_good';
-const SNAPSHOT_REDIS_CACHE_TTL_SECONDS = 300;
 const SNAPSHOT_STAGE_TIMEOUTS_MS = {
-  gex: resolveSnapshotGexTimeoutMs(),
+  gex: 12_000,
   flow: 4_000,
   basis: 4_000,
   spyImpact: 4_000,
@@ -42,15 +39,6 @@ const SNAPSHOT_STAGE_TIMEOUTS_MS = {
 
 let lastGoodSnapshot: SPXSnapshot | null = null;
 let lastGoodSnapshotAt = 0;
-let snapshotHydrateInFlight: Promise<void> | null = null;
-
-function resolveSnapshotGexTimeoutMs(): number {
-  const parsed = Number.parseInt(process.env.SPX_SNAPSHOT_GEX_TIMEOUT_MS || '', 10);
-  if (!Number.isFinite(parsed) || parsed < 5_000) {
-    return 30_000;
-  }
-  return Math.min(parsed, 120_000);
-}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeoutHandle: NodeJS.Timeout | null = null;
@@ -64,44 +52,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
     }
-  }
-}
-
-async function hydrateLastGoodSnapshotFromCache(): Promise<void> {
-  if (lastGoodSnapshot) {
-    return;
-  }
-  if (snapshotHydrateInFlight) {
-    return snapshotHydrateInFlight;
-  }
-
-  snapshotHydrateInFlight = (async () => {
-    try {
-      const cached = await cacheGet<SPXSnapshot>(SNAPSHOT_REDIS_CACHE_KEY);
-      if (cached) {
-        lastGoodSnapshot = cached;
-        lastGoodSnapshotAt = Date.now();
-        logger.info('SPX snapshot hydrated from redis cache');
-      }
-    } catch (error) {
-      logger.warn('SPX snapshot cache hydrate failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      snapshotHydrateInFlight = null;
-    }
-  })();
-
-  return snapshotHydrateInFlight;
-}
-
-async function persistLastGoodSnapshot(snapshot: SPXSnapshot): Promise<void> {
-  try {
-    await cacheSet(SNAPSHOT_REDIS_CACHE_KEY, snapshot, SNAPSHOT_REDIS_CACHE_TTL_SECONDS);
-  } catch (error) {
-    logger.warn('SPX snapshot cache persist failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
   }
 }
 
@@ -212,10 +162,6 @@ function createNeutralPredictionState(snapshot: SPXSnapshot | null, spotPrice: n
   };
 }
 
-function isGexDegraded(gex: UnifiedGEXLandscape): boolean {
-  return gex.spx.gexByStrike.length === 0 && gex.combined.gexByStrike.length === 0;
-}
-
 function getFallbackCoachMessages(snapshot: SPXSnapshot | null): CoachMessage[] {
   return snapshot?.coachMessages || [];
 }
@@ -223,7 +169,7 @@ function getFallbackCoachMessages(snapshot: SPXSnapshot | null): CoachMessage[] 
 async function withStageFallback<T>(input: {
   stage: keyof typeof SNAPSHOT_STAGE_TIMEOUTS_MS;
   run: () => Promise<T>;
-  fallback: () => T | Promise<T>;
+  fallback: () => T;
   forceRefresh: boolean;
 }): Promise<T> {
   const timeoutMs = SNAPSHOT_STAGE_TIMEOUTS_MS[input.stage];
@@ -237,64 +183,27 @@ async function withStageFallback<T>(input: {
       forceRefresh: input.forceRefresh,
       error: error instanceof Error ? error.message : String(error),
     });
-    return await input.fallback();
+    return input.fallback();
   }
-}
-
-async function resolveGexFallback(
-  forceRefresh: boolean,
-  snapshot: SPXSnapshot | null,
-): Promise<UnifiedGEXLandscape> {
-  if (forceRefresh) {
-    try {
-      const cached = await getCachedUnifiedGEXLandscape();
-      if (cached) {
-        logger.warn('SPX GEX stage using cached unified landscape after force-refresh timeout');
-        return cached;
-      }
-    } catch (error) {
-      logger.warn('SPX GEX cached fallback lookup failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    if (!snapshot) {
-      try {
-        const recovered = await withTimeout(
-          computeUnifiedGEXLandscape({ forceRefresh: false }),
-          10_000,
-        );
-        if (recovered.combined.gexByStrike.length > 0) {
-          logger.warn('SPX GEX stage recovered via in-flight refresh after timeout');
-          return recovered;
-        }
-      } catch (error) {
-        logger.warn('SPX GEX in-flight recovery fallback failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-  }
-
-  return snapshot?.gex || createNeutralGexLandscape(snapshot);
 }
 
 async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const fallbackSnapshot = lastGoodSnapshot;
 
-  const gex = await withStageFallback({
-    stage: 'gex',
-    forceRefresh,
-    run: () => computeUnifiedGEXLandscape({ forceRefresh }),
-    fallback: () => resolveGexFallback(forceRefresh, fallbackSnapshot),
-  });
-
-  const flow = await withStageFallback({
-    stage: 'flow',
-    forceRefresh,
-    run: () => getFlowEvents({ forceRefresh }),
-    fallback: () => fallbackSnapshot?.flow || [],
-  });
+  const [gex, flow] = await Promise.all([
+    withStageFallback({
+      stage: 'gex',
+      forceRefresh,
+      run: () => computeUnifiedGEXLandscape({ forceRefresh }),
+      fallback: () => fallbackSnapshot?.gex || createNeutralGexLandscape(fallbackSnapshot),
+    }),
+    withStageFallback({
+      stage: 'flow',
+      forceRefresh,
+      run: () => getFlowEvents({ forceRefresh }),
+      fallback: () => fallbackSnapshot?.flow || [],
+    }),
+  ]);
 
   const basis = await withStageFallback({
     stage: 'basis',
@@ -328,79 +237,48 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     }),
   });
 
-  const gexDegraded = isGexDegraded(gex);
-  if (gexDegraded) {
-    logger.warn('SPX snapshot using fail-closed setup pipeline due to degraded GEX data');
-  }
+  const regime = await withStageFallback({
+    stage: 'regime',
+    forceRefresh,
+    run: () => classifyCurrentRegime({ forceRefresh, gexLandscape: gex, levelData }),
+    fallback: () => createNeutralRegimeState(fallbackSnapshot),
+  });
 
-  const regime = gexDegraded
-    ? createNeutralRegimeState(fallbackSnapshot)
-    : await withStageFallback({
-      stage: 'regime',
+  const setupsRaw = await withStageFallback({
+    stage: 'setups',
+    forceRefresh,
+    run: () => detectActiveSetups({
       forceRefresh,
-      run: () => classifyCurrentRegime({ forceRefresh, gexLandscape: gex, levelData }),
-      fallback: () => createNeutralRegimeState(fallbackSnapshot),
-    });
+      levelData,
+      gexLandscape: gex,
+      fibLevels,
+      regimeState: regime,
+      flowEvents: flow,
+    }),
+    fallback: () => fallbackSnapshot?.setups || [],
+  });
 
-  const setupsRaw = gexDegraded
-    ? (fallbackSnapshot?.setups || [])
-    : await withStageFallback({
-      stage: 'setups',
+  const prediction = await withStageFallback({
+    stage: 'prediction',
+    forceRefresh,
+    run: () => getPredictionState({
       forceRefresh,
-      run: () => detectActiveSetups({
-        forceRefresh,
-        levelData,
-        gexLandscape: gex,
-        fibLevels,
-        regimeState: regime,
-        flowEvents: flow,
-      }),
-      fallback: () => fallbackSnapshot?.setups || [],
-    });
+      regimeState: regime,
+      levelData,
+      gexLandscape: gex,
+    }),
+    fallback: () => createNeutralPredictionState(fallbackSnapshot, gex.spx.spotPrice),
+  });
 
-  const prediction = gexDegraded
-    ? createNeutralPredictionState(fallbackSnapshot, gex.spx.spotPrice)
-    : await withStageFallback({
-      stage: 'prediction',
-      forceRefresh,
-      run: () => getPredictionState({
-        forceRefresh,
-        regimeState: regime,
-        levelData,
-        gexLandscape: gex,
-      }),
-      fallback: () => createNeutralPredictionState(fallbackSnapshot, gex.spx.spotPrice),
-    });
-
-  const coachState = gexDegraded
-    ? {
-      messages: [
-        ...getFallbackCoachMessages(fallbackSnapshot),
-        {
-          id: `gex_degraded_${Date.now()}`,
-          type: 'alert' as const,
-          priority: 'alert' as const,
-          setupId: null,
-          content: 'Gamma data degraded from Massive options feed. Fresh setups are paused; showing last confirmed state.',
-          structuredData: {
-            reason: 'gex_degraded',
-            source: 'massive_options',
-            failClosed: true,
-          },
-          timestamp: nowIso(),
-        },
-      ],
+  const coachState = await withStageFallback({
+    stage: 'coach',
+    forceRefresh,
+    run: () => getCoachState({ forceRefresh, setups: setupsRaw, prediction }),
+    fallback: () => ({
+      messages: getFallbackCoachMessages(fallbackSnapshot),
       generatedAt: nowIso(),
-    }
-    : await withStageFallback({
-      stage: 'coach',
-      forceRefresh,
-      run: () => getCoachState({ forceRefresh, setups: setupsRaw, prediction }),
-      fallback: () => ({
-        messages: getFallbackCoachMessages(fallbackSnapshot),
-        generatedAt: nowIso(),
-      }),
-    });
+    }),
+  });
 
   const deadline = Date.now() + SNAPSHOT_CONTRACT_ENRICHMENT_BUDGET_MS;
   let inlineRecommendations = 0;
@@ -457,7 +335,6 @@ function refreshSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     .then((snapshot) => {
       lastGoodSnapshot = snapshot;
       lastGoodSnapshotAt = Date.now();
-      void persistLastGoodSnapshot(snapshot);
       return snapshot;
     })
     .catch((error) => {
@@ -479,10 +356,6 @@ function refreshSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
 
 export async function getSPXSnapshot(options?: { forceRefresh?: boolean }): Promise<SPXSnapshot> {
   const forceRefresh = options?.forceRefresh === true;
-  if (!lastGoodSnapshot) {
-    await hydrateLastGoodSnapshotFromCache();
-  }
-
   if (forceRefresh) {
     return refreshSnapshot(true);
   }
