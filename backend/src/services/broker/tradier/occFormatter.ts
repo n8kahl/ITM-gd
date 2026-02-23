@@ -10,7 +10,10 @@ export interface TradierOccContract {
 const OCC_PATTERN = /^([A-Z]{1,6})(\d{6})([CP])(\d{8})$/;
 
 function normalizeUnderlying(underlying: string): string {
-  return underlying.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  const normalized = underlying.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  // Tradier routes most SPX weekly/0DTE index options on SPXW root.
+  if (normalized === 'SPX') return 'SPXW';
+  return normalized;
 }
 
 function toCompactExpiry(expiry: string): string {

@@ -7,6 +7,8 @@ import {
 } from '../services/positionPushChannel';
 import { ExitAdvisor } from '../services/positions/exitAdvisor';
 import { LivePositionSnapshot, LivePositionTracker } from '../services/positions/liveTracker';
+import { reconcileTradierBrokerLedger } from '../services/positions/brokerLedgerReconciliation';
+import { enforceTradierLateDayFlatten } from '../services/positions/tradierFlatten';
 import {
   markWorkerCycleFailed,
   markWorkerCycleStarted,
@@ -22,6 +24,8 @@ export const POSITION_TRACKER_POLL_INTERVAL_MARKET_CLOSED = 60_000;
 export const POSITION_TRACKER_INITIAL_DELAY = 15_000;
 const POSITION_TRACKER_FETCH_LIMIT = 1000;
 const POSITION_ADVICE_COOLDOWN_MS = 120_000;
+const BROKER_RECONCILIATION_COOLDOWN_MS = 60_000;
+const FLATTEN_CHECK_COOLDOWN_MS = 30_000;
 const WORKER_NAME = 'position_tracker_worker';
 
 registerWorker(WORKER_NAME);
@@ -29,6 +33,8 @@ registerWorker(WORKER_NAME);
 let pollingTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 const lastAdvicePublishedAt = new Map<string, number>();
+let lastBrokerReconciliationAt = 0;
+let lastFlattenCheckAt = 0;
 
 function adviceCooldownKey(userId: string, adviceType: string, positionId: string): string {
   return `${userId}:${positionId}:${adviceType}`;
@@ -118,6 +124,44 @@ async function runPositionTrackingCycle(): Promise<void> {
       activePositionCount,
       uniqueUsers: userSnapshots.size,
     });
+  }
+
+  const now = Date.now();
+  if (now - lastBrokerReconciliationAt >= BROKER_RECONCILIATION_COOLDOWN_MS) {
+    lastBrokerReconciliationAt = now;
+    try {
+      const reconciliation = await reconcileTradierBrokerLedger();
+      if (reconciliation.enabled && (reconciliation.positionsForceClosed > 0 || reconciliation.positionsQuantitySynced > 0)) {
+        logger.info('Position tracker broker reconciliation updated positions', {
+          forceClosed: reconciliation.positionsForceClosed,
+          quantitySynced: reconciliation.positionsQuantitySynced,
+        });
+      }
+    } catch (error) {
+      logger.warn('Position tracker broker reconciliation failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (now - lastFlattenCheckAt >= FLATTEN_CHECK_COOLDOWN_MS) {
+    lastFlattenCheckAt = now;
+    try {
+      const flattenSummary = await enforceTradierLateDayFlatten();
+      if (flattenSummary.flattenedPositions > 0 || flattenSummary.failedPositions > 0) {
+        logger.info('Position tracker late-day flatten cycle', {
+          enabled: flattenSummary.enabled,
+          disabledReason: flattenSummary.disabledReason,
+          consideredPositions: flattenSummary.consideredPositions,
+          flattenedPositions: flattenSummary.flattenedPositions,
+          failedPositions: flattenSummary.failedPositions,
+        });
+      }
+    } catch (error) {
+      logger.warn('Position tracker late-day flatten failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

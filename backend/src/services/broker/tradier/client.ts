@@ -19,7 +19,7 @@ export interface TradierBalanceSnapshot {
 export interface TradierOrderPayload {
   class: 'option';
   symbol: string;
-  side: 'buy_to_open' | 'sell_to_open' | 'sell_to_close' | 'buy_to_close';
+  side: 'buy_to_open' | 'sell_to_close' | 'buy_to_close';
   quantity: number;
   type: 'limit' | 'market' | 'stop' | 'stop_limit';
   duration?: 'day' | 'gtc';
@@ -146,6 +146,10 @@ export class TradierClient {
   }
 
   async placeOrder(order: TradierOrderPayload): Promise<TradierOrderResult> {
+    if ((order.side as string) === 'sell_to_open') {
+      throw new Error('Tradier execution rejected: sell_to_open is forbidden for SPX command center.');
+    }
+
     const payload = {
       class: order.class,
       symbol: order.symbol,

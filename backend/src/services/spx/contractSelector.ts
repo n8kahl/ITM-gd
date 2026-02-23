@@ -1,4 +1,5 @@
 import { cacheGet, cacheSet } from '../../config/redis';
+import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { fetchExpirationDates, fetchOptionsChain } from '../options/optionsChainFetcher';
 import type { OptionContract } from '../options/types';
@@ -22,6 +23,8 @@ const LATE_DAY_FILTER_MINUTE_ET = 14 * 60;
 const LATE_DAY_MAX_SPREAD_PCT = 0.18;
 const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;
 const LATE_DAY_MIN_OPEN_INTEREST = 250;
+const DEFAULT_MAX_RISK_PCT = 0.02;
+const DEFAULT_BUYING_POWER_UTILIZATION_PCT = 0.9;
 interface RankedContract {
   contract: OptionContract;
   score: number;
@@ -32,6 +35,22 @@ interface ContractHealth {
   tier: 'green' | 'amber' | 'red';
   thetaRiskPer15m: number;
   ivVsRealized: number;
+}
+
+interface ContractSelectionRiskContext {
+  totalEquity?: number;
+  dayTradeBuyingPower?: number;
+  maxRiskPct?: number;
+  buyingPowerUtilizationPct?: number;
+}
+
+interface ContractSizingResult {
+  recommendedContracts: number;
+  maxRiskDollars: number;
+  contractsByRisk: number;
+  contractsByBuyingPower: number;
+  perContractDebit: number;
+  blockedReason?: 'margin_limit_blocked';
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -160,6 +179,93 @@ function computeContractHealth(contract: OptionContract): ContractHealth {
   };
 }
 
+function clampPercent(value: number, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return clamp(value, min, max);
+}
+
+function computeSizingResult(
+  ask: number,
+  riskContext: ContractSelectionRiskContext | null,
+): ContractSizingResult | null {
+  if (!riskContext) return null;
+  const totalEquity = Math.max(0, riskContext.totalEquity || 0);
+  const dayTradeBuyingPower = Math.max(0, riskContext.dayTradeBuyingPower || 0);
+  if (!Number.isFinite(totalEquity) || totalEquity <= 0) return null;
+
+  const maxRiskPct = clampPercent(
+    riskContext.maxRiskPct ?? DEFAULT_MAX_RISK_PCT,
+    DEFAULT_MAX_RISK_PCT,
+    0.0025,
+    0.05,
+  );
+  const buyingPowerUtilizationPct = clampPercent(
+    riskContext.buyingPowerUtilizationPct ?? DEFAULT_BUYING_POWER_UTILIZATION_PCT,
+    DEFAULT_BUYING_POWER_UTILIZATION_PCT,
+    0.25,
+    0.98,
+  );
+  const perContractDebit = Math.max(0, ask) * CONTRACT_MULTIPLIER;
+  const maxRiskDollars = totalEquity * maxRiskPct;
+  const contractsByRisk = perContractDebit > 0 ? Math.floor(maxRiskDollars / perContractDebit) : 0;
+  const contractsByBuyingPower = perContractDebit > 0
+    ? Math.floor((dayTradeBuyingPower * buyingPowerUtilizationPct) / perContractDebit)
+    : 0;
+  const recommendedContracts = Math.max(0, Math.min(contractsByRisk, contractsByBuyingPower));
+
+  return {
+    recommendedContracts,
+    maxRiskDollars: round(maxRiskDollars, 2),
+    contractsByRisk,
+    contractsByBuyingPower,
+    perContractDebit: round(perContractDebit, 2),
+    blockedReason: recommendedContracts < 1 ? 'margin_limit_blocked' : undefined,
+  };
+}
+
+function riskContextFingerprint(
+  userId: string | undefined,
+  riskContext: ContractSelectionRiskContext | null,
+): string {
+  if (!riskContext) return userId ? `u:${userId}` : 'risk:none';
+  const equity = round(riskContext.totalEquity || 0, 2);
+  const dtbp = round(riskContext.dayTradeBuyingPower || 0, 2);
+  const maxRiskPct = round(riskContext.maxRiskPct ?? DEFAULT_MAX_RISK_PCT, 4);
+  const bpPct = round(riskContext.buyingPowerUtilizationPct ?? DEFAULT_BUYING_POWER_UTILIZATION_PCT, 4);
+  return `u:${userId || 'none'}|eq:${equity}|dtbp:${dtbp}|rp:${maxRiskPct}|bp:${bpPct}`;
+}
+
+async function loadLatestRiskContextForUser(userId: string): Promise<ContractSelectionRiskContext | null> {
+  const normalized = userId.trim();
+  if (!normalized) return null;
+
+  const { data, error } = await supabase
+    .from('portfolio_snapshots')
+    .select('total_equity,day_trade_buying_power')
+    .eq('user_id', normalized)
+    .order('snapshot_time', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const normalizedMessage = error.message.toLowerCase();
+    if (normalizedMessage.includes('relation') && normalizedMessage.includes('does not exist') && normalizedMessage.includes('portfolio_snapshots')) {
+      return null;
+    }
+    logger.warn('Contract selector failed to load user risk context', {
+      userId: normalized,
+      error: error.message,
+    });
+    return null;
+  }
+
+  if (!data) return null;
+  return {
+    totalEquity: Number((data as { total_equity?: unknown }).total_equity) || 0,
+    dayTradeBuyingPower: Number((data as { day_trade_buying_power?: unknown }).day_trade_buying_power) || 0,
+  };
+}
+
 function scoreContract(setup: Setup, contract: OptionContract, now: Date): number {
   const targetDelta = deltaTargetForSetup(setup);
   const absDelta = Math.abs(contract.delta || 0);
@@ -185,7 +291,11 @@ function scoreContract(setup: Setup, contract: OptionContract, now: Date): numbe
   return 100 - deltaPenalty - spreadPenalty - spreadAbsolutePenalty - thetaPenalty + liquidityBonus + gammaBonus;
 }
 
-function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[]): ContractRecommendation {
+function toContractRecommendation(
+  setup: Setup,
+  rankedContracts: RankedContract[],
+  sizing: ContractSizingResult | null,
+): ContractRecommendation {
   const [{ contract, score }] = rankedContracts;
   const mid = getMid(contract);
   const entry = (setup.entryZone.low + setup.entryZone.high) / 2;
@@ -289,6 +399,16 @@ function toContractRecommendation(setup: Setup, rankedContracts: RankedContract[
     thetaRiskPer15m: health.thetaRiskPer15m,
     ivVsRealized: health.ivVsRealized,
     alternatives,
+    suggestedContracts: sizing?.recommendedContracts,
+    sizing: sizing
+      ? {
+        maxRiskDollars: sizing.maxRiskDollars,
+        contractsByRisk: sizing.contractsByRisk,
+        contractsByBuyingPower: sizing.contractsByBuyingPower,
+        perContractDebit: sizing.perContractDebit,
+        blockedReason: sizing.blockedReason,
+      }
+      : undefined,
     reasoning: `Selected for ${setup.type} with model score ${round(score, 1)} and ${health.tier.toUpperCase()} contract health (${health.score}).`,
   };
 }
@@ -423,12 +543,19 @@ export async function getContractRecommendation(options?: {
   setupId?: string;
   setup?: Setup | null;
   forceRefresh?: boolean;
+  userId?: string;
+  riskContext?: ContractSelectionRiskContext | null;
 }): Promise<ContractRecommendation | null> {
   const setupId = options?.setupId || null;
-  const cacheKey = `spx_command_center:contract:${setupId || 'default'}`;
+  const adHocSetup = options?.setup ? true : false;
   const forceRefresh = options?.forceRefresh === true;
+  const loadedRiskContext = options?.riskContext === undefined
+    ? (options?.userId ? await loadLatestRiskContextForUser(options.userId) : null)
+    : options.riskContext;
+  const riskFingerprint = riskContextFingerprint(options?.userId, loadedRiskContext);
+  const cacheKey = `spx_command_center:contract:${setupId || 'default'}:${riskFingerprint}`;
 
-  if (!forceRefresh) {
+  if (!forceRefresh && !adHocSetup) {
     const cached = await cacheGet<ContractRecommendation>(cacheKey);
     if (cached) {
       return cached;
@@ -468,7 +595,8 @@ export async function getContractRecommendation(options?: {
     return null;
   }
 
-  const recommendation = toContractRecommendation(setup, rankedContracts);
+  const sizing = computeSizingResult(rankedContracts[0].contract.ask, loadedRiskContext);
+  const recommendation = toContractRecommendation(setup, rankedContracts, sizing);
   await cacheSet(cacheKey, recommendation, CONTRACT_CACHE_TTL_SECONDS);
 
   return recommendation;
