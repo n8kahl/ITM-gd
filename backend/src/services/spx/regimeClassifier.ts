@@ -158,6 +158,17 @@ export async function classifyCurrentRegime(options?: {
     }
   }
 
+  const shouldFetchTrendContext = (
+    providedVolumeTrend == null
+    || !Number.isFinite(providedTrendStrength)
+  );
+  const trendContextPromise = shouldFetchTrendContext
+    ? getSessionTrendContext()
+    : Promise.resolve<SessionTrendContext>({
+      volumeTrend: providedVolumeTrend as SessionTrendContext['volumeTrend'],
+      trendStrength: clamp(providedTrendStrength as number, 0, 1),
+    });
+
   const [gex, levels, trendContext] = await Promise.all([
     gexLandscape
       ? Promise.resolve(gexLandscape)
@@ -165,7 +176,7 @@ export async function classifyCurrentRegime(options?: {
     levelData
       ? Promise.resolve(levelData)
       : getMergedLevels({ forceRefresh }),
-    getSessionTrendContext(),
+    trendContextPromise,
   ]);
   const volumeTrend = providedVolumeTrend ?? trendContext.volumeTrend;
   const trendStrength = Number.isFinite(providedTrendStrength)

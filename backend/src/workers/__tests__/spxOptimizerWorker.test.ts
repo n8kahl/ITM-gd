@@ -13,15 +13,23 @@ jest.mock('../../services/spx/optimizer', () => ({
   runSPXOptimizerScan: (...args: any[]) => mockRunSPXOptimizerScan(...args),
 }));
 
-import {
-  getSPXOptimizerWorkerStatus,
-  shouldRunSPXOptimizerNightly,
-  startSPXOptimizerWorker,
-  stopSPXOptimizerWorker,
-} from '../spxOptimizerWorker';
+const originalNightlyEnabled = process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED;
+
+let getSPXOptimizerWorkerStatus: typeof import('../spxOptimizerWorker').getSPXOptimizerWorkerStatus;
+let shouldRunSPXOptimizerNightly: typeof import('../spxOptimizerWorker').shouldRunSPXOptimizerNightly;
+let startSPXOptimizerWorker: typeof import('../spxOptimizerWorker').startSPXOptimizerWorker;
+let stopSPXOptimizerWorker: typeof import('../spxOptimizerWorker').stopSPXOptimizerWorker;
 
 describe('SPX optimizer nightly worker', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    jest.resetModules();
+    process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED = 'true';
+    ({
+      getSPXOptimizerWorkerStatus,
+      shouldRunSPXOptimizerNightly,
+      startSPXOptimizerWorker,
+      stopSPXOptimizerWorker,
+    } = await import('../spxOptimizerWorker'));
     jest.clearAllMocks();
     jest.useFakeTimers();
   });
@@ -29,6 +37,14 @@ describe('SPX optimizer nightly worker', () => {
   afterEach(() => {
     stopSPXOptimizerWorker();
     jest.useRealTimers();
+  });
+
+  afterAll(() => {
+    if (originalNightlyEnabled == null) {
+      delete process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED;
+      return;
+    }
+    process.env.SPX_OPTIMIZER_NIGHTLY_ENABLED = originalNightlyEnabled;
   });
 
   it('runs once after target minute ET on a trading day', () => {
