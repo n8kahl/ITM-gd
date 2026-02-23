@@ -15,7 +15,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'buy_to_open',
       quantity: 3,
       type: 'limit',
@@ -34,7 +35,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'sell_to_close',
       quantity: 2,
       type: 'limit',
@@ -55,7 +57,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'sell_to_close',
       quantity: 1,
       type: 'stop_limit',
@@ -75,7 +78,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'sell_to_close',
       quantity: 1,
       type: 'stop',

@@ -1,5 +1,11 @@
 import type { TradierOrderPayload } from './client';
 
+/** Extract the root underlying from an OCC option symbol (e.g. SPXW260227C06050000 → SPXW). */
+function underlyingFromOcc(occSymbol: string): string {
+  const match = /^([A-Z]{1,6})\d{6}[CP]\d{8}$/.exec(occSymbol.trim().toUpperCase());
+  return match ? match[1] : occSymbol;
+}
+
 export interface TradierEntryOrderInput {
   symbol: string;
   quantity: number;
@@ -25,7 +31,8 @@ export interface TradierStopOrderInput {
 export function buildTradierEntryOrder(input: TradierEntryOrderInput): TradierOrderPayload {
   return {
     class: 'option',
-    symbol: input.symbol,
+    symbol: underlyingFromOcc(input.symbol),
+    option_symbol: input.symbol,
     side: 'buy_to_open',
     quantity: Math.max(1, Math.floor(input.quantity)),
     type: 'limit',
@@ -38,7 +45,8 @@ export function buildTradierEntryOrder(input: TradierEntryOrderInput): TradierOr
 export function buildTradierScaleOrder(input: TradierScaleOrderInput): TradierOrderPayload {
   return {
     class: 'option',
-    symbol: input.symbol,
+    symbol: underlyingFromOcc(input.symbol),
+    option_symbol: input.symbol,
     side: 'sell_to_close',
     quantity: Math.max(1, Math.floor(input.quantity)),
     type: 'limit',
@@ -53,7 +61,8 @@ export function buildTradierRunnerStopOrder(input: TradierStopOrderInput): Tradi
   if (typeof input.limitPrice === 'number' && Number.isFinite(input.limitPrice)) {
     return {
       class: 'option',
-      symbol: input.symbol,
+      symbol: underlyingFromOcc(input.symbol),
+      option_symbol: input.symbol,
       side: 'sell_to_close',
       quantity: Math.max(1, Math.floor(input.quantity)),
       type: 'stop_limit',
@@ -66,7 +75,8 @@ export function buildTradierRunnerStopOrder(input: TradierStopOrderInput): Tradi
 
   return {
     class: 'option',
-    symbol: input.symbol,
+    symbol: underlyingFromOcc(input.symbol),
+    option_symbol: input.symbol,
     side: 'sell_to_close',
     quantity: Math.max(1, Math.floor(input.quantity)),
     type: 'stop',

@@ -19,6 +19,7 @@ export interface TradierBalanceSnapshot {
 export interface TradierOrderPayload {
   class: 'option';
   symbol: string;
+  option_symbol?: string;
   side: 'buy_to_open' | 'sell_to_close' | 'buy_to_close';
   quantity: number;
   type: 'limit' | 'market' | 'stop' | 'stop_limit';
@@ -150,20 +151,25 @@ export class TradierClient {
       throw new Error('Tradier execution rejected: sell_to_open is forbidden for SPX command center.');
     }
 
-    const payload = {
+    const payload: Record<string, string | number> = {
       class: order.class,
       symbol: order.symbol,
       side: order.side,
       quantity: Math.max(1, Math.floor(order.quantity)),
       type: order.type,
       duration: order.duration || 'day',
-      price: typeof order.price === 'number' ? Number(order.price.toFixed(2)) : undefined,
-      stop: typeof order.stop === 'number' ? Number(order.stop.toFixed(2)) : undefined,
-      tag: order.tag,
     };
+    if (order.option_symbol) payload.option_symbol = order.option_symbol;
+    if (typeof order.price === 'number') payload.price = Number(order.price.toFixed(2));
+    if (typeof order.stop === 'number') payload.stop = Number(order.stop.toFixed(2));
+    if (order.tag) payload.tag = order.tag;
 
-    const response = await this.http.post(`/accounts/${this.accountId}/orders`, payload, {
-      headers: { 'Content-Type': 'application/json' },
+    const formBody = Object.entries(payload)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join('&');
+
+    const response = await this.http.post(`/accounts/${this.accountId}/orders`, formBody, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
     const body = response.data as Record<string, any>;
     const orderNode = (body?.order || {}) as Record<string, unknown>;
@@ -194,16 +200,19 @@ export class TradierClient {
       throw new Error('Tradier order id is required for replace.');
     }
 
-    const payload = {
-      type: order.type,
-      duration: order.duration || 'day',
-      price: typeof order.price === 'number' ? Number(order.price.toFixed(2)) : undefined,
-      stop: typeof order.stop === 'number' ? Number(order.stop.toFixed(2)) : undefined,
-      quantity: typeof order.quantity === 'number' ? Math.max(1, Math.floor(order.quantity)) : undefined,
-    };
+    const payload: Record<string, string | number> = {};
+    if (order.type) payload.type = order.type;
+    payload.duration = order.duration || 'day';
+    if (typeof order.price === 'number') payload.price = Number(order.price.toFixed(2));
+    if (typeof order.stop === 'number') payload.stop = Number(order.stop.toFixed(2));
+    if (typeof order.quantity === 'number') payload.quantity = Math.max(1, Math.floor(order.quantity));
 
-    const response = await this.http.put(`/accounts/${this.accountId}/orders/${normalized}`, payload, {
-      headers: { 'Content-Type': 'application/json' },
+    const formBody = Object.entries(payload)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join('&');
+
+    const response = await this.http.put(`/accounts/${this.accountId}/orders/${normalized}`, formBody, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
     const body = response.data as Record<string, any>;
     const orderNode = (body?.order || {}) as Record<string, unknown>;
