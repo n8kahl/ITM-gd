@@ -5,6 +5,8 @@ const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradein
 const APP_URL = (Deno.env.get('APP_URL') || 'https://tradeitm.com').replace(/\/+$/, '')
 const RATE_LIMIT_MAX_MESSAGES = 30 // Max messages per minute per visitor
 const MAX_MESSAGE_LENGTH = 2000
+const MAX_CONVERSATION_TOKEN_LENGTH = 256
+const ENFORCE_VISITOR_CONVERSATION_TOKEN = Deno.env.get('ENFORCE_VISITOR_CONVERSATION_TOKEN') === 'true'
 
 function corsHeaders(origin: string | null) {
   const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
@@ -53,6 +55,25 @@ function validateVisitorId(id: string | undefined): void {
   }
 }
 
+function validateConversationToken(token: string | undefined): void {
+  if (!token) return
+  if (token.length > MAX_CONVERSATION_TOKEN_LENGTH) {
+    throw new Error('conversationToken is too long')
+  }
+}
+
+function generateConversationToken(): string {
+  return `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, '')}`
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const encoded = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest('SHA-256', encoded)
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 async function checkRateLimit(supabase: any, visitorId: string): Promise<boolean> {
   // Check messages from this visitor in the last 60 seconds
   const oneMinuteAgo = new Date(Date.now() - 60000).toISOString()
@@ -96,11 +117,12 @@ serve(async (req) => {
   }
 
   try {
-    const { conversationId, visitorMessage, visitorId } = await req.json()
+    const { conversationId, visitorMessage, visitorId, conversationToken } = await req.json()
 
     // Validate required fields
     validateConversationId(conversationId)
     validateVisitorId(visitorId)
+    validateConversationToken(conversationToken)
     const sanitizedMessage = sanitizeVisitorMessage(visitorMessage)
 
     // Initialize Supabase client
@@ -124,13 +146,72 @@ serve(async (req) => {
 
     // 1. Get or create conversation
     let conversation
+    let issuedConversationToken: string | null = null
     if (conversationId) {
-      const { data } = await supabase
+      const { data, error: conversationError } = await supabase
         .from('chat_conversations')
         .select('*')
         .eq('id', conversationId)
-        .single()
-      conversation = data
+        .eq('visitor_id', visitorId)
+        .maybeSingle()
+
+      if (conversationError) throw conversationError
+      if (!data) {
+        return new Response(
+          JSON.stringify({ error: 'Conversation not found for this visitor' }),
+          { status: 403, headers: { ...headers, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      conversation = data as any
+
+      if (conversation.access_token_hash) {
+        if (conversationToken) {
+          const providedHash = await sha256Hex(conversationToken)
+          if (providedHash !== conversation.access_token_hash) {
+            return new Response(
+              JSON.stringify({ error: 'Invalid conversation token' }),
+              { status: 401, headers: { ...headers, 'Content-Type': 'application/json' } }
+            )
+          }
+        } else if (ENFORCE_VISITOR_CONVERSATION_TOKEN) {
+          return new Response(
+            JSON.stringify({ error: 'conversationToken is required for this conversation' }),
+            { status: 401, headers: { ...headers, 'Content-Type': 'application/json' } }
+          )
+        } else {
+          // Compatibility mode: rotate and return a fresh token so upgraded clients can adopt token sync.
+          issuedConversationToken = generateConversationToken()
+          const tokenHash = await sha256Hex(issuedConversationToken)
+
+          const { error: tokenRotateError } = await supabase
+            .from('chat_conversations')
+            .update({
+              access_token_hash: tokenHash,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', conversation.id)
+            .eq('visitor_id', visitorId)
+
+          if (tokenRotateError) throw tokenRotateError
+          conversation.access_token_hash = tokenHash
+        }
+      } else {
+        issuedConversationToken = generateConversationToken()
+        const tokenHash = await sha256Hex(issuedConversationToken)
+
+        const { error: tokenUpdateError } = await supabase
+          .from('chat_conversations')
+          .update({
+            access_token_hash: tokenHash,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', conversation.id)
+          .eq('visitor_id', visitorId)
+
+        if (tokenUpdateError) throw tokenUpdateError
+        conversation.access_token_hash = tokenHash
+      }
 
       // Check if conversation needs to be reopened
       if (conversation && (conversation.status === 'resolved' || conversation.status === 'archived')) {
@@ -170,12 +251,16 @@ serve(async (req) => {
       }
     } else {
       // Create new conversation
+      issuedConversationToken = generateConversationToken()
+      const conversationTokenHash = await sha256Hex(issuedConversationToken)
+
       const { data, error } = await supabase
         .from('chat_conversations')
         .insert({
           visitor_id: visitorId,
           status: 'active',
           ai_handled: true,
+          access_token_hash: conversationTokenHash,
           metadata: {
             user_agent: req.headers.get('user-agent'),
             created_at: new Date().toISOString()
@@ -249,6 +334,7 @@ serve(async (req) => {
             success: true,
             escalated: true,
             conversationId: conversation.id,
+            conversationToken: issuedConversationToken || conversationToken || null,
             reason: conversation.metadata.pending_escalation.reason
           }),
           { headers: { ...headers, 'Content-Type': 'application/json' } }
@@ -315,6 +401,7 @@ serve(async (req) => {
           escalated: !escalationResult.needsEmail,
           pendingEmail: escalationResult.needsEmail,
           conversationId: conversation.id,
+          conversationToken: issuedConversationToken || conversationToken || null,
           reason: `Sentiment detected: ${sentimentResult.sentiment}`
         }),
         { headers: { ...headers, 'Content-Type': 'application/json' } }
@@ -346,6 +433,7 @@ serve(async (req) => {
             escalated: !escalationResult.needsEmail,
             pendingEmail: escalationResult.needsEmail,
             conversationId: conversation.id,
+            conversationToken: issuedConversationToken || conversationToken || null,
             reason: escalationCheck.reason
           }),
           { headers: { ...headers, 'Content-Type': 'application/json' } }
@@ -382,6 +470,7 @@ serve(async (req) => {
           escalated: !escalationResult.needsEmail,
           pendingEmail: escalationResult.needsEmail,
           conversationId: conversation.id,
+          conversationToken: issuedConversationToken || conversationToken || null,
           reason: 'Low AI confidence - human verification needed'
         }),
         { headers: { ...headers, 'Content-Type': 'application/json' } }
@@ -409,6 +498,7 @@ serve(async (req) => {
         success: true,
         message: aiMessage,
         conversationId: conversation.id,
+        conversationToken: issuedConversationToken || conversationToken || null,
         confidence: aiResponse.confidence
       }),
       { headers: { ...headers, 'Content-Type': 'application/json' } }

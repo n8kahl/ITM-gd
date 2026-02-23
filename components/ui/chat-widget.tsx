@@ -21,14 +21,41 @@ interface Conversation {
   id: string
   ai_handled: boolean
   escalation_reason?: string
-  visitor_name?: string
-  visitor_email?: string
+  status?: string
+  updated_at?: string
+  last_message_at?: string
+}
+
+interface ChatSession {
+  conversationId: string
+  conversationToken: string
+}
+
+const CHAT_SESSION_STORAGE_KEY = 'tradeitm_chat_session_v1'
+
+function loadChatSession(): ChatSession | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = localStorage.getItem(CHAT_SESSION_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ChatSession>
+    if (!parsed.conversationId || !parsed.conversationToken) return null
+    return {
+      conversationId: parsed.conversationId,
+      conversationToken: parsed.conversationToken,
+    }
+  } catch {
+    return null
+  }
 }
 
 export function ChatWidget() {
+  const initialSession = loadChatSession()
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(initialSession?.conversationId ?? null)
+  const [conversationToken, setConversationToken] = useState<string | null>(initialSession?.conversationToken ?? null)
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [teamOnline, setTeamOnline] = useState(false)
@@ -53,6 +80,8 @@ export function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const previousMessageCount = useRef(0)
+  const lastSyncedAtRef = useRef<string | null>(null)
+  const syncInFlightRef = useRef(false)
 
   // Auto-scroll to bottom when new messages arrive (with image loading support)
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -75,32 +104,82 @@ export function ChatWidget() {
     previousMessageCount.current = messages.length
   }, [messages, scrollToBottom])
 
-  // Load existing messages when conversation exists
-  const loadMessages = useCallback(async (convId: string) => {
-    const { data } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: true })
+  const syncConversation = useCallback(async (options?: { fullRefresh?: boolean }) => {
+    if (!conversationId) return
+    if (syncInFlightRef.current) return
 
-    if (data && data.length > 0) {
-      setMessages(data as Message[])
+    syncInFlightRef.current = true
+    try {
+      const syncUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + '/functions/v1/chat-visitor-sync'
+      const response = await fetch(syncUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          conversationId,
+          conversationToken,
+          visitorId,
+          since: options?.fullRefresh ? null : lastSyncedAtRef.current
+        })
+      })
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          // Stale/invalid token session; force new conversation on next send.
+          setConversationId(null)
+          setConversationToken(null)
+          setConversation(null)
+          setMessages([])
+          setIsEscalated(false)
+          setTeamTyping(null)
+          lastSyncedAtRef.current = null
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(CHAT_SESSION_STORAGE_KEY)
+          }
+        }
+        return
+      }
+
+      const payload = await response.json()
+      if (!payload?.success) return
+
+      if (typeof payload.conversationToken === 'string' && payload.conversationToken.length > 0) {
+        setConversationToken(payload.conversationToken)
+      }
+
+      if (payload.conversation) {
+        const conv = payload.conversation as Conversation
+        setConversation(conv)
+        setIsEscalated(!conv.ai_handled)
+      }
+
+      if (typeof payload.teamTyping === 'string' && payload.teamTyping.length > 0) {
+        setTeamTyping(payload.teamTyping)
+      } else {
+        setTeamTyping(null)
+      }
+
+      const incoming = (payload.messages || []) as Message[]
+      if (incoming.length > 0) {
+        setMessages((prev) => {
+          const map = new Map<string, Message>()
+          prev.forEach((m) => map.set(m.id, m))
+          incoming.forEach((m) => map.set(m.id, m))
+          return Array.from(map.values()).sort((a, b) => a.created_at.localeCompare(b.created_at))
+        })
+
+        lastSyncedAtRef.current = incoming[incoming.length - 1].created_at
+      } else if (!lastSyncedAtRef.current && payload.conversation?.last_message_at) {
+        lastSyncedAtRef.current = payload.conversation.last_message_at
+      }
+    } catch (error) {
+      console.error('Error syncing chat conversation:', error)
+    } finally {
+      syncInFlightRef.current = false
     }
-  }, [])
-
-  // Load conversation state (for escalation tracking)
-  const loadConversation = useCallback(async (convId: string) => {
-    const { data } = await supabase
-      .from('chat_conversations')
-      .select('id, ai_handled, escalation_reason, visitor_name, visitor_email')
-      .eq('id', convId)
-      .single()
-
-    if (data) {
-      setConversation(data as Conversation)
-      setIsEscalated(!data.ai_handled)
-    }
-  }, [])
+  }, [conversationId, conversationToken, visitorId])
 
   // Check if chat widget is enabled
   useEffect(() => {
@@ -134,70 +213,32 @@ export function ChatWidget() {
     }
   }, [isOpen, conversationId, messages.length])
 
-  // Subscribe to real-time messages, conversation changes, AND typing indicators
+  // Persist session token for this visitor browser session.
   useEffect(() => {
-    if (!conversationId) return
+    if (typeof window === 'undefined') return
 
-    // Load existing messages and conversation state
-    loadMessages(conversationId)
-    loadConversation(conversationId)
+    if (conversationId && conversationToken) {
+      localStorage.setItem(CHAT_SESSION_STORAGE_KEY, JSON.stringify({ conversationId, conversationToken }))
+    } else {
+      localStorage.removeItem(CHAT_SESSION_STORAGE_KEY)
+    }
+  }, [conversationId, conversationToken])
 
-    // Single channel for all real-time updates
-    const channel = supabase
-      .channel(`chat:${conversationId}`)
-      // Listen to ALL message inserts (visitor, team, system)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_messages',
-        filter: `conversation_id=eq.${conversationId}`
-      }, (payload: any) => {
-        const newMessage = payload.new as Message
-        // Add message if not already in state (dedupe by id)
-        setMessages(prev => {
-          if (prev.some(m => m.id === newMessage.id)) {
-            return prev
-          }
-          return [...prev, newMessage]
-        })
-        // Clear typing indicator when message received
-        setTeamTyping(null)
-      })
-      // Listen to conversation updates (for escalation state)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'chat_conversations',
-        filter: `id=eq.${conversationId}`
-      }, (payload: any) => {
-        const updated = payload.new as Conversation
-        setConversation(updated)
-        setIsEscalated(!updated.ai_handled)
-      })
-      // Listen to typing indicators
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'team_typing_indicators',
-        filter: `conversation_id=eq.${conversationId}`
-      }, (payload: any) => {
-        if (payload.eventType === 'DELETE') {
-          setTeamTyping(null)
-        } else if (payload.new) {
-          const indicator = payload.new as { user_name: string; is_typing: boolean }
-          if (indicator.is_typing) {
-            setTeamTyping(indicator.user_name)
-          } else {
-            setTeamTyping(null)
-          }
-        }
-      })
-      .subscribe()
+  // Poll secure visitor sync endpoint for conversation state + messages.
+  useEffect(() => {
+    if (!conversationId || !isOpen) return
+
+    lastSyncedAtRef.current = null
+    void syncConversation({ fullRefresh: true })
+
+    const interval = setInterval(() => {
+      void syncConversation()
+    }, 2000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
-  }, [conversationId, loadMessages, loadConversation])
+  }, [conversationId, isOpen, syncConversation])
 
   // Check if team is online
   useEffect(() => {
@@ -247,6 +288,7 @@ export function ChatWidget() {
         },
         body: JSON.stringify({
           conversationId,
+          conversationToken,
           visitorMessage: messageText,
           visitorId
         })
@@ -258,17 +300,28 @@ export function ChatWidget() {
       const result = await response.json()
 
       if (result.success) {
-        // Set conversation ID if this was first message
-        // This triggers the useEffect to subscribe to Realtime and load messages
-        if (!conversationId && result.conversationId) {
+        const createdNewConversation = !conversationId && !!result.conversationId
+        if (result.conversationId) {
           setConversationId(result.conversationId)
-          // Clear the local greeting - DB messages will load via subscription
+        }
+        if (result.conversationToken) {
+          setConversationToken(result.conversationToken)
+        }
+
+        // Replace greeting placeholder on first send; secure sync repopulates actual messages.
+        if (createdNewConversation) {
           setMessages([])
         }
 
-        // Escalation state is handled via Realtime subscription on chat_conversations
         if (result.escalated) {
           setIsEscalated(true)
+        }
+
+        if (result.conversationId && (result.conversationToken || conversationToken)) {
+          const fullRefresh = createdNewConversation
+          setTimeout(() => {
+            void syncConversation({ fullRefresh })
+          }, 100)
         }
       } else {
         throw new Error(result.error || 'Failed to send message')
