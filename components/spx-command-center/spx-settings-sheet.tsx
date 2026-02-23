@@ -5,6 +5,7 @@ import { Loader2, Settings2, Sparkles, X } from 'lucide-react'
 import { useSPXOptimizer } from '@/hooks/use-spx-optimizer'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { cn } from '@/lib/utils'
+import { BrokerTab } from './broker-tab'
 
 interface SPXSettingsSheetProps {
   open: boolean
@@ -94,6 +95,7 @@ function formatBucketLabel(value: string): string {
 }
 
 export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) {
+  const [activeTab, setActiveTab] = useState<'optimizer' | 'broker'>('optimizer')
   const [activeRevertId, setActiveRevertId] = useState<number | null>(null)
   const {
     scorecard,
@@ -264,6 +266,36 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
           </button>
         </div>
 
+        <div className="flex items-center gap-1 border-b border-white/10 px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('optimizer')}
+            data-testid="spx-settings-tab-optimizer"
+            className={cn(
+              'rounded-md px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] transition-colors',
+              activeTab === 'optimizer'
+                ? 'border border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                : 'border border-white/10 bg-white/[0.03] text-white/55 hover:text-white/80',
+            )}
+          >
+            Optimizer
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('broker')}
+            data-testid="spx-settings-tab-broker"
+            className={cn(
+              'rounded-md px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] transition-colors',
+              activeTab === 'broker'
+                ? 'border border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                : 'border border-white/10 bg-white/[0.03] text-white/55 hover:text-white/80',
+            )}
+          >
+            Broker
+          </button>
+        </div>
+
+        {activeTab === 'optimizer' && (<>
         {(loadError || scanError || revertError) && (
           <div className="px-4 pb-2 pt-2">
             <p className="rounded border border-rose-300/35 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100">
@@ -319,8 +351,8 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
                   <p>Action set</p>
                   <p className="font-mono text-white/92">+{setupActionCounts.add} / ~{setupActionCounts.update} / -{setupActionCounts.remove}</p>
                   <p>Trigger guardrail</p>
-                  <p className={cn('font-mono', scorecard.blockerMix.triggerRateGuardrailPassed ? 'text-emerald-200' : 'text-rose-200')}>
-                    {scorecard.blockerMix.triggerRateGuardrailPassed ? 'pass' : 'fail'}
+                  <p className={cn('font-mono', scorecard.blockerMix?.triggerRateGuardrailPassed ? 'text-emerald-200' : 'text-rose-200')}>
+                    {scorecard.blockerMix?.triggerRateGuardrailPassed ? 'pass' : 'fail'}
                   </p>
                 </div>
               ) : (
@@ -388,6 +420,7 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
                         )}
                       </div>
                     </div>
+                    {scorecard.blockerMix && (
                     <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
                       <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Blocker Mix</p>
                       <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-white/72">
@@ -403,6 +436,7 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
                         <p className={cn('font-mono', statTone(scorecard.blockerMix.triggerRateDeltaPct))}>{formatDelta(scorecard.blockerMix.triggerRateDeltaPct, ' pts')}</p>
                       </div>
                     </div>
+                    )}
                   </div>
 
                   <div className="grid gap-2 xl:grid-cols-2">
@@ -493,12 +527,50 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
                           <p className="font-mono">{formatPct(scorecard.dataQuality.executionCoveragePct)}</p>
                           <p>Non-proxy fill coverage</p>
                           <p className="font-mono">{formatPct(scorecard.dataQuality.executionNonProxyCoveragePct)}</p>
+                          <p>Proxy share (filled)</p>
+                          <p className="font-mono">{formatPct(scorecard.dataQuality.executionProxyShareOfFilledPct)}</p>
+                          <p>Broker Tradier share (filled)</p>
+                          <p className="font-mono">{formatPct(scorecard.dataQuality.executionBrokerTradierShareOfFilledPct)}</p>
                           <p>Entry slip (pts / bps)</p>
                           <p className="font-mono">{formatPoints(scorecard.dataQuality.executionEntryAvgSlippagePts, 4)} / {formatPoints(scorecard.dataQuality.executionEntryAvgSlippageBps, 2)}</p>
                         </div>
+                        {(scorecard.dataQuality.warnings || []).length > 0 && (
+                          <div className="mt-1 space-y-0.5 border-t border-emerald-200/15 pt-1 text-[9px] text-amber-100/90">
+                            {(scorecard.dataQuality.warnings || []).slice(0, 4).map((warning, index) => (
+                              <p key={`quality_warning_${index}`}>{warning}</p>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
+
+                  {scorecard.governance && (
+                    <div className="rounded border border-amber-300/25 bg-amber-500/[0.08] px-2 py-1.5 text-[10px]">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-amber-100">Promotion Governance</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-amber-50/90">
+                        <p>Qualified</p>
+                        <p className="font-mono">{scorecard.governance.promotionQualified ? 'yes' : 'no'}</p>
+                        <p>Resolved trades</p>
+                        <p className="font-mono">{scorecard.governance.observedResolvedTrades} / {scorecard.governance.requiredResolvedTrades}</p>
+                        <p>Setup-family diversity</p>
+                        <p className="font-mono">{scorecard.governance.observedSetupFamilyDiversity} / {scorecard.governance.requiredSetupFamilyDiversity}</p>
+                        <p>Conservative objective delta</p>
+                        <p className="font-mono">{scorecard.governance.observedConservativeObjectiveDelta.toFixed(2)} / {scorecard.governance.requiredConservativeObjectiveDelta.toFixed(2)}</p>
+                        <p>Execution fills observed</p>
+                        <p className="font-mono">{scorecard.governance.observedExecutionFills}</p>
+                        <p>Proxy share cap</p>
+                        <p className="font-mono">{formatPct(scorecard.governance.observedProxyFillSharePct)} / {formatPct(scorecard.governance.maxProxyFillSharePct)}</p>
+                      </div>
+                      {scorecard.governance.reasons.length > 0 && (
+                        <div className="mt-1 space-y-0.5 border-t border-amber-200/20 pt-1 text-[9px] text-amber-100/90">
+                          {scorecard.governance.reasons.slice(0, 4).map((reason, index) => (
+                            <p key={`governance_reason_${index}`}>{reason}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
                     <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Optimizer Notes</p>
@@ -607,6 +679,9 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
             )}
           </button>
         </div>
+        </>)}
+
+        {activeTab === 'broker' && <BrokerTab />}
       </div>
     </div>
   )
