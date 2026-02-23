@@ -206,6 +206,23 @@ export interface Setup {
   recommendedContract: ContractRecommendation | null;
   createdAt: string;
   triggeredAt: string | null;
+  // Telemetry for optimizer learning (P16-S7)
+  flowQualityScore?: number;
+  flowRecentDirectionalEvents?: number;
+  flowRecentDirectionalPremium?: number;
+  flowLocalDirectionalEvents?: number;
+  flowLocalDirectionalPremium?: number;
+  volumeTrend?: 'rising' | 'flat' | 'falling';
+  minutesSinceOpen?: number;
+  emaFastSlope?: number;
+  microstructureSnapshot?: {
+    deltaVolume: number;
+    bidAskImbalance: number | null;
+    avgSpreadBps: number | null;
+    quoteCoveragePct: number;
+    buyVolume: number;
+    sellVolume: number;
+  } | null;
 }
 
 export interface PredictionState {

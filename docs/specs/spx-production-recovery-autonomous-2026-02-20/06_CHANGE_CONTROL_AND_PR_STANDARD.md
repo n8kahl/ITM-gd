@@ -1584,3 +1584,27 @@ PR can merge only when:
   - Revert listed files or disable all Tradier runtime flags.
 - Notes:
   - Slice aligns live-trading testability with sandbox controls while preserving current setup-detection behavior.
+
+---
+
+### P16-S7: Full Telemetry Persistence for Continuous Improvement
+- Date: 2026-02-22
+- Author: Claude Opus 4.6
+- Summary: Close 3 telemetry gaps: persist flow quality details (score, event counts, premium breakdowns), volume trend ('rising'/'flat'/'falling'), indicator context (minutesSinceOpen, emaFastSlope), and microstructure snapshot (deltaVolume, bidAskImbalance, avgSpreadBps, quoteCoveragePct, buy/sellVolume) to `spx_setup_instances` metadata JSONB.
+- Files touched:
+  - `backend/src/services/spx/types.ts` — Added 10 telemetry fields to `Setup` interface
+  - `backend/src/services/spx/setupDetector.ts` — Inject flowQuality, indicatorContext, and microbar data into setup return; import `getWorkingMicrobar`
+  - `backend/src/services/spx/outcomeTracker.ts` — Persist 9 new fields in `toTrackedRow()` metadata
+  - `docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S7_2026-02-22.md` — Slice spec
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend test` — 789/789 passed
+- Risks introduced:
+  - None. Additive JSONB fields, fully backwards-compatible.
+- Mitigations:
+  - Microstructure snapshot returns null when tick stream is inactive.
+  - All new fields are optional on the Setup interface.
+- Rollback:
+  - Revert 3 source files. No schema migration needed.
+- Notes:
+  - Enables optimizer to learn from continuous flow quality, volume trend, and microstructure signals instead of only boolean proxies.

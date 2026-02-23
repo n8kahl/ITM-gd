@@ -7,6 +7,7 @@ import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { getActiveSPXOptimizationProfile, type SPXGeometryPolicyEntry } from './optimizer';
+import { getWorkingMicrobar } from './microbarAggregator';
 import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
 import type {
@@ -2266,6 +2267,27 @@ export async function detectActiveSetups(options?: {
       triggeredAt: gatedLifecycle.status === 'triggered' || gatedLifecycle.status === 'invalidated' || gatedLifecycle.status === 'expired'
         ? gatedTriggeredAt
         : null,
+      // Telemetry for optimizer learning (P16-S7)
+      flowQualityScore: flowQuality.score,
+      flowRecentDirectionalEvents: flowQuality.recentDirectionalEvents,
+      flowRecentDirectionalPremium: flowQuality.recentDirectionalPremium,
+      flowLocalDirectionalEvents: flowQuality.localDirectionalEvents,
+      flowLocalDirectionalPremium: flowQuality.localDirectionalPremium,
+      volumeTrend: indicatorContext?.volumeTrend ?? 'flat',
+      minutesSinceOpen: indicatorContext?.minutesSinceOpen ?? undefined,
+      emaFastSlope: indicatorContext?.emaFastSlope ?? undefined,
+      microstructureSnapshot: (() => {
+        const bar = getWorkingMicrobar('SPX', '5s');
+        if (!bar) return null;
+        return {
+          deltaVolume: bar.deltaVolume,
+          bidAskImbalance: bar.bidAskImbalance,
+          avgSpreadBps: bar.avgSpreadBps,
+          quoteCoveragePct: bar.quoteCoveragePct,
+          buyVolume: bar.buyVolume,
+          sellVolume: bar.sellVolume,
+        };
+      })(),
     };
   });
 
