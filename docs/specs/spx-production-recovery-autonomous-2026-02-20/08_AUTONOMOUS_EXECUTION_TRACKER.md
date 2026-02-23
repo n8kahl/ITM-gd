@@ -1197,3 +1197,48 @@ Update this file at the end of each autonomous execution session.
   - Wire broker fill callbacks/polling into execution reconciliation to replace transition-proxy assumptions.
 - Blockers:
   - None for sandbox validation path.
+
+### Session 2026-02-23 17:00 ET
+- Goal: Execute P14-S8 through P14-S16 — unified setup detection and optimization enhancement (gate recalibration, geometry sweep expansion, regime-adaptive trade management, VWAP bridge).
+- Completed:
+  - **P14-S8**: ORB breakout rescue — flow/volume/EMA grace + range width filter (4-18pt)
+  - **P14-S9**: Gate recalibration — relaxed breakout_vacuum (confluence 5→4, pWin 0.70→0.62), tightened trend_pullback (pWin 0.58→0.62)
+  - **P14-S10**: Time-bucket expansion — 3→5 buckets (early_open/opening/midday/afternoon/close) + late-session geometry compression
+  - **P14-S11**: Geometry sweep expanded to all 7 setup families
+  - **P14-S12**: Direction-aware sweep library (bullish/bearish splits with MIN_DIRECTION_SAMPLE_SIZE=5)
+  - **P14-S13**: Direction-aware optimizer integration — direction-qualified profile keys, 8-key geometry resolution chain
+  - **P14-S14**: Regime-adaptive partials (compression:0.75, ranging:0.70, trending:0.55, breakout:0.50) + breakeven+0.15R stop
+  - **P14-S15**: GEX-adaptive stop scaling (positive:×0.90, negative+mean-reversion:×1.10)
+  - **P14-S16**: VWAP bridge — confluence source (`vwap_alignment`) + directional gate (`vwap_direction_misaligned`) + PreparedOptimizationRow fields
+  - 9 slice spec documents authored
+  - Change control (06_), risk register (07_), execution tracker (08_) updated
+  - Release notes and runbook updated
+- Files:
+  - `backend/src/services/spx/setupDetector.ts`
+  - `backend/src/services/spx/optimizer.ts`
+  - `backend/src/services/spx/winRateBacktest.ts`
+  - `backend/src/services/spx/geometrySweep.ts`
+  - `backend/src/services/spx/types.ts`
+  - `backend/src/services/spx/historicalReconstruction.ts`
+  - `backend/src/scripts/spxSweepGeometry.ts`
+  - `docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S8_2026-02-23.md` through `P14-S16_2026-02-23.md`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean (0 errors)
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+  - Node v22.22.0: `tsc --noEmit` — clean
+  - Node v22.22.0: `jest src/services/spx/__tests__/` — 71/71 pass
+  - Node v22.22.0: `pnpm run build` — clean
+  - `pnpm exec eslint <touched backend files>` — 0 errors (7 warnings: backend files ignored by root config, backend relies on tsc)
+- Risks found:
+  - ORB grace may admit low-conviction setups (R-058)
+  - Time/direction splits thin sample sizes (R-059)
+  - VWAP gate may over-filter counter-trend strategies (R-061)
+- Risks mitigated:
+  - All new features env-disableable: `SPX_ORB_FLOW_GRACE_ENABLED`, `SPX_VWAP_GATE_ENABLED`
+  - Direction-aware sweep falls back to undirected geometry when sample <5
+  - GEX and VWAP adjustments are null-safe
+  - All 9 slices validated under Node v22.22.0
+- Next slice:
+  - Run optimizer scan to validate aggregate impact across all 9 optimizations.
+- Blockers:
+  - None.

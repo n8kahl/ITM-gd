@@ -199,12 +199,15 @@ function toSessionMinuteEt(value: string | null | undefined): number | null {
   return Math.max(0, (et.hour * 60 + et.minute) - sessionOpenMinute);
 }
 
-function toGeometryBucket(firstSeenAtIso: string | null): 'opening' | 'midday' | 'late' {
+type GeometryBucket = 'early_open' | 'opening' | 'midday' | 'afternoon' | 'close';
+function toGeometryBucket(firstSeenAtIso: string | null): GeometryBucket {
   const minuteSinceOpen = toSessionMinuteEt(firstSeenAtIso);
   if (minuteSinceOpen == null) return 'midday';
+  if (minuteSinceOpen <= 30) return 'early_open';
   if (minuteSinceOpen <= 90) return 'opening';
   if (minuteSinceOpen <= 240) return 'midday';
-  return 'late';
+  if (minuteSinceOpen <= 330) return 'afternoon';
+  return 'close';
 }
 
 function resolveGeometryAdjustmentForSetup(
@@ -213,7 +216,16 @@ function resolveGeometryAdjustmentForSetup(
 ): SPXBacktestGeometryAdjustment | null {
   const regime = setup.regime || 'unknown';
   const bucket = toGeometryBucket(setup.firstSeenAt);
+  const dirSuffix = setup.direction ? `_${setup.direction}` : '';
   const keys = [
+    // Direction-specific keys (most specific first)
+    ...(dirSuffix ? [
+      `${setup.setupType}${dirSuffix}|${regime}|${bucket}`,
+      `${setup.setupType}${dirSuffix}|${regime}`,
+      `${setup.setupType}${dirSuffix}|${bucket}`,
+      `${setup.setupType}${dirSuffix}`,
+    ] : []),
+    // Undirected keys (fallback)
     `${setup.setupType}|${regime}|${bucket}`,
     `${setup.setupType}|${regime}`,
     `${setup.setupType}|${bucket}`,

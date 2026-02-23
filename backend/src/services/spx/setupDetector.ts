@@ -1,5 +1,6 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getMinuteAggregates } from '../../config/massive';
+import { calculateVWAP, analyzeVWAPPosition } from '../levels/calculators/vwap';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import { getFibLevels } from './fibEngine';
@@ -36,6 +37,12 @@ const FLOW_MIN_LOCAL_EVENTS = 2;
 const FLOW_QUALITY_MIN_EVENTS = 2;
 const FLOW_QUALITY_MIN_PREMIUM = 90_000;
 const ORB_MIN_FLOW_QUALITY_SCORE = 58;
+const ORB_GRACE_MIN_CONFLUENCE_SCORE = 4;
+const ORB_GRACE_MAX_FIRST_SEEN_MINUTE = 120;
+const ORB_GRACE_REDUCED_FLOW_QUALITY_SCORE = 25;
+const ORB_GRACE_REDUCED_FLOW_EVENTS = 0;
+const ORB_RANGE_MIN_WIDTH_POINTS = 4;
+const ORB_RANGE_MAX_WIDTH_POINTS = 18;
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
 
 const DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
@@ -146,7 +153,8 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
   },
   trend_pullback: {
     minConfluenceScore: 3,
-    minPWinCalibrated: 0.58,
+    // Tightened from 0.58 — 38.71% failure rate was highest among active strategies.
+    minPWinCalibrated: 0.62,
     minEvR: 0.24,
     requireFlowConfirmation: true,
     minAlignmentPct: 50,
@@ -164,11 +172,12 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     requireVolumeRegimeAlignment: true,
   },
   breakout_vacuum: {
-    minConfluenceScore: 5,
-    minPWinCalibrated: 0.7,
-    minEvR: 0.4,
+    // Relaxed from 5/0.70/0.40 — prior gates were structurally unreachable (0% trigger rate YTD).
+    minConfluenceScore: 4,
+    minPWinCalibrated: 0.62,
+    minEvR: 0.28,
     requireFlowConfirmation: true,
-    minAlignmentPct: 60,
+    minAlignmentPct: 55,
     requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
     maxFirstSeenMinuteEt: 225,
@@ -217,6 +226,8 @@ interface SetupIndicatorContext {
   minutesSinceOpen: number;
   sessionOpenTimestamp: string;
   asOfTimestamp: string;
+  vwapPrice: number | null;
+  vwapDeviation: number | null;
 }
 
 interface FlowQualitySummary {
@@ -727,8 +738,17 @@ function resolveTradeManagementForSetup(input: {
     };
   }
 
+  // Regime-adaptive partial at T1 — trend/breakout: hold more runner; compression/ranging: take more profit
+  const regimePartialOverride: Record<Regime, number> = {
+    compression: 0.75,
+    ranging: 0.70,
+    trending: 0.55,
+    breakout: 0.50,
+  };
+  const regimePartial = regimePartialOverride[input.regime] ?? basePartial;
+
   return {
-    partialAtT1Pct: basePartial,
+    partialAtT1Pct: Math.max(Math.min(regimePartial, 0.9), 0.1),
     moveStopToBreakeven: baseMoveToBreakeven,
   };
 }
@@ -776,6 +796,8 @@ function calculateConfluence(input: {
   flowConfirmed: boolean;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
+  vwapPrice: number | null;
+  vwapDeviation: number | null;
 }): { score: number; sources: string[] } {
   const sources: string[] = [];
 
@@ -793,6 +815,14 @@ function calculateConfluence(input: {
   if (input.regimeAligned) sources.push('regime_alignment');
   if (input.emaAligned) sources.push('ema_alignment');
   if (input.volumeRegimeAligned) sources.push('volume_regime_alignment');
+
+  // VWAP alignment: price aligned with direction relative to VWAP
+  if (input.vwapPrice != null) {
+    const vwapAligned = input.direction === 'bullish'
+      ? input.currentPrice >= input.vwapPrice
+      : input.currentPrice <= input.vwapPrice;
+    if (vwapAligned) sources.push('vwap_alignment');
+  }
 
   return {
     score: Math.min(5, sources.length),
@@ -958,6 +988,20 @@ function buildIndicatorContextFromBars(input: {
     ? firstBar.o
     : firstBar.c;
 
+  const vwapBars = sortedBars.map((bar) => ({
+    h: typeof bar.h === 'number' && Number.isFinite(bar.h) ? bar.h : bar.c,
+    l: typeof bar.l === 'number' && Number.isFinite(bar.l) ? bar.l : bar.c,
+    c: bar.c,
+    v: bar.v,
+    vw: 0,
+    o: typeof bar.o === 'number' && Number.isFinite(bar.o) ? bar.o : bar.c,
+    t: bar.t,
+    n: 0,
+  }));
+  const vwapPrice = calculateVWAP(vwapBars);
+  const lastClose = closes[closes.length - 1];
+  const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
+
   return {
     emaFast: round(emaFast, 2),
     emaSlow: round(emaSlow, 2),
@@ -970,6 +1014,8 @@ function buildIndicatorContextFromBars(input: {
     minutesSinceOpen,
     sessionOpenTimestamp: new Date(firstBar.t).toISOString(),
     asOfTimestamp: input.asOfTimestamp,
+    vwapPrice: vwapPrice != null ? round(vwapPrice, 2) : null,
+    vwapDeviation: vwapPosition != null ? round(vwapPosition.distancePct, 4) : null,
   };
 }
 
@@ -1480,16 +1526,37 @@ function resolveSetupGeometryPolicy(input: {
   return mergeGeometryPolicy(mergeGeometryPolicy(byType, byRegime), byRegimeBucket);
 }
 
+// GEX-adaptive stop scaling: positive GEX = dealer support → tighten stops 10%;
+// negative GEX = amplified moves → widen stops 10% for mean-reversion families.
+const GEX_STOP_TIGHTEN_FACTOR = 0.90;
+const GEX_STOP_WIDEN_FACTOR = 1.10;
+const GEX_MEAN_REVERSION_FAMILIES = new Set<string>(['mean_reversion', 'fade_at_wall', 'flip_reclaim']);
+
 function applyStopGeometryPolicy(input: {
   direction: 'bullish' | 'bearish';
   entryLow: number;
   entryHigh: number;
   baseStop: number;
   geometryPolicy: SPXGeometryPolicyEntry;
+  netGex?: number;
+  setupType?: string;
 }): number {
   const entryMid = (input.entryLow + input.entryHigh) / 2;
   const risk = Math.max(0.35, Math.abs(entryMid - input.baseStop));
-  const scaledRisk = Math.max(0.35, risk * input.geometryPolicy.stopScale);
+
+  // Apply GEX-adaptive stop modifier
+  let gexStopMultiplier = 1;
+  if (input.netGex != null && Number.isFinite(input.netGex)) {
+    if (input.netGex > 0) {
+      // Positive GEX: dealer hedging creates support → tighten stops
+      gexStopMultiplier = GEX_STOP_TIGHTEN_FACTOR;
+    } else if (input.netGex < 0 && GEX_MEAN_REVERSION_FAMILIES.has(input.setupType ?? '')) {
+      // Negative GEX + mean-reversion: moves overshoot → widen stops
+      gexStopMultiplier = GEX_STOP_WIDEN_FACTOR;
+    }
+  }
+
+  const scaledRisk = Math.max(0.35, risk * input.geometryPolicy.stopScale * gexStopMultiplier);
   const stop = input.direction === 'bullish'
     ? entryMid - scaledRisk
     : entryMid + scaledRisk;
@@ -1523,6 +1590,10 @@ function evaluateOptimizationGate(input: {
   pausedCombos: Set<string>;
   profile: Awaited<ReturnType<typeof getActiveSPXOptimizationProfile>>;
   direction: 'bullish' | 'bearish';
+  orbHigh?: number;
+  orbLow?: number;
+  vwapPrice?: number | null;
+  vwapDeviation?: number | null;
 }): string[] {
   const actionableStatuses = new Set(input.profile.qualityGate.actionableStatuses);
   const isNewActionable = (input.status === 'ready' || input.status === 'triggered') && !input.wasPreviouslyTriggered;
@@ -1573,6 +1644,33 @@ function evaluateOptimizationGate(input: {
     && input.emaAligned
     && input.confluenceScore >= Math.max(3, minConfluenceScore - 1)
   );
+  const orbFlowGraceEnabled = parseBooleanEnv(
+    process.env.SPX_ORB_FLOW_GRACE_ENABLED,
+    true,
+  );
+  const orbFlowGraceEligible = (
+    orbFlowGraceEnabled
+    && input.setupType === 'orb_breakout'
+    && firstSeenMinute != null
+    && firstSeenMinute <= ORB_GRACE_MAX_FIRST_SEEN_MINUTE
+    && input.emaAligned
+    && input.confluenceScore >= Math.max(ORB_GRACE_MIN_CONFLUENCE_SCORE, minConfluenceScore)
+  );
+  const orbVolumeGraceEligible = (
+    orbFlowGraceEnabled
+    && input.setupType === 'orb_breakout'
+    && firstSeenMinute != null
+    && firstSeenMinute <= ORB_GRACE_MAX_FIRST_SEEN_MINUTE
+    && input.emaAligned
+    && input.confluenceScore >= ORB_GRACE_MIN_CONFLUENCE_SCORE
+  );
+  const orbEmaGraceEligible = (
+    orbFlowGraceEnabled
+    && input.setupType === 'orb_breakout'
+    && firstSeenMinute != null
+    && firstSeenMinute <= ORB_WINDOW_MINUTES
+    && input.confluenceScore >= ORB_GRACE_MIN_CONFLUENCE_SCORE
+  );
   const trendFamilyVolumeGraceEligible = (
     input.setupType === 'trend_pullback'
     && firstSeenMinute != null
@@ -1595,20 +1693,20 @@ function evaluateOptimizationGate(input: {
   if (input.evR < minEvR) {
     reasons.push(`evr_below_floor:${round(input.evR, 3)}<${round(minEvR, 3)}`);
   }
-  if (requireFlowConfirmation && !input.flowConfirmed && !trendFamilyFlowGraceEligible) {
+  if (requireFlowConfirmation && !input.flowConfirmed && !trendFamilyFlowGraceEligible && !orbFlowGraceEligible) {
     reasons.push('flow_confirmation_required');
   }
   if (input.flowAlignmentPct != null) {
     if (minAlignmentPct > 0 && input.flowAlignmentPct < minAlignmentPct) {
       reasons.push(`flow_alignment_below_floor:${round(input.flowAlignmentPct, 2)}<${minAlignmentPct}`);
     }
-  } else if (requireFlowConfirmation && minAlignmentPct > 0 && !trendFamilyFlowGraceEligible) {
+  } else if (requireFlowConfirmation && minAlignmentPct > 0 && !trendFamilyFlowGraceEligible && !orbFlowGraceEligible) {
     reasons.push('flow_alignment_unavailable');
   }
-  if (requireEmaAlignment && !input.emaAligned) {
+  if (requireEmaAlignment && !input.emaAligned && !orbEmaGraceEligible) {
     reasons.push('ema_alignment_required');
   }
-  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned && !trendFamilyVolumeGraceEligible) {
+  if (requireVolumeRegimeAlignment && !input.volumeRegimeAligned && !trendFamilyVolumeGraceEligible && !orbVolumeGraceEligible) {
     reasons.push('volume_regime_alignment_required');
   }
   const setupSpecificMaxMinute = setupFloors?.maxFirstSeenMinuteEt;
@@ -1639,11 +1737,38 @@ function evaluateOptimizationGate(input: {
   }
 
   if (input.setupType === 'orb_breakout') {
-    if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
-      reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
+    const effectiveFlowMinEvents = orbFlowGraceEligible
+      ? ORB_GRACE_REDUCED_FLOW_EVENTS
+      : FLOW_QUALITY_MIN_EVENTS;
+    const effectiveFlowMinScore = orbFlowGraceEligible
+      ? ORB_GRACE_REDUCED_FLOW_QUALITY_SCORE
+      : ORB_MIN_FLOW_QUALITY_SCORE;
+    if (input.flowQuality.recentDirectionalEvents < effectiveFlowMinEvents) {
+      reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${effectiveFlowMinEvents}`);
     }
-    if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
-      reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
+    if (input.flowQuality.score < effectiveFlowMinScore) {
+      reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${effectiveFlowMinScore}`);
+    }
+    // ORB range width filter — reject too-narrow or too-wide opening ranges
+    const orbWidth = (input.orbHigh ?? 0) - (input.orbLow ?? 0);
+    if (input.orbHigh != null && input.orbLow != null && orbWidth > 0) {
+      if (orbWidth < ORB_RANGE_MIN_WIDTH_POINTS) {
+        reasons.push(`orb_range_too_narrow:${round(orbWidth, 2)}<${ORB_RANGE_MIN_WIDTH_POINTS}`);
+      }
+      if (orbWidth > ORB_RANGE_MAX_WIDTH_POINTS) {
+        reasons.push(`orb_range_too_wide:${round(orbWidth, 2)}>${ORB_RANGE_MAX_WIDTH_POINTS}`);
+      }
+    }
+  }
+
+  // VWAP directional filter — bullish setups should be at or above VWAP, bearish below
+  const vwapGateEnabled = parseBooleanEnv(process.env.SPX_VWAP_GATE_ENABLED, true);
+  if (vwapGateEnabled && input.vwapPrice != null && Number.isFinite(input.vwapPrice)) {
+    const vwapMisaligned = input.direction === 'bullish'
+      ? input.vwapDeviation != null && input.vwapDeviation < -0.15
+      : input.vwapDeviation != null && input.vwapDeviation > 0.15;
+    if (vwapMisaligned) {
+      reasons.push(`vwap_direction_misaligned:${input.direction}|dev=${round(input.vwapDeviation ?? 0, 4)}`);
     }
   }
 
@@ -1969,6 +2094,8 @@ export async function detectActiveSetups(options?: {
       flowConfirmed,
       emaAligned,
       volumeRegimeAligned,
+      vwapPrice: indicatorContext?.vwapPrice ?? null,
+      vwapDeviation: indicatorContext?.vwapDeviation ?? null,
     });
 
     const fallbackDistance = Math.max(6, Math.abs(gex.combined.callWall - gex.combined.putWall) / 4);
@@ -2008,6 +2135,8 @@ export async function detectActiveSetups(options?: {
       entryHigh,
       baseStop,
       geometryPolicy,
+      netGex: gex.combined.netGex,
+      setupType,
     });
     const baseTargets = getTargetPrice(levels.clusters, zoneCenter, direction, fallbackDistance);
     const tunedTargets = adjustTargetsForSetupType({
@@ -2186,6 +2315,10 @@ export async function detectActiveSetups(options?: {
       pausedCombos,
       profile: optimizationProfile,
       direction,
+      orbHigh: indicatorContext?.orbHigh,
+      orbLow: indicatorContext?.orbLow,
+      vwapPrice: indicatorContext?.vwapPrice,
+      vwapDeviation: indicatorContext?.vwapDeviation,
     });
     const gateStatus: Setup['gateStatus'] = gateReasons.length > 0 ? 'blocked' : 'eligible';
     const gatedStatus: Setup['status'] = gateStatus === 'blocked' ? 'forming' : lifecycle.status;
@@ -2288,6 +2421,14 @@ export async function detectActiveSetups(options?: {
           sellVolume: bar.sellVolume,
         };
       })(),
+      orbFlowGraceApplied: (
+        setupType === 'orb_breakout'
+        && parseBooleanEnv(process.env.SPX_ORB_FLOW_GRACE_ENABLED, true)
+        && emaAligned
+        && confluence.score >= ORB_GRACE_MIN_CONFLUENCE_SCORE
+        && indicatorContext?.minutesSinceOpen != null
+        && indicatorContext.minutesSinceOpen <= ORB_GRACE_MAX_FIRST_SEEN_MINUTE
+      ) || undefined,
     };
   });
 

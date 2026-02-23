@@ -1608,3 +1608,143 @@ PR can merge only when:
   - Revert 3 source files. No schema migration needed.
 - Notes:
   - Enables optimizer to learn from continuous flow quality, volume trend, and microstructure signals instead of only boolean proxies.
+
+---
+
+### Slice: P14-S8
+- Objective: Rescue ORB breakout from 88% gate-blocked rate via flow grace + range width filter.
+- Status: done
+- Scope: ORB flow/volume/EMA grace eligibility, opening range width filter (4-18 points), `orbFlowGraceApplied` telemetry, `SPX_ORB_FLOW_GRACE_ENABLED` env flag.
+- Out of scope: Other setup type gates, geometry sweep changes.
+- Files:
+  - `backend/src/services/spx/setupDetector.ts`
+  - `backend/src/services/spx/types.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: Grace may admit low-quality setups.
+- Mitigations: Requires confluenceScore>=4 and EMA alignment as structural evidence.
+- Rollback: Set `SPX_ORB_FLOW_GRACE_ENABLED=false`.
+
+### Slice: P14-S9
+- Objective: Unblock breakout_vacuum (0% trigger rate) and tighten trend_pullback (38.71% failure).
+- Status: done
+- Scope: Relax breakout_vacuum floors (confluence 5→4, pWin 0.70→0.62, evR 0.40→0.28), tighten trend_pullback pWin (0.58→0.62).
+- Out of scope: Geometry sweep, new gate types.
+- Files:
+  - `backend/src/services/spx/setupDetector.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: breakout_vacuum relaxation may admit marginal setups.
+- Mitigations: Still higher bar than most families; aligns with institutional floor.
+- Rollback: Revert SETUP_SPECIFIC_GATE_FLOORS values.
+
+### Slice: P14-S10
+- Objective: Expand time buckets from 3 to 5 with late-session geometry compression.
+- Status: done
+- Scope: early_open/opening/midday/afternoon/close buckets, geometry overrides per bucket, `GeometryBucket` type.
+- Out of scope: Geometry sweep integration (S11-S13).
+- Files:
+  - `backend/src/services/spx/winRateBacktest.ts`
+  - `backend/src/services/spx/optimizer.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: 5-bucket split thins per-bucket sample sizes.
+- Mitigations: Sweep auto-skips families with <8 samples.
+- Rollback: Revert `toGeometryBucket()` to 3-bucket function.
+
+### Slice: P14-S11
+- Objective: Expand geometry sweep from 4 to all 7 setup families.
+- Status: done
+- Scope: `SweepFamily` union type expanded, `ALL_SWEEP_FAMILIES` to 7, grid classification for new families, dynamic results initialization.
+- Out of scope: Direction-aware sweeping (S12-S13).
+- Files:
+  - `backend/src/services/spx/geometrySweep.ts`
+  - `backend/src/services/spx/optimizer.ts`
+  - `backend/src/scripts/spxSweepGeometry.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: New families may have insufficient samples.
+- Mitigations: Auto-skip when <8 triggered setups.
+- Rollback: Revert `ALL_SWEEP_FAMILIES` to 4 entries.
+
+### Slice: P14-S12
+- Objective: Build direction-aware (bullish/bearish) geometry sweep library.
+- Status: done
+- Scope: `SweepDirection`, `DirectionSweepFamilyResult` types, `sweepGeometryForFamiliesDirectional()` function, `MIN_DIRECTION_SAMPLE_SIZE=5`.
+- Out of scope: Optimizer integration (S13).
+- Files:
+  - `backend/src/services/spx/geometrySweep.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: Direction splits may be too small.
+- Mitigations: 5-sample minimum; null when insufficient.
+- Rollback: Revert to undirected `sweepGeometryForFamilies()`.
+
+### Slice: P14-S13
+- Objective: Wire direction-aware sweep into Stage 2 optimizer, profile assembly, and geometry resolution.
+- Status: done
+- Scope: Stage 2 directional sweep, direction-qualified profile keys (e.g., `fade_at_wall_bullish`), 8-key resolution chain, scorecard direction deltas.
+- Out of scope: New geometry candidate dimensions.
+- Files:
+  - `backend/src/services/spx/optimizer.ts`
+  - `backend/src/services/spx/winRateBacktest.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: Direction-qualified keys may fragment data.
+- Mitigations: Falls back through 8-key chain to undirected geometry.
+- Rollback: Revert to `sweepGeometryForFamilies()` in Stage 2.
+
+### Slice: P14-S14
+- Objective: Replace fixed 65% T1 partial with regime-adaptive values; add breakeven+0.15R stop.
+- Status: done
+- Scope: Regime-adaptive partial (compression:0.75, ranging:0.70, trending:0.55, breakout:0.50), `BREAKEVEN_PLUS_OFFSET_R=0.15` in runner stop.
+- Out of scope: Time-based T2 exit, multi-level partials.
+- Files:
+  - `backend/src/services/spx/setupDetector.ts`
+  - `backend/src/services/spx/winRateBacktest.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: Breakeven+ may cause premature exits.
+- Mitigations: 0.15R offset absorbs normal noise; only after T1 banked.
+- Rollback: Set `BREAKEVEN_PLUS_OFFSET_R=0`.
+
+### Slice: P14-S15
+- Objective: Adjust stop width based on GEX environment.
+- Status: done
+- Scope: `netGex` in PreparedOptimizationRow, GEX stop multiplier (positive:0.90, negative+mean-reversion:1.10), `GEX_MEAN_REVERSION_FAMILIES` set.
+- Out of scope: GEX as sweepable dimension, extreme GEX confluence adjustment.
+- Files:
+  - `backend/src/services/spx/optimizer.ts`
+  - `backend/src/services/spx/setupDetector.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+- Risks introduced: GEX data may be stale/missing.
+- Mitigations: Null-safe; defaults to 1.0 multiplier.
+- Rollback: Set both GEX factors to 1.0.
+
+### Slice: P14-S16
+- Objective: Wire existing VWAP infrastructure into setup gating and confluence scoring.
+- Status: done
+- Scope: VWAP computation in indicator context, `vwap_alignment` confluence source, `vwap_direction_misaligned` gate, `SPX_VWAP_GATE_ENABLED` env flag, VWAP fields in PreparedOptimizationRow.
+- Out of scope: VWAP bands, anchored VWAP, VWAP as sweepable dimension.
+- Files:
+  - `backend/src/services/spx/setupDetector.ts`
+  - `backend/src/services/spx/optimizer.ts`
+  - `backend/src/services/spx/historicalReconstruction.ts`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit` — clean
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass
+  - `source ~/.nvm/nvm.sh && nvm use 22 && pnpm --dir backend exec tsc --noEmit` — clean under Node v22.22.0
+  - `source ~/.nvm/nvm.sh && nvm use 22 && pnpm --dir backend exec jest src/services/spx/__tests__/ --no-coverage` — 71/71 pass under Node v22.22.0
+  - `source ~/.nvm/nvm.sh && nvm use 22 && pnpm run build` — clean under Node v22.22.0
+- Risks introduced: VWAP filter may reduce sample size for counter-trend strategies.
+- Mitigations: 0.15% tolerance allows near-VWAP setups; env-disableable.
+- Rollback: Set `SPX_VWAP_GATE_ENABLED=false`.

@@ -11,9 +11,19 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export type SweepFamily = 'fade_at_wall' | 'mean_reversion' | 'trend_pullback' | 'orb_breakout';
+export type SweepFamily =
+  | 'fade_at_wall'
+  | 'mean_reversion'
+  | 'trend_pullback'
+  | 'orb_breakout'
+  | 'trend_continuation'
+  | 'breakout_vacuum'
+  | 'flip_reclaim';
 
-export const ALL_SWEEP_FAMILIES: SweepFamily[] = ['fade_at_wall', 'mean_reversion', 'trend_pullback', 'orb_breakout'];
+export const ALL_SWEEP_FAMILIES: SweepFamily[] = [
+  'fade_at_wall', 'mean_reversion', 'trend_pullback', 'orb_breakout',
+  'trend_continuation', 'breakout_vacuum', 'flip_reclaim',
+];
 
 export interface SetupDbRow {
   engine_setup_id: string;
@@ -309,7 +319,10 @@ export function geometryCandidateGrid(input: {
   fastMode: boolean;
 }): CandidateConfig[] {
   const configs: CandidateConfig[] = [];
-  const trendFamily = input.family === 'trend_pullback' || input.family === 'orb_breakout';
+  const trendFamily = input.family === 'trend_pullback'
+    || input.family === 'orb_breakout'
+    || input.family === 'trend_continuation'
+    || input.family === 'breakout_vacuum';
   const stopScales = input.fastMode
     ? [0.95, 1, 1.05]
     : trendFamily ? [0.95, 1, 1.05] : [0.9, 1, 1.1];
@@ -457,12 +470,9 @@ export function sweepGeometryForFamilies(input: {
   baselinePartial: number;
   fastMode?: boolean;
 }): Record<SweepFamily, SweepFamilyResult | null> {
-  const results: Record<SweepFamily, SweepFamilyResult | null> = {
-    fade_at_wall: null,
-    mean_reversion: null,
-    trend_pullback: null,
-    orb_breakout: null,
-  };
+  const results: Record<SweepFamily, SweepFamilyResult | null> = Object.fromEntries(
+    ALL_SWEEP_FAMILIES.map((f) => [f, null]),
+  ) as Record<SweepFamily, SweepFamilyResult | null>;
 
   for (const family of input.families) {
     const familySetups = input.setups.filter((setup) => setup.setupType === family);
@@ -510,6 +520,70 @@ export function sweepGeometryForFamilies(input: {
         failureRatePct: round(best.metrics.failureRatePct - baseline.metrics.failureRatePct, 2),
       },
     };
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Direction-aware sweep — splits by bullish/bearish and sweeps independently
+// ---------------------------------------------------------------------------
+
+export type SweepDirection = 'bullish' | 'bearish';
+
+export interface DirectionSweepFamilyResult {
+  bullish: SweepFamilyResult | null;
+  bearish: SweepFamilyResult | null;
+  combined: SweepFamilyResult | null;
+}
+
+const MIN_DIRECTION_SAMPLE_SIZE = 5;
+
+export function sweepGeometryForFamiliesDirectional(input: {
+  families: SweepFamily[];
+  setups: EvalSetupCandidate[];
+  barsBySession: Map<string, MassiveAggregate[]>;
+  objectiveWeights: { t1: number; t2: number; failurePenalty: number; expectancyR: number };
+  baselinePartial: number;
+  fastMode?: boolean;
+}): Record<SweepFamily, DirectionSweepFamilyResult | null> {
+  // Run the undirected (combined) sweep first
+  const combinedResults = sweepGeometryForFamilies(input);
+
+  const results = Object.fromEntries(
+    ALL_SWEEP_FAMILIES.map((f) => [f, null as DirectionSweepFamilyResult | null]),
+  ) as Record<SweepFamily, DirectionSweepFamilyResult | null>;
+
+  for (const family of input.families) {
+    const combined = combinedResults[family];
+    const familySetups = input.setups.filter((s) => s.setupType === family);
+    const bullishSetups = familySetups.filter((s) => s.direction === 'bullish');
+    const bearishSetups = familySetups.filter((s) => s.direction === 'bearish');
+
+    let bullishResult: SweepFamilyResult | null = null;
+    let bearishResult: SweepFamilyResult | null = null;
+
+    if (bullishSetups.length >= MIN_DIRECTION_SAMPLE_SIZE) {
+      const bullishSweep = sweepGeometryForFamilies({
+        ...input,
+        families: [family],
+        setups: bullishSetups,
+      });
+      bullishResult = bullishSweep[family];
+    }
+
+    if (bearishSetups.length >= MIN_DIRECTION_SAMPLE_SIZE) {
+      const bearishSweep = sweepGeometryForFamilies({
+        ...input,
+        families: [family],
+        setups: bearishSetups,
+      });
+      bearishResult = bearishSweep[family];
+    }
+
+    if (combined || bullishResult || bearishResult) {
+      results[family] = { bullish: bullishResult, bearish: bearishResult, combined };
+    }
   }
 
   return results;

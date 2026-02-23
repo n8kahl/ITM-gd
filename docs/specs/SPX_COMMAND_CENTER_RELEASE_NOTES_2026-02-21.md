@@ -43,13 +43,40 @@ Track: Production Recovery Autonomous Program
    - `failureRate <= 17.65%`
    - `expectancyR >= +1.128`
 
+## Phase 14 Setup Detection & Optimization Enhancement (2026-02-23)
+### Phase 1: Gate Recalibration (P14-S8 through P14-S10)
+1. **P14-S8**: ORB breakout rescue — flow/volume/EMA grace pattern (mirroring trend_pullback), opening range width filter (4-18pt), `SPX_ORB_FLOW_GRACE_ENABLED` env flag.
+2. **P14-S9**: Strategy gate recalibration — relaxed breakout_vacuum gates (confluence 5→4, pWin 0.70→0.62, evR 0.40→0.28), tightened trend_pullback (pWin 0.58→0.62).
+3. **P14-S10**: Time-bucket expansion from 3→5 (early_open/opening/midday/afternoon/close) with late-session geometry compression.
+
+### Phase 2: Geometry Sweep Expansion (P14-S11 through P14-S13)
+4. **P14-S11**: Geometry sweep expanded from 4 to all 7 setup families (added trend_continuation, breakout_vacuum, flip_reclaim).
+5. **P14-S12**: Direction-aware sweep library (bullish/bearish per-family splits with MIN_DIRECTION_SAMPLE_SIZE=5).
+6. **P14-S13**: Direction-aware optimizer integration — direction-qualified profile keys, 8-key geometry resolution chain with undirected fallback.
+
+### Phase 3: Regime-Adaptive Trade Management (P14-S14 through P14-S16)
+7. **P14-S14**: Regime-adaptive partial at T1 (compression:75%, ranging:70%, trending:55%, breakout:50%) + breakeven+0.15R stop converting T2 failures to micro-wins.
+8. **P14-S15**: GEX-adaptive stop scaling (positive GEX: tighten 10%, negative GEX + mean-reversion: widen 10%).
+9. **P14-S16**: VWAP bridge to optimizer — `vwap_alignment` confluence source, `vwap_direction_misaligned` gate (±0.15% tolerance), `SPX_VWAP_GATE_ENABLED` env flag.
+
+### Aggregate Target Impact
+| Metric | Current | Target |
+|--------|---------|--------|
+| T1 Win Rate | 63.16% | 68-72% |
+| T2 Win Rate | 51.75% | 57-62% |
+| Failure Rate | 35.96% | 28-32% |
+| Expectancy | +0.48R | +0.85-1.10R |
+
+### New Environment Flags
+- `SPX_ORB_FLOW_GRACE_ENABLED` (default: true) — ORB flow/volume/EMA grace
+- `SPX_VWAP_GATE_ENABLED` (default: true) — VWAP directional gate
+
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).
 2. `pnpm exec tsc --noEmit` passed.
 3. `pnpm run build` passed.
-4. SPX vitest suite passed (`24/24` files, `85/85` tests).
-5. SPX Playwright suite passed (`29/29`).
-6. Final release gate revalidated under Node `v22.12.0` (project target runtime).
+4. SPX jest suite passed (`15/15` suites, `71/71` tests).
+5. Final release gate revalidated under Node `v22.22.0` (project target runtime).
 
 ## Operational Notes
 1. Replay/focus controls are controller-owned and command/action-strip synchronized.
