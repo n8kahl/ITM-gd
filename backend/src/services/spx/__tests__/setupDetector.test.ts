@@ -744,7 +744,77 @@ describe('spx/setupDetector optimization gate grace paths', () => {
     expect(result.effectiveVolumeAligned).toBe(true);
   });
 
-  it('allows orb_breakout through sparse-flow grace when no flow data', () => {
+  it('blocks trend_pullback when ORB confluence is required and no alternative context is present', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      requireOrbTrendConfluence: true,
+      orbTrendConfluence: noOrbConfluence,
+    }));
+    expect(result.reasons).toContain('trend_orb_confluence_required');
+  });
+
+  it('allows trend_pullback with ORB proximity alternative when ORB confluence is required', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      requireOrbTrendConfluence: true,
+      confluenceScore: 4,
+      orbTrendConfluence: {
+        available: true,
+        aligned: false,
+        orbLevel: 5950,
+        distanceToOrb: 6,
+        breakConfirmed: false,
+        pullbackRetest: true,
+        reclaimed: false,
+        reasons: ['orb_break_not_confirmed'],
+      },
+    }));
+    expect(result.reasons).not.toContain('trend_orb_confluence_required');
+  });
+
+  it('allows trend_pullback with trend-continuation context alternative when ORB confluence is required', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      requireOrbTrendConfluence: true,
+      confluenceScore: 4,
+      regime: 'trending',
+      firstSeenAtIso: '2026-02-20T11:10:00.000Z',
+      flowConfirmed: true,
+      volumeRegimeAligned: true,
+      orbTrendConfluence: {
+        available: true,
+        aligned: false,
+        orbLevel: 6000,
+        distanceToOrb: 24,
+        breakConfirmed: false,
+        pullbackRetest: false,
+        reclaimed: false,
+        reasons: ['orb_retest_missed', 'orb_not_reclaimed', 'orb_break_not_confirmed'],
+      },
+    }));
+    expect(result.reasons).not.toContain('trend_orb_confluence_required');
+  });
+
+  it('keeps trend_pullback blocked when continuation context has insufficient confluence floor', () => {
+    const result = __testables.evaluateOptimizationGate(buildGateInput({
+      requireOrbTrendConfluence: true,
+      confluenceScore: 3,
+      regime: 'trending',
+      firstSeenAtIso: '2026-02-20T11:10:00.000Z',
+      flowConfirmed: true,
+      volumeRegimeAligned: true,
+      orbTrendConfluence: {
+        available: true,
+        aligned: false,
+        orbLevel: 6000,
+        distanceToOrb: 24,
+        breakConfirmed: false,
+        pullbackRetest: false,
+        reclaimed: false,
+        reasons: ['orb_retest_missed', 'orb_not_reclaimed', 'orb_break_not_confirmed'],
+      },
+    }));
+    expect(result.reasons).toContain('trend_orb_confluence_required');
+  });
+
+  it('blocks orb_breakout when no directional flow sample and no ORB confluence', () => {
     const result = __testables.evaluateOptimizationGate(buildGateInput({
       setupType: 'orb_breakout',
       firstSeenAtIso: '2026-02-20T10:15:00.000Z', // ~45 min after open
@@ -752,20 +822,29 @@ describe('spx/setupDetector optimization gate grace paths', () => {
       pWinCalibrated: 0.60,
       evR: 0.25,
     }));
-    expect(result.reasons).not.toContain('orb_flow_or_confluence_required');
-    expect(result.effectiveFlowConfirmed).toBe(true);
+    expect(result.reasons).toContain('orb_flow_or_confluence_required');
+    expect(result.effectiveFlowConfirmed).toBe(false);
   });
 
-  it('blocks orb_breakout sparse-flow grace when EMA not aligned', () => {
+  it('allows orb_breakout without directional flow sample when ORB confluence is aligned', () => {
     const result = __testables.evaluateOptimizationGate(buildGateInput({
       setupType: 'orb_breakout',
       firstSeenAtIso: '2026-02-20T10:15:00.000Z',
-      emaAligned: false,
+      orbTrendConfluence: {
+        available: true,
+        aligned: true,
+        orbLevel: 5950,
+        distanceToOrb: 1.2,
+        breakConfirmed: true,
+        pullbackRetest: false,
+        reclaimed: false,
+        reasons: ['orb_break_confirmed'],
+      },
       confluenceScore: 3,
       pWinCalibrated: 0.60,
       evR: 0.25,
     }));
-    expect(result.reasons).toContain('orb_flow_or_confluence_required');
-    expect(result.effectiveFlowConfirmed).toBe(false);
+    expect(result.reasons).not.toContain('orb_flow_or_confluence_required');
+    expect(result.effectiveFlowConfirmed).toBe(true);
   });
 });

@@ -120,6 +120,7 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
     () => summarizeError(error) || summarizeError(scheduleError) || summarizeError(historyError),
     [error, scheduleError, historyError],
   )
+
   const strategyRows = useMemo(() => {
     if (!scorecard) return []
     return [...scorecard.setupTypePerformance]
@@ -130,6 +131,7 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
       })
       .slice(0, 6)
   }, [scorecard])
+
   const comboRows = useMemo(() => {
     if (!scorecard) return []
     return [...scorecard.setupComboPerformance]
@@ -138,8 +140,9 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
         if (b.tradeCount !== a.tradeCount) return b.tradeCount - a.tradeCount
         return b.t1WinRatePct - a.t1WinRatePct
       })
-      .slice(0, 4)
+      .slice(0, 6)
   }, [scorecard])
+
   const strategyAverages = useMemo(() => {
     if (!scorecard) return null
     const buckets = scorecard.setupTypePerformance.filter((bucket) => (
@@ -152,14 +155,28 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
     const weightedT2 = buckets.reduce((sum, bucket) => sum + (bucket.t2WinRatePct * bucket.tradeCount), 0) / totalTrades
     const weightedFailure = buckets.reduce((sum, bucket) => sum + (bucket.failureRatePct * bucket.tradeCount), 0) / totalTrades
     return {
-      totalStrategies: buckets.length,
-      totalTrades,
-      avgTradesPerStrategy: totalTrades / buckets.length,
       weightedT1,
       weightedT2,
       weightedFailure,
     }
   }, [scorecard])
+
+  const blockerRows = useMemo(() => {
+    if (!scorecard?.blockerMix?.bySetupRegimeTimeBucket) return []
+    return [...scorecard.blockerMix.bySetupRegimeTimeBucket]
+      .filter((bucket) => Number.isFinite(bucket.totalOpportunityCount) && bucket.totalOpportunityCount > 0)
+      .sort((a, b) => {
+        if (b.blockedPct !== a.blockedPct) return b.blockedPct - a.blockedPct
+        return b.totalOpportunityCount - a.totalOpportunityCount
+      })
+      .slice(0, 6)
+  }, [scorecard])
+
+  const setupActionCounts = useMemo(() => ({
+    add: scorecard?.setupActions.add.length ?? 0,
+    update: scorecard?.setupActions.update.length ?? 0,
+    remove: scorecard?.setupActions.remove.length ?? 0,
+  }), [scorecard])
 
   const handleRunScan = useCallback(async () => {
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
@@ -210,13 +227,32 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
       onMouseDown={() => onOpenChange(false)}
     >
       <div
-        className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-white/15 bg-[#070A0F] shadow-2xl"
+        className="relative w-full max-w-[1240px] overflow-hidden rounded-2xl border border-white/15 bg-[#070A0F] shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between border-b border-white/10 px-4 py-3.5">
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-1">
             <p className="text-[11px] uppercase tracking-[0.11em] text-emerald-200">SPX Command Center Settings</p>
             <p className="text-[10px] uppercase tracking-[0.08em] text-white/52">Optimizer automation and performance governance</p>
+            <div className="flex flex-wrap items-center gap-1.5 text-[9px] uppercase tracking-[0.08em]">
+              <span className={cn(
+                'rounded border px-1.5 py-0.5',
+                scorecard?.optimizationApplied ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100' : 'border-champagne/35 bg-champagne/10 text-champagne',
+              )}
+              >
+                Applied: {scorecard ? String(scorecard.optimizationApplied) : '--'}
+              </span>
+              <span className={cn(
+                'rounded border px-1.5 py-0.5',
+                schedule?.enabled ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100' : 'border-rose-300/40 bg-rose-500/10 text-rose-100',
+              )}
+              >
+                Nightly: {schedule?.enabled ? 'Enabled' : 'Disabled'}
+              </span>
+              <span className="rounded border border-white/18 bg-white/[0.03] px-1.5 py-0.5 text-white/70">
+                Updated: {scorecard ? `${formatEtIso(scorecard.generatedAt)} ET` : '--'}
+              </span>
+            </div>
           </div>
           <button
             type="button"
@@ -228,241 +264,319 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
           </button>
         </div>
 
-        <div className="grid gap-3 p-4 md:grid-cols-2">
-          <section className="rounded-xl border border-emerald-400/25 bg-emerald-500/[0.05] p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-emerald-100">
-              <Settings2 className="h-3.5 w-3.5" />
-              <p className="text-[10px] uppercase tracking-[0.1em]">Nightly Optimization Automation</p>
-            </div>
-            {(isScheduleLoading && !schedule) ? (
-              <p className="text-[11px] text-white/62">Loading schedule…</p>
-            ) : (
-              <div className="space-y-1.5 text-[11px] text-white/80">
-                <p>Status: <span className={cn('font-mono', schedule?.enabled ? 'text-emerald-200' : 'text-rose-200')}>{schedule?.enabled ? 'Enabled' : 'Disabled'}</span></p>
-                <p>Worker: <span className="font-mono text-white/90">{schedule?.isRunning ? 'Running' : 'Stopped'}</span></p>
-                <p>Mode: <span className="font-mono text-white/90">{schedule?.mode || '--'}</span></p>
-                <p>Target Time (ET): <span className="font-mono text-white/90">{schedule?.targetTimeEt || '--'}</span></p>
-                <p>Last Nightly Attempt: <span className="font-mono text-white/90">{schedule?.lastAttemptAtEt || '--'}</span></p>
-                <p>Last Nightly Success: <span className="font-mono text-white/90">{schedule?.lastSuccessAtEt || '--'}</span></p>
-                <p>Next Eligible Run: <span className="font-mono text-white/90">{schedule?.nextEligibleRunAtEt || '--'}</span></p>
-                {schedule?.lastErrorMessage && (
-                  <p className="rounded border border-rose-300/35 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100">
-                    {schedule.lastErrorMessage}
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-white/12 bg-black/30 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-white/58">Last Optimization Stats</p>
-              <p className="text-[10px] font-mono text-white/50">
-                {scorecard ? formatEtIso(scorecard.generatedAt) : '--'} ET
-              </p>
-            </div>
-
-            {(isLoading && !scorecard) ? (
-              <p className="text-[11px] text-white/62">Loading scorecard…</p>
-            ) : scorecard ? (
-              <div className="space-y-2 text-[11px] text-white/82">
-                <p>Range: <span className="font-mono">{scorecard.scanRange.from} → {scorecard.scanRange.to}</span></p>
-                <p>Applied: <span className={cn('font-mono', scorecard.optimizationApplied ? 'text-emerald-200' : 'text-champagne')}>{String(scorecard.optimizationApplied)}</span></p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1">
-                    <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">T1</p>
-                    <p className="font-mono">{formatPct(scorecard.optimized.t1WinRatePct)}</p>
-                    <p className={cn('font-mono text-[10px]', statTone(scorecard.improvementPct.t1WinRateDelta))}>{formatDelta(scorecard.improvementPct.t1WinRateDelta, ' pts')}</p>
-                  </div>
-                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1">
-                    <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">T2</p>
-                    <p className="font-mono">{formatPct(scorecard.optimized.t2WinRatePct)}</p>
-                    <p className={cn('font-mono text-[10px]', statTone(scorecard.improvementPct.t2WinRateDelta))}>{formatDelta(scorecard.improvementPct.t2WinRateDelta, ' pts')}</p>
-                  </div>
-                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1">
-                    <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Expectancy</p>
-                    <p className="font-mono">{formatR(scorecard.optimized.expectancyR)}</p>
-                    <p className={cn('font-mono text-[10px]', statTone(scorecard.improvementPct.expectancyRDelta))}>{formatDelta(scorecard.improvementPct.expectancyRDelta, 'R')}</p>
-                  </div>
-                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1">
-                    <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Validation Trades</p>
-                    <p className="font-mono">{scorecard.optimized.tradeCount}</p>
-                    <p className="text-[10px] text-white/55">{scorecard.optimized.resolvedCount} resolved</p>
-                  </div>
-                </div>
-                <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
-                  <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Averages and Objective</p>
-                  <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-white/72">
-                    <p>Objective (base → opt)</p>
-                    <p className="font-mono text-white/88">{formatObjective(scorecard.baseline.objectiveScore)} → {formatObjective(scorecard.optimized.objectiveScore)}</p>
-                    <p>Conservative objective</p>
-                    <p className="font-mono text-white/88">{formatObjective(scorecard.baseline.objectiveScoreConservative)} → {formatObjective(scorecard.optimized.objectiveScoreConservative)}</p>
-                    <p>Positive realized rate</p>
-                    <p className="font-mono text-white/88">{formatPct(scorecard.optimized.positiveRealizedRatePct)}</p>
-                    {strategyAverages && (
-                      <>
-                        <p>Avg trades / strategy</p>
-                        <p className="font-mono text-white/88">{strategyAverages.avgTradesPerStrategy.toFixed(2)}</p>
-                        <p>Weighted strategy T1 / T2</p>
-                        <p className="font-mono text-white/88">{formatPct(strategyAverages.weightedT1)} / {formatPct(strategyAverages.weightedT2)}</p>
-                        <p>Weighted strategy failure</p>
-                        <p className="font-mono text-white/88">{formatPct(strategyAverages.weightedFailure)}</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {scorecard.dataQuality && (
-                  <div className="rounded border border-emerald-300/20 bg-emerald-500/[0.06] px-2 py-1.5 text-[10px]">
-                    <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-100">Execution Actuals</p>
-                    <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-emerald-50/85">
-                      <p>Fill table</p>
-                      <p className="font-mono">
-                        {scorecard.dataQuality.executionFillTableAvailable === true
-                          ? 'available'
-                          : scorecard.dataQuality.executionFillTableAvailable === false
-                            ? 'missing'
-                            : 'unknown'}
-                      </p>
-                      <p>Any fill coverage</p>
-                      <p className="font-mono">{formatPct(scorecard.dataQuality.executionCoveragePct)} ({scorecard.dataQuality.executionTradesWithAnyFill ?? 0}/{scorecard.dataQuality.executionTriggeredTradeCount ?? 0})</p>
-                      <p>Non-proxy coverage</p>
-                      <p className="font-mono">{formatPct(scorecard.dataQuality.executionNonProxyCoveragePct)} ({scorecard.dataQuality.executionTradesWithNonProxyFill ?? 0}/{scorecard.dataQuality.executionTriggeredTradeCount ?? 0})</p>
-                      <p>Entry / Exit coverage</p>
-                      <p className="font-mono">{formatPct(scorecard.dataQuality.executionEntryCoveragePct)} / {formatPct(scorecard.dataQuality.executionExitCoveragePct)}</p>
-                      <p>Entry slip (pts / bps)</p>
-                      <p className="font-mono">{formatPoints(scorecard.dataQuality.executionEntryAvgSlippagePts, 4)} / {formatPoints(scorecard.dataQuality.executionEntryAvgSlippageBps, 2)}</p>
-                      <p>Exit slip (pts / bps)</p>
-                      <p className="font-mono">{formatPoints(scorecard.dataQuality.executionExitAvgSlippagePts, 4)} / {formatPoints(scorecard.dataQuality.executionExitAvgSlippageBps, 2)}</p>
-                    </div>
-                  </div>
-                )}
-                <div className="grid gap-2 md:grid-cols-2">
-                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
-                    <div className="mb-1 flex items-center justify-between">
-                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">By Strategy</p>
-                      <p className="text-[9px] text-white/42">{strategyRows.length} shown</p>
-                    </div>
-                    {strategyRows.length === 0 ? (
-                      <p className="text-[10px] text-white/50">No strategy buckets in this range.</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {strategyRows.map((bucket) => (
-                          <div key={`strategy_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1">
-                            <div className="grid grid-cols-[1fr_auto] gap-2 text-[10px]">
-                              <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
-                              <p className="font-mono text-white/70">{bucket.tradeCount} trades</p>
-                            </div>
-                            <div className="mt-0.5 grid grid-cols-3 gap-1 text-[9px] text-white/60">
-                              <p>T1 <span className="font-mono text-white/78">{formatPct(bucket.t1WinRatePct)}</span></p>
-                              <p>T2 <span className="font-mono text-white/78">{formatPct(bucket.t2WinRatePct)}</span></p>
-                              <p>Fail <span className="font-mono text-white/78">{formatPct(bucket.failureRatePct)}</span></p>
-                            </div>
-                            <p className="mt-0.5 text-[9px] text-white/45">
-                              95% CI T1 {formatCI(bucket.t1Confidence95)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
-                    <div className="mb-1 flex items-center justify-between">
-                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">By Setup + Regime</p>
-                      <p className="text-[9px] text-white/42">{comboRows.length} shown</p>
-                    </div>
-                    {comboRows.length === 0 ? (
-                      <p className="text-[10px] text-white/50">No setup/regime buckets in this range.</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {comboRows.map((bucket) => (
-                          <div key={`combo_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1">
-                            <div className="grid grid-cols-[1fr_auto] gap-2 text-[10px]">
-                              <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
-                              <p className="font-mono text-white/70">{bucket.tradeCount} trades</p>
-                            </div>
-                            <div className="mt-0.5 grid grid-cols-3 gap-1 text-[9px] text-white/60">
-                              <p>T1 <span className="font-mono text-white/78">{formatPct(bucket.t1WinRatePct)}</span></p>
-                              <p>T2 <span className="font-mono text-white/78">{formatPct(bucket.t2WinRatePct)}</span></p>
-                              <p>Fail <span className="font-mono text-white/78">{formatPct(bucket.failureRatePct)}</span></p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-[11px] text-white/62">No scorecard available.</p>
-            )}
-          </section>
-        </div>
-
         {(loadError || scanError || revertError) && (
-          <div className="px-4 pb-2">
+          <div className="px-4 pb-2 pt-2">
             <p className="rounded border border-rose-300/35 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100">
               {revertError || scanError || loadError}
             </p>
           </div>
         )}
 
-        <div className="border-t border-white/10 px-4 py-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-white/60">Audit History</p>
-            <p className="text-[10px] text-white/45">{isHistoryLoading ? 'Loading…' : `${history.length} entries`}</p>
-          </div>
-          {history.length === 0 ? (
-            <p className="text-[11px] text-white/55">No optimizer audit entries yet.</p>
-          ) : (
-            <div className="max-h-[220px] space-y-1.5 overflow-auto pr-1">
-              {history.map((entry) => {
-                const summary = entry.scorecardSummary
-                const canRevert = entry.action === 'scan'
-                const revertingThis = activeRevertId === entry.id
-                return (
-                  <div
-                    key={entry.id}
-                    className="grid grid-cols-[1fr_auto] gap-2 rounded border border-white/10 bg-black/25 px-2 py-1.5"
-                  >
-                    <div className="min-w-0 text-[10px] text-white/75">
-                      <p className="font-mono text-white/88">
-                        #{entry.id} · {entry.action.toUpperCase()} · {entry.mode} · {formatHistoryTime(entry.createdAt)} ET
-                      </p>
-                      <p className="mt-0.5 text-white/55">
-                        Range {entry.scanRange.from || '--'} → {entry.scanRange.to || '--'} · Applied {String(entry.optimizationApplied)}
-                      </p>
-                      {summary && (
-                        <p className="mt-0.5 text-white/55">
-                          T1 {formatDelta(summary.t1Delta, ' pts')} · T2 {formatDelta(summary.t2Delta, ' pts')} · Exp {formatDelta(summary.expectancyDeltaR, 'R')}
-                        </p>
-                      )}
-                      {entry.reason && <p className="mt-0.5 text-white/50">Reason: {entry.reason}</p>}
+        <div className="grid gap-3 p-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="max-h-[calc(100vh-260px)] space-y-3 overflow-y-auto pr-1">
+            <section className="rounded-xl border border-emerald-400/25 bg-emerald-500/[0.05] p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-emerald-100">
+                <Settings2 className="h-3.5 w-3.5" />
+                <p className="text-[10px] uppercase tracking-[0.1em]">Nightly Optimization Automation</p>
+              </div>
+              {(isScheduleLoading && !schedule) ? (
+                <p className="text-[11px] text-white/62">Loading schedule…</p>
+              ) : (
+                <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1 text-[10px] text-white/78">
+                  <p>Status</p>
+                  <p className={cn('font-mono', schedule?.enabled ? 'text-emerald-200' : 'text-rose-200')}>{schedule?.enabled ? 'Enabled' : 'Disabled'}</p>
+                  <p>Worker</p>
+                  <p className="font-mono text-white/92">{schedule?.isRunning ? 'Running' : 'Stopped'}</p>
+                  <p>Mode</p>
+                  <p className="font-mono text-white/92">{schedule?.mode || '--'}</p>
+                  <p>Target (ET)</p>
+                  <p className="font-mono text-white/92">{schedule?.targetTimeEt || '--'}</p>
+                  <p>Next run</p>
+                  <p className="font-mono text-white/92">{schedule?.nextEligibleRunAtEt || '--'}</p>
+                  <p>Last attempt</p>
+                  <p className="font-mono text-white/92">{schedule?.lastAttemptAtEt || '--'}</p>
+                  <p>Last success</p>
+                  <p className="font-mono text-white/92">{schedule?.lastSuccessAtEt || '--'}</p>
+                </div>
+              )}
+              {schedule?.lastErrorMessage && (
+                <p className="mt-2 rounded border border-rose-300/35 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100">
+                  {schedule.lastErrorMessage}
+                </p>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-white/12 bg-black/30 p-3 text-[10px] text-white/78">
+              <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-white/58">Scope and Governance</p>
+              {scorecard ? (
+                <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
+                  <p>Scan range</p>
+                  <p className="font-mono text-white/92">{scorecard.scanRange.from} → {scorecard.scanRange.to}</p>
+                  <p>Training range</p>
+                  <p className="font-mono text-white/92">{scorecard.trainingRange.from} → {scorecard.trainingRange.to}</p>
+                  <p>Validation range</p>
+                  <p className="font-mono text-white/92">{scorecard.validationRange.from} → {scorecard.validationRange.to}</p>
+                  <p>Action set</p>
+                  <p className="font-mono text-white/92">+{setupActionCounts.add} / ~{setupActionCounts.update} / -{setupActionCounts.remove}</p>
+                  <p>Trigger guardrail</p>
+                  <p className={cn('font-mono', scorecard.blockerMix.triggerRateGuardrailPassed ? 'text-emerald-200' : 'text-rose-200')}>
+                    {scorecard.blockerMix.triggerRateGuardrailPassed ? 'pass' : 'fail'}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-white/60">No scorecard available.</p>
+              )}
+            </section>
+          </aside>
+
+          <main className="max-h-[calc(100vh-260px)] space-y-3 overflow-y-auto pr-1">
+            <section className="rounded-xl border border-white/12 bg-black/30 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-white/58">Last Optimization Snapshot</p>
+                <p className="text-[10px] font-mono text-white/50">
+                  {scorecard ? `${formatEtIso(scorecard.generatedAt)} ET` : '--'}
+                </p>
+              </div>
+              {(isLoading && !scorecard) ? (
+                <p className="text-[11px] text-white/62">Loading scorecard…</p>
+              ) : scorecard ? (
+                <div className="space-y-2 text-[11px] text-white/82">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">T1 Win Rate</p>
+                      <p className="font-mono">{formatPct(scorecard.optimized.t1WinRatePct)}</p>
+                      <p className={cn('font-mono text-[10px]', statTone(scorecard.improvementPct.t1WinRateDelta))}>{formatDelta(scorecard.improvementPct.t1WinRateDelta, ' pts')}</p>
                     </div>
-                    <div className="flex items-center">
-                      {canRevert ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRevert(entry.id)}
-                          disabled={isReverting}
-                          data-testid={`spx-settings-revert-${entry.id}`}
-                          className="inline-flex min-h-[30px] items-center rounded border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-amber-100 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {(revertingThis && isReverting) ? (
-                            <>
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              Reverting
-                            </>
-                          ) : 'Revert'}
-                        </button>
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">T2 Win Rate</p>
+                      <p className="font-mono">{formatPct(scorecard.optimized.t2WinRatePct)}</p>
+                      <p className={cn('font-mono text-[10px]', statTone(scorecard.improvementPct.t2WinRateDelta))}>{formatDelta(scorecard.improvementPct.t2WinRateDelta, ' pts')}</p>
+                    </div>
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Expectancy</p>
+                      <p className="font-mono">{formatR(scorecard.optimized.expectancyR)}</p>
+                      <p className={cn('font-mono text-[10px]', statTone(scorecard.improvementPct.expectancyRDelta))}>{formatDelta(scorecard.improvementPct.expectancyRDelta, 'R')}</p>
+                    </div>
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Validation Trades</p>
+                      <p className="font-mono">{scorecard.optimized.tradeCount}</p>
+                      <p className="text-[10px] text-white/55">{scorecard.optimized.resolvedCount} resolved</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Objective and Confidence</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-white/72">
+                        <p>Objective (base → opt)</p>
+                        <p className="font-mono text-white/88">{formatObjective(scorecard.baseline.objectiveScore)} → {formatObjective(scorecard.optimized.objectiveScore)}</p>
+                        <p>Conservative objective</p>
+                        <p className="font-mono text-white/88">{formatObjective(scorecard.baseline.objectiveScoreConservative)} → {formatObjective(scorecard.optimized.objectiveScoreConservative)}</p>
+                        <p>95% CI T1 (opt)</p>
+                        <p className="font-mono text-white/88">{formatCI(scorecard.optimized.t1Confidence95)}</p>
+                        <p>95% CI T2 (opt)</p>
+                        <p className="font-mono text-white/88">{formatCI(scorecard.optimized.t2Confidence95)}</p>
+                        <p>Positive realized rate</p>
+                        <p className="font-mono text-white/88">{formatPct(scorecard.optimized.positiveRealizedRatePct)}</p>
+                        {strategyAverages && (
+                          <>
+                            <p>Weighted strategy T1 / T2 / Fail</p>
+                            <p className="font-mono text-white/88">
+                              {formatPct(strategyAverages.weightedT1)} / {formatPct(strategyAverages.weightedT2)} / {formatPct(strategyAverages.weightedFailure)}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Blocker Mix</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-white/72">
+                        <p>Total opportunities</p>
+                        <p className="font-mono text-white/88">{scorecard.blockerMix.totalOpportunityCount}</p>
+                        <p>Macro blocked</p>
+                        <p className="font-mono text-white/88">{formatPct(scorecard.blockerMix.macroBlockedPct)} ({scorecard.blockerMix.macroBlockedCount})</p>
+                        <p>Micro blocked</p>
+                        <p className="font-mono text-white/88">{formatPct(scorecard.blockerMix.microBlockedPct)} ({scorecard.blockerMix.microBlockedCount})</p>
+                        <p>Trigger rate (base → opt)</p>
+                        <p className="font-mono text-white/88">{formatPct(scorecard.blockerMix.baselineTriggerRatePct)} → {formatPct(scorecard.blockerMix.optimizedTriggerRatePct)}</p>
+                        <p>Trigger delta</p>
+                        <p className={cn('font-mono', statTone(scorecard.blockerMix.triggerRateDeltaPct))}>{formatDelta(scorecard.blockerMix.triggerRateDeltaPct, ' pts')}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <div className="mb-1 flex items-center justify-between">
+                        <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">By Strategy</p>
+                        <p className="text-[9px] text-white/42">{strategyRows.length} shown</p>
+                      </div>
+                      {strategyRows.length === 0 ? (
+                        <p className="text-[10px] text-white/50">No strategy buckets in this range.</p>
                       ) : (
-                        <span className="text-[9px] uppercase tracking-[0.08em] text-white/35">Audit</span>
+                        <div className="max-h-[170px] space-y-1 overflow-y-auto pr-0.5">
+                          {strategyRows.map((bucket) => (
+                            <div key={`strategy_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1">
+                              <div className="grid grid-cols-[1fr_auto] gap-2 text-[10px]">
+                                <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
+                                <p className="font-mono text-white/70">{bucket.tradeCount}</p>
+                              </div>
+                              <div className="mt-0.5 grid grid-cols-3 gap-1 text-[9px] text-white/60">
+                                <p>T1 <span className="font-mono text-white/78">{formatPct(bucket.t1WinRatePct)}</span></p>
+                                <p>T2 <span className="font-mono text-white/78">{formatPct(bucket.t2WinRatePct)}</span></p>
+                                <p>Fail <span className="font-mono text-white/78">{formatPct(bucket.failureRatePct)}</span></p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <div className="mb-1 flex items-center justify-between">
+                        <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">By Setup + Regime</p>
+                        <p className="text-[9px] text-white/42">{comboRows.length} shown</p>
+                      </div>
+                      {comboRows.length === 0 ? (
+                        <p className="text-[10px] text-white/50">No setup/regime buckets in this range.</p>
+                      ) : (
+                        <div className="max-h-[170px] space-y-1 overflow-y-auto pr-0.5">
+                          {comboRows.map((bucket) => (
+                            <div key={`combo_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1">
+                              <div className="grid grid-cols-[1fr_auto] gap-2 text-[10px]">
+                                <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
+                                <p className="font-mono text-white/70">{bucket.tradeCount}</p>
+                              </div>
+                              <div className="mt-0.5 grid grid-cols-3 gap-1 text-[9px] text-white/60">
+                                <p>T1 <span className="font-mono text-white/78">{formatPct(bucket.t1WinRatePct)}</span></p>
+                                <p>T2 <span className="font-mono text-white/78">{formatPct(bucket.t2WinRatePct)}</span></p>
+                                <p>Fail <span className="font-mono text-white/78">{formatPct(bucket.failureRatePct)}</span></p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
+
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Highest Blocked Buckets</p>
+                      {blockerRows.length === 0 ? (
+                        <p className="mt-1 text-white/55">No blocker buckets available.</p>
+                      ) : (
+                        <div className="mt-1 max-h-[130px] space-y-1 overflow-y-auto pr-0.5">
+                          {blockerRows.map((bucket) => (
+                            <div key={`blocker_${bucket.key}`} className="rounded border border-white/8 bg-black/30 px-1.5 py-1 text-[9px]">
+                              <div className="grid grid-cols-[1fr_auto] gap-2">
+                                <p className="truncate text-white/84">{formatBucketLabel(bucket.key)}</p>
+                                <p className="font-mono text-white/70">{bucket.totalOpportunityCount}</p>
+                              </div>
+                              <p className="mt-0.5 text-white/55">
+                                Blocked {formatPct(bucket.blockedPct)} · Macro {formatPct(bucket.macroBlockedPct)} · Micro {formatPct(bucket.microBlockedPct)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {scorecard.dataQuality && (
+                      <div className="rounded border border-emerald-300/20 bg-emerald-500/[0.06] px-2 py-1.5 text-[10px]">
+                        <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-100">Execution and Data Quality</p>
+                        <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 text-emerald-50/85">
+                          <p>Source / Resolution</p>
+                          <p className="font-mono">{scorecard.dataQuality.sourceUsed} / {scorecard.dataQuality.resolutionUsed}</p>
+                          <p>Fail-closed gate</p>
+                          <p className="font-mono">{scorecard.dataQuality.gatePassed ? 'pass' : 'fail'}</p>
+                          <p>Options coverage</p>
+                          <p className="font-mono">{formatPct(scorecard.dataQuality.optionsReplayCoveragePct ?? 0)}</p>
+                          <p>Any fill coverage</p>
+                          <p className="font-mono">{formatPct(scorecard.dataQuality.executionCoveragePct)}</p>
+                          <p>Non-proxy fill coverage</p>
+                          <p className="font-mono">{formatPct(scorecard.dataQuality.executionNonProxyCoveragePct)}</p>
+                          <p>Entry slip (pts / bps)</p>
+                          <p className="font-mono">{formatPoints(scorecard.dataQuality.executionEntryAvgSlippagePts, 4)} / {formatPoints(scorecard.dataQuality.executionEntryAvgSlippageBps, 2)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
+                    <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Optimizer Notes</p>
+                    <div className="mt-1 max-h-[120px] space-y-0.5 overflow-y-auto pr-0.5 text-white/64">
+                      {scorecard.notes.length > 0 ? (
+                        scorecard.notes.slice(0, 16).map((note, index) => (
+                          <p key={`note_${index}`} className="leading-snug">{note}</p>
+                        ))
+                      ) : (
+                        <p>No notes.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-white/62">No scorecard available.</p>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-white/12 bg-black/30 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-white/60">Audit History</p>
+                <p className="text-[10px] text-white/45">{isHistoryLoading ? 'Loading…' : `${history.length} entries`}</p>
+              </div>
+              {history.length === 0 ? (
+                <p className="text-[11px] text-white/55">No optimizer audit entries yet.</p>
+              ) : (
+                <div className="max-h-[220px] space-y-1.5 overflow-auto pr-1">
+                  {history.map((entry) => {
+                    const summary = entry.scorecardSummary
+                    const canRevert = entry.action === 'scan'
+                    const revertingThis = activeRevertId === entry.id
+                    return (
+                      <div
+                        key={entry.id}
+                        className="grid grid-cols-[1fr_auto] gap-2 rounded border border-white/10 bg-black/25 px-2 py-1.5"
+                      >
+                        <div className="min-w-0 text-[10px] text-white/75">
+                          <p className="font-mono text-white/88">
+                            #{entry.id} · {entry.action.toUpperCase()} · {entry.mode} · {formatHistoryTime(entry.createdAt)} ET
+                          </p>
+                          <p className="mt-0.5 text-white/55">
+                            Range {entry.scanRange.from || '--'} → {entry.scanRange.to || '--'} · Applied {String(entry.optimizationApplied)}
+                          </p>
+                          {summary && (
+                            <p className="mt-0.5 text-white/55">
+                              T1 {formatDelta(summary.t1Delta, ' pts')} · T2 {formatDelta(summary.t2Delta, ' pts')} · Exp {formatDelta(summary.expectancyDeltaR, 'R')}
+                            </p>
+                          )}
+                          {entry.reason && <p className="mt-0.5 text-white/50">Reason: {entry.reason}</p>}
+                        </div>
+                        <div className="flex items-center">
+                          {canRevert ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRevert(entry.id)}
+                              disabled={isReverting}
+                              data-testid={`spx-settings-revert-${entry.id}`}
+                              className="inline-flex min-h-[30px] items-center rounded border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-amber-100 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {(revertingThis && isReverting) ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  Reverting
+                                </>
+                              ) : 'Revert'}
+                            </button>
+                          ) : (
+                            <span className="text-[9px] uppercase tracking-[0.08em] text-white/35">Audit</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+          </main>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 px-4 py-3">

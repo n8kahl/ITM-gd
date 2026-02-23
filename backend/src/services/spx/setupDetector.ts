@@ -2487,25 +2487,20 @@ function evaluateOptimizationGate(input: {
     input.flowQuality.recentDirectionalEvents > 0
     || input.flowQuality.recentDirectionalPremium >= FLOW_MIN_DIRECTIONAL_PREMIUM
   );
-  const orbSparseFlowGrace = (
+  const orbFlowConfluenceBlocked = (
     input.setupType === 'orb_breakout'
     && !hasDirectionalFlowSample
-    && flowAvailability !== 'available'
-    && input.emaAligned
-    && input.confluenceScore >= 3
+    && !input.orbTrendConfluence.aligned
   );
   if (input.setupType === 'orb_breakout') {
-    if (hasDirectionalFlowSample && !orbSparseFlowGrace) {
+    if (hasDirectionalFlowSample) {
       if (input.flowQuality.recentDirectionalEvents < FLOW_QUALITY_MIN_EVENTS) {
         reasons.push(`flow_event_count_low:${input.flowQuality.recentDirectionalEvents}<${FLOW_QUALITY_MIN_EVENTS}`);
       }
-      const effectiveOrbMinFlowQuality = flowAvailability === 'sparse'
-        ? ORB_MIN_FLOW_QUALITY_SCORE - 7
-        : ORB_MIN_FLOW_QUALITY_SCORE;
-      if (input.flowQuality.score < effectiveOrbMinFlowQuality) {
-        reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${effectiveOrbMinFlowQuality}`);
+      if (input.flowQuality.score < ORB_MIN_FLOW_QUALITY_SCORE) {
+        reasons.push(`flow_quality_low:${round(input.flowQuality.score, 2)}<${ORB_MIN_FLOW_QUALITY_SCORE}`);
       }
-    } else if (!input.orbTrendConfluence.aligned && !orbSparseFlowGrace) {
+    } else if (!input.orbTrendConfluence.aligned) {
       reasons.push('orb_flow_or_confluence_required');
     }
   }
@@ -2522,10 +2517,59 @@ function evaluateOptimizationGate(input: {
       reasons.push(`trend_timing_window:${firstSeenMinute}>${trendMaxMinute}`);
     }
   }
+  const trendOrbAlternativeConfluenceFloor = Math.max(4, minConfluenceScore);
+  const trendPullbackOrbProximityAlternative = (
+    input.setupType === 'trend_pullback'
+    && input.requireOrbTrendConfluence
+    && !input.orbTrendConfluence.aligned
+    && input.orbTrendConfluence.available
+    && input.orbTrendConfluence.distanceToOrb != null
+    && input.orbTrendConfluence.distanceToOrb <= ORB_RECLAIM_TOLERANCE_POINTS
+    && input.emaAligned
+    && input.confluenceScore >= trendOrbAlternativeConfluenceFloor
+  );
+  const trendPullbackOrbBreakAlternative = (
+    input.setupType === 'trend_pullback'
+    && input.requireOrbTrendConfluence
+    && !input.orbTrendConfluence.aligned
+    && input.orbTrendConfluence.available
+    && input.orbTrendConfluence.breakConfirmed
+    && (input.orbTrendConfluence.reclaimed || input.orbTrendConfluence.pullbackRetest)
+    && input.emaAligned
+    && input.confluenceScore >= trendOrbAlternativeConfluenceFloor
+  );
+  const trendPullbackContinuationContextAlternative = (
+    input.setupType === 'trend_pullback'
+    && input.requireOrbTrendConfluence
+    && !input.orbTrendConfluence.aligned
+    && input.orbTrendConfluence.available
+    && input.regime === 'trending'
+    && firstSeenMinute != null
+    && firstSeenMinute <= 300
+    && input.emaAligned
+    && input.confluenceScore >= trendOrbAlternativeConfluenceFloor
+    && (
+      input.flowConfirmed
+      || flowUnavailableGraceActive
+      || trendFamilyFlowGraceEligible
+      || trendFlowUnavailableGraceEligible
+    )
+    && (
+      input.volumeRegimeAligned
+      || trendFamilyVolumeGraceEligible
+      || expandedVolumeGraceEligible
+    )
+  );
+  const trendPullbackOrbAlternativeEligible = (
+    trendPullbackOrbProximityAlternative
+    || trendPullbackOrbBreakAlternative
+    || trendPullbackContinuationContextAlternative
+  );
   if (
     input.setupType === 'trend_pullback'
     && input.requireOrbTrendConfluence
     && !input.orbTrendConfluence.aligned
+    && !trendPullbackOrbAlternativeEligible
   ) {
     reasons.push('trend_orb_confluence_required');
   }
@@ -2557,12 +2601,12 @@ function evaluateOptimizationGate(input: {
   const flowGraceApplied = (
     requireFlowConfirmation
     && !input.flowConfirmed
+    && !orbFlowConfluenceBlocked
     && (flowUnavailableGraceActive
       || trendFamilyFlowGraceEligible
       || orbFlowGraceEligible
       || trendFlowUnavailableGraceEligible
-      || orbTrendFusionGraceEligible
-      || orbSparseFlowGrace)
+      || orbTrendFusionGraceEligible)
   );
   const volumeGraceApplied = (
     requireVolumeRegimeAlignment
