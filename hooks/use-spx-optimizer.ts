@@ -117,6 +117,26 @@ export interface SPXOptimizerScorecard {
     update: string[]
     remove: string[]
   }
+  blockerMix: {
+    totalOpportunityCount: number
+    macroBlockedCount: number
+    microBlockedCount: number
+    macroBlockedPct: number
+    microBlockedPct: number
+    baselineTriggerRatePct: number
+    optimizedTriggerRatePct: number
+    triggerRateDeltaPct: number
+    triggerRateGuardrailPassed: boolean
+    bySetupRegimeTimeBucket: Array<{
+      key: string
+      totalOpportunityCount: number
+      macroBlockedCount: number
+      microBlockedCount: number
+      macroBlockedPct: number
+      microBlockedPct: number
+      blockedPct: number
+    }>
+  }
   optimizationApplied: boolean
   dataQuality?: SPXOptimizerDataQuality
   notes: string[]
