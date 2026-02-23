@@ -1,4 +1,3 @@
-import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 
 /**
@@ -33,10 +32,7 @@ export interface VWAPState {
 // Grace period: VWAP not reliable before 10:00 AM ET (only 30 bars)
 const VWAP_GRACE_MINUTE_ET = 10 * 60; // 10:00 AM ET = 600 minutes
 const VWAP_STALE_MS = 5 * 60 * 1000; // 5 minutes
-const SESSION_OPEN_MINUTE_ET = 9 * 60 + 30;
-
 let cachedVWAP: VWAPState | null = null;
-let cachedVWAPTimestamp = 0;
 
 /**
  * Compute VWAP from an array of minute bars.
@@ -129,9 +125,6 @@ export function evaluateVWAPAlignment(
   const nearVWAP = Math.abs(vwapState.deviationBands) <= 0.5;
   const confluenceBonus = aligned && nearVWAP ? 1 : 0;
 
-  // Mean reversion favored when > 1 SD from VWAP
-  const meanReversionFavored = Math.abs(vwapState.deviationBands) > 1;
-
   return {
     aligned,
     filtered: !aligned,
@@ -149,5 +142,4 @@ export function getCachedVWAP(): VWAPState | null {
 
 export function setCachedVWAP(state: VWAPState | null): void {
   cachedVWAP = state;
-  cachedVWAPTimestamp = Date.now();
 }
