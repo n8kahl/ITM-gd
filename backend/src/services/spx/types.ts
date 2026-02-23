@@ -139,6 +139,14 @@ export interface ContractRecommendation {
   premiumMid?: number;
   premiumAsk?: number;
   costBand?: 'discount' | 'balanced' | 'expensive';
+  suggestedContracts?: number;
+  sizing?: {
+    maxRiskDollars: number;
+    contractsByRisk: number;
+    contractsByBuyingPower: number;
+    perContractDebit: number;
+    blockedReason?: 'margin_limit_blocked';
+  };
   healthScore?: number;
   healthTier?: 'green' | 'amber' | 'red';
   thetaRiskPer15m?: number;

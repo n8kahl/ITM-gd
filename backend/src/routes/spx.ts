@@ -29,11 +29,26 @@ import { classifyCurrentRegime } from '../services/spx/regimeClassifier';
 import { detectActiveSetups, getSetupById } from '../services/spx/setupDetector';
 import type { CoachDecisionRequest, Setup } from '../services/spx/types';
 import { toEasternTime } from '../services/marketHours';
+import { TradierClient } from '../services/broker/tradier/client';
+import {
+  decryptTradierAccessToken,
+  isTradierProductionRuntimeEnabled,
+} from '../services/broker/tradier/credentials';
+import { getTradierExecutionRuntimeStatus } from '../services/broker/tradier/executionEngine';
 
 const router = Router();
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
+}
+
+function parseFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 function parseISODateInput(value: unknown): string | null {
@@ -431,9 +446,24 @@ router.get('/basis', async (req: Request, res: Response) => {
 router.get('/contract-select', async (req: Request, res: Response) => {
   try {
     const setupId = typeof req.query.setupId === 'string' ? req.query.setupId : undefined;
+    const totalEquity = parseFiniteNumber(req.query.totalEquity);
+    const dayTradeBuyingPower = parseFiniteNumber(req.query.dayTradeBuyingPower);
+    const maxRiskPct = parseFiniteNumber(req.query.maxRiskPct);
+    const buyingPowerUtilizationPct = parseFiniteNumber(req.query.buyingPowerUtilizationPct);
+    const hasRiskOverride = [totalEquity, dayTradeBuyingPower, maxRiskPct, buyingPowerUtilizationPct]
+      .some((value) => value != null);
     const recommendation = await getContractRecommendation({
       setupId,
       forceRefresh: parseBoolean(req.query.forceRefresh),
+      userId: req.user?.id,
+      riskContext: hasRiskOverride
+        ? {
+          totalEquity: totalEquity ?? undefined,
+          dayTradeBuyingPower: dayTradeBuyingPower ?? undefined,
+          maxRiskPct: maxRiskPct ?? undefined,
+          buyingPowerUtilizationPct: buyingPowerUtilizationPct ?? undefined,
+        }
+        : undefined,
     });
 
     if (!recommendation) {
@@ -460,10 +490,25 @@ router.post('/contract-select', async (req: Request, res: Response) => {
   try {
     const setupId = typeof req.body?.setupId === 'string' ? req.body.setupId : undefined;
     const setup = parseSetupPayload(req.body?.setup);
+    const totalEquity = parseFiniteNumber(req.body?.totalEquity);
+    const dayTradeBuyingPower = parseFiniteNumber(req.body?.dayTradeBuyingPower);
+    const maxRiskPct = parseFiniteNumber(req.body?.maxRiskPct);
+    const buyingPowerUtilizationPct = parseFiniteNumber(req.body?.buyingPowerUtilizationPct);
+    const hasRiskOverride = [totalEquity, dayTradeBuyingPower, maxRiskPct, buyingPowerUtilizationPct]
+      .some((value) => value != null);
     const recommendation = await getContractRecommendation({
       setupId,
       setup,
       forceRefresh: parseBoolean(req.body?.forceRefresh),
+      userId: req.user?.id,
+      riskContext: hasRiskOverride
+        ? {
+          totalEquity: totalEquity ?? undefined,
+          dayTradeBuyingPower: dayTradeBuyingPower ?? undefined,
+          maxRiskPct: maxRiskPct ?? undefined,
+          buyingPowerUtilizationPct: buyingPowerUtilizationPct ?? undefined,
+        }
+        : undefined,
     });
 
     if (!recommendation) {
@@ -482,6 +527,229 @@ router.post('/contract-select', async (req: Request, res: Response) => {
       error: 'Data unavailable',
       message: 'Unable to compute contract recommendation.',
       retryAfter: 10,
+    });
+  }
+});
+
+router.get('/broker/tradier/status', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const { data: credentialRow, error: credentialError } = await supabase
+      .from('broker_credentials')
+      .select('broker_name,account_id,is_active,metadata,updated_at')
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier')
+      .maybeSingle();
+    if (credentialError) {
+      throw credentialError;
+    }
+
+    const { data: snapshotRow, error: snapshotError } = await supabase
+      .from('portfolio_snapshots')
+      .select('snapshot_time,total_equity,day_trade_buying_power,realized_pnl_daily')
+      .eq('user_id', userId)
+      .order('snapshot_time', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (snapshotError) {
+      throw snapshotError;
+    }
+
+    const runtime = getTradierExecutionRuntimeStatus();
+    const portfolioSyncRuntime = isTradierProductionRuntimeEnabled({
+      baseEnabled: String(process.env.TRADIER_PORTFOLIO_SYNC_ENABLED || 'false').toLowerCase() === 'true',
+      productionEnableEnv: process.env.TRADIER_PORTFOLIO_SYNC_PRODUCTION_ENABLED,
+    });
+
+    const metadata = (credentialRow as { metadata?: Record<string, unknown> } | null)?.metadata || {};
+    const accountId = (credentialRow as { account_id?: string } | null)?.account_id;
+    const maskedAccountId = typeof accountId === 'string' && accountId.length > 4
+      ? `****${accountId.slice(-4)}`
+      : accountId || null;
+
+    return res.json({
+      broker: 'tradier',
+      credential: credentialRow
+        ? {
+          configured: true,
+          isActive: Boolean((credentialRow as { is_active?: unknown }).is_active),
+          accountIdMasked: maskedAccountId,
+          sandbox: typeof metadata.tradier_sandbox === 'boolean' ? metadata.tradier_sandbox : null,
+          autoExecute: typeof metadata.spx_auto_execute === 'boolean' ? metadata.spx_auto_execute : false,
+          updatedAt: (credentialRow as { updated_at?: string }).updated_at || null,
+        }
+        : { configured: false },
+      latestPortfolioSnapshot: snapshotRow || null,
+      runtime: {
+        execution: runtime,
+        portfolioSync: portfolioSyncRuntime,
+      },
+    });
+  } catch (error) {
+    logger.error('SPX Tradier status endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load Tradier status.',
+    });
+  }
+});
+
+router.post('/broker/tradier/credentials', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const accountId = typeof req.body?.accountId === 'string' ? req.body.accountId.trim() : '';
+    const accessToken = typeof req.body?.accessToken === 'string' ? req.body.accessToken.trim() : '';
+    const isActive = parseBoolean(req.body?.isActive ?? true);
+    const sandbox = parseBoolean(req.body?.sandbox ?? true);
+    const autoExecute = parseBoolean(req.body?.autoExecute ?? false);
+
+    if (!accountId || !accessToken) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Both accountId and accessToken are required.',
+      });
+    }
+
+    const { data: existingRow } = await supabase
+      .from('broker_credentials')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier')
+      .maybeSingle();
+
+    const existingMetadata = (
+      existingRow && typeof (existingRow as { metadata?: unknown }).metadata === 'object'
+        ? (existingRow as { metadata: Record<string, unknown> }).metadata
+        : {}
+    );
+
+    const metadata = {
+      ...existingMetadata,
+      tradier_sandbox: sandbox,
+      spx_auto_execute: autoExecute,
+      credential_source: 'api',
+    };
+
+    const { error } = await supabase
+      .from('broker_credentials')
+      .upsert({
+        user_id: userId,
+        broker_name: 'tradier',
+        account_id: accountId,
+        access_token_ciphertext: accessToken,
+        is_active: isActive,
+        metadata,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json({
+      success: true,
+      broker: 'tradier',
+      accountIdMasked: accountId.length > 4 ? `****${accountId.slice(-4)}` : accountId,
+      isActive,
+      sandbox,
+      autoExecute,
+    });
+  } catch (error) {
+    logger.error('SPX Tradier credential upsert failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to store Tradier credentials.',
+    });
+  }
+});
+
+router.post('/broker/tradier/test-balance', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const requestAccountId = typeof req.body?.accountId === 'string' ? req.body.accountId.trim() : '';
+    const requestToken = typeof req.body?.accessToken === 'string' ? req.body.accessToken.trim() : '';
+    const requestSandbox = req.body?.sandbox;
+
+    let accountId = requestAccountId;
+    let token = requestToken;
+    let sandbox = typeof requestSandbox === 'boolean'
+      ? requestSandbox
+      : String(process.env.TRADIER_EXECUTION_SANDBOX || 'true').toLowerCase() !== 'false';
+
+    if (!accountId || !token) {
+      const { data: credentialRow, error: credentialError } = await supabase
+        .from('broker_credentials')
+        .select('account_id,access_token_ciphertext,metadata')
+        .eq('user_id', userId)
+        .eq('broker_name', 'tradier')
+        .eq('is_active', true)
+        .maybeSingle();
+      if (credentialError) throw credentialError;
+
+      if (!credentialRow) {
+        return res.status(400).json({
+          error: 'Missing credentials',
+          message: 'Provide accountId/accessToken or configure stored Tradier credentials first.',
+        });
+      }
+
+      const row = credentialRow as {
+        account_id: string;
+        access_token_ciphertext: string;
+        metadata?: Record<string, unknown> | null;
+      };
+      accountId = row.account_id;
+      token = decryptTradierAccessToken(row.access_token_ciphertext);
+      if (typeof requestSandbox !== 'boolean' && typeof row.metadata?.tradier_sandbox === 'boolean') {
+        sandbox = row.metadata.tradier_sandbox;
+      }
+    }
+
+    const tradier = new TradierClient({
+      accountId,
+      accessToken: token,
+      sandbox,
+    });
+    const balances = await tradier.getBalances();
+
+    return res.json({
+      success: true,
+      sandbox,
+      accountIdMasked: accountId.length > 4 ? `****${accountId.slice(-4)}` : accountId,
+      balances,
+    });
+  } catch (error) {
+    logger.error('SPX Tradier balance test failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to fetch Tradier balances. Verify sandbox credentials and account settings.',
     });
   }
 });

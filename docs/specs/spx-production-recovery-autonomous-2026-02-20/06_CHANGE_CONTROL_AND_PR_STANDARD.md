@@ -1474,3 +1474,113 @@ PR can merge only when:
 - Blocker elimination: flow_confirmation_required 30→0, flow_alignment_unavailable 30→0, volume_regime_alignment_required 42→0.
 - Promotion decision: **BLOCKED** — quality far below targets despite throughput recovery.
 - Rollback: Kill switches for S2/S3 graces, code revert for S4.
+
+### Slice: P16-S1
+- Objective: Remove ORB sparse-flow grace and re-baseline strict replay behavior.
+- Status: done
+- Scope: Remove ORB sparse-flow grace path + restore ORB flow-quality discipline.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/__tests__/setupDetector.test.ts`.
+- Tests run: `pnpm --dir backend exec tsc --noEmit`, `pnpm --dir backend test -- src/services/spx/__tests__/setupDetector.test.ts src/services/spx/__tests__/winRateBacktest.test.ts src/services/spx/__tests__/optimizer-confidence.test.ts`.
+- Notes: ORB sparse-flow bypass removed; promotion remained blocked due low/zero strict sample in re-baseline window.
+
+### Slice: P16-S2
+- Objective: Recover trend-family throughput without restoring ORB sparse-flow grace.
+- Status: done
+- Scope: Bounded trend ORB-confluence alternatives + regime-bounded timing-window widening.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/__tests__/setupDetector.test.ts`.
+- Tests run: same Phase 16 detector/optimizer targeted suites + `tsc`.
+- Notes: Throughput recovered partially but remained below institutional promotion thresholds.
+
+### Slice: P16-S3
+- Objective: Persist deterministic flow/microstructure evidence for historical attribution.
+- Status: done
+- Scope: Persist flow availability/effective gate booleans/microstructure coverage evidence to setup metadata and consume in replay readers.
+- Files: `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/outcomeTracker.ts`, `backend/src/services/spx/winRateBacktest.ts`, `backend/src/scripts/spxFailureAttribution.ts`, `backend/src/services/spx/types.ts`.
+- Tests run: setup detector + win-rate backtest + outcome tracker suites, `tsc`.
+- Notes: Evidence parity improved; throughput/promotion posture unchanged.
+
+### Slice: P16-S4
+- Objective: Harden execution-truth path for broker realism and source-composition governance.
+- Status: done
+- Scope: Tradier credential hardening, production runtime enablement guards, execution source composition metrics, proxy-share fail/warn gates.
+- Files: `backend/src/services/broker/tradier/credentials.ts`, `backend/src/services/positions/brokerLedgerReconciliation.ts`, `backend/src/services/portfolio/portfolioSync.ts`, `backend/src/workers/positionTrackerWorker.ts`, `backend/src/services/spx/executionReconciliation.ts`, `backend/src/services/spx/optimizer.ts`, `hooks/use-spx-optimizer.ts`, `components/spx-command-center/spx-settings-sheet.tsx`.
+- Tests run: broker credential + reconciliation + optimizer confidence suites, `tsc`.
+- Notes: Realism gates added; strategy quality/throughput policy unchanged.
+
+### Slice: P16-S5
+- Objective: Tighten optimizer governance so low-diversity/low-realism windows cannot promote.
+- Status: done
+- Scope: Add resolved-sample floor, setup-family diversity floor, conservative objective delta floor, execution-fill evidence requirement, and proxy-share cap to promotion qualification.
+- Files: `backend/src/services/spx/optimizer.ts`, `backend/src/services/spx/__tests__/optimizer-confidence.test.ts`, `hooks/use-spx-optimizer.ts`, `components/spx-command-center/spx-settings-sheet.tsx`, `components/spx-command-center/optimizer-scorecard-panel.tsx`, `backend/.env.example`.
+- Tests run:
+  - `pnpm --dir backend test -- src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir /Users/natekahl/ITM-gd exec tsc --noEmit`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:optimizer-weekly`
+- Notes: Promotion qualification now explicitly blocked with governance reason codes when evidence is insufficient.
+
+### Slice: P16-S6
+- Objective: Run release gates and record institutional promote/block decision with explicit evidence.
+- Status: done (promotion blocked)
+- Scope: Execute validation commands, strict replay + attribution, optimizer governance readout, release artifact updates.
+- Files:
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S5_2026-02-23.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S6_2026-02-23.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_RELEASE_NOTES_2026-02-21.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_GOLD_STANDARD_CONFIG_2026-02-22.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+- Tests run:
+  - `pnpm --dir backend test`
+  - `pnpm --dir backend build`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir /Users/natekahl/ITM-gd exec tsc --noEmit`
+  - `LOG_LEVEL=warn pnpm --dir backend backtest:last-week instances second`
+  - `LOG_LEVEL=warn pnpm --dir backend exec tsx src/scripts/spxFailureAttribution.ts 2026-02-16 2026-02-20`
+  - `LOG_LEVEL=warn pnpm --dir backend spx:optimizer-weekly`
+- Notes:
+  - Added deterministic test-time control in `src/workers/__tests__/setupPushWorker.test.ts` to remove wall-clock flakiness from release gates.
+  - Promotion blocked due strict replay quality/throughput failure (`triggered=1`, `T1=0%`, `expectancyR=-1.04`) and governance disqualification (`resolved 9/10`, conservative objective delta below floor, no execution fill evidence).
+
+### Slice: P16-S7
+- Objective: Wire sandbox-safe Tradier execution and portfolio/position safety controls without changing setup-detection policy.
+- Status: done
+- Scope:
+  - Transition-driven Tradier routing foundation.
+  - User-scoped Tradier sandbox credential/status/balance API controls.
+  - DTBP-aware sizing output in contract selector.
+  - Portfolio sync >1% persistence threshold + PDT behavioral alerts.
+  - Late-day 0DTE flatten safety and reconciliation cadence in position tracker.
+- Out of scope:
+  - Broker webhook fill ingestion and strict fill-parity reconciliation.
+  - Promotion decision changes.
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/executionEngine.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/occFormatter.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/coachPushChannel.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/portfolio/portfolioSync.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/positions/tradierFlatten.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/routes/spx.ts`
+  - `/Users/natekahl/ITM-gd/backend/.env.example`
+  - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S7_2026-02-23.md`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/broker/tradier/__tests__/orderRouter.test.ts src/services/spx/__tests__/contractSelector.test.ts src/services/spx/__tests__/executionCoach.test.ts`
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/positions/__tests__/brokerLedgerReconciliation.test.ts`
+  - `pnpm exec eslint <touched files>` (warning-only due backend ignore pattern)
+- Risks introduced:
+  - Execution lifecycle still uses transition-time approximations until broker fill webhooks land.
+- Mitigations:
+  - Runtime remains disabled-by-default and sandbox-first.
+  - `sell_to_open` hard rejection enforced.
+  - Flatten/reconciliation pathways are guarded and fail-safe.
+- Rollback:
+  - Revert listed files or disable all Tradier runtime flags.
+- Notes:
+  - Slice aligns live-trading testability with sandbox controls while preserving current setup-detection behavior.

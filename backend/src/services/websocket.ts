@@ -63,8 +63,13 @@ import {
   type PositionAdviceUpdate,
   type PositionLiveUpdate,
 } from './positionPushChannel';
+import {
+  subscribeCoachPushEvents,
+  type CoachPushMessage,
+} from './coachPushChannel';
 import { getSPXSnapshot } from './spx';
 import type { CoachMessage, SPXSnapshot, Setup } from './spx/types';
+import { processTradierExecutionTransitions } from './broker/tradier/executionEngine';
 
 // ============================================
 // TYPES
@@ -289,6 +294,7 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let initialPollTimeout: ReturnType<typeof setTimeout> | null = null;
 let unsubscribeSetupEvents: (() => void) | null = null;
 let unsubscribePositionEvents: (() => void) | null = null;
+let unsubscribeCoachEvents: (() => void) | null = null;
 let unsubscribeTickEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
 const lastTickBroadcastAtBySymbol = new Map<string, number>();
@@ -485,7 +491,7 @@ function coachMessageSignature(messages: SPXSnapshot['coachMessages']): string {
     .join(';');
 }
 
-function toCoachChannelPayload(message: CoachMessage, source: 'snapshot' | 'transition'): Record<string, unknown> {
+function toCoachChannelPayload(message: CoachMessage, source: 'snapshot' | 'transition' | 'push'): Record<string, unknown> {
   const structuredData = message.structuredData && typeof message.structuredData === 'object'
     ? message.structuredData
     : {};
@@ -502,6 +508,25 @@ function toCoachChannelPayload(message: CoachMessage, source: 'snapshot' | 'tran
     },
     timestamp: message.timestamp,
   };
+}
+
+function broadcastCoachMessageForUser(payload: CoachPushMessage): void {
+  const serialized = JSON.stringify({
+    type: 'spx_coach',
+    channel: 'coach:message',
+    data: {
+      ...toCoachChannelPayload(payload.message, 'push'),
+      userId: payload.userId,
+      source: payload.source,
+    },
+  });
+
+  for (const [ws, state] of clients) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (state.userId !== payload.userId.toLowerCase()) continue;
+    if (!state.subscriptions.has('coach:message')) continue;
+    ws.send(serialized);
+  }
 }
 
 function diffLevels(
@@ -1445,6 +1470,11 @@ export function initWebSocket(server: HTTPServer): void {
       broadcastPositionAdvice(event.payload);
     }
   });
+  unsubscribeCoachEvents = subscribeCoachPushEvents((event) => {
+    if (event.type === 'coach_message') {
+      broadcastCoachMessageForUser(event.payload);
+    }
+  });
   unsubscribeTickEvents = subscribeMassiveTickUpdates((tick) => {
     void broadcastTickPrice(tick).catch((error) => {
       logger.warn('Failed to broadcast Massive tick price', {
@@ -1458,6 +1488,12 @@ export function initWebSocket(server: HTTPServer): void {
       broadcastSetupTransition(transition);
       broadcastExecutionDirective(transition);
     }
+    void processTradierExecutionTransitions(transitions).catch((error) => {
+      logger.warn('Tradier transition execution routing failed', {
+        transitionCount: transitions.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     void persistSetupTransitionsForWinRate(transitions).catch((error) => {
       logger.warn('Failed to persist SPX setup transitions for win-rate tracking', {
         transitionCount: transitions.length,
@@ -1501,6 +1537,10 @@ export function shutdownWebSocket(): void {
   if (unsubscribePositionEvents) {
     unsubscribePositionEvents();
     unsubscribePositionEvents = null;
+  }
+  if (unsubscribeCoachEvents) {
+    unsubscribeCoachEvents();
+    unsubscribeCoachEvents = null;
   }
   if (unsubscribeTickEvents) {
     unsubscribeTickEvents();

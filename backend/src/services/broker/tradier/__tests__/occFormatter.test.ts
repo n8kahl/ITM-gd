@@ -17,6 +17,16 @@ describe('tradier/occFormatter', () => {
     expect(occ).toBe('SPXW260220C06870000');
   });
 
+  it('normalizes SPX root to SPXW for Tradier routing', () => {
+    const occ = formatTradierOccSymbol({
+      underlying: 'SPX',
+      expiry: '2026-02-20',
+      optionType: 'put',
+      strike: 6865,
+    });
+    expect(occ).toBe('SPXW260220P06865000');
+  });
+
   it('parses OCC symbols to contract inputs', () => {
     const contract = parseTradierOccSymbol('SPXW260220P06865000');
     expect(contract).toEqual({

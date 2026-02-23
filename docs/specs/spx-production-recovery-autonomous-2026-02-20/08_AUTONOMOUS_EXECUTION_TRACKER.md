@@ -1077,6 +1077,71 @@ Update this file at the end of each autonomous execution session.
 - Blockers:
   - None.
 
+### Session 2026-02-23 00:40 ET
+- Goal: Execute Phase 16 optimizer governance tightening (`P16-S5`) and continue to release-gate decision (`P16-S6`).
+- Completed:
+  - Added promotion-governance qualification model in optimizer:
+    - resolved-trade minimum
+    - setup-family diversity minimum
+    - conservative objective delta floor
+    - execution-fill evidence requirement
+    - proxy-fill-share cap
+  - Surfaced governance outputs in UI:
+    - `/Users/natekahl/ITM-gd/components/spx-command-center/spx-settings-sheet.tsx`
+    - `/Users/natekahl/ITM-gd/components/spx-command-center/optimizer-scorecard-panel.tsx`
+  - Added/updated governance tests:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - Authored slice report:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S5_2026-02-23.md`
+- Tests run:
+  - `pnpm -C /Users/natekahl/ITM-gd/backend exec tsc --noEmit`
+  - `pnpm -C /Users/natekahl/ITM-gd exec tsc --noEmit`
+  - `pnpm -C /Users/natekahl/ITM-gd/backend test -- src/services/spx/__tests__/optimizer-confidence.test.ts`
+  - `LOG_LEVEL=warn pnpm -C /Users/natekahl/ITM-gd/backend spx:optimizer-weekly`
+- Risks found:
+  - Governance hardening increases probability of prolonged promotion blocks under sparse strict windows.
+- Risks mitigated:
+  - Explicit governance reason telemetry now visible in scorecard/settings.
+  - Fail-closed behavior remains explicit and auditable.
+- Next slice:
+  - `P16-S6`: run release gates and write promote/block evidence packet.
+- Blockers:
+  - None.
+
+### Session 2026-02-23 01:00 ET
+- Goal: Complete `P16-S6` release gates and institutional promotion decision.
+- Completed:
+  - Ran release validation gates:
+    - `pnpm -C /Users/natekahl/ITM-gd/backend test` (`103/103` pass)
+    - `pnpm -C /Users/natekahl/ITM-gd/backend build` (pass)
+    - `pnpm -C /Users/natekahl/ITM-gd/backend backtest:last-week instances second`
+    - `pnpm -C /Users/natekahl/ITM-gd/backend exec tsx src/scripts/spxFailureAttribution.ts 2026-02-16 2026-02-20`
+    - `pnpm -C /Users/natekahl/ITM-gd/backend spx:optimizer-weekly`
+  - Stabilized release-gate worker test determinism:
+    - `/Users/natekahl/ITM-gd/backend/src/workers/__tests__/setupPushWorker.test.ts`
+    - Added fixed system time in `beforeEach` to remove wall-clock staleness regression.
+  - Updated release artifacts:
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S6_2026-02-23.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_RELEASE_NOTES_2026-02-21.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_GOLD_STANDARD_CONFIG_2026-02-22.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+    - `/Users/natekahl/ITM-gd/docs/specs/spx-production-recovery-autonomous-2026-02-20/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+- Promotion decision:
+  - **BLOCKED**
+  - Evidence:
+    - strict replay remained far below quality and throughput gates (`triggered=1`, `resolved=1`, `T1=0%`, `T2=0%`, `failure=100%`, `expectancyR=-1.04`)
+    - optimizer data-quality gate passed (`options replay coverage=100%`, replay universe `102`) but governance remained unqualified
+    - governance reasons: `resolved_trades_below_floor:9<10`, `conservative_objective_delta_below_floor:-11.44<0.1`, `execution_fill_evidence_unavailable`
+- Risks found:
+  - Backfill runtime can be long/opaque operationally and may leave transient empty windows if interrupted.
+- Risks mitigated:
+  - Promotion remained fail-closed; no bypass introduced.
+- Next slice:
+  - Restore strict replay sample availability and satisfy governance/data-quality gates before reconsidering promotion.
+- Blockers:
+  - Institutional promotion gates remain unsatisfied.
+
 ## 4. Blocking Gate Checklist
 1. [x] No open P0 defects.
 2. [x] No open P1 defects.
@@ -1093,3 +1158,42 @@ Update this file at the end of each autonomous execution session.
 5. [x] Feature flags verified for release posture.
 6. [x] Release notes prepared.
 7. [x] Rollback plan validated.
+
+### Session 2026-02-23 13:35 ET
+- Goal: Execute `P16-S7` to deliver sandbox-testable Tradier routing with portfolio/position safety and DTBP-aware execution sizing.
+- Completed:
+  - Added Tradier execution engine with transition-driven order routing:
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/executionEngine.ts`
+  - Added user-scoped coach push channel + websocket subscription path:
+    - `/Users/natekahl/ITM-gd/backend/src/services/coachPushChannel.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/websocket.ts`
+  - Added contract selector DTBP/equity sizing output and risk-context cache fingerprinting:
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/contractSelector.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/spx/types.ts`
+  - Added Tradier sandbox management endpoints (`status`, `credentials`, `test-balance`):
+    - `/Users/natekahl/ITM-gd/backend/src/routes/spx.ts`
+  - Added portfolio sync >1% persistence rule + PDT behavioral alert emission:
+    - `/Users/natekahl/ITM-gd/backend/src/services/portfolio/portfolioSync.ts`
+  - Added late-day flatten service and position-tracker wiring:
+    - `/Users/natekahl/ITM-gd/backend/src/services/positions/tradierFlatten.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/workers/positionTrackerWorker.ts`
+  - Enforced hard no-STO guard in Tradier client:
+    - `/Users/natekahl/ITM-gd/backend/src/services/broker/tradier/client.ts`
+  - Updated env flag catalog and slice report:
+    - `/Users/natekahl/ITM-gd/backend/.env.example`
+    - `/Users/natekahl/ITM-gd/docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S7_2026-02-23.md`
+- Tests run:
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/broker/tradier/__tests__/orderRouter.test.ts src/services/spx/__tests__/contractSelector.test.ts src/services/spx/__tests__/executionCoach.test.ts`
+  - `pnpm --dir backend test -- src/services/broker/tradier/__tests__/occFormatter.test.ts src/services/positions/__tests__/brokerLedgerReconciliation.test.ts`
+  - `pnpm exec eslint <touched files>` (warning-only due backend ignore pattern)
+- Risks found:
+  - Fill-quality fidelity remains provisional until broker webhook/exec ingestion is connected.
+- Risks mitigated:
+  - Runtime remains disabled-by-default with production dual-flag guard.
+  - Sandbox-first controls and credential status endpoint added for safe validation.
+  - Late-day flatten + reconciliation cadence reduces unmanaged close-risk.
+- Next slice:
+  - Wire broker fill callbacks/polling into execution reconciliation to replace transition-proxy assumptions.
+- Blockers:
+  - None for sandbox validation path.
