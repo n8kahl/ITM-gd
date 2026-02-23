@@ -35,6 +35,10 @@ import {
   isTradierProductionRuntimeEnabled,
 } from '../services/broker/tradier/credentials';
 import { getTradierExecutionRuntimeStatus } from '../services/broker/tradier/executionEngine';
+import {
+  loadOpenStatesWithOrders,
+  closeAllUserStates,
+} from '../services/spx/executionStateStore';
 
 const router = Router();
 
@@ -876,15 +880,50 @@ router.post('/broker/tradier/kill', async (req: Request, res: Response) => {
       logger.error('Kill switch: failed to deactivate credentials', { userId, error: updateError.message });
     }
 
+    // S2: Cancel all open orders for this user
     let cancelledOrders = 0;
     try {
-      const positions = await tradier.getPositions();
-      logger.info('Kill switch: positions at time of kill', { userId, positionCount: positions.length });
-      // Note: Tradier does not expose a "cancel all open orders" endpoint for options directly.
-      // The execution engine tracks active states in memory. Setting is_active=false prevents
-      // new orders and the runtime check will stop processing.
+      // Query persisted execution states for active order IDs
+      const openStates = await loadOpenStatesWithOrders(userId);
+      for (const state of openStates) {
+        if (state.entryOrderId) {
+          try {
+            await tradier.cancelOrder(state.entryOrderId);
+            cancelledOrders++;
+          } catch {
+            // Order may already be filled/cancelled
+          }
+        }
+        if (state.runnerStopOrderId) {
+          try {
+            await tradier.cancelOrder(state.runnerStopOrderId);
+            cancelledOrders++;
+          } catch {
+            // Order may already be filled/cancelled
+          }
+        }
+      }
+
+      // Fallback: query Tradier directly for any SPX-tagged pending orders we may have missed
+      try {
+        const pendingOrders = await tradier.getOpenOrders('spx:');
+        for (const order of pendingOrders) {
+          try {
+            await tradier.cancelOrder(order.id);
+            cancelledOrders++;
+          } catch {
+            // Already cancelled or filled
+          }
+        }
+      } catch {
+        logger.warn('Kill switch: Tradier open orders query failed (non-fatal)', { userId });
+      }
+
+      // Close all execution states in Supabase
+      const closedCount = await closeAllUserStates(userId, 'kill_switch');
+      logger.info('Kill switch: closed execution states', { userId, closedCount });
     } catch (posError) {
-      logger.warn('Kill switch: position fetch failed (non-fatal)', {
+      logger.warn('Kill switch: order cancellation encountered errors (non-fatal)', {
         error: posError instanceof Error ? posError.message : String(posError),
       });
     }
@@ -892,7 +931,7 @@ router.post('/broker/tradier/kill', async (req: Request, res: Response) => {
     logger.info('Kill switch activated', { userId, cancelledOrders });
     return res.json({
       success: true,
-      message: 'Kill switch activated. Execution disabled, credentials deactivated.',
+      message: 'Kill switch activated. Execution disabled, all open orders cancelled.',
       cancelledOrders,
     });
   } catch (error) {

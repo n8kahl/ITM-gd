@@ -407,8 +407,6 @@ function chooseDeltaTarget(type: SetupType): number {
       return 0.18
     case 'orb_breakout':
       return 0.32
-    case 'breakout_vacuum':
-      return 0.26
     case 'trend_continuation':
       return 0.3
     case 'trend_pullback':

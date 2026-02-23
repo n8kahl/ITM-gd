@@ -35,7 +35,7 @@ const FLOW_MIN_LOCAL_PREMIUM = 150_000;
 const FLOW_MIN_LOCAL_EVENTS = 2;
 const FLOW_QUALITY_MIN_EVENTS = 2;
 const FLOW_QUALITY_MIN_PREMIUM = 90_000;
-const ORB_MIN_FLOW_QUALITY_SCORE = 58;
+const ORB_MIN_FLOW_QUALITY_SCORE = 45; // S7: Reduced from 58 for ORB gate relaxation
 const CONTEXT_STREAK_TTL_MS = 30 * 60 * 1000;
 
 const DEFAULT_REGIME_CONFLICT_CONFIDENCE_THRESHOLD = 68;
@@ -107,9 +107,8 @@ const DIVERSIFICATION_PREFERRED_SETUP_TYPES: ReadonlySet<SetupType> = new Set([
 ]);
 const DEFAULT_FADE_READY_MAX_SHARE = 0.5;
 const DEFAULT_MIN_ALTERNATIVE_READY_SETUPS = 1;
-const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
+const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<string, number> = {
   fade_at_wall: 300,
-  breakout_vacuum: 360,
   mean_reversion: 330,
   trend_continuation: 390,
   orb_breakout: 180,
@@ -135,18 +134,19 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     maxFirstSeenMinuteEt: 330,
   },
   orb_breakout: {
-    minConfluenceScore: 4,
-    minPWinCalibrated: 0.61,
-    minEvR: 0.3,
+    // S7: Relaxed ORB gates to increase trigger rate from 0% baseline
+    minConfluenceScore: 3, // Was 4
+    minPWinCalibrated: 0.56, // Was 0.61
+    minEvR: 0.24, // Was 0.3
     requireFlowConfirmation: true,
-    minAlignmentPct: 55,
-    requireEmaAlignment: true,
+    minAlignmentPct: 45, // Was 55
+    requireEmaAlignment: false, // S7: EMA alignment grace during ORB window
     requireVolumeRegimeAlignment: true,
     maxFirstSeenMinuteEt: 165,
   },
   trend_pullback: {
     minConfluenceScore: 3,
-    minPWinCalibrated: 0.58,
+    minPWinCalibrated: 0.62, // S7: Raised from 0.58 to reduce failure rate
     minEvR: 0.24,
     requireFlowConfirmation: true,
     minAlignmentPct: 50,
@@ -163,16 +163,7 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
   },
-  breakout_vacuum: {
-    minConfluenceScore: 5,
-    minPWinCalibrated: 0.7,
-    minEvR: 0.4,
-    requireFlowConfirmation: true,
-    minAlignmentPct: 60,
-    requireEmaAlignment: true,
-    requireVolumeRegimeAlignment: true,
-    maxFirstSeenMinuteEt: 225,
-  },
+  // S7: breakout_vacuum removed (permanently quarantined, 0% trigger rate)
 };
 
 interface SetupLifecycleConfig {
@@ -374,7 +365,7 @@ function setupTypeForRegime(regime: Regime): SetupType {
     case 'ranging':
       return 'fade_at_wall';
     case 'breakout':
-      return 'breakout_vacuum';
+      return 'flip_reclaim'; // S7: was breakout_vacuum (pruned)
     case 'trending':
       return 'trend_continuation';
     case 'compression':
@@ -389,17 +380,16 @@ function isRegimeAligned(type: SetupType, regime: Regime): boolean {
   }
   if (regime === 'compression') {
     return type === 'mean_reversion'
-      || type === 'breakout_vacuum'
+      || type === 'flip_reclaim'
       || type === 'orb_breakout'
       || type === 'flip_reclaim'
       || type === 'trend_pullback';
   }
   if (regime === 'trending') {
-    return type === 'trend_continuation' || type === 'breakout_vacuum' || type === 'trend_pullback';
+    return type === 'trend_continuation' || type === 'trend_pullback';
   }
   if (regime === 'breakout') {
-    return type === 'breakout_vacuum'
-      || type === 'trend_continuation'
+    return type === 'trend_continuation'
       || type === 'orb_breakout'
       || type === 'flip_reclaim'
       || type === 'trend_pullback';
@@ -481,21 +471,21 @@ function inferSetupTypeForZone(input: {
   if (input.regime === 'breakout') {
     if (intradayTrendStructure && minutesSinceOpen <= 300) return 'trend_pullback';
     if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
-    return inMomentumState ? 'trend_continuation' : 'breakout_vacuum';
+    return inMomentumState ? 'trend_continuation' : 'flip_reclaim';
   }
 
   if (input.regime === 'trending') {
     if (intradayTrendStructure) return 'trend_pullback';
     if (inMomentumState) return 'trend_continuation';
     if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
-    if (nearFlip || netGexNegative) return 'breakout_vacuum';
+    if (nearFlip || netGexNegative) return 'flip_reclaim';
     return 'trend_continuation';
   }
 
   if (input.regime === 'compression') {
     if (intradayTrendStructure && minutesSinceOpen <= 240) return 'trend_pullback';
     if (hasIndicatorContext && flipReclaim && nearFlip) return 'flip_reclaim';
-    if (volumeTrend === 'rising' && (nearFlip || netGexNegative)) return 'breakout_vacuum';
+    if (volumeTrend === 'rising' && (nearFlip || netGexNegative)) return 'flip_reclaim';
     return 'mean_reversion';
   }
 
@@ -514,7 +504,7 @@ function inferSetupTypeForZone(input: {
     if (flipReclaim && nearFlip) return 'flip_reclaim';
     if (hasIndicatorContext && flipReclaim && nearFlip && volumeTrend !== 'rising') return 'flip_reclaim';
     if (distanceToZone >= 20) return 'mean_reversion';
-    if (inMomentumState && (nearFlip || netGexNegative)) return 'breakout_vacuum';
+    if (inMomentumState && (nearFlip || netGexNegative)) return 'flip_reclaim';
     if (distanceToZone >= 40) return 'mean_reversion';
     return 'fade_at_wall';
   }

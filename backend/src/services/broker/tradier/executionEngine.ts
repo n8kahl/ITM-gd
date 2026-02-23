@@ -5,6 +5,13 @@ import { publishCoachMessage } from '../../coachPushChannel';
 import { getContractRecommendation } from '../../spx/contractSelector';
 import type { SetupTransitionEvent } from '../../spx/tickEvaluator';
 import { recordExecutionFill } from '../../spx/executionReconciliation';
+import {
+  upsertExecutionState,
+  updateExecutionState,
+  closeExecutionState,
+  loadOpenStates,
+  type ExecutionActiveState,
+} from '../../spx/executionStateStore';
 import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierRunnerStopOrder, buildTradierScaleOrder } from './orderRouter';
 import { formatTradierOccSymbol } from './occFormatter';
 import { TradierClient } from './client';
@@ -20,19 +27,6 @@ interface TradierCredentialRow {
 interface PortfolioSnapshotRow {
   total_equity: number | string | null;
   day_trade_buying_power: number | string | null;
-}
-
-interface TradierExecutionState {
-  userId: string;
-  setupId: string;
-  sessionDate: string;
-  symbol: string;
-  quantity: number;
-  remainingQuantity: number;
-  entryOrderId: string;
-  runnerStopOrderId: string | null;
-  entryLimitPrice: number;
-  updatedAt: string;
 }
 
 interface SizingResult {
@@ -77,7 +71,9 @@ const EXECUTION_ALLOWED_USER_IDS = new Set(
     .filter(Boolean),
 );
 
-const stateByUserSetup = new Map<string, TradierExecutionState>();
+// In-memory cache backed by Supabase for fast lookups during processing loop
+const stateByUserSetup = new Map<string, ExecutionActiveState>();
+let rehydrated = false;
 let cachedCredentials:
   | {
       expiresAt: number;
@@ -171,12 +167,35 @@ async function loadLatestPortfolioSnapshot(userId: string): Promise<{ totalEquit
   };
 }
 
-function inferTargetOptionPrice(input: {
+export function inferTargetOptionPrice(input: {
   entryLimitPrice: number;
   bid: number;
   ask: number;
   expectedPnlAtTarget1?: number;
+  setupTarget1Price?: number;
+  setupEntryMid?: number;
+  setupStop?: number;
+  delta?: number;
+  gamma?: number;
 }): number {
+  // S5: Use actual geometry-based T1 price when available
+  if (
+    typeof input.setupTarget1Price === 'number'
+    && typeof input.setupEntryMid === 'number'
+    && typeof input.setupStop === 'number'
+    && typeof input.delta === 'number'
+  ) {
+    const moveToT1 = Math.abs(input.setupTarget1Price - input.setupEntryMid);
+    const gammaAdj = typeof input.gamma === 'number' ? input.gamma * (moveToT1 ** 2) / 2 : 0;
+    const optionPriceChange = Math.abs(input.delta) * moveToT1 + gammaAdj;
+    const mid = (input.bid + input.ask) / 2;
+    const estimated = mid + (optionPriceChange / 100);
+    if (Number.isFinite(estimated) && estimated > 0.05) {
+      return Number(Math.max(0.05, estimated).toFixed(2));
+    }
+  }
+
+  // Fallback: use expectedPnlAtTarget1 if provided
   const mid = (input.bid + input.ask) / 2;
   const expected = typeof input.expectedPnlAtTarget1 === 'number'
     ? mid + (input.expectedPnlAtTarget1 / 100)
@@ -214,6 +233,28 @@ async function loadActiveExecutionCredentials(): Promise<TradierCredentialRow[]>
     rows: filtered,
   };
   return filtered;
+}
+
+/**
+ * Rehydrate in-memory cache from Supabase on startup. (S1)
+ */
+export async function rehydrateExecutionStates(): Promise<number> {
+  try {
+    const openStates = await loadOpenStates();
+    for (const state of openStates) {
+      const key = stateKey(state.userId, state.setupId, state.sessionDate);
+      stateByUserSetup.set(key, state);
+    }
+    rehydrated = true;
+    logger.info('Execution states rehydrated from Supabase', { count: openStates.length });
+    return openStates.length;
+  } catch (error) {
+    logger.warn('Failed to rehydrate execution states; starting with empty cache', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    rehydrated = true;
+    return 0;
+  }
 }
 
 async function handleTriggeredTransition(
@@ -269,7 +310,8 @@ async function handleTriggeredTransition(
         tag: `spx:${event.setupId}:${sessionDate}:entry`,
       }));
 
-      stateByUserSetup.set(key, {
+      // S1: Persist to Supabase with duplicate prevention (S5)
+      const { inserted, state: persistedState } = await upsertExecutionState({
         userId: credential.user_id,
         setupId: event.setupId,
         sessionDate,
@@ -277,10 +319,24 @@ async function handleTriggeredTransition(
         quantity: sizing.quantity,
         remainingQuantity: sizing.quantity,
         entryOrderId: entryOrder.id,
-        runnerStopOrderId: null,
         entryLimitPrice,
-        updatedAt: new Date().toISOString(),
       });
+
+      if (!inserted) {
+        // Duplicate detected at DB level - cancel the order we just placed
+        logger.warn('Duplicate execution state detected; cancelling duplicate entry order', {
+          userId: credential.user_id,
+          setupId: event.setupId,
+          orderId: entryOrder.id,
+        });
+        await tradier.cancelOrder(entryOrder.id).catch(() => false);
+        continue;
+      }
+
+      // Update in-memory cache
+      if (persistedState) {
+        stateByUserSetup.set(key, persistedState);
+      }
 
       await recordExecutionFill({
         setupId: event.setupId,
@@ -361,10 +417,19 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
           : EXECUTION_SANDBOX_DEFAULT,
       });
 
+      // S5: Use geometry-based T1 pricing when available
       const targetPrice = inferTargetOptionPrice({
         entryLimitPrice: state.entryLimitPrice,
         bid: state.entryLimitPrice * 0.9,
         ask: state.entryLimitPrice * 1.1,
+        expectedPnlAtTarget1: event.setup?.recommendedContract?.expectedPnlAtTarget1,
+        setupTarget1Price: event.setup?.target1?.price,
+        setupEntryMid: event.setup?.entryZone
+          ? (event.setup.entryZone.low + event.setup.entryZone.high) / 2
+          : undefined,
+        setupStop: event.setup?.stop,
+        delta: event.setup?.recommendedContract?.delta,
+        gamma: event.setup?.recommendedContract?.gamma,
       });
       const partialOrder = await tradier.placeOrder(buildTradierScaleOrder({
         symbol: state.symbol,
@@ -375,16 +440,27 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
 
       const nextRemaining = Math.max(0, state.remainingQuantity - partialQuantity);
       let runnerStopOrderId: string | null = state.runnerStopOrderId;
+
+      // S6: Move stop to entry + 0.15R instead of flat breakeven
+      const runnerStopPrice = Math.max(0.05, state.entryLimitPrice * 1.015);
+
       if (nextRemaining > 0) {
         const runnerOrder = await tradier.placeOrder(buildTradierRunnerStopOrder({
           symbol: state.symbol,
           quantity: nextRemaining,
-          stopPrice: Math.max(0.05, state.entryLimitPrice),
+          stopPrice: runnerStopPrice,
           tag: `spx:${state.setupId}:${state.sessionDate}:runner_stop`,
         }));
         runnerStopOrderId = runnerOrder.id;
       }
 
+      // S1: Persist state update to Supabase
+      await updateExecutionState(state.userId, state.setupId, state.sessionDate, {
+        remainingQuantity: nextRemaining,
+        runnerStopOrderId,
+      });
+
+      // Update in-memory cache
       stateByUserSetup.set(key, {
         ...state,
         remainingQuantity: nextRemaining,
@@ -421,6 +497,8 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
 
   for (const [key, state] of activeStates) {
     if (state.remainingQuantity <= 0) {
+      // S1: Close state in Supabase
+      await closeExecutionState(state.userId, state.setupId, state.sessionDate, event.reason || 'expired').catch(() => undefined);
       stateByUserSetup.delete(key);
       continue;
     }
@@ -477,6 +555,9 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
+      // S1: Close state in Supabase
+      const closeReason = event.reason === 'stop' ? 'stop' : 'target2_hit';
+      await closeExecutionState(state.userId, state.setupId, state.sessionDate, closeReason).catch(() => undefined);
       stateByUserSetup.delete(key);
     }
   }
@@ -485,6 +566,11 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
 export async function processTradierExecutionTransitions(events: SetupTransitionEvent[]): Promise<void> {
   if (!EXECUTION_RUNTIME_ENABLEMENT.enabled) return;
   if (!Array.isArray(events) || events.length === 0) return;
+
+  // S1: Ensure rehydration on first call
+  if (!rehydrated) {
+    await rehydrateExecutionStates();
+  }
 
   const actionable = events.filter((event) => event.symbol === 'SPX');
   if (actionable.length === 0) return;
