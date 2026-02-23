@@ -5,7 +5,7 @@ import { publishCoachMessage } from '../../coachPushChannel';
 import { getContractRecommendation } from '../../spx/contractSelector';
 import type { SetupTransitionEvent } from '../../spx/tickEvaluator';
 import { recordExecutionFill } from '../../spx/executionReconciliation';
-import { buildTradierEntryOrder, buildTradierRunnerStopOrder, buildTradierScaleOrder } from './orderRouter';
+import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierRunnerStopOrder, buildTradierScaleOrder } from './orderRouter';
 import { formatTradierOccSymbol } from './occFormatter';
 import { TradierClient } from './client';
 import { decryptTradierAccessToken, isTradierProductionRuntimeEnabled } from './credentials';
@@ -452,15 +452,11 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
         await tradier.cancelOrder(state.runnerStopOrderId).catch(() => false);
       }
 
-      const exitOrder = await tradier.placeOrder({
-        class: 'option',
+      const exitOrder = await tradier.placeOrder(buildTradierMarketExitOrder({
         symbol: state.symbol,
-        side: 'sell_to_close',
         quantity: state.remainingQuantity,
-        type: 'market',
-        duration: 'day',
         tag: `spx:${state.setupId}:${state.sessionDate}:terminal`,
-      });
+      }));
 
       await recordExecutionFill({
         setupId: event.setupId,

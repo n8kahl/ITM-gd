@@ -1,5 +1,6 @@
 import {
   buildTradierEntryOrder,
+  buildTradierMarketExitOrder,
   buildTradierRunnerStopOrder,
   buildTradierScaleOrder,
 } from '../orderRouter';
@@ -15,7 +16,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'buy_to_open',
       quantity: 3,
       type: 'limit',
@@ -34,7 +36,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'sell_to_close',
       quantity: 2,
       type: 'limit',
@@ -55,7 +58,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'sell_to_close',
       quantity: 1,
       type: 'stop_limit',
@@ -63,6 +67,25 @@ describe('tradier/orderRouter', () => {
       stop: 1.12,
       price: 1.0,
       tag: 'spx-runner-stop',
+    });
+  });
+
+  it('builds market sell-to-close exit payload', () => {
+    const payload = buildTradierMarketExitOrder({
+      symbol: 'SPXW260220C06870000',
+      quantity: 2.7,
+      tag: 'spx-terminal',
+    });
+
+    expect(payload).toEqual({
+      class: 'option',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
+      side: 'sell_to_close',
+      quantity: 2,
+      type: 'market',
+      duration: 'day',
+      tag: 'spx-terminal',
     });
   });
 
@@ -75,7 +98,8 @@ describe('tradier/orderRouter', () => {
 
     expect(payload).toEqual({
       class: 'option',
-      symbol: 'SPXW260220C06870000',
+      symbol: 'SPXW',
+      option_symbol: 'SPXW260220C06870000',
       side: 'sell_to_close',
       quantity: 1,
       type: 'stop',

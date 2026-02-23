@@ -203,3 +203,10 @@ Before release:
 | D-058 | 2026-02-23 | 16 | Tradier execution enablement posture | Immediate auto-routing by default, guarded runtime with user metadata arm, manual-only routing | Guarded runtime + user metadata arm (`spx_auto_execute`) | Preserves safe sandbox testing path while preventing accidental broker routing. | Adds operational setup overhead before users can route orders. | Eng | Accepted |
 | D-059 | 2026-02-23 | 16 | DTBP sizing expression in selector output | Keep static per-contract caps only, add user-risk sizing output with block reason | Add user-risk sizing output + `margin_limit_blocked` visibility | Makes contract recommendation execution-aware and transparent for institutional risk controls. | Requires latest portfolio snapshot availability for best accuracy. | Eng | Accepted |
 | D-060 | 2026-02-23 | 16 | Close-risk control strategy | Advisory-only near-close warnings, automated guarded flatten cycle | Automated guarded flatten cycle | Reduces operational assignment/exercise risk for 0DTE holdings during final minutes. | Requires credential availability and may fail per-position if broker/account drift exists. | Eng | Accepted |
+
+## 13. Execution Updates (2026-02-22 - P16-S7 Telemetry)
+### Decision Log Updates
+| Decision ID | Date | Phase | Decision | Options Considered | Chosen Option | Rationale | Tradeoffs | Owner | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| D-061 | 2026-02-22 | 16 | Telemetry persistence strategy | Extend DB schema with new columns, extend JSONB metadata, defer to future phase | Extend JSONB metadata | No schema migration needed, fully backwards-compatible, optimizer can query JSONB fields directly. | JSONB queries slightly slower than indexed columns, but volume is low (~100 setups/day). | Eng | Accepted |
+| D-062 | 2026-02-22 | 16 | Microstructure snapshot interval | 1s microbar (highest fidelity), 5s microbar (balanced), skip microstructure | 5s microbar | Matches the existing Phase 14 canonical interval; 1s too noisy for setup-level decisions. | Loses sub-5s microstructure detail. | Eng | Accepted |

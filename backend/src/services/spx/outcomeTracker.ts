@@ -115,6 +115,16 @@ function toTrackedRow(setup: Setup, observedAt: string) {
       tradeManagement: setup.tradeManagement ?? null,
       statusUpdatedAt: setup.statusUpdatedAt || null,
       rank: setup.rank ?? null,
+      // Telemetry for optimizer learning (P16-S7)
+      flowQualityScore: setup.flowQualityScore ?? null,
+      flowRecentDirectionalEvents: setup.flowRecentDirectionalEvents ?? null,
+      flowRecentDirectionalPremium: setup.flowRecentDirectionalPremium ?? null,
+      flowLocalDirectionalEvents: setup.flowLocalDirectionalEvents ?? null,
+      flowLocalDirectionalPremium: setup.flowLocalDirectionalPremium ?? null,
+      volumeTrend: setup.volumeTrend ?? null,
+      minutesSinceOpen: setup.minutesSinceOpen ?? null,
+      emaFastSlope: setup.emaFastSlope ?? null,
+      microstructureSnapshot: setup.microstructureSnapshot ?? null,
     },
     updated_at: observedAt,
   };
