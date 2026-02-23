@@ -53,6 +53,7 @@ describe('Setup Push Worker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-02-20T00:00:00.000Z'));
 
     mockFrom.mockReturnValue({
       select: mockSelect,

@@ -61,6 +61,7 @@ export interface SPXOptimizerDataQuality {
   failClosedActive: boolean
   gatePassed: boolean
   reasons: string[]
+  warnings: string[]
   sourceUsed: 'spx_setup_instances' | 'ai_coach_tracked_setups' | 'none' | 'unknown'
   requestedResolution: 'second'
   resolutionUsed: 'second' | 'minute' | 'none' | 'unknown'
@@ -82,6 +83,10 @@ export interface SPXOptimizerDataQuality {
   executionFillTableAvailable: boolean
   executionTriggeredTradeCount: number
   executionTradesWithAnyFill: number
+  executionTradesWithProxyFill: number
+  executionTradesWithManualFill: number
+  executionTradesWithBrokerTradierFill: number
+  executionTradesWithBrokerOtherFill: number
   executionTradesWithEntryFill: number
   executionTradesWithExitFill: number
   executionTradesWithNonProxyFill: number
@@ -89,10 +94,33 @@ export interface SPXOptimizerDataQuality {
   executionEntryCoveragePct: number
   executionExitCoveragePct: number
   executionNonProxyCoveragePct: number
+  executionProxyShareOfTriggeredPct: number
+  executionProxyShareOfFilledPct: number
+  executionBrokerTradierShareOfFilledPct: number
   executionEntryAvgSlippagePts: number | null
   executionExitAvgSlippagePts: number | null
   executionEntryAvgSlippageBps: number | null
   executionExitAvgSlippageBps: number | null
+}
+
+export interface SPXPromotionGovernance {
+  requiredResolvedTrades: number
+  observedResolvedTrades: number
+  resolvedTradesPassed: boolean
+  requiredSetupFamilyDiversity: number
+  observedSetupFamilyDiversity: number
+  setupFamilyDiversityPassed: boolean
+  requiredConservativeObjectiveDelta: number
+  observedConservativeObjectiveDelta: number
+  conservativeObjectiveDeltaPassed: boolean
+  requireExecutionFillEvidence: boolean
+  observedExecutionFills: number
+  executionFillEvidencePassed: boolean
+  maxProxyFillSharePct: number
+  observedProxyFillSharePct: number
+  proxySharePassed: boolean
+  promotionQualified: boolean
+  reasons: string[]
 }
 
 export interface SPXOptimizerScorecard {
@@ -138,6 +166,7 @@ export interface SPXOptimizerScorecard {
     }>
   }
   optimizationApplied: boolean
+  governance?: SPXPromotionGovernance
   dataQuality?: SPXOptimizerDataQuality
   notes: string[]
 }

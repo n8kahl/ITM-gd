@@ -61,6 +61,27 @@ export interface ExecutionFillReconciliationHistory {
   fills: ExecutionFillReconciliation[];
 }
 
+export interface ExecutionFillSourceBucket {
+  source: ExecutionFillSource;
+  fillCount: number;
+  fillSharePct: number;
+  entryFillCount: number;
+  exitFillCount: number;
+  avgEntrySlippagePts: number | null;
+  avgExitSlippagePts: number | null;
+  avgEntrySlippageBps: number | null;
+  avgExitSlippageBps: number | null;
+}
+
+export interface ExecutionFillSourceComposition {
+  setupId: string;
+  sessionDate: string | null;
+  totalFills: number;
+  proxySharePct: number;
+  nonProxySharePct: number;
+  bySource: ExecutionFillSourceBucket[];
+}
+
 interface RawTransitionRow {
   event_id: string;
   to_phase: ExecutionTransitionPhase;
@@ -493,6 +514,12 @@ function compareFillPriority(a: RawFillRow, b: RawFillRow): number {
   return b.id - a.id;
 }
 
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sum = values.reduce((total, value) => total + value, 0);
+  return round(sum / values.length, 4);
+}
+
 export async function getExecutionReconciliationHistory(input: {
   setupId: string;
   sessionDate?: string;
@@ -528,5 +555,77 @@ export async function getExecutionReconciliationHistory(input: {
     setupId: input.setupId,
     count: rows.length,
     fills: rows.map((row) => mapFillRowToReconciliation(row)),
+  };
+}
+
+export async function summarizeExecutionFillSourceComposition(input: {
+  setupId: string;
+  sessionDate?: string;
+}): Promise<ExecutionFillSourceComposition> {
+  const history = await getExecutionReconciliationHistory(input);
+  const total = history.fills.length;
+  const bySourceMap = new Map<ExecutionFillSource, {
+    fillCount: number;
+    entryFillCount: number;
+    exitFillCount: number;
+    entrySlippagePts: number[];
+    exitSlippagePts: number[];
+    entrySlippageBps: number[];
+    exitSlippageBps: number[];
+  }>();
+
+  const sources: ExecutionFillSource[] = ['broker_tradier', 'broker_other', 'manual', 'proxy'];
+  for (const source of sources) {
+    bySourceMap.set(source, {
+      fillCount: 0,
+      entryFillCount: 0,
+      exitFillCount: 0,
+      entrySlippagePts: [],
+      exitSlippagePts: [],
+      entrySlippageBps: [],
+      exitSlippageBps: [],
+    });
+  }
+
+  for (const fill of history.fills) {
+    const bucket = bySourceMap.get(fill.source);
+    if (!bucket) continue;
+    bucket.fillCount += 1;
+    if (fill.side === 'entry') {
+      bucket.entryFillCount += 1;
+      if (typeof fill.slippagePoints === 'number') bucket.entrySlippagePts.push(fill.slippagePoints);
+      if (typeof fill.slippageBps === 'number') bucket.entrySlippageBps.push(fill.slippageBps);
+    } else if (fill.side === 'exit') {
+      bucket.exitFillCount += 1;
+      if (typeof fill.slippagePoints === 'number') bucket.exitSlippagePts.push(fill.slippagePoints);
+      if (typeof fill.slippageBps === 'number') bucket.exitSlippageBps.push(fill.slippageBps);
+    }
+  }
+
+  const bySource: ExecutionFillSourceBucket[] = sources.map((source) => {
+    const bucket = bySourceMap.get(source)!;
+    return {
+      source,
+      fillCount: bucket.fillCount,
+      fillSharePct: total > 0 ? round((bucket.fillCount / total) * 100, 2) : 0,
+      entryFillCount: bucket.entryFillCount,
+      exitFillCount: bucket.exitFillCount,
+      avgEntrySlippagePts: average(bucket.entrySlippagePts),
+      avgExitSlippagePts: average(bucket.exitSlippagePts),
+      avgEntrySlippageBps: average(bucket.entrySlippageBps),
+      avgExitSlippageBps: average(bucket.exitSlippageBps),
+    };
+  });
+
+  const proxyCount = bySourceMap.get('proxy')?.fillCount || 0;
+  const proxySharePct = total > 0 ? round((proxyCount / total) * 100, 2) : 0;
+
+  return {
+    setupId: input.setupId,
+    sessionDate: input.sessionDate || null,
+    totalFills: total,
+    proxySharePct,
+    nonProxySharePct: total > 0 ? round(100 - proxySharePct, 2) : 0,
+    bySource,
   };
 }

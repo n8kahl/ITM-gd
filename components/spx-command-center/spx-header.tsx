@@ -5,6 +5,7 @@ import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { formatSPXFeedFallbackReasonCode } from '@/lib/spx/feed-health'
 import { cn } from '@/lib/utils'
 import { Settings2 } from 'lucide-react'
+import { BrokerHeaderChip } from './broker-header-chip'
 
 interface SPXHeaderProps {
   onOpenCommandPalette: () => void
@@ -124,6 +125,7 @@ export function SPXHeader({
             {feedLabel(feedFallbackStage, spxPriceSource)}
           </div>
         </div>
+        <BrokerHeaderChip onClick={onOpenSettings} />
         <button
           type="button"
           onClick={onToggleLevelOverlay}

@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger';
 import { syncAllActiveTradierPortfolioSnapshots } from '../services/portfolio/portfolioSync';
+import { isTradierProductionRuntimeEnabled } from '../services/broker/tradier/credentials';
 import {
   markWorkerCycleFailed,
   markWorkerCycleStarted,
@@ -12,6 +13,10 @@ import {
 
 const WORKER_NAME = 'portfolio_sync_worker';
 const ENABLED = String(process.env.TRADIER_PORTFOLIO_SYNC_ENABLED || 'false').toLowerCase() === 'true';
+const RUNTIME_ENABLEMENT = isTradierProductionRuntimeEnabled({
+  baseEnabled: ENABLED,
+  productionEnableEnv: process.env.TRADIER_PORTFOLIO_SYNC_PRODUCTION_ENABLED,
+});
 const INTERVAL_MS = (() => {
   const parsed = Number.parseInt(process.env.TRADIER_PORTFOLIO_SYNC_INTERVAL_MS || '60000', 10);
   if (!Number.isFinite(parsed)) return 60_000;
@@ -45,8 +50,10 @@ async function runCycle(): Promise<void> {
 }
 
 export function startPortfolioSyncWorker(): void {
-  if (!ENABLED) {
-    logger.info('Portfolio sync worker disabled via TRADIER_PORTFOLIO_SYNC_ENABLED=false');
+  if (!RUNTIME_ENABLEMENT.enabled) {
+    logger.info('Portfolio sync worker disabled by runtime guard', {
+      reason: RUNTIME_ENABLEMENT.reason,
+    });
     return;
   }
   if (isRunning) {

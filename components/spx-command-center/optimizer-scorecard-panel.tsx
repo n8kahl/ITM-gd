@@ -209,6 +209,27 @@ export function SPXOptimizerScorecardPanel({ compact = false }: SPXOptimizerScor
             </div>
           </div>
 
+          {scorecard.governance && (
+            <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+              <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Promotion Governance</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-white/75">
+                <p>qualified: <span className="font-mono">{scorecard.governance.promotionQualified ? 'yes' : 'no'}</span></p>
+                <p>resolved: <span className="font-mono">{scorecard.governance.observedResolvedTrades}/{scorecard.governance.requiredResolvedTrades}</span></p>
+                <p>families: <span className="font-mono">{scorecard.governance.observedSetupFamilyDiversity}/{scorecard.governance.requiredSetupFamilyDiversity}</span></p>
+                <p>conservative delta: <span className="font-mono">{scorecard.governance.observedConservativeObjectiveDelta.toFixed(2)}/{scorecard.governance.requiredConservativeObjectiveDelta.toFixed(2)}</span></p>
+                <p>execution fills: <span className="font-mono">{scorecard.governance.observedExecutionFills}</span></p>
+                <p>proxy share: <span className="font-mono">{formatPct(scorecard.governance.observedProxyFillSharePct)} / {formatPct(scorecard.governance.maxProxyFillSharePct)}</span></p>
+              </div>
+              {scorecard.governance.reasons.length > 0 && (
+                <div className="mt-1.5 space-y-0.5 text-[9px] text-amber-100/90">
+                  {scorecard.governance.reasons.slice(0, 3).map((reason, index) => (
+                    <p key={`governance_reason_${index}`}>{reason}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
             <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Recommended Setup Actions</p>
             <div className="mt-1.5 space-y-1 text-[10px] text-white/72">
