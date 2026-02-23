@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tradier Integration UX — SPX Command Center Settings</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  /* ══════════════════════════════════════════════
+     THE EMERALD STANDARD — Brand Design System
+     Onyx + Emerald Elite + Champagne
+     ══════════════════════════════════════════════ */
+  :root {
+    /* Brand Core */
+    --onyx: #0A0A0B;
+    --onyx-light: #141416;
+    --emerald-elite: #10B981;
+    --emerald-deep: #064E3B;
+    --champagne: #F5EDCC;
+    --error: #EF4444;
+
+    /* Semantic */
+    --bg: #0A0A0B;
+    --bg-glass: rgba(10, 10, 11, 0.60);
+    --bg-elevated: rgba(20, 20, 22, 0.70);
+    --glass-border: rgba(255, 255, 255, 0.05);
+    --glass-border-active: rgba(16, 185, 129, 0.50);
+    --text-primary: #F5F5F0;
+    --text-secondary: rgba(255, 255, 255, 0.60);
+    --text-muted: rgba(255, 255, 255, 0.40);
+    --border: rgba(255, 255, 255, 0.05);
+    --border-active: rgba(16, 185, 129, 0.35);
+    --amber: #F59E0B;
+    --rose: #EF4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* Typography — Brand System */
+  .font-serif { font-family: 'Playfair Display', Georgia, serif; }
+  .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* Glass Card — The Terminal Look */
+  .glass-card-heavy {
+    background: rgba(10, 10, 11, 0.60);
+    backdrop-filter: blur(60px);
+    -webkit-backdrop-filter: blur(60px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+  }
+
+  /* ═══ PROPOSAL HEADER ═══ */
+  .proposal-header {
+    padding: 48px 40px 36px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.03) 0%, transparent 100%);
+  }
+  .proposal-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 100px;
+    border: 1px solid rgba(16, 185, 129, 0.20);
+    background: rgba(16, 185, 129, 0.08);
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--emerald-elite); margin-bottom: 14px;
+  }
+  .proposal-badge::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--emerald-elite);
+  }
+  .proposal-header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px; font-weight: 600;
+    letter-spacing: -0.01em; margin-bottom: 6px;
+  }
+  .proposal-header p {
+    font-size: 13px; color: var(--text-secondary); max-width: 640px;
+  }
+  .proposal-location {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 14px; font-size: 11px; color: var(--text-muted);
+  }
+  .proposal-location span {
+    padding: 3px 10px; border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  }
+  .proposal-location .arrow { color: rgba(255,255,255,0.20); }
+
+  /* ═══ NAV ═══ */
+  .nav {
+    display: flex; gap: 1px; padding: 0 40px;
+    border-bottom: 1px solid var(--border);
+    background: var(--onyx-light);
+    overflow-x: auto;
+  }
+  .nav-btn {
+    padding: 13px 18px;
+    font: 500 10px/1 'Inter', sans-serif;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--text-muted); cursor: pointer;
+    border: none; border-bottom: 2px solid transparent;
+    background: none; white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .nav-btn:hover { color: var(--text-secondary); }
+  .nav-btn.active { color: var(--emerald-elite); border-bottom-color: var(--emerald-elite); }
+
+  /* ═══ SECTIONS ═══ */
+  .section { display: none; padding: 32px 40px; max-width: 1280px; }
+  .section.active { display: block; }
+
+  .section-label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--emerald-elite); margin-bottom: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(16,185,129,0.15), transparent);
+  }
+
+  /* ═══ MOCKUP FRAME (simulates SPX Settings Sheet) ═══ */
+  .mockup-frame {
+    border-radius: 16px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--onyx);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    margin-bottom: 20px;
+  }
+  .mockup-chrome {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(20,20,22,0.8);
+  }
+  .mockup-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.08); }
+  .mockup-path {
+    margin-left: auto;
+    font: 400 10px/1 'JetBrains Mono', monospace;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Sheet tabs within mockup */
+  .sheet-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    padding: 0 20px; background: rgba(14,14,16,0.9);
+  }
+  .sheet-tab {
+    padding: 11px 16px; font-size: 10px; letter-spacing: 0.10em;
+    text-transform: uppercase; color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer; background: none; border-top: none; border-left: none; border-right: none;
+    font-family: 'Inter', sans-serif; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .sheet-tab:hover { color: var(--text-secondary); }
+  .sheet-tab.active { color: var(--emerald-elite); border-bottom-color: var(--emerald-elite); }
+
+  .sheet-body { padding: 24px; }
+
+  /* ═══ EXECUTION MODE — The Big Toggle ═══ */
+  .exec-mode-switcher {
+    display: flex; border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 24px;
+  }
+  .exec-mode-option {
+    flex: 1; padding: 18px 20px; text-align: center;
+    cursor: pointer; transition: all 0.2s;
+    background: rgba(255,255,255,0.02);
+    border: none; color: var(--text-muted);
+    font-family: 'Inter', sans-serif;
+  }
+  .exec-mode-option + .exec-mode-option { border-left: 1px solid rgba(255,255,255,0.05); }
+  .exec-mode-option:hover { background: rgba(255,255,255,0.04); }
+  .exec-mode-option.selected-manual {
+    background: rgba(243, 237, 204, 0.08);
+    border-color: rgba(243, 237, 204, 0.20);
+    color: var(--champagne);
+  }
+  .exec-mode-option.selected-auto {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.20);
+    color: var(--emerald-elite);
+  }
+  .exec-mode-option.selected-off {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+  }
+  .exec-mode-title {
+    font-size: 13px; font-weight: 600; margin-bottom: 3px;
+    letter-spacing: 0.02em;
+  }
+  .exec-mode-desc {
+    font-size: 10px; opacity: 0.7;
+  }
+  .exec-mode-indicator {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; margin-right: 6px;
+  }
+
+  /* ═══ GRID SYSTEMS ═══ */
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 900px) {
+    .g2, .g3, .g4 { grid-template-columns: 1fr; }
+    .proposal-header, .section { padding-left: 20px; padding-right: 20px; }
+    .nav { padding: 0 20px; }
+    .exec-mode-switcher { flex-direction: column; }
+  }
+
+  /* ═══ STAT BOX ═══ */
+  .stat {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+    background: rgba(10,10,11,0.60); backdrop-filter: blur(60px);
+  }
+  .stat-label {
+    font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 5px;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px; font-weight: 600;
+  }
+  .stat-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; margin-top: 3px;
+  }
+
+  /* ═══ KV ROWS ═══ */
+  .kv {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 12px;
+  }
+  .kv:last-child { border-bottom: none; }
+  .kv-k { color: var(--text-secondary); }
+  .kv-v { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  /* ═══ BADGES ═══ */
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 100px;
+    font-size: 9px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .pill-emerald { background: rgba(16,185,129,0.10); color: var(--emerald-elite); border: 1px solid rgba(16,185,129,0.20); }
+  .pill-champagne { background: rgba(245,237,204,0.08); color: var(--champagne); border: 1px solid rgba(245,237,204,0.15); }
+  .pill-rose { background: rgba(239,68,68,0.10); color: var(--rose); border: 1px solid rgba(239,68,68,0.15); }
+  .pill-amber { background: rgba(245,158,11,0.10); color: var(--amber); border: 1px solid rgba(245,158,11,0.15); }
+  .pill-muted { background: rgba(255,255,255,0.04); color: var(--text-secondary); border: 1px solid var(--border); }
+
+  /* ═══ TOGGLE SWITCH ═══ */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-title { font-size: 12px; font-weight: 500; }
+  .toggle-sub { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+  .sw {
+    width: 38px; height: 20px; border-radius: 10px;
+    background: rgba(255,255,255,0.10); position: relative;
+    cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+  }
+  .sw::after {
+    content: ''; position: absolute; width: 14px; height: 14px;
+    border-radius: 50%; background: white; top: 3px; left: 3px;
+    transition: transform 0.2s;
+  }
+  .sw.on { background: var(--emerald-elite); }
+  .sw.on::after { transform: translateX(18px); }
+
+  /* ═══ BUTTONS ═══ */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px;
+    font: 500 11px/1 'Inter', sans-serif; letter-spacing: 0.04em;
+    cursor: pointer; transition: all 0.15s; border: none;
+  }
+  .btn-emerald { background: var(--emerald-elite); color: #000; }
+  .btn-emerald:hover { filter: brightness(1.1); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+  .btn-danger { background: rgba(239,68,68,0.10); color: var(--rose); border: 1px solid rgba(239,68,68,0.15); }
+  .btn-danger:hover { background: rgba(239,68,68,0.18); }
+  .btn-44 { min-height: 44px; } /* Touch target */
+
+  /* ═══ TIMELINE ═══ */
+  .tl { position: relative; padding-left: 22px; }
+  .tl::before {
+    content: ''; position: absolute; left: 6px; top: 4px; bottom: 4px;
+    width: 2px; background: rgba(255,255,255,0.06);
+  }
+  .tl-event { position: relative; padding: 6px 0 14px; }
+  .tl-event::before {
+    content: ''; position: absolute; left: -19px; top: 10px;
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--border); background: var(--onyx);
+  }
+  .tl-event.ev-entry::before { border-color: var(--emerald-elite); background: rgba(16,185,129,0.12); }
+  .tl-event.ev-t1::before { border-color: #3B82F6; background: rgba(59,130,246,0.12); }
+  .tl-event.ev-exit::before { border-color: var(--champagne); background: rgba(245,237,204,0.12); }
+  .tl-event.ev-stop::before { border-color: var(--rose); background: rgba(239,68,68,0.12); }
+  .tl-time { font: 400 10px/1 'JetBrains Mono', monospace; color: var(--text-muted); }
+  .tl-label { font-size: 12px; font-weight: 500; margin-top: 2px; }
+  .tl-detail { font-size: 10px; color: var(--text-secondary); }
+
+  /* ═══ PROGRESS ═══ */
+  .progress { height: 3px; border-radius: 3px; background: rgba(255,255,255,0.05); overflow: hidden; margin: 10px 0; }
+  .progress-fill { height: 100%; border-radius: 3px; }
+  .progress-fill-emerald { background: var(--emerald-elite); }
+
+  /* ═══ CONN STEP ═══ */
+  .step { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; flex-shrink: 0;
+  }
+  .step-done { background: rgba(16,185,129,0.12); color: var(--emerald-elite); border: 1px solid rgba(16,185,129,0.25); }
+  .step-active { background: var(--emerald-elite); color: #000; }
+  .step-pending { background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border); }
+  .step-title { font-size: 13px; font-weight: 500; }
+  .step-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.5; }
+
+  /* ═══ SEPARATOR ═══ */
+  .sep { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* ═══ ANNOTATION ═══ */
+  .note {
+    font-size: 10px; color: var(--text-muted); padding: 4px 10px;
+    border-left: 2px solid rgba(16,185,129,0.25); margin-top: 10px; line-height: 1.6;
+  }
+
+  /* ═══ COLORS ═══ */
+  .c-em { color: var(--emerald-elite); }
+  .c-ch { color: var(--champagne); }
+  .c-ro { color: var(--rose); }
+  .c-am { color: var(--amber); }
+
+  /* ═══ PULSE ═══ */
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); } }
+  .pulse { animation: pulse 2s infinite; }
+
+  /* Position table */
+  .ptable { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .ptable-head {
+    display: grid; grid-template-columns: 2.2fr 0.8fr 1fr 1fr 1fr 0.8fr; gap: 0;
+    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); padding: 9px 14px;
+    border-bottom: 1px solid var(--border); background: rgba(20,20,22,0.5);
+  }
+  .ptable-row {
+    display: grid; grid-template-columns: 2.2fr 0.8fr 1fr 1fr 1fr 0.8fr; gap: 0;
+    font-size: 11px; padding: 9px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ptable-row:last-child { border-bottom: none; }
+
+  /* Finding card */
+  .finding {
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 10px;
+    background: rgba(10,10,11,0.60); backdrop-filter: blur(60px);
+  }
+  .finding-hdr { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+  .finding-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .dot-crit { background: var(--rose); box-shadow: 0 0 6px var(--rose); }
+  .dot-high { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .dot-med { background: var(--champagne); }
+  .dot-low { background: #3B82F6; }
+  .finding h4 { font-size: 13px; font-weight: 500; }
+  .finding p { font-size: 11px; color: var(--text-secondary); line-height: 1.6; }
+  .finding-pills { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+  /* OAuth code block */
+  .code-block {
+    background: rgba(20,20,22,0.8); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+    font: 400 11px/1.6 'JetBrains Mono', monospace;
+    color: var(--text-secondary); overflow-x: auto;
+    margin: 10px 0;
+  }
+  .code-block .hl { color: var(--emerald-elite); }
+  .code-block .str { color: var(--champagne); }
+  .code-block .cmt { color: var(--text-muted); font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ PROPOSAL HEADER ════════════════════ -->
+<div class="proposal-header">
+  <div class="proposal-badge">Tradier Integration UX — Proposal v2</div>
+  <h1 class="font-serif">Broker Integration — SPX Command Center</h1>
+  <p>Audit, OAuth connection flow, execution mode controls, and UX architecture for the Tradier broker integration inside the SPX Command Center settings panel.</p>
+  <div class="proposal-location">
+    <span>/members/spx-command-center</span>
+    <span class="arrow">→</span>
+    <span>Settings (⚙)</span>
+    <span class="arrow">→</span>
+    <span style="border-color:rgba(16,185,129,0.25);color:var(--emerald-elite);">Broker Tab</span>
+  </div>
+</div>
+
+<!-- ════════════════════ NAV ════════════════════ -->
+<div class="nav" id="nav">
+  <button class="nav-btn active" data-t="oauth">Tradier OAuth Flow</button>
+  <button class="nav-btn" data-t="mode">Execution Mode</button>
+  <button class="nav-btn" data-t="settings">Settings Panel</button>
+  <button class="nav-btn" data-t="monitor">Position Monitor</button>
+  <button class="nav-btn" data-t="audit">Audit Summary</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 1: TRADIER OAUTH FLOW
+     ═══════════════════════════════════════════════════════════ -->
+<div class="section active" id="s-oauth">
+  <div class="section-label">Tradier OAuth 2.0 Connection Flow (from Tradier documentation)</div>
+
+  <!-- OAuth Technical Reference -->
+  <div class="glass-card-heavy" style="padding:20px;margin-bottom:20px;">
+    <div style="font-size:11px;font-weight:600;margin-bottom:12px;">Tradier OAuth 2.0 — Implementation Reference</div>
+    <div class="g2">
+      <div>
+        <div class="kv"><span class="kv-k">Authorization URL</span><span class="kv-v c-em">api.tradier.com/v1/oauth/authorize</span></div>
+        <div class="kv"><span class="kv-k">Token Exchange</span><span class="kv-v c-em">POST api.tradier.com/v1/oauth/accesstoken</span></div>
+        <div class="kv"><span class="kv-k">Token Refresh</span><span class="kv-v c-em">POST api.tradier.com/v1/oauth/refreshtoken</span></div>
+        <div class="kv"><span class="kv-k">Auth Code TTL</span><span class="kv-v">10 minutes</span></div>
+        <div class="kv"><span class="kv-k">Access Token TTL</span><span class="kv-v">24 hours</span></div>
+        <div class="kv"><span class="kv-k">Refresh Token</span><span class="kv-v pill pill-champagne">Partner approval required</span></div>
+      </div>
+      <div>
+        <div class="kv"><span class="kv-k">Required Scopes</span><span class="kv-v c-ch">read trade market stream</span></div>
+        <div class="kv"><span class="kv-k">Token Auth</span><span class="kv-v">HTTP Basic (client_id:secret)</span></div>
+        <div class="kv"><span class="kv-k">Production Base</span><span class="kv-v">https://api.tradier.com</span></div>
+        <div class="kv"><span class="kv-k">Sandbox Base</span><span class="kv-v">https://sandbox.tradier.com</span></div>
+        <div class="kv"><span class="kv-k">Callback Format</span><span class="kv-v">?code={code}&state={state}</span></div>
+        <div class="kv"><span class="kv-k">Token Storage</span><span class="kv-v pill pill-emerald">AES-256-GCM encrypted</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OAuth Code Block -->
+  <div class="code-block">
+    <span class="cmt">// Step 1 — Redirect user to Tradier authorization</span><br>
+    <span class="hl">GET</span> <span class="str">https://api.tradier.com/v1/oauth/authorize</span><br>
+    &nbsp;&nbsp;?<span class="hl">client_id</span>=<span class="str">{TRADIER_CLIENT_ID}</span><br>
+    &nbsp;&nbsp;&<span class="hl">scope</span>=<span class="str">read trade market stream</span><br>
+    &nbsp;&nbsp;&<span class="hl">state</span>=<span class="str">{random_csrf_token}</span><br><br>
+    <span class="cmt">// Step 2 — Tradier redirects back with authorization code</span><br>
+    <span class="str">https://tradeitm.com/api/auth/tradier/callback</span>?code=<span class="hl">{auth_code}</span>&state=<span class="hl">{csrf_token}</span><br><br>
+    <span class="cmt">// Step 3 — Exchange code for access token (server-side)</span><br>
+    <span class="hl">POST</span> <span class="str">https://api.tradier.com/v1/oauth/accesstoken</span><br>
+    &nbsp;&nbsp;Authorization: Basic <span class="str">{base64(client_id:client_secret)}</span><br>
+    &nbsp;&nbsp;grant_type=<span class="hl">authorization_code</span>&code=<span class="hl">{auth_code}</span><br><br>
+    <span class="cmt">// Step 4 — Encrypt & persist to broker_credentials table</span><br>
+    &nbsp;&nbsp;access_token → <span class="hl">AES-256-GCM</span> → access_token_ciphertext<br>
+    &nbsp;&nbsp;metadata.spx_auto_execute = <span class="str">false</span> <span class="cmt">// user chooses execution mode</span>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- UX Mockup: Connection Wizard -->
+  <div class="section-label">User-Facing Connection Wizard</div>
+  <div class="mockup-frame">
+    <div class="mockup-chrome">
+      <div class="mockup-dot"></div><div class="mockup-dot"></div><div class="mockup-dot"></div>
+      <span class="mockup-path">SPX Settings → Broker → Connect</span>
+    </div>
+    <div style="max-width:520px;margin:0 auto;padding:32px 24px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--emerald-elite);margin-bottom:6px;">Connect Your Broker</div>
+        <div class="font-serif" style="font-size:20px;font-weight:600;">Link Tradier Account</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Securely authorize to enable SPX execution</div>
+      </div>
+
+      <div class="step">
+        <div class="step-num step-done">✓</div>
+        <div>
+          <div class="step-title">Authorize via Tradier OAuth 2.0</div>
+          <div class="step-desc">Redirects to <span class="font-mono c-em">api.tradier.com/v1/oauth/authorize</span> — you log in at Tradier and grant <span class="font-mono c-ch">read + trade + market + stream</span> scopes. Authorization code expires in 10 minutes.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num step-active">2</div>
+        <div>
+          <div class="step-title">Validate Sandbox Connection</div>
+          <div class="step-desc">Token exchanged, encrypted (AES-256-GCM), and stored. Now validating against <span class="font-mono">sandbox.tradier.com</span> — placing a test limit order to verify OCC formatting and credential integrity.</div>
+          <div class="progress"><div class="progress-fill progress-fill-emerald" style="width:65%"></div></div>
+          <div class="font-mono" style="font-size:10px;color:var(--text-muted);">Validating SPXW260223P06050000 sandbox order…</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num step-pending">3</div>
+        <div>
+          <div class="step-title">Choose Execution Mode</div>
+          <div class="step-desc">Select how you want to trade: <strong class="c-ch">Manual</strong> (you click to execute), <strong class="c-em">Auto</strong> (engine routes on triggers), or <strong>Off</strong> (connection only, no execution). Changeable any time.</div>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost btn-44">Cancel</button>
+        <button class="btn btn-emerald btn-44">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">Post-connection: A persistent status chip appears in the SPX header (next to Health/Feed chips) showing broker connection state, mode (sandbox/live), and last sync time.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 2: EXECUTION MODE
+     ═══════════════════════════════════════════════════════════ -->
+<div class="section" id="s-mode">
+  <div class="section-label">Execution Mode — Manual / Auto / Off Toggle</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-chrome">
+      <div class="mockup-dot"></div><div class="mockup-dot"></div><div class="mockup-dot"></div>
+      <span class="mockup-path">SPX Settings → Broker → Execution Mode</span>
+    </div>
+    <div class="sheet-body">
+
+      <!-- The Big Toggle -->
+      <div style="margin-bottom:8px;font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--text-muted);">Execution Mode</div>
+      <div class="exec-mode-switcher" id="mode-switcher">
+        <button class="exec-mode-option" data-mode="off" onclick="selectMode(this)">
+          <div class="exec-mode-title"><span class="exec-mode-indicator" style="background:rgba(255,255,255,0.20);"></span>Off</div>
+          <div class="exec-mode-desc">Connected, no execution</div>
+        </button>
+        <button class="exec-mode-option selected-manual" data-mode="manual" onclick="selectMode(this)">
+          <div class="exec-mode-title"><span class="exec-mode-indicator" style="background:var(--champagne);"></span>Manual</div>
+          <div class="exec-mode-desc">You confirm each trade</div>
+        </button>
+        <button class="exec-mode-option" data-mode="auto" onclick="selectMode(this)">
+          <div class="exec-mode-title"><span class="exec-mode-indicator" style="background:var(--emerald-elite);"></span>Auto</div>
+          <div class="exec-mode-desc">Engine routes on triggers</div>
+        </button>
+      </div>
+
+      <div class="g2">
+        <!-- LEFT: What each mode does -->
+        <div class="glass-card-heavy" style="padding:16px;">
+          <div style="font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--emerald-elite);margin-bottom:10px;">Mode Behavior</div>
+
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.20);"></span>
+              <span style="font-size:12px;font-weight:600;">Off</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);padding-left:14px;">
+              Broker stays connected for balance/position sync. No orders routed. Setup signals are display-only. Use this to observe before committing.
+            </div>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--champagne);"></span>
+              <span style="font-size:12px;font-weight:600;color:var(--champagne);">Manual</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);padding-left:14px;">
+              When a setup triggers, a confirmation modal appears with contract details, risk sizing, and limit price. You tap <strong>"Execute"</strong> or <strong>"Skip"</strong>. T1 scale and runner stop also require confirmation. You stay in full control.
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--emerald-elite);"></span>
+              <span style="font-size:12px;font-weight:600;color:var(--emerald-elite);">Auto</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);padding-left:14px;">
+              Execution engine routes orders automatically on setup transitions. Entry → T1 Scale (65%) → Runner Stop → Terminal Exit. Backend writes <span class="font-mono" style="font-size:10px;">metadata.spx_auto_execute = true</span>. Kill switch always available.
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Active Execution Panel -->
+        <div class="glass-card-heavy" style="padding:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--emerald-elite);" class="pulse"></span>
+              <span style="font-size:11px;font-weight:500;">Tradier Connected</span>
+              <span class="pill pill-emerald">Sandbox</span>
+            </div>
+            <button class="btn btn-danger" style="font-size:9px;padding:5px 10px;">⛔ Kill All</button>
+          </div>
+
+          <div class="g3" style="margin-bottom:14px;">
+            <div class="stat">
+              <div class="stat-label">Equity</div>
+              <div class="stat-value" style="font-size:15px;">$127,450</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Day Trade BP</div>
+              <div class="stat-value" style="font-size:15px;">$509,800</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Realized P&L</div>
+              <div class="stat-value c-em" style="font-size:15px;">+$1,284</div>
+            </div>
+          </div>
+
+          <!-- Risk Sizing -->
+          <div style="background:rgba(20,20,22,0.5);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">
+            <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Risk Sizing — fib_reversal_5m_bull</div>
+            <div class="g4" style="gap:8px;">
+              <div><div style="font-size:8px;color:var(--text-muted);text-transform:uppercase;">Risk %</div><div class="font-mono" style="font-size:12px;">2.00%</div></div>
+              <div><div style="font-size:8px;color:var(--text-muted);text-transform:uppercase;">Max Risk $</div><div class="font-mono" style="font-size:12px;">$2,549</div></div>
+              <div><div style="font-size:8px;color:var(--text-muted);text-transform:uppercase;">By Risk</div><div class="font-mono" style="font-size:12px;">3 cts</div></div>
+              <div><div style="font-size:8px;color:var(--text-muted);text-transform:uppercase;">By DTBP</div><div class="font-mono" style="font-size:12px;">5 cts</div></div>
+            </div>
+            <div class="font-mono c-em" style="font-size:10px;margin-top:6px;">→ 3 contracts @ limit $8.70 (ask + $0.20)</div>
+          </div>
+
+          <!-- Timeline -->
+          <div class="tl">
+            <div class="tl-event ev-entry">
+              <div class="tl-time">10:42:18 ET</div>
+              <div class="tl-label">Entry — BTO 3x SPXW260223C06050000</div>
+              <div class="tl-detail">Limit $8.70 · Order #TRD-88291</div>
+            </div>
+            <div class="tl-event ev-t1">
+              <div class="tl-time">11:14:03 ET</div>
+              <div class="tl-label">T1 Scale — STC 2x @ $11.75</div>
+              <div class="tl-detail">65% scale · Runner stop 1x @ $8.70</div>
+            </div>
+            <div class="tl-event ev-exit">
+              <div class="tl-time" style="color:var(--text-muted);">Pending…</div>
+              <div class="tl-label" style="color:var(--text-muted);">Awaiting T2 or Stop</div>
+              <div class="tl-detail">Runner: 1 ct · Stop @ $8.70</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">The execution mode toggle writes to <span class="font-mono">broker_credentials.metadata.spx_auto_execute</span>. In Manual mode, a toast/modal surfaces for every order with one-tap Execute or Skip. In Auto mode, the execution engine handles lifecycle automatically. Kill switch cancels all open orders and flips mode to Off.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 3: SETTINGS PANEL
+     ═══════════════════════════════════════════════════════════ -->
+<div class="section" id="s-settings">
+  <div class="section-label">SPX Command Center Settings → Broker Tab</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-chrome">
+      <div class="mockup-dot"></div><div class="mockup-dot"></div><div class="mockup-dot"></div>
+      <span class="mockup-path">SPX Command Center → Settings</span>
+    </div>
+
+    <!-- Sheet tabs -->
+    <div class="sheet-tabs">
+      <button class="sheet-tab">Optimizer</button>
+      <button class="sheet-tab active">Broker</button>
+    </div>
+
+    <div class="sheet-body">
+      <div class="g2">
+        <!-- LEFT COL: Connection + Sync -->
+        <div>
+          <div style="font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--emerald-elite);margin-bottom:10px;">Connection</div>
+
+          <div class="glass-card-heavy" style="padding:14px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--emerald-elite);" class="pulse"></span>
+              <span style="font-size:12px;font-weight:500;">Connected — Sandbox</span>
+            </div>
+            <div class="kv"><span class="kv-k">Account</span><span class="kv-v">•••4821</span></div>
+            <div class="kv"><span class="kv-k">Balance Sync</span><span class="kv-v">14s ago</span></div>
+            <div class="kv"><span class="kv-k">Position Sync</span><span class="kv-v">14s ago</span></div>
+            <div class="kv"><span class="kv-k">Token Encrypted</span><span class="kv-v"><span class="pill pill-emerald">AES-256-GCM</span></span></div>
+            <div class="kv"><span class="kv-k">Token Expires</span><span class="kv-v">23h 46m</span></div>
+            <div class="kv"><span class="kv-k">Refresh Token</span><span class="kv-v"><span class="pill pill-champagne">Partner-only</span></span></div>
+            <div style="display:flex;gap:6px;margin-top:10px;">
+              <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px;">Disconnect</button>
+              <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px;">Rotate Token</button>
+            </div>
+          </div>
+
+          <div style="font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Portfolio Sync</div>
+          <div class="toggle-row">
+            <div><div class="toggle-title">Sync Enabled</div><div class="toggle-sub">Poll balances + positions every 60s</div></div>
+            <div class="sw on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-title">PDT Buying Power Alert</div><div class="toggle-sub">Alert when DTBP &lt; $25,000</div></div>
+            <div class="sw on" onclick="this.classList.toggle('on')"></div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div style="font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Environment</div>
+          <div class="toggle-row">
+            <div><div class="toggle-title">Live Execution</div><div class="toggle-sub">Switch from sandbox.tradier.com to api.tradier.com</div></div>
+            <div class="sw" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT COL: Execution Rules + Safety -->
+        <div>
+          <div style="font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--emerald-elite);margin-bottom:10px;">Execution Mode</div>
+
+          <!-- Compact mode switcher -->
+          <div class="exec-mode-switcher" id="settings-mode-switcher" style="margin-bottom:16px;">
+            <button class="exec-mode-option" onclick="selectSettingsMode(this)" data-mode="off">
+              <div class="exec-mode-title" style="font-size:12px;">Off</div>
+            </button>
+            <button class="exec-mode-option selected-manual" onclick="selectSettingsMode(this)" data-mode="manual">
+              <div class="exec-mode-title" style="font-size:12px;"><span class="exec-mode-indicator" style="background:var(--champagne);"></span>Manual</div>
+            </button>
+            <button class="exec-mode-option" onclick="selectSettingsMode(this)" data-mode="auto">
+              <div class="exec-mode-title" style="font-size:12px;">Auto</div>
+            </button>
+          </div>
+
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Sizing Parameters</div>
+          <div class="kv"><span class="kv-k">Risk Per Trade</span><span class="kv-v">2.00%</span></div>
+          <div class="kv"><span class="kv-k">DTBP Utilization Cap</span><span class="kv-v">90%</span></div>
+          <div class="kv"><span class="kv-k">Entry Limit Offset</span><span class="kv-v">$0.20</span></div>
+          <div class="kv"><span class="kv-k">T1 Scale %</span><span class="kv-v">65%</span></div>
+
+          <div class="sep"></div>
+
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Safety</div>
+          <div class="toggle-row">
+            <div><div class="toggle-title">0DTE Auto-Flatten</div><div class="toggle-sub">Close 0DTE positions 5 min before close</div></div>
+            <div class="sw on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-title">Confirm Before Send (Manual mode)</div><div class="toggle-sub">Show modal with sizing before each order</div></div>
+            <div class="sw on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="kv"><span class="kv-k">Flatten Window</span><span class="kv-v">5 min before close</span></div>
+          <div class="kv"><span class="kv-k">sell_to_open Guard</span><span class="kv-v"><span class="pill pill-emerald">Enforced</span></span></div>
+          <div class="kv"><span class="kv-k">buildTradierMarketExitOrder</span><span class="kv-v"><span class="pill pill-emerald">Terminal exits</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">The "Broker" tab lives as a sibling of the existing "Optimizer" tab inside the SPX Settings Sheet modal (<span class="font-mono">spx-settings-sheet.tsx</span>). All changes persist to <span class="font-mono">broker_credentials.metadata</span> via the existing API. Admin-only env var overrides remain at the backend level.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 4: POSITION MONITOR
+     ═══════════════════════════════════════════════════════════ -->
+<div class="section" id="s-monitor">
+  <div class="section-label">Position Monitor & Reconciliation</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-chrome">
+      <div class="mockup-dot"></div><div class="mockup-dot"></div><div class="mockup-dot"></div>
+      <span class="mockup-path">SPX Settings → Broker → Positions</span>
+    </div>
+    <div class="sheet-body">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="font-serif" style="font-size:14px;font-weight:600;">Broker Positions</span>
+          <span class="pill pill-emerald">Synced 4s ago</span>
+        </div>
+        <span class="pill pill-champagne">0DTE Flatten: 42m</span>
+      </div>
+
+      <div class="ptable">
+        <div class="ptable-head"><span>Contract</span><span>Qty</span><span>Entry</span><span>Mark</span><span>P&L</span><span>Recon</span></div>
+        <div class="ptable-row"><span>SPXW 6050C 02/23</span><span>1</span><span>$8.70</span><span>$12.40</span><span class="c-em">+$370</span><span class="pill pill-emerald" style="font-size:8px;">Match</span></div>
+        <div class="ptable-row"><span>SPXW 6020P 02/23</span><span>2</span><span>$4.20</span><span>$3.85</span><span class="c-ro">-$70</span><span class="pill pill-amber" style="font-size:8px;">Drift</span></div>
+        <div class="ptable-row"><span>SPXW 6080C 02/23</span><span>3</span><span>$5.50</span><span>$7.90</span><span class="c-em">+$720</span><span class="pill pill-emerald" style="font-size:8px;">Match</span></div>
+      </div>
+
+      <div class="sep"></div>
+
+      <div style="font-size:11px;font-weight:500;margin-bottom:10px;">Session Fill Quality</div>
+      <div class="g4">
+        <div class="stat"><div class="stat-label">Total Fills</div><div class="stat-value" style="font-size:16px;">8</div></div>
+        <div class="stat"><div class="stat-label">Broker Tradier %</div><div class="stat-value c-em" style="font-size:16px;">87.5%</div></div>
+        <div class="stat"><div class="stat-label">Avg Entry Slip</div><div class="stat-value" style="font-size:16px;">0.12 pts</div><div class="stat-sub" style="color:var(--text-muted);">3.2 bps</div></div>
+        <div class="stat"><div class="stat-label">Proxy Share</div><div class="stat-value c-am" style="font-size:16px;">12.5%</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">Reconciliation compares <span class="font-mono">TradierClient.getPositions()</span> against <span class="font-mono">ai_coach_positions</span>. "Drift" badges surface qty or price mismatches. 0DTE flatten countdown shows minutes until <span class="font-mono">enforceTradierLateDayFlatten()</span> activates.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 5: AUDIT SUMMARY
+     ═══════════════════════════════════════════════════════════ -->
+<div class="section" id="s-audit">
+  <div class="section-label">Current State Audit — Backend vs. Frontend</div>
+
+  <div class="g4" style="margin-bottom:20px;">
+    <div class="stat"><div class="stat-label">Backend Services</div><div class="stat-value">7</div><div class="stat-sub c-em">Solid foundation</div></div>
+    <div class="stat"><div class="stat-label">Frontend Surfaces</div><div class="stat-value c-am">1</div><div class="stat-sub c-am">Only optimizer scorecard</div></div>
+    <div class="stat"><div class="stat-label">Env Config Vars</div><div class="stat-value">25+</div><div class="stat-sub" style="color:var(--text-muted);">No user controls</div></div>
+    <div class="stat"><div class="stat-label">User Self-Service</div><div class="stat-value c-ro">0</div><div class="stat-sub c-ro">No connect / no toggle</div></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-hdr"><div class="finding-dot dot-crit"></div><div><h4>No User-Facing Broker Connection Flow</h4><p>Users must have credentials manually inserted into the database by an admin. No OAuth flow, no self-service onboarding, no way to verify connection status or disconnect.</p></div></div>
+    <div class="finding-pills"><span class="pill pill-rose">P0 — Critical</span><span class="pill pill-champagne">Blocks self-service</span></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-hdr"><div class="finding-dot dot-crit"></div><div><h4>No Execution Mode Toggle (Manual / Auto / Off)</h4><p>The execution engine auto-routes orders silently. Users have zero control — no way to switch between manual confirmation and auto-execution, and no way to disable execution entirely while keeping the broker connected.</p></div></div>
+    <div class="finding-pills"><span class="pill pill-rose">P0 — Critical</span><span class="pill pill-amber">Trust & Safety</span></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-hdr"><div class="finding-dot dot-high"></div><div><h4>No Sandbox/Live Mode Indicator</h4><p>Backend supports <span class="font-mono">metadata.tradier_sandbox</span> but users have no visual indicator. A user could be in live execution without realizing it.</p></div></div>
+    <div class="finding-pills"><span class="pill pill-amber">P1 — High</span></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-hdr"><div class="finding-dot dot-high"></div><div><h4>No Position Reconciliation View</h4><p>Backend has full broker↔ledger recon via <span class="font-mono">tradierFlatten</span> and <span class="font-mono">positionTrackerWorker</span>, but no user-facing view of positions, discrepancies, or flatten status.</p></div></div>
+    <div class="finding-pills"><span class="pill pill-amber">P1 — High</span></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-hdr"><div class="finding-dot dot-med"></div><div><h4>Risk Sizing Invisible + Silent Blocking</h4><p><span class="font-mono">createSizingResult()</span> calculates position size from equity/DTBP/risk% but users never see it. When sizing blocks (margin_limit_blocked), it's silently logged with no notification.</p></div></div>
+    <div class="finding-pills"><span class="pill pill-champagne">P2 — Medium</span></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script>
+  // Tab switching
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('s-' + btn.dataset.t).classList.add('active');
+    });
+  });
+
+  // Mode switcher
+  function selectMode(el) {
+    const parent = el.closest('.exec-mode-switcher');
+    parent.querySelectorAll('.exec-mode-option').forEach(o => {
+      o.className = 'exec-mode-option';
+    });
+    const mode = el.dataset.mode;
+    if (mode === 'manual') el.classList.add('selected-manual');
+    else if (mode === 'auto') el.classList.add('selected-auto');
+    else el.classList.add('selected-off');
+  }
+
+  function selectSettingsMode(el) {
+    const parent = el.closest('.exec-mode-switcher');
+    parent.querySelectorAll('.exec-mode-option').forEach(o => {
+      o.className = 'exec-mode-option';
+    });
+    const mode = el.dataset.mode;
+    if (mode === 'manual') el.classList.add('selected-manual');
+    else if (mode === 'auto') el.classList.add('selected-auto');
+    else el.classList.add('selected-off');
+  }
+</script>
+</body>
+</html>
