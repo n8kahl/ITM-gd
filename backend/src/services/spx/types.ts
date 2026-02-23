@@ -223,6 +223,7 @@ export interface Setup {
     buyVolume: number;
     sellVolume: number;
   } | null;
+  orbFlowGraceApplied?: boolean;
 }
 
 export interface PredictionState {

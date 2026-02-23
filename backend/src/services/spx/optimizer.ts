@@ -7,11 +7,11 @@ import type { SetupFinalOutcome } from './outcomeTracker';
 import { runSPXWinRateBacktest } from './winRateBacktest';
 import {
   loadBarsBySession,
-  sweepGeometryForFamilies,
+  sweepGeometryForFamiliesDirectional,
   toSetupCandidate,
   ALL_SWEEP_FAMILIES,
   type SweepFamily,
-  type SweepFamilyResult,
+  type DirectionSweepFamilyResult,
   type SetupDbRow,
 } from './geometrySweep';
 
@@ -97,6 +97,23 @@ export interface SPXConfidenceInterval {
   upperPct: number;
 }
 
+interface GeometrySweepWinningConfig {
+  stopScale: number;
+  target1Scale: number;
+  target2Scale: number;
+  partialAtT1Pct: number;
+  moveStopToBreakeven: boolean;
+}
+
+interface GeometrySweepDirectionData {
+  sampleSize: number;
+  baselineObjective: number;
+  optimizedObjective: number;
+  delta: number;
+  improved: boolean;
+  winningConfig: GeometrySweepWinningConfig;
+}
+
 export interface SPXGeometrySweepSummary {
   familiesSwept: string[];
   familiesImproved: string[];
@@ -104,13 +121,8 @@ export interface SPXGeometrySweepSummary {
     baselineObjective: number;
     optimizedObjective: number;
     delta: number;
-    winningConfig: {
-      stopScale: number;
-      target1Scale: number;
-      target2Scale: number;
-      partialAtT1Pct: number;
-      moveStopToBreakeven: boolean;
-    };
+    winningConfig: GeometrySweepWinningConfig;
+    byDirection?: Record<string, GeometrySweepDirectionData>;
   }>;
 }
 
@@ -249,6 +261,9 @@ interface PreparedOptimizationRow {
   flowConfirmed: boolean;
   emaAligned: boolean;
   volumeRegimeAligned: boolean;
+  netGex: number | null;
+  vwapPrice: number | null;
+  vwapDeviation: number | null;
 }
 
 interface ThresholdCandidate {
@@ -383,23 +398,72 @@ const DEFAULT_GEOMETRY_BY_SETUP_REGIME: Record<string, Partial<SPXGeometryPolicy
   },
 };
 const DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET: Record<string, Partial<SPXGeometryPolicyEntry>> = {
-  'trend_pullback|breakout|late': {
+  // --- Early open (0-30 min): Widen T2 targets — early moves have room to run ---
+  'trend_pullback|breakout|early_open': { target2Scale: 1.15 },
+  'trend_pullback|trending|early_open': { target2Scale: 1.15 },
+  'orb_breakout|breakout|early_open': { target2Scale: 1.15 },
+  'trend_continuation|trending|early_open': { target2Scale: 1.15 },
+  // --- Opening (31-90 min): Slight T2 widening for sustained momentum ---
+  'mean_reversion|ranging|opening': {
+    target1Scale: 0.99,
+    target2Scale: 0.98,
+  },
+  // --- Afternoon (241-330 min): Compress T2, increase T1 partial capture ---
+  'trend_pullback|breakout|afternoon': {
+    stopScale: 1.06,
+    target1Scale: 0.95,
+    target2Scale: 0.80,
+    t1MaxR: 1.8,
+    t2MaxR: 2.4,
+  },
+  'trend_pullback|trending|afternoon': {
+    target2Scale: 0.85,
+    t2MaxR: 2.6,
+  },
+  'orb_breakout|breakout|afternoon': {
+    target2Scale: 0.80,
+    t1MaxR: 1.85,
+    t2MaxR: 2.4,
+  },
+  'mean_reversion|ranging|afternoon': {
+    target2Scale: 0.80,
+  },
+  'fade_at_wall|ranging|afternoon': {
+    target2Scale: 0.80,
+  },
+  // --- Close (331+ min): Scalp mode — T2 minimal for fade/reversion, blocked for trend ---
+  'fade_at_wall|ranging|close': {
+    target1Scale: 0.90,
+    target2Scale: 0,
+    t1MaxR: 1.2,
+    t2MaxR: 0,
+  },
+  'mean_reversion|ranging|close': {
+    target1Scale: 0.90,
+    target2Scale: 0,
+    t1MaxR: 1.2,
+    t2MaxR: 0,
+  },
+  'mean_reversion|compression|close': {
+    target1Scale: 0.90,
+    target2Scale: 0,
+    t1MaxR: 1.2,
+    t2MaxR: 0,
+  },
+  // Late-day trend entries — keep existing policies for backward compat (renamed from 'late')
+  'trend_pullback|breakout|close': {
     stopScale: 1.06,
     target1Scale: 0.9,
     target2Scale: 0.88,
     t1MaxR: 1.8,
     t2MaxR: 2.8,
   },
-  'orb_breakout|breakout|late': {
+  'orb_breakout|breakout|close': {
     stopScale: 1.06,
     target1Scale: 0.9,
     target2Scale: 0.88,
     t1MaxR: 1.85,
     t2MaxR: 2.9,
-  },
-  'mean_reversion|ranging|opening': {
-    target1Scale: 0.99,
-    target2Scale: 0.98,
   },
 };
 
@@ -890,6 +954,9 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
     flowConfirmed,
     emaAligned,
     volumeRegimeAligned,
+    netGex: toFiniteNumber(metadata.netGex),
+    vwapPrice: toFiniteNumber(metadata.vwapPrice),
+    vwapDeviation: toFiniteNumber(metadata.vwapDeviation),
   };
 }
 
@@ -974,6 +1041,9 @@ function confidenceLowerBoundMean(values: number[], z = WILSON_Z_95): number {
   return avg - margin;
 }
 
+// Breakeven+ offset: after T1 hit, stop moved to entry + this R profit (not just breakeven)
+const BREAKEVEN_PLUS_OFFSET_R = 0.15;
+
 function realizedRForOutcome(
   row: PreparedOptimizationRow,
   partialAtT1Pct: number,
@@ -992,8 +1062,9 @@ function realizedRForOutcome(
     return (partialAtT1Pct * target1R) + ((1 - partialAtT1Pct) * runnerR) - commissionR;
   }
   if (row.finalOutcome === 't1_before_stop') {
+    // After T1, stop moves to entry + 0.15R (breakeven+), converting runner stop-outs into micro-wins
     const runnerR = row.stopHit
-      ? (useMoveStopBE ? 0 : -1)
+      ? (useMoveStopBE ? BREAKEVEN_PLUS_OFFSET_R : -1)
       : 0;
     return (partialAtT1Pct * target1R) + ((1 - partialAtT1Pct) * runnerR) - commissionR;
   }
@@ -1734,12 +1805,9 @@ export async function runSPXOptimizerScan(input?: {
   // ---------------------------------------------------------------------------
   // Stage 2: Geometry sweep per family on training data
   // ---------------------------------------------------------------------------
-  const geometrySweepResults: Record<SweepFamily, SweepFamilyResult | null> = {
-    fade_at_wall: null,
-    mean_reversion: null,
-    trend_pullback: null,
-    orb_breakout: null,
-  };
+  const geometrySweepResults: Record<SweepFamily, DirectionSweepFamilyResult | null> = Object.fromEntries(
+    ALL_SWEEP_FAMILIES.map((f) => [f, null]),
+  ) as Record<SweepFamily, DirectionSweepFamilyResult | null>;
   let geometrySweepSummary: SPXGeometrySweepSummary | undefined;
 
   const manualPausedForSweep = new Set(
@@ -1770,7 +1838,7 @@ export async function runSPXOptimizerScan(input?: {
       logger.info(`Stage 2 geometry sweep: loading second bars for ${trainingSessions.length} training sessions`);
       const barsBySession = await loadBarsBySession(trainingSessions);
 
-      const stage2Results = sweepGeometryForFamilies({
+      const stage2Results = sweepGeometryForFamiliesDirectional({
         families: sweepFamilies,
         setups: trainingSetupCandidates,
         barsBySession,
@@ -1783,22 +1851,44 @@ export async function runSPXOptimizerScan(input?: {
         geometrySweepResults[family] = stage2Results[family];
       }
 
-      const familiesSwept = sweepFamilies.filter((f) => stage2Results[f] != null);
-      const familiesImproved = familiesSwept.filter((f) => stage2Results[f]?.improved === true);
+      const familiesSwept = sweepFamilies.filter((f) => stage2Results[f]?.combined != null);
+      const familiesImproved = familiesSwept.filter((f) => stage2Results[f]?.combined?.improved === true);
       const perFamily: SPXGeometrySweepSummary['perFamily'] = {};
       for (const family of familiesSwept) {
-        const result = stage2Results[family]!;
+        const dirResult = stage2Results[family]!;
+        const combined = dirResult.combined!;
+        // Build per-direction breakdown
+        const byDirection: Record<string, GeometrySweepDirectionData> = {};
+        for (const dir of ['bullish', 'bearish'] as const) {
+          const dirSweep = dirResult[dir];
+          if (!dirSweep) continue;
+          byDirection[dir] = {
+            sampleSize: dirSweep.best.metrics.resolved,
+            baselineObjective: dirSweep.baseline.metrics.objectiveScoreConservative,
+            optimizedObjective: dirSweep.best.metrics.objectiveScoreConservative,
+            delta: dirSweep.delta.objectiveConservative,
+            improved: dirSweep.improved,
+            winningConfig: {
+              stopScale: dirSweep.best.config.geometry.stopScale ?? 1,
+              target1Scale: dirSweep.best.config.geometry.target1Scale ?? 1,
+              target2Scale: dirSweep.best.config.geometry.target2Scale ?? 1,
+              partialAtT1Pct: dirSweep.best.config.partialAtT1Pct,
+              moveStopToBreakeven: dirSweep.best.config.moveStopToBreakeven,
+            },
+          };
+        }
         perFamily[family] = {
-          baselineObjective: result.baseline.metrics.objectiveScoreConservative,
-          optimizedObjective: result.best.metrics.objectiveScoreConservative,
-          delta: result.delta.objectiveConservative,
+          baselineObjective: combined.baseline.metrics.objectiveScoreConservative,
+          optimizedObjective: combined.best.metrics.objectiveScoreConservative,
+          delta: combined.delta.objectiveConservative,
           winningConfig: {
-            stopScale: result.best.config.geometry.stopScale ?? 1,
-            target1Scale: result.best.config.geometry.target1Scale ?? 1,
-            target2Scale: result.best.config.geometry.target2Scale ?? 1,
-            partialAtT1Pct: result.best.config.partialAtT1Pct,
-            moveStopToBreakeven: result.best.config.moveStopToBreakeven,
+            stopScale: combined.best.config.geometry.stopScale ?? 1,
+            target1Scale: combined.best.config.geometry.target1Scale ?? 1,
+            target2Scale: combined.best.config.geometry.target2Scale ?? 1,
+            partialAtT1Pct: combined.best.config.partialAtT1Pct,
+            moveStopToBreakeven: combined.best.config.moveStopToBreakeven,
           },
+          byDirection: Object.keys(byDirection).length > 0 ? byDirection : undefined,
         };
       }
       geometrySweepSummary = { familiesSwept, familiesImproved, perFamily };
@@ -1885,20 +1975,47 @@ export async function runSPXOptimizerScan(input?: {
       const base = profileForScan.geometryPolicy;
       const improved: Record<string, SPXGeometryPolicyEntry> = {};
       for (const family of ALL_SWEEP_FAMILIES) {
-        const result = geometrySweepResults[family];
-        if (!result?.improved) continue;
-        const winning = result.best.config.geometry;
-        const existing = base.bySetupType[family] ?? DEFAULT_GEOMETRY_BY_SETUP_TYPE[family as SetupType];
-        if (!existing) continue;
-        improved[family] = {
-          stopScale: winning.stopScale ?? existing.stopScale,
-          target1Scale: winning.target1Scale ?? existing.target1Scale,
-          target2Scale: winning.target2Scale ?? existing.target2Scale,
-          t1MinR: existing.t1MinR,
-          t1MaxR: existing.t1MaxR,
-          t2MinR: existing.t2MinR,
-          t2MaxR: existing.t2MaxR,
-        };
+        const dirResult = geometrySweepResults[family];
+        if (!dirResult) continue;
+
+        // Undirected (combined) improvement
+        const combined = dirResult.combined;
+        if (combined?.improved) {
+          const winning = combined.best.config.geometry;
+          const existing = base.bySetupType[family] ?? DEFAULT_GEOMETRY_BY_SETUP_TYPE[family as SetupType];
+          if (existing) {
+            improved[family] = {
+              stopScale: winning.stopScale ?? existing.stopScale,
+              target1Scale: winning.target1Scale ?? existing.target1Scale,
+              target2Scale: winning.target2Scale ?? existing.target2Scale,
+              t1MinR: existing.t1MinR,
+              t1MaxR: existing.t1MaxR,
+              t2MinR: existing.t2MinR,
+              t2MaxR: existing.t2MaxR,
+            };
+          }
+        }
+
+        // Direction-specific improvements (e.g., "fade_at_wall_bullish")
+        for (const dir of ['bullish', 'bearish'] as const) {
+          const dirSweep = dirResult[dir];
+          if (!dirSweep?.improved) continue;
+          const dirKey = `${family}_${dir}`;
+          const winning = dirSweep.best.config.geometry;
+          const fallback = improved[family]
+            ?? base.bySetupType[family]
+            ?? DEFAULT_GEOMETRY_BY_SETUP_TYPE[family as SetupType];
+          if (!fallback) continue;
+          improved[dirKey] = {
+            stopScale: winning.stopScale ?? fallback.stopScale,
+            target1Scale: winning.target1Scale ?? fallback.target1Scale,
+            target2Scale: winning.target2Scale ?? fallback.target2Scale,
+            t1MinR: fallback.t1MinR,
+            t1MaxR: fallback.t1MaxR,
+            t2MinR: fallback.t2MinR,
+            t2MaxR: fallback.t2MaxR,
+          };
+        }
       }
       return {
         bySetupType: { ...base.bySetupType, ...improved },
@@ -1964,9 +2081,19 @@ export async function runSPXOptimizerScan(input?: {
       ...(geometrySweepSummary
         ? [
           `Stage 2 geometry sweep: ${geometrySweepSummary.familiesSwept.length} families swept, ${geometrySweepSummary.familiesImproved.length} improved (${geometrySweepSummary.familiesImproved.join(', ') || 'none'}).`,
-          ...Object.entries(geometrySweepSummary.perFamily).map(([family, data]) => (
-            `  ${family}: baseline=${data.baselineObjective} → optimized=${data.optimizedObjective} (delta=${data.delta > 0 ? '+' : ''}${data.delta}), config: stop=${data.winningConfig.stopScale} t1=${data.winningConfig.target1Scale} t2=${data.winningConfig.target2Scale} partial=${data.winningConfig.partialAtT1Pct} be=${data.winningConfig.moveStopToBreakeven}`
-          )),
+          ...Object.entries(geometrySweepSummary.perFamily).flatMap(([family, data]) => {
+            const lines = [
+              `  ${family}: baseline=${data.baselineObjective} → optimized=${data.optimizedObjective} (delta=${data.delta > 0 ? '+' : ''}${data.delta}), config: stop=${data.winningConfig.stopScale} t1=${data.winningConfig.target1Scale} t2=${data.winningConfig.target2Scale} partial=${data.winningConfig.partialAtT1Pct} be=${data.winningConfig.moveStopToBreakeven}`,
+            ];
+            if (data.byDirection) {
+              for (const [dir, dirData] of Object.entries(data.byDirection)) {
+                lines.push(
+                  `    ${dir}: n=${dirData.sampleSize} baseline=${dirData.baselineObjective} → optimized=${dirData.optimizedObjective} (delta=${dirData.delta > 0 ? '+' : ''}${dirData.delta}) improved=${dirData.improved}`,
+                );
+              }
+            }
+            return lines;
+          }),
         ]
         : ['Stage 2 geometry sweep: skipped (insufficient training setups or no eligible families).']
       ),

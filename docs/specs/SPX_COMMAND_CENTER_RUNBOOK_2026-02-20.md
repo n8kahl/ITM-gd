@@ -37,10 +37,56 @@ keep `coachAlertLifecycleV2` enabled and monitor `spx_coach_no_change_suppressed
 verify localStorage write path and `spx_trade_journal_captured` telemetry.
 4. If feed trust appears inconsistent:
 review `spx_data_health_changed` and fallback reason-code transitions.
+5. If ORB setups are triggering with low win rate:
+set `SPX_ORB_FLOW_GRACE_ENABLED=false` to disable ORB flow grace and restore strict flow/volume gates.
+6. If VWAP gate is over-filtering fade_at_wall or other counter-trend setups:
+set `SPX_VWAP_GATE_ENABLED=false` to disable VWAP directional gate.
+7. If GEX-adaptive stops cause anomalous stop distances:
+set `GEX_STOP_TIGHTEN_FACTOR=1.0` and `GEX_STOP_WIDEN_FACTOR=1.0` in code constants (requires redeploy).
+8. If breakeven+ stop causes excessive premature runner exits:
+set `BREAKEVEN_PLUS_OFFSET_R=0` in code constants (requires redeploy).
 
-## 5. Ownership
+## 5. Setup Detection & Optimization Configuration (P14-S8 through P14-S16)
+
+### Environment Flags
+| Flag | Default | Purpose | Rollback |
+|------|---------|---------|----------|
+| `SPX_ORB_FLOW_GRACE_ENABLED` | `true` | ORB flow/volume/EMA grace for first 120 min | Set `false` to disable all ORB grace |
+| `SPX_VWAP_GATE_ENABLED` | `true` | VWAP directional filter gate | Set `false` to disable VWAP gating |
+| `SPX_SETUP_SPECIFIC_GATES_ENABLED` | `true` | Per-family gate floor overrides | Set `false` for uniform gates |
+
+### Key Constants (Code-Level, Requires Redeploy)
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `ORB_GRACE_MIN_CONFLUENCE_SCORE` | 4 | Minimum confluence for ORB grace |
+| `ORB_RANGE_MIN_WIDTH_POINTS` | 4 | Minimum opening range width (points) |
+| `ORB_RANGE_MAX_WIDTH_POINTS` | 18 | Maximum opening range width (points) |
+| `BREAKEVEN_PLUS_OFFSET_R` | 0.15 | Runner stop offset above breakeven (R) |
+| `GEX_STOP_TIGHTEN_FACTOR` | 0.90 | Stop multiplier for positive GEX |
+| `GEX_STOP_WIDEN_FACTOR` | 1.10 | Stop multiplier for negative GEX + mean-reversion |
+| `MIN_DIRECTION_SAMPLE_SIZE` | 5 | Minimum samples for per-direction sweep |
+
+### Regime-Adaptive Partial at T1
+| Regime | Partial % | Rationale |
+|--------|-----------|-----------|
+| compression | 75% | Limited runway |
+| ranging | 70% | Moderate extension |
+| trending | 55% | Strong momentum |
+| breakout | 50% | Maximum extension |
+
+### Time Buckets (5-Bucket Model)
+| Bucket | Minutes | Key Geometry |
+|--------|---------|-------------|
+| early_open | 0-30 | Widen T2 +15% |
+| opening | 31-90 | Standard (ORB window) |
+| midday | 91-240 | Baseline |
+| afternoon | 241-330 | Compress T2 -20%, partial 80% |
+| close | 331+ | Fade/MR only, T2 disabled |
+
+## 6. Ownership
 1. Execution controls: `spx-execution`.
 2. Chart/replay/scenario UI: `spx-visual`.
 3. Coach + suppression: `spx-coach`.
 4. Feed/orchestrator + context: `spx-platform`.
 5. Mobile behavior: `spx-mobile`.
+6. Setup detection + optimizer: `spx-optimizer`.

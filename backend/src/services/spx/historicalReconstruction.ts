@@ -26,6 +26,7 @@ import type {
   UnifiedGEXLandscape,
 } from './types';
 import { ema, round, stableId } from './utils';
+import { calculateVWAP, analyzeVWAPPosition } from '../levels/calculators/vwap';
 
 const SPY_TO_SPX_STRIKE = 10;
 const SPY_TO_SPX_GEX_SCALE = 0.1;
@@ -687,6 +688,8 @@ function buildHistoricalIndicatorContext(input: {
   minutesSinceOpen: number;
   sessionOpenTimestamp: string;
   asOfTimestamp: string;
+  vwapPrice: number | null;
+  vwapDeviation: number | null;
 } | null {
   const usable = input.bars.filter((bar) => Number.isFinite(bar.c) && bar.c > 0);
   if (usable.length < 8) return null;
@@ -710,6 +713,20 @@ function buildHistoricalIndicatorContext(input: {
     ? firstBar.o
     : firstBar.c;
 
+  const vwapBars = usable.map((bar) => ({
+    h: typeof bar.h === 'number' && Number.isFinite(bar.h) ? bar.h : bar.c,
+    l: typeof bar.l === 'number' && Number.isFinite(bar.l) ? bar.l : bar.c,
+    c: bar.c,
+    v: bar.v,
+    vw: 0,
+    o: typeof bar.o === 'number' && Number.isFinite(bar.o) ? bar.o : bar.c,
+    t: bar.t,
+    n: 0,
+  }));
+  const vwapPrice = calculateVWAP(vwapBars);
+  const lastClose = closes[closes.length - 1];
+  const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
+
   return {
     emaFast: round(emaFast, 2),
     emaSlow: round(emaSlow, 2),
@@ -722,6 +739,8 @@ function buildHistoricalIndicatorContext(input: {
     minutesSinceOpen,
     sessionOpenTimestamp: new Date(firstBar.t).toISOString(),
     asOfTimestamp: input.asOfTimestamp,
+    vwapPrice: vwapPrice != null ? round(vwapPrice, 2) : null,
+    vwapDeviation: vwapPosition != null ? round(vwapPosition.distancePct, 4) : null,
   };
 }
 

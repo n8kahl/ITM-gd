@@ -24,10 +24,7 @@ async function main() {
       .split(',')
       .map((item) => item.trim())
       .filter((item): item is SweepFamily => (
-        item === 'fade_at_wall'
-        || item === 'mean_reversion'
-        || item === 'trend_pullback'
-        || item === 'orb_breakout'
+        (ALL_SWEEP_FAMILIES as readonly string[]).includes(item)
       ))
     : [...ALL_SWEEP_FAMILIES];
 
@@ -44,12 +41,9 @@ async function main() {
   const sessions = Array.from(new Set(sweepSetups.map((setup) => setup.sessionDate))).sort();
   const barsBySession = await loadBarsBySession(sessions);
 
-  const byFamily: Record<SweepFamily, CandidateResult[]> = {
-    fade_at_wall: [],
-    mean_reversion: [],
-    trend_pullback: [],
-    orb_breakout: [],
-  };
+  const byFamily = Object.fromEntries(
+    ALL_SWEEP_FAMILIES.map((f) => [f, [] as CandidateResult[]]),
+  ) as Record<SweepFamily, CandidateResult[]>;
 
   for (const family of families) {
     const familySetups = sweepSetups.filter((setup) => setup.setupType === family);

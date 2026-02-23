@@ -210,3 +210,23 @@ Before release:
 |---|---|---|---|---|---|---|---|---|---|
 | D-061 | 2026-02-22 | 16 | Telemetry persistence strategy | Extend DB schema with new columns, extend JSONB metadata, defer to future phase | Extend JSONB metadata | No schema migration needed, fully backwards-compatible, optimizer can query JSONB fields directly. | JSONB queries slightly slower than indexed columns, but volume is low (~100 setups/day). | Eng | Accepted |
 | D-062 | 2026-02-22 | 16 | Microstructure snapshot interval | 1s microbar (highest fidelity), 5s microbar (balanced), skip microstructure | 5s microbar | Matches the existing Phase 14 canonical interval; 1s too noisy for setup-level decisions. | Loses sub-5s microstructure detail. | Eng | Accepted |
+
+## 14. Execution Updates (2026-02-23 - P14-S8 through P14-S16)
+### Risk Register Updates
+| Risk ID | Date | Category | Description | Likelihood | Impact | Score | Phase | Owner | Mitigation | Trigger | Status |
+|---|---|---|---|---:|---:|---:|---|---|---|---|---|
+| R-058 | 2026-02-23 | Gate Quality | ORB flow grace may admit low-conviction setups when historical flow data is sparse. | 3 | 3 | 9 | 14 | Eng | Requires confluenceScore>=4 and EMA alignment; env-disableable via `SPX_ORB_FLOW_GRACE_ENABLED`. | ORB win rate drops below 40% in strict replay with grace enabled. | Open |
+| R-059 | 2026-02-23 | Sample Size | 5-bucket time expansion and direction-aware splits thin per-bucket/direction sample sizes, increasing geometry noise. | 3 | 3 | 9 | 14 | Eng | Auto-skip families/directions with <5-8 samples; undirected fallback in resolution chain. | Geometry sweep reports null/degraded for multiple families. | Open |
+| R-060 | 2026-02-23 | Stop Calibration | GEX-adaptive stop scaling may interact poorly with regime-adaptive partials in edge cases. | 2 | 3 | 6 | 14 | Eng | GEX adjustment is ±10% and null-safe; both factors revert to 1.0 when data unavailable. | Stop distance anomalies in GEX-extreme sessions. | Open |
+| R-061 | 2026-02-23 | Filter Aggression | VWAP directional gate may over-filter counter-trend strategies near VWAP. | 3 | 3 | 9 | 14 | Eng | 0.15% tolerance band; env-disableable via `SPX_VWAP_GATE_ENABLED`. | Significant drop in fade_at_wall eligible count with VWAP gate active. | Open |
+| R-062 | 2026-02-23 | Breakeven+ Interaction | Breakeven+0.15R stop may cause premature runner exits in volatile regimes. | 2 | 3 | 6 | 14 | Eng | 0.15R offset is small; only triggers after T1 banked. Revert by setting constant to 0. | Runner exits cluster at breakeven+ without reaching T2. | Open |
+
+### Decision Log Updates
+| Decision ID | Date | Phase | Decision | Options Considered | Chosen Option | Rationale | Tradeoffs | Owner | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| D-063 | 2026-02-23 | 14 | ORB gate rescue strategy | Remove ORB entirely, keep strict gates, add flow grace pattern | Add flow grace mirroring trend_pullback grace | Recovers ORB type without wholesale gate removal; maintains high confluence floor. | Grace-admitted ORB setups have lower flow evidence. | Eng | Accepted |
+| D-064 | 2026-02-23 | 14 | Time-bucket granularity | Keep 3 buckets, expand to 5, expand to 7+ | Expand to 5 buckets | Captures afternoon/close degradation without excessive fragmentation. | Thinner per-bucket samples. | Eng | Accepted |
+| D-065 | 2026-02-23 | 14 | Direction-aware geometry approach | Direction-only, combined-only, hybrid with fallback | Hybrid with 8-key resolution chain | Per-direction optimization with robust undirected fallback. | Additional profile keys to govern. | Eng | Accepted |
+| D-066 | 2026-02-23 | 14 | Partial profit regime strategy | Fixed 65%, regime-specific adaptive, sweepable per-family | Regime-specific adaptive | Aligns with regime momentum characteristics. | Less runner opportunity in compression/ranging. | Eng | Accepted |
+| D-067 | 2026-02-23 | 14 | GEX stop adjustment magnitude | ±5%, ±10%, ±20% | ±10% moderate | Meaningful impact without excessive deviation. | May be insufficient in extreme GEX. | Eng | Accepted |
+| D-068 | 2026-02-23 | 14 | VWAP integration scope | Full bands + anchored, direction only, confluence + gate | Confluence source + directional gate | Highest-leverage filtering without over-engineering. | Leaves bands/anchored for future. | Eng | Accepted |
