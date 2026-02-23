@@ -9,6 +9,10 @@ import {
   TradierClient,
   type TradierBrokerPosition,
 } from '../broker/tradier/client';
+import {
+  decryptTradierAccessToken,
+  isTradierProductionRuntimeEnabled,
+} from '../broker/tradier/credentials';
 
 interface BrokerCredentialRow {
   user_id: string;
@@ -47,6 +51,7 @@ type ReconciliationAction =
 
 export interface BrokerLedgerReconciliationSummary {
   enabled: boolean;
+  disabledReason: string | null;
   usersScanned: number;
   usersWithCredentials: number;
   usersWithBrokerErrors: number;
@@ -79,12 +84,6 @@ function round(value: number, decimals = 2): number {
 function isMissingRelationError(message: string, table: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('relation') && normalized.includes('does not exist') && normalized.includes(table);
-}
-
-function decryptAccessToken(ciphertext: string): string {
-  // Foundation behavior: token is stored directly.
-  // Follow-up hardening should replace this with KMS/envelope decryption.
-  return ciphertext;
 }
 
 function normalizeUnderlyingSymbol(value: string): string {
@@ -273,9 +272,14 @@ export async function reconcileTradierBrokerLedger(input?: {
   userLimit?: number;
   positionLimit?: number;
 }): Promise<BrokerLedgerReconciliationSummary> {
-  if (!TRADIER_RECONCILIATION_ENABLED) {
+  const runtime = isTradierProductionRuntimeEnabled({
+    baseEnabled: TRADIER_RECONCILIATION_ENABLED,
+    productionEnableEnv: process.env.TRADIER_POSITION_RECONCILIATION_PRODUCTION_ENABLED,
+  });
+  if (!runtime.enabled) {
     return {
       enabled: false,
+      disabledReason: runtime.reason,
       usersScanned: 0,
       usersWithCredentials: 0,
       usersWithBrokerErrors: 0,
@@ -299,6 +303,7 @@ export async function reconcileTradierBrokerLedger(input?: {
       logger.warn('Tradier position reconciliation skipped because ai_coach_positions table is missing.');
       return {
         enabled: true,
+        disabledReason: null,
         usersScanned: 0,
         usersWithCredentials: 0,
         usersWithBrokerErrors: 0,
@@ -314,6 +319,7 @@ export async function reconcileTradierBrokerLedger(input?: {
   if (openRows.length === 0) {
     return {
       enabled: true,
+      disabledReason: null,
       usersScanned: 0,
       usersWithCredentials: 0,
       usersWithBrokerErrors: 0,
@@ -336,6 +342,7 @@ export async function reconcileTradierBrokerLedger(input?: {
       logger.warn('Tradier position reconciliation skipped because broker_credentials table is missing.');
       return {
         enabled: true,
+        disabledReason: null,
         usersScanned: userIds.length,
         usersWithCredentials: 0,
         usersWithBrokerErrors: 0,
@@ -370,7 +377,7 @@ export async function reconcileTradierBrokerLedger(input?: {
     try {
       const tradier = new TradierClient({
         accountId: credential.account_id,
-        accessToken: decryptAccessToken(credential.access_token_ciphertext),
+        accessToken: decryptTradierAccessToken(credential.access_token_ciphertext),
       });
       const brokerPositions = await tradier.getPositions();
       const exposureMap = buildBrokerPositionExposureMap(brokerPositions);
@@ -397,6 +404,7 @@ export async function reconcileTradierBrokerLedger(input?: {
 
   return {
     enabled: true,
+    disabledReason: null,
     usersScanned: userIds.length,
     usersWithCredentials,
     usersWithBrokerErrors,
@@ -414,4 +422,3 @@ export const __brokerLedgerReconciliationTestUtils = {
   buildForceClosePatch,
   buildQuantitySyncPatch,
 };
-

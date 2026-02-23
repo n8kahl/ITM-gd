@@ -222,6 +222,30 @@ Late-session behavior snapshot (strict YTD trigger buckets):
 2. `300+ min since open`: T1 `58.82%`, T2 `35.29%`, stop `35.29%`
 3. Interpretation: very-late entries degrade runner quality (`T2`), supporting strict late-day contract safeguards.
 
+## Current Institutional Promotion Snapshot (2026-02-23)
+
+This section records current promotion posture against the Gold Standard baseline above.
+
+1. Promotion decision: **BLOCKED** (Phase 16 S6).
+2. Latest strict last-week replay snapshot:
+   - `setupCount=1`
+   - `triggeredCount=1`
+   - `resolvedCount=1`
+   - `T1=0%`
+   - `T2=0%`
+   - `failureRate=100%`
+   - `expectancyR=-1.04`
+   - `usedMassiveMinuteBars=false`
+3. Latest optimizer weekly governance/data-quality snapshot:
+   - `optimizationApplied=false`
+   - `dataQuality.gatePassed=true`
+   - `optionsReplayCoveragePct=100` (`replayUniverse=102`)
+   - `governance.promotionQualified=false`
+   - `resolved_trades_below_floor:9<10`
+   - `conservative_objective_delta_below_floor:-11.44<0.1`
+   - `execution_fill_evidence_unavailable`
+4. Gold Standard percentages in this document remain the release target thresholds; current runs are evaluated as deltas against those fixed targets.
+
 ## ORB / Trend Diagnostics Snapshot (YTD)
 
 1. `orb_breakout`: `rows=117`, `triggered=0`, `blocked=103`, `eligible=14`

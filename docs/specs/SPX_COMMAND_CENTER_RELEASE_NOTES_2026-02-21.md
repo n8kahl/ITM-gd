@@ -29,6 +29,20 @@ Track: Production Recovery Autonomous Program
 17. Phase 12 slice P12-S1 complete: profile-driven setup geometry policy (setup-type + optional regime/time-bucket overrides) now feeds live setup target/stop shaping, backtest geometry lookup now supports scoped override keys, and SPX realtime trigger notifications now ship with toast + browser-notification routing (dedupe/cooldown + user preference gate).
 18. Phase 12 slice P12-S5 complete: setup `pWin` is now calibrated from realized `spx_setup_instances` outcomes (hierarchical setup/regime/time-bucket smoothing + conservative blending), and nightly optimization now runs replay reconstruction before scan/promotion so optimizer decisions are based on reconstructed Massive-driven actuals.
 
+## Phase 16 Institutional Update (2026-02-23)
+1. P16-S1 removed ORB sparse-flow grace per policy; low-conviction ORB bypass is no longer in the detector path.
+2. P16-S2 added bounded trend-pullback recovery alternatives and widened trend timing windows without restoring ORB grace behavior.
+3. P16-S3 persisted deterministic flow/microstructure evidence into setup-instance metadata for replay/attribution parity.
+4. P16-S4 hardened execution realism with envelope-style Tradier credential handling, production runtime guards, and proxy-share fail/warn gates.
+5. P16-S5 added promotion governance floors (resolved sample, setup-family diversity, conservative objective delta, execution fill evidence, proxy-share cap) and surfaced governance reasons in optimizer UI.
+6. P16-S6 institutional promotion decision: **BLOCKED**.
+7. Blocking evidence snapshot (latest strict window): `triggered=1`, `resolved=1`, `T1=0%`, `T2=0%`, `failure=100%`, `expectancyR=-1.04`; optimizer data-quality gate passed (`options replay coverage=100%`, replay universe `102`) but governance remained unqualified.
+8. Gold Standard percentages remain unchanged targets for release eligibility:
+   - `T1 >= 76.47%`
+   - `T2 >= 70.59%`
+   - `failureRate <= 17.65%`
+   - `expectancyR >= +1.128`
+
 ## Quality Gate Summary
 1. `pnpm exec eslint .` passed (`0` errors, existing non-blocking warnings only).
 2. `pnpm exec tsc --noEmit` passed.

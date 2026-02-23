@@ -65,6 +65,31 @@ function parseMetadataValue<T>(metadata: Record<string, unknown> | null, key: st
   return (value as T) ?? fallback;
 }
 
+function parseMetadataNumber(metadata: Record<string, unknown> | null, key: string): number | null {
+  const value = metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function parseFlowQualityMetric(
+  metadata: Record<string, unknown> | null,
+  key: 'score' | 'recentDirectionalEvents' | 'recentDirectionalPremium' | 'localDirectionalEvents' | 'localDirectionalPremium' | 'localCoveragePct',
+): number | null {
+  const directKeyByMetric: Record<typeof key, string> = {
+    score: 'flowQualityScore',
+    recentDirectionalEvents: 'flowRecentDirectionalEvents',
+    recentDirectionalPremium: 'flowRecentDirectionalPremium',
+    localDirectionalEvents: 'flowLocalDirectionalEvents',
+    localDirectionalPremium: 'flowLocalDirectionalPremium',
+    localCoveragePct: 'flowLocalCoveragePct',
+  };
+  const direct = parseMetadataNumber(metadata, directKeyByMetric[key]);
+  if (direct != null) return direct;
+  const flowQuality = metadata?.flowQuality;
+  if (!flowQuality || typeof flowQuality !== 'object' || Array.isArray(flowQuality)) return null;
+  const nested = (flowQuality as Record<string, unknown>)[key];
+  return typeof nested === 'number' && Number.isFinite(nested) ? nested : null;
+}
+
 function upsertBucket(map: Map<string, BucketStats>, key: string, outcome: Outcome): void {
   const current = map.get(key) || { key, total: 0, stops: 0, t1Wins: 0, t2Wins: 0 };
   current.total += 1;
@@ -130,15 +155,36 @@ async function main() {
   const gateReasonCounter = new Map<string, number>();
   const setupTypeBlockerCounter = new Map<string, Map<string, number>>();
   const multiBlockerCombos = new Map<string, number>();
-  const flowAvailabilityByDate = new Map<string, { total: number; flowAvailable: number; flowConfirmed: number; totalDirectionalEvents: number }>();
+  const flowAvailabilityByDate = new Map<string, {
+    total: number;
+    flowAvailable: number;
+    flowSparse: number;
+    flowUnavailable: number;
+    flowConfirmed: number;
+    effectiveFlowConfirmed: number;
+    totalDirectionalEvents: number;
+    totalDirectionalPremium: number;
+  }>();
   const tierStatusSummary = { total: rows.length, blocked: 0, eligible: 0, hidden: 0, triggered: 0, noGateStatus: 0 };
 
   for (const row of rows) {
     const gateStatus = parseMetadataValue<string | null>(row.metadata, 'gateStatus', null);
     const gateReasonsRaw = parseMetadataValue<string[] | null>(row.metadata, 'gateReasons', null);
-    const flowAlignmentRaw = parseMetadataValue<number | null>(row.metadata, 'flowAlignmentPct', null);
+    const flowAlignmentRaw = parseMetadataNumber(row.metadata, 'flowAlignmentPct');
     const flowConfirmedVal = parseMetadataValue<boolean>(row.metadata, 'flowConfirmed', false);
-    const directionalEvents = parseMetadataValue<number>(row.metadata, 'flowRecentDirectionalEvents', 0);
+    const effectiveFlowConfirmedVal = parseMetadataValue<boolean>(row.metadata, 'effectiveFlowConfirmed', flowConfirmedVal);
+    const directionalEvents = parseFlowQualityMetric(row.metadata, 'recentDirectionalEvents') ?? 0;
+    const directionalPremium = parseFlowQualityMetric(row.metadata, 'recentDirectionalPremium') ?? 0;
+    const flowAvailabilityRaw = parseMetadataValue<string | null>(row.metadata, 'flowAvailability', null);
+    const flowAvailability = (
+      flowAvailabilityRaw === 'available'
+      || flowAvailabilityRaw === 'sparse'
+      || flowAvailabilityRaw === 'unavailable'
+    )
+      ? flowAvailabilityRaw
+      : (typeof flowAlignmentRaw === 'number'
+        ? 'available'
+        : (directionalEvents > 0 || directionalPremium > 0 ? 'sparse' : 'unavailable'));
 
     if (gateStatus === 'blocked') tierStatusSummary.blocked += 1;
     else if (gateStatus === 'eligible') tierStatusSummary.eligible += 1;
@@ -171,13 +217,26 @@ async function main() {
     // Flow data availability by date
     const date = row.session_date;
     if (!flowAvailabilityByDate.has(date)) {
-      flowAvailabilityByDate.set(date, { total: 0, flowAvailable: 0, flowConfirmed: 0, totalDirectionalEvents: 0 });
+      flowAvailabilityByDate.set(date, {
+        total: 0,
+        flowAvailable: 0,
+        flowSparse: 0,
+        flowUnavailable: 0,
+        flowConfirmed: 0,
+        effectiveFlowConfirmed: 0,
+        totalDirectionalEvents: 0,
+        totalDirectionalPremium: 0,
+      });
     }
     const dateStats = flowAvailabilityByDate.get(date)!;
     dateStats.total += 1;
-    if (typeof flowAlignmentRaw === 'number') dateStats.flowAvailable += 1;
+    if (flowAvailability === 'available') dateStats.flowAvailable += 1;
+    if (flowAvailability === 'sparse') dateStats.flowSparse += 1;
+    if (flowAvailability === 'unavailable') dateStats.flowUnavailable += 1;
     if (flowConfirmedVal) dateStats.flowConfirmed += 1;
-    dateStats.totalDirectionalEvents += (typeof directionalEvents === 'number' ? directionalEvents : 0);
+    if (effectiveFlowConfirmedVal) dateStats.effectiveFlowConfirmed += 1;
+    dateStats.totalDirectionalEvents += directionalEvents;
+    dateStats.totalDirectionalPremium += directionalPremium;
   }
 
   // Format blocker analysis results
@@ -204,8 +263,12 @@ async function main() {
       date,
       rows: stats.total,
       flowAvailablePct: round(stats.total > 0 ? (stats.flowAvailable / stats.total) * 100 : 0),
+      flowSparsePct: round(stats.total > 0 ? (stats.flowSparse / stats.total) * 100 : 0),
+      flowUnavailablePct: round(stats.total > 0 ? (stats.flowUnavailable / stats.total) * 100 : 0),
       flowConfirmedPct: round(stats.total > 0 ? (stats.flowConfirmed / stats.total) * 100 : 0),
+      effectiveFlowConfirmedPct: round(stats.total > 0 ? (stats.effectiveFlowConfirmed / stats.total) * 100 : 0),
       avgDirectionalEvents: round(stats.total > 0 ? stats.totalDirectionalEvents / stats.total : 0),
+      avgDirectionalPremium: round(stats.total > 0 ? stats.totalDirectionalPremium / stats.total : 0),
     }));
 
   // --- Original strict-triggered analysis ---
@@ -216,6 +279,8 @@ async function main() {
   const byConfluence = new Map<string, BucketStats>();
   const byFlowAlignment = new Map<string, BucketStats>();
   const byFlowConfirmed = new Map<string, BucketStats>();
+  const byEffectiveFlowConfirmed = new Map<string, BucketStats>();
+  const byFlowAvailability = new Map<string, BucketStats>();
   const byEmaAligned = new Map<string, BucketStats>();
   const byVolumeAligned = new Map<string, BucketStats>();
 
@@ -225,11 +290,28 @@ async function main() {
     const triggerMinute = minuteSinceOpenEt(row.triggered_at);
     const confluenceScoreRaw = parseMetadataValue<number | null>(row.metadata, 'confluenceScore', null);
     const confluenceScore = typeof confluenceScoreRaw === 'number' ? confluenceScoreRaw : null;
-    const flowAlignmentRaw = parseMetadataValue<number | null>(row.metadata, 'flowAlignmentPct', null);
+    const flowAlignmentRaw = parseMetadataNumber(row.metadata, 'flowAlignmentPct');
     const flowAlignment = typeof flowAlignmentRaw === 'number' ? flowAlignmentRaw : null;
     const flowConfirmed = parseMetadataValue<boolean>(row.metadata, 'flowConfirmed', false);
+    const effectiveFlowConfirmed = parseMetadataValue<boolean>(row.metadata, 'effectiveFlowConfirmed', flowConfirmed);
+    const directionalEvents = parseFlowQualityMetric(row.metadata, 'recentDirectionalEvents') ?? 0;
+    const directionalPremium = parseFlowQualityMetric(row.metadata, 'recentDirectionalPremium') ?? 0;
+    const flowAvailabilityRaw = parseMetadataValue<string | null>(row.metadata, 'flowAvailability', null);
+    const flowAvailability = (
+      flowAvailabilityRaw === 'available'
+      || flowAvailabilityRaw === 'sparse'
+      || flowAvailabilityRaw === 'unavailable'
+    )
+      ? flowAvailabilityRaw
+      : (flowAlignment != null
+        ? 'available'
+        : (directionalEvents > 0 || directionalPremium > 0 ? 'sparse' : 'unavailable'));
     const emaAligned = parseMetadataValue<boolean>(row.metadata, 'emaAligned', false);
-    const volumeAligned = parseMetadataValue<boolean>(row.metadata, 'volumeRegimeAligned', false);
+    const volumeAligned = parseMetadataValue<boolean>(
+      row.metadata,
+      'effectiveVolumeAligned',
+      parseMetadataValue<boolean>(row.metadata, 'volumeRegimeAligned', false),
+    );
 
     upsertBucket(bySetup, row.setup_type, outcome);
     upsertBucket(byRegime, row.regime || 'unknown', outcome);
@@ -238,6 +320,8 @@ async function main() {
     upsertBucket(byConfluence, confluenceBucket(confluenceScore), outcome);
     upsertBucket(byFlowAlignment, alignmentBucket(flowAlignment), outcome);
     upsertBucket(byFlowConfirmed, flowConfirmed ? 'true' : 'false', outcome);
+    upsertBucket(byEffectiveFlowConfirmed, effectiveFlowConfirmed ? 'true' : 'false', outcome);
+    upsertBucket(byFlowAvailability, flowAvailability, outcome);
     upsertBucket(byEmaAligned, emaAligned ? 'true' : 'false', outcome);
     upsertBucket(byVolumeAligned, volumeAligned ? 'true' : 'false', outcome);
   }
@@ -262,6 +346,8 @@ async function main() {
       confluenceBucket: sortBuckets(byConfluence).slice(0, 8),
       flowAlignmentBucket: sortBuckets(byFlowAlignment).slice(0, 8),
       flowConfirmed: sortBuckets(byFlowConfirmed, 1),
+      effectiveFlowConfirmed: sortBuckets(byEffectiveFlowConfirmed, 1),
+      flowAvailability: sortBuckets(byFlowAvailability, 1),
       emaAligned: sortBuckets(byEmaAligned, 1),
       volumeRegimeAligned: sortBuckets(byVolumeAligned, 1),
     },

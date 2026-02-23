@@ -43,6 +43,7 @@ describe('optimizer confidence controls', () => {
       expectancyR: 14,
     }, {
       partialAtT1Pct: 0.5,
+      moveStopToBreakeven: true,
     });
 
     expect(metrics.tradeCount).toBe(4);

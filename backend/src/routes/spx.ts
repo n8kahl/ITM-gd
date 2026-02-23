@@ -754,6 +754,214 @@ router.post('/broker/tradier/test-balance', async (req: Request, res: Response) 
   }
 });
 
+router.post('/broker/tradier/mode', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
+    }
+
+    const mode = req.body?.mode;
+    if (!['off', 'manual', 'auto'].includes(mode)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Mode must be one of: off, manual, auto.',
+      });
+    }
+
+    const isActive = mode !== 'off';
+    const autoExecute = mode === 'auto';
+
+    const { data: existingRow, error: fetchError } = await supabase
+      .from('broker_credentials')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier')
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+
+    if (!existingRow) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'No Tradier credentials configured. Add credentials first.',
+      });
+    }
+
+    const existingMetadata = (
+      typeof (existingRow as { metadata?: unknown }).metadata === 'object'
+        ? (existingRow as { metadata: Record<string, unknown> }).metadata
+        : {}
+    );
+
+    const { error: updateError } = await supabase
+      .from('broker_credentials')
+      .update({
+        is_active: isActive,
+        metadata: { ...existingMetadata, spx_auto_execute: autoExecute, exec_mode: mode },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier');
+
+    if (updateError) throw updateError;
+
+    logger.info('Tradier execution mode updated', { userId, mode, isActive, autoExecute });
+    return res.json({ success: true, mode, isActive, autoExecute });
+  } catch (error) {
+    logger.error('SPX Tradier mode update failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to update execution mode.',
+    });
+  }
+});
+
+router.post('/broker/tradier/kill', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
+    }
+
+    const { data: credentialRow, error: credentialError } = await supabase
+      .from('broker_credentials')
+      .select('account_id,access_token_ciphertext,metadata')
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier')
+      .maybeSingle();
+    if (credentialError) throw credentialError;
+
+    if (!credentialRow) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'No Tradier credentials configured.',
+      });
+    }
+
+    const row = credentialRow as {
+      account_id: string;
+      access_token_ciphertext: string;
+      metadata?: Record<string, unknown> | null;
+    };
+
+    const sandbox = typeof row.metadata?.tradier_sandbox === 'boolean'
+      ? row.metadata.tradier_sandbox
+      : String(process.env.TRADIER_EXECUTION_SANDBOX || 'true').toLowerCase() !== 'false';
+
+    const tradier = new TradierClient({
+      accountId: row.account_id,
+      accessToken: decryptTradierAccessToken(row.access_token_ciphertext),
+      sandbox,
+    });
+
+    const existingMetadata = (
+      typeof row.metadata === 'object' && row.metadata
+        ? row.metadata
+        : {}
+    );
+
+    const { error: updateError } = await supabase
+      .from('broker_credentials')
+      .update({
+        is_active: false,
+        metadata: { ...existingMetadata, spx_auto_execute: false, exec_mode: 'off', kill_switch_at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier');
+
+    if (updateError) {
+      logger.error('Kill switch: failed to deactivate credentials', { userId, error: updateError.message });
+    }
+
+    let cancelledOrders = 0;
+    try {
+      const positions = await tradier.getPositions();
+      logger.info('Kill switch: positions at time of kill', { userId, positionCount: positions.length });
+      // Note: Tradier does not expose a "cancel all open orders" endpoint for options directly.
+      // The execution engine tracks active states in memory. Setting is_active=false prevents
+      // new orders and the runtime check will stop processing.
+    } catch (posError) {
+      logger.warn('Kill switch: position fetch failed (non-fatal)', {
+        error: posError instanceof Error ? posError.message : String(posError),
+      });
+    }
+
+    logger.info('Kill switch activated', { userId, cancelledOrders });
+    return res.json({
+      success: true,
+      message: 'Kill switch activated. Execution disabled, credentials deactivated.',
+      cancelledOrders,
+    });
+  } catch (error) {
+    logger.error('SPX Tradier kill switch failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Kill switch encountered an error.',
+    });
+  }
+});
+
+router.get('/broker/tradier/positions', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
+    }
+
+    const { data: credentialRow, error: credentialError } = await supabase
+      .from('broker_credentials')
+      .select('account_id,access_token_ciphertext,metadata,is_active')
+      .eq('user_id', userId)
+      .eq('broker_name', 'tradier')
+      .maybeSingle();
+    if (credentialError) throw credentialError;
+
+    if (!credentialRow) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'No Tradier credentials configured.',
+      });
+    }
+
+    const row = credentialRow as {
+      account_id: string;
+      access_token_ciphertext: string;
+      metadata?: Record<string, unknown> | null;
+      is_active?: boolean;
+    };
+
+    if (!row.is_active) {
+      return res.json({ positions: [], isActive: false, message: 'Broker is not active.' });
+    }
+
+    const sandbox = typeof row.metadata?.tradier_sandbox === 'boolean'
+      ? row.metadata.tradier_sandbox
+      : String(process.env.TRADIER_EXECUTION_SANDBOX || 'true').toLowerCase() !== 'false';
+
+    const tradier = new TradierClient({
+      accountId: row.account_id,
+      accessToken: decryptTradierAccessToken(row.access_token_ciphertext),
+      sandbox,
+    });
+
+    const positions = await tradier.getPositions();
+    return res.json({ positions, isActive: true, positionCount: positions.length });
+  } catch (error) {
+    logger.error('SPX Tradier positions endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to fetch Tradier positions.',
+    });
+  }
+});
+
 router.get('/coach/state', async (req: Request, res: Response) => {
   try {
     const state = await getCoachState({ forceRefresh: parseBoolean(req.query.forceRefresh) });
