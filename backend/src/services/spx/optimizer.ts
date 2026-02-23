@@ -59,6 +59,40 @@ export interface SPXOptimizationProfile {
     bySetupType: Record<string, SPXGeometryPolicyEntry>;
     bySetupRegime: Record<string, Partial<SPXGeometryPolicyEntry>>;
     bySetupRegimeTimeBucket: Record<string, Partial<SPXGeometryPolicyEntry>>;
+    byTimeBucket?: {
+      opening?: Partial<SPXGeometryPolicyEntry>;
+      midday?: Partial<SPXGeometryPolicyEntry>;
+      late?: Partial<SPXGeometryPolicyEntry>;
+      final?: Partial<SPXGeometryPolicyEntry>;
+    };
+  };
+  vixRegimePolicy?: {
+    enabled: boolean;
+    thresholds: { low: number; normal: number; elevated: number; high: number };
+    strategyAllowlistByRegime: Record<string, string[]>;
+    geometryMultipliersByRegime: Record<string, { stopMultiplier: number; targetMultiplier: number }>;
+  };
+  vwapFilter?: {
+    enabled: boolean;
+    deviationBands: boolean;
+    confluenceBonus: boolean;
+    graceMinuteET: number;
+  };
+  dayOfWeekPolicy?: {
+    enabled: boolean;
+    fomcBlockEnabled: boolean;
+    opexRestrictionsEnabled: boolean;
+  };
+  gexAdaptiveStops?: {
+    enabled: boolean;
+    positiveGexMultiplier: number;
+    negativeGexMultiplier: number;
+    extremeGexConfluenceBonus: number;
+  };
+  adaptivePartialScaling?: {
+    enabled: boolean;
+    byRegime: Record<string, number>;
+    breakEvenPlusR: number;
   };
   walkForward: {
     trainingDays: number;
@@ -298,9 +332,8 @@ const OPTIMIZER_PROFILE_CACHE_KEY = 'spx_command_center:optimizer_profile';
 const OPTIMIZER_PROFILE_CACHE_TTL_SECONDS = 30;
 const SESSION_OPEN_MINUTE_ET = 9 * 60 + 30;
 
-const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<SetupType, number> = {
+const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<string, number> = {
   fade_at_wall: 300,
-  breakout_vacuum: 360,
   mean_reversion: 330,
   trend_continuation: 390,
   orb_breakout: 180,
@@ -316,7 +349,7 @@ const FALLBACK_GEOMETRY_POLICY_ENTRY: SPXGeometryPolicyEntry = {
   t2MinR: 1.6,
   t2MaxR: 3.4,
 };
-const DEFAULT_GEOMETRY_BY_SETUP_TYPE: Record<SetupType, SPXGeometryPolicyEntry> = {
+const DEFAULT_GEOMETRY_BY_SETUP_TYPE: Record<string, SPXGeometryPolicyEntry> = {
   fade_at_wall: {
     stopScale: 1,
     target1Scale: 0.95,
@@ -325,15 +358,6 @@ const DEFAULT_GEOMETRY_BY_SETUP_TYPE: Record<SetupType, SPXGeometryPolicyEntry> 
     t1MaxR: 1.7,
     t2MinR: 1.5,
     t2MaxR: 2.4,
-  },
-  breakout_vacuum: {
-    stopScale: 1.04,
-    target1Scale: 0.94,
-    target2Scale: 0.92,
-    t1MinR: 1.2,
-    t1MaxR: 2.4,
-    t2MinR: 1.9,
-    t2MaxR: 3.8,
   },
   mean_reversion: {
     stopScale: 1,
@@ -501,6 +525,51 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     bySetupType: { ...DEFAULT_GEOMETRY_BY_SETUP_TYPE },
     bySetupRegime: { ...DEFAULT_GEOMETRY_BY_SETUP_REGIME },
     bySetupRegimeTimeBucket: { ...DEFAULT_GEOMETRY_BY_SETUP_REGIME_TIME_BUCKET },
+    byTimeBucket: {
+      opening: { target2Scale: 1.15 }, // S6: Widen T2 by 15% in morning
+      midday: {}, // Baseline
+      late: { target2Scale: 0.80 }, // S6: Compress T2 by 20%
+      final: { target1Scale: 1.0, target2Scale: 0 }, // S6: T1-only, no runner
+    },
+  },
+  vixRegimePolicy: {
+    enabled: false, // Beta: off by default (S8)
+    thresholds: { low: 14, normal: 20, elevated: 28, high: 100 },
+    strategyAllowlistByRegime: {
+      high: ['mean_reversion', 'fade_at_wall'],
+    },
+    geometryMultipliersByRegime: {
+      low: { stopMultiplier: 1.10, targetMultiplier: 1.15 },
+      elevated: { stopMultiplier: 1.15, targetMultiplier: 0.90 },
+      high: { stopMultiplier: 1.20, targetMultiplier: 0.85 },
+    },
+  },
+  vwapFilter: {
+    enabled: false, // Beta: off by default (S9)
+    deviationBands: true,
+    confluenceBonus: true,
+    graceMinuteET: 600, // 10:00 AM ET
+  },
+  dayOfWeekPolicy: {
+    enabled: false, // Beta: off by default (S10)
+    fomcBlockEnabled: true,
+    opexRestrictionsEnabled: true,
+  },
+  gexAdaptiveStops: {
+    enabled: false, // Beta: off by default (S10)
+    positiveGexMultiplier: 0.875,
+    negativeGexMultiplier: 1.125,
+    extremeGexConfluenceBonus: 1,
+  },
+  adaptivePartialScaling: {
+    enabled: false, // Beta: off by default (S6)
+    byRegime: {
+      compression: 0.75,
+      ranging: 0.70,
+      trending: 0.55,
+      breakout: 0.50,
+    },
+    breakEvenPlusR: 0.15,
   },
   walkForward: {
     trainingDays: 20,

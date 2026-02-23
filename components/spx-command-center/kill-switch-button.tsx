@@ -6,16 +6,21 @@ import { AlertTriangle, Loader2 } from 'lucide-react'
 interface KillSwitchButtonProps {
   isConnected: boolean
   isKilling: boolean
-  onKill: () => Promise<void>
+  onKill: () => Promise<{ cancelledOrders?: number } | void>
+  lastCancelledCount?: number | null
 }
 
-export function KillSwitchButton({ isConnected, isKilling, onKill }: KillSwitchButtonProps) {
+export function KillSwitchButton({ isConnected, isKilling, onKill, lastCancelledCount }: KillSwitchButtonProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [cancelledCount, setCancelledCount] = useState<number | null>(lastCancelledCount ?? null)
 
   const handleKill = useCallback(async () => {
     setConfirmOpen(false)
     try {
-      await onKill()
+      const result = await onKill()
+      if (result && typeof result === 'object' && 'cancelledOrders' in result) {
+        setCancelledCount(result.cancelledOrders ?? 0)
+      }
     } catch {
       // Error surfaced via hook's killError
     }
@@ -52,7 +57,7 @@ export function KillSwitchButton({ isConnected, isKilling, onKill }: KillSwitchB
             Confirm Kill Switch
           </p>
           <p className="text-rose-100/70">
-            This will deactivate the broker, disable execution, and prevent all new orders.
+            This will deactivate the broker, cancel all open orders, and prevent new orders.
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -72,6 +77,11 @@ export function KillSwitchButton({ isConnected, isKilling, onKill }: KillSwitchB
             </button>
           </div>
         </div>
+      )}
+      {cancelledCount !== null && cancelledCount > 0 && (
+        <p className="mt-1.5 text-center text-[9px] font-mono text-rose-200/60">
+          {cancelledCount} order{cancelledCount > 1 ? 's' : ''} cancelled
+        </p>
       )}
     </div>
   )

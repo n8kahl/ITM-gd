@@ -194,6 +194,83 @@ export class TradierClient {
     return true;
   }
 
+  /**
+   * S2: Get open/pending orders for the account, optionally filtered by tag prefix.
+   */
+  async getOpenOrders(tagPrefix?: string): Promise<Array<{ id: string; status: string; tag: string | null; symbol: string | null; raw: Record<string, unknown> }>> {
+    const response = await this.http.get(`/accounts/${this.accountId}/orders`, {
+      params: { includeTags: true },
+    });
+    const body = response.data as Record<string, unknown>;
+    const ordersNode = (body as Record<string, unknown>)?.orders;
+    const rawNode = ordersNode && typeof ordersNode === 'object'
+      ? (ordersNode as Record<string, unknown>).order
+      : null;
+    const nodes = Array.isArray(rawNode)
+      ? rawNode
+      : rawNode && typeof rawNode === 'object'
+        ? [rawNode]
+        : [];
+
+    const results: Array<{ id: string; status: string; tag: string | null; symbol: string | null; raw: Record<string, unknown> }> = [];
+    for (const node of nodes) {
+      const record = node && typeof node === 'object' ? (node as Record<string, unknown>) : null;
+      if (!record) continue;
+
+      const status = typeof record.status === 'string' ? record.status : '';
+      if (status !== 'pending' && status !== 'open' && status !== 'partially_filled') continue;
+
+      const id = String(record.id || '').trim();
+      if (!id) continue;
+
+      const tag = typeof record.tag === 'string' ? record.tag : null;
+      if (tagPrefix && (!tag || !tag.startsWith(tagPrefix))) continue;
+
+      const optionSymbol = typeof record.option_symbol === 'string' ? record.option_symbol : null;
+      const symbol = typeof record.symbol === 'string' ? record.symbol : optionSymbol;
+
+      results.push({ id, status, tag, symbol, raw: record });
+    }
+
+    return results;
+  }
+
+  /**
+   * S3: Get the status of a specific order (for polling).
+   */
+  async getOrderStatus(orderId: string): Promise<{
+    id: string;
+    status: string;
+    filledQuantity: number;
+    avgFillPrice: number;
+    remainingQuantity: number;
+    raw: Record<string, unknown>;
+  }> {
+    const normalized = orderId.trim();
+    if (!normalized) {
+      throw new Error('Tradier order id is required for status check.');
+    }
+
+    const response = await this.http.get(`/accounts/${this.accountId}/orders/${normalized}`);
+    const body = response.data as Record<string, unknown>;
+    const orderNode = (body?.order || body) as Record<string, unknown>;
+
+    const status = typeof orderNode.status === 'string' ? orderNode.status : 'unknown';
+    const filledQuantity = toFiniteNumber(orderNode.last_fill_quantity ?? orderNode.exec_quantity) ?? 0;
+    const avgFillPrice = toFiniteNumber(orderNode.avg_fill_price) ?? 0;
+    const totalQuantity = toFiniteNumber(orderNode.quantity) ?? 0;
+    const remainingQuantity = Math.max(0, totalQuantity - filledQuantity);
+
+    return {
+      id: normalized,
+      status,
+      filledQuantity,
+      avgFillPrice,
+      remainingQuantity,
+      raw: orderNode,
+    };
+  }
+
   async replaceOrder(orderId: string, order: Partial<TradierOrderPayload>): Promise<TradierOrderResult> {
     const normalized = orderId.trim();
     if (!normalized) {
