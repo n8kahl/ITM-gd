@@ -172,6 +172,7 @@ const TICK_STALE_MS = (() => {
   const parsed = Number.parseInt(process.env.MASSIVE_TICK_STALE_MS || '5000', 10);
   return Number.isFinite(parsed) ? Math.max(parsed, 1000) : 5000;
 })();
+const POLL_BAR_MAX_AGE_MS = 120_000;
 const MICROBAR_FANOUT_THROTTLE_MS = (() => {
   const parsed = Number.parseInt(process.env.MASSIVE_MICROBAR_FANOUT_THROTTLE_MS || '250', 10);
   return Number.isFinite(parsed) ? Math.max(parsed, 25) : 250;
@@ -502,6 +503,12 @@ function areSymbolTicksFresh(symbols: Iterable<string>, nowMs: number = Date.now
 
   if (normalized.length === 0) return false;
   return normalized.every((symbol) => isSymbolTickFresh(symbol, nowMs));
+}
+
+function isPollBarFresh(asOfMs: number, nowMs: number = Date.now()): boolean {
+  if (!Number.isFinite(asOfMs)) return false;
+  const ageMs = nowMs - asOfMs;
+  return ageMs <= POLL_BAR_MAX_AGE_MS;
 }
 
 function hasSubscribersForChannel(channel: string): boolean {
@@ -1263,6 +1270,14 @@ async function pollPrices(): Promise<void> {
 
     const data = await fetchLatestPrice(symbol);
     if (!data) continue;
+    if (!isPollBarFresh(data.asOfMs, now)) {
+      logger.warn('Poll fallback bar too old', {
+        symbol,
+        barAgeMs: Math.max(0, now - data.asOfMs),
+        barTimestampMs: data.asOfMs,
+      });
+      continue;
+    }
 
     priceCache.set(symbol, { ...data, fetchedAt: Date.now() });
 
@@ -1673,6 +1688,8 @@ export const __testables = {
   extractWsToken,
   isSymbolTickFresh,
   areSymbolTicksFresh,
+  isPollBarFresh,
+  POLL_BAR_MAX_AGE_MS,
   addClientSubscription,
   removeClientSubscription,
   cleanupClientSubscriptions,

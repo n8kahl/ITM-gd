@@ -10,6 +10,7 @@ export type SPXFeedFallbackReasonCode =
   | 'heartbeat_stale'
   | 'tick_source_stale'
   | 'poll_source_stale'
+  | 'snapshot_source_stale'
   | 'poll_fallback_active'
   | 'snapshot_fallback_active'
   | 'stream_disconnected_snapshot'
@@ -27,6 +28,7 @@ export interface ResolveSPXFeedHealthInput {
   heartbeatStale?: boolean
   tickFreshnessStaleMs?: number
   pollFreshnessStaleMs?: number
+  snapshotFreshnessStaleMs?: number
 }
 
 export interface ResolveSPXFeedHealthResult {
@@ -40,6 +42,7 @@ export interface ResolveSPXFeedHealthResult {
   flags: {
     tickSourceStale: boolean
     pollSourceStale: boolean
+    snapshotSourceStale: boolean
     usingPollFallback: boolean
     usingSnapshotFallback: boolean
     sequenceGapDetected: boolean
@@ -50,6 +53,7 @@ export interface ResolveSPXFeedHealthResult {
 export const SPX_FEED_HEALTH_DEFAULTS = {
   tickFreshnessStaleMs: 7_500,
   pollFreshnessStaleMs: 90_000,
+  snapshotFreshnessStaleMs: 300_000,
 }
 
 const BLOCK_TRADE_ENTRY_REASON_CODES: ReadonlySet<SPXFeedFallbackReasonCode> = new Set([
@@ -60,6 +64,7 @@ const BLOCK_TRADE_ENTRY_REASON_CODES: ReadonlySet<SPXFeedFallbackReasonCode> = n
   'heartbeat_stale',
   'tick_source_stale',
   'poll_source_stale',
+  'snapshot_source_stale',
 ])
 
 function ageSeconds(ageMs: number | null): string | null {
@@ -87,6 +92,8 @@ export function formatSPXFeedFallbackReasonCode(reasonCode: SPXFeedFallbackReaso
       return 'Tick lag'
     case 'poll_source_stale':
       return 'Poll stale'
+    case 'snapshot_source_stale':
+      return 'Snapshot stale'
     case 'poll_fallback_active':
       return 'Poll fallback'
     case 'snapshot_fallback_active':
@@ -116,6 +123,7 @@ export function resolveSPXFeedHealth(
 ): ResolveSPXFeedHealthResult {
   const tickFreshnessStaleMs = input.tickFreshnessStaleMs ?? SPX_FEED_HEALTH_DEFAULTS.tickFreshnessStaleMs
   const pollFreshnessStaleMs = input.pollFreshnessStaleMs ?? SPX_FEED_HEALTH_DEFAULTS.pollFreshnessStaleMs
+  const snapshotFreshnessStaleMs = input.snapshotFreshnessStaleMs ?? SPX_FEED_HEALTH_DEFAULTS.snapshotFreshnessStaleMs
   const sequenceGapDetected = Boolean(input.sequenceGapDetected)
   const heartbeatStale = Boolean(input.heartbeatStale)
 
@@ -125,6 +133,9 @@ export function resolveSPXFeedHealth(
   const pollSourceStale = input.spxPriceSource === 'poll'
     && input.spxPriceAgeMs != null
     && input.spxPriceAgeMs > pollFreshnessStaleMs
+  const snapshotSourceStale = input.spxPriceSource === 'snapshot'
+    && input.spxPriceAgeMs != null
+    && input.spxPriceAgeMs > snapshotFreshnessStaleMs
 
   let dataHealth: SPXFeedHealth
   if (input.snapshotIsDegraded || Boolean(input.errorMessage) || input.snapshotRequestLate) {
@@ -139,6 +150,7 @@ export function resolveSPXFeedHealth(
         || input.spxPriceSource === 'snapshot'
         || tickSourceStale
         || pollSourceStale
+        || snapshotSourceStale
       )
     )
     || (!input.streamConnected && input.snapshotAvailable)
@@ -171,6 +183,8 @@ export function resolveSPXFeedHealth(
     fallbackReasonCode = 'tick_source_stale'
   } else if (pollSourceStale) {
     fallbackReasonCode = 'poll_source_stale'
+  } else if (snapshotSourceStale) {
+    fallbackReasonCode = 'snapshot_source_stale'
   } else if (input.spxPriceSource === 'poll' && input.streamConnected) {
     fallbackReasonCode = 'poll_fallback_active'
   } else if (input.spxPriceSource === 'snapshot' && input.streamConnected) {
@@ -202,6 +216,9 @@ export function resolveSPXFeedHealth(
     case 'poll_source_stale':
       dataHealthMessage = 'Poll fallback data is stale. Waiting for fresher provider bars or tick feed recovery.'
       break
+    case 'snapshot_source_stale':
+      dataHealthMessage = 'Snapshot fallback data is stale. Waiting for fresher provider bars or tick feed recovery.'
+      break
     case 'poll_fallback_active':
       dataHealthMessage = 'Live tick feed unavailable. Streaming over poll fallback, so chart and price updates may lag.'
       break
@@ -226,6 +243,7 @@ export function resolveSPXFeedHealth(
     flags: {
       tickSourceStale,
       pollSourceStale,
+      snapshotSourceStale,
       usingPollFallback: input.spxPriceSource === 'poll',
       usingSnapshotFallback: input.spxPriceSource === 'snapshot',
       sequenceGapDetected,

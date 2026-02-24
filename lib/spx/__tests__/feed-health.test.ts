@@ -71,9 +71,26 @@ describe('feed health', () => {
     expect(result.fallbackPolicy.blockTradeEntry).toBe(true)
   })
 
+  it('marks stale when snapshot fallback exceeds max age', () => {
+    const result = resolveSPXFeedHealth({
+      snapshotIsDegraded: false,
+      snapshotRequestLate: false,
+      snapshotAvailable: true,
+      streamConnected: true,
+      spxPriceSource: 'snapshot',
+      spxPriceAgeMs: 305_000,
+    })
+
+    expect(result.dataHealth).toBe('stale')
+    expect(result.flags.snapshotSourceStale).toBe(true)
+    expect(result.fallbackPolicy.reasonCode).toBe('snapshot_source_stale')
+    expect(result.fallbackPolicy.blockTradeEntry).toBe(true)
+  })
+
   it('only blocks trade-entry for high-risk trust reasons', () => {
     expect(doesSPXFeedReasonBlockTradeEntry('poll_fallback_active')).toBe(false)
     expect(doesSPXFeedReasonBlockTradeEntry('stream_disconnected_snapshot')).toBe(false)
+    expect(doesSPXFeedReasonBlockTradeEntry('snapshot_source_stale')).toBe(true)
     expect(doesSPXFeedReasonBlockTradeEntry('sequence_gap_detected')).toBe(true)
   })
 })

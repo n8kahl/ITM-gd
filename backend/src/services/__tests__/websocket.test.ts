@@ -15,6 +15,8 @@ describe('websocket service helpers', () => {
     extractWsToken,
     isSymbolTickFresh,
     areSymbolTicksFresh,
+    isPollBarFresh,
+    POLL_BAR_MAX_AGE_MS,
     addClientSubscription,
     removeClientSubscription,
     cleanupClientSubscriptions,
@@ -110,6 +112,12 @@ describe('websocket service helpers', () => {
 
     expect(areSymbolTicksFresh(['SPX'], now)).toBe(true);
     expect(areSymbolTicksFresh(['SPX', 'SPY'], now)).toBe(false);
+  });
+
+  it('rejects poll fallback bars older than max age', () => {
+    const now = Date.now();
+    expect(isPollBarFresh(now - (POLL_BAR_MAX_AGE_MS + 1), now)).toBe(false);
+    expect(isPollBarFresh(now - (POLL_BAR_MAX_AGE_MS - 1), now)).toBe(true);
   });
 
   it('cleans tracked subscriptions on disconnect', () => {
