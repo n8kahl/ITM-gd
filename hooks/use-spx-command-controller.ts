@@ -70,9 +70,11 @@ export function useSPXCommandController() {
     tradeMode,
     enterTrade,
     exitTrade,
+    visibleLevelCategories,
   } = useSPXSetupContext()
 
   const [mobileTab, setMobileTab] = useState<MobilePanelTab>('chart')
+  const [mobileCoachTabVisited, setMobileCoachTabVisited] = useState(false)
   const [showLevelOverlay, setShowLevelOverlay] = useState(true)
   const [showAdvancedHud, setShowAdvancedHud] = useState(false)
   const [initialSkeletonExpired, setInitialSkeletonExpired] = useState(false)
@@ -504,6 +506,9 @@ export function useSPXCommandController() {
 
   const handleMobileTabChange = useCallback((next: MobilePanelTab) => {
     setMobileTab(next)
+    if (next === 'coach') {
+      setMobileCoachTabVisited(true)
+    }
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
       surface: 'mobile_tabs',
       tab: next,
@@ -706,7 +711,12 @@ export function useSPXCommandController() {
   ])
 
   useEffect(() => {
-    invalidateChartCoordinates()
+    const timeoutId = window.setTimeout(() => {
+      invalidateChartCoordinates()
+    }, 80)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
   }, [
     focusMode,
     immersiveMode,
@@ -716,10 +726,6 @@ export function useSPXCommandController() {
     replaySpeed,
     replayWindowMinutes,
     showAdvancedHud,
-    showCone,
-    showGEXGlow,
-    showLevelOverlay,
-    showSpatialCoach,
     sidebarWidth,
     uxFlags.spatialHudV1,
     viewMode,
@@ -740,6 +746,7 @@ export function useSPXCommandController() {
     isLoading,
     levels,
     mobileTab,
+    mobileCoachTabVisited,
     showLevelOverlay,
     initialSkeletonExpired,
     showShortcutHelp,
@@ -781,6 +788,7 @@ export function useSPXCommandController() {
     sidebarOpen,
     commandPaletteCommands,
     desktopViewMode,
+    activeLevelCategoryCount: visibleLevelCategories.size,
     shouldShowInitialSkeleton,
     setShowLevelOverlay,
     setShowShortcutHelp,

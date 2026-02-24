@@ -75,6 +75,7 @@ export function useAICoachChat() {
 
   // AbortController for cancelling in-flight requests on unmount
   const abortControllerRef = useRef<AbortController | null>(null)
+  const sessionMessagesAbortRef = useRef<AbortController | null>(null)
 
   // Stable getter — never recreated
   const getToken = useCallback((): string | null => {
@@ -113,7 +114,10 @@ export function useAICoachChat() {
 
   // Cleanup: abort in-flight requests on unmount
   useEffect(() => {
-    return () => { abortControllerRef.current?.abort() }
+    return () => {
+      abortControllerRef.current?.abort()
+      sessionMessagesAbortRef.current?.abort()
+    }
   }, [])
 
   useEffect(() => {
@@ -977,9 +981,12 @@ export function useAICoachChat() {
     if (sessionId === currentSessionIdRef.current) return
     const token = getToken()
     if (!token) return
+    sessionMessagesAbortRef.current?.abort()
+    const controller = new AbortController()
+    sessionMessagesAbortRef.current = controller
     setState(prev => ({ ...prev, currentSessionId: sessionId, messages: [], isLoadingMessages: true, error: null }))
     try {
-      const result = await apiGetSessionMessages(sessionId, token)
+      const result = await apiGetSessionMessages(sessionId, token, 50, 0, controller.signal)
       const loadedMessages: ChatMessage[] = result.messages
         .filter(msg => msg.role === 'user' || msg.role === 'assistant')
         .map(msg => ({
@@ -994,6 +1001,9 @@ export function useAICoachChat() {
         }))
       setState(prev => ({ ...prev, messages: loadedMessages, isLoadingMessages: false }))
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to load messages'
       setState(prev => ({ ...prev, isLoadingMessages: false, error: message }))
     }

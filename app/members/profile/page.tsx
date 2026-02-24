@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Settings, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -33,9 +33,13 @@ export default function ProfilePage() {
   const [transcriptLoading, setTranscriptLoading] = useState(true)
   const [affiliateLoading, setAffiliateLoading] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const fetchAbortRef = useRef<AbortController | null>(null)
 
   const fetchData = useCallback(async () => {
     if (!user) return
+    fetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    fetchAbortRef.current = controller
 
     setLoading(true)
     setTranscriptLoading(true)
@@ -44,31 +48,35 @@ export default function ProfilePage() {
     try {
       // Fetch all data in parallel
       const [profileRes, transcriptRes, affiliateRes] = await Promise.all([
-        fetch('/api/members/profile'),
-        fetch('/api/members/profile/transcript'),
-        fetch('/api/members/affiliate'),
+        fetch('/api/members/profile', { signal: controller.signal }),
+        fetch('/api/members/profile/transcript', { signal: controller.signal }),
+        fetch('/api/members/affiliate', { signal: controller.signal }),
       ])
 
       if (profileRes.ok) {
         const profileData = await profileRes.json()
+        if (controller.signal.aborted) return
         setMemberProfile(profileData.data)
       }
 
       if (transcriptRes.ok) {
         const transcriptData = await transcriptRes.json()
+        if (controller.signal.aborted) return
         setTranscript(transcriptData.data)
       }
 
       if (affiliateRes.ok) {
         const affiliateData = await affiliateRes.json()
+        if (controller.signal.aborted) return
         setAffiliateStats({ stats: affiliateData.data?.stats ?? null })
       }
 
       // Derive academy profile metrics from v3 mastery data.
       try {
-        const academyRes = await fetch('/api/academy-v3/mastery')
+        const academyRes = await fetch('/api/academy-v3/mastery', { signal: controller.signal })
         if (academyRes.ok) {
           const academyJson = await academyRes.json()
+          if (controller.signal.aborted) return
           const masteryItems = Array.isArray(academyJson?.data?.items) ? academyJson.data.items : []
           const averageMasteryScore = masteryItems.length > 0
             ? masteryItems.reduce((sum: number, item: { currentScore?: number }) => (
@@ -91,17 +99,28 @@ export default function ProfilePage() {
         // Academy data is optional
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       console.error('Failed to fetch profile data:', error)
     } finally {
-      setLoading(false)
-      setTranscriptLoading(false)
-      setAffiliateLoading(false)
+      if (!controller.signal.aborted) {
+        setLoading(false)
+        setTranscriptLoading(false)
+        setAffiliateLoading(false)
+      }
     }
   }, [user])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    return () => {
+      fetchAbortRef.current?.abort()
+    }
+  }, [])
 
   const handleSettingsSave = async (updates: Record<string, unknown>) => {
     const res = await fetch('/api/members/profile', {

@@ -40,70 +40,122 @@ import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
 import { Analytics } from '@/lib/analytics'
-import { getActiveChartSymbol } from '@/lib/ai-coach-chart-context'
+import { getActiveChartSymbol, subscribeActiveChartSymbol } from '@/lib/ai-coach-chart-context'
 
-const CHAT_QUICK_PROMPTS = [
-  {
-    text: 'Start Here',
-    prompt: 'I am a newer trader. Show SPY on the chart and explain the most important support/resistance levels in plain English.',
-  },
-  {
-    text: 'Read This Chart',
-    prompt: 'Show SPX on the chart and give me a simple read: trend, nearest support/resistance, and one bull + one bear trigger.',
-  },
-  {
-    text: 'Risk Checklist',
-    prompt: 'Build a beginner-friendly risk checklist for today: position size, max loss, and what invalidation means before entry.',
-  },
-  {
-    text: 'Advanced SPX Plan',
-    prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
-  },
-] as const
-
-const CHAT_PLACEHOLDERS = {
-  pre_market: [
-    'Show me overnight levels in plain English',
-    'What should I watch at the open?',
-    'Morning brief',
-  ],
-  session: [
-    'How is SPX holding up right now?',
-    'What is the safest setup to watch?',
-    'Explain this move simply',
-  ],
-  after_hours: [
-    'Recap today\'s session simply',
-    'What worked and what failed today?',
-    'Build a plan for tomorrow',
-  ],
-  closed: [
-    'Review my trade journal',
-    'What mistakes should I avoid tomorrow?',
-    'Study one setup step-by-step',
-  ],
-} as const
-
-const CHAT_CAPABILITY_HINTS: Record<keyof typeof CHAT_PLACEHOLDERS, string[]> = {
-  pre_market: [
-    'You can ask me: "What are the two key levels for the open?"',
-    'You can ask me: "Give me a pre-market risk checklist."',
-  ],
-  session: [
-    'You can ask me: "Explain this move simply and show it on chart."',
-    'You can ask me: "Build a risk plan around current price."',
-  ],
-  after_hours: [
-    'You can ask me: "Recap today and what I should improve tomorrow."',
-    'You can ask me: "What setup should I study tonight?"',
-  ],
-  closed: [
-    'You can ask me: "Review my mistakes and build tomorrow plan."',
-    'You can ask me: "Teach me one setup step-by-step."',
-  ],
+type PlaceholderBucket = 'pre_market' | 'session' | 'after_hours' | 'closed'
+type LearnerLevel = 'beginner' | 'intermediate' | 'advanced'
+type QuickPromptItem = {
+  text: string
+  prompt: string
 }
 
-function getEasternPlaceholderBucket(now: Date = new Date()): keyof typeof CHAT_PLACEHOLDERS {
+function normalizePromptSymbol(symbol: string | null | undefined): string {
+  if (typeof symbol !== 'string') return 'SPX'
+  const normalized = symbol.trim().toUpperCase()
+  return /^[A-Z0-9._:-]{1,10}$/.test(normalized) ? normalized : 'SPX'
+}
+
+function inferLearnerLevel(tier: 'core' | 'pro' | 'executive' | null | undefined): LearnerLevel {
+  if (tier === 'executive') return 'advanced'
+  if (tier === 'pro') return 'intermediate'
+  return 'beginner'
+}
+
+function buildQuickPrompts(symbolRaw: string, learnerLevel: LearnerLevel): QuickPromptItem[] {
+  const symbol = normalizePromptSymbol(symbolRaw)
+  const advancedPlanPrompt = symbol === 'SPX'
+    ? 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.'
+    : `Give me a full ${symbol} game plan: trend, key levels, bull/bear triggers, invalidation, and the cleanest setup to watch today. Show the chart.`
+
+  return [
+    {
+      text: 'Start Here',
+      prompt: `I am a ${learnerLevel === 'advanced' ? 'trader' : 'newer trader'}. Show ${symbol} on the chart and explain the most important support/resistance levels in plain English.`,
+    },
+    {
+      text: 'Read This Chart',
+      prompt: `Show ${symbol} on the chart and give me a simple read: trend, nearest support/resistance, and one bull + one bear trigger.`,
+    },
+    {
+      text: 'Risk Checklist',
+      prompt: `Build a ${learnerLevel === 'beginner' ? 'beginner-friendly ' : ''}risk checklist for trading ${symbol} today: position size, max loss, and what invalidation means before entry.`,
+    },
+    {
+      text: symbol === 'SPX' ? 'Advanced SPX Plan' : `${symbol} Full Plan`,
+      prompt: advancedPlanPrompt,
+    },
+  ]
+}
+
+function buildPlaceholderOptions(bucket: PlaceholderBucket, symbolRaw: string): string[] {
+  const symbol = normalizePromptSymbol(symbolRaw)
+
+  if (bucket === 'pre_market') {
+    return [
+      `Show me ${symbol} overnight levels in plain English`,
+      `What should I watch first on ${symbol} at the open?`,
+      `Give me a simple morning brief for ${symbol}`,
+    ]
+  }
+
+  if (bucket === 'session') {
+    return [
+      `How is ${symbol} holding up right now?`,
+      `Find one clean setup for ${symbol} with invalidation`,
+      `Explain this ${symbol} move simply`,
+    ]
+  }
+
+  if (bucket === 'after_hours') {
+    return [
+      `Recap today's ${symbol} session simply`,
+      `What worked and what failed in ${symbol} today?`,
+      `Build a simple ${symbol} plan for tomorrow`,
+    ]
+  }
+
+  return [
+    'Review my trade journal',
+    `What mistakes should I avoid when trading ${symbol} tomorrow?`,
+    `Study one ${symbol} setup step-by-step`,
+  ]
+}
+
+function buildCapabilityHints(bucket: PlaceholderBucket, symbolRaw: string, learnerLevel: LearnerLevel): string[] {
+  const symbol = normalizePromptSymbol(symbolRaw)
+
+  if (bucket === 'pre_market') {
+    return [
+      `You can ask me: "What are the two key ${symbol} levels for the open?"`,
+      `You can ask me: "Give me a pre-market risk checklist for ${symbol}."`,
+    ]
+  }
+
+  if (bucket === 'session') {
+    return [
+      `You can ask me: "Explain this ${symbol} move simply and show it on chart."`,
+      `You can ask me: "Build a risk plan around current ${symbol} price."`,
+    ]
+  }
+
+  if (bucket === 'after_hours') {
+    return [
+      `You can ask me: "Recap ${symbol} and what I should improve tomorrow."`,
+      `You can ask me: "What ${symbol} setup should I study tonight?"`,
+    ]
+  }
+
+  return [
+    'You can ask me: "Review my mistakes and build tomorrow plan."',
+    learnerLevel === 'advanced'
+      ? `You can ask me: "Build a tactical ${symbol} execution plan for tomorrow with entry, invalidation, and targets."`
+      : `You can ask me: "Teach me one ${symbol} setup step-by-step."`,
+  ]
+}
+
+const SUPPORTED_CHART_TIMEFRAMES = new Set(['1m', '5m', '15m', '1h', '4h', '1D'])
+
+function getEasternPlaceholderBucket(now: Date = new Date()): PlaceholderBucket {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     hour: '2-digit',
@@ -243,6 +295,222 @@ export default function AICoachPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [closeSheet, isChatCollapsed, requestFocusInput, toggleChatPanelCollapse])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const toNumber = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+      if (typeof value === 'string') {
+        const parsed = Number.parseFloat(value.replace(/[^0-9.+-]/g, ''))
+        if (Number.isFinite(parsed)) return parsed
+      }
+      return null
+    }
+
+    const toChartRequestFromWidget = (detail: Record<string, unknown>): ChartRequest | null => {
+      const symbol = typeof detail.symbol === 'string' ? detail.symbol.trim().toUpperCase() : ''
+      if (!symbol) return null
+
+      const rawTimeframe = typeof detail.timeframe === 'string' ? detail.timeframe : '5m'
+      const timeframe = SUPPORTED_CHART_TIMEFRAMES.has(rawTimeframe)
+        ? rawTimeframe as ChartRequest['timeframe']
+        : '5m'
+      const level = toNumber(detail.level)
+      const label = typeof detail.label === 'string' && detail.label.trim().length > 0 ? detail.label.trim() : 'Level'
+
+      const request: ChartRequest = { symbol, timeframe }
+
+      if (level != null) {
+        request.levels = {
+          support: [{ name: label, price: level }],
+          resistance: [],
+        }
+      }
+
+      if (Array.isArray(detail.contextNotes)) {
+        request.contextNotes = detail.contextNotes
+          .filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
+          .slice(0, 6)
+      }
+
+      if (Array.isArray(detail.eventMarkers)) {
+        request.eventMarkers = detail.eventMarkers
+          .filter((marker): marker is {
+            label: string
+            date?: string
+            impact?: 'high' | 'medium' | 'low' | 'info'
+            source?: string
+          } => (
+            Boolean(marker)
+            && typeof marker === 'object'
+            && typeof (marker as { label?: unknown }).label === 'string'
+            && (marker as { label: string }).label.trim().length > 0
+          ))
+          .slice(0, 6)
+      }
+
+      if (Array.isArray(detail.positionOverlays)) {
+        request.positionOverlays = detail.positionOverlays
+          .filter((overlay): overlay is {
+            id?: string
+            label?: string
+            entry: number
+            stop?: number
+            target?: number
+          } => (
+            Boolean(overlay)
+            && typeof overlay === 'object'
+            && toNumber((overlay as { entry?: unknown }).entry) != null
+          ))
+          .map((overlay) => ({
+            id: typeof overlay.id === 'string' ? overlay.id : undefined,
+            label: typeof overlay.label === 'string' ? overlay.label : undefined,
+            entry: toNumber(overlay.entry) as number,
+            stop: toNumber(overlay.stop) ?? undefined,
+            target: toNumber(overlay.target) ?? undefined,
+          }))
+          .slice(0, 4)
+      }
+
+      return request
+    }
+
+    const handleWidgetChat = (event: Event) => {
+      const detail = (event as CustomEvent<{ prompt?: unknown }>).detail
+      if (!detail || typeof detail.prompt !== 'string') return
+      const prompt = detail.prompt.trim()
+      if (!prompt) return
+      handleSendPrompt(prompt)
+    }
+
+    const handleWidgetAlert = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        symbol?: unknown
+        price?: unknown
+        alertType?: unknown
+        notes?: unknown
+      }>).detail
+      const symbol = typeof detail?.symbol === 'string' ? detail.symbol.trim().toUpperCase() : ''
+      const price = toNumber(detail?.price)
+      const alertType = typeof detail?.alertType === 'string' ? detail.alertType : 'level_approach'
+      const notes = typeof detail?.notes === 'string' ? detail.notes.trim() : ''
+      if (!symbol || price == null) return
+
+      const prompt = [
+        `Create a practical alert plan for ${symbol} around ${price.toFixed(2)} (${alertType}).`,
+        'Include trigger, invalidation, and what I should do if the alert fires.',
+        notes ? `Context: ${notes}` : null,
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      handleSendPrompt(prompt)
+    }
+
+    const handleWidgetAnalyze = (event: Event) => {
+      const detail = (event as CustomEvent<{ setup?: Record<string, unknown> }>).detail
+      const setup = detail?.setup
+      if (!setup || typeof setup !== 'object') return
+
+      const symbol = typeof setup.symbol === 'string' ? setup.symbol.toUpperCase() : 'this symbol'
+      const type = typeof setup.type === 'string' ? setup.type.toUpperCase() : 'POSITION'
+      const strike = toNumber(setup.strike)
+      const qty = toNumber(setup.quantity)
+      const entry = toNumber(setup.entryPrice)
+
+      const setupSummary = [
+        symbol,
+        type,
+        strike != null ? `strike ${strike}` : null,
+        qty != null ? `qty ${qty}` : null,
+        entry != null ? `entry ${entry}` : null,
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      handleSendPrompt(`Analyze ${setupSummary}. Give entry, invalidation/stop, take-profits, and risk guidance in plain language.`)
+    }
+
+    const handleWidgetChart = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail
+      if (!detail || typeof detail !== 'object') return
+      const request = toChartRequestFromWidget(detail)
+      if (!request) return
+      handleExpandChart(request)
+    }
+
+    const handleWidgetOptions = (event: Event) => {
+      const detail = (event as CustomEvent<{ symbol?: unknown }>).detail
+      const symbol = typeof detail?.symbol === 'string' ? detail.symbol.toUpperCase() : undefined
+
+      if (window.innerWidth < 1024) {
+        openSheet('options', symbol, symbol ? { symbol } : {})
+        return
+      }
+
+      window.dispatchEvent(new CustomEvent('ai-coach-center-view', {
+        detail: {
+          view: 'options',
+          symbol,
+        },
+      }))
+    }
+
+    const handleWidgetView = (event: Event) => {
+      const detail = (event as CustomEvent<{ view?: unknown; symbol?: unknown; timeframe?: unknown }>).detail
+      if (!detail || typeof detail.view !== 'string') return
+      const view = detail.view
+      const symbol = typeof detail.symbol === 'string' ? detail.symbol.toUpperCase() : undefined
+      const timeframe = typeof detail.timeframe === 'string' && SUPPORTED_CHART_TIMEFRAMES.has(detail.timeframe)
+        ? detail.timeframe
+        : undefined
+
+      if (view === 'chart') {
+        handleExpandChart({
+          symbol: symbol || getActiveChartSymbol('SPX'),
+          timeframe: (timeframe as ChartRequest['timeframe']) || '5m',
+        })
+        return
+      }
+
+      if (window.innerWidth < 1024) {
+        if (view === 'options' || view === 'journal') {
+          openSheet(view, symbol, symbol ? { symbol } : {})
+        }
+        return
+      }
+
+      if (view === 'journal') {
+        window.location.assign('/members/journal')
+        return
+      }
+
+      window.dispatchEvent(new CustomEvent('ai-coach-center-view', {
+        detail: {
+          view,
+          symbol,
+          timeframe,
+        },
+      }))
+    }
+
+    window.addEventListener('ai-coach-widget-chat', handleWidgetChat)
+    window.addEventListener('ai-coach-widget-alert', handleWidgetAlert)
+    window.addEventListener('ai-coach-widget-analyze', handleWidgetAnalyze)
+    window.addEventListener('ai-coach-widget-chart', handleWidgetChart)
+    window.addEventListener('ai-coach-widget-options', handleWidgetOptions)
+    window.addEventListener('ai-coach-widget-view', handleWidgetView)
+
+    return () => {
+      window.removeEventListener('ai-coach-widget-chat', handleWidgetChat)
+      window.removeEventListener('ai-coach-widget-alert', handleWidgetAlert)
+      window.removeEventListener('ai-coach-widget-analyze', handleWidgetAnalyze)
+      window.removeEventListener('ai-coach-widget-chart', handleWidgetChart)
+      window.removeEventListener('ai-coach-widget-options', handleWidgetOptions)
+      window.removeEventListener('ai-coach-widget-view', handleWidgetView)
+    }
+  }, [handleExpandChart, handleSendPrompt, openSheet])
+
   return (
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
       <AICoachWorkflowProvider onSendPrompt={handleSendPrompt}>
@@ -252,7 +520,7 @@ export default function AICoachPage() {
           <div className="flex-1 min-h-0 overflow-hidden">
             {/* Desktop: Resizable Split Panels */}
             <div className="hidden lg:block h-full relative">
-              <PanelGroup direction="horizontal">
+              <PanelGroup direction="horizontal" autoSaveId="ai-coach:desktop-panels:v1">
                 {/* Chat Panel (40% default, more room for messages) */}
                 <Panel
                   ref={chatPanelRef}
@@ -413,12 +681,13 @@ function ChatArea({
   isLoadingMessages, error, rateLimitInfo, onSendMessage, onNewSession,
   onSelectSession, onDeleteSession, onClearError, onAppendUserMessage, onAppendAssistantMessage, onExpandChart, onOpenSheet, onTogglePanelCollapse,
 }: ChatAreaProps) {
-  const { session } = useMemberAuth()
+  const { session, profile } = useMemberAuth()
   const [inputValue, setInputValue] = useState('')
   const [showSessions, setShowSessions] = useState(false)
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
-  const [placeholderBucket, setPlaceholderBucket] = useState<keyof typeof CHAT_PLACEHOLDERS>(() => getEasternPlaceholderBucket())
+  const [placeholderBucket, setPlaceholderBucket] = useState<PlaceholderBucket>(() => getEasternPlaceholderBucket())
+  const [activePromptSymbol, setActivePromptSymbol] = useState<string>(() => getActiveChartSymbol('SPX'))
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
   const [stagedCsv, setStagedCsv] = useState<StagedCsvUpload | null>(null)
   const [screenshotActions, setScreenshotActions] = useState<ScreenshotActionState | null>(null)
@@ -441,6 +710,7 @@ function ChatArea({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
   const isUserScrolledUp = useRef(false)
+  const headerTickerAbortRef = useRef<AbortController | null>(null)
 
   const autoResizeInput = useCallback((element: HTMLTextAreaElement | null) => {
     if (!element) return
@@ -480,9 +750,11 @@ function ChatArea({
 
   useEffect(() => {
     const rotateInterval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
       setPlaceholderIndex((index) => index + 1)
     }, 10_000)
     const bucketInterval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
       setPlaceholderBucket(getEasternPlaceholderBucket())
     }, 60_000)
 
@@ -492,13 +764,23 @@ function ChatArea({
     }
   }, [])
 
+  useEffect(() => {
+    setActivePromptSymbol(getActiveChartSymbol('SPX'))
+    return subscribeActiveChartSymbol((symbol) => {
+      setActivePromptSymbol(normalizePromptSymbol(symbol))
+    })
+  }, [])
+
   const loadSPXHeaderTicker = useCallback(async () => {
     if (!session?.access_token) return
+    headerTickerAbortRef.current?.abort()
+    const controller = new AbortController()
+    headerTickerAbortRef.current = controller
 
     try {
-      let data = await getChartData('SPX', '1m', session.access_token)
+      let data = await getChartData('SPX', '1m', session.access_token, controller.signal)
       if (data.bars.length < 2) {
-        data = await getChartData('SPX', '1D', session.access_token)
+        data = await getChartData('SPX', '1D', session.access_token, controller.signal)
       }
 
       if (data.bars.length === 0) {
@@ -517,7 +799,10 @@ function ChatArea({
         isLoading: false,
         error: null,
       })
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       setSpxHeaderTicker((prev) => ({
         ...prev,
         isLoading: false,
@@ -530,9 +815,13 @@ function ChatArea({
     if (!session?.access_token) return
     void loadSPXHeaderTicker()
     const interval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
       void loadSPXHeaderTicker()
     }, 60_000)
-    return () => window.clearInterval(interval)
+    return () => {
+      window.clearInterval(interval)
+      headerTickerAbortRef.current?.abort()
+    }
   }, [loadSPXHeaderTicker, session?.access_token])
 
   useEffect(() => {
@@ -559,9 +848,20 @@ function ChatArea({
 
   const isBusy = isSending || isAnalyzingImage
   const streamStatus = messages.find((msg) => msg.isStreaming)?.streamStatus
-  const placeholderOptions = CHAT_PLACEHOLDERS[placeholderBucket]
+  const learnerLevel = inferLearnerLevel(profile?.membership_tier)
+  const quickPrompts = useMemo(
+    () => buildQuickPrompts(activePromptSymbol, learnerLevel),
+    [activePromptSymbol, learnerLevel],
+  )
+  const placeholderOptions = useMemo(
+    () => buildPlaceholderOptions(placeholderBucket, activePromptSymbol),
+    [activePromptSymbol, placeholderBucket],
+  )
   const rotatingPlaceholder = placeholderOptions[placeholderIndex % placeholderOptions.length]
-  const capabilityHintOptions = CHAT_CAPABILITY_HINTS[placeholderBucket]
+  const capabilityHintOptions = useMemo(
+    () => buildCapabilityHints(placeholderBucket, activePromptSymbol, learnerLevel),
+    [activePromptSymbol, learnerLevel, placeholderBucket],
+  )
   const capabilityHint = capabilityHintOptions[placeholderIndex % capabilityHintOptions.length]
   const usageRatio = rateLimitInfo?.queryCount && rateLimitInfo?.queryLimit
     ? rateLimitInfo.queryCount / rateLimitInfo.queryLimit
@@ -1011,7 +1311,11 @@ function ChatArea({
               <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
             </div>
           ) : messages.length === 0 ? (
-            <EmptyState onSendPrompt={onSendMessage} />
+            <EmptyState
+              onSendPrompt={onSendMessage}
+              quickPrompts={quickPrompts}
+              activeSymbol={activePromptSymbol}
+            />
           ) : (
             <>
               {messages.map((msg) => (
@@ -1108,8 +1412,12 @@ function ChatArea({
 
 function EmptyState({
   onSendPrompt,
+  quickPrompts,
+  activeSymbol,
 }: {
   onSendPrompt: (prompt: string) => void
+  quickPrompts: QuickPromptItem[]
+  activeSymbol: string
 }) {
   const bucket = getEasternPlaceholderBucket()
   const contextLine = bucket === 'pre_market'
@@ -1141,9 +1449,10 @@ function EmptyState({
         </h3>
         <p className="text-sm text-white/40 leading-relaxed mb-6">
           Ask me about any ticker, levels, options setups, and risk in one flow.
+          <span className="block mt-1 text-emerald-300/70">Current chart focus: {activeSymbol}</span>
         </p>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          {CHAT_QUICK_PROMPTS.map((item) => (
+          {quickPrompts.map((item) => (
             <motion.button
               key={item.text}
               onClick={() => {

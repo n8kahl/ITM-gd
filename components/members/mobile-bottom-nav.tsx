@@ -110,18 +110,16 @@ export function MemberBottomNav() {
                 aria-current={active ? 'page' : undefined}
               >
                 {active && (
-                  <motion.div
-                    layoutId="member-mobile-active"
+                  <span
                     className="absolute -top-1 h-0.5 w-8 rounded-full bg-emerald-400"
-                    transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                    aria-hidden
                   />
                 )}
 
                 {active && (
-                  <motion.div
-                    layoutId="member-mobile-active-glow"
+                  <span
                     className="pointer-events-none absolute inset-x-2 bottom-5 h-8 rounded-full bg-emerald-500/10 blur-lg"
-                    transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+                    aria-hidden
                   />
                 )}
 

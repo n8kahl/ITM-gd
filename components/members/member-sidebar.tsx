@@ -3,7 +3,6 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
 import {
   LogOut,
   Sparkles,
@@ -142,10 +141,9 @@ export function MemberSidebar() {
             >
               {/* Active glow pill */}
               {isActive && (
-                <motion.div
-                  layoutId="sidebar-glow"
+                <div
                   className="pointer-events-none absolute inset-y-0 left-0 right-0 rounded-lg bg-emerald-500/10 border-l-2 border-emerald-500 shadow-[0_0_20px_-5px_rgba(16,185,129,0.15)]"
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  aria-hidden
                 />
               )}
 

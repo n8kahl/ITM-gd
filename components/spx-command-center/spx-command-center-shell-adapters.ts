@@ -74,6 +74,7 @@ function createDesktopSurfaceBaseProps(
     overlayPreset: controller.overlayPreset,
     onSelectOverlayPreset: controller.handleOverlayPresetChange,
     onRunActionStripCommand: controller.runActionStripCommand,
+    activeLevelCategoryCount: controller.activeLevelCategoryCount,
   }
 }
 
@@ -95,6 +96,7 @@ export function createMobileSurfaceOrchestratorProps(
     onLatestBarTimeChange: controller.handleLatestChartBarTimeChange,
     gexProfile: controller.gexProfile,
     mobileTab: controller.mobileTab,
+    mobileCoachTabVisited: controller.mobileCoachTabVisited,
     onMobileTabChange: controller.handleMobileTabChange,
     showMobileCoachSheet: controller.showMobileCoachSheet,
     onMobileCoachSheetChange: controller.handleMobileCoachSheetChange,

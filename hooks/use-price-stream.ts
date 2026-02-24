@@ -121,6 +121,7 @@ const sharedState: PriceStreamState = {
   isConnected: false,
   error: null,
 }
+let notifyRafId: number | null = null
 
 function cloneState(): PriceStreamState {
   return {
@@ -131,11 +132,29 @@ function cloneState(): PriceStreamState {
   }
 }
 
-function notifyConsumers(): void {
+function flushConsumerNotification(): void {
   const snapshot = cloneState()
   for (const consumer of streamConsumers.values()) {
     consumer.listener(snapshot)
   }
+}
+
+function notifyConsumers(options?: { immediate?: boolean }): void {
+  const immediate = options?.immediate === true || typeof window === 'undefined'
+  if (immediate) {
+    if (notifyRafId != null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(notifyRafId)
+      notifyRafId = null
+    }
+    flushConsumerNotification()
+    return
+  }
+
+  if (notifyRafId != null) return
+  notifyRafId = window.requestAnimationFrame(() => {
+    notifyRafId = null
+    flushConsumerNotification()
+  })
 }
 
 function normalizeSymbols(symbols: string[]): string[] {

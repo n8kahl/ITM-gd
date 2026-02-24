@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { ImagePlus, Plus, Upload } from 'lucide-react'
 import { PageHeader } from '@/components/members/page-header'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
@@ -100,6 +100,7 @@ export default function JournalPage() {
   const [deleteBusy, setDeleteBusy] = useState(false)
 
   const [psychPromptEntry, setPsychPromptEntry] = useState<JournalEntry | null>(null)
+  const loadEntriesAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -160,7 +161,13 @@ export default function JournalPage() {
     }
   }, [])
 
+  const queryString = useMemo(() => toQueryString(filters), [filters])
+
   const loadEntries = useCallback(async () => {
+    loadEntriesAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadEntriesAbortRef.current = controller
+
     if (!isOnline) {
       const cached = readCachedJournalEntries()
       setEntries(cached)
@@ -173,7 +180,10 @@ export default function JournalPage() {
     setError(null)
 
     try {
-      const response = await fetch(`/api/members/journal?${toQueryString(filters)}`, { cache: 'no-store' })
+      const response = await fetch(`/api/members/journal?${queryString}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
       if (!response.ok) {
         throw new Error(await extractError(response))
       }
@@ -191,6 +201,9 @@ export default function JournalPage() {
       setTotal(resolvedTotal)
       writeCachedJournalEntries(sanitized)
     } catch (loadError) {
+      if (loadError instanceof DOMException && loadError.name === 'AbortError') {
+        return
+      }
       const message = loadError instanceof Error ? loadError.message : 'Failed to load journal entries'
       setError(message)
 
@@ -200,13 +213,21 @@ export default function JournalPage() {
         setTotal(cached.length)
       }
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) {
+        setLoading(false)
+      }
     }
-  }, [filters, isOnline])
+  }, [isOnline, queryString])
 
   useEffect(() => {
     void loadEntries()
   }, [loadEntries])
+
+  useEffect(() => {
+    return () => {
+      loadEntriesAbortRef.current?.abort()
+    }
+  }, [])
 
   const availableTags = useMemo(() => {
     const set = new Set<string>()

@@ -37,6 +37,7 @@ export type SPXMobileSurfaceOrchestratorProps = {
   onLatestBarTimeChange: SPXCommandController['handleLatestChartBarTimeChange']
   gexProfile: SPXCommandController['gexProfile']
   mobileTab: SPXCommandController['mobileTab']
+  mobileCoachTabVisited: boolean
   onMobileTabChange: SPXCommandController['handleMobileTabChange']
   showMobileCoachSheet: boolean
   onMobileCoachSheetChange: SPXCommandController['handleMobileCoachSheetChange']
@@ -70,6 +71,7 @@ export function SPXMobileSurfaceOrchestrator({
   onLatestBarTimeChange,
   gexProfile,
   mobileTab,
+  mobileCoachTabVisited,
   onMobileTabChange,
   showMobileCoachSheet,
   onMobileCoachSheetChange,
@@ -87,6 +89,8 @@ export function SPXMobileSurfaceOrchestrator({
   showSettingsPanel,
   onSettingsPanelChange,
 }: SPXMobileSurfaceOrchestratorProps) {
+  const coachTabMounted = mobileCoachTabVisited || mobileTab === 'coach'
+
   const primaryActionTone = primaryActionMode === 'in_trade'
     ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
     : primaryActionMode === 'evaluate'
@@ -252,8 +256,11 @@ export function SPXMobileSurfaceOrchestrator({
             </div>
           )}
 
-          {mobileTab === 'coach' && (
-            <div className="space-y-2.5">
+          {coachTabMounted && (
+            <div
+              className={cn('space-y-2.5', mobileTab !== 'coach' && 'hidden')}
+              aria-hidden={mobileTab !== 'coach'}
+            >
               <AICoachFeed readOnly={mobileReadOnly} />
             </div>
           )}
