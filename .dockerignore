@@ -7,6 +7,8 @@
 node_modules
 backend/node_modules
 backend/dist
+scripts
+docs
 coverage
 backend/coverage
 playwright-report

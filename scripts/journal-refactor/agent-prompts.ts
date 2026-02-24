@@ -463,10 +463,10 @@ Available slices: ${Object.keys(SLICE_PROMPTS).join(', ')}
   process.exit(0)
 }
 
-const prompt = SLICE_PROMPTS[sliceId]
-if (!prompt) {
+const slicePrompt = SLICE_PROMPTS[sliceId]
+if (!slicePrompt) {
   console.error(`Unknown slice: ${sliceId}. Available: ${Object.keys(SLICE_PROMPTS).join(', ')}`)
   process.exit(1)
 }
 
-console.log(prompt)
+console.log(slicePrompt)
