@@ -63,7 +63,7 @@ const INTENT_SPECS: IntentSpec[] = [
   },
   {
     id: 'setup_help',
-    phrases: ['help with setup', 'trade setup', 'entry stop', 'invalidation', 'scanner idea', 'tracked setup', 'trigger plan', 'setup found'],
+    phrases: ['help with setup', 'trade setup', 'entry stop', 'scanner idea', 'tracked setup', 'trigger plan', 'setup found'],
     requiredFunctions: ['get_key_levels', 'scan_opportunities', 'show_chart'],
     recommendedFunctions: ['get_current_price'],
     requiresChart: true,
@@ -176,16 +176,16 @@ const INTENT_SPECS: IntentSpec[] = [
       'macro events',
       'data releases',
       'what might move the market this week',
-      'upcoming cpi',
-      'upcoming nfp',
-      'upcoming fomc',
+      'upcoming inflation data',
+      'upcoming labor data',
+      'upcoming policy meeting',
     ],
     requiredFunctions: ['get_economic_calendar'],
     recommendedFunctions: ['get_macro_context'],
   },
   {
     id: 'macro_context',
-    phrases: ['macro', 'fomc', 'fed', 'cpi', 'jobs report', 'economic calendar', 'sector rotation'],
+    phrases: ['macro', 'policy', 'central bank', 'inflation data', 'labor data', 'economic calendar', 'sector rotation'],
     requiredFunctions: ['get_macro_context'],
   },
   {
@@ -290,6 +290,10 @@ function hasSetupPlanStructure(text: string): boolean {
   const hasTarget = /\b(target|take\s?-?profit|tp1|tp2)\b/i.test(text);
   const hasLevelNumber = /\$?\d{2,5}(?:\.\d{1,2})?/.test(text);
   return hasEntry && hasStopOrInvalidation && hasTarget && hasLevelNumber;
+}
+
+function hasExplicitSetupExecutionLanguage(loweredMessage: string): boolean {
+  return /(setup|entry|stop|take\s?-?profit|target|tp1|tp2|scanner|find setups?|execution plan|trade plan|risk plan)/.test(loweredMessage);
 }
 
 function isSetAlertCreationPrompt(message: string): boolean {
@@ -486,6 +490,19 @@ export function buildIntentRoutingPlan(message: string, context?: IntentRoutingC
     selectedIntentIds.delete('setup_help');
     selectedIntentIds.delete('key_levels');
     selectedIntentIds.delete('price_check');
+  }
+
+  if (selectedIntentIds.has('setup_help') && !hasExplicitSetupExecutionLanguage(loweredMessage)) {
+    // Don't force scanner/setup workflow for plain-language context requests that only mention invalidation.
+    selectedIntentIds.delete('setup_help');
+    if (
+      loweredMessage.includes('support')
+      || loweredMessage.includes('resistance')
+      || loweredMessage.includes('invalidation')
+      || loweredMessage.includes('invalidates')
+    ) {
+      selectedIntentIds.add('key_levels');
+    }
   }
 
   const intents = Array.from(selectedIntentIds);
@@ -696,9 +713,7 @@ function findLatestCall(functionCalls: FunctionCallLike[], functionName: string)
 export function buildBudgetFallbackMessage(plan: IntentRoutingPlan, functionCallsRaw: FunctionCallLike[] | undefined): string {
   const functionCalls = Array.isArray(functionCallsRaw) ? functionCallsRaw : [];
   const successful = functionCalls.filter((call) => call.result && typeof call.result === 'object' && !(call.result as { error?: unknown }).error);
-  const calledFunctions = dedupe(successful.map((call) => call.function || '').filter(Boolean));
-
-  const lines: string[] = ['I gathered live data but hit the response budget before full analysis.'];
+  const lines: string[] = ['I pulled live data and here is the quick read:'];
 
   if (plan.primarySymbol) {
     lines.push(`- Focus symbol: **${plan.primarySymbol}**`);
@@ -706,11 +721,9 @@ export function buildBudgetFallbackMessage(plan: IntentRoutingPlan, functionCall
     lines.push(`- Symbol scope: **${plan.symbols.join(', ')}**`);
   }
 
-  if (calledFunctions.length > 0) {
-    lines.push(`- Completed tools: ${calledFunctions.join(', ')}`);
-  }
-
   const keyLevelsCall = findLatestCall(successful, 'get_key_levels');
+  let nearestResistance: string | null = null;
+  let nearestSupport: string | null = null;
   if (keyLevelsCall?.result && typeof keyLevelsCall.result === 'object') {
     const levels = (keyLevelsCall.result as {
       levels?: {
@@ -725,10 +738,11 @@ export function buildBudgetFallbackMessage(plan: IntentRoutingPlan, functionCall
     const resistanceLine = formatLevel(topResistance?.name || 'Resistance', toSafeNumber(topResistance?.price));
     const supportLine = formatLevel(topSupport?.name || 'Support', toSafeNumber(topSupport?.price));
 
-    const levelSummary = [resistanceLine, supportLine].filter(Boolean).join(', ');
-    if (levelSummary) {
-      lines.push(`- Key levels: ${levelSummary}`);
-    }
+    nearestResistance = resistanceLine;
+    nearestSupport = supportLine;
+
+    if (nearestResistance) lines.push(`- Nearest resistance: ${nearestResistance}`);
+    if (nearestSupport) lines.push(`- Nearest support: ${nearestSupport}`);
   }
 
   const priceCall = findLatestCall(successful, 'get_current_price');
@@ -752,12 +766,13 @@ export function buildBudgetFallbackMessage(plan: IntentRoutingPlan, functionCall
     }
   }
 
-  const missingRequired = plan.requiredFunctions.filter((fn) => !calledFunctions.includes(fn));
-  if (missingRequired.length > 0) {
-    lines.push(`- Remaining required tools: ${missingRequired.join(', ')}`);
+  if (nearestSupport) {
+    lines.push(`- Invalidation guide: bullish idea weakens on a 15m close below ${nearestSupport}.`);
+  } else if (nearestResistance) {
+    lines.push(`- Invalidation guide: bearish idea weakens on a 15m close above ${nearestResistance}.`);
   }
 
-  lines.push('Follow up with a narrower ask for full detail, for example: "SPX bull case only with 15m invalidation and 2 levels."');
+  lines.push('If you want, ask "expand this into a full bull/base/bear plan" and I will map entries, stops, and targets.');
 
   return lines.join('\n');
 }

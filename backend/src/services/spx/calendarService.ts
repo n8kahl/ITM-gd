@@ -5,30 +5,6 @@ import { toEasternTime } from '../marketHours';
  * Provides strategy restrictions and geometry adjustments based on calendar events.
  */
 
-// 2026 FOMC meeting dates (announcement at 2:00 PM ET on second day)
-const FOMC_DATES_2026: ReadonlySet<string> = new Set([
-  '2026-01-28', '2026-01-29',
-  '2026-03-17', '2026-03-18',
-  '2026-05-05', '2026-05-06',
-  '2026-06-16', '2026-06-17',
-  '2026-07-28', '2026-07-29',
-  '2026-09-15', '2026-09-16',
-  '2026-10-27', '2026-10-28',
-  '2026-12-15', '2026-12-16',
-]);
-
-// FOMC announcement days (Wednesday, second day of 2-day meeting)
-const FOMC_ANNOUNCEMENT_DATES_2026: ReadonlySet<string> = new Set([
-  '2026-01-29',
-  '2026-03-18',
-  '2026-05-06',
-  '2026-06-17',
-  '2026-07-29',
-  '2026-09-16',
-  '2026-10-28',
-  '2026-12-16',
-]);
-
 // Post-announcement minute: 2:30 PM ET = 14*60+30 = 870
 const FOMC_POST_ANNOUNCEMENT_MINUTE_ET = 870;
 
@@ -47,6 +23,19 @@ export interface CalendarContext {
   events: CalendarEventType[];
   strategyRestrictions: string[];
   postAnnouncementMinuteET: number | null;
+}
+
+export interface CalendarEventOverrides {
+  fomcMeetingDates?: Iterable<string>;
+  fomcAnnouncementDates?: Iterable<string>;
+}
+
+function hasCalendarDate(dates: Iterable<string> | undefined, targetDate: string): boolean {
+  if (!dates) return false;
+  for (const date of dates) {
+    if (date === targetDate) return true;
+  }
+  return false;
 }
 
 /**
@@ -106,15 +95,18 @@ function isOPEXThursdayDate(date: Date): boolean {
 /**
  * Get the full calendar context for a given date.
  */
-export function getCalendarContext(dateStr?: string): CalendarContext {
+export function getCalendarContext(
+  dateStr?: string,
+  overrides?: CalendarEventOverrides,
+): CalendarContext {
   const now = toEasternTime(new Date());
   const effectiveDateStr = dateStr || now.dateStr;
   const date = new Date(`${effectiveDateStr}T12:00:00`);
   const dayOfWeek = date.getDay();
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-  const isFOMCMeeting = FOMC_DATES_2026.has(effectiveDateStr);
-  const isFOMCAnnouncement = FOMC_ANNOUNCEMENT_DATES_2026.has(effectiveDateStr);
+  const isFOMCAnnouncement = hasCalendarDate(overrides?.fomcAnnouncementDates, effectiveDateStr);
+  const isFOMCMeeting = hasCalendarDate(overrides?.fomcMeetingDates, effectiveDateStr) || isFOMCAnnouncement;
   const isFOMCPreAnnouncement = isFOMCAnnouncement; // Same day
   const isOPEXWeek = isOPEXWeekDate(date);
   const isOPEXFriday = isOPEXFridayDate(date);

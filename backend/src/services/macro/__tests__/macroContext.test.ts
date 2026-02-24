@@ -4,12 +4,22 @@ jest.mock('../../economic', () => ({
 }));
 
 import { getMacroContext, assessMacroImpact } from '../macroContext';
+import { getEconomicCalendar, getCurrentFedFundsRate } from '../../economic';
+
+const mockGetEconomicCalendar = getEconomicCalendar as jest.MockedFunction<typeof getEconomicCalendar>;
+const mockGetCurrentFedFundsRate = getCurrentFedFundsRate as jest.MockedFunction<typeof getCurrentFedFundsRate>;
 
 /**
  * Tests for Macro Context Service
  */
 
 describe('Macro Context Service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetEconomicCalendar.mockResolvedValue([]);
+    mockGetCurrentFedFundsRate.mockResolvedValue(null);
+  });
+
   describe('getMacroContext', () => {
     it('returns complete macro context structure', async () => {
       const context = await getMacroContext();
@@ -38,7 +48,7 @@ describe('Macro Context Service', () => {
       const fed = context.fedPolicy;
 
       expect(fed.currentRate).toBeTruthy();
-      expect(fed.nextMeetingDate).toBeTruthy();
+      expect(fed.nextMeetingDate).toBeNull();
       expect(fed.marketImpliedProbabilities.hold).toBeGreaterThanOrEqual(0);
       expect(fed.marketImpliedProbabilities.cut25).toBeGreaterThanOrEqual(0);
       expect(fed.marketImpliedProbabilities.hike25).toBeGreaterThanOrEqual(0);
@@ -48,6 +58,23 @@ describe('Macro Context Service', () => {
         + fed.marketImpliedProbabilities.hike25;
       expect(total).toBeCloseTo(1.0, 1);
       expect(['hawkish', 'dovish', 'neutral']).toContain(fed.currentTone);
+    });
+
+    it('derives next Fed meeting from live economic events only', async () => {
+      mockGetEconomicCalendar.mockResolvedValue([
+        {
+          date: '2099-03-18',
+          event: 'Federal Reserve (FOMC)',
+          expected: null,
+          previous: null,
+          actual: null,
+          impact: 'HIGH',
+          relevance: 'Fed policy decision',
+        },
+      ]);
+
+      const context = await getMacroContext();
+      expect(context.fedPolicy.nextMeetingDate).toBe('2099-03-18');
     });
 
     it('returns sector rotation data', async () => {
@@ -73,12 +100,6 @@ describe('Macro Context Service', () => {
       expect(earnings.beatRate).toBeLessThanOrEqual(1);
       expect(earnings.implication).toBeTruthy();
     });
-
-    it('next FOMC date is in the future', async () => {
-      const context = await getMacroContext();
-      const nextMeeting = new Date(context.fedPolicy.nextMeetingDate);
-      expect(nextMeeting.getTime()).toBeGreaterThan(Date.now());
-    });
   });
 
   describe('assessMacroImpact', () => {
@@ -102,12 +123,21 @@ describe('Macro Context Service', () => {
       expect(impact.riskFactors.length).toBeGreaterThan(0);
     });
 
-    it('includes FOMC as a catalyst', async () => {
-      const impact = await assessMacroImpact('NDX');
+    it('includes live Fed events as catalysts when available', async () => {
+      mockGetEconomicCalendar.mockResolvedValue([
+        {
+          date: '2099-03-18',
+          event: 'Federal Reserve (FOMC)',
+          expected: null,
+          previous: null,
+          actual: null,
+          impact: 'HIGH',
+          relevance: 'Fed policy decision',
+        },
+      ]);
 
-      const hasFomc = impact.upcomingCatalysts.some((c) =>
-        c.event.includes('FOMC'),
-      );
+      const impact = await assessMacroImpact('NDX');
+      const hasFomc = impact.upcomingCatalysts.some((c) => c.event.includes('FOMC'));
       expect(hasFomc).toBe(true);
     });
 

@@ -11,6 +11,11 @@ import {
   getGEXAdaptiveStopMultiplier,
 } from '@/backend/src/services/spx/calendarService';
 
+const FOMC_OVERRIDES = {
+  fomcMeetingDates: new Set(['2026-01-28', '2026-01-29']),
+  fomcAnnouncementDates: new Set(['2026-01-29']),
+};
+
 describe('calendarService', () => {
   describe('getCalendarContext', () => {
     it('returns context with correct structure', () => {
@@ -23,13 +28,13 @@ describe('calendarService', () => {
     });
 
     it('detects FOMC announcement dates', () => {
-      const ctx = getCalendarContext('2026-01-29');
+      const ctx = getCalendarContext('2026-01-29', FOMC_OVERRIDES);
       expect(ctx.isFOMCAnnouncement).toBe(true);
       expect(ctx.events).toContain('fomc_announcement');
     });
 
     it('detects FOMC meeting dates', () => {
-      const ctx = getCalendarContext('2026-01-28');
+      const ctx = getCalendarContext('2026-01-28', FOMC_OVERRIDES);
       expect(ctx.isFOMCMeeting).toBe(true);
     });
 
@@ -49,7 +54,7 @@ describe('calendarService', () => {
     });
 
     it('restricts strategies on FOMC announcement', () => {
-      const ctx = getCalendarContext('2026-01-29');
+      const ctx = getCalendarContext('2026-01-29', FOMC_OVERRIDES);
       expect(ctx.strategyRestrictions).toContain('block_all_until_2:30pm_et');
     });
 
@@ -61,13 +66,13 @@ describe('calendarService', () => {
 
   describe('shouldBlockStrategies', () => {
     it('blocks strategies on FOMC announcement before 2:30 PM', () => {
-      const ctx = getCalendarContext('2026-01-29');
+      const ctx = getCalendarContext('2026-01-29', FOMC_OVERRIDES);
       const result = shouldBlockStrategies(ctx, 840); // 2:00 PM ET
       expect(result.blocked).toBe(true);
     });
 
     it('allows strategies on FOMC announcement after 2:30 PM', () => {
-      const ctx = getCalendarContext('2026-01-29');
+      const ctx = getCalendarContext('2026-01-29', FOMC_OVERRIDES);
       const result = shouldBlockStrategies(ctx, 900); // 3:00 PM ET
       expect(result.blocked).toBe(false);
     });
@@ -81,13 +86,13 @@ describe('calendarService', () => {
 
   describe('isSetupTypeAllowed', () => {
     it('blocks all strategies on FOMC pre-announcement', () => {
-      const ctx = getCalendarContext('2026-01-29');
+      const ctx = getCalendarContext('2026-01-29', FOMC_OVERRIDES);
       expect(isSetupTypeAllowed('fade_at_wall', ctx, 840)).toBe(false);
       expect(isSetupTypeAllowed('trend_continuation', ctx, 840)).toBe(false);
     });
 
     it('allows strategies on FOMC post-announcement', () => {
-      const ctx = getCalendarContext('2026-01-29');
+      const ctx = getCalendarContext('2026-01-29', FOMC_OVERRIDES);
       expect(isSetupTypeAllowed('fade_at_wall', ctx, 900)).toBe(true);
     });
 

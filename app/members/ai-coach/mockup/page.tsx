@@ -69,10 +69,10 @@ const MODE_META: Record<
     label: 'Market Intelligence',
     summary: 'Single narrative across Morning Brief, Macro, and Earnings implications.',
     context: [
-      { key: 'Today', value: 'PPI cooled, yields lower across curve' },
-      { key: 'Macro', value: 'FOMC minutes at 2:00 PM ET' },
-      { key: 'Earnings', value: 'NVDA + WMT after close' },
-      { key: 'Plan', value: 'Focus high-vol names with event premium' },
+      { key: 'Today', value: 'Live calendar and rates data synced from market feeds' },
+      { key: 'Macro', value: 'Upcoming releases pulled from real-time economic API' },
+      { key: 'Earnings', value: 'Catalysts sourced dynamically per selected symbols' },
+      { key: 'Plan', value: 'Adjust playbook based on fresh event risk windows' },
     ],
   },
   portfolio: {

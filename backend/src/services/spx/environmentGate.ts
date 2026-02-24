@@ -115,6 +115,15 @@ function isPriorityMacroEvent(eventName: string): boolean {
   );
 }
 
+function isFedCalendarEvent(eventName: string): boolean {
+  const normalized = eventName.toLowerCase();
+  return (
+    normalized.includes('fomc')
+    || normalized.includes('federal reserve')
+    || normalized.includes('federal open market')
+  );
+}
+
 function reasonForVixGate(vixValue: number): string {
   return `VIX ${round(vixValue, 2)} above actionable cap (${MAX_ACTIONABLE_VIX})`;
 }
@@ -252,24 +261,36 @@ async function evaluateMacroCalendarGate(input: {
   }
 
   const et = toEasternTime(input.evaluationDate);
-  const calendar = getCalendarContext(et.dateStr);
-  const legacyGate = shouldBlockStrategies(calendar, input.minuteEt);
-  if (legacyGate.blocked) {
-    return {
-      passed: false,
-      caution: false,
-      reason: legacyGate.reason || 'Calendar blackout in effect',
-      nextEvent: {
-        event: 'FOMC announcement',
-        at: `${et.dateStr}T14:00:00.000-05:00`,
-        minutesUntil: Math.max(0, (14 * 60) - input.minuteEt),
-      },
-    };
-  }
 
   try {
     const events = await getEconomicCalendar(2, 'HIGH');
     const nowMs = input.evaluationDate.getTime();
+    const fedAnnouncementDates = new Set(
+      events
+        .filter((event) => isFedCalendarEvent(event.event))
+        .map((event) => event.date),
+    );
+
+    const calendar = getCalendarContext(et.dateStr, {
+      fomcMeetingDates: fedAnnouncementDates,
+      fomcAnnouncementDates: fedAnnouncementDates,
+    });
+    const legacyGate = shouldBlockStrategies(calendar, input.minuteEt);
+    if (legacyGate.blocked) {
+      const fedEventName = events.find(
+        (event) => event.date === et.dateStr && isFedCalendarEvent(event.event),
+      )?.event || 'Federal Reserve event';
+      return {
+        passed: false,
+        caution: false,
+        reason: legacyGate.reason || 'Calendar blackout in effect',
+        nextEvent: {
+          event: fedEventName,
+          at: parseDateAtEtMinute(et.dateStr, 14 * 60).toISOString(),
+          minutesUntil: Math.max(0, (14 * 60) - input.minuteEt),
+        },
+      };
+    }
 
     const candidates = events
       .filter((event) => isPriorityMacroEvent(event.event))

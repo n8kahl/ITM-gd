@@ -707,7 +707,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_macro_context',
-      description: 'Get macro-economic context including economic calendar, Fed policy status, sector rotation, and earnings season data. Use this when the user asks about the macro outlook, economic events, Fed meetings, sector performance, or earnings season impact on their positions.',
+      description: 'Get macro-economic context including economic calendar, policy backdrop, sector rotation, and earnings season data. Use this when the user asks about macro outlook, upcoming market-moving releases, policy risk, sector performance, or earnings-season impact on positions.',
       parameters: {
         type: 'object',
         properties: {
@@ -723,7 +723,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_economic_calendar',
-      description: 'Get upcoming economic data releases (CPI, NFP, GDP, FOMC, PPI, Retail Sales, PCE, ISM, Consumer Sentiment) that could impact market volatility and options pricing. Use when trader asks about upcoming macro events, economic releases, what might move the market this week, or before recommending trades near major data releases.',
+      description: 'Get upcoming economic releases that could impact market volatility and options pricing. Use when trader asks about upcoming macro catalysts, what may move the market this week, or before recommending trades near major releases.',
       parameters: {
         type: 'object',
         properties: {
@@ -734,7 +734,7 @@ export const AI_FUNCTIONS: ChatCompletionTool[] = [
           impact_filter: {
             type: 'string',
             enum: ['HIGH', 'MEDIUM', 'ALL'],
-            description: 'Filter by impact level (default HIGH). HIGH = CPI, NFP, GDP, FOMC. MEDIUM = PPI, Retail, ISM, Sentiment.',
+            description: 'Filter by impact level (default HIGH).',
           },
         },
       },

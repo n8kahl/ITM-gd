@@ -80,7 +80,7 @@ async function getPreviousValue(seriesId: string): Promise<string | null> {
  * Filters FRED's full release calendar to only HIGH/MEDIUM impact events
  * relevant to options traders. Enriches with "previous" values from FRED series.
  *
- * Falls back to empty array if FRED is unavailable (macroContext.ts handles its own fallback).
+ * Returns an empty array if FRED is unavailable.
  */
 export async function getEconomicCalendar(
   daysAhead: number = DEFAULT_DAYS_AHEAD,
