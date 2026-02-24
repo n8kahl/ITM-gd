@@ -38,6 +38,8 @@ interface ChatRequest {
   sessionId: string;
   message: string;
   userId: string;
+  image?: string;
+  imageMimeType?: string;
   context?: {
     isMobile?: boolean;
   };
@@ -197,7 +199,7 @@ function buildRepairFunctionContext(functionCalls: Array<{ function: string; arg
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
   const startTime = Date.now();
-  const { sessionId, message, userId, context } = request;
+  const { sessionId, message, userId, image, imageMimeType, context } = request;
   const sanitizedMessage = sanitizeUserMessage(message);
   const routingPlan = buildIntentRoutingPlan(sanitizedMessage);
   const routingDirective = buildIntentRoutingDirective(routingPlan);
@@ -229,7 +231,21 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
         role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.role === 'user' ? sanitizeUserMessage(msg.content) : msg.content
       })),
-      { role: 'user', content: sanitizedMessage }
+      image
+        ? {
+            role: 'user' as const,
+            content: [
+              { type: 'text' as const, text: sanitizedMessage },
+              {
+                type: 'image_url' as const,
+                image_url: {
+                  url: `data:${imageMimeType || 'image/png'};base64,${image}`,
+                  detail: 'high' as const,
+                },
+              },
+            ],
+          }
+        : { role: 'user' as const, content: sanitizedMessage },
     ];
 
     // Save user message to database

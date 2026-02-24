@@ -355,7 +355,7 @@ interface ChatAreaProps {
   isLoadingMessages: boolean
   error: string | null
   rateLimitInfo: { queryCount?: number; queryLimit?: number; resetDate?: string } | null
-  onSendMessage: (text: string) => void
+  onSendMessage: (text: string, imagePayload?: { image: string; imageMimeType: string }) => void
   onNewSession: () => void
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
@@ -573,53 +573,33 @@ function ChatArea({
 
     const staged = stagedImage
     const msg = userMessage || 'Analyze this screenshot'
-    onAppendUserMessage(`${msg}\n\n[Uploaded screenshot attached]`)
     setStagedImage(null)
     setIsAnalyzingImage(true)
 
     if (!session?.access_token) {
+      onAppendUserMessage(`${msg}\n\n[Uploaded screenshot attached]`)
       onAppendAssistantMessage('Screenshot upload received, but your session token is missing. Please refresh and try again.')
       setIsAnalyzingImage(false)
       return
     }
 
-    try {
-      const analysis = await apiAnalyzeScreenshot(staged.base64, staged.mimeType, session.access_token)
-      setScreenshotActions({
-        intent: analysis.intent,
-        positions: analysis.positions,
-        actions: analysis.suggestedActions,
+    // Run position extraction in the background for action chips
+    apiAnalyzeScreenshot(staged.base64, staged.mimeType, session.access_token)
+      .then((analysis) => {
+        setScreenshotActions({
+          intent: analysis.intent,
+          positions: analysis.positions,
+          actions: analysis.suggestedActions,
+        })
+      })
+      .catch(() => {
+        // Position extraction is supplementary; chat vision still works
+        setScreenshotActions(null)
       })
 
-      const extracted = analysis.positions.map((position, index) => {
-        const strike = position.strike ? ` ${position.strike}` : ''
-        const expiry = position.expiry ? ` ${position.expiry}` : ''
-        const confidence = Math.round(position.confidence * 100)
-        return `${index + 1}. ${position.symbol} ${position.type}${strike}${expiry} x${position.quantity} (confidence ${confidence}%)`
-      })
-
-      const warnings = analysis.warnings.length > 0
-        ? `\n\nWarnings:\n${analysis.warnings.map((warning) => `- ${warning}`).join('\n')}`
-        : ''
-
-      const accountValue = typeof analysis.accountValue === 'number'
-        ? `\n\nAccount Value: $${analysis.accountValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-        : ''
-
-      const summary = analysis.positionCount > 0
-        ? `I extracted ${analysis.positionCount} position${analysis.positionCount === 1 ? '' : 's'} from your screenshot:\n${extracted.join('\n')}`
-        : 'I could not reliably extract any positions from this screenshot.'
-
-      onAppendAssistantMessage(
-        `${summary}${accountValue}${warnings}\n\nIntent detected: ${analysis.intent.replace('_', ' ')}.\nUse the action buttons below the input to choose your next step instantly.`
-      )
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to analyze screenshot.'
-      onAppendAssistantMessage(`Screenshot analysis failed: ${message}`)
-      setScreenshotActions(null)
-    } finally {
-      setIsAnalyzingImage(false)
-    }
+    // Send the image directly to the chat LLM so it can see and discuss it
+    setIsAnalyzingImage(false)
+    onSendMessage(msg, { image: staged.base64, imageMimeType: staged.mimeType })
   }
 
   const handleCsvAnalysis = async (userMessage: string) => {

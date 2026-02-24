@@ -27,7 +27,7 @@ router.post(
   validateBody(sendMessageSchema),
   async (req: Request, res: Response) => {
     try {
-      const { sessionId, message } = (req as any).validatedBody;
+      const { sessionId, message, image, imageMimeType } = (req as any).validatedBody;
       const userId = req.user!.id;
 
       const finalSessionId = sessionId || uuidv4();
@@ -36,6 +36,8 @@ router.post(
         sessionId: finalSessionId,
         message: message.trim(),
         userId,
+        image,
+        imageMimeType,
         context: {
           isMobile: isMobileRequest(req),
         },
@@ -90,7 +92,7 @@ router.post(
   validateBody(sendMessageSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { sessionId, message } = (req as any).validatedBody;
+      const { sessionId, message, image, imageMimeType } = (req as any).validatedBody;
       const userId = req.user!.id;
       const finalSessionId = sessionId || uuidv4();
 
@@ -109,6 +111,8 @@ router.post(
         sessionId: finalSessionId,
         message: message.trim(),
         userId,
+        image,
+        imageMimeType,
         context: {
           isMobile: isMobileRequest(req),
         },

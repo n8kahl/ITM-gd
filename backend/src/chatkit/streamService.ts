@@ -45,6 +45,8 @@ interface StreamRequest {
   sessionId: string;
   message: string;
   userId: string;
+  image?: string;
+  imageMimeType?: string;
   context?: {
     isMobile?: boolean;
   };
@@ -272,7 +274,7 @@ async function runStreamingIteration(
  */
 export async function streamChatMessage(request: StreamRequest, res: Response): Promise<void> {
   const startTime = Date.now();
-  const { sessionId, message, userId, context } = request;
+  const { sessionId, message, userId, image, imageMimeType, context } = request;
   const sanitizedMessage = sanitizeUserMessage(message);
   const routingPlan = buildIntentRoutingPlan(sanitizedMessage);
   const routingDirective = buildIntentRoutingDirective(routingPlan);
@@ -295,6 +297,23 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
     });
     const hardenedSystemPrompt = `${systemPrompt}\n\n${PROMPT_INJECTION_GUARDRAIL}`;
 
+    // Build user message — multimodal if image attached
+    const userMessageParam: ChatCompletionMessageParam = image
+      ? {
+          role: 'user',
+          content: [
+            { type: 'text', text: sanitizedMessage },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${imageMimeType || 'image/png'};base64,${image}`,
+                detail: 'high' as const,
+              },
+            },
+          ],
+        }
+      : { role: 'user', content: sanitizedMessage };
+
     // Build messages array
     const messages: ChatCompletionMessageParam[] = [
       { role: 'system', content: hardenedSystemPrompt },
@@ -303,7 +322,7 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
         role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.role === 'user' ? sanitizeUserMessage(msg.content) : msg.content,
       })),
-      { role: 'user', content: sanitizedMessage },
+      userMessageParam,
     ];
 
     // Save user message
