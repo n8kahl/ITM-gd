@@ -2,6 +2,7 @@ import {
   buildBudgetFallbackMessage,
   buildIntentRoutingDirective,
   buildIntentRoutingPlan,
+  shouldAttemptContractRewrite,
   evaluateResponseContract,
 } from '../intentRouter';
 
@@ -42,6 +43,9 @@ describe('intentRouter', () => {
     expect(plan.requiredFunctions).not.toContain('get_key_levels');
     expect(plan.requiredFunctions).not.toContain('get_gamma_exposure');
     expect(plan.requiredFunctions).not.toContain('get_earnings_analysis');
+    expect(plan.requiresDisclaimer).toBe(false);
+    expect(plan.requiresScenarioProbabilities).toBe(false);
+    expect(plan.requiresLiquidityWatchouts).toBe(false);
   });
 
   it('does not force price-check for generic market-status prompts without a symbol', () => {
@@ -71,6 +75,20 @@ describe('intentRouter', () => {
     expect(plan.requiredFunctions).not.toContain('get_options_chain');
     expect(plan.requiredFunctions).not.toContain('get_iv_analysis');
     expect(plan.recommendedFunctions).toContain('get_options_chain');
+  });
+
+  it('does not force company profile tool calls without a symbol', () => {
+    const plan = buildIntentRoutingPlan('Give me a company profile and fundamentals overview.');
+
+    expect(plan.intents).toContain('company_profile');
+    expect(plan.requiredFunctions).not.toContain('get_company_profile');
+    expect(plan.recommendedFunctions).toContain('get_company_profile');
+  });
+
+  it('avoids company profile intent for generic educational "what is" prompts', () => {
+    const plan = buildIntentRoutingPlan('What is delta and why does it matter for options?');
+
+    expect(plan.intents).not.toContain('company_profile');
   });
 
   it('fails contract audit when required functions are missing', () => {
@@ -144,6 +162,26 @@ describe('intentRouter', () => {
     expect(audit.blockingViolations).toContain('missing_financial_disclaimer');
     expect(audit.blockingViolations).toContain('missing_scenario_probabilities');
     expect(audit.blockingViolations).toContain('missing_liquidity_watchouts');
+  });
+
+  it('does not trigger rewrite for warnings-only audits', () => {
+    const plan = buildIntentRoutingPlan('Give me SPX key levels and show chart.');
+    const audit = evaluateResponseContract(plan, [
+      {
+        function: 'get_key_levels',
+        arguments: { symbol: 'SPX' },
+        result: { symbol: 'SPX' },
+      },
+      {
+        function: 'show_chart',
+        arguments: { symbol: 'SPX', timeframe: '1D' },
+        result: { symbol: 'SPX', timeframe: '1D' },
+      },
+    ], 'SPX key levels are in play.');
+
+    expect(audit.blockingViolations).toHaveLength(0);
+    expect(audit.warnings).toContain('missing_numeric_prices');
+    expect(shouldAttemptContractRewrite(audit)).toBe(false);
   });
 
   it('builds a budget fallback summary from tool outputs', () => {

@@ -25,6 +25,8 @@
     "test:e2e:ai-coach-audit": "playwright test e2e/specs/ai-coach/ai-coach-widget-actions-audit.spec.ts --project=ai-coach",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "backtest:spx": "pnpm --dir backend run backtest:spx",
+    "backtest:spx:walkforward": "pnpm --dir backend run backtest:spx:walkforward",
     "journal:cleanup-ambiguous": "node scripts/journal/cleanup-ambiguous-symbol-entries.mjs",
     "academy:v3:seed": "node scripts/academy-v3/generate-seed-sql.mjs --input docs/specs/academy-content/foundations-program.seed.json --output supabase/seeds/academy_v3_foundations.sql",
     "academy:v3:validate-content": "node scripts/academy-v3/validate-content.mjs docs/specs/academy-content",

@@ -19,6 +19,7 @@ interface SymbolSearchProps {
 const FAVORITES_KEY = 'ai-coach-symbol-favorites'
 const RECENTS_KEY = 'ai-coach-symbol-recents'
 const MAX_RECENTS = 10
+const SYMBOL_INPUT_REGEX = /^[A-Z0-9._:-]{1,10}$/
 
 const POPULAR_SYMBOLS: SymbolSearchItem[] = [
   { symbol: 'SPX', name: 'S&P 500 Index', type: 'index', exchange: null },
@@ -168,6 +169,13 @@ export function SymbolSearch({ value, onChange, className }: SymbolSearchProps) 
     stock: suggestions.filter((item) => item.type === 'stock'),
   }), [suggestions])
 
+  const manualSymbolCandidate = useMemo(() => {
+    const query = inputValue.trim().toUpperCase()
+    if (!SYMBOL_INPUT_REGEX.test(query)) return null
+    if (suggestions.some((item) => item.symbol === query)) return null
+    return query
+  }, [inputValue, suggestions])
+
   const addRecent = useCallback((symbol: string) => {
     const updated = [symbol, ...recents.filter((item) => item !== symbol)].slice(0, MAX_RECENTS)
     setRecents(updated)
@@ -191,9 +199,30 @@ export function SymbolSearch({ value, onChange, className }: SymbolSearchProps) 
     setIsOpen(false)
   }, [addRecent, onChange])
 
+  const commitInputSymbol = useCallback(() => {
+    const typed = inputValue.trim().toUpperCase()
+    if (!typed) return
+
+    const exactMatch = suggestions.find((item) => item.symbol === typed)
+    if (exactMatch) {
+      handleSelect(exactMatch.symbol)
+      return
+    }
+
+    if (manualSymbolCandidate) {
+      handleSelect(manualSymbolCandidate)
+      return
+    }
+
+    if (suggestions.length > 0) {
+      handleSelect(suggestions[0].symbol)
+    }
+  }, [handleSelect, inputValue, manualSymbolCandidate, suggestions])
+
   return (
     <div className={cn('relative', className)}>
-      <div className="relative">
+      <div className="relative flex items-center gap-1.5">
+        <div className="relative flex-1">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
         <input
           value={inputValue}
@@ -204,14 +233,25 @@ export function SymbolSearch({ value, onChange, className }: SymbolSearchProps) 
           onFocus={() => setIsOpen(true)}
           onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && suggestions.length > 0) {
-              event.preventDefault()
-              handleSelect(suggestions[0].symbol)
-            }
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            commitInputSymbol()
           }}
           placeholder="Search symbol (AAPL, SPX, QQQ...)"
           className="h-8 w-full rounded-md border border-white/10 bg-white/5 pl-8 pr-2.5 text-xs text-white placeholder:text-white/35 focus:border-emerald-500/40 focus:outline-none"
         />
+        </div>
+        <button
+          type="button"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            commitInputSymbol()
+          }}
+          className="h-8 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] text-emerald-200 transition-colors hover:bg-emerald-500/20"
+          aria-label="Apply symbol search"
+        >
+          Go
+        </button>
       </div>
 
       {isOpen && (
@@ -224,6 +264,19 @@ export function SymbolSearch({ value, onChange, className }: SymbolSearchProps) 
           )}
           {!isLoading && suggestions.length === 0 && (
             <p className="px-2 py-1.5 text-[11px] text-white/45">No symbols found.</p>
+          )}
+
+          {!isLoading && manualSymbolCandidate && (
+            <button
+              type="button"
+              onMouseDown={() => handleSelect(manualSymbolCandidate)}
+              className="mb-1 flex w-full items-center justify-between rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-left transition-colors hover:bg-emerald-500/15"
+            >
+              <div>
+                <p className="text-xs font-medium text-emerald-200">{manualSymbolCandidate}</p>
+                <p className="text-[10px] text-emerald-200/75">Use typed symbol</p>
+              </div>
+            </button>
           )}
 
           {!isLoading && (

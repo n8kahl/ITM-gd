@@ -35,6 +35,7 @@ import { startPortfolioSyncWorker, stopPortfolioSyncWorker } from './workers/por
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startMassiveTickStream, stopMassiveTickStream } from './services/massiveTickStream';
 import { initializeMarketHolidays } from './services/marketHours';
+import { startSPXNewsSentimentPolling } from './services/spx/newsSentimentService';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -175,11 +176,31 @@ app.use((err: Error, _req: Request, res: Response, _next: any) => {
 });
 
 let httpServer: any;
+let stopNewsSentimentPolling: (() => void) | null = null;
 
 async function start() {
   try {
     const env = validateEnv();
     logger.info(`Starting server in ${env.NODE_ENV} mode...`);
+    if (env.NODE_ENV === 'production') {
+      const phase18Flags: Array<[string, boolean]> = [
+        ['SPX_ENVIRONMENT_GATE_ENABLED', env.SPX_ENVIRONMENT_GATE_ENABLED],
+        ['SPX_EVENT_RISK_GATE_ENABLED', env.SPX_EVENT_RISK_GATE_ENABLED],
+        ['SPX_NEWS_SENTIMENT_ENABLED', env.SPX_NEWS_SENTIMENT_ENABLED],
+        ['SPX_MEMORY_ENGINE_ENABLED', env.SPX_MEMORY_ENGINE_ENABLED],
+        ['SPX_MULTI_TF_CONFLUENCE_ENABLED', env.SPX_MULTI_TF_CONFLUENCE_ENABLED],
+        ['SPX_WEIGHTED_CONFLUENCE_ENABLED', env.SPX_WEIGHTED_CONFLUENCE_ENABLED],
+        ['SPX_ADAPTIVE_EV_ENABLED', env.SPX_ADAPTIVE_EV_ENABLED],
+      ];
+      const disabled = phase18Flags
+        .filter(([, enabled]) => !enabled)
+        .map(([name]) => name);
+      if (disabled.length > 0) {
+        logger.warn('SPX Phase 18 flags disabled in production', {
+          disabledFlags: disabled,
+        });
+      }
+    }
 
     try {
       logger.info('Connecting to Redis...');
@@ -204,6 +225,10 @@ async function start() {
     startSPXDataLoop();
     startSPXOptimizerWorker();
     startPortfolioSyncWorker();
+    if (env.SPX_NEWS_SENTIMENT_ENABLED) {
+      stopNewsSentimentPolling = startSPXNewsSentimentPolling();
+      logger.info('SPX news sentiment polling enabled');
+    }
 
     // Initialize market holidays (async, but don't block server start completely)
     initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
@@ -229,6 +254,10 @@ async function gracefulShutdown(signal: string) {
     stopSPXDataLoop();
     stopSPXOptimizerWorker();
     stopPortfolioSyncWorker();
+    if (stopNewsSentimentPolling) {
+      stopNewsSentimentPolling();
+      stopNewsSentimentPolling = null;
+    }
     stopMassiveTickStream();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown

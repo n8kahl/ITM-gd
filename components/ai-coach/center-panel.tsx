@@ -20,6 +20,7 @@ import {
   Globe,
   Calendar,
   Sunrise,
+  Shield,
   ListChecks,
   Settings,
   RefreshCw,
@@ -138,6 +139,7 @@ export interface ChartRequest {
     maxGEXStrike?: number | null
     keyLevels?: Array<{ strike: number; gexValue: number; type: 'support' | 'resistance' | 'magnet' }>
   }
+  contextNotes?: string[]
 }
 
 const SUPPORTED_CHART_TIMEFRAMES = new Set<ChartTimeframe>(['1m', '5m', '15m', '1h', '4h', '1D'])
@@ -155,6 +157,9 @@ function toSheetChartRequest(value: unknown): ChartRequest | null {
     timeframe: maybe.timeframe as ChartTimeframe,
     levels: maybe.levels,
     gexProfile: maybe.gexProfile,
+    contextNotes: Array.isArray(maybe.contextNotes)
+      ? maybe.contextNotes.filter((note): note is string => typeof note === 'string').slice(0, 6)
+      : undefined,
   }
 }
 
@@ -181,27 +186,27 @@ interface CenterPanelProps {
 const EXAMPLE_PROMPTS = [
   {
     icon: Target,
-    label: 'SPX Game Plan',
-    prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
-    description: 'Complete SPX analysis with levels, GEX, and trade setups',
+    label: 'Start Here (Beginner)',
+    prompt: 'I am a newer trader. Show SPY on the chart and explain the most important support/resistance levels in plain language.',
+    description: 'Plain-English chart read with key levels and risk context',
   },
   {
     icon: Sunrise,
-    label: 'Morning Brief',
-    prompt: 'Give me this morning brief with overnight gaps, key levels, and what to watch during the session.',
-    description: 'Pre-market overview, overnight gaps, key levels & events',
+    label: 'Simple Morning Brief',
+    prompt: 'Give me this morning brief in plain language: overnight gaps, key levels, and what to watch first.',
+    description: 'Beginner-friendly pre-market overview and catalysts',
   },
   {
-    icon: Search,
-    label: 'Best Setup Now',
-    prompt: 'Scan SPX, NDX, QQQ, SPY, AAPL, TSLA, NVDA for the best setups right now. Show me the highest-probability trade with entry, target, and stop.',
-    description: 'AI scans 7 symbols for the highest-conviction setup',
+    icon: Shield,
+    label: 'Risk Checklist',
+    prompt: 'Build a beginner risk checklist for today: position size, max daily loss, invalidation, and when to stand down.',
+    description: 'Practical guardrails before taking any trade',
   },
   {
     icon: Activity,
-    label: 'SPX vs SPY',
-    prompt: 'Compare SPX and SPY right now: price levels, expected move, GEX context, and which has the better risk/reward for day trading today. Include the SPX-to-SPY price ratio.',
-    description: 'Head-to-head comparison for day trading decisions',
+    label: 'Advanced SPX Game Plan',
+    prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
+    description: 'Full institutional-style SPX analysis',
   },
 ]
 
@@ -361,6 +366,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   const [chartTimeframe, setChartTimeframe] = useState<ChartTimeframe>('5m')
   const [chartBars, setChartBars] = useState<ChartBar[]>([])
   const [chartLevels, setChartLevels] = useState<LevelAnnotation[]>([])
+  const [chartContextNotes, setChartContextNotes] = useState<string[]>([])
   const [chartProviderIndicators, setChartProviderIndicators] = useState<ChartProviderIndicators | null>(null)
   const [chartIndicatorConfig, setChartIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [isLoadingChart, setIsLoadingChart] = useState(false)
@@ -428,7 +434,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
   useEffect(() => {
     const loaded = loadAICoachPreferences()
-    const restoredSymbol = loaded.lastChartSymbol || 'SPX'
+    const defaultWatchSymbol = loaded.defaultWatchlist[0] || 'SPX'
+    const restoredSymbol = loaded.lastChartSymbol || defaultWatchSymbol
     const restoredTimeframe = loaded.lastChartTimeframe || loaded.defaultChartTimeframe
     const restoredView = loaded.lastActiveView
     setPreferences(loaded)
@@ -683,6 +690,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     const levelAnnotations = buildLevelAnnotations(chartRequest)
     const gexAnnotations = buildGEXAnnotations(chartRequest)
     setChartLevels([...levelAnnotations, ...gexAnnotations])
+    setChartContextNotes(Array.isArray(chartRequest.contextNotes) ? chartRequest.contextNotes.slice(0, 6) : [])
 
     fetchChartData(chartRequest.symbol, chartRequest.timeframe)
   }, [buildGEXAnnotations, buildLevelAnnotations, chartRequest, fetchChartData, forcedView, setCenterView, setSymbol])
@@ -720,8 +728,10 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       const levelAnnotations = buildLevelAnnotations(sheetChartRequest)
       const gexAnnotations = buildGEXAnnotations(sheetChartRequest)
       setChartLevels([...levelAnnotations, ...gexAnnotations])
+      setChartContextNotes(Array.isArray(sheetChartRequest.contextNotes) ? sheetChartRequest.contextNotes.slice(0, 6) : [])
     } else if (symbolChanged || timeframeChanged) {
       setChartLevels([])
+      setChartContextNotes([])
     }
 
     if (symbolChanged) {
@@ -765,6 +775,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       const levelAnnotations = buildLevelAnnotations(request)
       const gexAnnotations = buildGEXAnnotations(request)
       setChartLevels([...levelAnnotations, ...gexAnnotations])
+      setChartContextNotes(Array.isArray(request.contextNotes) ? request.contextNotes.slice(0, 6) : [])
 
       fetchChartData(request.symbol, request.timeframe)
     }
@@ -807,6 +818,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     setSymbol(symbol)
     setPendingChartSyncSymbol(null)
     setChartLevels([])
+    setChartContextNotes([])
     fetchChartData(symbol, chartTimeframe)
   }, [chartTimeframe, fetchChartData, setSymbol])
 
@@ -815,6 +827,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     setChartSymbol(pendingChartSyncSymbol)
     setPendingChartSyncSymbol(null)
     setChartLevels([])
+    setChartContextNotes([])
     fetchChartData(pendingChartSyncSymbol, chartTimeframe)
   }, [pendingChartSyncSymbol, fetchChartData, chartTimeframe])
 
@@ -1081,12 +1094,14 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
           {shouldRenderChartCanvas && (
             <ChartView
               symbol={chartSymbol}
+              watchlist={preferences.defaultWatchlist}
               timeframe={chartTimeframe}
               bars={chartBars}
               levels={chartLevels}
               providerIndicators={chartProviderIndicators}
               indicators={chartIndicatorConfig}
               openingRangeMinutes={preferences.orbMinutes}
+              contextNotes={chartContextNotes}
               pendingSyncSymbol={pendingChartSyncSymbol}
               isLoading={isLoadingChart}
               error={chartError}
@@ -1095,6 +1110,12 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               realtimeError={chartStream.error}
               highlightedLevel={highlightedLevel}
               onSymbolChange={handleSymbolChange}
+              onWatchlistChange={(watchlist) => {
+                setPreferences((prev) => ({
+                  ...prev,
+                  defaultWatchlist: watchlist,
+                }))
+              }}
               onTimeframeChange={handleTimeframeChange}
               onIndicatorsChange={setChartIndicatorConfig}
               levelVisibility={preferences.defaultLevelVisibility}
@@ -1316,12 +1337,14 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
 function ChartView({
   symbol,
+  watchlist,
   timeframe,
   bars,
   levels,
   providerIndicators,
   indicators,
   openingRangeMinutes,
+  contextNotes,
   pendingSyncSymbol,
   isLoading,
   error,
@@ -1330,6 +1353,7 @@ function ChartView({
   realtimeError,
   highlightedLevel,
   onSymbolChange,
+  onWatchlistChange,
   onTimeframeChange,
   onIndicatorsChange,
   levelVisibility,
@@ -1339,12 +1363,14 @@ function ChartView({
   onDismissSync,
 }: {
   symbol: string
+  watchlist: string[]
   timeframe: ChartTimeframe
   bars: ChartBar[]
   levels: LevelAnnotation[]
   providerIndicators: ChartProviderIndicators | null
   indicators: IndicatorConfig
   openingRangeMinutes: 5 | 15 | 30
+  contextNotes: string[]
   pendingSyncSymbol: string | null
   isLoading: boolean
   error: string | null
@@ -1353,6 +1379,7 @@ function ChartView({
   realtimeError: string | null
   highlightedLevel: { value: string; price?: number } | null
   onSymbolChange: (s: string) => void
+  onWatchlistChange: (symbols: string[]) => void
   onTimeframeChange: (t: ChartTimeframe) => void
   onIndicatorsChange: (next: IndicatorConfig) => void
   levelVisibility: LevelVisibilityConfig
@@ -1477,8 +1504,10 @@ function ChartView({
         </div>
         <ChartToolbar
           symbol={symbol}
+          watchlist={watchlist}
           timeframe={timeframe}
           onSymbolChange={onSymbolChange}
+          onWatchlistChange={onWatchlistChange}
           onTimeframeChange={onTimeframeChange}
           indicators={indicators}
           onIndicatorsChange={onIndicatorsChange}
@@ -1487,6 +1516,20 @@ function ChartView({
           levelCounts={levelCounts}
           isLoading={isLoading}
         />
+        {contextNotes.length > 0 && (
+          <div className="border-t border-white/5 px-3 py-2">
+            <div className="flex flex-wrap gap-1.5">
+              {contextNotes.slice(0, 4).map((note, index) => (
+                <span
+                  key={`${note}-${index}`}
+                  className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200/85"
+                >
+                  {note}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0">

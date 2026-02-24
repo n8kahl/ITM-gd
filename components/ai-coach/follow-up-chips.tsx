@@ -63,12 +63,12 @@ function buildFollowUps(
   if (mentionsSPX) {
     candidates.push(
       {
-        label: 'SPX Game Plan',
-        prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
+        label: 'Explain SPX Simply',
+        prompt: 'Explain the SPX context in plain English: trend, nearest support/resistance, and what would invalidate the current idea.',
       },
       {
-        label: 'SPX vs SPY',
-        prompt: 'Compare SPX and SPY right now: price levels, expected move, GEX context, and which has the better risk/reward for day trading today. Include the SPX-to-SPY price ratio.',
+        label: 'SPX Game Plan',
+        prompt: 'Give me the full SPX game plan with key levels, bull and bear triggers, and show it on the chart.',
       },
     )
   }
@@ -76,12 +76,16 @@ function buildFollowUps(
   if (mentionsLevels) {
     candidates.push(
       {
-        label: 'Show Chart',
+        label: 'Show on Chart',
         prompt: `Show ${symbol} on the chart and map PDH, PDL, pivot, and VWAP with a quick setup read.`,
       },
       {
-        label: 'Set Level Alerts',
-        prompt: `Set practical level alerts for ${symbol} around key support/resistance and explain what each trigger means.`,
+        label: 'Explain Levels',
+        prompt: `Explain the ${symbol} key levels in plain language and tell me what each level means for risk.`,
+      },
+      {
+        label: 'Build Risk Plan',
+        prompt: `Build a simple risk plan for trading ${symbol} around these levels: entry trigger, invalidation, and max loss.`,
       },
     )
   }
@@ -93,8 +97,8 @@ function buildFollowUps(
         prompt: `Show the ${symbol} options chain around ATM and summarize the important strikes, flow, and IV context.`,
       },
       {
-        label: 'Analyze Position',
-        prompt: `Help me structure and analyze a ${symbol} trade with entry, target, stop, and risk plan.`,
+        label: 'Explain Greeks',
+        prompt: `Explain delta, gamma, theta, and IV for this ${symbol} setup in plain language and what to monitor next.`,
       },
     )
   }
@@ -102,12 +106,16 @@ function buildFollowUps(
   if (candidates.length === 0) {
     candidates.push(
       {
+        label: 'Explain in Plain English',
+        prompt: `Explain this ${symbol} setup in plain English, then show the chart with the most important levels.`,
+      },
+      {
         label: 'Show Chart',
         prompt: `Show ${symbol} on the chart and give me a quick read of trend, levels, and key triggers.`,
       },
       {
-        label: 'Scan Setups',
-        prompt: 'Scan SPX, NDX, QQQ, SPY, AAPL, TSLA, NVDA and give me the highest-conviction setup right now.',
+        label: 'Risk Checklist',
+        prompt: `Give me a beginner risk checklist before trading ${symbol} today.`,
       },
     )
   }

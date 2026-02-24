@@ -40,6 +40,7 @@ export function chartAction(
   timeframe: ChartTimeframe = '5m',
   label?: string,
   buttonLabel?: string,
+  contextNotes?: string[],
 ): WidgetAction {
   return {
     label: buttonLabel || (typeof level === 'number' ? 'Show on Chart' : 'Open Chart'),
@@ -54,6 +55,7 @@ export function chartAction(
         level,
         timeframe,
         label,
+        contextNotes,
       })
     },
   }

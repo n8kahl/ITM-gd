@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { ChartTimeframe } from '@/lib/api/ai-coach'
 import type { IndicatorConfig } from './chart-indicators'
 import type { AICoachPreferences } from './preferences'
@@ -24,11 +25,27 @@ const INDICATOR_KEYS: Array<{ key: keyof IndicatorConfig; label: string }> = [
 ]
 
 export function PreferencesPanel({ value, onChange, onReset }: PreferencesPanelProps) {
+  const [watchlistDraft, setWatchlistDraft] = useState('')
   const setPreference = <K extends keyof AICoachPreferences>(key: K, nextValue: AICoachPreferences[K]) => {
     onChange({
       ...value,
       [key]: nextValue,
     })
+  }
+
+  const addWatchlistSymbol = () => {
+    const candidate = watchlistDraft.trim().toUpperCase()
+    if (!/^[A-Z0-9._:-]{1,10}$/.test(candidate)) return
+    if (value.defaultWatchlist.includes(candidate)) {
+      setWatchlistDraft('')
+      return
+    }
+    setPreference('defaultWatchlist', [...value.defaultWatchlist, candidate].slice(0, 20))
+    setWatchlistDraft('')
+  }
+
+  const removeWatchlistSymbol = (symbol: string) => {
+    setPreference('defaultWatchlist', value.defaultWatchlist.filter((item) => item !== symbol))
   }
 
   return (
@@ -190,9 +207,51 @@ export function PreferencesPanel({ value, onChange, onReset }: PreferencesPanelP
               />
             </label>
           </div>
+
+          <div className="mt-3 rounded border border-white/10 bg-black/20 p-2.5">
+            <p className="text-[11px] text-white/60 mb-2">Default Watchlist</p>
+            <div className="mb-2 flex items-center gap-1.5">
+              <input
+                value={watchlistDraft}
+                onChange={(event) => setWatchlistDraft(event.target.value.toUpperCase().replace(/[^A-Z0-9._:-]/g, ''))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addWatchlistSymbol()
+                  }
+                }}
+                placeholder="Add symbol (AAPL, SPX...)"
+                className="h-8 flex-1 rounded border border-white/10 bg-black/30 px-2 text-xs text-white placeholder:text-white/35 focus:border-emerald-500/40 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={addWatchlistSymbol}
+                className="h-8 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] text-emerald-300 hover:bg-emerald-500/15"
+              >
+                Add
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {value.defaultWatchlist.map((symbol) => (
+                <span
+                  key={symbol}
+                  className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/75"
+                >
+                  {symbol}
+                  <button
+                    type="button"
+                    onClick={() => removeWatchlistSymbol(symbol)}
+                    className="text-white/40 hover:text-red-300"
+                    aria-label={`Remove ${symbol} from watchlist`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
         </section>
       </div>
     </div>
   )
 }
-

@@ -43,43 +43,43 @@ import { Analytics } from '@/lib/analytics'
 
 const CHAT_QUICK_PROMPTS = [
   {
-    text: 'SPX Game Plan',
+    text: 'Start Here',
+    prompt: 'I am a newer trader. Show SPY on the chart and explain the most important support/resistance levels in plain English.',
+  },
+  {
+    text: 'Read This Chart',
+    prompt: 'Show SPX on the chart and give me a simple read: trend, nearest support/resistance, and one bull + one bear trigger.',
+  },
+  {
+    text: 'Risk Checklist',
+    prompt: 'Build a beginner-friendly risk checklist for today: position size, max loss, and what invalidation means before entry.',
+  },
+  {
+    text: 'Advanced SPX Plan',
     prompt: 'Give me the full SPX game plan: key levels (PDH, PDL, pivot, VWAP), GEX profile with flip point, expected move, and what setups to watch today. Show the chart.',
-  },
-  {
-    text: 'Morning Brief',
-    prompt: 'Show me today\'s morning brief with overnight gaps, key levels, and what to watch.',
-  },
-  {
-    text: 'Best Setup Now',
-    prompt: 'Scan SPX, NDX, QQQ, SPY, AAPL, TSLA, NVDA for the best setups right now. Show me the highest-probability trade with entry, target, and stop.',
-  },
-  {
-    text: 'SPX vs SPY',
-    prompt: 'Compare SPX and SPY right now: price levels, expected move, GEX context, and which has the better risk/reward for day trading today. Include the SPX-to-SPY price ratio.',
   },
 ] as const
 
 const CHAT_PLACEHOLDERS = {
   pre_market: [
-    'What\'s the gap looking like?',
-    'Show me overnight levels',
+    'Show me overnight levels in plain English',
+    'What should I watch at the open?',
     'Morning brief',
   ],
   session: [
-    'How is SPX holding up?',
-    'Best setup right now',
-    'Check my positions',
+    'How is SPX holding up right now?',
+    'What is the safest setup to watch?',
+    'Explain this move simply',
   ],
   after_hours: [
-    'Recap today\'s session',
-    'What worked today?',
-    'Plan for tomorrow',
+    'Recap today\'s session simply',
+    'What worked and what failed today?',
+    'Build a plan for tomorrow',
   ],
   closed: [
     'Review my trade journal',
-    'Analyze my win rate',
-    'Study a setup',
+    'What mistakes should I avoid tomorrow?',
+    'Study one setup step-by-step',
   ],
 } as const
 

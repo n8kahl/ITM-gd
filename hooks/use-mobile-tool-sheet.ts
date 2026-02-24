@@ -58,6 +58,7 @@ export function resolveMobileSheetFromWidgetEvent(
                   timeframe,
                   levels: detail?.levels,
                   gexProfile: detail?.gexProfile,
+                  contextNotes: detail?.contextNotes,
                 },
               }
             : {}),
@@ -205,6 +206,7 @@ export function useMobileToolSheet() {
           timeframe,
           levels: detail.levels,
           gexProfile: detail.gexProfile,
+          contextNotes: detail.contextNotes,
         },
       })
     }

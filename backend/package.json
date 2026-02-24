@@ -13,6 +13,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "backtest:last-week": "tsx src/scripts/spxBacktestLastWeek.ts",
+    "backtest:spx": "tsx src/scripts/spxBacktestRange.ts",
+    "backtest:spx:walkforward": "tsx src/scripts/spxBacktestWalkforward.ts",
     "spx:backfill-historical": "tsx src/scripts/spxBackfillHistoricalSetups.ts",
     "spx:optimizer-weekly": "tsx src/scripts/spxWeeklyOptimizerScan.ts",
     "spx:sweep-geometry": "tsx src/scripts/spxSweepGeometry.ts",

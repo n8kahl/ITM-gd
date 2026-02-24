@@ -12,6 +12,7 @@ export interface AICoachPreferences {
   riskPerTradePct: number
   orbMinutes: 5 | 15 | 30
   defaultChartTimeframe: ChartTimeframe
+  defaultWatchlist: string[]
   autoSyncWorkflowSymbol: boolean
   notificationsEnabled: boolean
   defaultOptionsStrikeRange: 5 | 10 | 15 | 20 | 30
@@ -37,6 +38,7 @@ export const DEFAULT_AI_COACH_PREFERENCES: AICoachPreferences = {
   riskPerTradePct: 1,
   orbMinutes: 15,
   defaultChartTimeframe: '5m',
+  defaultWatchlist: ['SPX', 'NDX', 'SPY', 'QQQ'],
   autoSyncWorkflowSymbol: false,
   notificationsEnabled: true,
   defaultOptionsStrikeRange: 10,
@@ -95,8 +97,22 @@ function toPersistentCenterView(value: unknown): PersistentCenterView | undefine
 function toSymbol(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value.trim().toUpperCase()
-  if (!normalized || normalized.length > 12) return undefined
+  if (!normalized || !/^[A-Z0-9._:-]{1,10}$/.test(normalized)) return undefined
   return normalized
+}
+
+function toSymbolList(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return fallback
+  const deduped: string[] = []
+  const seen = new Set<string>()
+  for (const raw of value) {
+    const symbol = toSymbol(raw)
+    if (!symbol || seen.has(symbol)) continue
+    seen.add(symbol)
+    deduped.push(symbol)
+    if (deduped.length >= 20) break
+  }
+  return deduped.length > 0 ? deduped : fallback
 }
 
 function toRiskPct(value: unknown): number {
@@ -148,6 +164,7 @@ export function normalizeAICoachPreferences(value: unknown): AICoachPreferences 
     riskPerTradePct: toRiskPct(raw.riskPerTradePct),
     orbMinutes: toOrbMinutes(raw.orbMinutes),
     defaultChartTimeframe: toChartTimeframe(raw.defaultChartTimeframe),
+    defaultWatchlist: toSymbolList(raw.defaultWatchlist, DEFAULT_AI_COACH_PREFERENCES.defaultWatchlist),
     autoSyncWorkflowSymbol: toBoolean(raw.autoSyncWorkflowSymbol, DEFAULT_AI_COACH_PREFERENCES.autoSyncWorkflowSymbol),
     notificationsEnabled: toBoolean(raw.notificationsEnabled, DEFAULT_AI_COACH_PREFERENCES.notificationsEnabled),
     defaultOptionsStrikeRange: toStrikeRange(raw.defaultOptionsStrikeRange),

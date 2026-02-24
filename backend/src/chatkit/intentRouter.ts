@@ -59,9 +59,6 @@ const INTENT_SPECS: IntentSpec[] = [
     preferredChartTimeframe: '15m',
     requiresBullBear: true,
     requiresPriceNumbers: true,
-    requiresDisclaimer: true,
-    requiresScenarioProbabilities: true,
-    requiresLiquidityWatchouts: true,
   },
   {
     id: 'setup_help',
@@ -210,7 +207,7 @@ const INTENT_SPECS: IntentSpec[] = [
   },
   {
     id: 'company_profile',
-    phrases: ['what does', 'what is', 'company info', 'about the company', 'sector', 'market cap', 'fundamentals'],
+    phrases: ['company profile', 'company info', 'about the company', 'business model', 'sector', 'market cap', 'fundamentals'],
     requiredFunctions: ['get_company_profile'],
   },
   {
@@ -241,6 +238,7 @@ const SYMBOL_SPECIFIC_FUNCTIONS = new Set([
   'get_zero_dte_analysis',
   'get_iv_analysis',
   'get_earnings_analysis',
+  'get_trade_history_for_symbol',
   'show_chart',
   'get_ticker_news',
   'get_company_profile',
@@ -472,22 +470,11 @@ export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
   let requiredFunctions = dedupe(selectedSpecs.flatMap((spec) => spec.requiredFunctions));
   let recommendedFunctions = dedupe(selectedSpecs.flatMap((spec) => spec.recommendedFunctions || []));
 
-  const symbolBoundFunctions = new Set([
-    'get_key_levels',
-    'get_current_price',
-    'get_options_chain',
-    'get_gamma_exposure',
-    'get_zero_dte_analysis',
-    'get_iv_analysis',
-    'get_earnings_analysis',
-    'show_chart',
-  ]);
-
   if (symbols.length === 0) {
-    const symbolBoundRequired = requiredFunctions.filter((fn) => symbolBoundFunctions.has(fn));
+    const symbolBoundRequired = requiredFunctions.filter((fn) => SYMBOL_SPECIFIC_FUNCTIONS.has(fn));
     if (symbolBoundRequired.length > 0) {
       recommendedFunctions = dedupe([...recommendedFunctions, ...symbolBoundRequired]);
-      requiredFunctions = requiredFunctions.filter((fn) => !symbolBoundFunctions.has(fn));
+      requiredFunctions = requiredFunctions.filter((fn) => !SYMBOL_SPECIFIC_FUNCTIONS.has(fn));
     }
   }
 
@@ -630,8 +617,7 @@ export function evaluateResponseContract(
 }
 
 export function shouldAttemptContractRewrite(audit: ContractViolationAudit): boolean {
-  if (audit.blockingViolations.length > 0) return true;
-  return audit.warnings.some((warning) => warning === 'missing_bull_bear_duality');
+  return audit.blockingViolations.length > 0;
 }
 
 export function buildContractRepairDirective(plan: IntentRoutingPlan): string {

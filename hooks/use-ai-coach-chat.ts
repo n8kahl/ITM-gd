@@ -121,6 +121,24 @@ export function useAICoachChat() {
     return null
   }, [])
 
+  const toContextNotes = useCallback((notes: Array<string | null | undefined>, limit: number = 4): string[] => {
+    const deduped: string[] = []
+    const seen = new Set<string>()
+
+    for (const raw of notes) {
+      if (typeof raw !== 'string') continue
+      const normalized = raw.trim()
+      if (!normalized) continue
+      const key = normalized.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      deduped.push(normalized)
+      if (deduped.length >= limit) break
+    }
+
+    return deduped
+  }, [])
+
   /**
    * Extract chart request from function calls
    */
@@ -389,8 +407,143 @@ export function useAICoachChat() {
         }
       }
     }
+
+    const earningsAnalysisCall = functionCalls.find(fc => fc.function === 'get_earnings_analysis')
+    if (earningsAnalysisCall) {
+      const result = (earningsAnalysisCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        currentPrice?: number | string
+        earningsDate?: string
+        expectedMove?: {
+          points?: number | string
+          pct?: number | string
+        }
+        ivCrushRisk?: string
+      }
+
+      if (!result.error && result.symbol) {
+        const currentPrice = toFiniteNumber(result.currentPrice)
+        const expectedMovePoints = toFiniteNumber(result.expectedMove?.points)
+        const expectedMovePct = toFiniteNumber(result.expectedMove?.pct)
+        const derivedMovePoints = (
+          expectedMovePoints != null
+            ? expectedMovePoints
+            : (currentPrice != null && expectedMovePct != null)
+              ? (currentPrice * expectedMovePct) / 100
+              : null
+        )
+        const upper = currentPrice != null && derivedMovePoints != null ? currentPrice + derivedMovePoints : null
+        const lower = currentPrice != null && derivedMovePoints != null ? currentPrice - derivedMovePoints : null
+
+        return {
+          symbol: result.symbol,
+          timeframe: '1D',
+          levels: {
+            resistance: [
+              ...(upper != null ? [{ name: 'Expected High', price: upper }] : []),
+            ],
+            support: [
+              ...(lower != null ? [{ name: 'Expected Low', price: lower }] : []),
+              ...(currentPrice != null ? [{ name: 'Spot', price: currentPrice }] : []),
+            ],
+          },
+          contextNotes: toContextNotes([
+            result.earningsDate ? `Earnings: ${result.earningsDate}` : null,
+            expectedMovePct != null ? `Expected move: +/-${expectedMovePct.toFixed(2)}%` : null,
+            result.ivCrushRisk ? `IV crush risk: ${result.ivCrushRisk}` : null,
+          ]),
+        }
+      }
+    }
+
+    const macroCall = functionCalls.find(fc => fc.function === 'get_macro_context')
+    if (macroCall) {
+      const result = (macroCall.result || {}) as {
+        error?: unknown
+        symbolImpact?: {
+          symbol?: string
+          outlook?: string
+          bullishFactors?: string[]
+          bearishFactors?: string[]
+        }
+        fedPolicy?: {
+          tone?: string
+          nextMeeting?: string
+        }
+        economicCalendar?: Array<{
+          event?: string
+          date?: string
+          impact?: string
+        }>
+      }
+
+      if (!result.error) {
+        const symbol = result.symbolImpact?.symbol || 'SPX'
+        const firstEvent = result.economicCalendar?.[0]
+
+        return {
+          symbol,
+          timeframe: '1D',
+          contextNotes: toContextNotes([
+            result.symbolImpact?.outlook ? `${symbol} outlook: ${result.symbolImpact.outlook}` : null,
+            result.fedPolicy?.tone ? `Fed tone: ${result.fedPolicy.tone}` : null,
+            result.fedPolicy?.nextMeeting ? `Next Fed meeting: ${result.fedPolicy.nextMeeting}` : null,
+            firstEvent?.event ? `Next event: ${firstEvent.event}${firstEvent.date ? ` (${firstEvent.date})` : ''}` : null,
+          ]),
+        }
+      }
+    }
+
+    const economicCalendarCall = functionCalls.find(fc => fc.function === 'get_economic_calendar')
+    if (economicCalendarCall) {
+      const result = (economicCalendarCall.result || {}) as {
+        error?: unknown
+        events?: Array<{
+          event?: string
+          date?: string
+          impact?: string
+        }>
+      }
+
+      if (!result.error) {
+        const events = Array.isArray(result.events) ? result.events.slice(0, 3) : []
+        return {
+          symbol: 'SPX',
+          timeframe: '1D',
+          contextNotes: toContextNotes(events.map((event) => (
+            event.event
+              ? `${event.event}${event.date ? ` (${event.date})` : ''}${event.impact ? ` - ${event.impact}` : ''}`
+              : null
+          ))),
+        }
+      }
+    }
+
+    const tickerNewsCall = functionCalls.find(fc => fc.function === 'get_ticker_news')
+    if (tickerNewsCall) {
+      const args = (tickerNewsCall.arguments || {}) as { symbol?: string }
+      const result = (tickerNewsCall.result || {}) as {
+        error?: unknown
+        symbol?: string
+        articles?: Array<{
+          title?: string
+          publishedUtc?: string
+        }>
+      }
+
+      if (!result.error && (result.symbol || args.symbol)) {
+        const symbol = result.symbol || args.symbol || 'SPX'
+        const headlines = Array.isArray(result.articles) ? result.articles.slice(0, 2) : []
+        return {
+          symbol,
+          timeframe: '1D',
+          contextNotes: toContextNotes(headlines.map((headline) => headline.title || null)),
+        }
+      }
+    }
     return null
-  }, [toFiniteNumber])
+  }, [toContextNotes, toFiniteNumber])
 
   /**
    * Send message with streaming (default) or fallback to non-streaming
@@ -616,7 +769,7 @@ export function useAICoachChat() {
       const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to load messages'
       setState(prev => ({ ...prev, isLoadingMessages: false, error: message }))
     }
-  }, [getToken])
+  }, [extractChartRequest, getToken])
 
   const removeSession = useCallback(async (sessionId: string) => {
     const token = getToken()

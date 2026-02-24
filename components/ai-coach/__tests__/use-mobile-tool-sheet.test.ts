@@ -27,6 +27,7 @@ describe('resolveMobileSheetFromWidgetEvent', () => {
           resistance: [{ name: 'Fib 100%', price: 452.43 }],
           support: [{ name: 'Fib 38.2%', price: 412.32 }],
         },
+        contextNotes: ['Earnings tomorrow', 'Expected move +/-4.2%'],
       },
     })
 
@@ -38,6 +39,7 @@ describe('resolveMobileSheetFromWidgetEvent', () => {
         chartRequest: {
           symbol: 'TSLA',
           timeframe: '1D',
+          contextNotes: ['Earnings tomorrow', 'Expected move +/-4.2%'],
         },
       },
     })

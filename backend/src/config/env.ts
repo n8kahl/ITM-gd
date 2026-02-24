@@ -68,6 +68,7 @@ const envSchema = z.object({
   SPX_SETUP_SNIPER_SECONDARY_PWIN: z.string().default('0.54').transform(Number),
   SPX_SETUP_SNIPER_PRIMARY_EV_R: z.string().default('0.35').transform(Number),
   SPX_SETUP_SNIPER_SECONDARY_EV_R: z.string().default('0.20').transform(Number),
+  SPX_ENVIRONMENT_GATE_ENABLED: booleanFromEnv.default(false),
   SPX_ENVIRONMENT_LIVE_SESSION_ENABLED: booleanFromEnv.default(false),
   SPX_EVENT_RISK_GATE_ENABLED: booleanFromEnv.default(false),
   SPX_NEWS_SENTIMENT_ENABLED: booleanFromEnv.default(false),

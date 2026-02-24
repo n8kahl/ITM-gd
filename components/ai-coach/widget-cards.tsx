@@ -871,15 +871,20 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
   const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
   const highImpactCount = calendar.filter((event) => String(event.impact || '').toUpperCase() === 'HIGH').length
+  const macroContextNotes = [
+    symbolImpact?.outlook ? `${symbolImpact.symbol || 'SPX'} outlook: ${symbolImpact.outlook}` : null,
+    fedPolicy?.tone ? `Fed tone: ${fedPolicy.tone}` : null,
+    calendar[0]?.event ? `Next event: ${calendar[0].event}${calendar[0].date ? ` (${calendar[0].date})` : ''}` : null,
+  ].filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
   const openCard = () => {
     if (symbolImpact?.symbol) {
-      chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context').action()
+      chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes).action()
       return
     }
     viewAction('chart', 'Open Chart', 'SPX').action()
   }
   const actions: WidgetAction[] = normalizeActions([
-    symbolImpact?.symbol ? chartAction(symbolImpact.symbol) : viewAction('chart', 'Open Chart', 'SPX'),
+    symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes) : viewAction('chart', 'Open Chart', 'SPX'),
     symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('chart', 'Open Brief Context', 'SPX'),
     chatAction(symbolImpact?.symbol
       ? `Give me a macro-aware plan for ${symbolImpact.symbol} this week.`
@@ -941,7 +946,16 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
             <WidgetRowActions
               key={`${event.event}-${event.date}-${i}`}
               actions={normalizeActions([
-                symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', `${event.event}`) : viewAction('chart', 'Open Chart', 'SPX'),
+                symbolImpact?.symbol
+                  ? chartAction(
+                    symbolImpact.symbol,
+                    undefined,
+                    '5m',
+                    `${event.event}`,
+                    undefined,
+                    [`${event.event}${event.date ? ` (${event.date})` : ''}${event.impact ? ` - ${event.impact}` : ''}`],
+                  )
+                  : viewAction('chart', 'Open Chart', 'SPX'),
                 chatAction(`How should I position around ${event.event} on ${event.date}?`, 'Ask AI'),
                 copyAction(`${event.event} | ${event.date} | ${event.impact}`, 'Copy Event'),
               ])}
@@ -1865,12 +1879,18 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const pct = parseNullableNumeric(expectedMove?.pct)
   const currentPrice = parseNullableNumeric((data as Record<string, unknown>).currentPrice) ?? 0
   const ivCrushRisk = String((data as Record<string, unknown>).ivCrushRisk || '').toLowerCase()
+  const earningsContextNotes = [
+    String(data.earningsDate || '').trim() ? `Earnings: ${String(data.earningsDate)}` : null,
+    points != null ? `Expected move: +/-${points.toFixed(2)} pts` : null,
+    pct != null ? `Expected move: +/-${pct.toFixed(2)}%` : null,
+    ivCrushRisk ? `IV crush risk: ${ivCrushRisk}` : null,
+  ].filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
   const openCard = () => {
     optionsAction(symbol, currentPrice).action()
   }
   const cardActions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
-    chartAction(symbol, currentPrice, '5m', 'Earnings Setup'),
+    chartAction(symbol, currentPrice, '5m', 'Earnings Setup', undefined, earningsContextNotes),
     currentPrice > 0 ? alertAction(symbol, currentPrice, 'level_approach', `${symbol} earnings watch`) : chartAction(symbol, undefined, '5m', 'Earnings Context'),
     chatAction(`Rank the pre-earnings strategies for ${symbol} by risk/reward and IV crush risk.`),
     copyAction(`${symbol} earnings expected move ${points ?? 'N/A'} (${pct ?? 'N/A'}%)`),
