@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels'
 import {
@@ -83,6 +83,50 @@ const CHAT_PLACEHOLDERS = {
   ],
 } as const
 
+const BEGINNER_RAIL_STORAGE_KEY = 'ai-coach-beginner-rail-step'
+
+const BEGINNER_RAIL_STEPS = [
+  {
+    id: 'level_1_read_trend',
+    label: 'Level 1: Read trend',
+    prompt: 'Level 1: Show SPX on chart and explain trend, nearest support/resistance, and one thing that would invalidate the read.',
+  },
+  {
+    id: 'level_2_define_trigger',
+    label: 'Level 2: Define trigger',
+    prompt: 'Level 2: Help me define one bullish trigger and one bearish trigger with exact prices and confirmation rules.',
+  },
+  {
+    id: 'level_3_build_risk_plan',
+    label: 'Level 3: Build risk plan',
+    prompt: 'Level 3: Build a simple risk plan with position size, max loss, stop placement, and when to stand down.',
+  },
+  {
+    id: 'level_4_post_trade_review',
+    label: 'Level 4: Post-trade review',
+    prompt: 'Level 4: Give me a post-trade review checklist for journaling, mistakes, and next-session improvement.',
+  },
+] as const
+
+const CHAT_CAPABILITY_HINTS: Record<keyof typeof CHAT_PLACEHOLDERS, string[]> = {
+  pre_market: [
+    'You can ask me: "What are the two key levels for the open?"',
+    'You can ask me: "Give me a pre-market risk checklist."',
+  ],
+  session: [
+    'You can ask me: "Explain this move simply and show it on chart."',
+    'You can ask me: "Build a risk plan around current price."',
+  ],
+  after_hours: [
+    'You can ask me: "Recap today and what I should improve tomorrow."',
+    'You can ask me: "What setup should I study tonight?"',
+  ],
+  closed: [
+    'You can ask me: "Review my mistakes and build tomorrow plan."',
+    'You can ask me: "Teach me one setup step-by-step."',
+  ],
+}
+
 function getEasternPlaceholderBucket(now: Date = new Date()): keyof typeof CHAT_PLACEHOLDERS {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -116,6 +160,15 @@ export default function AICoachPage() {
   const chatPanelRef = useRef<ImperativePanelHandle | null>(null)
   const seededPromptRef = useRef<string | null>(null)
   const pulse = usePanelAttentionPulse()
+  const latestAssistantSummary = useMemo(() => {
+    const latest = [...chat.messages].reverse().find((message) => (
+      message.role === 'assistant' && message.content.trim().length > 0
+    ))
+    if (!latest) return null
+    const compact = latest.content.replace(/\s+/g, ' ').trim()
+    if (compact.length <= 160) return compact
+    return `${compact.slice(0, 157)}...`
+  }, [chat.messages])
 
   const handleSendPrompt = useCallback((prompt: string) => {
     chat.sendMessage(prompt)
@@ -323,6 +376,7 @@ export default function AICoachPage() {
               <MobileToolSheet
                 activeSheet={activeSheet}
                 onClose={closeSheet}
+                contextText={latestAssistantSummary}
               >
                 {activeSheet && (
                   <CenterPanel
@@ -389,6 +443,7 @@ function ChatArea({
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [placeholderBucket, setPlaceholderBucket] = useState<keyof typeof CHAT_PLACEHOLDERS>(() => getEasternPlaceholderBucket())
+  const [beginnerRailStep, setBeginnerRailStep] = useState(0)
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
   const [stagedCsv, setStagedCsv] = useState<StagedCsvUpload | null>(null)
   const [screenshotActions, setScreenshotActions] = useState<ScreenshotActionState | null>(null)
@@ -447,6 +502,19 @@ function ChatArea({
   useEffect(() => {
     previousMessageCount.current = messages.length
   }, [messages.length])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const persisted = Number(window.localStorage.getItem(BEGINNER_RAIL_STORAGE_KEY) || 0)
+    if (Number.isFinite(persisted)) {
+      setBeginnerRailStep(Math.max(0, Math.min(BEGINNER_RAIL_STEPS.length - 1, Math.round(persisted))))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(BEGINNER_RAIL_STORAGE_KEY, String(beginnerRailStep))
+  }, [beginnerRailStep])
 
   useEffect(() => {
     const rotateInterval = window.setInterval(() => {
@@ -531,6 +599,8 @@ function ChatArea({
   const streamStatus = messages.find((msg) => msg.isStreaming)?.streamStatus
   const placeholderOptions = CHAT_PLACEHOLDERS[placeholderBucket]
   const rotatingPlaceholder = placeholderOptions[placeholderIndex % placeholderOptions.length]
+  const capabilityHintOptions = CHAT_CAPABILITY_HINTS[placeholderBucket]
+  const capabilityHint = capabilityHintOptions[placeholderIndex % capabilityHintOptions.length]
   const usageRatio = rateLimitInfo?.queryCount && rateLimitInfo?.queryLimit
     ? rateLimitInfo.queryCount / rateLimitInfo.queryLimit
     : 0
@@ -567,6 +637,15 @@ function ChatArea({
       inputRef.current.style.height = 'auto'
     }
   }
+
+  const runBeginnerRailStep = useCallback((stepIndex: number) => {
+    const normalizedIndex = Math.max(0, Math.min(BEGINNER_RAIL_STEPS.length - 1, Math.round(stepIndex)))
+    const step = BEGINNER_RAIL_STEPS[normalizedIndex]
+    if (!step) return
+    Analytics.trackAICoachAction(`beginner_rail_${step.id}`)
+    setBeginnerRailStep(normalizedIndex)
+    onSendMessage(step.prompt)
+  }, [onSendMessage])
 
   const handleImageAnalysis = async (userMessage: string) => {
     if (!stagedImage) return
@@ -976,7 +1055,11 @@ function ChatArea({
               <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
             </div>
           ) : messages.length === 0 ? (
-            <EmptyState onSendPrompt={onSendMessage} />
+            <EmptyState
+              onSendPrompt={onSendMessage}
+              beginnerRailStep={beginnerRailStep}
+              onRunBeginnerRailStep={runBeginnerRailStep}
+            />
           ) : (
             <>
               {messages.map((msg) => (
@@ -1026,6 +1109,38 @@ function ChatArea({
             </div>
           )}
 
+          <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-white/45">Guided path</p>
+              <button
+                type="button"
+                onClick={() => runBeginnerRailStep(Math.min(beginnerRailStep + 1, BEGINNER_RAIL_STEPS.length - 1))}
+                className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/15"
+              >
+                Next: {BEGINNER_RAIL_STEPS[Math.min(beginnerRailStep + 1, BEGINNER_RAIL_STEPS.length - 1)]?.label}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {BEGINNER_RAIL_STEPS.map((step, index) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => runBeginnerRailStep(index)}
+                  className={cn(
+                    'rounded border px-2 py-1 text-[10px] transition-colors',
+                    index === beginnerRailStep
+                      ? 'border-emerald-500/35 bg-emerald-500/15 text-emerald-200'
+                      : 'border-white/10 bg-white/5 text-white/55 hover:text-white/75',
+                  )}
+                >
+                  {step.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="mb-2 text-[10px] text-white/35">{capabilityHint}</p>
+
           <form onSubmit={handleSubmit} className="flex items-end gap-2">
             <textarea
               ref={inputRef}
@@ -1066,7 +1181,15 @@ function ChatArea({
 // EMPTY STATE
 // ============================================
 
-function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }) {
+function EmptyState({
+  onSendPrompt,
+  beginnerRailStep,
+  onRunBeginnerRailStep,
+}: {
+  onSendPrompt: (prompt: string) => void
+  beginnerRailStep: number
+  onRunBeginnerRailStep: (index: number) => void
+}) {
   const bucket = getEasternPlaceholderBucket()
   const contextLine = bucket === 'pre_market'
     ? 'Pre-market prep mode'
@@ -1098,6 +1221,26 @@ function EmptyState({ onSendPrompt }: { onSendPrompt: (prompt: string) => void }
         <p className="text-sm text-white/40 leading-relaxed mb-6">
           Ask me about any ticker, levels, options setups, and risk in one flow.
         </p>
+        <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+          <p className="mb-2 text-[10px] uppercase tracking-[0.12em] text-white/45">Guided learning rails</p>
+          <div className="grid grid-cols-1 gap-1.5 text-left text-[11px]">
+            {BEGINNER_RAIL_STEPS.map((step, index) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => onRunBeginnerRailStep(index)}
+                className={cn(
+                  'rounded border px-2 py-1.5 transition-colors',
+                  index === beginnerRailStep
+                    ? 'border-emerald-500/35 bg-emerald-500/15 text-emerald-200'
+                    : 'border-white/10 bg-white/5 text-white/60 hover:text-white/80',
+                )}
+              >
+                {step.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           {CHAT_QUICK_PROMPTS.map((item) => (
             <motion.button

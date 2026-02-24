@@ -41,3 +41,11 @@ This release hardens AI Coach for new-trader usability while preserving advanced
 - Add keyboard/accessibility-specific QA pass for watchlist panel interactions.
 - Add targeted tests for symbol search commit edge cases and watchlist add/remove UX.
 - Rebaseline E2E timeout defaults for AI Coach suites with local webserver startup overhead.
+
+## Phase 2 Addendum (2026-02-24)
+- Added chart payload support for event markers and position overlays.
+- Added beginner progression rails with persistent step tracking.
+- Added capability hint rotation for broad novice discoverability.
+- Standardized widget action prioritization and quick-action visibility for core controls.
+- Added trust metadata footer (`Data as of`, `Source`, `Confidence`) on major analytical cards.
+- Added mobile context strip with one-tap return to chat.

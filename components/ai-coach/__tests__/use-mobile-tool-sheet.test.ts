@@ -28,6 +28,8 @@ describe('resolveMobileSheetFromWidgetEvent', () => {
           support: [{ name: 'Fib 38.2%', price: 412.32 }],
         },
         contextNotes: ['Earnings tomorrow', 'Expected move +/-4.2%'],
+        eventMarkers: [{ label: 'Earnings', date: '2026-03-14', impact: 'high', source: 'Earnings calendar' }],
+        positionOverlays: [{ label: 'Expected Move', entry: 432.25, stop: 414.12, target: 450.38 }],
       },
     })
 
@@ -40,6 +42,8 @@ describe('resolveMobileSheetFromWidgetEvent', () => {
           symbol: 'TSLA',
           timeframe: '1D',
           contextNotes: ['Earnings tomorrow', 'Expected move +/-4.2%'],
+          eventMarkers: [{ label: 'Earnings', date: '2026-03-14', impact: 'high', source: 'Earnings calendar' }],
+          positionOverlays: [{ label: 'Expected Move', entry: 432.25, stop: 414.12, target: 450.38 }],
         },
       },
     })

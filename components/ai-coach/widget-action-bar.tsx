@@ -149,5 +149,92 @@ export function toTieredActions(actions: WidgetAction[]): TieredActions {
     overflow.push(action)
   }
 
+  const optionsAction = actions.find((action) => action.label.toLowerCase().includes('options'))
+  if (optionsAction && !quick.includes(optionsAction)) {
+    if (quick.length >= 3) {
+      const displaced = quick[quick.length - 1]
+      if (displaced && displaced !== optionsAction && !overflow.includes(displaced)) {
+        overflow.unshift(displaced)
+      }
+      quick[quick.length - 1] = optionsAction
+    } else {
+      quick.push(optionsAction)
+    }
+
+    if (primary && quick[0] !== primary) {
+      const primaryIndex = quick.indexOf(primary)
+      if (primaryIndex > 0) {
+        const [primaryAction] = quick.splice(primaryIndex, 1)
+        quick.unshift(primaryAction)
+      }
+    }
+
+    const optionsIndex = quick.indexOf(optionsAction)
+    if (optionsIndex > 1 || (!primary && optionsIndex > 0)) {
+      quick.splice(optionsIndex, 1)
+      quick.splice(primary ? 1 : 0, 0, optionsAction)
+    }
+  }
+
+  const analyzeAction = actions.find((action) => action.label.toLowerCase() === 'analyze')
+  if (analyzeAction && !quick.includes(analyzeAction)) {
+    if (quick.length >= 3) {
+      let replaceIndex = -1
+      for (let i = quick.length - 1; i >= 0; i -= 1) {
+        const action = quick[i]
+        if (action !== primary && action !== optionsAction) {
+          replaceIndex = i
+          break
+        }
+      }
+      const fallbackIndex = replaceIndex >= 0 ? replaceIndex : quick.length - 1
+      const displaced = quick[fallbackIndex]
+      if (displaced && displaced !== analyzeAction && !overflow.includes(displaced)) {
+        overflow.unshift(displaced)
+      }
+      quick[fallbackIndex] = analyzeAction
+    } else {
+      quick.push(analyzeAction)
+    }
+
+    if (primary && quick[0] !== primary) {
+      const primaryIndex = quick.indexOf(primary)
+      if (primaryIndex > 0) {
+        const [primaryAction] = quick.splice(primaryIndex, 1)
+        quick.unshift(primaryAction)
+      }
+    }
+  }
+
+  const alertAction = actions.find((action) => action.label.toLowerCase().includes('alert'))
+  if (alertAction && !quick.includes(alertAction) && !analyzeAction) {
+    if (quick.length >= 3) {
+      let replaceIndex = -1
+      for (let i = quick.length - 1; i >= 0; i -= 1) {
+        const action = quick[i]
+        if (action !== primary && action !== optionsAction) {
+          replaceIndex = i
+          break
+        }
+      }
+      const fallbackIndex = replaceIndex >= 0 ? replaceIndex : quick.length - 1
+      const displaced = quick[fallbackIndex]
+      if (displaced && displaced !== alertAction && !overflow.includes(displaced)) {
+        overflow.unshift(displaced)
+      }
+      quick[fallbackIndex] = alertAction
+    } else {
+      quick.push(alertAction)
+    }
+
+    if (primary && quick[0] !== primary) {
+      const primaryIndex = quick.indexOf(primary)
+      if (primaryIndex > 0) {
+        const [primaryAction] = quick.splice(primaryIndex, 1)
+        quick.unshift(primaryAction)
+      }
+    }
+  }
+
   return { quick, overflow }
 }

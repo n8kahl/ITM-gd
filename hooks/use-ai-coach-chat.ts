@@ -139,6 +139,43 @@ export function useAICoachChat() {
     return deduped
   }, [])
 
+  const toEventMarkers = useCallback((events: Array<{
+    label?: string | null
+    date?: string | null
+    impact?: string | null
+    source?: string | null
+  }>, limit: number = 4): NonNullable<ChartRequest['eventMarkers']> => {
+    const markers: NonNullable<ChartRequest['eventMarkers']> = []
+    const seen = new Set<string>()
+
+    for (const event of events) {
+      const label = typeof event.label === 'string' ? event.label.trim() : ''
+      if (!label) continue
+      const dedupeKey = `${label.toLowerCase()}|${(event.date || '').toLowerCase()}`
+      if (seen.has(dedupeKey)) continue
+      seen.add(dedupeKey)
+
+      const rawImpact = typeof event.impact === 'string' ? event.impact.toLowerCase() : ''
+      const impact = rawImpact.includes('high')
+        ? 'high'
+        : rawImpact.includes('med')
+          ? 'medium'
+          : rawImpact.includes('low')
+            ? 'low'
+            : 'info'
+
+      markers.push({
+        label,
+        date: typeof event.date === 'string' ? event.date : undefined,
+        impact,
+        source: typeof event.source === 'string' ? event.source : undefined,
+      })
+      if (markers.length >= limit) break
+    }
+
+    return markers
+  }, [])
+
   /**
    * Extract chart request from function calls
    */
@@ -289,6 +326,20 @@ export function useAICoachChat() {
             resistance,
             support,
           },
+          positionOverlays: entry != null
+            ? [{
+                label: 'Scanner Setup',
+                entry,
+                stop: stopLoss ?? undefined,
+                target: target ?? undefined,
+              }]
+            : [],
+          contextNotes: toContextNotes([
+            top.direction ? `Direction: ${top.direction}` : null,
+            entry != null ? `Entry: ${entry.toFixed(2)}` : null,
+            stopLoss != null ? `Stop: ${stopLoss.toFixed(2)}` : null,
+            target != null ? `Target: ${target.toFixed(2)}` : null,
+          ]),
         }
       }
     }
@@ -347,10 +398,20 @@ export function useAICoachChat() {
     if (positionCall) {
       const result = (positionCall.result || {}) as {
         error?: unknown
-        position?: { symbol?: string; strike?: number }
+        position?: {
+          symbol?: string
+          strike?: number
+          entryPrice?: number | string
+          stopLoss?: number | string
+          target?: number | string
+          type?: string
+        }
       }
       if (!result.error && result.position?.symbol) {
         const strike = toFiniteNumber(result.position.strike)
+        const entry = toFiniteNumber(result.position.entryPrice) ?? strike
+        const stop = toFiniteNumber(result.position.stopLoss)
+        const target = toFiniteNumber(result.position.target)
         return {
           symbol: result.position.symbol,
           timeframe: '5m',
@@ -360,6 +421,19 @@ export function useAICoachChat() {
                 resistance: [],
               }
             : undefined,
+          positionOverlays: entry != null
+            ? [{
+                label: `${result.position.symbol} ${String(result.position.type || 'Position').toUpperCase()}`,
+                entry,
+                stop: stop ?? undefined,
+                target: target ?? undefined,
+              }]
+            : [],
+          contextNotes: toContextNotes([
+            entry != null ? `Entry: ${entry.toFixed(2)}` : null,
+            stop != null ? `Stop: ${stop.toFixed(2)}` : null,
+            target != null ? `Target: ${target.toFixed(2)}` : null,
+          ]),
         }
       }
     }
@@ -453,6 +527,22 @@ export function useAICoachChat() {
             expectedMovePct != null ? `Expected move: +/-${expectedMovePct.toFixed(2)}%` : null,
             result.ivCrushRisk ? `IV crush risk: ${result.ivCrushRisk}` : null,
           ]),
+          positionOverlays: currentPrice != null
+            ? [{
+                label: 'Expected Move',
+                entry: currentPrice,
+                stop: lower ?? undefined,
+                target: upper ?? undefined,
+              }]
+            : [],
+          eventMarkers: toEventMarkers([
+            {
+              label: 'Earnings',
+              date: result.earningsDate || null,
+              impact: 'high',
+              source: 'Earnings calendar',
+            },
+          ]),
         }
       }
     }
@@ -491,6 +581,22 @@ export function useAICoachChat() {
             result.fedPolicy?.nextMeeting ? `Next Fed meeting: ${result.fedPolicy.nextMeeting}` : null,
             firstEvent?.event ? `Next event: ${firstEvent.event}${firstEvent.date ? ` (${firstEvent.date})` : ''}` : null,
           ]),
+          eventMarkers: toEventMarkers([
+            ...(result.fedPolicy?.nextMeeting
+              ? [{
+                  label: 'Fed Meeting',
+                  date: result.fedPolicy.nextMeeting,
+                  impact: result.fedPolicy.tone || 'high',
+                  source: 'Fed policy',
+                }]
+              : []),
+            ...((result.economicCalendar || []).slice(0, 3).map((event) => ({
+              label: event.event || '',
+              date: event.date || null,
+              impact: event.impact || 'medium',
+              source: 'Economic calendar',
+            }))),
+          ]),
         }
       }
     }
@@ -516,6 +622,12 @@ export function useAICoachChat() {
               ? `${event.event}${event.date ? ` (${event.date})` : ''}${event.impact ? ` - ${event.impact}` : ''}`
               : null
           ))),
+          eventMarkers: toEventMarkers(events.map((event) => ({
+            label: event.event || '',
+            date: event.date || null,
+            impact: event.impact || 'medium',
+            source: 'Economic calendar',
+          }))),
         }
       }
     }
@@ -539,11 +651,17 @@ export function useAICoachChat() {
           symbol,
           timeframe: '1D',
           contextNotes: toContextNotes(headlines.map((headline) => headline.title || null)),
+          eventMarkers: toEventMarkers(headlines.map((headline) => ({
+            label: headline.title || '',
+            date: headline.publishedUtc || null,
+            impact: 'info',
+            source: 'News',
+          })), 3),
         }
       }
     }
     return null
-  }, [toContextNotes, toFiniteNumber])
+  }, [toContextNotes, toEventMarkers, toFiniteNumber])
 
   /**
    * Send message with streaming (default) or fallback to non-streaming

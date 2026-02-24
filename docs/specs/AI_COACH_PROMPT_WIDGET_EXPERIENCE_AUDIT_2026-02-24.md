@@ -2,7 +2,7 @@
 
 Date: 2026-02-24  
 Owner: Codex  
-Status: Post-hardening audit (Phase 1 complete, next tranche scoped)
+Status: Phase 2 completed (implementation aligned to recommendations)
 
 ## Executive Summary
 The AI Coach is materially improved for beginners after Phase 1 hardening, but the chart experience still underutilizes visual coaching potential. The top next-step opportunity is converting more card insights into concrete chart overlays (risk zones, event markers, scenario bands) instead of text-only context badges.
@@ -105,6 +105,16 @@ Target files:
 2. Beginner Progression Rails and session-aware onboarding prompts.
 3. Widget Action Contract standardization + trust metadata.
 4. Mobile context strip improvements.
+
+## Phase 2 Implementation Status
+- Implemented in code and validated:
+  - chart request expansion with `eventMarkers` and `positionOverlays`
+  - beginner progression rails with persistence
+  - widget action contract prioritization and visibility safeguards
+  - card-level trust metadata footer standard
+  - mobile context strip with one-tap return to chat
+- Completion report:
+  - `docs/specs/AI_COACH_PROMPT_WIDGET_PHASE2_COMPLETION_2026-02-24.md`
 
 ## Suggested Acceptance Criteria for Phase 2
 - At least 80% of macro/earnings/position widget actions produce visible chart overlays.

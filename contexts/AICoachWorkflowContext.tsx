@@ -47,7 +47,24 @@ interface AICoachWorkflowContextValue extends AICoachWorkflowState {
   viewChartAtLevel: (
     symbol: string,
     level?: number,
-    options?: { label?: string; timeframe?: ChartTimeframe },
+    options?: {
+      label?: string
+      timeframe?: ChartTimeframe
+      contextNotes?: string[]
+      eventMarkers?: Array<{
+        label: string
+        date?: string
+        impact?: 'high' | 'medium' | 'low' | 'info'
+        source?: string
+      }>
+      positionOverlays?: Array<{
+        id?: string
+        label?: string
+        entry: number
+        stop?: number
+        target?: number
+      }>
+    },
   ) => void
   viewOptionsNearStrike: (
     symbol: string,
@@ -74,6 +91,20 @@ function dispatchChartEvent(detail: {
     resistance?: Array<{ name: string; price: number }>
     support?: Array<{ name: string; price: number }>
   }
+  contextNotes?: string[]
+  eventMarkers?: Array<{
+    label: string
+    date?: string
+    impact?: 'high' | 'medium' | 'low' | 'info'
+    source?: string
+  }>
+  positionOverlays?: Array<{
+    id?: string
+    label?: string
+    entry: number
+    stop?: number
+    target?: number
+  }>
 }) {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('ai-coach-show-chart', { detail }))
@@ -146,7 +177,24 @@ export function AICoachWorkflowProvider({
   const viewChartAtLevel = useCallback((
     symbol: string,
     level?: number,
-    options?: { label?: string; timeframe?: ChartTimeframe },
+    options?: {
+      label?: string
+      timeframe?: ChartTimeframe
+      contextNotes?: string[]
+      eventMarkers?: Array<{
+        label: string
+        date?: string
+        impact?: 'high' | 'medium' | 'low' | 'info'
+        source?: string
+      }>
+      positionOverlays?: Array<{
+        id?: string
+        label?: string
+        entry: number
+        stop?: number
+        target?: number
+      }>
+    },
   ) => {
     const normalized = normalizeSymbol(symbol)
     if (!normalized) return
@@ -173,12 +221,21 @@ export function AICoachWorkflowProvider({
         levels: {
           support: [{ name: options?.label || 'Focus', price: level }],
         },
+        contextNotes: options?.contextNotes,
+        eventMarkers: options?.eventMarkers,
+        positionOverlays: options?.positionOverlays,
       })
       return
     }
 
     setChartAnnotationsState(null)
-    dispatchChartEvent({ symbol: normalized, timeframe })
+    dispatchChartEvent({
+      symbol: normalized,
+      timeframe,
+      contextNotes: options?.contextNotes,
+      eventMarkers: options?.eventMarkers,
+      positionOverlays: options?.positionOverlays,
+    })
   }, [])
 
   const viewOptionsNearStrike = useCallback((
@@ -232,11 +289,33 @@ export function AICoachWorkflowProvider({
 
   useEffect(() => {
     const onChart = (event: Event) => {
-      const detail = (event as CustomEvent<{ symbol?: string; level?: number; timeframe?: ChartTimeframe; label?: string }>).detail
+      const detail = (event as CustomEvent<{
+        symbol?: string
+        level?: number
+        timeframe?: ChartTimeframe
+        label?: string
+        contextNotes?: string[]
+        eventMarkers?: Array<{
+          label: string
+          date?: string
+          impact?: 'high' | 'medium' | 'low' | 'info'
+          source?: string
+        }>
+        positionOverlays?: Array<{
+          id?: string
+          label?: string
+          entry: number
+          stop?: number
+          target?: number
+        }>
+      }>).detail
       if (!detail?.symbol) return
       viewChartAtLevel(detail.symbol, detail.level, {
         timeframe: detail.timeframe || '5m',
         label: detail.label,
+        contextNotes: detail.contextNotes,
+        eventMarkers: detail.eventMarkers,
+        positionOverlays: detail.positionOverlays,
       })
     }
 

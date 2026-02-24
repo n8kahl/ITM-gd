@@ -30,6 +30,7 @@ import {
   chatAction,
   copyAction,
   optionsAction,
+  prioritizeWidgetActions,
   viewAction,
 } from './widget-actions'
 import type { ChartTimeframe, PositionType } from '@/lib/api/ai-coach'
@@ -115,6 +116,72 @@ function formatTime(value: unknown): string {
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatAsOf(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function inferDataAsOf(data: Record<string, unknown>): string | null {
+  return (
+    formatAsOf(data.asOf)
+    || formatAsOf(data.timestamp)
+    || formatAsOf(data.updatedAt)
+    || formatAsOf(data.generatedAt)
+    || formatAsOf(data.calculatedAt)
+    || (typeof data.priceAsOf === 'string' && data.priceAsOf.trim().length > 0 ? data.priceAsOf : null)
+  )
+}
+
+function inferDataSource(data: Record<string, unknown>, sourceHint?: string): string | null {
+  const candidate = typeof data.source === 'string'
+    ? data.source
+    : typeof data.provider === 'string'
+      ? data.provider
+      : typeof data.dataSource === 'string'
+        ? data.dataSource
+        : sourceHint
+  if (!candidate || !candidate.trim()) return null
+  return candidate.trim()
+}
+
+function inferDataConfidence(data: Record<string, unknown>): string | null {
+  const confidence = parseNullableNumeric(data.confidence)
+  if (confidence == null) return null
+  const pct = confidence <= 1 ? confidence * 100 : confidence
+  if (!Number.isFinite(pct)) return null
+  return `${Math.max(0, Math.min(100, pct)).toFixed(0)}%`
+}
+
+function WidgetDataFooter({
+  data,
+  sourceHint,
+}: {
+  data: Record<string, unknown>
+  sourceHint?: string
+}) {
+  const asOf = inferDataAsOf(data)
+  const source = inferDataSource(data, sourceHint)
+  const confidence = inferDataConfidence(data)
+  if (!asOf && !source && !confidence) return null
+
+  return (
+    <div className="mt-2 border-t border-white/10 pt-1.5 text-[10px] text-white/35">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {asOf && <span>Data as of: <span className="text-white/55">{asOf}</span></span>}
+        {source && <span>Source: <span className="text-white/55">{source}</span></span>}
+        {confidence && <span>Confidence: <span className="text-white/55">{confidence}</span></span>}
+      </div>
+    </div>
+  )
+}
+
 function premiumCardClass(extra: string): string {
   return cn(
     'glass-card-heavy relative mt-2 overflow-hidden rounded-xl border bg-gradient-to-b from-white/[0.04] to-black/25 p-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)]',
@@ -137,7 +204,7 @@ function normalizeActions(actions: WidgetAction[]): WidgetAction[] {
     const key = `${action.label}:${action.variant || 'secondary'}`
     if (!unique.has(key)) unique.set(key, action)
   }
-  return Array.from(unique.values()).slice(0, 5)
+  return prioritizeWidgetActions(Array.from(unique.values())).slice(0, 6)
 }
 
 function shouldIgnoreCardActivation(target: EventTarget | null): boolean {
@@ -397,9 +464,10 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
       action: openCardChart,
     },
     optionsAction(symbol, currentPrice),
-    alertAction(symbol, currentPrice, 'level_approach', `${symbol} key-level sweep`),
+    chatAction(`Build a risk plan for trading ${symbol} key levels with entry, invalidation, and max loss.`, 'Risk Plan'),
+    chatAction(`Explain ${symbol} key levels in plain English for a new trader.`, 'Explain Simply'),
     chatAction(`Summarize ${symbol} key levels and likely scenarios around ${currentPrice.toFixed(2)}.`),
-    copyAction(`${symbol} key levels | Spot ${currentPrice.toFixed(2)} | R: ${resistance.slice(0, 2).map((level) => `${level.name} ${level.price}`).join(', ')} | S: ${support.slice(0, 2).map((level) => `${level.name} ${level.price}`).join(', ')}`),
+    alertAction(symbol, currentPrice, 'level_approach', `${symbol} key-level sweep`),
   ])
 
   const levelActions = (level: { name: string; price: number }, side: 'support' | 'resistance'): WidgetAction[] => ([
@@ -485,6 +553,7 @@ function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={cardActions} />
+      <WidgetDataFooter data={data} sourceHint="Massive.com" />
     </div>
   )
 }
@@ -578,6 +647,7 @@ function PositionSummaryCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={actions} />
+      <WidgetDataFooter data={data} sourceHint="Position analysis" />
     </div>
   )
 }
@@ -825,9 +895,9 @@ function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
   const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, price),
     optionsAction(symbol, price),
+    chatAction(`Build a risk plan for ${symbol} around ${price.toFixed(2)} with clear invalidation.`, 'Risk Plan'),
+    chatAction(`Explain ${symbol} price action in plain English and what to watch next.`, 'Explain Simply'),
     alertAction(symbol, price, 'level_approach', `${symbol} price watch`),
-    chatAction(`Build an actionable intraday plan for ${symbol} around ${price.toFixed(2)}.`, 'Build Plan'),
-    copyAction(`${symbol} ${price.toFixed(2)} | H ${high ?? '—'} | L ${low ?? '—'}`),
   ])
 
   return (
@@ -858,6 +928,7 @@ function CurrentPriceCard({ data }: { data: Record<string, unknown> }) {
         {priceAsOf && <span className="ml-auto">{formatTime(priceAsOf)}</span>}
       </div>
       <WidgetActionBar actions={actions} compact />
+      <WidgetDataFooter data={data} sourceHint="Massive.com" />
     </div>
   )
 }
@@ -876,19 +947,40 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
     fedPolicy?.tone ? `Fed tone: ${fedPolicy.tone}` : null,
     calendar[0]?.event ? `Next event: ${calendar[0].event}${calendar[0].date ? ` (${calendar[0].date})` : ''}` : null,
   ].filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
+  const macroEventMarkers: Array<{
+    label: string
+    date?: string
+    impact: 'high' | 'medium' | 'low' | 'info'
+    source?: string
+  }> = calendar.slice(0, 4).map((event) => ({
+    label: event.event,
+    date: event.date,
+    impact: String(event.impact || '').toLowerCase().includes('high')
+      ? 'high'
+      : String(event.impact || '').toLowerCase().includes('med')
+        ? 'medium'
+        : 'low',
+    source: 'Economic calendar',
+  }))
   const openCard = () => {
     if (symbolImpact?.symbol) {
-      chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes).action()
+      chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes, macroEventMarkers).action()
       return
     }
     viewAction('chart', 'Open Chart', 'SPX').action()
   }
   const actions: WidgetAction[] = normalizeActions([
-    symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes) : viewAction('chart', 'Open Chart', 'SPX'),
+    symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes, macroEventMarkers) : viewAction('chart', 'Open Chart', 'SPX'),
     symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('chart', 'Open Brief Context', 'SPX'),
+    chatAction(symbolImpact?.symbol
+      ? `Build a risk plan for ${symbolImpact.symbol} using this macro context and key catalysts.`
+      : 'Build a risk plan for trading SPX around this macro calendar.', 'Risk Plan'),
     chatAction(symbolImpact?.symbol
       ? `Give me a macro-aware plan for ${symbolImpact.symbol} this week.`
       : 'Summarize the top macro risks and catalysts this week.'),
+    chatAction(symbolImpact?.symbol
+      ? `Explain this macro setup for ${symbolImpact.symbol} in plain English.`
+      : 'Explain this macro setup in plain English for a newer trader.', 'Explain Simply'),
     copyAction(`Macro context | Fed: ${fedPolicy?.currentRate || 'N/A'} | Tone: ${fedPolicy?.tone || 'N/A'} | Events: ${calendar.slice(0, 3).map((event) => event.event).join(', ')}`),
   ])
 
@@ -954,6 +1046,16 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
                     `${event.event}`,
                     undefined,
                     [`${event.event}${event.date ? ` (${event.date})` : ''}${event.impact ? ` - ${event.impact}` : ''}`],
+                    [{
+                      label: event.event,
+                      date: event.date,
+                      impact: String(event.impact || '').toLowerCase().includes('high')
+                        ? 'high'
+                        : String(event.impact || '').toLowerCase().includes('med')
+                          ? 'medium'
+                          : 'low',
+                      source: 'Economic calendar',
+                    }],
                   )
                   : viewAction('chart', 'Open Chart', 'SPX'),
                 chatAction(`How should I position around ${event.event} on ${event.date}?`, 'Ask AI'),
@@ -978,6 +1080,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={actions} compact />
+      <WidgetDataFooter data={data} sourceHint="Macro context service" />
     </div>
   )
 }
@@ -998,10 +1101,10 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
     optionsAction(symbol, currentPrice, expiry).action()
   }
   const actions: WidgetAction[] = normalizeActions([
-    optionsAction(symbol, currentPrice, expiry),
     chartAction(symbol, currentPrice),
-    alertAction(symbol, currentPrice, 'level_approach', `${symbol} ATM options focus`),
-    chatAction(`Review the ${symbol} ${expiry} options chain and identify the best strikes to monitor.`),
+    optionsAction(symbol, currentPrice, expiry),
+    chatAction(`Build a risk plan for trading ${symbol} options around ATM strikes this session.`, 'Risk Plan'),
+    chatAction(`Explain the ${symbol} options chain simply: which strikes matter and why.`, 'Explain Simply'),
     copyAction(`${symbol} ${expiry} | Spot ${currentPrice} | IV ${ivRank ?? 'N/A'}`),
   ])
 
@@ -1081,6 +1184,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
         Price: <span className="font-mono text-white/60">${currentPrice.toLocaleString()}</span>
       </div>
       <WidgetActionBar actions={actions} />
+      <WidgetDataFooter data={data} sourceHint="Massive.com options" />
     </div>
   )
 }
@@ -1131,8 +1235,9 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
       tooltip: `${symbol} gamma levels overlay`,
       action: handleShowOnChart,
     },
+    chatAction(`Build a risk plan using ${symbol} gamma flip and max GEX levels.`, 'Risk Plan'),
+    chatAction(`Explain this ${symbol} gamma profile in plain English for a newer trader.`, 'Explain Simply'),
     optionsAction(symbol, maxGEXStrike || undefined),
-    chatAction(`Interpret ${symbol} gamma profile with flip ${flipPoint ?? 'n/a'} and max GEX ${maxGEXStrike ?? 'n/a'}.`),
     copyAction(`${symbol} GEX | Spot ${spotPrice ?? 'N/A'} | Flip ${flipPoint ?? 'N/A'} | Max ${maxGEXStrike ?? 'N/A'}`),
   ])
 
@@ -1221,6 +1326,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
           {calculatedAt ? `Updated ${new Date(calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
         </span>
       </div>
+      <WidgetDataFooter data={data} sourceHint="Gamma exposure model" />
     </div>
   )
 }
@@ -1285,8 +1391,9 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
 
   const actions: WidgetAction[] = normalizeActions([
     chartAction(symbol, currentPrice ?? undefined, '5m', 'SPX Game Plan'),
+    chatAction('Build a risk plan from this SPX game plan with entry, invalidation, and max daily loss.', 'Risk Plan'),
+    chatAction('Explain this SPX game plan in plain English for a new trader.', 'Explain Simply'),
     optionsAction(symbol, maxGEXStrike ?? undefined),
-    chatAction('Turn this SPX game plan into an actionable intraday checklist with bull and bear triggers.'),
     copyAction(`SPX Plan | Spot ${currentPrice ?? 'N/A'} | Flip ${flipPoint ?? 'N/A'} | Max GEX ${maxGEXStrike ?? 'N/A'} | Exp Move ${expectedMove ?? 'N/A'}`),
   ])
   const alertLevel = flipPoint ?? currentPrice
@@ -1412,6 +1519,7 @@ function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={actions} />
+      <WidgetDataFooter data={data} sourceHint="SPX game plan engine" />
     </div>
   )
 }
@@ -1448,10 +1556,10 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
   const actions: WidgetAction[] = normalizeActions(opportunities.length > 0
     ? [
         scannerChartAction(opportunities[0], '15m'),
+        chatAction('Build a risk plan for the top setup: entry, stop, target, and invalidation.', 'Risk Plan'),
+        chatAction(`Explain the top ${opportunities[0].symbol} setup in plain English and what confirms it.`, 'Explain Simply'),
         optionsAction(opportunities[0].symbol, opportunities[0].currentPrice),
         viewAction('journal', 'Open Journal', opportunities[0].symbol),
-        chatAction(`Review top scanner opportunities and rank by conviction with risk plan.`),
-        copyAction(`Top setup: ${opportunities[0].symbol} ${opportunities[0].setupType} (${opportunities[0].direction}) score ${opportunities[0].score}`),
       ]
     : [viewAction('chart', 'Open Chart'), chatAction('Run another opportunity scan and summarize strongest setups.')])
 
@@ -1527,6 +1635,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={actions} compact />
+      <WidgetDataFooter data={data} sourceHint="Opportunity scanner" />
     </div>
   )
 }
@@ -1634,6 +1743,7 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={actions} compact />
+      <WidgetDataFooter data={data} sourceHint="0DTE analysis service" />
     </div>
   )
 }
@@ -1732,6 +1842,7 @@ function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={actions} compact />
+      <WidgetDataFooter data={data} sourceHint="Implied volatility model" />
     </div>
   )
 }
@@ -1804,6 +1915,7 @@ function EconomicCalendarCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={cardActions} compact />
+      <WidgetDataFooter data={data} sourceHint="Economic calendar" />
     </div>
   )
 }
@@ -1885,14 +1997,31 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
     pct != null ? `Expected move: +/-${pct.toFixed(2)}%` : null,
     ivCrushRisk ? `IV crush risk: ${ivCrushRisk}` : null,
   ].filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
+  const earningsPositionOverlays = currentPrice > 0
+    ? [{
+        label: 'Expected Move',
+        entry: currentPrice,
+        stop: points != null ? currentPrice - points : undefined,
+        target: points != null ? currentPrice + points : undefined,
+      }]
+    : []
+  const earningsEventMarkers = String(data.earningsDate || '').trim()
+    ? [{
+        label: 'Earnings',
+        date: String(data.earningsDate),
+        impact: 'high' as const,
+        source: 'Earnings calendar',
+      }]
+    : []
   const openCard = () => {
     optionsAction(symbol, currentPrice).action()
   }
   const cardActions: WidgetAction[] = normalizeActions([
+    chartAction(symbol, currentPrice, '5m', 'Earnings Setup', undefined, earningsContextNotes, earningsEventMarkers, earningsPositionOverlays),
     optionsAction(symbol, currentPrice),
-    chartAction(symbol, currentPrice, '5m', 'Earnings Setup', undefined, earningsContextNotes),
+    chatAction(`Build a risk plan for ${symbol} into earnings with entry, invalidation, and max loss.`, 'Risk Plan'),
+    chatAction(`Explain this ${symbol} earnings setup in plain English for a newer trader.`, 'Explain Simply'),
     currentPrice > 0 ? alertAction(symbol, currentPrice, 'level_approach', `${symbol} earnings watch`) : chartAction(symbol, undefined, '5m', 'Earnings Context'),
-    chatAction(`Rank the pre-earnings strategies for ${symbol} by risk/reward and IV crush risk.`),
     copyAction(`${symbol} earnings expected move ${points ?? 'N/A'} (${pct ?? 'N/A'}%)`),
   ])
 
@@ -1963,6 +2092,7 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
       )}
 
       <WidgetActionBar actions={cardActions} compact />
+      <WidgetDataFooter data={data} sourceHint="Earnings analysis" />
     </div>
   )
 }
@@ -2114,6 +2244,7 @@ function TickerNewsCard({ data }: { data: Record<string, unknown> }) {
         chatAction(`Summarize the latest catalysts for ${symbol} and explain likely market reaction.`),
         chartAction(symbol),
       ])} compact />
+      <WidgetDataFooter data={data} sourceHint="Ticker news" />
     </div>
   )
 }

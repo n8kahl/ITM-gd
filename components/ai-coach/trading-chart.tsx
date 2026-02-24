@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   createChart,
   CandlestickSeries,
@@ -30,6 +30,7 @@ import {
 import type { LevelGroupId } from './chart-level-groups'
 import { resolveVisibleChartLevels, type VisibleChartLevelsResult } from '@/lib/spx/spatial-hud'
 import type { SPXLevelVisibilityBudget } from '@/lib/spx/overlay-priority'
+import { cn } from '@/lib/utils'
 
 // ============================================
 // TYPES
@@ -60,6 +61,7 @@ interface TradingChartProps {
   indicators?: IndicatorConfig
   openingRangeMinutes?: 5 | 15 | 30
   positionOverlays?: PositionOverlay[]
+  eventMarkers?: ChartEventMarker[]
   symbol: string
   timeframe: string
   futureOffsetBars?: number
@@ -86,6 +88,13 @@ export interface PositionOverlay {
   stop?: number
   target?: number
   label?: string
+}
+
+export interface ChartEventMarker {
+  label: string
+  date?: string
+  impact?: 'high' | 'medium' | 'low' | 'info'
+  source?: string
 }
 
 interface NormalizedIndicatorPoint {
@@ -193,6 +202,7 @@ export function TradingChart({
   indicators = DEFAULT_INDICATOR_CONFIG,
   openingRangeMinutes = 15,
   positionOverlays = [],
+  eventMarkers = [],
   symbol,
   timeframe,
   futureOffsetBars = 12,
@@ -248,6 +258,59 @@ export function TradingChart({
     minGapPoints: 1.2,
     pixelCollisionGap: 16,
   }
+
+  const timelineMarkers = useMemo(() => {
+    if (eventMarkers.length === 0 || safeBars.length === 0) return []
+
+    const toUnixSeconds = (value: string | undefined): number | null => {
+      if (!value) return null
+      const parsed = Date.parse(value)
+      if (!Number.isFinite(parsed)) return null
+      return Math.floor(parsed / 1000)
+    }
+
+    const barsCount = safeBars.length
+    const maxMarkers = 6
+    const dedupe = new Set<string>()
+    const markers: Array<{
+      label: string
+      leftPct: number
+      impact: 'high' | 'medium' | 'low' | 'info'
+      source?: string
+    }> = []
+
+    for (const marker of eventMarkers.slice(0, maxMarkers)) {
+      const rawLabel = String(marker.label || '').trim()
+      if (!rawLabel) continue
+
+      const key = `${rawLabel.toLowerCase()}|${(marker.date || '').toLowerCase()}`
+      if (dedupe.has(key)) continue
+      dedupe.add(key)
+
+      const target = toUnixSeconds(marker.date) ?? safeBars[barsCount - 1]!.time
+      let nearestIndex = 0
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      for (let i = 0; i < barsCount; i += 1) {
+        const distance = Math.abs(safeBars[i]!.time - target)
+        if (distance < nearestDistance) {
+          nearestDistance = distance
+          nearestIndex = i
+        }
+      }
+
+      const leftPct = barsCount <= 1 ? 50 : (nearestIndex / (barsCount - 1)) * 100
+      const impact = marker.impact || 'info'
+      markers.push({
+        label: rawLabel.length > 22 ? `${rawLabel.slice(0, 22)}...` : rawLabel,
+        leftPct,
+        impact,
+        source: marker.source,
+      })
+    }
+
+    return markers
+  }, [eventMarkers, safeBars])
 
   const normalizeIndicatorPoints = useCallback((
     points: Array<{ time: number; value: number; signal?: number; histogram?: number }> | undefined,
@@ -1221,6 +1284,41 @@ export function TradingChart({
       <div className="flex h-full flex-col">
         <div className="relative min-h-0 flex-1">
           <div ref={containerRef} className="h-full w-full" />
+          {timelineMarkers.length > 0 && (
+            <div className="pointer-events-none absolute inset-0 z-20">
+              {timelineMarkers.map((marker, index) => (
+                <div
+                  key={`${marker.label}-${index}`}
+                  className="absolute bottom-0 top-0"
+                  style={{ left: `${marker.leftPct}%` }}
+                  title={marker.source || marker.label}
+                >
+                  <div className={cn(
+                    'absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] font-medium',
+                    marker.impact === 'high'
+                      ? 'border-red-500/35 bg-red-500/15 text-red-200'
+                      : marker.impact === 'medium'
+                        ? 'border-amber-500/35 bg-amber-500/15 text-amber-200'
+                        : marker.impact === 'low'
+                          ? 'border-sky-500/35 bg-sky-500/15 text-sky-200'
+                          : 'border-white/20 bg-black/40 text-white/70',
+                  )}>
+                    {marker.label}
+                  </div>
+                  <div className={cn(
+                    'absolute left-1/2 top-6 bottom-0 -translate-x-1/2 border-l border-dashed',
+                    marker.impact === 'high'
+                      ? 'border-red-500/45'
+                      : marker.impact === 'medium'
+                        ? 'border-amber-500/45'
+                        : marker.impact === 'low'
+                          ? 'border-sky-500/45'
+                          : 'border-white/25',
+                  )} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {showRSIPane && (

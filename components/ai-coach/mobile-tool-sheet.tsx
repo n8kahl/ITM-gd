@@ -8,6 +8,7 @@ import type { MobileToolView } from '@/hooks/use-mobile-tool-sheet'
 interface MobileToolSheetProps {
   activeSheet: MobileToolView | null
   onClose: () => void
+  contextText?: string | null
   children: React.ReactNode
 }
 
@@ -17,7 +18,7 @@ const SHEET_LABELS: Record<MobileToolView, string> = {
   journal: 'Trade Journal',
 }
 
-export function MobileToolSheet({ activeSheet, onClose, children }: MobileToolSheetProps) {
+export function MobileToolSheet({ activeSheet, onClose, contextText, children }: MobileToolSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const shouldReduceMotion = useReducedMotion()
 
@@ -70,6 +71,21 @@ export function MobileToolSheet({ activeSheet, onClose, children }: MobileToolSh
               <ChevronDown className="w-3.5 h-3.5" />
               Close
             </button>
+          </div>
+
+          <div className="border-b border-white/5 bg-white/[0.02] px-4 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="line-clamp-2 text-[11px] text-white/60">
+                {contextText || 'Return to chat to continue the conversation context.'}
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/15"
+              >
+                Back to Chat
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 min-h-0 overflow-hidden">

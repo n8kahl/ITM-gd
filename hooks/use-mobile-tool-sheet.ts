@@ -59,6 +59,8 @@ export function resolveMobileSheetFromWidgetEvent(
                   levels: detail?.levels,
                   gexProfile: detail?.gexProfile,
                   contextNotes: detail?.contextNotes,
+                  eventMarkers: detail?.eventMarkers,
+                  positionOverlays: detail?.positionOverlays,
                 },
               }
             : {}),
@@ -207,6 +209,8 @@ export function useMobileToolSheet() {
           levels: detail.levels,
           gexProfile: detail.gexProfile,
           contextNotes: detail.contextNotes,
+          eventMarkers: detail.eventMarkers,
+          positionOverlays: detail.positionOverlays,
         },
       })
     }

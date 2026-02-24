@@ -35,7 +35,7 @@ import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { LevelAnnotation } from './trading-chart'
+import type { LevelAnnotation, PositionOverlay } from './trading-chart'
 import { usePriceStream } from '@/hooks/use-price-stream'
 import { OptionsChain } from './options-chain'
 // TradeJournal removed — journal is now accessed via /members/journal or slide-over
@@ -140,9 +140,35 @@ export interface ChartRequest {
     keyLevels?: Array<{ strike: number; gexValue: number; type: 'support' | 'resistance' | 'magnet' }>
   }
   contextNotes?: string[]
+  positionOverlays?: Array<{
+    id?: string
+    label?: string
+    entry: number
+    stop?: number
+    target?: number
+  }>
+  eventMarkers?: Array<{
+    label: string
+    date?: string
+    impact?: 'high' | 'medium' | 'low' | 'info'
+    source?: string
+  }>
 }
 
 const SUPPORTED_CHART_TIMEFRAMES = new Set<ChartTimeframe>(['1m', '5m', '15m', '1h', '4h', '1D'])
+const MAX_CONTEXT_NOTES = 6
+const MAX_EVENT_MARKERS = 6
+const MAX_POSITION_OVERLAYS = 4
+
+function normalizeChartEventImpact(value: unknown): 'high' | 'medium' | 'low' | 'info' {
+  if (typeof value !== 'string') return 'info'
+  const lowered = value.trim().toLowerCase()
+  if (lowered === 'high' || lowered === 'medium' || lowered === 'low' || lowered === 'info') return lowered
+  if (lowered.includes('high')) return 'high'
+  if (lowered.includes('med')) return 'medium'
+  if (lowered.includes('low')) return 'low'
+  return 'info'
+}
 
 function toSheetChartRequest(value: unknown): ChartRequest | null {
   if (!value || typeof value !== 'object') return null
@@ -158,7 +184,39 @@ function toSheetChartRequest(value: unknown): ChartRequest | null {
     levels: maybe.levels,
     gexProfile: maybe.gexProfile,
     contextNotes: Array.isArray(maybe.contextNotes)
-      ? maybe.contextNotes.filter((note): note is string => typeof note === 'string').slice(0, 6)
+      ? maybe.contextNotes.filter((note): note is string => typeof note === 'string').slice(0, MAX_CONTEXT_NOTES)
+      : undefined,
+    positionOverlays: Array.isArray(maybe.positionOverlays)
+      ? maybe.positionOverlays
+        .filter((overlay): overlay is NonNullable<ChartRequest['positionOverlays']>[number] => (
+          Boolean(overlay)
+          && typeof overlay === 'object'
+          && typeof (overlay as { entry?: unknown }).entry === 'number'
+          && Number.isFinite((overlay as { entry?: number }).entry)
+        ))
+        .map((overlay) => ({
+          id: typeof overlay.id === 'string' ? overlay.id : undefined,
+          label: typeof overlay.label === 'string' ? overlay.label : undefined,
+          entry: Number(overlay.entry),
+          stop: typeof overlay.stop === 'number' && Number.isFinite(overlay.stop) ? overlay.stop : undefined,
+          target: typeof overlay.target === 'number' && Number.isFinite(overlay.target) ? overlay.target : undefined,
+        }))
+        .slice(0, MAX_POSITION_OVERLAYS)
+      : undefined,
+    eventMarkers: Array.isArray(maybe.eventMarkers)
+      ? maybe.eventMarkers
+        .filter((marker): marker is NonNullable<ChartRequest['eventMarkers']>[number] => (
+          Boolean(marker)
+          && typeof marker === 'object'
+          && typeof (marker as { label?: unknown }).label === 'string'
+        ))
+        .map((marker) => ({
+          label: marker.label,
+          date: typeof marker.date === 'string' ? marker.date : undefined,
+          impact: normalizeChartEventImpact(marker.impact),
+          source: typeof marker.source === 'string' ? marker.source : undefined,
+        }))
+        .slice(0, MAX_EVENT_MARKERS)
       : undefined,
   }
 }
@@ -363,6 +421,13 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   const [chartBars, setChartBars] = useState<ChartBar[]>([])
   const [chartLevels, setChartLevels] = useState<LevelAnnotation[]>([])
   const [chartContextNotes, setChartContextNotes] = useState<string[]>([])
+  const [chartPositionOverlays, setChartPositionOverlays] = useState<PositionOverlay[]>([])
+  const [chartEventMarkers, setChartEventMarkers] = useState<Array<{
+    label: string
+    date?: string
+    impact: 'high' | 'medium' | 'low' | 'info'
+    source?: string
+  }>>([])
   const [chartProviderIndicators, setChartProviderIndicators] = useState<ChartProviderIndicators | null>(null)
   const [chartIndicatorConfig, setChartIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [isLoadingChart, setIsLoadingChart] = useState(false)
@@ -672,6 +737,37 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     return annotations
   }, [])
 
+  const buildPositionOverlays = useCallback((request: ChartRequest): PositionOverlay[] => {
+    if (!Array.isArray(request.positionOverlays)) return []
+    return request.positionOverlays
+      .filter((overlay): overlay is NonNullable<ChartRequest['positionOverlays']>[number] => (
+        Number.isFinite(overlay.entry)
+      ))
+      .map((overlay, index) => ({
+        id: overlay.id || `${request.symbol}-${index}`,
+        label: overlay.label || 'Setup',
+        entry: overlay.entry,
+        stop: typeof overlay.stop === 'number' && Number.isFinite(overlay.stop) ? overlay.stop : undefined,
+        target: typeof overlay.target === 'number' && Number.isFinite(overlay.target) ? overlay.target : undefined,
+      }))
+      .slice(0, MAX_POSITION_OVERLAYS)
+  }, [])
+
+  const buildEventMarkers = useCallback((request: ChartRequest) => {
+    if (!Array.isArray(request.eventMarkers)) return []
+    return request.eventMarkers
+      .filter((marker): marker is NonNullable<ChartRequest['eventMarkers']>[number] => (
+        typeof marker.label === 'string' && marker.label.trim().length > 0
+      ))
+      .map((marker) => ({
+        label: marker.label.trim(),
+        date: typeof marker.date === 'string' ? marker.date : undefined,
+        impact: normalizeChartEventImpact(marker.impact),
+        source: typeof marker.source === 'string' ? marker.source : undefined,
+      }))
+      .slice(0, MAX_EVENT_MARKERS)
+  }, [])
+
   // Handle chart request from AI
   useEffect(() => {
     if (forcedView) return
@@ -686,10 +782,12 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     const levelAnnotations = buildLevelAnnotations(chartRequest)
     const gexAnnotations = buildGEXAnnotations(chartRequest)
     setChartLevels([...levelAnnotations, ...gexAnnotations])
-    setChartContextNotes(Array.isArray(chartRequest.contextNotes) ? chartRequest.contextNotes.slice(0, 6) : [])
+    setChartContextNotes(Array.isArray(chartRequest.contextNotes) ? chartRequest.contextNotes.slice(0, MAX_CONTEXT_NOTES) : [])
+    setChartPositionOverlays(buildPositionOverlays(chartRequest))
+    setChartEventMarkers(buildEventMarkers(chartRequest))
 
     fetchChartData(chartRequest.symbol, chartRequest.timeframe)
-  }, [buildGEXAnnotations, buildLevelAnnotations, chartRequest, fetchChartData, forcedView, setCenterView, setSymbol])
+  }, [buildEventMarkers, buildGEXAnnotations, buildLevelAnnotations, buildPositionOverlays, chartRequest, fetchChartData, forcedView, setCenterView, setSymbol])
 
   useEffect(() => {
     if (!forcedView) return
@@ -724,10 +822,14 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       const levelAnnotations = buildLevelAnnotations(sheetChartRequest)
       const gexAnnotations = buildGEXAnnotations(sheetChartRequest)
       setChartLevels([...levelAnnotations, ...gexAnnotations])
-      setChartContextNotes(Array.isArray(sheetChartRequest.contextNotes) ? sheetChartRequest.contextNotes.slice(0, 6) : [])
+      setChartContextNotes(Array.isArray(sheetChartRequest.contextNotes) ? sheetChartRequest.contextNotes.slice(0, MAX_CONTEXT_NOTES) : [])
+      setChartPositionOverlays(buildPositionOverlays(sheetChartRequest))
+      setChartEventMarkers(buildEventMarkers(sheetChartRequest))
     } else if (symbolChanged || timeframeChanged) {
       setChartLevels([])
       setChartContextNotes([])
+      setChartPositionOverlays([])
+      setChartEventMarkers([])
     }
 
     if (symbolChanged) {
@@ -746,6 +848,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     activeView,
     buildGEXAnnotations,
     buildLevelAnnotations,
+    buildEventMarkers,
+    buildPositionOverlays,
     chartSymbol,
     chartTimeframe,
     fetchChartData,
@@ -771,14 +875,16 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       const levelAnnotations = buildLevelAnnotations(request)
       const gexAnnotations = buildGEXAnnotations(request)
       setChartLevels([...levelAnnotations, ...gexAnnotations])
-      setChartContextNotes(Array.isArray(request.contextNotes) ? request.contextNotes.slice(0, 6) : [])
+      setChartContextNotes(Array.isArray(request.contextNotes) ? request.contextNotes.slice(0, MAX_CONTEXT_NOTES) : [])
+      setChartPositionOverlays(buildPositionOverlays(request))
+      setChartEventMarkers(buildEventMarkers(request))
 
       fetchChartData(request.symbol, request.timeframe)
     }
 
     window.addEventListener('ai-coach-show-chart', handleChartEvent)
     return () => window.removeEventListener('ai-coach-show-chart', handleChartEvent)
-  }, [buildLevelAnnotations, buildGEXAnnotations, fetchChartData, setCenterView, setSymbol])
+  }, [buildEventMarkers, buildLevelAnnotations, buildGEXAnnotations, buildPositionOverlays, fetchChartData, setCenterView, setSymbol])
 
   useEffect(() => {
     const handleHover = (event: Event) => {
@@ -815,6 +921,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     setPendingChartSyncSymbol(null)
     setChartLevels([])
     setChartContextNotes([])
+    setChartPositionOverlays([])
+    setChartEventMarkers([])
     fetchChartData(symbol, chartTimeframe)
   }, [chartTimeframe, fetchChartData, setSymbol])
 
@@ -824,6 +932,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     setPendingChartSyncSymbol(null)
     setChartLevels([])
     setChartContextNotes([])
+    setChartPositionOverlays([])
+    setChartEventMarkers([])
     fetchChartData(pendingChartSyncSymbol, chartTimeframe)
   }, [pendingChartSyncSymbol, fetchChartData, chartTimeframe])
 
@@ -1094,6 +1204,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               indicators={chartIndicatorConfig}
               openingRangeMinutes={preferences.orbMinutes}
               contextNotes={chartContextNotes}
+              positionOverlays={chartPositionOverlays}
+              eventMarkers={chartEventMarkers}
               pendingSyncSymbol={pendingChartSyncSymbol}
               isLoading={isLoadingChart}
               error={chartError}
@@ -1316,6 +1428,8 @@ function ChartView({
   indicators,
   openingRangeMinutes,
   contextNotes,
+  positionOverlays,
+  eventMarkers,
   pendingSyncSymbol,
   isLoading,
   error,
@@ -1342,6 +1456,13 @@ function ChartView({
   indicators: IndicatorConfig
   openingRangeMinutes: 5 | 15 | 30
   contextNotes: string[]
+  positionOverlays: PositionOverlay[]
+  eventMarkers: Array<{
+    label: string
+    date?: string
+    impact: 'high' | 'medium' | 'low' | 'info'
+    source?: string
+  }>
   pendingSyncSymbol: string | null
   isLoading: boolean
   error: string | null
@@ -1501,6 +1622,30 @@ function ChartView({
             </div>
           </div>
         )}
+        {eventMarkers.length > 0 && (
+          <div className="border-t border-white/5 px-3 py-2">
+            <div className="flex flex-wrap gap-1.5">
+              {eventMarkers.slice(0, 4).map((marker, index) => (
+                <span
+                  key={`${marker.label}-${marker.date || index}`}
+                  className={cn(
+                    'rounded border px-2 py-0.5 text-[10px]',
+                    marker.impact === 'high'
+                      ? 'border-red-500/30 bg-red-500/10 text-red-200/85'
+                      : marker.impact === 'medium'
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200/85'
+                        : marker.impact === 'low'
+                          ? 'border-sky-500/30 bg-sky-500/10 text-sky-200/85'
+                          : 'border-white/15 bg-white/5 text-white/70',
+                  )}
+                  title={marker.source ? `${marker.label} • ${marker.source}` : marker.label}
+                >
+                  {marker.label}{marker.date ? ` (${marker.date})` : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0">
@@ -1524,6 +1669,8 @@ function ChartView({
                 providerIndicators={providerIndicators || undefined}
                 indicators={indicators}
                 openingRangeMinutes={openingRangeMinutes}
+                positionOverlays={positionOverlays}
+                eventMarkers={eventMarkers}
                 symbol={symbol}
                 timeframe={timeframe}
                 isLoading={isLoading}

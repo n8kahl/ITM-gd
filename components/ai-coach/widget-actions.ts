@@ -41,6 +41,19 @@ export function chartAction(
   label?: string,
   buttonLabel?: string,
   contextNotes?: string[],
+  eventMarkers?: Array<{
+    label: string
+    date?: string
+    impact?: 'high' | 'medium' | 'low' | 'info'
+    source?: string
+  }>,
+  positionOverlays?: Array<{
+    id?: string
+    label?: string
+    entry: number
+    stop?: number
+    target?: number
+  }>,
 ): WidgetAction {
   return {
     label: buttonLabel || (typeof level === 'number' ? 'Show on Chart' : 'Open Chart'),
@@ -56,9 +69,31 @@ export function chartAction(
         timeframe,
         label,
         contextNotes,
+        eventMarkers,
+        positionOverlays,
       })
     },
   }
+}
+
+export function prioritizeWidgetActions(actions: WidgetAction[]): WidgetAction[] {
+  const rankForLabel = (label: string): number => {
+    const lowered = label.toLowerCase()
+    if (lowered.includes('show on chart') || lowered.includes('open chart')) return 0
+    if (lowered.includes('risk plan') || lowered.includes('risk checklist') || lowered === 'analyze') return 1
+    if (lowered.includes('explain simply') || lowered.includes('plain english') || lowered.includes('explain')) return 2
+    if (lowered.includes('view options') || lowered.includes('options')) return 3
+    if (lowered.includes('ask ai')) return 4
+    return 5
+  }
+
+  return [...actions].sort((a, b) => {
+    const rankDelta = rankForLabel(a.label) - rankForLabel(b.label)
+    if (rankDelta !== 0) return rankDelta
+    if (a.variant === 'primary' && b.variant !== 'primary') return -1
+    if (b.variant === 'primary' && a.variant !== 'primary') return 1
+    return a.label.localeCompare(b.label)
+  })
 }
 
 export function optionsAction(
