@@ -2550,15 +2550,32 @@ export async function detectActiveSetups(options?: {
     const memoryPWinAdjustment = memoryContext
       ? clamp(((memoryContext.score - 50) / 100) * 0.08 * Math.max(0.2, memoryContext.confidence), -0.04, 0.06)
       : 0;
-    const hasMemoryEdge = Boolean(
-      memoryContext
-      && memoryContext.resolved >= 3
-      && memoryContext.winRatePct != null
-      && memoryContext.winRatePct >= 58,
-    );
+    const regimeAligned = isRegimeAligned(setupType, regimeState.regime);
+    const regimeCompatibility = regimeAligned
+      ? (
+        regimeState.direction === 'neutral'
+          ? 0.72
+          : regimeState.direction === direction
+            ? 0.9
+            : 0.65
+      )
+      : 0.35;
+    const memoryWinRate = memoryContext?.winRatePct != null
+      ? memoryContext.winRatePct / 100
+      : null;
+    const memoryTotalTests = memoryContext?.resolved ?? 0;
+    const memoryBonus = (
+      memoryWinRate != null
+      && memoryWinRate >= 0.55
+      && memoryTotalTests >= 5
+      && regimeCompatibility >= 0.65
+    )
+      ? Math.min(1, Math.max(0, (memoryWinRate - 0.5) * 2))
+      : 0;
+    const hasMemoryEdge = memoryBonus > 0;
     const memoryWeakness = Boolean(
       memoryContext
-      && memoryContext.resolved >= 3
+      && memoryContext.resolved >= 5
       && memoryContext.winRatePct != null
       && memoryContext.winRatePct <= 45,
     );
@@ -2568,7 +2585,6 @@ export async function detectActiveSetups(options?: {
     const memoryRisk = memoryWeakness && memoryContext?.winRatePct != null
       ? `Cross-session memory weak (${round(memoryContext.winRatePct, 1)}% win rate)`
       : null;
-    const regimeAligned = isRegimeAligned(setupType, regimeState.regime);
     const multiTFConfluence = multiTFConfluenceEnabled
       ? scoreMultiTFConfluence({
         context: multiTFConfluenceContext,
@@ -2591,7 +2607,7 @@ export async function detectActiveSetups(options?: {
       vwapPrice: indicatorContext?.vwapPrice ?? null,
       vwapDeviation: indicatorContext?.vwapDeviation ?? null,
     });
-    let confluenceScore = hasMemoryEdge ? Math.min(5, confluence.score + 1) : confluence.score;
+    let confluenceScore = hasMemoryEdge ? Math.min(5, confluence.score + memoryBonus) : confluence.score;
     let confluenceSources = hasMemoryEdge && !confluence.sources.includes('cross_session_memory')
       ? [...confluence.sources, 'cross_session_memory']
       : confluence.sources;
@@ -2846,7 +2862,7 @@ export async function detectActiveSetups(options?: {
         gex: weightedConfluence.gex,
         regime: weightedConfluence.regime,
         multiTF: weightedConfluence.multiTF,
-        memory: weightedConfluence.memory,
+        memory: round(memoryBonus, 2),
         composite: weightedConfluence.composite,
         legacyEquivalent: weightedConfluence.legacyEquivalent,
         threshold: round(readyConfluenceThresholdScore, 2),
