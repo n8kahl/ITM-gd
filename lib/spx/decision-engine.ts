@@ -1,3 +1,6 @@
+import { predictConfidence, primeConfidenceModel } from '@/lib/ml/confidence-model'
+import { extractFeatures } from '@/lib/ml/feature-extractor'
+import type { FeatureExtractionContext } from '@/lib/ml/types'
 import type {
   BasisState,
   FlowEvent,
@@ -9,19 +12,13 @@ import type {
 
 export type SPXConfidenceTrend = 'up' | 'flat' | 'down'
 
-export interface SPXDecisionEngineContext {
-  regime: Regime | null
-  prediction: PredictionState | null
-  basis: BasisState | null
-  gex: GEXProfile | null
-  flowEvents: FlowEvent[]
-  nowMs?: number
-}
+export interface SPXDecisionEngineContext extends FeatureExtractionContext {}
 
 export interface SPXDecisionEngineEvaluation {
   alignmentByTimeframe: Record<'1m' | '5m' | '15m' | '1h', number>
   alignmentScore: number
   confidence: number
+  confidenceSource: 'ml' | 'rule_based'
   confidenceTrend: SPXConfidenceTrend
   expectedValueR: number
   drivers: string[]
@@ -74,6 +71,30 @@ function regimePenaltyFromScore(regimeScore: number): number {
   if (regimeScore < 0.3) return 18
   if (regimeScore < 0.45) return 12
   return 0
+}
+
+export function calculateRuleBasedConfidence(input: {
+  alignmentScore: number
+  confluenceScore: number
+  probability: number
+  flowBias: number
+  regimeScore: number
+}): number {
+  const confluenceComponent = (input.confluenceScore / 5) * 22
+  const probabilityComponent = clamp(input.probability, 0, 100) * 0.2
+  const flowComponent = input.flowBias * 8
+  const regimePenalty = regimePenaltyFromScore(input.regimeScore)
+
+  return round(clamp(
+    20
+    + (input.alignmentScore * 0.55)
+    + confluenceComponent
+    + probabilityComponent
+    + flowComponent
+    - regimePenalty,
+    5,
+    95,
+  ), 2)
 }
 
 function directionalPredictionScore(
@@ -267,21 +288,25 @@ export function evaluateSPXSetupDecision(
     2,
   )
 
-  const confluenceComponent = (setup.confluenceScore / 5) * 22
-  const probabilityComponent = clamp(setup.probability, 0, 100) * 0.2
-  const flowComponent = flowBias * 8
-  const regimePenalty = regimePenaltyFromScore(regimeScore)
-
-  const confidence = round(clamp(
-    20
-    + (alignmentScore * 0.55)
-    + confluenceComponent
-    + probabilityComponent
-    + flowComponent
-    - regimePenalty,
-    5,
-    95,
-  ), 2)
+  const ruleBasedConfidence = calculateRuleBasedConfidence({
+    alignmentScore,
+    confluenceScore: setup.confluenceScore,
+    probability: setup.probability,
+    flowBias,
+    regimeScore,
+  })
+  const featureVector = extractFeatures(setup, context)
+  void primeConfidenceModel()
+  const mlConfidence = predictConfidence(featureVector, {
+    userId: context.userId,
+    enabledOverride: context.mlConfidenceEnabled,
+  })
+  const confidence = mlConfidence == null
+    ? ruleBasedConfidence
+    : round(clamp(mlConfidence, 5, 95), 2)
+  const confidenceSource: SPXDecisionEngineEvaluation['confidenceSource'] = mlConfidence == null
+    ? 'rule_based'
+    : 'ml'
 
   const confidenceTrend = confidenceTrendFromBaseline(confidence, setup.probability)
   const drivers = buildDrivers(setup, alignmentScore, flowBias, regimeScore, predictionScore, gexScore)
@@ -297,6 +322,7 @@ export function evaluateSPXSetupDecision(
     alignmentByTimeframe,
     alignmentScore,
     confidence,
+    confidenceSource,
     confidenceTrend,
     expectedValueR: valueR,
     drivers,

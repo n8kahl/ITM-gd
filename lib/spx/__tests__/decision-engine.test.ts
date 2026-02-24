@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { __resetConfidenceModelForTest, __setConfidenceModelForTest } from '@/lib/ml/confidence-model'
 import {
   FLOW_BIAS_EWMA_DECAY,
+  calculateRuleBasedConfidence,
   enrichSPXSetupWithDecisionEngine,
   evaluateSPXSetupDecision,
   flowAlignmentBias,
@@ -57,6 +59,24 @@ function buildFlow(direction: FlowEvent['direction'], id: string): FlowEvent {
 }
 
 describe('decision engine', () => {
+  const previousABRollout = process.env.SPX_ML_CONFIDENCE_AB_PERCENT
+  const previousMLEnabled = process.env.SPX_ML_CONFIDENCE_ENABLED
+
+  beforeEach(() => {
+    __resetConfidenceModelForTest()
+    process.env.SPX_ML_CONFIDENCE_AB_PERCENT = '100'
+    process.env.SPX_ML_CONFIDENCE_ENABLED = 'true'
+  })
+
+  afterEach(() => {
+    __resetConfidenceModelForTest()
+    if (previousABRollout == null) delete process.env.SPX_ML_CONFIDENCE_AB_PERCENT
+    else process.env.SPX_ML_CONFIDENCE_AB_PERCENT = previousABRollout
+
+    if (previousMLEnabled == null) delete process.env.SPX_ML_CONFIDENCE_ENABLED
+    else process.env.SPX_ML_CONFIDENCE_ENABLED = previousMLEnabled
+  })
+
   it('uses EWMA flow weights where recent events carry more influence', () => {
     expect(FLOW_BIAS_EWMA_DECAY ** 0).toBe(1)
     expect(FLOW_BIAS_EWMA_DECAY ** 5).toBeCloseTo(0.44, 2)
@@ -322,5 +342,82 @@ describe('decision engine', () => {
     expect(['up', 'flat', 'down']).toContain(enriched.confidenceTrend)
     expect(Array.isArray(enriched.decisionDrivers)).toBe(true)
     expect(Array.isArray(enriched.decisionRisks)).toBe(true)
+  })
+
+  it('falls back to rule-based confidence when ML model is unavailable', () => {
+    const setup = buildSetup()
+    const context = {
+      regime: 'trending' as const,
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'user-123',
+      mlConfidenceEnabled: true,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    }
+
+    const result = evaluateSPXSetupDecision(setup, context)
+    const flowBias = flowAlignmentBias(setup.direction, context.flowEvents)
+    const regimeScore = regimeCompatibility(setup.regime, context.regime)
+    const expected = calculateRuleBasedConfidence({
+      alignmentScore: result.alignmentScore,
+      confluenceScore: setup.confluenceScore,
+      probability: setup.probability,
+      flowBias,
+      regimeScore,
+    })
+
+    expect(result.confidenceSource).toBe('rule_based')
+    expect(result.confidence).toBe(expected)
+  })
+
+  it('uses ML confidence when model is available and user is enabled', () => {
+    const setup = buildSetup()
+    __setConfidenceModelForTest({
+      version: 'test-model',
+      intercept: 0,
+      features: {
+        confluenceScore: 0.5,
+      },
+    })
+
+    const result = evaluateSPXSetupDecision(setup, {
+      regime: 'trending',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'ml-user',
+      mlConfidenceEnabled: true,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(result.confidenceSource).toBe('ml')
+    expect(result.confidence).toBeCloseTo(88.08, 2)
+  })
+
+  it('respects ML override when disabled for a user', () => {
+    const setup = buildSetup()
+    __setConfidenceModelForTest({
+      version: 'test-model',
+      intercept: 2,
+      features: {
+        confluenceScore: 0.6,
+      },
+    })
+
+    const result = evaluateSPXSetupDecision(setup, {
+      regime: 'trending',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'ml-user',
+      mlConfidenceEnabled: false,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(result.confidenceSource).toBe('rule_based')
   })
 })
