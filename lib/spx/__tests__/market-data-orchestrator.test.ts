@@ -45,10 +45,12 @@ describe('market data orchestrator', () => {
     expect(trust.sequenceGapDetected).toBe(false)
   })
 
-  it('sequence gap helper handles null edges', () => {
-    expect(detectSPXSequenceGap(null, 4)).toBe(false)
-    expect(detectSPXSequenceGap(4, null)).toBe(false)
-    expect(detectSPXSequenceGap(4, 5)).toBe(false)
-    expect(detectSPXSequenceGap(4, 7)).toBe(true)
+  it('sequence gap helper handles tolerance and null edge cases', () => {
+    expect(detectSPXSequenceGap(100, 102, 0)).toBe(true)
+    expect(detectSPXSequenceGap(100, 101, 0)).toBe(false)
+    expect(detectSPXSequenceGap(100, 103, 1)).toBe(true)
+    expect(detectSPXSequenceGap(100, 102, 1)).toBe(false)
+    expect(detectSPXSequenceGap(null, null, 0)).toBe(false)
+    expect(detectSPXSequenceGap(null, 5, 0)).toBe(false)
   })
 })

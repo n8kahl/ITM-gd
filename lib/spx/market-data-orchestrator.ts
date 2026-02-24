@@ -23,7 +23,8 @@ export function detectSPXSequenceGap(
   tolerance = DEFAULT_OPTIONS.sequenceGapTolerance,
 ): boolean {
   if (previousSequence == null || nextSequence == null) return false
-  return nextSequence > previousSequence + tolerance + 1
+  const expectedNext = previousSequence + 1
+  return nextSequence > expectedNext + tolerance
 }
 
 export class SPXMarketDataOrchestrator {
