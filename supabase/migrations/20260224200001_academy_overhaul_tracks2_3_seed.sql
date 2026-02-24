@@ -1,686 +1,1697 @@
 -- ============================================================================
 -- File: 20260224200001_academy_overhaul_tracks2_3_seed.sql
 -- Phase: Academy Overhaul – Phase 2, Slice 2B
--- Purpose: Seed Tracks 2 (Technical Analysis) and 3 (Options Mastery)
---          with modules, lessons, and content blocks.
--- Idempotency: ON CONFLICT DO NOTHING / DO UPDATE
+-- Purpose: Seed Track 2 (technical-analysis) and Track 3 (options-mastery)
+--          with modules, lessons (3 blocks each), and competency links.
+-- Idempotency: ON CONFLICT (slug) DO UPDATE for modules/lessons;
+--              ON CONFLICT DO NOTHING for blocks and competency links.
 -- ============================================================================
 
 BEGIN;
 
 -- ============================================================================
--- COMPETENCIES (idempotent, overlap with other seeds)
+-- 1. EXTEND ENUM: add text_explanation and key_concept block types
+-- ============================================================================
+
+ALTER TYPE academy_block_type ADD VALUE IF NOT EXISTS 'text_explanation';
+ALTER TYPE academy_block_type ADD VALUE IF NOT EXISTS 'key_concept';
+
+-- ============================================================================
+-- 2. COMPETENCIES (idempotent)
 -- ============================================================================
 
 INSERT INTO academy_competencies (key, title, description, domain, metadata)
 VALUES
-  ('chart_reading',       'Chart Reading',        'Read and interpret price charts with speed and accuracy.',                  'analysis',    '{}'::jsonb),
-  ('indicator_fluency',   'Indicator Fluency',    'Apply oscillators and indicators to confirm setups.',                      'analysis',    '{}'::jsonb),
-  ('pattern_recognition', 'Pattern Recognition',  'Identify actionable price-action and candlestick patterns.',               'analysis',    '{}'::jsonb),
-  ('options_literacy',    'Options Literacy',      'Understand options contracts, pricing, and basic mechanics.',              'options',     '{}'::jsonb),
-  ('greeks_mastery',      'Greeks Mastery',        'Apply Delta, Gamma, Theta, Vega in position management.',                 'options',     '{}'::jsonb),
-  ('strategy_selection',  'Strategy Selection',    'Choose the right options strategy for a given outlook and IV environment.','options',     '{}'::jsonb),
-  ('trading_psychology',  'Trading Psychology',    'Manage emotions and cognitive biases to execute the trading plan.',        'mindset',     '{}'::jsonb),
-  ('risk_management',     'Risk Management',       'Size positions and manage portfolio risk within defined limits.',          'risk',        '{}'::jsonb)
+  ('market_context',      'Market Context',       'Evaluate session structure and context before taking risk.',                'analysis',  '{}'::jsonb),
+  ('entry_validation',    'Entry Validation',     'Confirm setup quality and invalidation before execution.',                  'execution', '{}'::jsonb),
+  ('exit_discipline',     'Exit Discipline',      'Execute planned exits under pressure without drift.',                       'risk',      '{}'::jsonb),
+  ('review_reflection',   'Review Reflection',    'Use post-trade review to improve repeatability.',                          'improvement','{}'::jsonb),
+  ('volatility_mechanics','Volatility Mechanics', 'Understand IV, VIX, skew, and term structure.',                            'analysis',  '{}'::jsonb),
+  ('options_pricing',     'Options Pricing',      'Model and interpret option premiums, intrinsic/extrinsic value.',           'options',   '{}'::jsonb),
+  ('options_strategies',  'Options Strategies',   'Select and manage options structures for defined-risk outcomes.',           'options',   '{}'::jsonb),
+  ('risk_management',     'Risk Management',      'Size positions and manage portfolio risk within defined limits.',           'risk',      '{}'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================================
--- TRACK 2: TECHNICAL ANALYSIS
+-- 3. TRACK 2: TECHNICAL ANALYSIS
 -- ============================================================================
 
--- ---------- Module 2.1: Chart Reading Fundamentals ----------
+INSERT INTO academy_tracks (program_id, code, title, description, position, is_active, metadata)
+VALUES (
+  (SELECT id FROM academy_programs WHERE code = 'titm-core-program'),
+  'technical-analysis',
+  'Technical Analysis',
+  'Master chart reading, indicators, and price-action patterns for high-probability setups.',
+  2, true, '{}'::jsonb
+)
+ON CONFLICT (program_id, code) DO UPDATE SET
+  title       = EXCLUDED.title,
+  description = EXCLUDED.description,
+  position    = EXCLUDED.position,
+  is_active   = EXCLUDED.is_active,
+  updated_at  = now();
+
+-- ============================================================================
+-- MODULE 2.1: Chart Reading Fundamentals (position 0)
+-- ============================================================================
 
 INSERT INTO academy_modules (
   track_id, slug, code, title, description, learning_outcomes,
   estimated_minutes, position, is_published, metadata
 )
 VALUES (
-  (SELECT t.id FROM academy_tracks t JOIN academy_programs p ON p.id = t.program_id
+  (SELECT t.id FROM academy_tracks t
+   JOIN academy_programs p ON p.id = t.program_id
    WHERE p.code = 'titm-core-program' AND t.code = 'technical-analysis'),
   'chart-reading-fundamentals',
   'chart-reading-fundamentals',
   'Chart Reading Fundamentals',
-  'Learn to read candlestick charts, identify support/resistance, and understand time frames.',
-  '["Read candlestick charts with confidence","Identify support and resistance levels","Understand multiple time frame analysis"]'::jsonb,
-  45, 1, true, '{}'::jsonb
+  'Build the foundation of chart literacy: candlesticks, levels, trends, and volume.',
+  '["Interpret candlestick anatomy and basic patterns","Identify support and resistance zones","Recognize trend structure across time frames","Read volume to confirm or question price moves"]'::jsonb,
+  48, 0, true, '{}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
-  title = EXCLUDED.title, description = EXCLUDED.description,
-  learning_outcomes = EXCLUDED.learning_outcomes, estimated_minutes = EXCLUDED.estimated_minutes,
-  position = EXCLUDED.position, is_published = EXCLUDED.is_published, updated_at = now();
+  title             = EXCLUDED.title,
+  description       = EXCLUDED.description,
+  learning_outcomes = EXCLUDED.learning_outcomes,
+  estimated_minutes = EXCLUDED.estimated_minutes,
+  position          = EXCLUDED.position,
+  is_published      = EXCLUDED.is_published,
+  updated_at        = now();
 
--- Lesson 2.1.1: Candlestick Anatomy
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.1.1: candlestick-anatomy (position 0, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'chart-reading-fundamentals'),
-  'candlestick-anatomy', 'Candlestick Anatomy',
-  'Understand the components of a candlestick and interpret basic patterns',
+  'candlestick-anatomy',
+  'Candlestick Anatomy',
+  'Identify the four OHLC components of a candlestick and interpret basic single-candle signals',
   12, 'beginner'::academy_difficulty, '{}'::uuid[], 0, true,
-  '{"competenciesTargeted":["chart_reading"]}'::jsonb
+  '{"competenciesTargeted":["market_context","entry_validation"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
-   'candlestick-anatomy-b1', 'text_explanation', 'What Is a Candlestick?',
-   'A candlestick is a visual representation of price action over a specific time period. Each candle shows four data points: the **open**, **high**, **low**, and **close** (OHLC). The rectangular body represents the range between open and close, while the thin lines (wicks or shadows) show the highs and lows beyond the body. A green/white candle means close > open (bullish); a red/black candle means close < open (bearish).', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
-   'candlestick-anatomy-b2', 'key_concept', 'Key Patterns to Know',
-   'Single-candle patterns include the **Doji** (open ≈ close, indecision), **Hammer** (small body, long lower wick, potential reversal at support), and **Engulfing** (two-candle pattern where the second body completely "engulfs" the first). These patterns gain significance when they appear at key support/resistance levels.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
-   'candlestick-anatomy-b3', 'quiz_single', 'Candlestick Quiz',
-   'A candle with a very small body and a long lower shadow appearing at a support level is called a:', 2,
-   '{"options":["Doji","Hammer","Engulfing","Spinning Top"],"correctIndex":1,"explanation":"A Hammer has a small body near the top and a long lower shadow, signaling potential bullish reversal at support."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A candlestick shows four price points for a single time period: **Open**, **High**, **Low**, and **Close**. The body (rectangle) spans from open to close; the wicks extend to the high and low. A green/bullish candle means close > open; red/bearish means close < open. The size of the body relative to the wicks reveals the strength of buying or selling pressure during that period."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
+    'key_concept'::academy_block_type,
+    '{"title": "Three Candles Every Trader Must Know", "summary": "The **Doji** (open ≈ close) signals indecision. The **Hammer** (small body, long lower wick at support) signals potential bullish reversal. The **Engulfing** (second candle body fully covers the first) signals a momentum shift. All three gain significance only at key price levels."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
+    'flashcard_deck'::academy_block_type,
+    '{"config": {"cards": [{"front": "Green candle with no upper wick and a long lower wick at support", "back": "Bullish Hammer — signals potential reversal; buyers absorbed all selling pressure"}, {"front": "Two candles: small red followed by large green that fully covers it", "back": "Bullish Engulfing — buyers overpowered sellers; high-probability reversal signal at support"}, {"front": "Candle where open and close are identical", "back": "Doji — indecision; neither side won the period"}]}, "instructions": "Flip each card and identify the candlestick pattern from the description."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.1.2: Support & Resistance
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.1.2: support-and-resistance (position 1, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'chart-reading-fundamentals'),
-  'support-and-resistance', 'Support & Resistance',
-  'Identify horizontal and dynamic support/resistance levels on charts',
-  15, 'beginner'::academy_difficulty, '{}'::uuid[], 1, true,
-  '{"competenciesTargeted":["chart_reading","pattern_recognition"]}'::jsonb
+  'support-and-resistance',
+  'Support and Resistance',
+  'Identify horizontal support and resistance zones and understand polarity flips',
+  12, 'beginner'::academy_difficulty, '{}'::uuid[], 1, true,
+  '{"competenciesTargeted":["market_context","entry_validation"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
-   'support-resistance-b1', 'text_explanation', 'Finding Key Levels',
-   'Support is a price level where buying pressure tends to prevent further decline. Resistance is where selling pressure prevents further advance. These levels form because of **market memory** — traders remember prices where they made or lost money. Look for areas where price has bounced multiple times. The more touches, the more significant the level. Round numbers ($100, $200, $4500 on SPX) often act as psychological support/resistance.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
-   'support-resistance-b2', 'worked_example', 'Drawing S/R on SPX',
-   'Step 1: Zoom out to a daily chart. Step 2: Identify at least 3 touches at a similar price level. Step 3: Draw a horizontal line through the cluster of touches. Step 4: Note that a broken resistance often becomes new support (polarity flip). On SPX, the 4500 level served as resistance in Q3, was broken in Q4, and then held as support on the January retest.', 1, '{"steps":3}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
-   'support-resistance-b3', 'quiz_multi', 'Support/Resistance Check',
-   'Which of the following increase the significance of a support/resistance level? (Select all that apply)', 2,
-   '{"options":["Multiple touches over time","High volume at the level","Round number","Only appearing on 1-minute charts"],"correctIndices":[0,1,2],"explanation":"Multiple touches, high volume, and round numbers all strengthen S/R levels. One-minute-only levels are weak and unreliable."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "**Support** is a price level where buying pressure historically halts a decline. **Resistance** is where selling pressure halts an advance. These levels form because of market memory — traders recall where they entered or exited. A level grows stronger with each additional price test. When a resistance level is broken convincingly, it often becomes new support — this is called a **polarity flip**."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
+    'key_concept'::academy_block_type,
+    '{"title": "Grading Level Strength", "summary": "Not all levels are equal. A strong level has: (1) at least 3 prior touches, (2) significant volume at those touches, (3) a clean reaction (not gradual), and (4) alignment with round numbers or prior significant swing highs/lows. Weak levels — especially those only visible on 1-minute charts — should be ignored in favor of higher time frame structure."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
+    'market_context_tagger'::academy_block_type,
+    '{"config": {"chart": "SPX_daily_annotated", "levelTypes": ["strong_support", "weak_support", "strong_resistance", "weak_resistance"]}, "instructions": "Tag each highlighted price zone on the SPX chart as strong support, weak support, strong resistance, or weak resistance. Justify your classification based on number of touches and volume."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.1.3: Time Frame Analysis
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.1.3: trend-identification (position 2, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'chart-reading-fundamentals'),
-  'time-frame-analysis', 'Time Frame Analysis',
-  'Use multiple time frames to build a complete market picture',
-  15, 'beginner'::academy_difficulty, '{}'::uuid[], 2, true,
-  '{"competenciesTargeted":["chart_reading","pattern_recognition"]}'::jsonb
+  'trend-identification',
+  'Trend Identification',
+  'Define uptrends, downtrends, and ranges using swing highs and lows',
+  12, 'beginner'::academy_difficulty, '{}'::uuid[], 2, true,
+  '{"competenciesTargeted":["market_context","entry_validation"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'time-frame-analysis'),
-   'time-frame-b1', 'text_explanation', 'The Top-Down Approach',
-   'Multiple time frame (MTF) analysis means checking higher time frames before zooming in. A common stack: **Daily** → trend direction and key levels; **4H/1H** → current structure and momentum; **15M/5M** → entry timing. The higher time frame always has priority. If the daily is bearish, a bullish 5-minute setup is lower probability. Think of it as context → structure → trigger.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'time-frame-analysis'),
-   'time-frame-b2', 'key_concept', 'Time Frame Alignment',
-   'A trade setup has the highest probability when all three time frames agree on direction. This is called **time frame alignment** or confluence. When the daily trend is up, the 1H structure shows a higher low forming at support, and the 5M shows a bullish engulfing — that is a high-confluence long setup.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'time-frame-analysis'),
-   'time-frame-b3', 'reflection', 'Your Time Frame Stack',
-   'Think about the instruments you trade most. What time frame stack makes sense for your style? Write down your primary (trend), secondary (structure), and tertiary (entry) time frames and why you chose them.', 2,
-   '{"minWords":30}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'trend-identification'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "An **uptrend** is a series of higher highs (HH) and higher lows (HL). A **downtrend** is lower lows (LL) and lower highs (LH). A **range** is when price oscillates between two horizontal levels without forming a clear sequence of HH/HL or LL/LH. The trend is determined by the **most recent completed swing**, not by drawing a line from the lowest to the highest point."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'trend-identification'),
+    'key_concept'::academy_block_type,
+    '{"title": "Trend Changes Start with a Break of Structure", "summary": "An uptrend is broken when price makes a **Lower Low** — breaking below the most recent HL. This is called a Break of Structure (BOS). Until that happens, the trend is still up regardless of how \"extended\" price looks. Trading with the trend on the higher time frame dramatically improves probability on lower time frame entries."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'trend-identification'),
+    'timed_challenge'::academy_block_type,
+    '{"config": {"timeSeconds": 60, "questions": [{"chart": "SPX_5min_1", "question": "Is this chart showing an uptrend, downtrend, or range?", "answer": "uptrend", "hint": "Look for the sequence of swing highs and lows"}, {"chart": "SPX_5min_2", "question": "Has a Break of Structure occurred?", "answer": "yes", "hint": "Did price break the most recent higher low?"}]}, "instructions": "Classify each chart in under 60 seconds. Speed builds the pattern recognition muscle used in live trading."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.1.4: Volume Analysis Basics
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.1.4: volume-analysis (position 3, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'chart-reading-fundamentals'),
-  'volume-analysis-basics', 'Volume Analysis Basics',
-  'Interpret volume to confirm price moves and identify divergences',
+  'volume-analysis',
+  'Volume Analysis',
+  'Use volume to confirm price moves and detect divergences',
   12, 'beginner'::academy_difficulty, '{}'::uuid[], 3, true,
-  '{"competenciesTargeted":["chart_reading"]}'::jsonb
+  '{"competenciesTargeted":["market_context","entry_validation"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'volume-analysis-basics'),
-   'volume-b1', 'text_explanation', 'Volume Confirms Price',
-   'Volume measures the number of shares or contracts traded in a period. **Rising price + rising volume** = strong move, likely to continue. **Rising price + falling volume** = weakening move, potential reversal ahead. Volume spikes at key levels (breakouts, reversals) show institutional participation. Low volume at a resistance test suggests the breakout may fail.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'volume-analysis-basics'),
-   'volume-b2', 'key_concept', 'Volume Profile',
-   'Volume profile shows traded volume at each price level (not each time period). The **Point of Control (POC)** is the price with the most volume — it acts as a magnet. **High Volume Nodes** are areas of acceptance; **Low Volume Nodes** are areas price moves through quickly. Volume profile is especially useful for SPX intraday trading.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'volume-analysis-basics'),
-   'volume-b3', 'quiz_single', 'Volume Quiz',
-   'Price is breaking above resistance with declining volume. What does this suggest?', 2,
-   '{"options":["Strong breakout, go long","Weak breakout, likely to fail","Volume does not matter at resistance","Wait for a pullback to go short"],"correctIndex":1,"explanation":"Declining volume on a breakout suggests lack of conviction. The breakout is more likely to fail or produce a false breakout/trap."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'volume-analysis'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "Volume is the number of shares or contracts traded in a given period. **Rising price + rising volume** confirms institutional participation — the move is likely to continue. **Rising price + falling volume** signals weakening conviction — a potential reversal or consolidation ahead. Volume spikes at key levels (breakouts, bounces) indicate a decision point where large players are active."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'volume-analysis'),
+    'key_concept'::academy_block_type,
+    '{"title": "Volume Profile and VWAP", "summary": "Volume Profile maps traded volume at each price level, not each time bar. The **Point of Control (POC)** — the price with the most volume — acts as a magnet. **VWAP** (Volume-Weighted Average Price) is the average price weighted by volume; institutional algorithms often use it as a fair-value reference. Price above VWAP is bullish bias intraday; below is bearish bias."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'volume-analysis'),
+    'what_went_wrong'::academy_block_type,
+    '{"config": {"scenario": "A trader enters a long position as SPX breaks above 4500. The breakout candle closes above the level, but volume is 40% below the 20-period average. The trade fails within 3 bars.", "errorOptions": ["Stop was too wide", "Volume did not confirm the breakout", "Entry was at resistance not support", "Position size was too large"], "correctError": "Volume did not confirm the breakout"}, "instructions": "Analyze the failed trade scenario and identify the primary reason it did not work."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- ---------- Module 2.2: Indicators & Oscillators ----------
+-- ============================================================================
+-- MODULE 2.2: Indicators and Oscillators (position 1)
+-- ============================================================================
 
 INSERT INTO academy_modules (
   track_id, slug, code, title, description, learning_outcomes,
   estimated_minutes, position, is_published, metadata
 )
 VALUES (
-  (SELECT t.id FROM academy_tracks t JOIN academy_programs p ON p.id = t.program_id
+  (SELECT t.id FROM academy_tracks t
+   JOIN academy_programs p ON p.id = t.program_id
    WHERE p.code = 'titm-core-program' AND t.code = 'technical-analysis'),
   'indicators-and-oscillators',
   'indicators-and-oscillators',
-  'Indicators & Oscillators',
-  'Master the most widely used technical indicators and learn when each is appropriate.',
-  '["Apply moving averages for trend identification","Use RSI and MACD for momentum analysis","Combine indicators without redundancy"]'::jsonb,
-  40, 2, true, '{}'::jsonb
+  'Indicators and Oscillators',
+  'Apply moving averages, RSI, MACD, and multi-indicator setups to identify high-probability entries.',
+  '["Use moving averages for trend and dynamic S/R","Apply RSI and MACD for momentum confirmation","Build a non-redundant indicator stack"]'::jsonb,
+  48, 1, true, '{}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
-  title = EXCLUDED.title, description = EXCLUDED.description,
-  learning_outcomes = EXCLUDED.learning_outcomes, estimated_minutes = EXCLUDED.estimated_minutes,
-  position = EXCLUDED.position, is_published = EXCLUDED.is_published, updated_at = now();
+  title             = EXCLUDED.title,
+  description       = EXCLUDED.description,
+  learning_outcomes = EXCLUDED.learning_outcomes,
+  estimated_minutes = EXCLUDED.estimated_minutes,
+  position          = EXCLUDED.position,
+  is_published      = EXCLUDED.is_published,
+  updated_at        = now();
 
--- Lesson 2.2.1: Moving Averages
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.2.1: moving-averages (position 0, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'indicators-and-oscillators'),
-  'moving-averages', 'Moving Averages',
-  'Use SMA and EMA to identify trends and dynamic support/resistance',
+  'moving-averages',
+  'Moving Averages',
+  'Distinguish SMA from EMA and apply them as trend filters and dynamic support/resistance',
   12, 'beginner'::academy_difficulty, '{}'::uuid[], 0, true,
-  '{"competenciesTargeted":["indicator_fluency","chart_reading"]}'::jsonb
+  '{"competenciesTargeted":["market_context","entry_validation"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
-   'ma-b1', 'text_explanation', 'SMA vs EMA',
-   'A **Simple Moving Average (SMA)** calculates the mean of the last N closing prices. An **Exponential Moving Average (EMA)** weights recent prices more heavily, making it more responsive. The 20 EMA is popular for short-term trend, the 50 SMA for intermediate trend, and the 200 SMA for long-term trend. Price above the 200 SMA is generally considered bullish; below is bearish.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
-   'ma-b2', 'key_concept', 'Golden & Death Cross',
-   'A **Golden Cross** occurs when the 50 SMA crosses above the 200 SMA — a bullish signal. A **Death Cross** is when the 50 SMA crosses below the 200 SMA — bearish. These are lagging signals but useful for confirming trend changes. Moving averages also act as dynamic support/resistance — price often bounces off the 20 EMA in trending markets.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
-   'ma-b3', 'quiz_single', 'MA Quiz',
-   'Which moving average crossover is considered a bullish signal?', 2,
-   '{"options":["50 SMA crossing below 200 SMA","50 SMA crossing above 200 SMA","20 EMA crossing below 50 SMA","200 SMA crossing below 50 SMA"],"correctIndex":1,"explanation":"The Golden Cross (50 SMA crossing above 200 SMA) is a widely-followed bullish signal indicating potential long-term trend change."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A **Simple Moving Average (SMA)** is the arithmetic mean of the last N closes. An **Exponential Moving Average (EMA)** weights recent prices more heavily, making it more reactive. The **20 EMA** tracks short-term trend; the **50 SMA** is intermediate; the **200 SMA** is long-term. Price above the 200 SMA = bullish macro bias. Moving averages also act as **dynamic support/resistance** — trending stocks often bounce off the 20 EMA."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
+    'key_concept'::academy_block_type,
+    '{"title": "Golden Cross and Death Cross", "summary": "A **Golden Cross** — 50 SMA crossing above 200 SMA — is a lagging but reliable bullish signal. A **Death Cross** is the reverse, bearish. These are not timing tools but trend confirmation tools. Use them to set your macro bias, then use shorter-period MAs (20 EMA, 8 EMA) to time entries in the direction of the cross."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
+    'flashcard_deck'::academy_block_type,
+    '{"config": {"cards": [{"front": "50 SMA crosses above the 200 SMA", "back": "Golden Cross — bullish signal; suggests long-term trend may be shifting upward"}, {"front": "Price is above the 20 EMA in a trending market and pulls back to touch it", "back": "Pullback-to-EMA setup — a common high-probability long entry in uptrends"}, {"front": "SMA vs EMA: which reacts faster to recent price changes?", "back": "EMA — because it weights recent closes more heavily than older closes"}]}, "instructions": "Review each card and test your recall of moving average concepts."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.2.2: RSI & Stochastic
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.2.2: rsi-and-momentum (position 1, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'indicators-and-oscillators'),
-  'rsi-and-stochastic', 'RSI & Stochastic',
-  'Apply RSI and Stochastic oscillators to identify overbought/oversold conditions',
-  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
-  '{"competenciesTargeted":["indicator_fluency"]}'::jsonb
+  'rsi-and-momentum',
+  'RSI and Momentum',
+  'Use RSI to gauge momentum, spot divergences, and avoid overbought/oversold traps',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
+  '{"competenciesTargeted":["entry_validation","review_reflection"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'rsi-and-stochastic'),
-   'rsi-b1', 'text_explanation', 'Understanding RSI',
-   'The **Relative Strength Index (RSI)** measures the speed and magnitude of recent price changes on a scale of 0-100. Readings above 70 suggest overbought conditions; below 30 suggest oversold. However, in strong trends, RSI can remain overbought/oversold for extended periods. **RSI divergence** — where price makes a new high but RSI makes a lower high — is a powerful reversal signal.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'rsi-and-stochastic'),
-   'rsi-b2', 'worked_example', 'RSI Divergence Trade',
-   'SPX makes a new intraday high at 4520, but 14-period RSI peaks at 65, below its prior peak of 72. This bearish divergence signals weakening momentum. A trader might: (1) Avoid new longs, (2) Tighten stops on existing longs, (3) Look for a short entry if price breaks below the most recent swing low on increased volume.', 1, '{"steps":3}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'rsi-and-stochastic'),
-   'rsi-b3', 'quiz_single', 'RSI Quiz',
-   'Price makes a new high but RSI makes a lower high. This is called:', 2,
-   '{"options":["Bullish confirmation","Bearish divergence","RSI reset","Momentum convergence"],"correctIndex":1,"explanation":"When price and RSI diverge (price higher, RSI lower), it is bearish divergence — a warning that momentum is weakening."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'rsi-and-momentum'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "**RSI (Relative Strength Index)** measures the speed and change of price movements on a 0–100 scale. Above 70 = traditionally overbought; below 30 = oversold. However, in strong trends RSI can remain extreme for extended periods — so use these levels as alerts, not automatic trade signals. The real power of RSI is in **divergence**: when price makes a new high but RSI makes a lower high, momentum is fading and a reversal is more likely."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'rsi-and-momentum'),
+    'key_concept'::academy_block_type,
+    '{"title": "RSI Divergence as a Trade Filter", "summary": "**Bearish divergence**: price makes higher highs, RSI makes lower highs — momentum weakening, avoid new longs. **Bullish divergence**: price makes lower lows, RSI makes higher lows — selling is exhausting, consider longs at support. Divergences are higher quality when they form on 1H or 4H charts and align with a key S/R level."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'rsi-and-momentum'),
+    'timed_challenge'::academy_block_type,
+    '{"config": {"timeSeconds": 90, "questions": [{"chart": "RSI_divergence_1", "question": "Does this chart show bullish or bearish RSI divergence?", "answer": "bearish", "hint": "Price made a higher high — did RSI also?"}, {"chart": "RSI_divergence_2", "question": "RSI is at 72 in a strong uptrend. Should you immediately sell?", "answer": "no", "hint": "Overbought can stay overbought in a strong trend"}]}, "instructions": "Identify the RSI condition in each chart within 90 seconds."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.2.3: MACD
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.2.3: macd-deep-dive (position 2, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'indicators-and-oscillators'),
-  'macd-indicator', 'MACD: Trend & Momentum',
-  'Use MACD for trend direction, momentum shifts, and signal line crossovers',
+  'macd-deep-dive',
+  'MACD Deep Dive',
+  'Interpret MACD line, signal line, and histogram to confirm trend direction and momentum shifts',
   12, 'intermediate'::academy_difficulty, '{}'::uuid[], 2, true,
-  '{"competenciesTargeted":["indicator_fluency","chart_reading"]}'::jsonb
+  '{"competenciesTargeted":["entry_validation","market_context"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'macd-indicator'),
-   'macd-b1', 'text_explanation', 'MACD Components',
-   'MACD (Moving Average Convergence Divergence) consists of three parts: the **MACD line** (12 EMA - 26 EMA), the **Signal line** (9-period EMA of the MACD line), and the **Histogram** (difference between MACD and Signal). When MACD crosses above the signal line, it is a bullish signal. When the histogram bars grow, momentum is increasing. The zero line represents the point where the 12 and 26 EMAs converge.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'macd-indicator'),
-   'macd-b2', 'key_concept', 'MACD Best Practices',
-   'MACD works best in **trending** markets, not ranges. Use it to confirm trend direction (MACD above zero = bullish, below = bearish) and to spot momentum shifts via histogram changes. Avoid taking every crossover — filter with price structure and volume. MACD divergence (like RSI divergence) is more reliable than simple crossovers.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'macd-indicator'),
-   'macd-b3', 'quiz_single', 'MACD Quiz',
-   'The MACD histogram shrinking while price continues higher suggests:', 2,
-   '{"options":["Accelerating momentum","Slowing momentum","No change in trend","Bearish reversal confirmed"],"correctIndex":1,"explanation":"A shrinking MACD histogram while price rises means the rate of change is slowing, even though the trend is still up. This is early warning, not confirmation of reversal."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'macd-deep-dive'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "MACD has three components: the **MACD line** (12 EMA minus 26 EMA), the **Signal line** (9-period EMA of MACD), and the **Histogram** (MACD minus Signal). MACD above zero = bullish (short-term average above long-term). A **bullish crossover** — MACD crossing above the signal line — is an entry trigger. The **histogram** shows momentum: growing bars = accelerating move; shrinking bars = slowing move, potential reversal."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'macd-deep-dive'),
+    'key_concept'::academy_block_type,
+    '{"title": "MACD Works Best in Trends, Not Ranges", "summary": "In a sideways market, MACD produces frequent false crossovers. Always check if the market is trending before using MACD signals. Combine it with a trend filter (price vs 50 SMA) to eliminate range noise. MACD crossovers below zero (in bearish territory) are more reliable short signals; crossovers above zero are more reliable long signals."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'macd-deep-dive'),
+    'strategy_matcher'::academy_block_type,
+    '{"config": {"scenarios": [{"id": "s1", "description": "MACD crosses above signal line while both are above zero; histogram expanding", "correctStrategy": "High-probability long entry — trend and momentum aligned"}, {"id": "s2", "description": "MACD crosses above signal line in a sideways range; price at mid-range", "correctStrategy": "Low-probability — avoid; MACD unreliable in ranges"}, {"id": "s3", "description": "Histogram shrinking for 3 consecutive bars while price still rising", "correctStrategy": "Early warning of momentum fade — tighten stops on longs"}]}, "instructions": "Match each MACD scenario to the correct trading interpretation."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.2.4: Combining Indicators
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.2.4: combining-indicators (position 3, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'indicators-and-oscillators'),
-  'combining-indicators', 'Combining Indicators Without Redundancy',
-  'Build an indicator stack that provides non-redundant confirmation signals',
+  'combining-indicators',
+  'Combining Indicators',
+  'Build a non-redundant indicator stack by combining trend, momentum, and volume categories',
   12, 'intermediate'::academy_difficulty, '{}'::uuid[], 3, true,
-  '{"competenciesTargeted":["indicator_fluency","chart_reading"]}'::jsonb
+  '{"competenciesTargeted":["entry_validation","review_reflection"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
-   'combining-b1', 'text_explanation', 'Indicator Categories',
-   'Indicators fall into categories: **Trend** (MA, MACD), **Momentum** (RSI, Stochastic), **Volatility** (Bollinger Bands, ATR), and **Volume** (OBV, VWAP). Using two indicators from the same category (e.g., RSI + Stochastic) is redundant. Instead, combine one from each category for true confirmation. A good basic stack: 20 EMA (trend) + RSI 14 (momentum) + VWAP (volume/value area).', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
-   'combining-b2', 'key_concept', 'The Confluence Principle',
-   'The more independent signals that agree, the higher the probability of the trade. A buy signal is strong when: (1) Price is above the 20 EMA (trend up), (2) RSI bounces from 40 level (momentum support), (3) Price is at VWAP (fair value). Three independent categories confirming = high-probability setup. But remember: no amount of indicators can guarantee a trade.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
-   'combining-b3', 'reflection', 'Design Your Indicator Stack',
-   'Based on what you have learned, design a 3-indicator stack for your trading style. For each indicator, explain which category it belongs to and why you chose it over alternatives in that category.', 2,
-   '{"minWords":40}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "Indicators fall into four categories: **Trend** (MA, MACD), **Momentum** (RSI, Stochastic), **Volatility** (Bollinger Bands, ATR), and **Volume** (VWAP, OBV). Using two from the same category — RSI and Stochastic — adds no new information. A non-redundant stack picks one from different categories. A classic setup: 20 EMA (trend) + RSI (momentum) + VWAP (volume-weighted value). Three independent lenses pointing the same direction = high confluence."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
+    'key_concept'::academy_block_type,
+    '{"title": "The Law of Diminishing Returns", "summary": "Adding more indicators does not make a setup more reliable — it adds complexity and conflict. Studies consistently show traders with 2–3 indicators outperform those with 6+. The goal is **confluence** (independent signals agreeing), not redundancy. If your indicators frequently contradict each other, you have too many or you are using the wrong ones for your time frame."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
+    'strategy_matcher'::academy_block_type,
+    '{"config": {"scenarios": [{"id": "s1", "description": "RSI + Stochastic both showing oversold on 5M chart", "correctStrategy": "Redundant — both are momentum oscillators; only one needed"}, {"id": "s2", "description": "20 EMA (trend) + RSI 14 (momentum) + VWAP (volume reference)", "correctStrategy": "Non-redundant stack — each indicator provides unique information"}, {"id": "s3", "description": "50 SMA + 200 SMA + 20 EMA all below price", "correctStrategy": "Redundant trend filters — all confirm the same thing with no additional edge"}]}, "instructions": "Classify each indicator combination as redundant or non-redundant and explain why."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- ---------- Module 2.3: Price Action Patterns ----------
+-- ============================================================================
+-- MODULE 2.3: Price Action Patterns (position 2)
+-- ============================================================================
 
 INSERT INTO academy_modules (
   track_id, slug, code, title, description, learning_outcomes,
   estimated_minutes, position, is_published, metadata
 )
 VALUES (
-  (SELECT t.id FROM academy_tracks t JOIN academy_programs p ON p.id = t.program_id
+  (SELECT t.id FROM academy_tracks t
+   JOIN academy_programs p ON p.id = t.program_id
    WHERE p.code = 'titm-core-program' AND t.code = 'technical-analysis'),
   'price-action-patterns',
   'price-action-patterns',
   'Price Action Patterns',
-  'Recognize and trade the most reliable chart patterns and candlestick formations.',
-  '["Identify continuation and reversal chart patterns","Trade breakout and retest setups","Combine price action with volume for confirmation"]'::jsonb,
-  40, 3, true, '{}'::jsonb
+  'Recognize reversal and continuation patterns, trade breakouts, and identify traps.',
+  '["Identify reversal patterns at key levels","Trade continuation patterns with measured-move targets","Distinguish true breakouts from false breakouts"]'::jsonb,
+  48, 2, true, '{}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
-  title = EXCLUDED.title, description = EXCLUDED.description,
-  learning_outcomes = EXCLUDED.learning_outcomes, estimated_minutes = EXCLUDED.estimated_minutes,
-  position = EXCLUDED.position, is_published = EXCLUDED.is_published, updated_at = now();
+  title             = EXCLUDED.title,
+  description       = EXCLUDED.description,
+  learning_outcomes = EXCLUDED.learning_outcomes,
+  estimated_minutes = EXCLUDED.estimated_minutes,
+  position          = EXCLUDED.position,
+  is_published      = EXCLUDED.is_published,
+  updated_at        = now();
 
--- Lesson 2.3.1: Continuation Patterns
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.3.1: reversal-patterns (position 0, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'price-action-patterns'),
-  'continuation-patterns', 'Continuation Patterns',
-  'Identify flags, pennants, and wedges that signal trend continuation',
-  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 0, true,
-  '{"competenciesTargeted":["pattern_recognition","chart_reading"]}'::jsonb
+  'reversal-patterns',
+  'Reversal Patterns',
+  'Identify double tops, double bottoms, and head & shoulders patterns at key levels',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 0, true,
+  '{"competenciesTargeted":["entry_validation","exit_discipline"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
-   'continuation-b1', 'text_explanation', 'Flags and Pennants',
-   'After a sharp move (the "pole"), price often consolidates in a small channel (flag) or triangle (pennant) before continuing. **Bull flags** slope downward against the trend; **bear flags** slope upward. Pennants are small symmetrical triangles. The key is the pole — a strong, high-volume move. The breakout from the flag/pennant should occur on rising volume and typically targets a measured move equal to the pole length.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
-   'continuation-b2', 'worked_example', 'Bull Flag on SPX',
-   'SPX rallies from 4450 to 4500 on heavy volume (the pole = 50 pts). Price then drifts lower in a tight channel to 4485 over 3 bars on declining volume. This is the flag. Entry: break above 4500 on increased volume. Stop: below 4480 (flag low). Target: 4485 + 50 = 4535 (measured move). Risk:Reward ≈ 1:2.5.', 1, '{"steps":4}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
-   'continuation-b3', 'quiz_single', 'Continuation Quiz',
-   'A bull flag is characterized by:', 2,
-   '{"options":["A sharp rally followed by an upward-sloping consolidation","A sharp rally followed by a downward-sloping consolidation","A sharp decline followed by a downward-sloping consolidation","A sideways range after a large gap"],"correctIndex":1,"explanation":"A bull flag forms when price drifts lower (downward slope) against the prior uptrend, typically on declining volume, before breaking out higher."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "Reversal patterns form at the end of a trend. A **double top** (M shape) forms when price tests the same resistance twice and fails — confirmed by a break below the neckline. A **double bottom** (W shape) is the inverse at support. The **head and shoulders** is the most reliable reversal: three peaks with the middle (head) being the highest, flanked by two lower shoulders. Target = head-to-neckline distance projected below the neckline."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
+    'key_concept'::academy_block_type,
+    '{"title": "Volume Confirms Reversal", "summary": "A reversal pattern is much more reliable when volume **decreases** on the second test of resistance (showing sellers are losing conviction) and then **expands** on the neckline breakdown. Low-volume second tests with high-volume breakdowns signal institutional distribution. Without volume confirmation, reversal patterns fail frequently."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
+    'timed_challenge'::academy_block_type,
+    '{"config": {"timeSeconds": 90, "questions": [{"chart": "reversal_1", "question": "Name this reversal pattern and state whether it is bullish or bearish", "answer": "Head and shoulders — bearish"}, {"chart": "reversal_2", "question": "Is the double bottom confirmed? What is the trigger?", "answer": "Not yet — needs a neckline breakout with volume"}]}, "instructions": "Identify each reversal pattern and determine if/how it is confirmed."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.3.2: Reversal Patterns
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.3.2: continuation-patterns (position 1, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'price-action-patterns'),
-  'reversal-patterns', 'Reversal Patterns',
-  'Recognize double tops/bottoms, head & shoulders, and key reversals',
-  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
-  '{"competenciesTargeted":["pattern_recognition"]}'::jsonb
+  'continuation-patterns',
+  'Continuation Patterns',
+  'Trade flags, pennants, and ascending triangles with measured-move targets',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
+  '{"competenciesTargeted":["entry_validation","exit_discipline"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
-   'reversal-b1', 'text_explanation', 'Double Top & Double Bottom',
-   'A **double top** forms when price hits the same resistance twice and fails — an M shape. The neckline is the support between the two peaks. A confirmed break below the neckline targets a measured move equal to the pattern height. A **double bottom** is the inverse W pattern at support. Volume typically decreases on the second test, showing weakening momentum in the prior trend direction.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
-   'reversal-b2', 'key_concept', 'Head & Shoulders',
-   'The **head and shoulders** (H&S) is the most reliable reversal pattern. It consists of three peaks: a higher middle peak (head) flanked by two lower peaks (shoulders). The neckline connects the troughs. Confirmation: price breaks below the neckline with volume. Target: neckline minus the distance from head to neckline. Inverse H&S at bottoms is equally powerful for bullish reversals.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
-   'reversal-b3', 'quiz_single', 'Reversal Quiz',
-   'In a head & shoulders pattern, the neckline connects:', 2,
-   '{"options":["The tops of the two shoulders","The bottoms of the two troughs between the peaks","The head and the right shoulder","The left shoulder and the head"],"correctIndex":1,"explanation":"The neckline in a head and shoulders pattern connects the two troughs (lows) between the left shoulder/head and head/right shoulder."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "After a sharp directional move (the pole), price often consolidates before continuing. A **bull flag** is a downward-sloping channel after an upward pole — volume decreases during the flag and expands on the breakout. A **pennant** is a small symmetrical triangle after the pole. An **ascending triangle** is a flat top resistance with rising lows. The measured-move target for each equals the pole length added to the breakout point."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
+    'key_concept'::academy_block_type,
+    '{"title": "The Pole-to-Target Rule", "summary": "Every continuation pattern has a **measured move**: the length of the initial pole (impulse move) added to the breakout level. Example: SPX rallies 50 points (pole), consolidates in a flag, then breaks out. Target = breakout level + 50 points. This gives you a pre-planned exit with a defined R:R before you enter. Always calculate the measured move before the entry."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
+    'what_went_wrong'::academy_block_type,
+    '{"config": {"scenario": "A trader buys a bull flag breakout at 4500. The pole was 30 points up. The flag resolved sideways, not down, on above-average volume. The trade immediately reverses after entry.", "errorOptions": ["Position size too large", "The pattern was not a bull flag — sideways consolidation on high volume is distribution, not a flag", "Target was set incorrectly", "Entry was too early"], "correctError": "The pattern was not a bull flag — sideways consolidation on high volume is distribution, not a flag"}, "instructions": "Identify the primary reason this continuation pattern trade failed."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 2.3.3: Breakout Trading
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 2.3.3: breakout-trading (position 2, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'price-action-patterns'),
-  'breakout-trading', 'Breakout & Retest Trading',
-  'Execute breakout trades with proper confirmation and manage false breakouts',
+  'breakout-trading',
+  'Breakout Trading',
+  'Execute breakout entries with confirmation and retest strategies to minimize false breakouts',
   12, 'intermediate'::academy_difficulty, '{}'::uuid[], 2, true,
-  '{"competenciesTargeted":["pattern_recognition","chart_reading"]}'::jsonb
+  '{"competenciesTargeted":["entry_validation","exit_discipline"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
-   'breakout-b1', 'text_explanation', 'Breakout Confirmation',
-   'Not every break of a level is a valid breakout. Look for: (1) **Volume expansion** — a real breakout has institutional participation, (2) **Candle close** beyond the level (not just a wick), (3) **Prior compression** — the tighter the range before breakout, the more powerful the move. Many traders wait for the **retest** — price breaks out, pulls back to the broken level (old resistance = new support), and bounces.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
-   'breakout-b2', 'key_concept', 'False Breakout Traps',
-   'False breakouts (or "fakeouts") occur when price breaks a level briefly, traps traders, then reverses. They are especially common at obvious levels where many stops are clustered. To avoid: (1) Wait for the candle to **close** beyond the level, (2) Require **volume confirmation**, (3) Consider the **retest entry** instead of chasing the initial break. False breakouts can actually be traded in the opposite direction by experienced traders.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
-   'breakout-b3', 'quiz_single', 'Breakout Quiz',
-   'The safest way to trade a breakout is typically to:', 2,
-   '{"options":["Buy immediately when price touches the resistance level","Wait for a candle close above resistance with volume, then enter on the retest","Use maximum position size since breakouts are high probability","Ignore volume and focus only on price"],"correctIndex":1,"explanation":"Waiting for a close above resistance with volume confirmation, then entering on the retest of the broken level, reduces false breakout risk."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A **valid breakout** has three hallmarks: (1) a **candle close** beyond the level — not just a wick, (2) **volume expansion** showing institutional participation, and (3) **prior compression** — the tighter the range before the break, the more powerful the move. The **retest entry** waits for price to break, pull back to the broken level (former resistance = new support), and bounce — reducing false breakout risk significantly."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
+    'key_concept'::academy_block_type,
+    '{"title": "False Breakouts Are Tradeable Too", "summary": "A **false breakout** occurs when price briefly breaches a level, traps breakout buyers, then reverses sharply. They are most common at obvious levels with many retail stops clustered. Experienced traders watch for this: if a breakout immediately stalls and reverses on high volume, that itself is a signal — fade the breakout in the opposite direction with a tight stop above the wick."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
+    'market_context_tagger'::academy_block_type,
+    '{"config": {"scenarios": [{"id": "b1", "chart": "breakout_valid", "tags": ["valid_breakout", "false_breakout", "retest_entry", "no_signal"]}, {"id": "b2", "chart": "breakout_false", "tags": ["valid_breakout", "false_breakout", "retest_entry", "no_signal"]}, {"id": "b3", "chart": "breakout_retest", "tags": ["valid_breakout", "false_breakout", "retest_entry", "no_signal"]}]}, "instructions": "Tag each chart scenario with the breakout type. Justify your classification using volume and candle close criteria."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
+-- ---- Lesson 2.3.4: failed-patterns-and-traps (position 3, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
+VALUES (
+  (SELECT id FROM academy_modules WHERE slug = 'price-action-patterns'),
+  'failed-patterns-and-traps',
+  'Failed Patterns and Traps',
+  'Recognize when patterns fail and use the failure signal as a high-probability trade in the opposite direction',
+  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 3, true,
+  '{"competenciesTargeted":["entry_validation","review_reflection"]}'::jsonb
+)
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
+
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
+VALUES
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'failed-patterns-and-traps'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "**Pattern failure is information.** When a well-known pattern like a bull flag or double bottom fails to follow through, it tells you that the expected buyers are not there — or worse, that smart money is selling into them. Failed patterns often produce fast, violent moves in the opposite direction because trapped traders rush to exit. Recognizing failure early lets you either exit quickly or trade the fade."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'failed-patterns-and-traps'),
+    'key_concept'::academy_block_type,
+    '{"title": "The Stop-Hunt Trap", "summary": "The most common trap is the **stop hunt**: price briefly breaks a key level (triggering retail stops), then immediately reverses. This is engineered by large players accumulating inventory at the best prices. The tell: a single wick through the level with immediate rejection, often on average or below-average volume. After a stop hunt, the subsequent move in the original direction is often fast and clean."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'failed-patterns-and-traps'),
+    'what_went_wrong'::academy_block_type,
+    '{"config": {"scenario": "A head and shoulders pattern forms on SPX 1H. The neckline is at 4480. Price breaks below the neckline, traders short. Within 2 bars, price snaps back above 4480 and accelerates to 4510.", "errorOptions": ["The target calculation was wrong", "This was a failed H&S — the break was a stop hunt below the neckline; the correct response is to exit short immediately and potentially reverse long", "The stop was too tight", "The entry candle was too large"], "correctError": "This was a failed H&S — the break was a stop hunt below the neckline; the correct response is to exit short immediately and potentially reverse long"}, "instructions": "Identify what happened and what the correct response to the pattern failure was."}'::jsonb,
+    2
+  )
+ON CONFLICT DO NOTHING;
+
+
 -- ============================================================================
--- TRACK 3: OPTIONS MASTERY
+-- 4. TRACK 3: OPTIONS MASTERY
 -- ============================================================================
 
--- ---------- Module 3.1: Options Fundamentals ----------
+INSERT INTO academy_tracks (program_id, code, title, description, position, is_active, metadata)
+VALUES (
+  (SELECT id FROM academy_programs WHERE code = 'titm-core-program'),
+  'options-mastery',
+  'Options Mastery',
+  'From contract basics through the Greeks and into multi-leg strategies for any market environment.',
+  3, true, '{}'::jsonb
+)
+ON CONFLICT (program_id, code) DO UPDATE SET
+  title       = EXCLUDED.title,
+  description = EXCLUDED.description,
+  position    = EXCLUDED.position,
+  is_active   = EXCLUDED.is_active,
+  updated_at  = now();
+
+-- ============================================================================
+-- MODULE 3.1: Options Fundamentals (position 0)
+-- ============================================================================
 
 INSERT INTO academy_modules (
   track_id, slug, code, title, description, learning_outcomes,
   estimated_minutes, position, is_published, metadata
 )
 VALUES (
-  (SELECT t.id FROM academy_tracks t JOIN academy_programs p ON p.id = t.program_id
+  (SELECT t.id FROM academy_tracks t
+   JOIN academy_programs p ON p.id = t.program_id
    WHERE p.code = 'titm-core-program' AND t.code = 'options-mastery'),
   'options-fundamentals',
   'options-fundamentals',
   'Options Fundamentals',
-  'Understand what options are, how they are priced, and the mechanics of buying and selling contracts.',
-  '["Define calls and puts and their payoff profiles","Explain intrinsic vs extrinsic value","Understand the impact of expiration and strike selection"]'::jsonb,
-  45, 1, true, '{}'::jsonb
+  'Understand what options are, how they are priced, and how to navigate the options chain.',
+  '["Define calls, puts, and the buyer/seller relationship","Explain intrinsic and extrinsic value","Read and interpret a real options chain"]'::jsonb,
+  48, 0, true, '{}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
-  title = EXCLUDED.title, description = EXCLUDED.description,
-  learning_outcomes = EXCLUDED.learning_outcomes, estimated_minutes = EXCLUDED.estimated_minutes,
-  position = EXCLUDED.position, is_published = EXCLUDED.is_published, updated_at = now();
+  title             = EXCLUDED.title,
+  description       = EXCLUDED.description,
+  learning_outcomes = EXCLUDED.learning_outcomes,
+  estimated_minutes = EXCLUDED.estimated_minutes,
+  position          = EXCLUDED.position,
+  is_published      = EXCLUDED.is_published,
+  updated_at        = now();
 
--- Lesson 3.1.1: What Are Options?
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.1.1: what-are-options (position 0, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'options-fundamentals'),
-  'what-are-options', 'What Are Options?',
-  'Define calls and puts and understand the buyer/seller relationship',
+  'what-are-options',
+  'What Are Options?',
+  'Define an option contract and explain the rights and obligations of buyers vs sellers',
   12, 'beginner'::academy_difficulty, '{}'::uuid[], 0, true,
-  '{"competenciesTargeted":["options_literacy"]}'::jsonb
+  '{"competenciesTargeted":["options_pricing","volatility_mechanics"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
-   'options-intro-b1', 'text_explanation', 'Calls and Puts',
-   'An option is a contract giving the buyer the **right, but not the obligation**, to buy (call) or sell (put) an underlying asset at a specific price (strike) by a specific date (expiration). The **buyer** pays a premium and has limited risk (the premium paid). The **seller** (writer) collects the premium but takes on the obligation and potentially unlimited risk (for naked calls). One standard equity option contract represents 100 shares.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
-   'options-intro-b2', 'key_concept', 'Intrinsic vs Extrinsic Value',
-   'An option price has two components: **Intrinsic value** = how much it is in the money (ITM). For a call: max(0, stock price - strike). **Extrinsic value** (time value) = premium - intrinsic value. This represents the probability of the option gaining more value before expiration. At-the-money (ATM) options have the most extrinsic value. As expiration approaches, extrinsic value decays (theta decay).', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
-   'options-intro-b3', 'quiz_single', 'Options Basics Quiz',
-   'A call option buyer has:', 2,
-   '{"options":["The obligation to buy at the strike price","The right to buy at the strike price","The obligation to sell at the strike price","Unlimited risk"],"correctIndex":1,"explanation":"The buyer of a call has the RIGHT (not obligation) to buy the underlying at the strike price. The buyer''s risk is limited to the premium paid."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "An option is a contract granting the buyer the **right, but not the obligation**, to buy (call) or sell (put) an underlying asset at a specified **strike price** before the **expiration date**. The buyer pays a **premium** for this right. The seller (writer) collects the premium but takes on the corresponding obligation. One standard equity options contract covers **100 shares**. Buyers have defined, limited risk (the premium); sellers have potentially larger risk."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
+    'key_concept'::academy_block_type,
+    '{"title": "Four Positions: Long/Short Call and Long/Short Put", "summary": "**Long call**: right to buy — bullish, limited risk. **Short call**: obligation to sell — bearish/neutral, unlimited risk. **Long put**: right to sell — bearish, limited risk. **Short put**: obligation to buy — bullish/neutral, limited upside. The buyer always has the right; the seller always has the obligation. Risk profiles are asymmetric between buyers and sellers."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
+    'flashcard_deck'::academy_block_type,
+    '{"config": {"cards": [{"front": "You buy a call option. What is your maximum loss?", "back": "The premium paid — nothing more. Buyers have defined risk."}, {"front": "You sell a naked call. What is your maximum loss?", "back": "Theoretically unlimited — the stock can rise indefinitely."}, {"front": "Does the option buyer have an obligation to exercise?", "back": "No — the buyer has the right but not the obligation. They can let it expire worthless."}]}, "instructions": "Test your understanding of option buyer vs seller dynamics."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.1.2: Option Pricing Mechanics
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.1.2: calls-and-puts (position 1, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'options-fundamentals'),
-  'option-pricing-mechanics', 'Option Pricing Mechanics',
-  'Understand the factors that drive option premiums and the basics of Black-Scholes',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
-  '{"competenciesTargeted":["options_literacy","greeks_mastery"]}'::jsonb
+  'calls-and-puts',
+  'Calls and Puts',
+  'Describe the payoff profiles of long and short calls and puts at expiration',
+  12, 'beginner'::academy_difficulty, '{}'::uuid[], 1, true,
+  '{"competenciesTargeted":["options_pricing","options_strategies"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'option-pricing-mechanics'),
-   'pricing-b1', 'text_explanation', 'Five Pricing Factors',
-   'Option premiums are driven by five main factors: (1) **Underlying price** relative to strike, (2) **Time to expiration** — more time = more premium, (3) **Implied volatility (IV)** — higher IV = higher premium, (4) **Interest rates** — minor effect, raises call prices slightly, (5) **Dividends** — reduce call prices, increase put prices. The Black-Scholes model quantifies these relationships mathematically, though real markets deviate from the model assumptions.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'option-pricing-mechanics'),
-   'pricing-b2', 'worked_example', 'Pricing Example',
-   'SPX is at 4500. The 4500 call (ATM) expiring in 30 days is $45. This is all extrinsic value (intrinsic = $0 since it is exactly ATM). If IV increases from 15% to 20%, the premium might jump to $60 without SPX moving. If 15 days pass with no SPX move, the premium might decay to $32 (theta ate ~$13). Understanding these dynamics is critical for options trading profitability.', 1, '{"steps":2}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'option-pricing-mechanics'),
-   'pricing-b3', 'quiz_single', 'Pricing Quiz',
-   'All else being equal, which factor would INCREASE a call option premium?', 2,
-   '{"options":["Decrease in implied volatility","Passage of time","Increase in implied volatility","Increase in dividends"],"correctIndex":2,"explanation":"Higher implied volatility increases both call and put premiums, as it implies a greater expected range of price movement."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'calls-and-puts'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A **call option** profits when the underlying rises above the strike. At expiration, intrinsic value = max(0, stock price − strike). A **put option** profits when the underlying falls below the strike. At expiration, intrinsic value = max(0, strike − stock price). If the option expires out of the money (OTM), the buyer loses the entire premium. These payoff profiles are the building blocks for every options strategy."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'calls-and-puts'),
+    'key_concept'::academy_block_type,
+    '{"title": "In the Money, At the Money, Out of the Money", "summary": "A call is **ITM** when stock price > strike. A put is ITM when stock price < strike. **ATM** = stock price ≈ strike. **OTM** = no intrinsic value. ITM options are more expensive but have higher delta. OTM options are cheaper but need a larger move to profit. ATM options are the most sensitive to time and volatility changes."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'calls-and-puts'),
+    'options_chain_simulator'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "expirationDays": 7, "strikesToShow": [4450, 4475, 4500, 4525, 4550], "task": "identify_itm_atm_otm"}, "instructions": "Using the simulated SPX options chain, identify which call and put strikes are ITM, ATM, and OTM at the current price of 4500."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.1.3: Strike Selection & Expiration
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.1.3: options-pricing-basics (position 2, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'options-fundamentals'),
-  'strike-and-expiration', 'Strike Selection & Expiration',
-  'Choose appropriate strikes and expirations based on market outlook and risk tolerance',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 2, true,
-  '{"competenciesTargeted":["options_literacy","strategy_selection"]}'::jsonb
+  'options-pricing-basics',
+  'Options Pricing Basics',
+  'Explain intrinsic value, extrinsic value, and the five factors that drive option premiums',
+  12, 'beginner'::academy_difficulty, '{}'::uuid[], 2, true,
+  '{"competenciesTargeted":["options_pricing","volatility_mechanics"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'strike-and-expiration'),
-   'strike-b1', 'text_explanation', 'ITM, ATM, OTM Trade-offs',
-   'Strike selection involves trade-offs. **ITM** options have higher delta (more stock-like), less extrinsic value at risk, but cost more. **ATM** options offer the best balance of leverage and probability. **OTM** options are cheap but have low probability of profit — they need a large move. For directional trades, slightly ITM or ATM options offer the best risk/reward. For income strategies, OTM options are preferred to collect premium with higher probability of expiring worthless.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'strike-and-expiration'),
-   'strike-b2', 'key_concept', 'Expiration Selection',
-   'Shorter expirations (0-7 DTE) have rapid theta decay — great for sellers, terrible for buyers. 30-60 DTE is the sweet spot for most directional buyers: enough time for the thesis to play out without excessive premium. For earnings plays, use the closest expiration after the event. A critical concept: **gamma risk** increases dramatically in the last week before expiration, making positions more volatile.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'strike-and-expiration'),
-   'strike-b3', 'quiz_single', 'Strike Selection Quiz',
-   'For a directional call trade with 30 days to expiration, the most balanced strike choice is typically:', 2,
-   '{"options":["Deep OTM for maximum leverage","Slightly ITM or ATM for best risk/reward","Deep ITM to avoid all time decay","It does not matter"],"correctIndex":1,"explanation":"Slightly ITM or ATM strikes offer the best balance of delta exposure, reasonable cost, and manageable theta decay for 30-day directional trades."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'options-pricing-basics'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "An option premium = **Intrinsic Value** + **Extrinsic Value**. Intrinsic = how much it is currently ITM. Extrinsic (time value) = the rest — it represents the probability of the option gaining more value before expiration. Five factors drive premiums: (1) underlying price vs strike, (2) time to expiration, (3) **implied volatility (IV)** — the most tradeable factor, (4) interest rates, (5) dividends. Higher IV inflates both calls and puts."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'options-pricing-basics'),
+    'key_concept'::academy_block_type,
+    '{"title": "Implied Volatility Is the Market''s Price of Uncertainty", "summary": "IV is derived from the option price itself — it is what the market implies about future volatility. High IV = expensive options (good for sellers). Low IV = cheap options (good for buyers). **IV Rank** (IVR) compares current IV to its 52-week range. IVR above 50 favors selling premium; below 20 favors buying. Understanding IV is what separates professional options traders from amateurs."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'options-pricing-basics'),
+    'payoff_diagram_builder'::academy_block_type,
+    '{"config": {"instrument": "long_call", "underlying": "SPX", "strike": 4500, "premium": 30, "expiration": "7DTE"}, "instructions": "Use the payoff diagram builder to visualize the P&L of a long 4500 call at different SPX prices at expiration. Identify the breakeven point and the maximum loss."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.1.4: Order Types & Execution
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.1.4: the-options-chain (position 3, beginner) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'options-fundamentals'),
-  'order-types-and-execution', 'Order Types & Execution',
-  'Place options orders correctly using limit orders, spreads, and proper execution practices',
+  'the-options-chain',
+  'The Options Chain',
+  'Navigate a real options chain to find strikes, expirations, bid/ask, and open interest',
   12, 'beginner'::academy_difficulty, '{}'::uuid[], 3, true,
-  '{"competenciesTargeted":["options_literacy"]}'::jsonb
+  '{"competenciesTargeted":["options_pricing","options_strategies"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'order-types-and-execution'),
-   'order-types-b1', 'text_explanation', 'Limit Orders Are Essential',
-   'Always use **limit orders** for options — never market orders. The bid-ask spread on options can be wide, and a market order guarantees you get the worst price. Start with the **mid-price** (halfway between bid and ask) and adjust if needed. For spreads, submit as a single order with a net debit/credit, not as individual legs. Trading during the first and last 15 minutes of the session can result in poor fills due to wide spreads.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'order-types-and-execution'),
-   'order-types-b2', 'key_concept', 'The Bid-Ask Spread',
-   'The **bid** is what buyers will pay; the **ask** is what sellers want. The spread is the difference. Wide spreads = illiquid options. Tight spreads = liquid (SPX, SPY, QQQ, AAPL). Always check **open interest** and **volume** before trading an options contract. A rule of thumb: avoid options with fewer than 100 open interest or a spread wider than 10% of the premium.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'order-types-and-execution'),
-   'order-types-b3', 'quiz_single', 'Order Types Quiz',
-   'Why should you avoid market orders for options?', 2,
-   '{"options":["They are not supported by brokers","The bid-ask spread can cause significant slippage","Market orders are slower","They require more margin"],"correctIndex":1,"explanation":"Wide bid-ask spreads on options mean market orders can fill at significantly worse prices than expected, eating into your trade edge."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'the-options-chain'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "The **options chain** displays all available contracts for an underlying, organized by expiration and strike. Each row shows: **Bid** (what buyers will pay), **Ask** (what sellers want), **Last** price, **Volume** (today''s trades), **Open Interest** (total outstanding contracts), and the **Greeks** (Delta, Gamma, Theta, Vega). Always use limit orders at or near the **mid-price** (bid + ask ÷ 2). Low open interest or a wide bid-ask spread indicates an illiquid contract to avoid."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'the-options-chain'),
+    'key_concept'::academy_block_type,
+    '{"title": "How to Choose the Right Expiration", "summary": "Short expirations (0–7 DTE) have fast theta decay — better for sellers, very risky for buyers. 30–60 DTE is the sweet spot for directional buyers: enough time for the thesis to play out without overpaying. For earnings trades, use the expiration immediately after the event to capture the IV expansion. Always check that the expiration has **adequate open interest** before trading."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'the-options-chain'),
+    'options_chain_simulator'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "expirations": ["0DTE", "7DTE", "30DTE"], "task": "select_appropriate_contract", "scenario": "You are bullish on SPX for the next 2 weeks. IV Rank is 20 (low)."}, "instructions": "Using the simulated options chain, select the expiration and strike that best fits the scenario. Explain why you chose that contract."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- ---------- Module 3.2: The Greeks ----------
+-- ============================================================================
+-- MODULE 3.2: The Greeks (position 1)
+-- ============================================================================
 
 INSERT INTO academy_modules (
   track_id, slug, code, title, description, learning_outcomes,
   estimated_minutes, position, is_published, metadata
 )
 VALUES (
-  (SELECT t.id FROM academy_tracks t JOIN academy_programs p ON p.id = t.program_id
+  (SELECT t.id FROM academy_tracks t
+   JOIN academy_programs p ON p.id = t.program_id
    WHERE p.code = 'titm-core-program' AND t.code = 'options-mastery'),
   'the-greeks',
   'the-greeks',
   'The Greeks',
-  'Master Delta, Gamma, Theta, Vega, and Rho to manage options positions like a professional.',
-  '["Calculate and interpret each Greek for any position","Use Greeks to manage portfolio risk","Anticipate how Greeks change with price, time, and volatility"]'::jsonb,
-  50, 2, true, '{}'::jsonb
+  'Master Delta, Gamma, Theta, and Vega to manage options positions with precision.',
+  '["Calculate and interpret Delta, Gamma, Theta, Vega","Use Greeks to quantify and manage position risk","Anticipate how Greeks shift with price, time, and volatility changes"]'::jsonb,
+  48, 1, true, '{}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
-  title = EXCLUDED.title, description = EXCLUDED.description,
-  learning_outcomes = EXCLUDED.learning_outcomes, estimated_minutes = EXCLUDED.estimated_minutes,
-  position = EXCLUDED.position, is_published = EXCLUDED.is_published, updated_at = now();
+  title             = EXCLUDED.title,
+  description       = EXCLUDED.description,
+  learning_outcomes = EXCLUDED.learning_outcomes,
+  estimated_minutes = EXCLUDED.estimated_minutes,
+  position          = EXCLUDED.position,
+  is_published      = EXCLUDED.is_published,
+  updated_at        = now();
 
--- Lesson 3.2.1: Delta & Gamma
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.2.1: delta-and-gamma (position 0, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'the-greeks'),
-  'delta-and-gamma', 'Delta & Gamma',
-  'Understand how delta measures directional exposure and gamma measures the rate of change',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 0, true,
-  '{"competenciesTargeted":["greeks_mastery","options_literacy"]}'::jsonb
+  'delta-and-gamma',
+  'Delta and Gamma',
+  'Explain delta as directional exposure and gamma as the acceleration of that exposure',
+  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 0, true,
+  '{"competenciesTargeted":["options_pricing","volatility_mechanics"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
-   'delta-gamma-b1', 'text_explanation', 'Delta Explained',
-   '**Delta** measures how much an option price changes for a $1 move in the underlying. A call with delta 0.50 gains $0.50 per $1 up-move. Delta also approximates the probability of expiring ITM. Calls have positive delta (0 to +1), puts have negative delta (0 to -1). ATM options have ~0.50 delta. As options move deeper ITM, delta approaches 1.0 (or -1.0 for puts). Portfolio delta is the sum of all position deltas — it tells you your net directional exposure.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
-   'delta-gamma-b2', 'key_concept', 'Gamma: Delta of Delta',
-   '**Gamma** is the rate at which delta changes. High gamma means delta changes rapidly with price movement. ATM options near expiration have the highest gamma. This is why short-dated ATM options are so volatile near expiry — a small move causes a large delta shift, which amplifies P&L swings. Long gamma positions (buying options) profit from big moves; short gamma positions (selling options) profit from stability.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
-   'delta-gamma-b3', 'quiz_single', 'Delta Quiz',
-   'An ATM call option typically has a delta of approximately:', 2,
-   '{"options":["0.10","0.25","0.50","1.00"],"correctIndex":2,"explanation":"ATM options have approximately 0.50 delta, meaning they gain about $0.50 for every $1 move in the underlying. This also implies ~50% probability of expiring ITM."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "**Delta** measures how much an option price changes per $1 move in the underlying. Calls have positive delta (0 to +1); puts have negative delta (0 to −1). An ATM call has delta ≈ 0.50. Delta also approximates the probability of expiring ITM. Portfolio delta = sum of all position deltas = your net directional exposure. **Gamma** is the rate at which delta changes — high gamma near expiration means delta can shift dramatically on small moves."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
+    'key_concept'::academy_block_type,
+    '{"title": "Gamma Risk in the Final Week", "summary": "Gamma spikes in the final 7 days before expiration, especially for ATM options. A 0.50-delta ATM option can go to 0.90 delta on a 5-point move in the last day. This amplifies gains but also losses. Short gamma positions (option sellers) face explosive losses when held into expiration during large moves. Long gamma (option buyers) benefit from large moves near expiry."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
+    'greeks_dashboard'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "contract": {"type": "call", "strike": 4500, "dte": 7}, "task": "observe_delta_gamma_shift", "priceMovements": [-20, -10, 0, 10, 20, 30]}, "instructions": "Use the Greeks dashboard to observe how delta and gamma change as SPX moves from -20 to +30 points relative to the 4500 strike. Note when gamma peaks."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.2.2: Theta & Vega
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.2.2: theta-and-time-decay (position 1, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'the-greeks'),
-  'theta-and-vega', 'Theta & Vega',
-  'Manage time decay and volatility exposure in your options positions',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
-  '{"competenciesTargeted":["greeks_mastery"]}'::jsonb
+  'theta-and-time-decay',
+  'Theta and Time Decay',
+  'Quantify how theta erodes option value over time and use this to inform entry timing',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
+  '{"competenciesTargeted":["options_pricing","risk_management"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'theta-and-vega'),
-   'theta-vega-b1', 'text_explanation', 'Theta: The Time Tax',
-   '**Theta** measures how much an option loses per day from time decay (all else equal). ATM options have the highest theta. Theta accelerates as expiration approaches — an option that loses $1/day at 30 DTE might lose $3/day at 5 DTE. Theta is the enemy of option buyers and the friend of option sellers. This is why many income strategies (credit spreads, iron condors) are fundamentally theta-positive: they profit from the passage of time.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'theta-and-vega'),
-   'theta-vega-b2', 'key_concept', 'Vega: Volatility Sensitivity',
-   '**Vega** measures how much an option price changes for a 1% change in implied volatility. Higher vega means more sensitivity to IV changes. Long options are long vega (benefit from IV increase); short options are short vega (benefit from IV decrease). Before earnings, IV inflates ("vol crush" risk after). Understanding vega is critical for managing trades around events and in high-IV environments.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'theta-and-vega'),
-   'theta-vega-b3', 'quiz_single', 'Theta Quiz',
-   'Theta decay accelerates most dramatically:', 2,
-   '{"options":["60-90 days before expiration","30-45 days before expiration","In the final 7-10 days before expiration","It is constant throughout the option life"],"correctIndex":2,"explanation":"Theta decay is non-linear and accelerates sharply in the final 7-10 days before expiration, especially for ATM options."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'theta-and-time-decay'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "**Theta** is the daily dollar decay of an option''s extrinsic value, all else equal. ATM options have the highest theta because they have the most extrinsic value. Theta decay is **non-linear** — it accelerates sharply in the final 2 weeks before expiration (the theta curve is convex). An option losing $1/day at 30 DTE might lose $3+/day at 5 DTE. Theta is the primary income source for option sellers and the primary enemy of option buyers."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'theta-and-time-decay'),
+    'key_concept'::academy_block_type,
+    '{"title": "The 30-60 DTE Sweet Spot for Sellers", "summary": "Premium sellers typically target 30–60 DTE because theta decay is meaningful but not yet at maximum acceleration. They plan to close at 50% profit (typically in 15–30 days) before gamma risk grows. This is why the most popular income strategies (credit spreads, iron condors) use monthly expirations in the 30–45 DTE window — it balances premium collected vs time to react to adverse moves."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'theta-and-time-decay'),
+    'greeks_dashboard'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "contract": {"type": "call", "strike": 4500, "iv": 0.15}, "task": "observe_theta_decay", "dteValues": [45, 30, 21, 14, 7, 3, 1]}, "instructions": "Observe how the ATM 4500 call''s theta changes as DTE decreases from 45 to 1 day. Identify the DTE at which theta acceleration becomes most pronounced."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.2.3: Greeks in Practice
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.2.3: vega-and-volatility (position 2, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'the-greeks'),
-  'greeks-in-practice', 'Greeks in Practice',
-  'Apply the Greeks to manage real positions and make adjustment decisions',
-  18, 'advanced'::academy_difficulty, '{}'::uuid[], 2, true,
-  '{"competenciesTargeted":["greeks_mastery","risk_management"]}'::jsonb
+  'vega-and-volatility',
+  'Vega and Volatility',
+  'Measure vega sensitivity and anticipate how IV changes affect position value',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 2, true,
+  '{"competenciesTargeted":["volatility_mechanics","options_pricing"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
-   'greeks-practice-b1', 'text_explanation', 'Portfolio Greeks Dashboard',
-   'Professional traders monitor aggregate portfolio Greeks. **Net delta** = directional bias. **Net gamma** = how quickly exposure changes. **Net theta** = daily time decay P&L. **Net vega** = volatility exposure. The goal is often to be roughly delta-neutral (no directional bet) while being positive theta (collecting time decay). Adjustments are made when Greeks drift outside acceptable ranges.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
-   'greeks-practice-b2', 'worked_example', 'Greeks Adjustment Scenario',
-   'Your portfolio: Long 10 SPX 4500 calls (delta +500), Short 5 SPX 4550 calls (delta -200). Net delta = +300 (bullish). If you want to reduce directional risk, sell 3 more 4550 calls (delta -120) to bring net delta to +180. Or buy 3 SPX 4500 puts (delta -150) for a hedge. Each adjustment changes the full Greek profile, so recalculate theta and vega after each change.', 1, '{"steps":3}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
-   'greeks-practice-b3', 'reflection', 'Your Greeks Priorities',
-   'Consider: Which Greek matters most for your trading style? If you are primarily a directional trader, delta is key. If you sell premium, theta and vega dominate. Write about which Greeks you monitor most and why, and describe a scenario where a secondary Greek surprised you.', 2,
-   '{"minWords":40}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'vega-and-volatility'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "**Vega** measures how much an option''s price changes for a 1-percentage-point change in implied volatility. Long options are **long vega** (benefit when IV rises); short options are **short vega** (benefit when IV falls). IV inflates before binary events (earnings, FOMC) and collapses after — the \"**IV crush**\". Buying options before earnings expecting a big move can still lose money if the move is smaller than the IV implied — the crush destroys extrinsic value faster than delta gains."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'vega-and-volatility'),
+    'key_concept'::academy_block_type,
+    '{"title": "IV Rank and the Sell/Buy Decision", "summary": "**IV Rank (IVR)** = (current IV − 52-week low) ÷ (52-week high − 52-week low) × 100. IVR 80+ means IV is near its yearly high — sell premium. IVR 20 or below means IV is near its yearly low — buy premium. Trading vega with IVR awareness is arguably the single most important edge in options over equity trading."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'vega-and-volatility'),
+    'greeks_dashboard'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "contract": {"type": "call", "strike": 4500, "dte": 30}, "task": "observe_vega_iv_impact", "ivValues": [0.10, 0.15, 0.20, 0.25, 0.30]}, "instructions": "Use the Greeks dashboard to observe how the option premium and vega change as IV moves from 10% to 30%. Note how much the premium changes per 1% IV move (that is the vega)."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- ---------- Module 3.3: Basic Options Strategies ----------
+-- ---- Lesson 3.2.4: greeks-in-practice (position 3, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
+VALUES (
+  (SELECT id FROM academy_modules WHERE slug = 'the-greeks'),
+  'greeks-in-practice',
+  'Greeks in Practice',
+  'Apply all four Greeks together to manage a live position and make adjustment decisions',
+  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 3, true,
+  '{"competenciesTargeted":["options_pricing","risk_management"]}'::jsonb
+)
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
+
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
+VALUES
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "Professional traders manage positions by monitoring aggregate Greeks. **Net delta** = directional bias. **Net gamma** = how quickly exposure will change on a move. **Net theta** = daily P&L from time decay. **Net vega** = IV sensitivity. A delta-neutral, theta-positive position (e.g., short straddle) profits from time passing without large moves. Adjustments are triggered when any Greek drifts outside a predefined acceptable range."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
+    'key_concept'::academy_block_type,
+    '{"title": "Greeks Change as Market Conditions Change", "summary": "Greeks are not static — they shift as price, time, and IV change. Delta increases as an option goes deeper ITM. Gamma spikes near expiration. Theta accelerates in the final week. Vega decreases as expiration approaches. This means a position that was low-risk at entry can become high-risk if held too long or through a volatility spike. Review your Greeks daily on any open position."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
+    'position_builder'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "availableLegs": [{"type": "long_call", "strike": 4500, "dte": 30}, {"type": "short_call", "strike": 4530, "dte": 30}, {"type": "long_put", "strike": 4470, "dte": 30}, {"type": "short_put", "strike": 4440, "dte": 30}], "task": "build_delta_neutral_position"}, "instructions": "Using the position builder, combine the available option legs to create a delta-neutral position. Observe the combined Greeks and describe how the position would be affected by a 20-point SPX move."}'::jsonb,
+    2
+  )
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- MODULE 3.3: Basic Options Strategies (position 2)
+-- ============================================================================
 
 INSERT INTO academy_modules (
   track_id, slug, code, title, description, learning_outcomes,
   estimated_minutes, position, is_published, metadata
 )
 VALUES (
-  (SELECT t.id FROM academy_tracks t JOIN academy_programs p ON p.id = t.program_id
+  (SELECT t.id FROM academy_tracks t
+   JOIN academy_programs p ON p.id = t.program_id
    WHERE p.code = 'titm-core-program' AND t.code = 'options-mastery'),
   'basic-options-strategies',
   'basic-options-strategies',
   'Basic Options Strategies',
-  'Learn the essential options strategies: long calls/puts, vertical spreads, and covered calls.',
-  '["Execute vertical debit and credit spreads","Manage risk with defined-risk structures","Select the right strategy for a given market outlook"]'::jsonb,
-  45, 3, true, '{}'::jsonb
+  'Learn covered calls, protective puts, vertical spreads, and how to choose the right strategy.',
+  '["Execute covered calls and cash-secured puts","Build vertical debit and credit spreads","Select the appropriate strategy for any outlook and IV environment"]'::jsonb,
+  48, 2, true, '{}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
-  title = EXCLUDED.title, description = EXCLUDED.description,
-  learning_outcomes = EXCLUDED.learning_outcomes, estimated_minutes = EXCLUDED.estimated_minutes,
-  position = EXCLUDED.position, is_published = EXCLUDED.is_published, updated_at = now();
+  title             = EXCLUDED.title,
+  description       = EXCLUDED.description,
+  learning_outcomes = EXCLUDED.learning_outcomes,
+  estimated_minutes = EXCLUDED.estimated_minutes,
+  position          = EXCLUDED.position,
+  is_published      = EXCLUDED.is_published,
+  updated_at        = now();
 
--- Lesson 3.3.1: Vertical Spreads
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.3.1: covered-calls (position 0, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'basic-options-strategies'),
-  'vertical-spreads', 'Vertical Spreads',
-  'Build bull call spreads and bear put spreads for defined-risk directional trades',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 0, true,
-  '{"competenciesTargeted":["strategy_selection","options_literacy"]}'::jsonb
+  'covered-calls',
+  'Covered Calls',
+  'Construct and manage a covered call to generate income from an existing long stock position',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 0, true,
+  '{"competenciesTargeted":["options_strategies","risk_management"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
-   'verticals-b1', 'text_explanation', 'Debit Spreads',
-   'A **bull call spread** (call debit spread) involves buying a call at a lower strike and selling a call at a higher strike, same expiration. The max profit is the width of the strikes minus the premium paid. The max loss is the premium paid. Example: Buy 4500 call for $20, sell 4520 call for $10. Net debit = $10. Max profit = $20 - $10 = $10 (at SPX 4520+). Max loss = $10 (at SPX 4500 or below). This is defined-risk: you know your worst case before entering.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
-   'verticals-b2', 'key_concept', 'Credit Spreads',
-   'A **bull put spread** (put credit spread) involves selling a higher-strike put and buying a lower-strike put. You collect net credit. Max profit = credit received (if both expire OTM). Max loss = width minus credit. Credit spreads profit from time decay and have probability on their side — but the risk/reward is asymmetric (small frequent wins, occasional larger losses). Risk management and position sizing are critical.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
-   'verticals-b3', 'quiz_single', 'Vertical Spread Quiz',
-   'A bull call spread with 4500/4520 strikes costs $10. What is the maximum profit?', 2,
-   '{"options":["$10","$20","$30","Unlimited"],"correctIndex":0,"explanation":"Max profit = width ($20) minus cost ($10) = $10. This occurs when SPX is at or above 4520 at expiration."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'covered-calls'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A **covered call** means selling an OTM call against 100 shares you already own. You collect the premium upfront. If the stock stays below the strike at expiration, you keep the premium and the shares. If the stock rises above the strike, your shares get called away at the strike price — you keep the premium but miss the upside. Best used in sideways to slightly bullish markets when IV is elevated to maximize premium collected."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'covered-calls'),
+    'key_concept'::academy_block_type,
+    '{"title": "Maximum Profit, Loss, and Breakeven", "summary": "**Max profit** = (strike − purchase price) + premium collected. **Max loss** = purchase price − premium collected (same as owning the stock, just reduced by premium). **Breakeven** = purchase price − premium. The covered call lowers your cost basis but caps your upside. The ideal scenario: stock slowly rises toward the strike over time without exceeding it."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'covered-calls'),
+    'payoff_diagram_builder'::academy_block_type,
+    '{"config": {"strategy": "covered_call", "stockPurchasePrice": 4500, "callStrike": 4530, "callPremium": 15, "underlying": "SPX"}, "instructions": "Build the payoff diagram for this covered call. Identify: (1) the maximum profit, (2) the maximum loss, and (3) the breakeven price at expiration."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.3.2: Covered Calls & Cash-Secured Puts
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.3.2: protective-puts (position 1, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'basic-options-strategies'),
-  'covered-calls-cash-secured-puts', 'Covered Calls & Cash-Secured Puts',
-  'Generate income from existing positions or enter at better prices using options',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
-  '{"competenciesTargeted":["strategy_selection","risk_management"]}'::jsonb
+  'protective-puts',
+  'Protective Puts',
+  'Use a protective put to hedge downside risk on a long stock or index position',
+  12, 'intermediate'::academy_difficulty, '{}'::uuid[], 1, true,
+  '{"competenciesTargeted":["options_strategies","risk_management"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'covered-calls-cash-secured-puts'),
-   'covered-b1', 'text_explanation', 'Covered Call Strategy',
-   'A **covered call** means selling a call against 100 shares you already own. You collect premium (income) in exchange for capping your upside at the strike price. Best used: (1) In sideways/slightly bullish markets, (2) On stocks you are willing to sell at the strike, (3) When IV is elevated (better premium). The risk: if the stock drops significantly, the premium collected only partially offsets the loss.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'covered-calls-cash-secured-puts'),
-   'covered-b2', 'key_concept', 'Cash-Secured Put',
-   'A **cash-secured put** means selling a put while holding enough cash to buy 100 shares if assigned. You collect premium while waiting to buy a stock at your target price. If the stock stays above the strike, you keep the premium. If it falls below, you buy the stock at a net cost of strike minus premium — effectively entering at a discount. This is the options-based version of a limit buy order that pays you to wait.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'covered-calls-cash-secured-puts'),
-   'covered-b3', 'quiz_single', 'Covered Call Quiz',
-   'When is a covered call most profitable?', 2,
-   '{"options":["When the stock rises significantly above the call strike","When the stock stays near or slightly below the call strike","When the stock crashes","When volatility collapses after entry"],"correctIndex":1,"explanation":"A covered call is most profitable when the stock stays near or slightly below the strike — you keep the shares AND the full premium. If the stock rises far above the strike, you miss out on gains."}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'protective-puts'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A **protective put** is owning a put option against a long stock or index position — essentially portfolio insurance. If the stock falls below the put strike, your put gains value, offsetting losses in the stock. The cost is the put premium paid. A protective put is most valuable (and most expensive) during low-IV environments or ahead of uncertain events. The \"**married put**\" is a variant: buying a put simultaneously with stock purchase to define risk from the start."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'protective-puts'),
+    'key_concept'::academy_block_type,
+    '{"title": "Insurance vs Speculation", "summary": "A protective put is insurance, not a trade. You hope it expires worthless (like home insurance you hope never to claim). The strike determines your \"deductible\": a 5% OTM put lets the stock fall 5% before protection kicks in, at lower cost than an ATM put. The further OTM, the cheaper but the more loss you absorb before the hedge helps. Balance protection level vs cost based on your risk tolerance."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'protective-puts'),
+    'payoff_diagram_builder'::academy_block_type,
+    '{"config": {"strategy": "protective_put", "stockPurchasePrice": 4500, "putStrike": 4450, "putPremium": 20, "underlying": "SPX"}, "instructions": "Build the payoff diagram for this protective put. Identify: (1) the maximum loss (floor), (2) the breakeven price, and (3) how the diagram compares to simply owning the stock without the put."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
 
--- Lesson 3.3.3: Strategy Selection Framework
-INSERT INTO academy_lessons (module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata)
+-- ---- Lesson 3.3.3: vertical-spreads (position 2, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
 VALUES (
   (SELECT id FROM academy_modules WHERE slug = 'basic-options-strategies'),
-  'strategy-selection-framework', 'Strategy Selection Framework',
-  'Choose the right options strategy based on outlook, volatility, and risk tolerance',
-  15, 'intermediate'::academy_difficulty, '{}'::uuid[], 2, true,
-  '{"competenciesTargeted":["strategy_selection","options_literacy","risk_management"]}'::jsonb
+  'vertical-spreads',
+  'Vertical Spreads',
+  'Construct bull call spreads and bear put spreads for defined-risk directional trades',
+  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 2, true,
+  '{"competenciesTargeted":["options_strategies","risk_management"]}'::jsonb
 )
-ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, learning_objective = EXCLUDED.learning_objective, updated_at = now();
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
 
-INSERT INTO academy_lesson_blocks (lesson_id, slug, block_type, title, body, position, metadata)
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
 VALUES
-  ((SELECT id FROM academy_lessons WHERE slug = 'strategy-selection-framework'),
-   'selection-b1', 'text_explanation', 'The Decision Matrix',
-   'Strategy selection starts with three questions: (1) **Direction** — Bullish, bearish, or neutral? (2) **Volatility** — Is IV high (sell premium) or low (buy premium)? (3) **Risk tolerance** — Defined risk (spreads) or undefined (naked)? A bullish outlook in low IV → buy calls or call debit spreads. A neutral outlook in high IV → sell iron condors or strangles. Always match the strategy to YOUR analysis, not to a feeling.', 0, '{}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'strategy-selection-framework'),
-   'selection-b2', 'key_concept', 'Quick Reference',
-   '**Bullish + Low IV**: Long call, call debit spread. **Bullish + High IV**: Bull put spread (credit). **Bearish + Low IV**: Long put, put debit spread. **Bearish + High IV**: Bear call spread (credit). **Neutral + High IV**: Iron condor, short strangle. **Neutral + Low IV**: Calendar spread, butterfly. Always start with defined-risk strategies until you have a proven edge and risk management system.', 1, '{"highlight":true}'::jsonb),
-  ((SELECT id FROM academy_lessons WHERE slug = 'strategy-selection-framework'),
-   'selection-b3', 'reflection', 'Your Strategy Playbook',
-   'Based on your typical market outlook and risk tolerance, which 2-3 strategies will form your core playbook? Explain why each strategy fits your trading personality and goals.', 2,
-   '{"minWords":40}'::jsonb)
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "A **vertical spread** involves buying one option and selling another at a different strike in the same expiration. **Bull call spread (debit)**: buy a lower-strike call, sell a higher-strike call. Max profit = width minus premium paid; max loss = premium paid. **Bear put spread (debit)**: buy a higher-strike put, sell a lower-strike put. Both are defined-risk. **Credit spreads** (bull put, bear call) collect premium upfront — max profit is the credit; max loss is width minus credit."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
+    'key_concept'::academy_block_type,
+    '{"title": "Debit vs Credit Spreads: When to Use Each", "summary": "**Debit spreads** (buy premium): better when IV is low. You pay less and the position benefits from IV expansion. **Credit spreads** (sell premium): better when IV is high. You collect more and the position benefits from IV contraction and time decay. The structure is nearly the same — only the direction of premium flow changes. Many professional traders prefer credit spreads for their theta-positive nature."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
+    'position_builder'::academy_block_type,
+    '{"config": {"underlying": "SPX", "currentPrice": 4500, "task": "build_bull_call_spread", "availableStrikes": [4480, 4490, 4500, 4510, 4520, 4530], "expiration": "30DTE"}, "instructions": "Use the position builder to construct a bull call spread targeting a 1:2 risk-reward ratio. Show the max profit, max loss, breakeven, and the spread width you selected."}'::jsonb,
+    2
+  )
 ON CONFLICT DO NOTHING;
+
+-- ---- Lesson 3.3.4: choosing-right-strategy (position 3, intermediate) ----
+
+INSERT INTO academy_lessons (
+  module_id, slug, title, learning_objective,
+  estimated_minutes, difficulty, prerequisite_lesson_ids,
+  position, is_published, metadata
+)
+VALUES (
+  (SELECT id FROM academy_modules WHERE slug = 'basic-options-strategies'),
+  'choosing-right-strategy',
+  'Choosing the Right Strategy',
+  'Select the appropriate options strategy based on directional outlook, IV environment, and risk tolerance',
+  14, 'intermediate'::academy_difficulty, '{}'::uuid[], 3, true,
+  '{"competenciesTargeted":["options_strategies","risk_management"]}'::jsonb
+)
+ON CONFLICT (slug) DO UPDATE SET
+  title                   = EXCLUDED.title,
+  learning_objective      = EXCLUDED.learning_objective,
+  estimated_minutes       = EXCLUDED.estimated_minutes,
+  difficulty              = EXCLUDED.difficulty,
+  prerequisite_lesson_ids = EXCLUDED.prerequisite_lesson_ids,
+  position                = EXCLUDED.position,
+  is_published            = EXCLUDED.is_published,
+  metadata                = EXCLUDED.metadata,
+  updated_at              = now();
+
+INSERT INTO academy_lesson_blocks (lesson_id, block_type, content_json, position)
+VALUES
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'choosing-right-strategy'),
+    'text_explanation'::academy_block_type,
+    '{"markdown": "Strategy selection is driven by three factors: (1) **Directional outlook** — bullish, bearish, or neutral; (2) **IV environment** — high IV favors selling premium, low IV favors buying; (3) **Risk tolerance** — defined risk (spreads) or undefined (naked). Framework: Bullish + Low IV = long call or call debit spread. Bullish + High IV = bull put spread (credit). Bearish + Low IV = long put or put debit spread. Bearish + High IV = bear call spread (credit). Neutral + High IV = iron condor."}'::jsonb,
+    0
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'choosing-right-strategy'),
+    'key_concept'::academy_block_type,
+    '{"title": "Start With Defined Risk. Always.", "summary": "Until you have a proven edge across 100+ trades and a robust risk management system, use only **defined-risk strategies**. Naked options (undefined risk) can produce losses that dwarf your account size on a single move. Spreads cap your loss and force disciplined trade sizing. The limitation on upside is a small price to pay for the protection on the downside during your learning phase."}'::jsonb,
+    1
+  ),
+  (
+    (SELECT id FROM academy_lessons WHERE slug = 'choosing-right-strategy'),
+    'strategy_matcher'::academy_block_type,
+    '{"config": {"scenarios": [{"id": "sc1", "description": "Bullish on SPX over next 30 days. IV Rank = 15 (low). Want defined risk.", "correctStrategy": "Long call or bull call spread (debit)"}, {"id": "sc2", "description": "Neutral on SPX for next 3 weeks. IV Rank = 75 (high). Want to collect premium.", "correctStrategy": "Iron condor (credit spread on both sides)"}, {"id": "sc3", "description": "Bearish after FOMC. IV Rank = 85 (very high, about to crush). Want credit.", "correctStrategy": "Bear call spread (credit) — benefits from move down AND IV crush"}]}, "instructions": "Match each market scenario to the most appropriate options strategy. Explain your reasoning."}'::jsonb,
+    2
+  )
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================================
+-- 5. COMPETENCY LINKS — Track 2 (Technical Analysis)
+-- ============================================================================
+
+-- Module 2.1 lessons
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
+   (SELECT id FROM academy_competencies WHERE key = 'market_context'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'candlestick-anatomy'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
+   (SELECT id FROM academy_competencies WHERE key = 'market_context'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'support-and-resistance'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'trend-identification'),
+   (SELECT id FROM academy_competencies WHERE key = 'market_context'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'trend-identification'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'volume-analysis'),
+   (SELECT id FROM academy_competencies WHERE key = 'market_context'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'volume-analysis'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+-- Module 2.2 lessons
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
+   (SELECT id FROM academy_competencies WHERE key = 'market_context'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'moving-averages'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'rsi-and-momentum'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'rsi-and-momentum'),
+   (SELECT id FROM academy_competencies WHERE key = 'review_reflection'), 0.5)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'macd-deep-dive'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'macd-deep-dive'),
+   (SELECT id FROM academy_competencies WHERE key = 'market_context'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'combining-indicators'),
+   (SELECT id FROM academy_competencies WHERE key = 'review_reflection'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+-- Module 2.3 lessons
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'reversal-patterns'),
+   (SELECT id FROM academy_competencies WHERE key = 'exit_discipline'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'continuation-patterns'),
+   (SELECT id FROM academy_competencies WHERE key = 'exit_discipline'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'breakout-trading'),
+   (SELECT id FROM academy_competencies WHERE key = 'exit_discipline'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'failed-patterns-and-traps'),
+   (SELECT id FROM academy_competencies WHERE key = 'entry_validation'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'failed-patterns-and-traps'),
+   (SELECT id FROM academy_competencies WHERE key = 'review_reflection'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+-- ============================================================================
+-- 6. COMPETENCY LINKS — Track 3 (Options Mastery)
+-- ============================================================================
+
+-- Module 3.1 lessons
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'what-are-options'),
+   (SELECT id FROM academy_competencies WHERE key = 'volatility_mechanics'), 0.4)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'calls-and-puts'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'calls-and-puts'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_strategies'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'options-pricing-basics'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'options-pricing-basics'),
+   (SELECT id FROM academy_competencies WHERE key = 'volatility_mechanics'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'the-options-chain'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'the-options-chain'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_strategies'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+-- Module 3.2 lessons
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'delta-and-gamma'),
+   (SELECT id FROM academy_competencies WHERE key = 'volatility_mechanics'), 0.6)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'theta-and-time-decay'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'theta-and-time-decay'),
+   (SELECT id FROM academy_competencies WHERE key = 'risk_management'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'vega-and-volatility'),
+   (SELECT id FROM academy_competencies WHERE key = 'volatility_mechanics'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'vega-and-volatility'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_pricing'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'greeks-in-practice'),
+   (SELECT id FROM academy_competencies WHERE key = 'risk_management'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+-- Module 3.3 lessons
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'covered-calls'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_strategies'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'covered-calls'),
+   (SELECT id FROM academy_competencies WHERE key = 'risk_management'), 0.7)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'protective-puts'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_strategies'), 0.9)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'protective-puts'),
+   (SELECT id FROM academy_competencies WHERE key = 'risk_management'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_strategies'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'vertical-spreads'),
+   (SELECT id FROM academy_competencies WHERE key = 'risk_management'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'choosing-right-strategy'),
+   (SELECT id FROM academy_competencies WHERE key = 'options_strategies'), 1.0)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
+
+INSERT INTO academy_lesson_competencies (lesson_id, competency_id, weight)
+VALUES
+  ((SELECT id FROM academy_lessons WHERE slug = 'choosing-right-strategy'),
+   (SELECT id FROM academy_competencies WHERE key = 'risk_management'), 0.8)
+ON CONFLICT (lesson_id, competency_id) DO UPDATE SET weight = EXCLUDED.weight;
 
 COMMIT;
