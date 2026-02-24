@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
       }
 
       const retryResult = await retryQuery
-      data = retryResult.data
+      data = retryResult.data as typeof data
       error = retryResult.error
     }
 
