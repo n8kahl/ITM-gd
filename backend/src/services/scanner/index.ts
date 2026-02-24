@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { runTechnicalScan, TechnicalSetup } from './technicalScanner';
 import { runOptionsScan, OptionsSetup } from './optionsScanner';
 import { POPULAR_SYMBOLS } from '../../lib/symbols';
@@ -127,7 +128,7 @@ function scoreOptionsSetup(setup: OptionsSetup): number {
  */
 function technicalToOpportunity(setup: TechnicalSetup): Opportunity {
   return {
-    id: `tech-${setup.symbol}-${setup.type}-${Date.now()}`,
+    id: `tech-${setup.symbol}-${setup.type}-${crypto.randomUUID()}`,
     type: 'technical',
     setupType: setup.type,
     symbol: setup.symbol,
@@ -152,7 +153,7 @@ function technicalToOpportunity(setup: TechnicalSetup): Opportunity {
  */
 function optionsToOpportunity(setup: OptionsSetup): Opportunity {
   return {
-    id: `opt-${setup.symbol}-${setup.type}-${Date.now()}`,
+    id: `opt-${setup.symbol}-${setup.type}-${crypto.randomUUID()}`,
     type: 'options',
     setupType: setup.type,
     symbol: setup.symbol,

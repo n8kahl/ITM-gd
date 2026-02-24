@@ -271,6 +271,38 @@ describe('Opportunity Scanner', () => {
   });
 
   describe('Full Scan', () => {
+    it('generates UUID-based opportunity IDs without collisions', async () => {
+      const technicalSpy = jest.spyOn(technicalScannerModule, 'runTechnicalScan').mockResolvedValue([
+        {
+          type: 'breakout',
+          symbol: 'SPX',
+          direction: 'bullish',
+          confidence: 0.7,
+          currentPrice: 6000,
+          triggerPrice: 5995,
+          description: 'SPX breakout',
+          metadata: {},
+        },
+      ] as any);
+      const optionsSpy = jest.spyOn(optionsScannerModule, 'runOptionsScan').mockResolvedValue([]);
+
+      try {
+        const first = await scanOpportunities(['SPX'], false);
+        const second = await scanOpportunities(['SPX'], false);
+
+        const firstId = first.opportunities[0]?.id;
+        const secondId = second.opportunities[0]?.id;
+
+        expect(firstId).toMatch(/^tech-SPX-breakout-[0-9a-f-]{36}$/);
+        expect(secondId).toMatch(/^tech-SPX-breakout-[0-9a-f-]{36}$/);
+        expect(firstId).not.toBe(secondId);
+        expect(optionsSpy).not.toHaveBeenCalled();
+      } finally {
+        technicalSpy.mockRestore();
+        optionsSpy.mockRestore();
+      }
+    });
+
     it('respects SCANNER_CONCURRENCY while scanning all requested symbols', async () => {
       const symbols = ['SPX', 'NDX', 'QQQ', 'IWM', 'AAPL'];
       const originalConcurrency = process.env.SCANNER_CONCURRENCY;
