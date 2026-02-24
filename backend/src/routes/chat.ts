@@ -27,10 +27,15 @@ router.post(
   validateBody(sendMessageSchema),
   async (req: Request, res: Response) => {
     try {
-      const { sessionId, message, image, imageMimeType } = (req as any).validatedBody;
+      const { sessionId, message, context } = (req as any).validatedBody;
+      const { image, imageMimeType } = (req as any).validatedBody;
       const userId = req.user!.id;
 
       const finalSessionId = sessionId || uuidv4();
+      const requestContext = {
+        isMobile: isMobileRequest(req),
+        ...(context?.activeChartSymbol ? { activeChartSymbol: context.activeChartSymbol } : {}),
+      };
 
       const response = await sendChatMessage({
         sessionId: finalSessionId,
@@ -38,9 +43,7 @@ router.post(
         userId,
         image,
         imageMimeType,
-        context: {
-          isMobile: isMobileRequest(req),
-        },
+        context: requestContext,
       });
 
       return res.json({
@@ -92,9 +95,14 @@ router.post(
   validateBody(sendMessageSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { sessionId, message, image, imageMimeType } = (req as any).validatedBody;
+      const { sessionId, message, context } = (req as any).validatedBody;
+      const { image, imageMimeType } = (req as any).validatedBody;
       const userId = req.user!.id;
       const finalSessionId = sessionId || uuidv4();
+      const requestContext = {
+        isMobile: isMobileRequest(req),
+        ...(context?.activeChartSymbol ? { activeChartSymbol: context.activeChartSymbol } : {}),
+      };
 
       // Set SSE headers
       res.writeHead(200, {
@@ -113,9 +121,7 @@ router.post(
         userId,
         image,
         imageMimeType,
-        context: {
-          isMobile: isMobileRequest(req),
-        },
+        context: requestContext,
       }, res);
 
       res.end();

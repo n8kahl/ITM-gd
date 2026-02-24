@@ -278,10 +278,13 @@ async function loadPromptProfile(userId: string): Promise<PromptProfile> {
 
 export async function buildSystemPromptForUser(
   userId: string,
-  options?: { isMobile?: boolean; recentSymbols?: string[] },
+  options?: { isMobile?: boolean; recentSymbols?: string[]; activeChartSymbol?: string },
 ): Promise<string> {
   const marketStatus = getMarketStatus();
-  const symbols = options?.recentSymbols || [];
+  const symbols = normalizeSymbols([
+    ...(options?.activeChartSymbol ? [options.activeChartSymbol] : []),
+    ...(options?.recentSymbols || []),
+  ]);
 
   const [profile, indicesResponse, marketContextText, earningsWarnings, economicWarnings, newsDigest] = await Promise.all([
     loadPromptProfile(userId),
@@ -302,6 +305,7 @@ export async function buildSystemPromptForUser(
     tier: profile.tier,
     experienceLevel: profile.experienceLevel,
     isMobile: options?.isMobile === true,
+    activeChartSymbol: options?.activeChartSymbol,
     marketContext: {
       isMarketOpen: marketStatus.status === 'open',
       marketStatus: marketStatus.status === 'open'

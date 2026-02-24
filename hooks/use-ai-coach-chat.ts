@@ -16,6 +16,10 @@ import {
   type StreamDoneData,
 } from '@/lib/api/ai-coach'
 import type { ChartRequest } from '@/components/ai-coach/center-panel'
+import {
+  getActiveChartSymbol,
+  subscribeActiveChartSymbol,
+} from '@/lib/ai-coach-chart-context'
 
 export const AI_COACH_CURRENT_SESSION_STORAGE_KEY = 'ai-coach-current-session-id'
 
@@ -63,6 +67,7 @@ export function useAICoachChat() {
   })
 
   const sendingRef = useRef(false)
+  const activeChartSymbolRef = useRef<string>(getActiveChartSymbol('SPX'))
 
   // Use a ref for the token so callbacks don't depend on the session object
   const tokenRef = useRef<string | null>(session?.access_token || null)
@@ -109,6 +114,13 @@ export function useAICoachChat() {
   // Cleanup: abort in-flight requests on unmount
   useEffect(() => {
     return () => { abortControllerRef.current?.abort() }
+  }, [])
+
+  useEffect(() => {
+    activeChartSymbolRef.current = getActiveChartSymbol('SPX')
+    return subscribeActiveChartSymbol((symbol) => {
+      activeChartSymbolRef.current = symbol
+    })
   }, [])
 
   const toFiniteNumber = useCallback((value: unknown): number | null => {
@@ -181,6 +193,7 @@ export function useAICoachChat() {
    */
   const extractChartRequest = useCallback((functionCalls: ChatMessageResponse['functionCalls']): ChartRequest | null => {
     if (!functionCalls) return null
+    const fallbackSymbol = activeChartSymbolRef.current || 'SPX'
     const showChartCall = functionCalls.find(fc => fc.function === 'show_chart')
     const gexCall = functionCalls.find(fc => fc.function === 'get_gamma_exposure')
     const spxGamePlanCall = functionCalls.find(fc => fc.function === 'get_spx_game_plan')
@@ -222,7 +235,7 @@ export function useAICoachChat() {
 
     // Priority 1: explicit chart directives or SPX game-plan data.
     if (showChartCall || gexCall || spxGamePlanCall) {
-      const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || 'SPX'
+      const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || fallbackSymbol
       const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '5m') as ChartTimeframe
       const levels = showChartResult?.levels || spxGamePlanResult?.keyLevels
       const gexProfile = gexResult
@@ -266,7 +279,7 @@ export function useAICoachChat() {
       }
       if (!result.error) {
         return {
-          symbol: result.symbol || args.symbol || 'SPX',
+          symbol: result.symbol || args.symbol || fallbackSymbol,
           timeframe: '5m',
           levels: result.levels,
         }
@@ -569,7 +582,7 @@ export function useAICoachChat() {
       }
 
       if (!result.error) {
-        const symbol = result.symbolImpact?.symbol || 'SPX'
+        const symbol = result.symbolImpact?.symbol || fallbackSymbol
         const firstEvent = result.economicCalendar?.[0]
 
         return {
@@ -615,7 +628,7 @@ export function useAICoachChat() {
       if (!result.error) {
         const events = Array.isArray(result.events) ? result.events.slice(0, 3) : []
         return {
-          symbol: 'SPX',
+          symbol: fallbackSymbol,
           timeframe: '1D',
           contextNotes: toContextNotes(events.map((event) => (
             event.event
@@ -645,7 +658,7 @@ export function useAICoachChat() {
       }
 
       if (!result.error && (result.symbol || args.symbol)) {
-        const symbol = result.symbol || args.symbol || 'SPX'
+        const symbol = result.symbol || args.symbol || fallbackSymbol
         const headlines = Array.isArray(result.articles) ? result.articles.slice(0, 2) : []
         return {
           symbol,
@@ -724,7 +737,14 @@ export function useAICoachChat() {
 
       try {
         // Try streaming first
-        for await (const event of apiStreamMessage(sessionId, trimmedText, token, controller.signal, imagePayload)) {
+        for await (const event of apiStreamMessage(
+          sessionId,
+          trimmedText,
+          token,
+          controller.signal,
+          imagePayload,
+          { activeChartSymbol: activeChartSymbolRef.current },
+        )) {
           usedStreaming = true
 
           if (event.type === 'status') {
@@ -764,7 +784,14 @@ export function useAICoachChat() {
       } catch (streamError) {
         // If streaming fails and we haven't received any data, fall back to non-streaming
         if (!usedStreaming) {
-          const response = await apiSendMessage(sessionId, trimmedText, token, controller.signal, imagePayload)
+          const response = await apiSendMessage(
+            sessionId,
+            trimmedText,
+            token,
+            controller.signal,
+            imagePayload,
+            { activeChartSymbol: activeChartSymbolRef.current },
+          )
           streamContent = response.content
           doneData = {
             messageId: response.messageId,

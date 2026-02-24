@@ -76,13 +76,16 @@ import {
 } from './preferences'
 import {
   getChartData,
+  getKeyLevels,
   AICoachAPIError,
   type ChartTimeframe,
   type ChartBar,
+  type KeyLevelsTimeframe,
   type ChartProviderIndicators,
 } from '@/lib/api/ai-coach'
 import { mergeRealtimePriceIntoBars } from './chart-realtime'
 import { InfoTip } from '@/components/ui/info-tip'
+import { setActiveChartSymbol } from '@/lib/ai-coach-chart-context'
 
 // ============================================
 // TYPES
@@ -315,6 +318,115 @@ const LEVEL_COLORS: Record<string, string> = {
 
 const PIVOT_LEVEL_KEY_REGEX = /\b(PDH|PDL|PDC|PWH|PWL|PWC|PIVOT|R1|R2|R3|S1|S2|S3|PP)\b/
 
+function chartTimeframeToLevelsTimeframe(timeframe: ChartTimeframe): KeyLevelsTimeframe {
+  if (timeframe === '4h' || timeframe === '1D') return 'daily'
+  return 'intraday'
+}
+
+function mergeLevelAnnotations(primary: LevelAnnotation[], secondary: LevelAnnotation[]): LevelAnnotation[] {
+  const merged: LevelAnnotation[] = []
+  const seen = new Set<string>()
+
+  const append = (items: LevelAnnotation[]) => {
+    for (const level of items) {
+      const price = Number.isFinite(level.price) ? level.price : 0
+      const key = `${level.group || 'other'}|${(level.label || '').toLowerCase()}|${price.toFixed(2)}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(level)
+    }
+  }
+
+  append(primary)
+  append(secondary)
+  return merged
+}
+
+function buildFallbackKeyLevelAnnotations(args: {
+  resistance: Array<{
+    type?: string
+    displayLabel?: string
+    displayContext?: string
+    price: number
+    strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+    testsToday?: number
+    lastTest?: string | null
+    holdRate?: number | null
+  }>
+  support: Array<{
+    type?: string
+    displayLabel?: string
+    displayContext?: string
+    price: number
+    strength?: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+    testsToday?: number
+    lastTest?: string | null
+    holdRate?: number | null
+  }>
+  indicators?: {
+    vwap?: number | null
+  }
+}): LevelAnnotation[] {
+  const annotations: LevelAnnotation[] = []
+
+  for (const level of args.resistance) {
+    const label = level.displayLabel || level.type || 'Resistance'
+    const levelKey = (level.type || '').toUpperCase()
+    const group = PIVOT_LEVEL_KEY_REGEX.test(levelKey) ? 'pivot' : 'supportResistance'
+    annotations.push({
+      price: level.price,
+      label,
+      color: LEVEL_COLORS[levelKey] || '#ef4444',
+      lineWidth: 1,
+      lineStyle: 'dashed',
+      type: level.type || 'Resistance',
+      side: 'resistance',
+      strength: level.strength,
+      description: `${level.type || 'Resistance'} level`,
+      testsToday: level.testsToday,
+      lastTest: level.lastTest,
+      holdRate: level.holdRate,
+      displayContext: level.displayContext,
+      group,
+    })
+  }
+
+  for (const level of args.support) {
+    const label = level.displayLabel || level.type || 'Support'
+    const levelKey = (level.type || '').toUpperCase()
+    const group = PIVOT_LEVEL_KEY_REGEX.test(levelKey) ? 'pivot' : 'supportResistance'
+    annotations.push({
+      price: level.price,
+      label,
+      color: LEVEL_COLORS[levelKey] || '#10B981',
+      lineWidth: 1,
+      lineStyle: 'dashed',
+      type: level.type || 'Support',
+      side: 'support',
+      strength: level.strength,
+      description: `${level.type || 'Support'} level`,
+      testsToday: level.testsToday,
+      lastTest: level.lastTest,
+      holdRate: level.holdRate,
+      displayContext: level.displayContext,
+      group,
+    })
+  }
+
+  if (typeof args.indicators?.vwap === 'number' && Number.isFinite(args.indicators.vwap)) {
+    annotations.push({
+      price: args.indicators.vwap,
+      label: 'VWAP',
+      color: LEVEL_COLORS.VWAP,
+      lineWidth: 2,
+      lineStyle: 'solid',
+      group: 'vwap',
+    })
+  }
+
+  return annotations
+}
+
 type WelcomeMarketStatus = {
   label: 'Pre-Market' | 'Open' | 'After Hours' | 'Closed'
   toneClass: string
@@ -444,6 +556,10 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   )
 
   useEffect(() => {
+    setActiveChartSymbol(chartSymbol)
+  }, [chartSymbol])
+
+  useEffect(() => {
     chartRealtimeTickKeyRef.current = null
   }, [chartSymbol, chartTimeframe])
 
@@ -552,11 +668,31 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     setChartError(null)
 
     try {
-      const data = await getChartData(symbol, timeframe, token, undefined, {
-        includeIndicators: true,
-      })
+      const [data, keyLevels] = await Promise.all([
+        getChartData(symbol, timeframe, token, undefined, {
+          includeIndicators: true,
+        }),
+        getKeyLevels(
+          symbol,
+          chartTimeframeToLevelsTimeframe(timeframe),
+          token,
+        ).catch(() => null),
+      ])
+
       setChartBars(data.bars)
       setChartProviderIndicators(data.providerIndicators ?? null)
+
+      if (keyLevels?.levels) {
+        const fallbackLevels = buildFallbackKeyLevelAnnotations({
+          resistance: keyLevels.levels.resistance || [],
+          support: keyLevels.levels.support || [],
+          indicators: {
+            vwap: keyLevels.levels.indicators?.vwap ?? undefined,
+          },
+        })
+
+        setChartLevels((prev) => mergeLevelAnnotations(fallbackLevels, prev))
+      }
     } catch (error) {
       const message = error instanceof AICoachAPIError
         ? error.apiError.message
@@ -841,7 +977,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       setChartTimeframe(nextTimeframe)
     }
 
-    if (symbolChanged || timeframeChanged || viewChanged) {
+    if (symbolChanged || timeframeChanged || viewChanged || Boolean(sheetChartRequest)) {
       fetchChartData(nextSymbol, nextTimeframe)
     }
   }, [

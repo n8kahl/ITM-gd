@@ -5,6 +5,11 @@ import { z } from 'zod';
  * Enforces strict input types and bounds.
  */
 
+const chartSymbolSchema = z.string()
+  .trim()
+  .regex(/^[A-Za-z0-9._:-]{1,10}$/, 'activeChartSymbol must be a valid ticker symbol')
+  .transform((value) => value.toUpperCase());
+
 export const sendMessageSchema = z.object({
   sessionId: z.string().uuid('sessionId must be a valid UUID').optional(),
   message: z.string()
@@ -13,6 +18,9 @@ export const sendMessageSchema = z.object({
     .max(5000, 'Message cannot exceed 5000 characters'),
   image: z.string().min(1).optional(),
   imageMimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']).optional(),
+  context: z.object({
+    activeChartSymbol: chartSymbolSchema.optional(),
+  }).optional(),
 });
 
 export const getSessionMessagesSchema = z.object({

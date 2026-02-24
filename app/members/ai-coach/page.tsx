@@ -40,6 +40,7 @@ import { Button } from '@/components/ui/button'
 import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
 import { Analytics } from '@/lib/analytics'
+import { getActiveChartSymbol } from '@/lib/ai-coach-chart-context'
 
 const CHAT_QUICK_PROMPTS = [
   {
@@ -194,7 +195,7 @@ export default function AICoachPage() {
 
   const handleOpenMobileSheet = useCallback((view: MobileToolView) => {
     if (view === 'chart') {
-      const symbol = chat.chartRequest?.symbol || 'SPX'
+      const symbol = chat.chartRequest?.symbol || getActiveChartSymbol('SPX')
       const timeframe = chat.chartRequest?.timeframe || '5m'
       openSheet('chart', symbol, { symbol, timeframe })
       return

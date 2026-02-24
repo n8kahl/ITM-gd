@@ -8,7 +8,7 @@ import {
 import { calculatePreviousDayLevels, calculateDistances } from './calculators/previousDay';
 import { calculatePreMarketLevels } from './calculators/premarket';
 import { calculateAllPivots } from './calculators/pivots';
-import { calculateVWAP } from './calculators/vwap';
+import { calculateVWAP, getRunningVWAPBandSet } from './calculators/vwap';
 import { calculateATR } from './calculators/atr';
 import {
   getCachedLevels,
@@ -218,8 +218,9 @@ export async function calculateLevels(
     const atr14 = calculateATR(dailyData, 14);
     const atr7 = calculateATR(dailyData, 7);
 
-    // Calculate VWAP
-    const vwap = calculateVWAP(intradayData);
+    // Prefer live tick-fed VWAP when available (B11), otherwise fall back to aggregate recalculation.
+    const liveVWAP = getRunningVWAPBandSet(symbol)?.vwap ?? null;
+    const vwap = liveVWAP ?? calculateVWAP(intradayData);
 
     // Calculate pre-market levels
     const preMarketLevels = calculatePreMarketLevels(preMarketData);

@@ -43,6 +43,7 @@ import { getMarketStatus, toEasternTime } from './marketHours';
 import { AuthTokenError, extractBearerToken, verifyAuthToken } from '../lib/tokenAuth';
 import { subscribeMassiveTickUpdates, isMassiveTickStreamConnected } from './massiveTickStream';
 import { getLatestTick, type NormalizedMarketTick } from './tickCache';
+import { updateRunningVWAPForSymbol } from './levels/calculators/vwap';
 import { ingestTickMicrobars, resetMicrobarAggregator } from './spx/microbarAggregator';
 import {
   applyTickStateToSetups,
@@ -1476,6 +1477,12 @@ export function initWebSocket(server: HTTPServer): void {
     }
   });
   unsubscribeTickEvents = subscribeMassiveTickUpdates((tick) => {
+    const normalizedSymbol = normalizeSymbol(tick.symbol);
+    updateRunningVWAPForSymbol(normalizedSymbol, {
+      price: tick.price,
+      volume: tick.size,
+      timestampMs: tick.timestamp,
+    });
     void broadcastTickPrice(tick).catch((error) => {
       logger.warn('Failed to broadcast Massive tick price', {
         symbol: tick.symbol,

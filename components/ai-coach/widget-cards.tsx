@@ -18,6 +18,7 @@ import {
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { getActiveChartSymbol } from '@/lib/ai-coach-chart-context'
 import { clearHoverTarget, emitHoverTarget } from '@/hooks/use-hover-coordination'
 import { GEXChart } from './gex-chart'
 import { WidgetActionBar } from './widget-action-bar'
@@ -205,6 +206,10 @@ function normalizeActions(actions: WidgetAction[]): WidgetAction[] {
     if (!unique.has(key)) unique.set(key, action)
   }
   return prioritizeWidgetActions(Array.from(unique.values())).slice(0, 6)
+}
+
+function getDefaultChartSymbol(): string {
+  return getActiveChartSymbol('SPX')
 }
 
 function shouldIgnoreCardActivation(target: EventTarget | null): boolean {
@@ -439,7 +444,7 @@ export function WidgetCard({ widget }: { widget: WidgetData }) {
 // ============================================
 
 function KeyLevelsCard({ data }: { data: Record<string, unknown> }) {
-  const symbol = data.symbol as string || 'SPX'
+  const symbol = data.symbol as string || getDefaultChartSymbol()
   const currentPrice = parseNumeric(data.currentPrice)
   const resistance = (data.resistance as KeyLevelLike[]) || []
   const support = (data.support as KeyLevelLike[]) || []
@@ -752,13 +757,14 @@ function MarketOverviewCard({ data }: { data: Record<string, unknown> }) {
     'after-hours': 'text-blue-400 bg-blue-500/10',
     closed: 'text-white/40 bg-white/5',
   }
+  const fallbackSymbol = getDefaultChartSymbol()
   const actions: WidgetAction[] = normalizeActions([
-    chartAction('SPX'),
-    viewAction('chart', status === 'pre-market' ? 'Open Brief Context' : 'Open Macro Context', 'SPX'),
+    chartAction(fallbackSymbol),
+    viewAction('chart', status === 'pre-market' ? 'Open Brief Context' : 'Open Macro Context', fallbackSymbol),
     chatAction('Given current market status, what trading approach should I prioritize?'),
   ])
   const openCard = () => {
-    chartAction('SPX').action()
+    chartAction(fallbackSymbol).action()
   }
 
   return (
@@ -942,8 +948,10 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
   const fedPolicy = data.fedPolicy as { currentRate?: string; nextMeeting?: string; rateOutlook?: string; tone?: string } | undefined
   const symbolImpact = data.symbolImpact as { symbol?: string; outlook?: string; bullishFactors?: string[]; bearishFactors?: string[] } | undefined
   const highImpactCount = calendar.filter((event) => String(event.impact || '').toUpperCase() === 'HIGH').length
+  const fallbackSymbol = getDefaultChartSymbol()
+  const macroSymbol = symbolImpact?.symbol || fallbackSymbol
   const macroContextNotes = [
-    symbolImpact?.outlook ? `${symbolImpact.symbol || 'SPX'} outlook: ${symbolImpact.outlook}` : null,
+    symbolImpact?.outlook ? `${macroSymbol} outlook: ${symbolImpact.outlook}` : null,
     fedPolicy?.tone ? `Fed tone: ${fedPolicy.tone}` : null,
     calendar[0]?.event ? `Next event: ${calendar[0].event}${calendar[0].date ? ` (${calendar[0].date})` : ''}` : null,
   ].filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
@@ -967,11 +975,11 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
       chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes, macroEventMarkers).action()
       return
     }
-    viewAction('chart', 'Open Chart', 'SPX').action()
+    viewAction('chart', 'Open Chart', fallbackSymbol).action()
   }
   const actions: WidgetAction[] = normalizeActions([
-    symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes, macroEventMarkers) : viewAction('chart', 'Open Chart', 'SPX'),
-    symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('chart', 'Open Brief Context', 'SPX'),
+    symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context', undefined, macroContextNotes, macroEventMarkers) : viewAction('chart', 'Open Chart', fallbackSymbol),
+    symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('chart', 'Open Brief Context', fallbackSymbol),
     chatAction(symbolImpact?.symbol
       ? `Build a risk plan for ${symbolImpact.symbol} using this macro context and key catalysts.`
       : 'Build a risk plan for trading SPX around this macro calendar.', 'Risk Plan'),
@@ -1057,7 +1065,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
                       source: 'Economic calendar',
                     }],
                   )
-                  : viewAction('chart', 'Open Chart', 'SPX'),
+                  : viewAction('chart', 'Open Chart', fallbackSymbol),
                 chatAction(`How should I position around ${event.event} on ${event.date}?`, 'Ask AI'),
                 copyAction(`${event.event} | ${event.date} | ${event.impact}`, 'Copy Event'),
               ])}
@@ -1194,7 +1202,7 @@ function OptionsChainCard({ data }: { data: Record<string, unknown> }) {
 // ============================================
 
 function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
-  const symbol = (data.symbol as string) || 'SPX'
+  const symbol = (data.symbol as string) || getDefaultChartSymbol()
   const spotPrice = data.spotPrice as number | undefined
   const regime = (data.regime as string) || 'unknown'
   const flipPoint = data.flipPoint as number | null | undefined
@@ -1336,7 +1344,7 @@ function GEXProfileCard({ data }: { data: Record<string, unknown> }) {
 // ============================================
 
 function SPXGamePlanCard({ data }: { data: Record<string, unknown> }) {
-  const symbol = (data.symbol as string) || 'SPX'
+  const symbol = (data.symbol as string) || getDefaultChartSymbol()
   const currentPrice = parseNullableNumeric(data.currentPrice)
   const spyPrice = parseNullableNumeric(data.spyPrice)
   const ratio = parseNullableNumeric(data.spxSpyRatio)
@@ -1641,7 +1649,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
 }
 
 function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
-  const symbol = (data.symbol as string) || 'SPX'
+  const symbol = (data.symbol as string) || getDefaultChartSymbol()
   const expectedMove = (data.expectedMove as Record<string, unknown> | null) || null
   const topContracts = Array.isArray(data.topContracts)
     ? data.topContracts as Array<Record<string, unknown>>
@@ -1749,7 +1757,7 @@ function ZeroDTEAnalysisCard({ data }: { data: Record<string, unknown> }) {
 }
 
 function IVAnalysisCard({ data }: { data: Record<string, unknown> }) {
-  const symbol = (data.symbol as string) || 'SPX'
+  const symbol = (data.symbol as string) || getDefaultChartSymbol()
   const currentPrice = parseNullableNumeric(data.currentPrice) ?? 0
   const ivRank = (data.ivRank as Record<string, unknown> | null) || null
   const skew = (data.skew as Record<string, unknown> | null) || null
@@ -1851,11 +1859,12 @@ function EconomicCalendarCard({ data }: { data: Record<string, unknown> }) {
   const daysAhead = parseNumeric(data.daysAhead || 7)
   const impactFilter = String(data.impactFilter || 'HIGH')
   const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
+  const fallbackSymbol = getDefaultChartSymbol()
   const openCard = () => {
-    viewAction('chart', 'Open Chart', 'SPX').action()
+    viewAction('chart', 'Open Chart', fallbackSymbol).action()
   }
   const cardActions: WidgetAction[] = normalizeActions([
-    viewAction('chart', 'Open Chart', 'SPX'),
+    viewAction('chart', 'Open Chart', fallbackSymbol),
     chatAction('Summarize this week\'s economic events and likely IV/volatility impact.'),
     copyAction(`Economic events (${impactFilter}): ${events.slice(0, 5).map((event) => String(event.event || '')).join(', ')}`),
   ])
@@ -1891,7 +1900,7 @@ function EconomicCalendarCard({ data }: { data: Record<string, unknown> }) {
               <WidgetRowActions
                 key={`${String(event.event)}-${String(event.date)}-${idx}`}
                 actions={normalizeActions([
-                  viewAction('chart', 'Open Chart', 'SPX'),
+                  viewAction('chart', 'Open Chart', fallbackSymbol),
                   chatAction(`How should I position around ${String(event.event)} on ${String(event.date)}?`, 'Ask AI'),
                   copyAction(`${String(event.event)} | ${String(event.date)} | ${impact}`, 'Copy Event'),
                 ])}
@@ -1924,11 +1933,12 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
   const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
   const watchlist = Array.isArray(data.watchlist) ? data.watchlist as string[] : []
   const daysAhead = parseNumeric(data.daysAhead)
+  const fallbackSymbol = getDefaultChartSymbol()
   const openCard = () => {
-    chartAction(watchlist[0] || 'SPX').action()
+    chartAction(watchlist[0] || fallbackSymbol).action()
   }
   const cardActions: WidgetAction[] = normalizeActions([
-    chartAction(watchlist[0] || 'SPX'),
+    chartAction(watchlist[0] || fallbackSymbol),
     chatAction('Summarize this earnings calendar and highlight the highest-risk names for options day traders.'),
     copyAction(`Earnings watchlist: ${watchlist.join(', ')}`),
   ])

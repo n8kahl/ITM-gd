@@ -116,6 +116,30 @@ describeWithSockets('Chat Routes', () => {
       });
     });
 
+    it('passes active chart symbol context when provided', async () => {
+      const res = await request(app)
+        .post('/api/chat/message')
+        .set('Authorization', 'Bearer test-token')
+        .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)')
+        .send({
+          message: 'Find a setup from my chart context',
+          context: {
+            activeChartSymbol: 'AAPL',
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(mockSendChatMessage).toHaveBeenCalledWith({
+        sessionId: '11111111-1111-4111-8111-111111111111',
+        message: 'Find a setup from my chart context',
+        userId: 'user-123',
+        context: {
+          isMobile: false,
+          activeChartSymbol: 'AAPL',
+        },
+      });
+    });
+
     it('maps OpenAI-style upstream errors to 503', async () => {
       mockSendChatMessage.mockRejectedValue({
         status: 429,

@@ -85,6 +85,17 @@ describe('intentRouter', () => {
     expect(plan.recommendedFunctions).toContain('get_company_profile');
   });
 
+  it('uses active chart symbol context when setup prompt omits ticker', () => {
+    const plan = buildIntentRoutingPlan(
+      'Help with setup: entry, stop, invalidation, and show chart.',
+      { activeSymbol: 'AAPL' },
+    );
+
+    expect(plan.symbols).toContain('AAPL');
+    expect(plan.primarySymbol).toBe('AAPL');
+    expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['get_key_levels', 'show_chart']));
+  });
+
   it('avoids company profile intent for generic educational "what is" prompts', () => {
     const plan = buildIntentRoutingPlan('What is delta and why does it matter for options?');
 

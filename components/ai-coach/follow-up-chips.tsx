@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import type { ChatMessageResponse } from '@/lib/api/ai-coach'
+import { getActiveChartSymbol } from '@/lib/ai-coach-chart-context'
 
 type FunctionCall = NonNullable<ChatMessageResponse['functionCalls']>[number]
 
@@ -38,7 +39,7 @@ function extractPrimarySymbol(
 
   const matches = content.toUpperCase().match(SYMBOL_PATTERN) || []
   const firstSymbol = matches.find((candidate) => !SYMBOL_BLACKLIST.has(candidate))
-  return firstSymbol || 'SPX'
+  return firstSymbol || getActiveChartSymbol('SPX')
 }
 
 function buildFollowUps(

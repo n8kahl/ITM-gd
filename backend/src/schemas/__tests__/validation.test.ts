@@ -380,6 +380,35 @@ describe('Validation Schemas', () => {
         expect(result.success).toBe(false);
       });
 
+      it('should accept active chart symbol context', () => {
+        const message = {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          message: 'Find a setup for this chart.',
+          context: {
+            activeChartSymbol: 'aapl',
+          },
+        };
+
+        const result = messageSchema.safeParse(message);
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.context?.activeChartSymbol).toBe('AAPL');
+        }
+      });
+
+      it('should reject malformed active chart symbol context', () => {
+        const message = {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          message: 'Find setup',
+          context: {
+            activeChartSymbol: 'AAPL!',
+          },
+        };
+
+        const result = messageSchema.safeParse(message);
+        expect(result.success).toBe(false);
+      });
+
       it('should accept multiline message', () => {
         const message = {
           sessionId: '550e8400-e29b-41d4-a716-446655440000',

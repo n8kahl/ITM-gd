@@ -319,6 +319,10 @@ function selectPrimarySymbol(symbols: string[], intents: CoachIntentId[], lowere
   return symbols[0] || null;
 }
 
+interface IntentRoutingContext {
+  activeSymbol?: string | null;
+}
+
 function intentScore(spec: IntentSpec, loweredMessage: string): number {
   let score = countPhraseHits(loweredMessage, spec.phrases);
 
@@ -406,9 +410,15 @@ function extractCalledSymbols(functionCalls: FunctionCallLike[]): string[] {
   return dedupe(symbols);
 }
 
-export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
+export function buildIntentRoutingPlan(message: string, context?: IntentRoutingContext): IntentRoutingPlan {
   const loweredMessage = message.toLowerCase();
   const symbols = extractSymbols(message);
+  const contextSymbol = coerceSymbol(context?.activeSymbol);
+  const effectiveSymbols = symbols.length > 0
+    ? symbols
+    : contextSymbol
+      ? [contextSymbol]
+      : [];
   const hasExplicitEarningsLanguage = /\bearnings?\b/.test(loweredMessage);
   const isEducationalNoSymbolPrompt = symbols.length === 0
     && /(beginner|plain language|explain|checklist|small account|risk per trade|stop trading|safe|safer|what not to do)/.test(loweredMessage);
@@ -424,7 +434,7 @@ export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
     if (selectedIntentIds.size >= 3) break;
   }
 
-  if (symbols.length > 0 && selectedIntentIds.size === 0) {
+  if (effectiveSymbols.length > 0 && selectedIntentIds.size === 0) {
     selectedIntentIds.add('price_check');
   }
 
@@ -470,7 +480,7 @@ export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
   let requiredFunctions = dedupe(selectedSpecs.flatMap((spec) => spec.requiredFunctions));
   let recommendedFunctions = dedupe(selectedSpecs.flatMap((spec) => spec.recommendedFunctions || []));
 
-  if (symbols.length === 0) {
+  if (effectiveSymbols.length === 0) {
     const symbolBoundRequired = requiredFunctions.filter((fn) => SYMBOL_SPECIFIC_FUNCTIONS.has(fn));
     if (symbolBoundRequired.length > 0) {
       recommendedFunctions = dedupe([...recommendedFunctions, ...symbolBoundRequired]);
@@ -485,11 +495,11 @@ export function buildIntentRoutingPlan(message: string): IntentRoutingPlan {
   const requiresDisclaimer = selectedSpecs.some((spec) => spec.requiresDisclaimer === true);
   const requiresScenarioProbabilities = selectedSpecs.some((spec) => spec.requiresScenarioProbabilities === true);
   const requiresLiquidityWatchouts = selectedSpecs.some((spec) => spec.requiresLiquidityWatchouts === true);
-  const primarySymbol = selectPrimarySymbol(symbols, intents, loweredMessage);
+  const primarySymbol = selectPrimarySymbol(effectiveSymbols, intents, loweredMessage);
 
   return {
     intents,
-    symbols,
+    symbols: effectiveSymbols,
     primarySymbol,
     requiredFunctions,
     recommendedFunctions,

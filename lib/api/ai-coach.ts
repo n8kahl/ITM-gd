@@ -119,6 +119,51 @@ export interface ChartDataResponse {
   providerIndicators?: ChartProviderIndicators
 }
 
+export type KeyLevelsTimeframe = 'intraday' | 'daily' | 'weekly'
+
+export interface KeyLevelItem {
+  type: string
+  price: number
+  distance: number
+  distancePct: number
+  distanceATR: number
+  strength: 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical'
+  description: string
+  displayLabel?: string
+  displayContext?: string
+  side?: 'resistance' | 'support'
+  testsToday?: number
+  lastTest?: string | null
+  holdRate?: number | null
+}
+
+export interface KeyLevelsResponse {
+  symbol: string
+  timestamp: string
+  currentPrice: number
+  levels: {
+    resistance: KeyLevelItem[]
+    support: KeyLevelItem[]
+    pivots: {
+      standard: Record<string, number | null>
+      camarilla: Record<string, number | null>
+      fibonacci: Record<string, number | null>
+    }
+    indicators: {
+      vwap: number | null
+      atr14: number | null
+      atr7?: number | null
+    }
+  }
+  marketContext: {
+    marketStatus: string
+    sessionType: string
+    timeSinceOpen?: string
+  }
+  cached: boolean
+  cacheExpiresAt: string | null
+}
+
 export type FibonacciTimeframe = 'daily' | '1h' | '15m' | '5m'
 
 export interface FibonacciLevelsResponse {
@@ -599,14 +644,30 @@ export async function sendMessage(
   token: string,
   signal?: AbortSignal,
   imagePayload?: { image: string; imageMimeType: string },
+  context?: {
+    activeChartSymbol?: string
+  },
 ): Promise<ChatMessageResponse> {
-  const payload: { message: string; sessionId?: string; image?: string; imageMimeType?: string } = { message }
+  const payload: {
+    message: string
+    sessionId?: string
+    image?: string
+    imageMimeType?: string
+    context?: {
+      activeChartSymbol?: string
+    }
+  } = { message }
   if (sessionId && sessionId.trim().length > 0) {
     payload.sessionId = sessionId
   }
   if (imagePayload) {
     payload.image = imagePayload.image
     payload.imageMimeType = imagePayload.imageMimeType
+  }
+  if (context?.activeChartSymbol) {
+    payload.context = {
+      activeChartSymbol: context.activeChartSymbol,
+    }
   }
 
   const response = await fetchWithAuth(
@@ -636,9 +697,12 @@ export async function sendMessage(
  */
 export async function sendChatMessage(
   message: string,
-  token: string
+  token: string,
+  context?: {
+    activeChartSymbol?: string
+  },
 ): Promise<ChatMessageResponse> {
-  return sendMessage(undefined, message, token)
+  return sendMessage(undefined, message, token, undefined, undefined, context)
 }
 
 /**
@@ -743,6 +807,34 @@ export async function getChartData(
     { headers: {} },
     token,
     signal
+  )
+
+  if (!response.ok) {
+    const error: APIError = await response.json().catch(() => ({
+      error: 'Network error',
+      message: `Request failed with status ${response.status}`,
+    }))
+    throw new AICoachAPIError(response.status, error)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get key levels for a symbol.
+ */
+export async function getKeyLevels(
+  symbol: string,
+  timeframe: KeyLevelsTimeframe,
+  token: string,
+  signal?: AbortSignal,
+): Promise<KeyLevelsResponse> {
+  const params = new URLSearchParams({ timeframe })
+  const response = await fetchWithAuth(
+    `${API_BASE}/api/levels/${symbol}?${params.toString()}`,
+    { headers: {} },
+    token,
+    signal,
   )
 
   if (!response.ok) {
@@ -1649,11 +1741,27 @@ export async function* streamMessage(
   token: string,
   signal?: AbortSignal,
   imagePayload?: { image: string; imageMimeType: string },
+  context?: {
+    activeChartSymbol?: string
+  },
 ): AsyncGenerator<StreamEvent> {
-  const body: { sessionId: string; message: string; image?: string; imageMimeType?: string } = { sessionId, message }
+  const payload: {
+    sessionId: string
+    message: string
+    image?: string
+    imageMimeType?: string
+    context?: {
+      activeChartSymbol?: string
+    }
+  } = { sessionId, message }
   if (imagePayload) {
-    body.image = imagePayload.image
-    body.imageMimeType = imagePayload.imageMimeType
+    payload.image = imagePayload.image
+    payload.imageMimeType = imagePayload.imageMimeType
+  }
+  if (context?.activeChartSymbol) {
+    payload.context = {
+      activeChartSymbol: context.activeChartSymbol,
+    }
   }
 
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
@@ -1662,7 +1770,7 @@ export async function* streamMessage(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
     signal,
   })
 

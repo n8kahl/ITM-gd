@@ -42,6 +42,7 @@ interface ChatRequest {
   imageMimeType?: string;
   context?: {
     isMobile?: boolean;
+    activeChartSymbol?: string;
   };
 }
 
@@ -63,7 +64,18 @@ interface ChatResponse {
   responseTime: number;
 }
 
-function extractSymbolsFromHistory(history: ChatMessage[], latestMessage: string): string[] {
+function normalizeSymbolCandidate(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z0-9._:-]{1,10}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function extractSymbolsFromHistory(
+  history: ChatMessage[],
+  latestMessage: string,
+  activeChartSymbol?: string,
+): string[] {
   const combined = [
     ...history.slice(-5).map((message) => message.content || ''),
     latestMessage,
@@ -80,7 +92,8 @@ function extractSymbolsFromHistory(history: ChatMessage[], latestMessage: string
     .filter((symbol) => symbol.length >= 1 && symbol.length <= 6)
     .filter((symbol) => !stopwords.has(symbol));
 
-  return [...new Set(normalized)].slice(0, 10);
+  const contextSymbol = normalizeSymbolCandidate(activeChartSymbol);
+  return [...new Set([...(contextSymbol ? [contextSymbol] : []), ...normalized])].slice(0, 10);
 }
 
 /**
@@ -201,7 +214,9 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
   const startTime = Date.now();
   const { sessionId, message, userId, image, imageMimeType, context } = request;
   const sanitizedMessage = sanitizeUserMessage(message);
-  const routingPlan = buildIntentRoutingPlan(sanitizedMessage);
+  const routingPlan = buildIntentRoutingPlan(sanitizedMessage, {
+    activeSymbol: context?.activeChartSymbol,
+  });
   const routingDirective = buildIntentRoutingDirective(routingPlan);
   const maxFunctionCalls = Math.max(
     MAX_FUNCTION_CALLS,
@@ -218,10 +233,11 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     logger.info('History loaded', { messageCount: history.length });
 
     // Build messages array
-    const recentSymbols = extractSymbolsFromHistory(history, sanitizedMessage);
+    const recentSymbols = extractSymbolsFromHistory(history, sanitizedMessage, context?.activeChartSymbol);
     const systemPrompt = await buildSystemPromptForUser(userId, {
       isMobile: context?.isMobile,
       recentSymbols,
+      activeChartSymbol: context?.activeChartSymbol,
     });
     const hardenedSystemPrompt = `${systemPrompt}\n\n${PROMPT_INJECTION_GUARDRAIL}`;
     const messages: ChatCompletionMessageParam[] = [
