@@ -24,7 +24,7 @@ jest.mock('../../../lib/logger', () => ({
 import { getDailyAggregates } from '../../../config/massive';
 import { cacheGet, cacheSet } from '../../../config/redis';
 import { fetchExpirationDates, fetchOptionsChain } from '../optionsChainFetcher';
-import { analyzeIVProfile } from '../ivAnalysis';
+import { adjustIVRankFor0DTE, analyzeIVProfile } from '../ivAnalysis';
 
 const mockGetDailyAggregates = getDailyAggregates as jest.MockedFunction<typeof getDailyAggregates>;
 const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
@@ -140,5 +140,22 @@ describe('ivAnalysis service', () => {
     mockFetchExpirationDates.mockResolvedValue([]);
 
     await expect(analyzeIVProfile('SPX')).rejects.toThrow('No options expirations found for SPX');
+  });
+
+  it('leaves 0DTE IV rank unchanged at or above 60 minutes to close', () => {
+    expect(adjustIVRankFor0DTE(80, 60, 0)).toBe(80);
+    expect(adjustIVRankFor0DTE(80, 75, 0)).toBe(80);
+  });
+
+  it('discounts 0DTE IV rank by 10% at 30 minutes to close', () => {
+    expect(adjustIVRankFor0DTE(80, 30, 0)).toBe(72);
+  });
+
+  it('discounts 0DTE IV rank by 20% inside final 30 minutes', () => {
+    expect(adjustIVRankFor0DTE(80, 15, 0)).toBe(64);
+  });
+
+  it('does not alter IV rank for non-0DTE contracts', () => {
+    expect(adjustIVRankFor0DTE(80, 15, 3)).toBe(80);
   });
 });

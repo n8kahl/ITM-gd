@@ -2,6 +2,7 @@ import { getDailyAggregates } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 import { formatMassiveTicker } from '../../lib/symbols';
 import { logger } from '../../lib/logger';
+import { MARKET_HOLIDAYS, toEasternTime } from '../marketHours';
 import { fetchExpirationDates, fetchOptionsChain } from './optionsChainFetcher';
 import {
   IVAnalysisProfile,
@@ -227,6 +228,25 @@ function buildCacheKey(symbol: string, options: { expiry?: string; strikeRange: 
   return `options:iv:${symbol}:${options.expiry || 'multi'}:${options.strikeRange}:${options.maxExpirations}`;
 }
 
+function minutesUntilMarketClose(now: Date): number {
+  const et = toEasternTime(now);
+  const minuteOfDay = (et.hour * 60) + et.minute;
+  const closeMinute = MARKET_HOLIDAYS[et.dateStr] === 'early' ? 13 * 60 : 16 * 60;
+  return Math.max(0, closeMinute - minuteOfDay);
+}
+
+export function adjustIVRankFor0DTE(
+  rawIVRank: number,
+  minutesToClose: number,
+  dte: number,
+): number {
+  if (!Number.isFinite(rawIVRank)) return rawIVRank;
+  if (!Number.isFinite(minutesToClose) || !Number.isFinite(dte)) return rawIVRank;
+  if (dte > 0 || minutesToClose >= 60) return rawIVRank;
+  const gammaAdjustment = minutesToClose < 30 ? 0.8 : 0.9;
+  return Math.min(100, rawIVRank * gammaAdjustment);
+}
+
 export async function analyzeIVProfile(
   symbolInput: string,
   options: AnalyzeIVOptions = {},
@@ -258,6 +278,7 @@ export async function analyzeIVProfile(
   let firstChainCalls: OptionContract[] = [];
   let firstChainPuts: OptionContract[] = [];
   let currentIVDecimal: number | null = null;
+  let nearestDte: number | null = null;
 
   for (let idx = 0; idx < expirations.length; idx += 1) {
     const expiry = expirations[idx];
@@ -277,6 +298,7 @@ export async function analyzeIVProfile(
     if (idx === 0) {
       firstChainCalls = chain.options.calls;
       firstChainPuts = chain.options.puts;
+      nearestDte = chain.daysToExpiry;
     }
   }
 
@@ -291,6 +313,13 @@ export async function analyzeIVProfile(
   const closes = dailyBars.map((bar) => bar.c).filter((value) => Number.isFinite(value) && value > 0);
 
   const ivRank = buildIVRankAnalysis(currentIVDecimal, closes);
+  const minutesToClose = minutesUntilMarketClose(now);
+  const calibratedIVRank = (
+    ivRank.ivRank != null
+    && nearestDte != null
+  )
+    ? round(adjustIVRankFor0DTE(ivRank.ivRank, minutesToClose, nearestDte))
+    : ivRank.ivRank;
   const skew = buildIVSkewAnalysis(firstChainCalls, firstChainPuts, currentPrice);
   const termStructure = buildTermStructure(termStructurePoints.sort((a, b) => a.dte - b.dte));
 
@@ -298,7 +327,10 @@ export async function analyzeIVProfile(
     symbol,
     currentPrice: round(currentPrice),
     asOf: now.toISOString(),
-    ivRank,
+    ivRank: {
+      ...ivRank,
+      ivRank: calibratedIVRank,
+    },
     skew,
     termStructure,
   };
