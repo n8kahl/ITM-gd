@@ -1482,6 +1482,17 @@ export async function getJournalInsights(
   return buildJournalInsightsFromAnalytics(payload.data, options?.period || '30d')
 }
 
+export interface TradeCreateInput {
+  symbol: string
+  position_type: 'call' | 'put' | 'stock'
+  strategy?: string | null
+  entry_date: string
+  entry_price: number
+  exit_date?: string | null
+  exit_price?: number | null
+  quantity: number
+}
+
 /**
  * Import trades from CSV/broker data
  */
