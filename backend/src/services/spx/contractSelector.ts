@@ -104,6 +104,10 @@ export function deltaTargetForSetup(setup: Pick<Setup, 'type' | 'regime'>): numb
         return 0.26;
       case 'flip_reclaim':
         return 0.24;
+      case 'vwap_reclaim':
+        return 0.28;
+      case 'vwap_fade_at_band':
+        return 0.2;
       case 'mean_reversion':
         return 0.22;
       case 'fade_at_wall':

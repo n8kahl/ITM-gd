@@ -95,6 +95,49 @@ export function calculateVWAPBands(
   };
 }
 
+export interface VWAPBandSet {
+  vwap: number;
+  band1SD: {
+    upper: number;
+    lower: number;
+  };
+  band15SD: {
+    upper: number;
+    lower: number;
+  };
+  band2SD: {
+    upper: number;
+    lower: number;
+  };
+}
+
+/**
+ * Calculate commonly used VWAP standard deviation bands in one payload.
+ */
+export function calculateVWAPBandSet(intradayData: MassiveAggregate[]): VWAPBandSet | null {
+  const band1SD = calculateVWAPBands(intradayData, 1);
+  const band15SD = calculateVWAPBands(intradayData, 1.5);
+  const band2SD = calculateVWAPBands(intradayData, 2);
+
+  if (!band1SD || !band15SD || !band2SD) return null;
+
+  return {
+    vwap: band1SD.vwap,
+    band1SD: {
+      upper: band1SD.upperBand,
+      lower: band1SD.lowerBand,
+    },
+    band15SD: {
+      upper: band15SD.upperBand,
+      lower: band15SD.lowerBand,
+    },
+    band2SD: {
+      upper: band2SD.upperBand,
+      lower: band2SD.lowerBand,
+    },
+  };
+}
+
 /**
  * Analyze price position relative to VWAP
  */

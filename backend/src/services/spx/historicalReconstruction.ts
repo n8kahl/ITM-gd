@@ -26,7 +26,11 @@ import type {
   UnifiedGEXLandscape,
 } from './types';
 import { ema, round, stableId } from './utils';
-import { calculateVWAP, analyzeVWAPPosition } from '../levels/calculators/vwap';
+import {
+  calculateVWAP,
+  analyzeVWAPPosition,
+  calculateVWAPBandSet,
+} from '../levels/calculators/vwap';
 
 const SPY_TO_SPX_STRIKE = 10;
 const SPY_TO_SPX_GEX_SCALE = 0.1;
@@ -690,6 +694,18 @@ function buildHistoricalIndicatorContext(input: {
   asOfTimestamp: string;
   vwapPrice: number | null;
   vwapDeviation: number | null;
+  vwapBand1SD: {
+    upper: number;
+    lower: number;
+  } | null;
+  vwapBand15SD: {
+    upper: number;
+    lower: number;
+  } | null;
+  vwapBand2SD: {
+    upper: number;
+    lower: number;
+  } | null;
   latestBar: {
     t: number;
     o: number;
@@ -746,6 +762,7 @@ function buildHistoricalIndicatorContext(input: {
     n: 0,
   }));
   const vwapPrice = calculateVWAP(vwapBars);
+  const vwapBandSet = calculateVWAPBandSet(vwapBars);
   const lastClose = closes[closes.length - 1];
   const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
   const latestBarRaw = usable[usable.length - 1];
@@ -784,6 +801,24 @@ function buildHistoricalIndicatorContext(input: {
     asOfTimestamp: input.asOfTimestamp,
     vwapPrice: vwapPrice != null ? round(vwapPrice, 2) : null,
     vwapDeviation: vwapPosition != null ? round(vwapPosition.distancePct, 4) : null,
+    vwapBand1SD: vwapBandSet
+      ? {
+        upper: round(vwapBandSet.band1SD.upper, 2),
+        lower: round(vwapBandSet.band1SD.lower, 2),
+      }
+      : null,
+    vwapBand15SD: vwapBandSet
+      ? {
+        upper: round(vwapBandSet.band15SD.upper, 2),
+        lower: round(vwapBandSet.band15SD.lower, 2),
+      }
+      : null,
+    vwapBand2SD: vwapBandSet
+      ? {
+        upper: round(vwapBandSet.band2SD.upper, 2),
+        lower: round(vwapBandSet.band2SD.lower, 2),
+      }
+      : null,
     latestBar: toTriggerBar(latestBarRaw),
     priorBar: toTriggerBar(priorBarRaw),
     avgRecentVolume,

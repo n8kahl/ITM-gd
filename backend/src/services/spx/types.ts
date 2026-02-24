@@ -13,7 +13,9 @@ export type SetupType =
   | 'trend_continuation'
   | 'orb_breakout'
   | 'trend_pullback'
-  | 'flip_reclaim';
+  | 'flip_reclaim'
+  | 'vwap_reclaim'
+  | 'vwap_fade_at_band';
 
 export type SetupStatus = 'forming' | 'ready' | 'triggered' | 'invalidated' | 'expired';
 

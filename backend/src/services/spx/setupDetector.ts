@@ -1,6 +1,6 @@
 import { cacheGet, cacheSet } from '../../config/redis';
 import { getMinuteAggregates } from '../../config/massive';
-import { calculateVWAP, analyzeVWAPPosition } from '../levels/calculators/vwap';
+import { analyzeVWAPPosition, calculateVWAPBandSet } from '../levels/calculators/vwap';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import { calculateAtrFromBars } from './atrService';
@@ -143,6 +143,8 @@ const DIVERSIFICATION_PREFERRED_SETUP_TYPES: ReadonlySet<SetupType> = new Set([
   'flip_reclaim',
   'orb_breakout',
   'trend_pullback',
+  'vwap_reclaim',
+  'vwap_fade_at_band',
 ]);
 const DEFAULT_FADE_READY_MAX_SHARE = 0.5;
 const DEFAULT_MIN_ALTERNATIVE_READY_SETUPS = 1;
@@ -153,6 +155,8 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<string, number> = {
   orb_breakout: 180,
   trend_pullback: 360,
   flip_reclaim: 360,
+  vwap_reclaim: 300,
+  vwap_fade_at_band: 330,
 };
 const STABLE_SETUP_PRICE_BUCKET = 1;
 const STABLE_SETUP_MORPH_ENTRY_TOLERANCE = 1.5;
@@ -254,6 +258,18 @@ interface SetupIndicatorContext {
   asOfTimestamp: string;
   vwapPrice: number | null;
   vwapDeviation: number | null;
+  vwapBand1SD: {
+    upper: number;
+    lower: number;
+  } | null;
+  vwapBand15SD: {
+    upper: number;
+    lower: number;
+  } | null;
+  vwapBand2SD: {
+    upper: number;
+    lower: number;
+  } | null;
   latestBar: {
     t: number;
     o: number;
@@ -298,6 +314,11 @@ interface SetupContextState {
   flowDivergenceStreak: number;
   stopBreachStreak: number;
   updatedAtMs: number;
+}
+
+interface VWAPBand {
+  upper: number;
+  lower: number;
 }
 
 export interface SetupEnvironmentStateSnapshot {
@@ -444,6 +465,124 @@ function getSetupDiversificationConfig(): SetupDiversificationConfig {
   };
 }
 
+function detectVWAPReclaim(input: {
+  currentPrice: number;
+  previousBarClose: number;
+  vwap: number;
+  direction: 'bullish' | 'bearish';
+  vwapBand1SD: VWAPBand;
+}): boolean {
+  if (input.direction === 'bullish') {
+    return (
+      input.previousBarClose < input.vwap
+      && input.currentPrice >= input.vwap
+      && input.currentPrice < input.vwapBand1SD.upper
+    );
+  }
+
+  return (
+    input.previousBarClose > input.vwap
+    && input.currentPrice <= input.vwap
+    && input.currentPrice > input.vwapBand1SD.lower
+  );
+}
+
+function detectVWAPFade(input: {
+  currentPrice: number;
+  vwapBand15SD: VWAPBand;
+  vwapBand2SD: VWAPBand;
+}): { detected: boolean; direction: 'bullish' | 'bearish' } {
+  if (
+    input.currentPrice >= input.vwapBand15SD.upper
+    && input.currentPrice <= input.vwapBand2SD.upper
+  ) {
+    return { detected: true, direction: 'bearish' };
+  }
+
+  if (
+    input.currentPrice <= input.vwapBand15SD.lower
+    && input.currentPrice >= input.vwapBand2SD.lower
+  ) {
+    return { detected: true, direction: 'bullish' };
+  }
+
+  return { detected: false, direction: 'bullish' };
+}
+
+function buildVWAPSetupGeometry(input: {
+  setupType: SetupType;
+  direction: 'bullish' | 'bearish';
+  indicatorContext: SetupIndicatorContext | null;
+}): {
+  entryLow: number;
+  entryHigh: number;
+  stop: number;
+  target1: number;
+  target2: number;
+} | null {
+  const context = input.indicatorContext;
+  if (!context || context.vwapPrice == null) return null;
+
+  if (
+    input.setupType === 'vwap_reclaim'
+    && context.vwapBand1SD
+    && context.vwapBand15SD
+  ) {
+    const vwap = context.vwapPrice;
+    const entryLow = round(vwap - 0.5, 2);
+    const entryHigh = round(vwap + 0.5, 2);
+    const stop = input.direction === 'bullish'
+      ? round(vwap - 2, 2)
+      : round(vwap + 2, 2);
+    const target1 = input.direction === 'bullish'
+      ? round(context.vwapBand1SD.upper, 2)
+      : round(context.vwapBand1SD.lower, 2);
+    const target2 = input.direction === 'bullish'
+      ? round(context.vwapBand15SD.upper, 2)
+      : round(context.vwapBand15SD.lower, 2);
+
+    return {
+      entryLow,
+      entryHigh,
+      stop,
+      target1,
+      target2,
+    };
+  }
+
+  if (
+    input.setupType === 'vwap_fade_at_band'
+    && context.vwapBand1SD
+    && context.vwapBand15SD
+    && context.vwapBand2SD
+  ) {
+    const vwap = context.vwapPrice;
+    const halfSdDistance = Math.max(0.1, Math.abs(context.vwapBand1SD.upper - vwap) * 0.5);
+    const fadeAnchor = input.direction === 'bearish'
+      ? context.vwapBand15SD.upper
+      : context.vwapBand15SD.lower;
+    const entryLow = round(fadeAnchor - 1, 2);
+    const entryHigh = round(fadeAnchor + 1, 2);
+    const stop = input.direction === 'bearish'
+      ? round(context.vwapBand2SD.upper + 2, 2)
+      : round(context.vwapBand2SD.lower - 2, 2);
+    const target1 = round(vwap, 2);
+    const target2 = input.direction === 'bearish'
+      ? round(vwap - halfSdDistance, 2)
+      : round(vwap + halfSdDistance, 2);
+
+    return {
+      entryLow,
+      entryHigh,
+      stop,
+      target1,
+      target2,
+    };
+  }
+
+  return null;
+}
+
 function setupTypeForRegime(regime: Regime): SetupType {
   switch (regime) {
     case 'ranging':
@@ -460,22 +599,34 @@ function setupTypeForRegime(regime: Regime): SetupType {
 
 function isRegimeAligned(type: SetupType, regime: Regime): boolean {
   if (regime === 'ranging') {
-    return type === 'fade_at_wall' || type === 'mean_reversion' || type === 'flip_reclaim';
+    return (
+      type === 'fade_at_wall'
+      || type === 'mean_reversion'
+      || type === 'flip_reclaim'
+      || type === 'vwap_fade_at_band'
+    );
   }
   if (regime === 'compression') {
     return type === 'mean_reversion'
       || type === 'flip_reclaim'
       || type === 'orb_breakout'
-      || type === 'trend_pullback';
+      || type === 'trend_pullback'
+      || type === 'vwap_fade_at_band'
+      || type === 'vwap_reclaim';
   }
   if (regime === 'trending') {
-    return type === 'trend_continuation' || type === 'trend_pullback';
+    return (
+      type === 'trend_continuation'
+      || type === 'trend_pullback'
+      || type === 'vwap_reclaim'
+    );
   }
   if (regime === 'breakout') {
     return type === 'trend_continuation'
       || type === 'orb_breakout'
       || type === 'flip_reclaim'
-      || type === 'trend_pullback';
+      || type === 'trend_pullback'
+      || type === 'vwap_reclaim';
   }
   return false;
 }
@@ -505,6 +656,11 @@ function inferSetupTypeForZone(input: {
   const inOpeningWindow = minutesSinceOpen <= ORB_ACTIVE_WINDOW_MINUTES;
   const orbHigh = input.indicatorContext?.orbHigh;
   const orbLow = input.indicatorContext?.orbLow;
+  const vwapPrice = input.indicatorContext?.vwapPrice ?? null;
+  const vwapBand1SD = input.indicatorContext?.vwapBand1SD ?? null;
+  const vwapBand15SD = input.indicatorContext?.vwapBand15SD ?? null;
+  const vwapBand2SD = input.indicatorContext?.vwapBand2SD ?? null;
+  const previousBarClose = input.indicatorContext?.priorBar?.c ?? null;
   const nearOpeningRangeEdge = input.direction === 'bullish'
     ? (Number.isFinite(orbHigh)
       && Math.abs(input.zoneCenter - (orbHigh as number)) <= ORB_RECLAIM_TOLERANCE_POINTS
@@ -534,6 +690,51 @@ function inferSetupTypeForZone(input: {
       && input.zoneCenter <= input.gexLandscape.combined.flipPoint + FLIP_RECLAIM_TOLERANCE_POINTS)
     : (input.currentPrice <= input.gexLandscape.combined.flipPoint + FLIP_RECLAIM_TOLERANCE_POINTS
       && input.zoneCenter >= input.gexLandscape.combined.flipPoint - FLIP_RECLAIM_TOLERANCE_POINTS);
+  const bullishReclaim = (
+    hasIndicatorContext
+    && vwapPrice != null
+    && vwapBand1SD != null
+    && previousBarClose != null
+    && detectVWAPReclaim({
+      currentPrice: input.currentPrice,
+      previousBarClose,
+      vwap: vwapPrice,
+      direction: 'bullish',
+      vwapBand1SD,
+    })
+  );
+  const bearishReclaim = (
+    hasIndicatorContext
+    && vwapPrice != null
+    && vwapBand1SD != null
+    && previousBarClose != null
+    && detectVWAPReclaim({
+      currentPrice: input.currentPrice,
+      previousBarClose,
+      vwap: vwapPrice,
+      direction: 'bearish',
+      vwapBand1SD,
+    })
+  );
+  const vwapFadeSignal = (
+    hasIndicatorContext
+    && vwapBand15SD != null
+    && vwapBand2SD != null
+  )
+    ? detectVWAPFade({
+      currentPrice: input.currentPrice,
+      vwapBand15SD,
+      vwapBand2SD,
+    })
+    : { detected: false, direction: 'bullish' as const };
+
+  if ((input.direction === 'bullish' && bullishReclaim) || (input.direction === 'bearish' && bearishReclaim)) {
+    return 'vwap_reclaim';
+  }
+
+  if (vwapFadeSignal.detected && vwapFadeSignal.direction === input.direction) {
+    return 'vwap_fade_at_band';
+  }
 
   if (
     hasIndicatorContext
@@ -1161,7 +1362,8 @@ function buildIndicatorContextFromBars(input: {
     t: bar.t,
     n: 0,
   }));
-  const vwapPrice = calculateVWAP(vwapBars);
+  const vwapBandSet = calculateVWAPBandSet(vwapBars);
+  const vwapPrice = vwapBandSet?.vwap ?? null;
   const lastClose = closes[closes.length - 1];
   const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
   const atr14 = calculateAtrFromBars(sortedBars, 14);
@@ -1201,6 +1403,24 @@ function buildIndicatorContextFromBars(input: {
     asOfTimestamp: input.asOfTimestamp,
     vwapPrice: vwapPrice != null ? round(vwapPrice, 2) : null,
     vwapDeviation: vwapPosition != null ? round(vwapPosition.distancePct, 4) : null,
+    vwapBand1SD: vwapBandSet
+      ? {
+        upper: round(vwapBandSet.band1SD.upper, 2),
+        lower: round(vwapBandSet.band1SD.lower, 2),
+      }
+      : null,
+    vwapBand15SD: vwapBandSet
+      ? {
+        upper: round(vwapBandSet.band15SD.upper, 2),
+        lower: round(vwapBandSet.band15SD.lower, 2),
+      }
+      : null,
+    vwapBand2SD: vwapBandSet
+      ? {
+        upper: round(vwapBandSet.band2SD.upper, 2),
+        lower: round(vwapBandSet.band2SD.lower, 2),
+      }
+      : null,
     latestBar: toTriggerBar(latestBarRaw),
     priorBar: toTriggerBar(priorBarRaw),
     avgRecentVolume,
@@ -2636,8 +2856,13 @@ export async function detectActiveSetups(options?: {
     }
 
     const fallbackDistance = Math.max(6, Math.abs(gex.combined.callWall - gex.combined.putWall) / 4);
-    const entryLow = round(zone.priceLow, 2);
-    const entryHigh = round(zone.priceHigh, 2);
+    const vwapGeometry = buildVWAPSetupGeometry({
+      setupType,
+      direction,
+      indicatorContext,
+    });
+    const entryLow = vwapGeometry?.entryLow ?? round(zone.priceLow, 2);
+    const entryHigh = vwapGeometry?.entryHigh ?? round(zone.priceHigh, 2);
     const entryMid = (entryLow + entryHigh) / 2;
     const stableIdHash = hashStableSetupId({
       sessionDate,
@@ -2683,7 +2908,7 @@ export async function detectActiveSetups(options?: {
     const baseStop = direction === 'bullish'
       ? round(zone.priceLow - stopBuffer, 2)
       : round(zone.priceHigh + stopBuffer, 2);
-    const stop = applyStopGeometryPolicy({
+    const derivedStop = applyStopGeometryPolicy({
       direction,
       entryLow,
       entryHigh,
@@ -2697,6 +2922,7 @@ export async function detectActiveSetups(options?: {
       gexPutWall: gex.combined.putWall,
       gexFlipPoint: gex.combined.flipPoint,
     });
+    const stop = vwapGeometry?.stop ?? derivedStop;
     const baseTargets = getTargetPrice(levels.clusters, zoneCenter, direction, fallbackDistance);
     const tunedTargets = adjustTargetsForSetupType({
       setupType,
@@ -2710,8 +2936,8 @@ export async function detectActiveSetups(options?: {
       indicatorContext,
       geometryPolicy,
     });
-    const target1 = tunedTargets.target1;
-    const target2 = tunedTargets.target2;
+    const target1 = vwapGeometry?.target1 ?? tunedTargets.target1;
+    const target2 = vwapGeometry?.target2 ?? tunedTargets.target2;
 
     const setupReadyFloor = (
       setupType === 'flip_reclaim'
@@ -3284,3 +3510,9 @@ export function __resetSetupDetectorStateForTests(): void {
   setupsInFlight = null;
   latestSetupEnvironmentState = null;
 }
+
+export const __testables = {
+  detectVWAPReclaim,
+  detectVWAPFade,
+  buildVWAPSetupGeometry,
+};
