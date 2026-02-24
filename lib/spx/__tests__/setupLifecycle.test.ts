@@ -56,6 +56,76 @@ describe('transitionSetupStatus', () => {
     expect(next).toBe('triggered')
   })
 
+  it('marks setup triggered when bar is confirmed and latest bar close enters entry zone', () => {
+    const next = transitionSetupStatus(
+      { ...baseSetup, status: 'ready', confluenceScore: 4 },
+      {
+        currentPrice: 5910,
+        latestBarClose: 5904,
+        barConfirmed: true,
+        nowIso: '2026-02-15T14:06:00.000Z',
+      },
+    )
+
+    expect(next).toBe('triggered')
+  })
+
+  it('keeps setup ready when bar is not confirmed even if price is in entry zone', () => {
+    const next = transitionSetupStatus(
+      { ...baseSetup, status: 'ready', confluenceScore: 4 },
+      {
+        currentPrice: 5904,
+        barConfirmed: false,
+        nowIso: '2026-02-15T14:06:00.000Z',
+      },
+    )
+
+    expect(next).toBe('ready')
+  })
+
+  it('preserves legacy behavior when barConfirmed is undefined', () => {
+    const next = transitionSetupStatus(
+      { ...baseSetup, status: 'ready', confluenceScore: 4 },
+      {
+        currentPrice: 5904,
+        nowIso: '2026-02-15T14:06:00.000Z',
+      },
+    )
+
+    expect(next).toBe('triggered')
+  })
+
+  it('keeps setup ready when latest bar close is outside entry zone even if current price is inside', () => {
+    const next = transitionSetupStatus(
+      { ...baseSetup, status: 'ready', confluenceScore: 4 },
+      {
+        currentPrice: 5904,
+        latestBarClose: 5906,
+        barConfirmed: true,
+        nowIso: '2026-02-15T14:06:00.000Z',
+      },
+    )
+
+    expect(next).toBe('ready')
+  })
+
+  it.each([5902, 5905])(
+    'triggers at entry zone boundary when bar close is %d',
+    (boundaryClose) => {
+      const next = transitionSetupStatus(
+        { ...baseSetup, status: 'ready', confluenceScore: 4 },
+        {
+          currentPrice: 5910,
+          latestBarClose: boundaryClose,
+          barConfirmed: true,
+          nowIso: '2026-02-15T14:06:00.000Z',
+        },
+      )
+
+      expect(next).toBe('triggered')
+    },
+  )
+
   it('expires setup after 30 minutes without trigger', () => {
     const next = transitionSetupStatus(baseSetup, {
       currentPrice: 5909,

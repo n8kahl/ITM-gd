@@ -252,6 +252,8 @@ export function transitionSetupStatus(
     nowIso?: string
     invalidated?: boolean
     confluenceScore?: number
+    barConfirmed?: boolean
+    latestBarClose?: number
   },
 ): SetupStatus {
   const now = new Date(context.nowIso ?? new Date().toISOString())
@@ -260,8 +262,10 @@ export function transitionSetupStatus(
 
   if (context.invalidated) return 'invalidated'
 
-  const inEntryZone = context.currentPrice >= setup.entryZone.low && context.currentPrice <= setup.entryZone.high
-  if (inEntryZone && (setup.status === 'ready' || setup.status === 'forming')) {
+  const confirmationPrice = context.latestBarClose ?? context.currentPrice
+  const inEntryZone = confirmationPrice >= setup.entryZone.low && confirmationPrice <= setup.entryZone.high
+  const isConfirmed = context.barConfirmed !== false
+  if (inEntryZone && isConfirmed && (setup.status === 'ready' || setup.status === 'forming')) {
     return 'triggered'
   }
 
