@@ -8,6 +8,15 @@ import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { SetupCard } from '@/components/spx-command-center/setup-card'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
+import {
+  createTriggeredAlertState,
+  ingestTriggeredAlertSetups,
+  MAX_TRIGGER_ALERT_HISTORY,
+  sanitizeTriggeredAlertHistory,
+  TRIGGER_ALERT_HISTORY_PREVIEW,
+  type TriggeredAlertHistoryItem,
+  type TriggeredAlertState,
+} from '@/lib/spx/triggered-alert-history'
 import type { Setup } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
 
@@ -22,111 +31,31 @@ function prioritizeSelected(setups: Setup[], selectedSetupId: string | null): Se
   return next
 }
 
-interface TriggeredAlertHistoryItem {
-  id: string
-  setupId: string
-  setupType: string
-  direction: Setup['direction']
-  regime: Setup['regime']
-  triggeredAt: string
-  entryLow: number
-  entryHigh: number
-  stop: number
-  target1: number
-  target2: number
-}
-
-interface TriggeredAlertState {
-  history: TriggeredAlertHistoryItem[]
-  previousStatusBySetupId: Record<string, Setup['status']>
-}
-
 type TriggeredAlertAction = {
   type: 'ingest_setups'
   setups: Setup[]
 }
 
 const TRIGGER_ALERT_HISTORY_STORAGE_KEY = 'spx_command_center:trigger_alert_history'
-const MAX_TRIGGER_ALERT_HISTORY = 40
-const TRIGGER_ALERT_HISTORY_PREVIEW = 4
 
 function restoreTriggeredAlertHistory(): TriggeredAlertHistoryItem[] {
   if (typeof window === 'undefined') return []
   try {
     const raw = window.localStorage.getItem(TRIGGER_ALERT_HISTORY_STORAGE_KEY)
     if (!raw) return []
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    const restored = parsed.filter((item): item is TriggeredAlertHistoryItem => (
-      Boolean(item)
-      && typeof (item as TriggeredAlertHistoryItem).id === 'string'
-      && typeof (item as TriggeredAlertHistoryItem).setupId === 'string'
-      && typeof (item as TriggeredAlertHistoryItem).triggeredAt === 'string'
-      && typeof (item as TriggeredAlertHistoryItem).entryLow === 'number'
-      && typeof (item as TriggeredAlertHistoryItem).entryHigh === 'number'
-      && typeof (item as TriggeredAlertHistoryItem).stop === 'number'
-      && typeof (item as TriggeredAlertHistoryItem).target1 === 'number'
-      && typeof (item as TriggeredAlertHistoryItem).target2 === 'number'
-    ))
-    return restored.slice(0, MAX_TRIGGER_ALERT_HISTORY)
+    return sanitizeTriggeredAlertHistory(JSON.parse(raw))
   } catch {
     return []
   }
 }
 
-function createTriggeredAlertState(): TriggeredAlertState {
-  return {
-    history: restoreTriggeredAlertHistory(),
-    previousStatusBySetupId: {},
-  }
+function createTriggeredAlertStateFromStorage(): TriggeredAlertState {
+  return createTriggeredAlertState(restoreTriggeredAlertHistory())
 }
 
 function triggeredAlertReducer(state: TriggeredAlertState, action: TriggeredAlertAction): TriggeredAlertState {
   if (action.type !== 'ingest_setups') return state
-
-  const nextStatusBySetupId: Record<string, Setup['status']> = {}
-  const newlyTriggered: TriggeredAlertHistoryItem[] = []
-
-  for (const setup of action.setups) {
-    nextStatusBySetupId[setup.id] = setup.status
-    const previousStatus = state.previousStatusBySetupId[setup.id]
-    if (!previousStatus) continue
-    if (previousStatus === 'triggered' || setup.status !== 'triggered') continue
-
-    const triggeredAt = setup.statusUpdatedAt || setup.triggeredAt || new Date().toISOString()
-    newlyTriggered.push({
-      id: `${setup.id}:${triggeredAt}`,
-      setupId: setup.id,
-      setupType: setup.type,
-      direction: setup.direction,
-      regime: setup.regime,
-      triggeredAt,
-      entryLow: setup.entryZone.low,
-      entryHigh: setup.entryZone.high,
-      stop: setup.stop,
-      target1: setup.target1.price,
-      target2: setup.target2.price,
-    })
-  }
-
-  if (newlyTriggered.length === 0) {
-    return {
-      history: state.history,
-      previousStatusBySetupId: nextStatusBySetupId,
-    }
-  }
-
-  const deduped = new Map<string, TriggeredAlertHistoryItem>()
-  for (const item of [...newlyTriggered, ...state.history]) {
-    deduped.set(item.id, item)
-  }
-
-  return {
-    history: Array.from(deduped.values())
-      .sort((a, b) => Date.parse(b.triggeredAt) - Date.parse(a.triggeredAt))
-      .slice(0, MAX_TRIGGER_ALERT_HISTORY),
-    previousStatusBySetupId: nextStatusBySetupId,
-  }
+  return ingestTriggeredAlertSetups(state, action.setups)
 }
 
 export function SetupFeed({
@@ -152,10 +81,11 @@ export function SetupFeed({
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [showMoreActionable, setShowMoreActionable] = useState(false)
   const [showAllTriggeredHistory, setShowAllTriggeredHistory] = useState(false)
+  const [selectedTriggeredAlertId, setSelectedTriggeredAlertId] = useState<string | null>(null)
   const [triggeredAlertState, dispatchTriggeredAlertState] = useReducer(
     triggeredAlertReducer,
     undefined,
-    createTriggeredAlertState,
+    createTriggeredAlertStateFromStorage,
   )
 
   const policy = useMemo(
@@ -189,6 +119,18 @@ export function SetupFeed({
   const renderedTriggeredHistory = showAllTriggeredHistory
     ? triggeredAlertHistory
     : triggeredAlertHistory.slice(0, TRIGGER_ALERT_HISTORY_PREVIEW)
+  const selectedTriggeredAlert = useMemo(() => {
+    if (triggeredAlertHistory.length === 0) return null
+    if (selectedTriggeredAlertId) {
+      const selected = triggeredAlertHistory.find((item) => item.id === selectedTriggeredAlertId) || null
+      if (selected) return selected
+    }
+    return triggeredAlertHistory[0] || null
+  }, [selectedTriggeredAlertId, triggeredAlertHistory])
+  const selectedTriggeredAlertActiveMatch = useMemo(() => {
+    if (!selectedTriggeredAlert) return null
+    return activeSetups.find((setup) => setup.id === selectedTriggeredAlert.setupId) || null
+  }, [activeSetups, selectedTriggeredAlert])
 
   useEffect(() => {
     dispatchTriggeredAlertState({
@@ -262,9 +204,16 @@ export function SetupFeed({
                 <button
                   key={item.id}
                   type="button"
-                  disabled={!activeMatch}
                   onClick={() => {
-                    if (!activeMatch) return
+                    setSelectedTriggeredAlertId(item.id)
+                    if (!activeMatch) {
+                      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                        surface: 'trigger_alert_history',
+                        action: 'replay_snapshot',
+                        setupId: item.setupId,
+                      })
+                      return
+                    }
                     selectSetup(activeMatch)
                     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
                       surface: 'trigger_alert_history',
@@ -272,13 +221,21 @@ export function SetupFeed({
                       setupId: activeMatch.id,
                     })
                   }}
-                  className="w-full rounded border border-white/10 bg-white/[0.02] px-2 py-1.5 text-left text-[10px] text-white/75 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'w-full rounded border px-2 py-1.5 text-left text-[10px] transition-colors',
+                    selectedTriggeredAlertId === item.id
+                      ? 'border-emerald-300/40 bg-emerald-500/[0.08] text-white/90'
+                      : 'border-white/10 bg-white/[0.02] text-white/75 hover:bg-white/[0.06]',
+                  )}
                 >
                   <p className="font-mono text-[9px] text-white/55">
                     {new Date(item.triggeredAt).toLocaleTimeString()} · {item.direction.toUpperCase()} {item.setupType.replace(/_/g, ' ')}
                   </p>
                   <p className="mt-0.5 text-[10px]">
                     Entry {item.entryLow.toFixed(2)}-{item.entryHigh.toFixed(2)} · Stop {item.stop.toFixed(2)} · T1 {item.target1.toFixed(2)} · T2 {item.target2.toFixed(2)}
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-white/55">
+                    {activeMatch ? 'Active setup available' : 'Replay snapshot only'} · Confluence {item.confluenceScore.toFixed(1)} · Win {item.probability.toFixed(0)}%
                   </p>
                 </button>
               )
@@ -291,6 +248,47 @@ export function SetupFeed({
               >
                 {showAllTriggeredHistory ? 'Show fewer alerts' : `Show all alerts (${triggeredAlertHistory.length})`}
               </button>
+            )}
+            {selectedTriggeredAlert && (
+              <div className="rounded border border-emerald-300/25 bg-emerald-500/[0.07] px-2 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-100/85">
+                    Replay · {selectedTriggeredAlert.setupType.replace(/_/g, ' ')}
+                  </p>
+                  <span className="text-[9px] font-mono text-emerald-100/75">
+                    {new Date(selectedTriggeredAlert.triggeredAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-emerald-50/90">
+                  {selectedTriggeredAlert.direction.toUpperCase()} {selectedTriggeredAlert.regime} · Entry {selectedTriggeredAlert.entryLow.toFixed(2)}-{selectedTriggeredAlert.entryHigh.toFixed(2)}
+                </p>
+                <p className="mt-0.5 text-[10px] text-emerald-50/85">
+                  Stop {selectedTriggeredAlert.stop.toFixed(2)} · T1 {selectedTriggeredAlert.target1.toFixed(2)} · T2 {selectedTriggeredAlert.target2.toFixed(2)}
+                </p>
+                <p className="mt-0.5 text-[9px] text-emerald-100/75">
+                  Confluence {selectedTriggeredAlert.confluenceScore.toFixed(1)} / 5 · Win {selectedTriggeredAlert.probability.toFixed(0)}%
+                </p>
+                {selectedTriggeredAlertActiveMatch ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      selectSetup(selectedTriggeredAlertActiveMatch)
+                      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                        surface: 'trigger_alert_history',
+                        action: 'focus_setup',
+                        setupId: selectedTriggeredAlertActiveMatch.id,
+                      })
+                    }}
+                    className="mt-1.5 rounded border border-emerald-300/40 bg-emerald-500/16 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/24"
+                  >
+                    Focus active setup
+                  </button>
+                ) : (
+                  <p className="mt-1.5 text-[9px] uppercase tracking-[0.08em] text-emerald-100/65">
+                    Setup no longer active; replay preserved for audit.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}
