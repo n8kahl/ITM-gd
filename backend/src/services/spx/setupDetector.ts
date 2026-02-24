@@ -158,6 +158,15 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<string, number> = {
   vwap_reclaim: 300,
   vwap_fade_at_band: 330,
 };
+const CONFLUENCE_HALF_LIVES_MS = {
+  flow: 2 * 60_000,
+  gex: 15 * 60_000,
+  regime: 10 * 60_000,
+  ema: 5 * 60_000,
+  zone: 30 * 60_000,
+  memory: 60 * 60_000,
+} as const;
+const DEFAULT_CONFLUENCE_COMPONENT_HALF_LIFE_MS = 10 * 60_000;
 const STABLE_SETUP_PRICE_BUCKET = 1;
 const STABLE_SETUP_MORPH_ENTRY_TOLERANCE = 1.5;
 const MAX_MORPH_HISTORY_ITEMS = 12;
@@ -1091,6 +1100,51 @@ function calculateConfluence(input: {
     score: Math.min(5, sources.length),
     sources,
   };
+}
+
+function decayFactor(ageMs: number, halfLifeMs: number): number {
+  if (!Number.isFinite(ageMs) || ageMs <= 0) return 1;
+  if (!Number.isFinite(halfLifeMs) || halfLifeMs <= 0) return 1;
+  return Math.exp(-0.693 * (ageMs / halfLifeMs));
+}
+
+function computeDecayedConfluence(input: {
+  components: Record<string, number>;
+  componentTimestampsMs: Record<string, number>;
+  nowMs: number;
+}): number {
+  let total = 0;
+  for (const [key, rawScore] of Object.entries(input.components)) {
+    const score = Number.isFinite(rawScore) ? Math.max(0, rawScore) : 0;
+    if (score <= 0) continue;
+    const halfLifeMs = CONFLUENCE_HALF_LIVES_MS[key as keyof typeof CONFLUENCE_HALF_LIVES_MS]
+      ?? DEFAULT_CONFLUENCE_COMPONENT_HALF_LIFE_MS;
+    const timestampMs = Number.isFinite(input.componentTimestampsMs[key])
+      ? input.componentTimestampsMs[key]
+      : input.nowMs;
+    const ageMs = Math.max(0, input.nowMs - timestampMs);
+    total += score * decayFactor(ageMs, halfLifeMs);
+  }
+  return Math.min(5, round(total, 4));
+}
+
+function latestDirectionalFlowTimestampMs(input: {
+  flowEvents: SPXFlowEvent[];
+  direction: 'bullish' | 'bearish';
+  zoneCenter: number;
+  nowMs: number;
+}): number | null {
+  let latest = 0;
+  for (const event of input.flowEvents) {
+    if (event.direction !== input.direction) continue;
+    if (Math.abs(event.strike - input.zoneCenter) > FLOW_ZONE_TOLERANCE_POINTS) continue;
+    const eventMs = Date.parse(event.timestamp);
+    if (!Number.isFinite(eventMs)) continue;
+    const ageMs = input.nowMs - eventMs;
+    if (ageMs < 0 || ageMs > FLOW_CONFIRMATION_WINDOW_MS) continue;
+    if (eventMs > latest) latest = eventMs;
+  }
+  return latest > 0 ? latest : null;
 }
 
 function calculateWeightedConfluence(input: {
@@ -2829,7 +2883,49 @@ export async function detectActiveSetups(options?: {
       vwapPrice: indicatorContext?.vwapPrice ?? null,
       vwapDeviation: indicatorContext?.vwapDeviation ?? null,
     });
-    let confluenceScore = hasMemoryEdge ? Math.min(5, confluence.score + memoryBonus) : confluence.score;
+    const gexTimestampMs = toEpochMs(gex.combined.timestamp || null) || nowMs;
+    const regimeTimestampMs = toEpochMs(regimeState.timestamp || null) || nowMs;
+    const indicatorTimestampMs = toEpochMs(indicatorContext?.asOfTimestamp || null) || nowMs;
+    const confluenceNowMs = indicatorTimestampMs || regimeTimestampMs || gexTimestampMs || nowMs;
+    const flowTimestampMs = latestDirectionalFlowTimestampMs({
+      flowEvents,
+      direction,
+      zoneCenter,
+      nowMs: confluenceNowMs,
+    }) ?? confluenceNowMs;
+    const zoneTimestampMs = toEpochMs(zone.lastTestAt || null) || indicatorTimestampMs || confluenceNowMs;
+
+    const confluenceComponents = {
+      flow: confluence.sources.includes('flow_confirmation') ? 1 : 0,
+      gex: confluence.sources.includes('gex_alignment') ? 1 : 0,
+      regime: confluence.sources.includes('regime_alignment') ? 1 : 0,
+      ema: confluence.sources.includes('ema_alignment') ? 1 : 0,
+      zone: confluence.sources.includes('level_quality') ? 1 : 0,
+      memory: memoryBonus,
+      other: Math.max(
+        0,
+        confluence.score - (
+          (confluence.sources.includes('flow_confirmation') ? 1 : 0)
+          + (confluence.sources.includes('gex_alignment') ? 1 : 0)
+          + (confluence.sources.includes('regime_alignment') ? 1 : 0)
+          + (confluence.sources.includes('ema_alignment') ? 1 : 0)
+          + (confluence.sources.includes('level_quality') ? 1 : 0)
+        ),
+      ),
+    };
+    let confluenceScore = computeDecayedConfluence({
+      components: confluenceComponents,
+      componentTimestampsMs: {
+        flow: flowTimestampMs,
+        gex: gexTimestampMs,
+        regime: regimeTimestampMs,
+        ema: indicatorTimestampMs,
+        zone: zoneTimestampMs,
+        memory: confluenceNowMs,
+        other: indicatorTimestampMs,
+      },
+      nowMs: confluenceNowMs,
+    });
     let confluenceSources = hasMemoryEdge && !confluence.sources.includes('cross_session_memory')
       ? [...confluence.sources, 'cross_session_memory']
       : confluence.sources;
@@ -3518,4 +3614,7 @@ export const __testables = {
   detectVWAPReclaim,
   detectVWAPFade,
   buildVWAPSetupGeometry,
+  decayFactor,
+  computeDecayedConfluence,
+  CONFLUENCE_HALF_LIVES_MS,
 };

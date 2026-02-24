@@ -392,8 +392,14 @@ describe('spx/setupDetector', () => {
     });
     mockCacheGet.mockResolvedValue(null as never);
 
-    const first = await detectActiveSetups({ forceRefresh: true });
-    const second = await detectActiveSetups({ forceRefresh: true });
+    const first = await detectActiveSetups({
+      forceRefresh: true,
+      asOfTimestamp: '2026-02-15T14:40:00.000Z',
+    });
+    const second = await detectActiveSetups({
+      forceRefresh: true,
+      asOfTimestamp: '2026-02-15T14:41:00.000Z',
+    });
 
     expect(first[0]?.status).toBe('ready');
     expect(second[0]?.status).toBe('forming');
