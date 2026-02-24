@@ -30,21 +30,42 @@ function isFiniteNumber(value: unknown): value is number {
 
 export function sanitizeTriggeredAlertHistory(input: unknown): TriggeredAlertHistoryItem[] {
   if (!Array.isArray(input)) return []
-  const filtered = input.filter((item): item is TriggeredAlertHistoryItem => (
-    Boolean(item)
-    && typeof (item as TriggeredAlertHistoryItem).id === 'string'
-    && typeof (item as TriggeredAlertHistoryItem).setupId === 'string'
-    && typeof (item as TriggeredAlertHistoryItem).setupType === 'string'
-    && ((item as TriggeredAlertHistoryItem).direction === 'bullish' || (item as TriggeredAlertHistoryItem).direction === 'bearish')
-    && typeof (item as TriggeredAlertHistoryItem).regime === 'string'
-    && typeof (item as TriggeredAlertHistoryItem).triggeredAt === 'string'
-    && isFiniteNumber((item as TriggeredAlertHistoryItem).entryLow)
-    && isFiniteNumber((item as TriggeredAlertHistoryItem).entryHigh)
-    && isFiniteNumber((item as TriggeredAlertHistoryItem).stop)
-    && isFiniteNumber((item as TriggeredAlertHistoryItem).target1)
-    && isFiniteNumber((item as TriggeredAlertHistoryItem).target2)
-  ))
-  return filtered.slice(0, MAX_TRIGGER_ALERT_HISTORY)
+  const normalized: TriggeredAlertHistoryItem[] = []
+
+  for (const item of input) {
+    if (!item || typeof item !== 'object') continue
+    const candidate = item as Partial<TriggeredAlertHistoryItem>
+    if (typeof candidate.id !== 'string') continue
+    if (typeof candidate.setupId !== 'string') continue
+    if (typeof candidate.setupType !== 'string') continue
+    if (candidate.direction !== 'bullish' && candidate.direction !== 'bearish') continue
+    if (typeof candidate.regime !== 'string') continue
+    if (typeof candidate.triggeredAt !== 'string') continue
+    if (!isFiniteNumber(candidate.entryLow)) continue
+    if (!isFiniteNumber(candidate.entryHigh)) continue
+    if (!isFiniteNumber(candidate.stop)) continue
+    if (!isFiniteNumber(candidate.target1)) continue
+    if (!isFiniteNumber(candidate.target2)) continue
+
+    normalized.push({
+      id: candidate.id,
+      setupId: candidate.setupId,
+      setupType: candidate.setupType,
+      direction: candidate.direction,
+      regime: candidate.regime as TriggeredAlertHistoryItem['regime'],
+      triggeredAt: candidate.triggeredAt,
+      entryLow: candidate.entryLow,
+      entryHigh: candidate.entryHigh,
+      stop: candidate.stop,
+      target1: candidate.target1,
+      target2: candidate.target2,
+      // Backwards compatibility for payloads persisted before these fields existed.
+      confluenceScore: isFiniteNumber(candidate.confluenceScore) ? candidate.confluenceScore : 0,
+      probability: isFiniteNumber(candidate.probability) ? candidate.probability : 0,
+    })
+  }
+
+  return normalized.slice(0, MAX_TRIGGER_ALERT_HISTORY)
 }
 
 function toHistoryItem(setup: Setup): TriggeredAlertHistoryItem {

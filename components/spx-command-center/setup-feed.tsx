@@ -40,6 +40,11 @@ type TriggeredAlertAction = {
 
 const TRIGGER_ALERT_HISTORY_STORAGE_KEY = 'spx_command_center:trigger_alert_history'
 
+function formatMaybeFixed(value: unknown, digits: number): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return value.toFixed(digits)
+}
+
 function restoreTriggeredAlertHistory(): TriggeredAlertHistoryItem[] {
   if (typeof window === 'undefined') return []
   try {
@@ -291,7 +296,7 @@ export function SetupFeed({
                     Entry {item.entryLow.toFixed(2)}-{item.entryHigh.toFixed(2)} · Stop {item.stop.toFixed(2)} · T1 {item.target1.toFixed(2)} · T2 {item.target2.toFixed(2)}
                   </p>
                   <p className="mt-0.5 text-[9px] text-white/55">
-                    {activeMatch ? 'Active setup available' : 'Replay snapshot only'} · Confluence {item.confluenceScore.toFixed(1)} · Win {item.probability.toFixed(0)}%
+                    {activeMatch ? 'Active setup available' : 'Replay snapshot only'} · Confluence {formatMaybeFixed(item.confluenceScore, 1)} · Win {formatMaybeFixed(item.probability, 0)}%
                   </p>
                 </button>
               )
@@ -322,7 +327,7 @@ export function SetupFeed({
                   Stop {selectedTriggeredAlert.stop.toFixed(2)} · T1 {selectedTriggeredAlert.target1.toFixed(2)} · T2 {selectedTriggeredAlert.target2.toFixed(2)}
                 </p>
                 <p className="mt-0.5 text-[9px] text-emerald-100/75">
-                  Confluence {selectedTriggeredAlert.confluenceScore.toFixed(1)} / 5 · Win {selectedTriggeredAlert.probability.toFixed(0)}%
+                  Confluence {formatMaybeFixed(selectedTriggeredAlert.confluenceScore, 1)} / 5 · Win {formatMaybeFixed(selectedTriggeredAlert.probability, 0)}%
                 </p>
                 {selectedTriggeredAlertActiveMatch ? (
                   <button

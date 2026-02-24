@@ -93,6 +93,26 @@ describe('triggered alert history', () => {
     expect(output).toEqual([valid])
   })
 
+  it('backfills legacy localStorage payloads missing confluence/probability', () => {
+    const output = sanitizeTriggeredAlertHistory([{
+      id: 'legacy-1',
+      setupId: 'setup-legacy',
+      setupType: 'mean_reversion',
+      direction: 'bullish',
+      regime: 'ranging',
+      triggeredAt: '2026-02-24T15:00:00.000Z',
+      entryLow: 6888,
+      entryHigh: 6890,
+      stop: 6883,
+      target1: 6892,
+      target2: 6894,
+    }])
+
+    expect(output).toHaveLength(1)
+    expect(output[0]?.confluenceScore).toBe(0)
+    expect(output[0]?.probability).toBe(0)
+  })
+
   it('caps retained history at max length', () => {
     const items = Array.from({ length: MAX_TRIGGER_ALERT_HISTORY + 5 }, (_, idx) =>
       buildSetup({
