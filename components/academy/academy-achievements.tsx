@@ -76,7 +76,7 @@ export function AcademyAchievements() {
     <AcademyShell
       title="Achievements"
       description="Earn badges and XP by completing lessons, mastering concepts, and building learning streaks."
-      maxWidthClassName="max-w-4xl"
+      maxWidthClassName="max-w-6xl"
     >
       {loading ? (
         <div
@@ -139,7 +139,7 @@ export function AcademyAchievements() {
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-400">
                 {CATEGORY_LABELS[category] || category}
               </h2>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {grouped[category].map((achievement) => {
                   const isUnlocked = achievement.unlockedAt !== null
 

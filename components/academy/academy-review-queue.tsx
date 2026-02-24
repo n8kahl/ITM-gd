@@ -62,7 +62,7 @@ export function AcademyReviewQueue() {
     <AcademyShell
       title="Review Queue"
       description="Reinforce weak competencies with short retrieval prompts."
-      maxWidthClassName="max-w-3xl"
+      maxWidthClassName="max-w-6xl"
     >
       {loading ? (
         <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading review queue...</div>
