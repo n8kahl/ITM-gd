@@ -1,6 +1,8 @@
 import { scanOpportunities } from '../index';
 import { runTechnicalScan, scanResistanceRejection } from '../technicalScanner';
 import { runOptionsScan } from '../optionsScanner';
+import * as technicalScannerModule from '../technicalScanner';
+import * as optionsScannerModule from '../optionsScanner';
 
 // Mock all external dependencies
 jest.mock('../../levels', () => ({
@@ -239,6 +241,46 @@ describe('Opportunity Scanner', () => {
   });
 
   describe('Full Scan', () => {
+    it('respects SCANNER_CONCURRENCY while scanning all requested symbols', async () => {
+      const symbols = ['SPX', 'NDX', 'QQQ', 'IWM', 'AAPL'];
+      const originalConcurrency = process.env.SCANNER_CONCURRENCY;
+      process.env.SCANNER_CONCURRENCY = '2';
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const scannedSymbols: string[] = [];
+
+      const technicalSpy = jest
+        .spyOn(technicalScannerModule, 'runTechnicalScan')
+        .mockImplementation(async (symbol: string) => {
+          scannedSymbols.push(symbol);
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          inFlight -= 1;
+          return [];
+        });
+      const optionsSpy = jest.spyOn(optionsScannerModule, 'runOptionsScan').mockResolvedValue([]);
+
+      try {
+        const result = await scanOpportunities(symbols, false);
+
+        expect(result.symbols).toEqual(symbols);
+        expect(scannedSymbols).toHaveLength(symbols.length);
+        expect(scannedSymbols.slice().sort()).toEqual(symbols.slice().sort());
+        expect(maxInFlight).toBeLessThanOrEqual(2);
+        expect(optionsSpy).not.toHaveBeenCalled();
+      } finally {
+        technicalSpy.mockRestore();
+        optionsSpy.mockRestore();
+        if (originalConcurrency == null) {
+          delete process.env.SCANNER_CONCURRENCY;
+        } else {
+          process.env.SCANNER_CONCURRENCY = originalConcurrency;
+        }
+      }
+    });
+
     it('should return scored and sorted opportunities', async () => {
       // Mock minimal data
       mockCalculateLevels.mockRejectedValue(new Error('test'));

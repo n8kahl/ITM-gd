@@ -42,6 +42,40 @@ export interface ScanResult {
   scannedAt: string;
 }
 
+class Semaphore {
+  private current = 0;
+  private queue: Array<() => void> = [];
+
+  constructor(private readonly max: number) {}
+
+  async acquire(): Promise<void> {
+    if (this.current < this.max) {
+      this.current += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+      return;
+    }
+    this.current = Math.max(0, this.current - 1);
+  }
+}
+
+const DEFAULT_SCANNER_CONCURRENCY = 5;
+
+function resolveScannerConcurrency(): number {
+  const parsed = Number.parseInt(process.env.SCANNER_CONCURRENCY ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_SCANNER_CONCURRENCY;
+  return parsed;
+}
+
 /**
  * Score a technical setup based on confidence, type, and levels
  */
@@ -142,23 +176,29 @@ export async function scanOpportunities(
 ): Promise<ScanResult> {
   const startTime = Date.now();
   const opportunities: Opportunity[] = [];
+  const semaphore = new Semaphore(resolveScannerConcurrency());
 
-  // Run scans in parallel across symbols
+  // Run scans with bounded symbol-level concurrency
   const scanPromises = symbols.map(async (symbol) => {
+    await semaphore.acquire();
     const symbolOpps: Opportunity[] = [];
 
-    // Technical scans
-    const technicalSetups = await runTechnicalScan(symbol);
-    for (const setup of technicalSetups) {
-      symbolOpps.push(technicalToOpportunity(setup));
-    }
-
-    // Options scans (optional, more expensive)
-    if (includeOptions) {
-      const optionsSetups = await runOptionsScan(symbol);
-      for (const setup of optionsSetups) {
-        symbolOpps.push(optionsToOpportunity(setup));
+    try {
+      // Technical scans
+      const technicalSetups = await runTechnicalScan(symbol);
+      for (const setup of technicalSetups) {
+        symbolOpps.push(technicalToOpportunity(setup));
       }
+
+      // Options scans (optional, more expensive)
+      if (includeOptions) {
+        const optionsSetups = await runOptionsScan(symbol);
+        for (const setup of optionsSetups) {
+          symbolOpps.push(optionsToOpportunity(setup));
+        }
+      }
+    } finally {
+      semaphore.release();
     }
 
     return symbolOpps;
