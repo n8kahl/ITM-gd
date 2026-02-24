@@ -105,8 +105,8 @@ export interface MTFConfluenceWeights {
     bias: number[]
   }
   outputLayer: {
-    weights: number[]
-    bias: number
+    weights: number[][]
+    bias: number[]
   }
   updatedAt?: string
 }

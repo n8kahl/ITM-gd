@@ -1,5 +1,6 @@
 import { predictConfidence, primeConfidenceModel } from '@/lib/ml/confidence-model'
 import { extractFeatures } from '@/lib/ml/feature-extractor'
+import { predictMTFConfluenceWeights } from '@/lib/ml/mtf-confluence-model'
 import {
   calculateRuleBasedTier,
   mapMLTierToSetupTier,
@@ -22,6 +23,7 @@ export interface SPXDecisionEngineContext extends FeatureExtractionContext {}
 export interface SPXDecisionEngineEvaluation {
   alignmentByTimeframe: Record<'1m' | '5m' | '15m' | '1h', number>
   alignmentScore: number
+  alignmentWeightSource: 'ml' | 'rule_based'
   confidence: number
   confidenceSource: 'ml' | 'rule_based'
   confidenceTrend: SPXConfidenceTrend
@@ -283,12 +285,22 @@ export function evaluateSPXSetupDecision(
     ), 4),
   }
 
+  const mtfWeightPrediction = predictMTFConfluenceWeights({
+    alignmentByTimeframe,
+    regimeCompatibility: regimeScore,
+    flowBias,
+    confluenceScore: setup.confluenceScore,
+  }, {
+    userId: context.userId,
+    enabledOverride: context.mlConfluenceEnabled,
+  })
+
   const alignmentScore = round(
     (
-      (alignmentByTimeframe['1m'] * 0.2)
-      + (alignmentByTimeframe['5m'] * 0.35)
-      + (alignmentByTimeframe['15m'] * 0.25)
-      + (alignmentByTimeframe['1h'] * 0.2)
+      (alignmentByTimeframe['1m'] * mtfWeightPrediction.weights['1m'])
+      + (alignmentByTimeframe['5m'] * mtfWeightPrediction.weights['5m'])
+      + (alignmentByTimeframe['15m'] * mtfWeightPrediction.weights['15m'])
+      + (alignmentByTimeframe['1h'] * mtfWeightPrediction.weights['1h'])
     ) * 100,
     2,
   )
@@ -326,6 +338,7 @@ export function evaluateSPXSetupDecision(
   return {
     alignmentByTimeframe,
     alignmentScore,
+    alignmentWeightSource: mtfWeightPrediction.source,
     confidence,
     confidenceSource,
     confidenceTrend,

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { __resetConfidenceModelForTest, __setConfidenceModelForTest } from '@/lib/ml/confidence-model'
+import { __resetMTFConfluenceModelForTest, __setMTFConfluenceModelForTest } from '@/lib/ml/mtf-confluence-model'
 import { __resetTierModelForTest, __setTierModelForTest } from '@/lib/ml/tier-classifier'
 import {
   FLOW_BIAS_EWMA_DECAY,
@@ -64,18 +65,24 @@ describe('decision engine', () => {
   const previousMLEnabled = process.env.SPX_ML_CONFIDENCE_ENABLED
   const previousTierABRollout = process.env.SPX_ML_TIER_AB_PERCENT
   const previousTierEnabled = process.env.SPX_ML_TIER_ENABLED
+  const previousConfluenceABRollout = process.env.SPX_ML_MTF_CONFLUENCE_AB_PERCENT
+  const previousConfluenceEnabled = process.env.SPX_ML_MTF_CONFLUENCE_ENABLED
 
   beforeEach(() => {
     __resetConfidenceModelForTest()
+    __resetMTFConfluenceModelForTest()
     __resetTierModelForTest()
     process.env.SPX_ML_CONFIDENCE_AB_PERCENT = '100'
     process.env.SPX_ML_CONFIDENCE_ENABLED = 'true'
     process.env.SPX_ML_TIER_AB_PERCENT = '100'
     process.env.SPX_ML_TIER_ENABLED = 'true'
+    process.env.SPX_ML_MTF_CONFLUENCE_AB_PERCENT = '100'
+    process.env.SPX_ML_MTF_CONFLUENCE_ENABLED = 'false'
   })
 
   afterEach(() => {
     __resetConfidenceModelForTest()
+    __resetMTFConfluenceModelForTest()
     __resetTierModelForTest()
     if (previousABRollout == null) delete process.env.SPX_ML_CONFIDENCE_AB_PERCENT
     else process.env.SPX_ML_CONFIDENCE_AB_PERCENT = previousABRollout
@@ -88,6 +95,12 @@ describe('decision engine', () => {
 
     if (previousTierEnabled == null) delete process.env.SPX_ML_TIER_ENABLED
     else process.env.SPX_ML_TIER_ENABLED = previousTierEnabled
+
+    if (previousConfluenceABRollout == null) delete process.env.SPX_ML_MTF_CONFLUENCE_AB_PERCENT
+    else process.env.SPX_ML_MTF_CONFLUENCE_AB_PERCENT = previousConfluenceABRollout
+
+    if (previousConfluenceEnabled == null) delete process.env.SPX_ML_MTF_CONFLUENCE_ENABLED
+    else process.env.SPX_ML_MTF_CONFLUENCE_ENABLED = previousConfluenceEnabled
   })
 
   it('uses EWMA flow weights where recent events carry more influence', () => {
@@ -192,6 +205,7 @@ describe('decision engine', () => {
     expect(result.alignmentScore).toBeGreaterThan(60)
     expect(result.confidence).toBeGreaterThan(70)
     expect(result.confidenceTrend).toBe('up')
+    expect(result.alignmentWeightSource).toBe('rule_based')
     expect(result.drivers.length).toBeGreaterThan(0)
   })
 
@@ -463,6 +477,39 @@ describe('decision engine', () => {
     })
 
     expect(enriched.tier).toBe('sniper_primary')
+  })
+
+  it('uses ML confluence weighting when enabled', () => {
+    __setMTFConfluenceModelForTest({
+      version: 'mtf-test',
+      hiddenLayer: {
+        weights: [
+          [1, 0, 0, 0, 0, 0, 0],
+          [0, 1, 0, 0, 0, 0, 0],
+        ],
+        bias: [0, 0],
+      },
+      outputLayer: {
+        weights: [
+          [1.8, 0.1, 0.1, 0.1],
+          [0.1, 0.1, 0.1, 1.8],
+        ],
+        bias: [0, 0, 0, 0],
+      },
+    })
+
+    const result = evaluateSPXSetupDecision(buildSetup(), {
+      regime: 'trending',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'confluence-user',
+      mlConfluenceEnabled: true,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(result.alignmentWeightSource).toBe('ml')
   })
 
   it('uses rule-based tier fallback when ML tiering is disabled', () => {
