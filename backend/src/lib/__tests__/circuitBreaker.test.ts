@@ -281,6 +281,38 @@ describe('Circuit Breaker', () => {
       massiveCircuit.reset();
       expect(massiveCircuit.getState().state).toBe('CLOSED');
     });
+
+    it('massiveCircuit should open after 3 failures and enforce 30s cooldown', async () => {
+      massiveCircuit.reset();
+      const failFn = jest.fn().mockRejectedValue(new Error('test failure'));
+
+      for (let i = 0; i < 3; i++) {
+        await expect(massiveCircuit.execute(failFn)).rejects.toThrow('test failure');
+      }
+
+      expect(massiveCircuit.getState().state).toBe('OPEN');
+      await expect(massiveCircuit.execute(jest.fn())).rejects.toThrow('Retry after 30s');
+      massiveCircuit.reset();
+    });
+
+    it('massiveCircuit should time out after 15000ms', async () => {
+      massiveCircuit.reset();
+      jest.useFakeTimers();
+
+      try {
+        const slowFn = () => new Promise<string>(() => {
+          // Intentionally unresolved to force timeout.
+        });
+
+        const pending = massiveCircuit.execute(slowFn);
+        const assertion = expect(pending).rejects.toThrow('timed out after 15000ms');
+        await jest.advanceTimersByTimeAsync(15001);
+        await assertion;
+      } finally {
+        jest.useRealTimers();
+        massiveCircuit.reset();
+      }
+    });
   });
 
   describe('Error handling', () => {

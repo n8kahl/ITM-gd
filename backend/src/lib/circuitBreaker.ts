@@ -130,7 +130,7 @@ export const openaiCircuit = new CircuitBreaker({
 
 export const massiveCircuit = new CircuitBreaker({
   name: 'Massive.com',
-  failureThreshold: 5,
-  cooldownMs: 15000, // 15 seconds
-  timeoutMs: 10000,  // 10 seconds per call
+  failureThreshold: 3,
+  cooldownMs: 30000, // 30 seconds
+  timeoutMs: 15000,  // 15 seconds per call
 });
