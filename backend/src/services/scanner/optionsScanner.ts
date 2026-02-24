@@ -1,4 +1,5 @@
 import { fetchOptionsChain } from '../options/optionsChainFetcher';
+import { logger } from '../../lib/logger';
 
 /**
  * Options-based scanning algorithms for detecting trading opportunities
@@ -71,7 +72,13 @@ export async function scanHighIV(symbol: string): Promise<OptionsSetup | null> {
         ivRank: chain.ivRank,
       },
     };
-  } catch {
+  } catch (error) {
+    logger.warn('Scanner failed: scanHighIV', {
+      scanner: 'scanHighIV',
+      symbol,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return null;
   }
 }
@@ -119,7 +126,13 @@ export async function scanUnusualActivity(symbol: string): Promise<OptionsSetup 
         iv: (top.impliedVolatility * 100).toFixed(1) + '%',
       },
     };
-  } catch {
+  } catch (error) {
+    logger.warn('Scanner failed: scanUnusualActivity', {
+      scanner: 'scanUnusualActivity',
+      symbol,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return null;
   }
 }

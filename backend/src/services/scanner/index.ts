@@ -1,6 +1,7 @@
 import { runTechnicalScan, TechnicalSetup } from './technicalScanner';
 import { runOptionsScan, OptionsSetup } from './optionsScanner';
 import { POPULAR_SYMBOLS } from '../../lib/symbols';
+import { logger } from '../../lib/logger';
 
 /**
  * Opportunity Scanner - orchestrates all scanning algorithms
@@ -167,6 +168,10 @@ export async function scanOpportunities(
   for (const result of results) {
     if (result.status === 'fulfilled') {
       opportunities.push(...result.value);
+    } else {
+      logger.warn('Symbol scan failed', {
+        reason: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
     }
   }
 

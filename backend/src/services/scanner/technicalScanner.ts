@@ -1,6 +1,7 @@
 import { MassiveAggregate } from '../../config/massive';
 import { fetchDailyData, fetchIntradayData } from '../levels/fetcher';
 import { calculateLevels } from '../levels';
+import { logger } from '../../lib/logger';
 
 /**
  * Technical scanning algorithms for detecting trading setups
@@ -24,6 +25,15 @@ export interface TechnicalSetup {
 
 const PROXIMITY_THRESHOLD_PCT = 0.5;
 const STALE_PDC_SKIP_DISTANCE_PCT = 0.01;
+
+function logScannerFailure(scanner: string, symbol: string, error: unknown): void {
+  logger.warn(`Scanner failed: ${scanner}`, {
+    scanner,
+    symbol,
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
+}
 
 type ScannerLevel = {
   type: string;
@@ -132,7 +142,8 @@ export async function scanSupportBounce(symbol: string): Promise<TechnicalSetup 
         distancePct,
       },
     };
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanSupportBounce', symbol, error);
     return null;
   }
 }
@@ -183,7 +194,8 @@ export async function scanResistanceRejection(symbol: string): Promise<Technical
         distancePct,
       },
     };
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanResistanceRejection', symbol, error);
     return null;
   }
 }
@@ -224,7 +236,8 @@ export async function scanVolumeSpike(symbol: string): Promise<TechnicalSetup | 
         priceChange: ((lastBar.c - lastBar.o) / lastBar.o * 100).toFixed(2) + '%',
       },
     };
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanVolumeSpike', symbol, error);
     return null;
   }
 }
@@ -273,7 +286,8 @@ export async function scanBreakout(symbol: string): Promise<TechnicalSetup | nul
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanBreakout', symbol, error);
     return null;
   }
 }
@@ -320,7 +334,8 @@ export async function scanBreakdown(symbol: string): Promise<TechnicalSetup | nu
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanBreakdown', symbol, error);
     return null;
   }
 }
@@ -413,7 +428,8 @@ export async function scanMACrossover(symbol: string): Promise<TechnicalSetup | 
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanMACrossover', symbol, error);
     return null;
   }
 }
@@ -466,7 +482,8 @@ export async function scanRSIDivergence(symbol: string): Promise<TechnicalSetup 
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    logScannerFailure('scanRSIDivergence', symbol, error);
     return null;
   }
 }
