@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { __resetConfidenceModelForTest, __setConfidenceModelForTest } from '@/lib/ml/confidence-model'
+import { __resetTierModelForTest, __setTierModelForTest } from '@/lib/ml/tier-classifier'
 import {
   FLOW_BIAS_EWMA_DECAY,
   calculateRuleBasedConfidence,
@@ -61,20 +62,32 @@ function buildFlow(direction: FlowEvent['direction'], id: string): FlowEvent {
 describe('decision engine', () => {
   const previousABRollout = process.env.SPX_ML_CONFIDENCE_AB_PERCENT
   const previousMLEnabled = process.env.SPX_ML_CONFIDENCE_ENABLED
+  const previousTierABRollout = process.env.SPX_ML_TIER_AB_PERCENT
+  const previousTierEnabled = process.env.SPX_ML_TIER_ENABLED
 
   beforeEach(() => {
     __resetConfidenceModelForTest()
+    __resetTierModelForTest()
     process.env.SPX_ML_CONFIDENCE_AB_PERCENT = '100'
     process.env.SPX_ML_CONFIDENCE_ENABLED = 'true'
+    process.env.SPX_ML_TIER_AB_PERCENT = '100'
+    process.env.SPX_ML_TIER_ENABLED = 'true'
   })
 
   afterEach(() => {
     __resetConfidenceModelForTest()
+    __resetTierModelForTest()
     if (previousABRollout == null) delete process.env.SPX_ML_CONFIDENCE_AB_PERCENT
     else process.env.SPX_ML_CONFIDENCE_AB_PERCENT = previousABRollout
 
     if (previousMLEnabled == null) delete process.env.SPX_ML_CONFIDENCE_ENABLED
     else process.env.SPX_ML_CONFIDENCE_ENABLED = previousMLEnabled
+
+    if (previousTierABRollout == null) delete process.env.SPX_ML_TIER_AB_PERCENT
+    else process.env.SPX_ML_TIER_AB_PERCENT = previousTierABRollout
+
+    if (previousTierEnabled == null) delete process.env.SPX_ML_TIER_ENABLED
+    else process.env.SPX_ML_TIER_ENABLED = previousTierEnabled
   })
 
   it('uses EWMA flow weights where recent events carry more influence', () => {
@@ -419,5 +432,51 @@ describe('decision engine', () => {
     })
 
     expect(result.confidenceSource).toBe('rule_based')
+  })
+
+  it('uses ML tier prediction when enabled', () => {
+    __setTierModelForTest({
+      version: 'tier-test',
+      interceptByTier: {
+        sniper_primary: 3,
+        sniper_secondary: 0,
+        watchlist: 0,
+        skip: 0,
+      },
+      featureWeightsByTier: {
+        sniper_primary: {},
+        sniper_secondary: {},
+        watchlist: {},
+        skip: {},
+      },
+    })
+
+    const enriched = enrichSPXSetupWithDecisionEngine(buildSetup({ tier: 'watchlist' }), {
+      regime: 'trending',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'tier-user',
+      mlTierEnabled: true,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(enriched.tier).toBe('sniper_primary')
+  })
+
+  it('uses rule-based tier fallback when ML tiering is disabled', () => {
+    const enriched = enrichSPXSetupWithDecisionEngine(buildSetup({ tier: undefined, confluenceScore: 4.2 }), {
+      regime: 'trending',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'tier-user',
+      mlTierEnabled: false,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(enriched.tier).toBe('sniper_primary')
   })
 })

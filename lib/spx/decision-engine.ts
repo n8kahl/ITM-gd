@@ -1,5 +1,10 @@
 import { predictConfidence, primeConfidenceModel } from '@/lib/ml/confidence-model'
 import { extractFeatures } from '@/lib/ml/feature-extractor'
+import {
+  calculateRuleBasedTier,
+  mapMLTierToSetupTier,
+  predictSetupTier,
+} from '@/lib/ml/tier-classifier'
 import type { FeatureExtractionContext } from '@/lib/ml/types'
 import type {
   BasisState,
@@ -337,10 +342,19 @@ export function enrichSPXSetupWithDecisionEngine(
 ): Setup {
   const evaluation = evaluateSPXSetupDecision(setup, context)
   const score = round((evaluation.alignmentScore * 0.45) + (evaluation.confidence * 0.55), 0)
+  const featureVector = extractFeatures(setup, context)
+  const predictedTier = predictSetupTier(featureVector, setup, {
+    userId: context.userId,
+    mlTierEnabled: context.mlTierEnabled,
+  })
+  const resolvedTier = predictedTier == null
+    ? calculateRuleBasedTier(setup, evaluation.confidence)
+    : predictedTier
 
   return {
     ...setup,
     score,
+    tier: mapMLTierToSetupTier(resolvedTier),
     pWinCalibrated: round(evaluation.confidence / 100, 4),
     evR: evaluation.expectedValueR,
     alignmentScore: round(evaluation.alignmentScore, 0),
