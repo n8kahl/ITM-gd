@@ -74,7 +74,6 @@ function createDesktopSurfaceBaseProps(
     overlayPreset: controller.overlayPreset,
     onSelectOverlayPreset: controller.handleOverlayPresetChange,
     onRunActionStripCommand: controller.runActionStripCommand,
-    activeLevelCategoryCount: controller.activeLevelCategoryCount,
   }
 }
 
