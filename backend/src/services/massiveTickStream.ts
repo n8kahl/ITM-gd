@@ -9,9 +9,17 @@ import {
 } from './tickCache';
 
 type TickListener = (tick: NormalizedMarketTick) => void;
+type MassiveTickConnectionState = 'connecting' | 'authenticating' | 'authenticated' | 'subscribing' | 'active' | 'error';
+type MassiveControlAction = 'none' | 'send_subscriptions' | 'reconnect';
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_HEARTBEAT_MS = 30_000;
+const DEFAULT_AUTH_ACK_TIMEOUT_MS = 5_000;
+const SUBSCRIBE_ACK_TIMEOUT_MS = 3_000;
+const AUTH_ACK_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.MASSIVE_TICK_AUTH_ACK_TIMEOUT_MS || `${DEFAULT_AUTH_ACK_TIMEOUT_MS}`, 10);
+  return Number.isFinite(parsed) ? Math.max(parsed, 1_000) : DEFAULT_AUTH_ACK_TIMEOUT_MS;
+})();
 
 const tickListeners = new Set<TickListener>();
 
@@ -19,8 +27,11 @@ let wsClient: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+let authAckTimer: ReturnType<typeof setTimeout> | null = null;
+let subscribeAckTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldRun = false;
 let isConnected = false;
+let connectionState: MassiveTickConnectionState = 'connecting';
 let reconnectAttempt = 0;
 let lastConnectedAt: string | null = null;
 let lastMessageAt: string | null = null;
@@ -42,6 +53,28 @@ function clearConnectTimeoutTimer(): void {
   if (!connectTimeoutTimer) return;
   clearTimeout(connectTimeoutTimer);
   connectTimeoutTimer = null;
+}
+
+function clearAuthAckTimer(): void {
+  if (!authAckTimer) return;
+  clearTimeout(authAckTimer);
+  authAckTimer = null;
+}
+
+function clearSubscribeAckTimer(): void {
+  if (!subscribeAckTimer) return;
+  clearTimeout(subscribeAckTimer);
+  subscribeAckTimer = null;
+}
+
+function setConnectionState(nextState: MassiveTickConnectionState, reason: string): void {
+  if (connectionState === nextState) return;
+  logger.info('Massive tick stream state transition', {
+    from: connectionState,
+    to: nextState,
+    reason,
+  });
+  connectionState = nextState;
 }
 
 function nowIso(): string {
@@ -144,6 +177,85 @@ function getObjectString(
   return null;
 }
 
+interface MassiveStatusEvent {
+  status: string;
+  message?: string;
+}
+
+function parseStatusEvent(payload: unknown): MassiveStatusEvent | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const event = payload as Record<string, unknown>;
+
+  const eventType = getObjectString(event, ['ev', 'event', 'type']);
+  const status = getObjectString(event, ['status', 'state']);
+  if (!status) return null;
+  if (eventType && eventType.toLowerCase() !== 'status') return null;
+
+  return {
+    status: status.toLowerCase(),
+    message: getObjectString(event, ['message', 'msg']) || undefined,
+  };
+}
+
+function evaluateAuthControlEvent(
+  state: MassiveTickConnectionState,
+  statusEvent: MassiveStatusEvent,
+): { nextState: MassiveTickConnectionState; action: MassiveControlAction } {
+  if (state !== 'authenticating') {
+    return {
+      nextState: state,
+      action: 'none',
+    };
+  }
+
+  const message = (statusEvent.message || '').toLowerCase();
+  const isAuthSuccess = statusEvent.status === 'auth_success' || statusEvent.status === 'authenticated';
+  const isAuthFailure = statusEvent.status === 'auth_failed'
+    || statusEvent.status === 'auth_error'
+    || statusEvent.status === 'authentication_failed'
+    || (statusEvent.status === 'error' && message.includes('auth'));
+
+  if (isAuthSuccess) {
+    return {
+      nextState: 'authenticated',
+      action: 'send_subscriptions',
+    };
+  }
+
+  if (isAuthFailure) {
+    return {
+      nextState: 'error',
+      action: 'reconnect',
+    };
+  }
+
+  return {
+    nextState: state,
+    action: 'none',
+  };
+}
+
+function evaluateAuthTimeout(state: MassiveTickConnectionState): {
+  nextState: MassiveTickConnectionState;
+  action: MassiveControlAction;
+} {
+  if (state === 'authenticating') {
+    return {
+      nextState: 'error',
+      action: 'reconnect',
+    };
+  }
+
+  return {
+    nextState: state,
+    action: 'none',
+  };
+}
+
+function shouldProcessTickEvent(state: MassiveTickConnectionState): boolean {
+  return state === 'active';
+}
+
 function parseTickPayload(payload: unknown): NormalizedMarketTick | null {
   if (!payload || typeof payload !== 'object') return null;
   const event = payload as Record<string, unknown>;
@@ -228,6 +340,43 @@ function handleMessage(raw: RawData): void {
 
   const events = Array.isArray(payload) ? payload : [payload];
   for (const event of events) {
+    const statusEvent = parseStatusEvent(event);
+    if (statusEvent) {
+      const authControl = evaluateAuthControlEvent(connectionState, statusEvent);
+      if (authControl.nextState !== connectionState) {
+        setConnectionState(authControl.nextState, `status:${statusEvent.status}`);
+      }
+
+      if (authControl.action === 'send_subscriptions') {
+        clearAuthAckTimer();
+        sendSubscriptions(getEnv().MASSIVE_TICK_EVENT_PREFIX);
+        continue;
+      }
+
+      if (authControl.action === 'reconnect') {
+        clearAuthAckTimer();
+        clearSubscribeAckTimer();
+        isConnected = false;
+        logger.error('Massive tick stream authentication failed', {
+          status: statusEvent.status,
+          message: statusEvent.message,
+        });
+
+        if (wsClient) {
+          try {
+            wsClient.close();
+          } catch {
+            wsClient.terminate();
+          }
+        }
+        return;
+      }
+    }
+
+    if (!shouldProcessTickEvent(connectionState)) {
+      continue;
+    }
+
     const tick = parseTickPayload(event);
     if (!tick) continue;
 
@@ -265,6 +414,23 @@ function safeSend(payload: Record<string, unknown>): void {
   wsClient.send(JSON.stringify(payload));
 }
 
+function sendSubscriptions(eventPrefix: string): void {
+  if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
+
+  setConnectionState('subscribing', 'auth_acknowledged');
+  const subscribeParams = toSubscriptionParams(subscribedSymbols, eventPrefix);
+  if (subscribeParams.length > 0) {
+    safeSend({ action: 'subscribe', params: subscribeParams });
+  }
+
+  clearSubscribeAckTimer();
+  subscribeAckTimer = setTimeout(() => {
+    if (connectionState !== 'subscribing') return;
+    setConnectionState('active', 'subscription_assumed_active');
+    isConnected = true;
+  }, SUBSCRIBE_ACK_TIMEOUT_MS);
+}
+
 function connectStream(): void {
   if (!shouldRun) return;
 
@@ -278,6 +444,10 @@ function connectStream(): void {
   clearReconnectTimer();
   clearHeartbeatTimer();
   clearConnectTimeoutTimer();
+  clearAuthAckTimer();
+  clearSubscribeAckTimer();
+  isConnected = false;
+  setConnectionState('connecting', 'connect_attempt');
 
   wsClient = new WebSocket(env.MASSIVE_TICK_WS_URL);
   connectTimeoutTimer = setTimeout(() => {
@@ -287,16 +457,31 @@ function connectStream(): void {
   }, DEFAULT_CONNECT_TIMEOUT_MS);
 
   wsClient.on('open', () => {
-    isConnected = true;
     reconnectAttempt = 0;
     lastConnectedAt = nowIso();
     clearConnectTimeoutTimer();
+    setConnectionState('authenticating', 'socket_open');
 
     safeSend({ action: 'auth', params: env.MASSIVE_API_KEY });
-    const subscribeParams = toSubscriptionParams(subscribedSymbols, env.MASSIVE_TICK_EVENT_PREFIX);
-    if (subscribeParams.length > 0) {
-      safeSend({ action: 'subscribe', params: subscribeParams });
-    }
+    clearAuthAckTimer();
+    authAckTimer = setTimeout(() => {
+      const authTimeout = evaluateAuthTimeout(connectionState);
+      if (authTimeout.action !== 'reconnect') return;
+
+      setConnectionState(authTimeout.nextState, 'auth_ack_timeout');
+      isConnected = false;
+      logger.error('Massive tick stream auth timeout', {
+        timeoutMs: AUTH_ACK_TIMEOUT_MS,
+      });
+
+      if (wsClient) {
+        try {
+          wsClient.close();
+        } catch {
+          wsClient.terminate();
+        }
+      }
+    }, AUTH_ACK_TIMEOUT_MS);
 
     heartbeatTimer = setInterval(() => {
       if (wsClient?.readyState === WebSocket.OPEN) {
@@ -315,9 +500,12 @@ function connectStream(): void {
   wsClient.on('close', (code, reason) => {
     clearHeartbeatTimer();
     clearConnectTimeoutTimer();
+    clearAuthAckTimer();
+    clearSubscribeAckTimer();
     isConnected = false;
     wsClient = null;
     if (!shouldRun) return;
+    setConnectionState('error', `socket_close:${code}`);
     scheduleReconnect(`close:${code}:${reason.toString('utf8')}`);
   });
 
@@ -353,7 +541,10 @@ export function stopMassiveTickStream(): void {
   clearReconnectTimer();
   clearHeartbeatTimer();
   clearConnectTimeoutTimer();
+  clearAuthAckTimer();
+  clearSubscribeAckTimer();
   isConnected = false;
+  setConnectionState('error', 'stream_stopped');
   reconnectAttempt = 0;
 
   if (!wsClient) return;
@@ -381,6 +572,7 @@ export function isMassiveTickStreamConnected(): boolean {
 export function getMassiveTickStreamStatus(): {
   enabled: boolean;
   connected: boolean;
+  connectionState: MassiveTickConnectionState;
   shouldRun: boolean;
   subscribedSymbols: string[];
   reconnectAttempt: number;
@@ -391,6 +583,7 @@ export function getMassiveTickStreamStatus(): {
   return {
     enabled: env.MASSIVE_TICK_WS_ENABLED,
     connected: isConnected,
+    connectionState,
     shouldRun,
     subscribedSymbols: [...subscribedSymbols],
     reconnectAttempt,
@@ -400,8 +593,14 @@ export function getMassiveTickStreamStatus(): {
 }
 
 export const __testables = {
+  AUTH_ACK_TIMEOUT_MS,
+  SUBSCRIBE_ACK_TIMEOUT_MS,
   parseSymbols,
   toSubscriptionParams,
   normalizeTimestamp,
   parseTickPayload,
+  parseStatusEvent,
+  evaluateAuthControlEvent,
+  evaluateAuthTimeout,
+  shouldProcessTickEvent,
 };

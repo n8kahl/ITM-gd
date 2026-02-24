@@ -89,4 +89,45 @@ describe('massiveTickStream helpers', () => {
     });
     expect(parsed).toBeNull();
   });
+
+  it('auth timeout control path transitions to error and requests reconnect', () => {
+    const timeout = __testables.evaluateAuthTimeout('authenticating');
+    expect(timeout.nextState).toBe('error');
+    expect(timeout.action).toBe('reconnect');
+  });
+
+  it('auth failure status transitions to error and requests reconnect', () => {
+    const statusEvent = __testables.parseStatusEvent({
+      ev: 'status',
+      status: 'auth_failed',
+      message: 'authentication failed',
+    });
+    expect(statusEvent).not.toBeNull();
+
+    const next = __testables.evaluateAuthControlEvent('authenticating', statusEvent!);
+    expect(next.nextState).toBe('error');
+    expect(next.action).toBe('reconnect');
+  });
+
+  it('requests subscriptions only after auth success while authenticating', () => {
+    const authSuccess = __testables.parseStatusEvent({
+      ev: 'status',
+      status: 'auth_success',
+      message: 'authenticated',
+    });
+    expect(authSuccess).not.toBeNull();
+
+    const inAuth = __testables.evaluateAuthControlEvent('authenticating', authSuccess!);
+    expect(inAuth.nextState).toBe('authenticated');
+    expect(inAuth.action).toBe('send_subscriptions');
+
+    const inConnecting = __testables.evaluateAuthControlEvent('connecting', authSuccess!);
+    expect(inConnecting.action).toBe('none');
+  });
+
+  it('only processes tick payloads while stream state is active', () => {
+    expect(__testables.shouldProcessTickEvent('active')).toBe(true);
+    expect(__testables.shouldProcessTickEvent('authenticating')).toBe(false);
+    expect(__testables.shouldProcessTickEvent('subscribing')).toBe(false);
+  });
 });
