@@ -1248,6 +1248,14 @@ export function TradingChart({
       pixelFiltered.push(candidate)
     }
     const visibleLevels = pixelFiltered.map((entry) => entry.level)
+    const alwaysVisiblePositionLevels = derivedLevels.filter((level) => level.group === 'position')
+    const forcedPositionLevels = alwaysVisiblePositionLevels.filter((positionLevel) => {
+      return !visibleLevels.some((visibleLevel) => (
+        Math.abs(visibleLevel.price - positionLevel.price) < 0.0001
+        && visibleLevel.label === positionLevel.label
+      ))
+    })
+    const finalLevels = [...visibleLevels, ...forcedPositionLevels]
     onLevelLayoutStats?.({
       ...visibleLevelSelection.stats,
       collisionSuppressedCount: visibleLevelSelection.stats.collisionSuppressedCount + pixelCollisionSuppressedCount,
@@ -1255,7 +1263,7 @@ export function TradingChart({
 
     // Add new price lines for each selected level
     const newLines = []
-    for (const level of visibleLevels) {
+    for (const level of finalLevels) {
       const lineStyle = level.lineStyle === 'dashed' ? 1 : level.lineStyle === 'dotted' ? 2 : 0
 
       try {

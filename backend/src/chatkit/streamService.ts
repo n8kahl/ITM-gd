@@ -523,6 +523,7 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
 
     sendSSE(res, 'done', {
       messageId: savedMessage.id,
+      content: safeFinalContent,
       functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
       contractAudit,
       tokensUsed: cumulativeTokens,

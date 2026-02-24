@@ -1725,6 +1725,7 @@ export interface StreamEvent {
 
 export interface StreamDoneData {
   messageId: string
+  content?: string
   functionCalls?: ChatMessageResponse['functionCalls']
   contractAudit?: ChatMessageResponse['contractAudit']
   tokensUsed: number

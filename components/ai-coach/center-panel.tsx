@@ -930,8 +930,22 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     const gexAnnotations = buildGEXAnnotations(chartRequest)
     setChartLevels([...levelAnnotations, ...gexAnnotations])
     setChartContextNotes(Array.isArray(chartRequest.contextNotes) ? chartRequest.contextNotes.slice(0, MAX_CONTEXT_NOTES) : [])
-    setChartPositionOverlays(buildPositionOverlays(chartRequest))
+    const overlays = buildPositionOverlays(chartRequest)
+    setChartPositionOverlays(overlays)
     setChartEventMarkers(buildEventMarkers(chartRequest))
+
+    if (overlays.length > 0) {
+      setPreferences((prev) => {
+        if (prev.defaultLevelVisibility.position) return prev
+        return {
+          ...prev,
+          defaultLevelVisibility: {
+            ...prev.defaultLevelVisibility,
+            position: true,
+          },
+        }
+      })
+    }
 
     fetchChartData(chartRequest.symbol, chartRequest.timeframe)
   }, [buildEventMarkers, buildGEXAnnotations, buildLevelAnnotations, buildPositionOverlays, chartRequest, fetchChartData, forcedView, setCenterView, setSymbol])
@@ -1023,8 +1037,22 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
       const gexAnnotations = buildGEXAnnotations(request)
       setChartLevels([...levelAnnotations, ...gexAnnotations])
       setChartContextNotes(Array.isArray(request.contextNotes) ? request.contextNotes.slice(0, MAX_CONTEXT_NOTES) : [])
-      setChartPositionOverlays(buildPositionOverlays(request))
+      const overlays = buildPositionOverlays(request)
+      setChartPositionOverlays(overlays)
       setChartEventMarkers(buildEventMarkers(request))
+
+      if (overlays.length > 0) {
+        setPreferences((prev) => {
+          if (prev.defaultLevelVisibility.position) return prev
+          return {
+            ...prev,
+            defaultLevelVisibility: {
+              ...prev.defaultLevelVisibility,
+              position: true,
+            },
+          }
+        })
+      }
 
       fetchChartData(request.symbol, request.timeframe)
     }

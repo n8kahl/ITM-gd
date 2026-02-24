@@ -121,7 +121,11 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
                 )}
               </div>
             ) : !message.isStreaming ? (
-              <div className="text-sm text-white/30 italic">No response</div>
+              <div className="text-sm text-white/40 italic">
+                {message.functionCalls && message.functionCalls.length > 0
+                  ? 'Analysis complete. See the result cards below.'
+                  : 'No response'}
+              </div>
             ) : null}
             </div>
           </div>

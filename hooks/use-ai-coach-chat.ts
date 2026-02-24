@@ -873,6 +873,7 @@ export function useAICoachChat() {
           streamContent = response.content
           doneData = {
             messageId: response.messageId,
+            content: response.content,
             functionCalls: response.functionCalls,
             tokensUsed: response.tokensUsed,
             responseTime: response.responseTime,
@@ -880,6 +881,10 @@ export function useAICoachChat() {
         } else {
           throw streamError
         }
+      }
+
+      if (!streamContent.trim() && doneData?.content) {
+        streamContent = doneData.content
       }
 
       const confirmedUserMessage: ChatMessage = { ...userMessage, isOptimistic: false }
