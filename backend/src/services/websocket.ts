@@ -298,8 +298,88 @@ let unsubscribePositionEvents: (() => void) | null = null;
 let unsubscribeCoachEvents: (() => void) | null = null;
 let unsubscribeTickEvents: (() => void) | null = null;
 const clients = new Map<WebSocket, ClientState>();
+const clientSubscriptions = new Map<WebSocket, Map<string, () => void>>();
 const lastTickBroadcastAtBySymbol = new Map<string, number>();
 const lastMicrobarBroadcastAtBySymbolInterval = new Map<string, number>();
+let sigtermCleanupHandler: (() => void) | null = null;
+
+function ensureClientSubscriptionRegistry(ws: WebSocket): Map<string, () => void> {
+  let registry = clientSubscriptions.get(ws);
+  if (!registry) {
+    registry = new Map<string, () => void>();
+    clientSubscriptions.set(ws, registry);
+  }
+  return registry;
+}
+
+function addClientSubscription(
+  ws: WebSocket,
+  key: string,
+  cleanup: () => void,
+): void {
+  const registry = ensureClientSubscriptionRegistry(ws);
+  if (!registry.has(key)) {
+    registry.set(key, cleanup);
+  }
+}
+
+function removeClientSubscription(ws: WebSocket, key: string): void {
+  const registry = clientSubscriptions.get(ws);
+  const cleanup = registry?.get(key);
+  if (!cleanup) return;
+
+  try {
+    cleanup();
+  } catch (error) {
+    logger.warn('WebSocket subscription cleanup failed', {
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    registry?.delete(key);
+    if (registry && registry.size === 0) {
+      clientSubscriptions.delete(ws);
+    }
+  }
+}
+
+function cleanupClientSubscriptions(ws: WebSocket): void {
+  const registry = clientSubscriptions.get(ws);
+  if (!registry) return;
+
+  const keys = Array.from(registry.keys());
+  for (const key of keys) {
+    removeClientSubscription(ws, key);
+  }
+  clientSubscriptions.delete(ws);
+}
+
+function cleanupClient(ws: WebSocket): void {
+  cleanupClientSubscriptions(ws);
+  clients.delete(ws);
+}
+
+function cleanupAllClients(): void {
+  for (const ws of Array.from(clients.keys())) {
+    cleanupClient(ws);
+  }
+}
+
+function registerSigtermCleanup(): void {
+  if (sigtermCleanupHandler) return;
+
+  sigtermCleanupHandler = () => {
+    logger.info('SIGTERM received; cleaning up websocket subscriptions');
+    shutdownWebSocket();
+  };
+  process.once('SIGTERM', sigtermCleanupHandler);
+}
+
+function unregisterSigtermCleanup(): void {
+  if (!sigtermCleanupHandler) return;
+  process.off('SIGTERM', sigtermCleanupHandler);
+  sigtermCleanupHandler = null;
+}
 
 function isSymbolSubscription(value: string): boolean {
   return isValidSymbol(value);
@@ -1057,7 +1137,12 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
             sendToClient(ws, { type: 'error', message: `Maximum ${MAX_SUBSCRIPTIONS_PER_CLIENT} subscriptions` });
             break;
           }
-          state.subscriptions.add(upper);
+          if (!state.subscriptions.has(upper)) {
+            state.subscriptions.add(upper);
+            addClientSubscription(ws, upper, () => {
+              state.subscriptions.delete(upper);
+            });
+          }
           void sendLatestSymbolPriceToClient(ws, upper).catch((error) => {
             logger.warn('Failed to send initial websocket symbol price', {
               symbol: upper,
@@ -1085,8 +1170,13 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
             break;
           }
 
-          state.subscriptions.add(channel);
-          newlySubscribedChannels.add(channel);
+          if (!state.subscriptions.has(channel)) {
+            state.subscriptions.add(channel);
+            addClientSubscription(ws, channel, () => {
+              state.subscriptions.delete(channel);
+            });
+            newlySubscribedChannels.add(channel);
+          }
 
           const priceChannel = normalizePriceChannel(channel);
           if (priceChannel) {
@@ -1118,14 +1208,15 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
         const channels = Array.isArray(msg.channels) ? msg.channels : [];
         for (const sym of symbols) {
           if (typeof sym === 'string') {
-            state.subscriptions.delete(sym.toUpperCase());
+            const normalized = normalizeSymbol(sym);
+            removeClientSubscription(ws, normalized);
           }
         }
         for (const channelCandidate of channels) {
           if (typeof channelCandidate !== 'string') continue;
           const channel = normalizeRealtimeChannel(channelCandidate);
           if (channel) {
-            state.subscriptions.delete(channel);
+            removeClientSubscription(ws, channel);
           }
         }
         break;
@@ -1357,7 +1448,7 @@ function startHeartbeat(): void {
     for (const [ws, state] of clients) {
       if (now - state.lastActivity > CLIENT_TIMEOUT) {
         ws.terminate();
-        clients.delete(ws);
+        cleanupClient(ws);
       }
     }
   }, HEARTBEAT_INTERVAL);
@@ -1372,6 +1463,7 @@ function startHeartbeat(): void {
  * Called from server.ts after the HTTP server starts listening.
  */
 export function initWebSocket(server: HTTPServer): void {
+  registerSigtermCleanup();
   wss = new WebSocketServer({ server, path: '/ws/prices' });
 
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
@@ -1421,6 +1513,7 @@ export function initWebSocket(server: HTTPServer): void {
       subscriptions: new Set(),
       lastActivity: Date.now(),
     });
+    ensureClientSubscriptionRegistry(ws);
 
     logger.info('WebSocket client connected', {
       clients: clients.size,
@@ -1436,7 +1529,7 @@ export function initWebSocket(server: HTTPServer): void {
     });
 
     ws.on('close', (code, reason) => {
-      clients.delete(ws);
+      cleanupClient(ws);
       logger.info('WebSocket client disconnected', {
         clients: clients.size,
         userId: authenticatedUserId,
@@ -1447,7 +1540,7 @@ export function initWebSocket(server: HTTPServer): void {
 
     ws.on('error', (error) => {
       logger.error('WebSocket client error', { error: error.message });
-      clients.delete(ws);
+      cleanupClient(ws);
     });
   });
 
@@ -1517,6 +1610,7 @@ export function initWebSocket(server: HTTPServer): void {
  * Called during graceful shutdown.
  */
 export function shutdownWebSocket(): void {
+  unregisterSigtermCleanup();
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
@@ -1530,10 +1624,12 @@ export function shutdownWebSocket(): void {
     heartbeatTimer = null;
   }
   if (wss) {
-    for (const [ws] of clients) {
+    for (const ws of Array.from(clients.keys())) {
+      cleanupClient(ws);
       ws.terminate();
     }
     clients.clear();
+    clientSubscriptions.clear();
     wss.close();
     wss = null;
   }
@@ -1553,6 +1649,8 @@ export function shutdownWebSocket(): void {
     unsubscribeTickEvents();
     unsubscribeTickEvents = null;
   }
+  cleanupAllClients();
+  clientSubscriptions.clear();
   lastTickBroadcastAtBySymbol.clear();
   lastMicrobarBroadcastAtBySymbolInterval.clear();
   resetMicrobarAggregator();
@@ -1575,4 +1673,14 @@ export const __testables = {
   extractWsToken,
   isSymbolTickFresh,
   areSymbolTicksFresh,
+  addClientSubscription,
+  removeClientSubscription,
+  cleanupClientSubscriptions,
+  cleanupClient,
+  cleanupAllClients,
+  ensureClientSubscriptionRegistry,
+  registerSigtermCleanup,
+  unregisterSigtermCleanup,
+  __getTrackedClientCount: () => clients.size,
+  __getTrackedSubscriptionRegistryCount: () => clientSubscriptions.size,
 };

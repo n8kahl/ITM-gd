@@ -15,10 +15,17 @@ describe('websocket service helpers', () => {
     extractWsToken,
     isSymbolTickFresh,
     areSymbolTicksFresh,
+    addClientSubscription,
+    removeClientSubscription,
+    cleanupClientSubscriptions,
+    cleanupClient,
+    __getTrackedClientCount,
+    __getTrackedSubscriptionRegistryCount,
   } = __testables;
 
   beforeEach(() => {
     resetTickCache();
+    __testables.cleanupAllClients();
   });
 
   it('normalizes realtime channels and rejects invalid formats', () => {
@@ -103,5 +110,66 @@ describe('websocket service helpers', () => {
 
     expect(areSymbolTicksFresh(['SPX'], now)).toBe(true);
     expect(areSymbolTicksFresh(['SPX', 'SPY'], now)).toBe(false);
+  });
+
+  it('cleans tracked subscriptions on disconnect', () => {
+    const ws = {} as any;
+    const state = {
+      subscriptions: new Set<string>(['SPX']),
+    };
+
+    addClientSubscription(ws, 'SPX', () => {
+      state.subscriptions.delete('SPX');
+    });
+
+    expect(__getTrackedSubscriptionRegistryCount()).toBe(1);
+    cleanupClientSubscriptions(ws);
+    expect(state.subscriptions.size).toBe(0);
+    expect(__getTrackedSubscriptionRegistryCount()).toBe(0);
+  });
+
+  it('continues cleanup when a subscription cleanup callback throws', () => {
+    const ws = {} as any;
+    const state = {
+      userId: 'user-2',
+      subscriptions: new Set<string>(['SPX', 'NDX']),
+      lastActivity: Date.now(),
+    };
+
+    addClientSubscription(ws, 'SPX', () => {
+      state.subscriptions.delete('SPX');
+      throw new Error('boom');
+    });
+    addClientSubscription(ws, 'NDX', () => {
+      state.subscriptions.delete('NDX');
+    });
+
+    cleanupClient(ws);
+    expect(state.subscriptions.size).toBe(0);
+    expect(__getTrackedSubscriptionRegistryCount()).toBe(0);
+    expect(__getTrackedClientCount()).toBe(0);
+  });
+
+  it('removes a single subscription via unsubscribe path helper', () => {
+    const ws = {} as any;
+    const state = {
+      userId: 'user-3',
+      subscriptions: new Set<string>(['SPX', 'NDX']),
+      lastActivity: Date.now(),
+    };
+
+    addClientSubscription(ws, 'SPX', () => {
+      state.subscriptions.delete('SPX');
+    });
+    addClientSubscription(ws, 'NDX', () => {
+      state.subscriptions.delete('NDX');
+    });
+
+    removeClientSubscription(ws, 'SPX');
+    expect(state.subscriptions.has('SPX')).toBe(false);
+    expect(state.subscriptions.has('NDX')).toBe(true);
+
+    cleanupClientSubscriptions(ws);
+    expect(state.subscriptions.size).toBe(0);
   });
 });
