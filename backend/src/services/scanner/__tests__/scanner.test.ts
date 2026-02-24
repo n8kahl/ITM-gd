@@ -244,7 +244,39 @@ describe('Opportunity Scanner', () => {
       if (unusual) {
         expect(unusual.direction).toBe('bullish'); // call activity
         expect(unusual.metadata.volumeOIRatio).toBe('5.0');
+        expect(unusual.metadata.anomalyScore).toBeGreaterThan(0.6);
       }
+    });
+
+    it('does not emit unusual activity for baseline flow patterns', async () => {
+      mockFetchOptionsChain.mockResolvedValue({
+        symbol: 'SPX',
+        currentPrice: 5900,
+        expiry: '2026-03-20',
+        daysToExpiry: 40,
+        ivRank: 50,
+        options: {
+          calls: [
+            {
+              symbol: 'SPX', strike: 5905, expiry: '2026-03-20', type: 'call',
+              last: 35, bid: 34.5, ask: 35.5, volume: 2200, openInterest: 2600,
+              impliedVolatility: 0.22, delta: 0.45, gamma: 0.001, theta: -3, vega: 10,
+              rho: 3, inTheMoney: false, intrinsicValue: 0, extrinsicValue: 35,
+            },
+          ],
+          puts: [
+            {
+              symbol: 'SPX', strike: 5895, expiry: '2026-03-20', type: 'put',
+              last: 34, bid: 33.5, ask: 34.5, volume: 2300, openInterest: 2500,
+              impliedVolatility: 0.23, delta: -0.45, gamma: 0.001, theta: -3, vega: 10,
+              rho: -3, inTheMoney: false, intrinsicValue: 0, extrinsicValue: 34,
+            },
+          ],
+        },
+      });
+
+      const setups = await runOptionsScan('SPX');
+      expect(setups.find((setup) => setup.type === 'unusual_activity')).toBeUndefined();
     });
 
     it('should handle errors gracefully', async () => {

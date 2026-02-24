@@ -71,6 +71,12 @@ class Semaphore {
 
 const DEFAULT_SCANNER_CONCURRENCY = 5;
 
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
 function resolveScannerConcurrency(): number {
   const parsed = Number.parseInt(process.env.SCANNER_CONCURRENCY ?? '', 10);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_SCANNER_CONCURRENCY;
@@ -119,6 +125,11 @@ function scoreOptionsSetup(setup: OptionsSetup): number {
     iv_crush: 6,
   };
   score += typeBonus[setup.type] || 0;
+
+  const anomalyScore = setup.metadata?.anomalyScore;
+  if (typeof anomalyScore === 'number' && Number.isFinite(anomalyScore)) {
+    score += clamp(Math.round(anomalyScore * 12), 0, 12);
+  }
 
   return Math.min(100, Math.round(score));
 }

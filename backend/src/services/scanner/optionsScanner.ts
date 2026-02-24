@@ -1,4 +1,5 @@
 import { fetchOptionsChain } from '../options/optionsChainFetcher';
+import { detectFlowAnomaly } from './flowAnomalyScanner';
 import { logger } from '../../lib/logger';
 
 /**
@@ -116,39 +117,36 @@ export async function scanUnusualActivity(symbol: string): Promise<OptionsSetup 
     );
     if (!chain.options.calls.length && !chain.options.puts.length) return null;
 
-    const allOptions = [...chain.options.calls, ...chain.options.puts];
+    const anomaly = detectFlowAnomaly(chain);
+    if (!anomaly) return null;
 
-    // Find options where volume > 3x open interest (unusual)
-    const unusual = allOptions.filter(o =>
-      o.openInterest > 0 &&
-      o.volume > 0 &&
-      o.volume / o.openInterest > 3
-    );
-
-    if (unusual.length === 0) return null;
-
-    // Sort by volume/OI ratio
-    unusual.sort((a, b) => (b.volume / b.openInterest) - (a.volume / a.openInterest));
-
-    const top = unusual[0];
-    const ratio = (top.volume / top.openInterest).toFixed(1);
-    const direction = top.type === 'call' ? 'bullish' : 'bearish';
+    const ratio = anomaly.volumeOIRatio.toFixed(1);
+    const direction = anomaly.direction;
+    const confidence = Math.min(0.88, 0.35 + (anomaly.anomalyScore * 0.6));
 
     return {
       type: 'unusual_activity',
       symbol,
       direction,
-      confidence: Math.min(0.75, 0.35 + (top.volume / top.openInterest - 3) * 0.1),
+      confidence,
       currentPrice: chain.currentPrice,
-      description: `${symbol} unusual ${top.type} activity: $${top.strike} strike has ${ratio}x volume/OI ratio`,
+      description: `${symbol} ${anomaly.contract.type} flow anomaly: $${anomaly.contract.strike} strike scored ${(anomaly.anomalyScore * 100).toFixed(0)} anomaly percentile`,
       metadata: {
-        contractType: top.type,
-        strike: top.strike,
-        expiry: top.expiry,
-        volume: top.volume,
-        openInterest: top.openInterest,
+        contractType: anomaly.contract.type,
+        strike: anomaly.contract.strike,
+        expiry: anomaly.contract.expiry,
+        volume: anomaly.contract.volume,
+        openInterest: anomaly.contract.openInterest,
         volumeOIRatio: ratio,
-        iv: (top.impliedVolatility * 100).toFixed(1) + '%',
+        iv: (anomaly.contract.impliedVolatility * 100).toFixed(1) + '%',
+        anomalyScore: Number(anomaly.anomalyScore.toFixed(4)),
+        anomalyFeatures: {
+          volumeOiZScore: Number(anomaly.features.volumeOiZScore.toFixed(4)),
+          premiumMomentum: Number(anomaly.features.premiumMomentum.toFixed(4)),
+          spreadTighteningRatio: Number(anomaly.features.spreadTighteningRatio.toFixed(4)),
+          sweepIntensity: Number(anomaly.features.sweepIntensity.toFixed(4)),
+          timeOfDayNormalizedVolume: Number(anomaly.features.timeOfDayNormalizedVolume.toFixed(4)),
+        },
       },
     };
   } catch (error) {
