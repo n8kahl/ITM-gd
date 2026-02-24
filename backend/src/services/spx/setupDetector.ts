@@ -89,6 +89,8 @@ const DEFAULT_SNIPER_PRIMARY_PWIN = 0.58;
 const DEFAULT_SNIPER_SECONDARY_PWIN = 0.54;
 const DEFAULT_SNIPER_PRIMARY_EV_R = 0.35;
 const DEFAULT_SNIPER_SECONDARY_EV_R = 0.2;
+const DEFAULT_MIN_SETUP_SCORE_FLOOR = 65;
+const DEFAULT_LATE_SESSION_HARD_GATE_MINUTE_ET = 270;
 const EMA_FAST_PERIOD = 21;
 const EMA_SLOW_PERIOD = 55;
 const EMA_MIN_BARS = 8;
@@ -1777,6 +1779,8 @@ function evaluateOptimizationGate(input: {
   wasPreviouslyTriggered: boolean;
   setupType: SetupType;
   regime: Regime;
+  setupScore: number;
+  evaluationMinuteEt?: number | null;
   firstSeenAtIso: string | null;
   confluenceScore: number;
   pWinCalibrated: number;
@@ -1807,6 +1811,28 @@ function evaluateOptimizationGate(input: {
   const setupFloors = useSetupSpecificFloors
     ? SETUP_SPECIFIC_GATE_FLOORS[input.setupType]
     : undefined;
+  const scoreFloorEnabled = parseBooleanEnv(
+    process.env.SPX_SETUP_SCORE_FLOOR_ENABLED,
+    true,
+  );
+  const minSetupScoreFloor = clamp(
+    parseFloatEnv(
+      process.env.SPX_SETUP_MIN_SCORE_FLOOR,
+      DEFAULT_MIN_SETUP_SCORE_FLOOR,
+      0,
+    ),
+    0,
+    100,
+  );
+  const lateSessionHardGateEnabled = parseBooleanEnv(
+    process.env.SPX_SETUP_LATE_SESSION_HARD_GATE_ENABLED,
+    true,
+  );
+  const lateSessionHardGateMinuteEt = parseIntEnv(
+    process.env.SPX_SETUP_LATE_SESSION_HARD_GATE_MINUTE_ET,
+    DEFAULT_LATE_SESSION_HARD_GATE_MINUTE_ET,
+    0,
+  );
   const minConfluenceScore = Math.max(
     input.profile.qualityGate.minConfluenceScore,
     setupFloors?.minConfluenceScore ?? 0,
@@ -1884,6 +1910,9 @@ function evaluateOptimizationGate(input: {
   if (input.pausedCombos.has(comboKey)) {
     reasons.push(`regime_combo_paused:${comboKey}`);
   }
+  if (scoreFloorEnabled && input.setupScore < minSetupScoreFloor) {
+    reasons.push(`score_below_floor:${round(input.setupScore, 2)}<${round(minSetupScoreFloor, 2)}`);
+  }
   if (input.confluenceScore < minConfluenceScore) {
     reasons.push(`confluence_below_floor:${input.confluenceScore}<${minConfluenceScore}`);
   }
@@ -1922,6 +1951,13 @@ function evaluateOptimizationGate(input: {
     if (firstSeenMinute != null && firstSeenMinute > maxMinute) {
       reasons.push(`timing_gate_blocked:${firstSeenMinute}>${maxMinute}`);
     }
+  }
+  if (
+    lateSessionHardGateEnabled
+    && Number.isFinite(input.evaluationMinuteEt ?? NaN)
+    && Number(input.evaluationMinuteEt) >= lateSessionHardGateMinuteEt
+  ) {
+    reasons.push(`late_session_hard_gate:${Number(input.evaluationMinuteEt)}>=${lateSessionHardGateMinuteEt}`);
   }
 
   if (input.setupType === 'fade_at_wall' && input.regime === 'ranging') {
@@ -2853,6 +2889,8 @@ export async function detectActiveSetups(options?: {
       wasPreviouslyTriggered: Boolean(previous?.triggeredAt),
       setupType,
       regime: regimeState.regime,
+      setupScore: finalScore,
+      evaluationMinuteEt: indicatorContext?.minutesSinceOpen ?? null,
       firstSeenAtIso: createdAt,
       confluenceScore,
       pWinCalibrated: effectivePWinCalibrated,

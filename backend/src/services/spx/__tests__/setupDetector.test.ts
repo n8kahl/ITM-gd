@@ -129,6 +129,69 @@ function buildBaseMocks(currentPrice: number) {
   mockGetFlowEvents.mockResolvedValue([]);
 }
 
+function buildIndicatorContext(overrides?: Partial<Record<string, unknown>>): any {
+  return {
+    emaFast: 101.2,
+    emaSlow: 100.8,
+    emaFastSlope: 0.06,
+    emaSlowSlope: 0.03,
+    atr14: 1.4,
+    volumeTrend: 'rising',
+    sessionOpenPrice: 100.5,
+    orbHigh: 102.1,
+    orbLow: 99.8,
+    minutesSinceOpen: 120,
+    sessionOpenTimestamp: '2026-02-20T14:30:00.000Z',
+    asOfTimestamp: '2026-02-20T15:30:00.000Z',
+    vwapPrice: 101.1,
+    vwapDeviation: 0.18,
+    latestBar: null,
+    priorBar: null,
+    avgRecentVolume: 1200,
+    ...(overrides || {}),
+  };
+}
+
+function buildPassingEnvironmentGate() {
+  return {
+    passed: true,
+    reason: null,
+    reasons: [],
+    vixRegime: 'normal' as const,
+    dynamicReadyThreshold: 3,
+    caution: false,
+    breakdown: {
+      vixRegime: {
+        passed: true,
+        regime: 'normal' as const,
+        value: 16,
+      },
+      expectedMoveConsumption: {
+        passed: true,
+        value: 35,
+        expectedMovePoints: 12,
+      },
+      macroCalendar: {
+        passed: true,
+        caution: false,
+        nextEvent: null,
+      },
+      sessionTime: {
+        passed: true,
+        minuteEt: 120,
+        minutesUntilClose: 270,
+        source: 'local' as const,
+      },
+      compression: {
+        passed: true,
+        realizedVolPct: 12,
+        impliedVolPct: 14,
+        spreadPct: 2,
+      },
+    },
+  };
+}
+
 describe('spx/setupDetector', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -193,6 +256,8 @@ describe('spx/setupDetector', () => {
       SPX_SETUP_TTL_READY_MS: String(25 * 60 * 1000),
       SPX_SETUP_TTL_TRIGGERED_MS: String(90 * 60 * 1000),
       SPX_SETUP_SPECIFIC_GATES_ENABLED: 'false',
+      SPX_SETUP_SCORE_FLOOR_ENABLED: 'false',
+      SPX_SETUP_LATE_SESSION_HARD_GATE_ENABLED: 'false',
     };
   });
 
@@ -350,10 +415,53 @@ describe('spx/setupDetector', () => {
     expect(['sniper_primary', 'sniper_secondary', 'watchlist', 'hidden']).toContain(setup.tier);
   });
 
+  it('blocks actionable setups when score floor is enabled and score is below threshold', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    process.env.SPX_SETUP_SCORE_FLOOR_ENABLED = 'true';
+    process.env.SPX_SETUP_MIN_SCORE_FLOOR = '95';
+    process.env.SPX_SETUP_LATE_SESSION_HARD_GATE_ENABLED = 'false';
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      asOfTimestamp: '2026-02-20T15:30:00.000Z',
+      indicatorContext: buildIndicatorContext(),
+    });
+
+    expect(setups.length).toBeGreaterThan(0);
+    expect(setups.some((setup) => setup.gateReasons?.some((reason) => reason.startsWith('score_below_floor:')))).toBe(true);
+    expect(setups.every((setup) => setup.gateStatus !== 'eligible' || setup.status === 'forming')).toBe(true);
+  });
+
+  it('blocks actionable setups when late-session hard gate is enabled', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    process.env.SPX_SETUP_SCORE_FLOOR_ENABLED = 'false';
+    process.env.SPX_SETUP_LATE_SESSION_HARD_GATE_ENABLED = 'true';
+    process.env.SPX_SETUP_LATE_SESSION_HARD_GATE_MINUTE_ET = '270';
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      asOfTimestamp: '2026-02-20T20:30:00.000Z',
+      indicatorContext: buildIndicatorContext({
+        minutesSinceOpen: 300,
+        asOfTimestamp: '2026-02-20T20:30:00.000Z',
+      }),
+    });
+
+    expect(setups.length).toBeGreaterThan(0);
+    expect(setups.some((setup) => setup.gateReasons?.some((reason) => reason.startsWith('late_session_hard_gate:')))).toBe(true);
+    expect(setups.every((setup) => setup.gateStatus !== 'eligible' || setup.status === 'forming')).toBe(true);
+  });
+
   it('invalidates triggered setups with ttl_expired reason when triggered ttl is exceeded', async () => {
     buildBaseMocks(101);
     mockCacheGet.mockResolvedValueOnce(null as never);
-    const initial = await detectActiveSetups({ forceRefresh: true });
+    const initial = await detectActiveSetups({
+      forceRefresh: true,
+      indicatorContext: buildIndicatorContext(),
+      environmentGateOverride: buildPassingEnvironmentGate(),
+    });
     const setup = initial[0];
 
     const staleTriggered = {
@@ -364,8 +472,12 @@ describe('spx/setupDetector', () => {
     };
 
     buildBaseMocks(101);
-    mockCacheGet.mockResolvedValueOnce([staleTriggered] as never);
-    const next = await detectActiveSetups({ forceRefresh: true });
+    const next = await detectActiveSetups({
+      forceRefresh: true,
+      indicatorContext: buildIndicatorContext(),
+      environmentGateOverride: buildPassingEnvironmentGate(),
+      previousSetups: [staleTriggered],
+    });
     const sameSetup = next.find((candidate) => candidate.id === setup.id);
 
     expect(sameSetup?.status).toBe('invalidated');
