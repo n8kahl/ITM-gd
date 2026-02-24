@@ -68,8 +68,9 @@ describe('PUT /api/admin/tabs', () => {
     const deleteMock = vi.fn(() => ({
       in: deleteInMock,
     }))
-    const upsertMock = vi.fn(async (rows: unknown[]) => {
+    const upsertMock = vi.fn(async (rows: unknown[], options?: unknown) => {
       void rows
+      void options
       return { error: null }
     })
     const orderMock = vi.fn(async () => ({
@@ -140,10 +141,15 @@ describe('PUT /api/admin/tabs', () => {
     expect(deleteMock).toHaveBeenCalledTimes(1)
     expect(deleteInMock).toHaveBeenCalledWith('tab_id', ['legacy-tab'])
     expect(upsertMock).toHaveBeenCalledTimes(1)
-    expect(upsertMock).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ tab_id: 'dashboard' }),
-      expect.objectContaining({ tab_id: 'profile' }),
-    ]))
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ tab_id: 'dashboard' }),
+        expect.objectContaining({ tab_id: 'profile' }),
+      ]),
+      expect.objectContaining({
+        onConflict: 'tab_id',
+      }),
+    )
 
     expect(mockLogAdminActivity).toHaveBeenCalledWith(
       expect.objectContaining({
