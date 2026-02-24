@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch historical context for each unique symbol
     const symbolHistoryCache = new Map<string, HistoricalContext>()
-    const uniqueSymbols = Array.from(new Set(candidates.map((c: GradeCandidate) => c.symbol)))
+    const uniqueSymbols: string[] = Array.from(new Set(candidates.map((c: GradeCandidate) => c.symbol)))
 
     for (const sym of uniqueSymbols) {
       const { data: symTrades } = await supabase
