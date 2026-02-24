@@ -11,6 +11,8 @@ export const sendMessageSchema = z.object({
     .trim()
     .min(1, 'Message cannot be empty')
     .max(5000, 'Message cannot exceed 5000 characters'),
+  image: z.string().min(1).optional(),
+  imageMimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']).optional(),
 });
 
 export const getSessionMessagesSchema = z.object({

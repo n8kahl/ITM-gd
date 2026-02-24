@@ -136,9 +136,12 @@ export async function GET(request: NextRequest) {
     const period = analyticsPeriodSchema.parse(searchParams.get('period') ?? '30d')
     const periodStart = getPeriodStart(period)
 
+    const fullSelect = 'id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss,setup_type,market_context'
+    const coreSelect = 'id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss,market_context'
+
     let query = supabase
       .from('journal_entries')
-      .select('id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss,setup_type,market_context')
+      .select(fullSelect)
       .eq('user_id', user.id)
       .order('trade_date', { ascending: true })
 
@@ -146,7 +149,24 @@ export async function GET(request: NextRequest) {
       query = query.gte('trade_date', periodStart)
     }
 
-    const { data, error } = await query
+    let { data, error } = await query
+
+    // Retry without setup_type if the column doesn't exist yet (migration pending)
+    if (error && error.message?.includes('setup_type')) {
+      let retryQuery = supabase
+        .from('journal_entries')
+        .select(coreSelect)
+        .eq('user_id', user.id)
+        .order('trade_date', { ascending: true })
+
+      if (period !== 'all') {
+        retryQuery = retryQuery.gte('trade_date', periodStart)
+      }
+
+      const retryResult = await retryQuery
+      data = retryResult.data
+      error = retryResult.error
+    }
 
     if (error) {
       console.error('Failed to load analytics rows:', error)

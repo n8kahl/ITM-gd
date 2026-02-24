@@ -597,11 +597,16 @@ export async function sendMessage(
   sessionId: string | undefined,
   message: string,
   token: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  imagePayload?: { image: string; imageMimeType: string },
 ): Promise<ChatMessageResponse> {
-  const payload: { message: string; sessionId?: string } = { message }
+  const payload: { message: string; sessionId?: string; image?: string; imageMimeType?: string } = { message }
   if (sessionId && sessionId.trim().length > 0) {
     payload.sessionId = sessionId
+  }
+  if (imagePayload) {
+    payload.image = imagePayload.image
+    payload.imageMimeType = imagePayload.imageMimeType
   }
 
   const response = await fetchWithAuth(
@@ -1643,14 +1648,21 @@ export async function* streamMessage(
   message: string,
   token: string,
   signal?: AbortSignal,
+  imagePayload?: { image: string; imageMimeType: string },
 ): AsyncGenerator<StreamEvent> {
+  const body: { sessionId: string; message: string; image?: string; imageMimeType?: string } = { sessionId, message }
+  if (imagePayload) {
+    body.image = imagePayload.image
+    body.imageMimeType = imagePayload.imageMimeType
+  }
+
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ sessionId, message }),
+    body: JSON.stringify(body),
     signal,
   })
 

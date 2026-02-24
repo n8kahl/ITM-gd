@@ -548,7 +548,7 @@ export function useAICoachChat() {
   /**
    * Send message with streaming (default) or fallback to non-streaming
    */
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, imagePayload?: { image: string; imageMimeType: string }) => {
     const token = getToken()
     if (!token || !text.trim() || sendingRef.current) return
 
@@ -606,7 +606,7 @@ export function useAICoachChat() {
 
       try {
         // Try streaming first
-        for await (const event of apiStreamMessage(sessionId, trimmedText, token, controller.signal)) {
+        for await (const event of apiStreamMessage(sessionId, trimmedText, token, controller.signal, imagePayload)) {
           usedStreaming = true
 
           if (event.type === 'status') {
@@ -646,7 +646,7 @@ export function useAICoachChat() {
       } catch (streamError) {
         // If streaming fails and we haven't received any data, fall back to non-streaming
         if (!usedStreaming) {
-          const response = await apiSendMessage(sessionId, trimmedText, token, controller.signal)
+          const response = await apiSendMessage(sessionId, trimmedText, token, controller.signal, imagePayload)
           streamContent = response.content
           doneData = {
             messageId: response.messageId,
