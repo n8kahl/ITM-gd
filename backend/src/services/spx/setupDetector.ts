@@ -700,8 +700,9 @@ function inferSetupTypeForZone(input: {
   const openingRangeBreakConfirmed = input.direction === 'bullish'
     ? (Number.isFinite(orbHigh) && input.currentPrice >= (orbHigh as number) + ORB_BREAK_CONFIRM_POINTS)
     : (Number.isFinite(orbLow) && input.currentPrice <= (orbLow as number) - ORB_BREAK_CONFIRM_POINTS);
+  const latestBarClose = input.indicatorContext?.latestBar?.c ?? input.currentPrice;
   const nearFastEma = input.indicatorContext
-    ? Math.abs(input.currentPrice - input.indicatorContext.emaFast) <= TREND_PULLBACK_EMA_DISTANCE_POINTS
+    ? Math.abs(latestBarClose - input.indicatorContext.emaFast) <= TREND_PULLBACK_EMA_DISTANCE_POINTS
     : false;
   const openingMomentumConfirmed = inMomentumState || (
     directionalMomentum
@@ -3639,6 +3640,7 @@ export function __resetSetupDetectorStateForTests(): void {
 }
 
 export const __testables = {
+  inferSetupTypeForZone,
   detectVWAPReclaim,
   detectVWAPFade,
   buildVWAPSetupGeometry,
