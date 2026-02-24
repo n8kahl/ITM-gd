@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ImagePlus, Loader2, X } from 'lucide-react'
+import { Check, ImagePlus, Loader2, X } from 'lucide-react'
 import Image from 'next/image'
 import { uploadScreenshot, type UploadProgress } from '@/lib/uploads/supabaseStorage'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
-import { analyzeScreenshot, type ScreenshotAnalysisResponse } from '@/lib/api/ai-coach'
+import {
+  analyzeScreenshot,
+  type ExtractedPosition,
+  type ScreenshotAnalysisResponse,
+} from '@/lib/api/ai-coach'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 const ALLOWED_SCREENSHOT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
@@ -29,6 +33,26 @@ function normalizeSymbol(value: string): string {
 
 function isAmbiguousSymbol(value: string): boolean {
   return AMBIGUOUS_SCREENSHOT_SYMBOLS.has(normalizeSymbol(value))
+}
+
+function isValidPosition(pos: ExtractedPosition): boolean {
+  return Boolean(pos.symbol) && !isAmbiguousSymbol(pos.symbol)
+}
+
+function formatPositionLabel(pos: ExtractedPosition): string {
+  const parts: string[] = [pos.symbol]
+  if (pos.type !== 'stock') {
+    parts.push(pos.type.toUpperCase())
+  }
+  if (pos.strike) parts.push(`$${pos.strike}`)
+  if (pos.expiry) parts.push(pos.expiry)
+  return parts.join(' ')
+}
+
+function formatPnl(pnl: number | undefined): string {
+  if (pnl == null) return ''
+  const sign = pnl >= 0 ? '+' : ''
+  return `${sign}$${pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 async function resolveCurrentUserId(supabase: ReturnType<typeof createBrowserSupabase>): Promise<string | null> {
@@ -75,6 +99,11 @@ function ScreenshotQuickAddDialog({
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<ScreenshotAnalysisResponse | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [selectedPositions, setSelectedPositions] = useState<Set<number>>(new Set())
+  const [saveResult, setSaveResult] = useState<{ created: number; failed: number } | null>(null)
+
+  const hasMultiplePositions = (analysis?.positionCount ?? 0) > 1
+  const validPositions = analysis?.positions.filter(isValidPosition) ?? []
 
   useFocusTrap({
     active: !uploading,
@@ -91,16 +120,34 @@ function ScreenshotQuickAddDialog({
     }
   }, [])
 
-  const openAICoach = useCallback((prompt: string) => {
+  const openAICoach = useCallback((actionPrompt: string) => {
     if (typeof window === 'undefined') return
-    const query = encodeURIComponent(prompt)
+    // Build position summary for context
+    const positions = analysis?.positions ?? []
+    const summary = positions
+      .slice(0, 10)
+      .map((p) => {
+        const label = formatPositionLabel(p)
+        const qty = `x${Math.abs(p.quantity)}`
+        const pnl = p.pnl != null ? ` P&L: ${formatPnl(p.pnl)}` : ''
+        return `${label} ${qty}${pnl}`
+      })
+      .join('; ')
+
+    const fullPrompt = summary
+      ? `${actionPrompt}\n\nPositions from screenshot: ${summary}`
+      : actionPrompt
+
+    const query = encodeURIComponent(fullPrompt)
     window.open(`/members/ai-coach?prompt=${query}`, '_blank', 'noopener,noreferrer')
-  }, [])
+  }, [analysis?.positions])
 
   const runScreenshotAnalysis = useCallback(async (selectedFile: File) => {
     setAnalysis(null)
     setAnalysisError(null)
     setAnalyzing(true)
+    setSelectedPositions(new Set())
+    setSaveResult(null)
     try {
       const supabase = createBrowserSupabase()
       const {
@@ -116,6 +163,7 @@ function ScreenshotQuickAddDialog({
       const result = await analyzeScreenshot(base64, selectedFile.type, session.access_token)
       setAnalysis(result)
 
+      // Auto-fill symbol only for single non-ambiguous position
       const top = result.positions[0]
       if (result.positionCount === 1 && top?.symbol && !symbol.trim() && !isAmbiguousSymbol(top.symbol)) {
         setSymbol(normalizeSymbol(top.symbol))
@@ -127,6 +175,22 @@ function ScreenshotQuickAddDialog({
     }
   }, [symbol])
 
+  const togglePosition = useCallback((index: number) => {
+    setSelectedPositions((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }, [])
+
+  const selectAllPositions = useCallback(() => {
+    setSelectedPositions(new Set(validPositions.map((_, i) => i)))
+  }, [validPositions])
+
   const handleFileSelect = useCallback((selectedFile: File) => {
     if (!ALLOWED_SCREENSHOT_TYPES.has(selectedFile.type)) {
       setError('Please select a PNG, JPEG, or WebP image')
@@ -137,6 +201,8 @@ function ScreenshotQuickAddDialog({
     setError(null)
     setAnalysis(null)
     setAnalysisError(null)
+    setSelectedPositions(new Set())
+    setSaveResult(null)
 
     // Create preview
     const reader = new FileReader()
@@ -154,8 +220,8 @@ function ScreenshotQuickAddDialog({
         for (const type of item.types) {
           if (type.startsWith('image/')) {
             const blob = await item.getType(type)
-            const file = new File([blob], `screenshot-${Date.now()}.png`, { type })
-            handleFileSelect(file)
+            const pasteFile = new File([blob], `screenshot-${Date.now()}.png`, { type })
+            handleFileSelect(pasteFile)
             return
           }
         }
@@ -180,38 +246,99 @@ function ScreenshotQuickAddDialog({
     [handleFileSelect],
   )
 
+  const buildEntryPayload = useCallback((
+    position: ExtractedPosition,
+    screenshotUrl: string,
+    storagePath: string,
+  ) => {
+    const exitPrice = position.currentPrice && position.currentPrice > 0 ? position.currentPrice : null
+    const entryPrice = position.entryPrice && position.entryPrice > 0 ? position.entryPrice : null
+    const positionSize = position.quantity ? Math.abs(position.quantity) : 1
+    const direction = position.quantity < 0 ? 'short' as const : 'long' as const
+
+    let pnl: number | null = position.pnl != null ? position.pnl : null
+    if (pnl == null && entryPrice != null && exitPrice != null) {
+      const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+      pnl = Math.round(perUnit * positionSize * 100) / 100
+    }
+
+    return {
+      symbol: normalizeSymbol(position.symbol),
+      trade_date: new Date().toISOString(),
+      direction,
+      contract_type: position.type === 'call' || position.type === 'put' ? position.type : 'stock',
+      entry_price: entryPrice,
+      exit_price: exitPrice,
+      position_size: positionSize,
+      pnl,
+      strike_price: typeof position.strike === 'number' ? position.strike : null,
+      expiration_date: typeof position.expiry === 'string' ? position.expiry.slice(0, 10) : null,
+      is_open: exitPrice == null,
+      screenshot_url: screenshotUrl,
+      screenshot_storage_path: storagePath,
+      setup_notes: notes.trim() || null,
+      tags: ['screenshot:quick-add'],
+    }
+  }, [notes])
+
   const handleSave = useCallback(async () => {
     if (!file) {
       setError('Please select a screenshot first')
       return
     }
 
-    const fallbackSymbol = (
-      analysis?.positionCount === 1
-      && analysis?.positions?.[0]?.symbol
-      && !isAmbiguousSymbol(analysis.positions[0].symbol)
-    )
-      ? normalizeSymbol(analysis.positions[0].symbol)
-      : ''
-    const typedSymbol = normalizeSymbol(symbol)
-    const normalizedSymbol = typedSymbol || fallbackSymbol
-    if (!normalizedSymbol) {
+    // Determine which positions to save
+    const positionsToSave: ExtractedPosition[] = []
+
+    if (hasMultiplePositions && selectedPositions.size > 0) {
+      // Multi-position mode: save selected positions
+      for (const idx of selectedPositions) {
+        const pos = validPositions[idx]
+        if (pos) positionsToSave.push(pos)
+      }
+    } else if (!hasMultiplePositions && analysis?.positions[0]) {
+      // Single position: use symbol field (manual or auto-filled)
+      const fallbackSymbol = (
+        analysis.positionCount === 1
+        && analysis.positions[0]?.symbol
+        && !isAmbiguousSymbol(analysis.positions[0].symbol)
+      )
+        ? normalizeSymbol(analysis.positions[0].symbol)
+        : ''
+      const typedSymbol = normalizeSymbol(symbol)
+      const normalizedSymbol = typedSymbol || fallbackSymbol
+      if (!normalizedSymbol) {
+        setError('Please enter a symbol before creating the entry')
+        return
+      }
+      if (isAmbiguousSymbol(normalizedSymbol)) {
+        setError('Detected symbol is ambiguous. Enter a specific ticker symbol to continue.')
+        return
+      }
+      // Use a synthetic position with the user's symbol override
+      positionsToSave.push({ ...analysis.positions[0], symbol: normalizedSymbol })
+    } else if (!analysis && normalizeSymbol(symbol)) {
+      // No analysis but user typed a symbol — create a bare entry
+      positionsToSave.push({
+        symbol: normalizeSymbol(symbol),
+        type: 'stock',
+        quantity: 1,
+        entryPrice: 0,
+        confidence: 0,
+      })
+    } else {
       setError(
-        analysis?.positionCount && analysis.positionCount > 1
-          ? 'Multiple positions detected. Enter one symbol to log a specific trade.'
+        hasMultiplePositions
+          ? 'Select at least one position to log'
           : 'Please enter a symbol before creating the entry',
       )
-      return
-    }
-
-    if (isAmbiguousSymbol(normalizedSymbol)) {
-      setError('Detected symbol is ambiguous. Enter a specific ticker symbol to continue.')
       return
     }
 
     setUploading(true)
     setError(null)
     setUploadProgress(0)
+    setSaveResult(null)
 
     try {
       const supabase = createBrowserSupabase()
@@ -223,7 +350,7 @@ function ScreenshotQuickAddDialog({
         return
       }
 
-      // Upload screenshot
+      // Upload screenshot once
       const result = await uploadScreenshot(file, userId, undefined, (progress: UploadProgress) => {
         if (progress.status === 'uploading' && progress.percent != null) {
           setUploadProgress(progress.percent)
@@ -242,57 +369,46 @@ function ScreenshotQuickAddDialog({
         return
       }
 
-      const topPosition = analysis?.positions?.[0]
-      const exitPrice = topPosition?.currentPrice && topPosition.currentPrice > 0 ? topPosition.currentPrice : null
-      const entryPrice = topPosition?.entryPrice && topPosition.entryPrice > 0 ? topPosition.entryPrice : null
-      const positionSize = topPosition?.quantity ? Math.abs(topPosition.quantity) : 1
-      const direction = topPosition && topPosition.quantity < 0 ? 'short' as const : 'long' as const
+      // Create journal entries (one per position)
+      let created = 0
+      let failed = 0
+      let lastCreatedId: string | null = null
 
-      // Use extracted PnL if available, otherwise calculate from entry/exit prices
-      let pnl: number | null = topPosition?.pnl != null ? topPosition.pnl : null
-      if (pnl == null && entryPrice != null && exitPrice != null) {
-        const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
-        pnl = Math.round(perUnit * positionSize * 100) / 100
+      for (const position of positionsToSave) {
+        const payload = buildEntryPayload(position, result.url, result.storagePath)
+
+        const createResponse = await fetch('/api/members/journal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+
+        const createPayload = await createResponse.json().catch(() => null)
+        if (createResponse.ok && createPayload?.success && createPayload?.data?.id) {
+          created += 1
+          lastCreatedId = createPayload.data.id as string
+        } else {
+          failed += 1
+        }
       }
 
-      const createResponse = await fetch('/api/members/journal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: normalizedSymbol,
-          trade_date: new Date().toISOString(),
-          direction,
-          contract_type: topPosition?.type === 'call' || topPosition?.type === 'put' ? topPosition.type : 'stock',
-          entry_price: entryPrice,
-          exit_price: exitPrice,
-          position_size: positionSize,
-          pnl,
-          strike_price: typeof topPosition?.strike === 'number' ? topPosition.strike : null,
-          expiration_date: typeof topPosition?.expiry === 'string' ? topPosition.expiry.slice(0, 10) : null,
-          is_open: exitPrice == null,
-          screenshot_url: result.url,
-          screenshot_storage_path: result.storagePath,
-          setup_notes: notes.trim() || null,
-          tags: ['screenshot:quick-add'],
-        }),
-      })
-
-      const createPayload = await createResponse.json().catch(() => null)
-      if (!createResponse.ok || !createPayload?.success || !createPayload?.data?.id) {
-        const message = createPayload?.error || 'Failed to create entry'
-        setError(message)
+      if (created === 0) {
+        setError('Failed to create any entries')
         setUploading(false)
         return
       }
 
-      // Success! Call parent callback
-      onEntryCreated(createPayload.data.id as string)
+      if (positionsToSave.length > 1) {
+        setSaveResult({ created, failed })
+      }
+
+      onEntryCreated(lastCreatedId!)
     } catch (err) {
       console.error('Quick screenshot save failed:', err)
       setError(err instanceof Error ? err.message : 'Save failed')
       setUploading(false)
     }
-  }, [analysis?.positionCount, analysis?.positions, file, symbol, notes, onEntryCreated])
+  }, [analysis, buildEntryPayload, file, hasMultiplePositions, notes, onEntryCreated, selectedPositions, symbol, validPositions])
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
@@ -307,7 +423,7 @@ function ScreenshotQuickAddDialog({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-ivory">Quick Screenshot Entry</h2>
-            <p className="text-xs text-muted-foreground">Fastest way to log a trade - just 10 seconds</p>
+            <p className="text-xs text-muted-foreground">Upload a screenshot to extract and log positions</p>
           </div>
           <button
             type="button"
@@ -383,6 +499,8 @@ function ScreenshotQuickAddDialog({
                     setPreviewUrl(null)
                     setAnalysis(null)
                     setAnalysisError(null)
+                    setSelectedPositions(new Set())
+                    setSaveResult(null)
                   }}
                   className="absolute right-2 top-2 rounded-md bg-black/80 p-1.5 text-red-300 hover:bg-black"
                   aria-label="Remove screenshot"
@@ -401,51 +519,136 @@ function ScreenshotQuickAddDialog({
               )}
 
               {analysis && (
-                <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-3">
-                  <p className="text-xs text-white/70">
-                    Found <span className="text-emerald-300">{analysis.positionCount}</span> position{analysis.positionCount === 1 ? '' : 's'}
-                    {' '}({analysis.intent.replace('_', ' ')})
-                  </p>
-
-                  {analysis.positions[0] && (
-                    <button
-                      type="button"
-                      onClick={() => setSymbol(analysis.positions[0]?.symbol || symbol)}
-                      className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/15"
-                    >
-                      Use Detected Symbol ({analysis.positions[0].symbol})
-                    </button>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {analysis.suggestedActions.map((action) => (
+                <div className="space-y-3 rounded-md border border-white/10 bg-black/20 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-white/70">
+                      Found <span className="text-emerald-300">{analysis.positionCount}</span> position{analysis.positionCount === 1 ? '' : 's'}
+                      {' '}({analysis.intent.replace(/_/g, ' ')})
+                    </p>
+                    {hasMultiplePositions && validPositions.length > 1 && (
                       <button
-                        key={action.id}
                         type="button"
-                        onClick={() => openAICoach(`I uploaded a screenshot. ${action.label}: ${action.description}`)}
-                        className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/80 hover:border-emerald-500/30 hover:text-emerald-200"
-                        title={action.description}
+                        onClick={selectAllPositions}
+                        disabled={uploading}
+                        className="text-[11px] text-emerald-300 hover:text-emerald-200"
                       >
-                        {action.label}
+                        {selectedPositions.size === validPositions.length ? 'Deselect All' : 'Select All'}
                       </button>
-                    ))}
+                    )}
                   </div>
+
+                  {/* Position list */}
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                    {analysis.positions.map((pos, idx) => {
+                      const valid = isValidPosition(pos)
+                      const isSelected = selectedPositions.has(idx)
+
+                      return (
+                        <div
+                          key={`${pos.symbol}-${idx}`}
+                          className={`flex items-center gap-2.5 rounded-md border px-2.5 py-2 transition-colors ${
+                            hasMultiplePositions && valid
+                              ? isSelected
+                                ? 'border-emerald-500/40 bg-emerald-500/10'
+                                : 'border-white/10 bg-white/5 hover:border-white/20 cursor-pointer'
+                              : !hasMultiplePositions
+                                ? 'border-emerald-500/30 bg-emerald-500/5'
+                                : 'border-white/5 bg-white/[0.02] opacity-50'
+                          }`}
+                          onClick={hasMultiplePositions && valid && !uploading ? () => togglePosition(idx) : undefined}
+                        >
+                          {/* Checkbox for multi-position mode */}
+                          {hasMultiplePositions && valid && (
+                            <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                              isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-white/30'
+                            }`}>
+                              {isSelected && <Check className="h-3 w-3 text-black" />}
+                            </div>
+                          )}
+
+                          {/* Position details */}
+                          <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="font-mono text-xs font-medium text-ivory">
+                                {pos.symbol}
+                              </span>
+                              {pos.type !== 'stock' && (
+                                <span className="ml-1.5 text-[10px] text-white/50">
+                                  {pos.type.toUpperCase()}
+                                  {pos.strike ? ` $${pos.strike}` : ''}
+                                  {pos.expiry ? ` ${pos.expiry}` : ''}
+                                </span>
+                              )}
+                              <span className="ml-1.5 text-[10px] text-white/40">
+                                x{Math.abs(pos.quantity)}
+                              </span>
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-2">
+                              {pos.pnl != null && (
+                                <span className={`font-mono text-xs ${pos.pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                                  {formatPnl(pos.pnl)}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-white/30">
+                                {Math.round(pos.confidence * 100)}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Single-position: click to use */}
+                          {!hasMultiplePositions && valid && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSymbol(normalizeSymbol(pos.symbol))
+                              }}
+                              className="shrink-0 rounded border border-emerald-500/30 px-2 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/10"
+                            >
+                              Use
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Action chips — always visible */}
+                  {analysis.suggestedActions.length > 0 && (
+                    <div className="flex flex-wrap gap-2 border-t border-white/10 pt-2">
+                      {analysis.suggestedActions.map((action) => (
+                        <button
+                          key={action.id}
+                          type="button"
+                          onClick={() => openAICoach(`${action.label}: ${action.description}`)}
+                          className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/80 hover:border-emerald-500/30 hover:text-emerald-200"
+                          title={action.description}
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
               {analysisError && <p className="text-xs text-amber-300">{analysisError}</p>}
 
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Symbol (required)</label>
-                <input
-                  type="text"
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                  placeholder="e.g., AAPL"
-                  disabled={uploading}
-                  className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory placeholder:text-muted-foreground disabled:opacity-60"
-                />
-              </div>
+              {/* Symbol input: only shown for single-position or no-analysis mode */}
+              {!hasMultiplePositions && (
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Symbol (required)</label>
+                  <input
+                    type="text"
+                    value={symbol}
+                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                    placeholder="e.g., AAPL"
+                    disabled={uploading}
+                    className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory placeholder:text-muted-foreground disabled:opacity-60"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="mb-1 block text-xs text-muted-foreground">Quick notes (optional)</label>
@@ -460,6 +663,13 @@ function ScreenshotQuickAddDialog({
               </div>
             </div>
 
+            {saveResult && (
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                Created {saveResult.created} journal {saveResult.created === 1 ? 'entry' : 'entries'}
+                {saveResult.failed > 0 && ` (${saveResult.failed} failed)`}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -472,7 +682,7 @@ function ScreenshotQuickAddDialog({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={uploading}
+                disabled={uploading || (hasMultiplePositions && selectedPositions.size === 0 && !symbol.trim())}
                 className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {uploading ? (
@@ -480,6 +690,8 @@ function ScreenshotQuickAddDialog({
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {uploadProgress > 0 ? `${uploadProgress}%` : 'Saving...'}
                   </>
+                ) : hasMultiplePositions && selectedPositions.size > 0 ? (
+                  `Log ${selectedPositions.size} ${selectedPositions.size === 1 ? 'Entry' : 'Entries'}`
                 ) : (
                   'Create Entry'
                 )}
