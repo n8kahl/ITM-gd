@@ -243,14 +243,14 @@ function ScreenshotQuickAddDialog({
       }
 
       const topPosition = analysis?.positions?.[0]
-      const exitPrice = topPosition?.exitPrice && topPosition.exitPrice > 0 ? topPosition.exitPrice : null
+      const exitPrice = topPosition?.currentPrice && topPosition.currentPrice > 0 ? topPosition.currentPrice : null
       const entryPrice = topPosition?.entryPrice && topPosition.entryPrice > 0 ? topPosition.entryPrice : null
       const positionSize = topPosition?.quantity ? Math.abs(topPosition.quantity) : 1
       const direction = topPosition && topPosition.quantity < 0 ? 'short' as const : 'long' as const
 
-      // Auto-calculate PnL if both entry and exit prices are available
-      let pnl: number | null = null
-      if (entryPrice != null && exitPrice != null) {
+      // Use extracted PnL if available, otherwise calculate from entry/exit prices
+      let pnl: number | null = topPosition?.pnl != null ? topPosition.pnl : null
+      if (pnl == null && entryPrice != null && exitPrice != null) {
         const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
         pnl = Math.round(perUnit * positionSize * 100) / 100
       }
