@@ -48,6 +48,20 @@ type SetupPushListener = (event: SetupPushEvent) => void;
 
 const listeners = new Set<SetupPushListener>();
 
+function broadcastToListeners(event: SetupPushEvent): void {
+  const snapshot = Array.from(listeners);
+
+  for (const listener of snapshot) {
+    try {
+      listener(event);
+    } catch (error) {
+      logger.warn('Setup push listener failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
 export function subscribeSetupPushEvents(listener: SetupPushListener): () => void {
   listeners.add(listener);
   return () => {
@@ -59,46 +73,19 @@ export function publishSetupPushHeartbeat(payload: SetupPushHeartbeat): void {
   if (listeners.size === 0) return;
 
   const event: SetupPushEvent = { type: 'heartbeat', payload };
-
-  for (const listener of listeners) {
-    try {
-      listener(event);
-    } catch (error) {
-      logger.warn('Setup push listener failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  broadcastToListeners(event);
 }
 
 export function publishSetupStatusUpdate(payload: SetupStatusUpdate): void {
   if (listeners.size === 0) return;
 
   const event: SetupPushEvent = { type: 'setup_update', payload };
-
-  for (const listener of listeners) {
-    try {
-      listener(event);
-    } catch (error) {
-      logger.warn('Setup push listener failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  broadcastToListeners(event);
 }
 
 export function publishSetupDetected(payload: SetupDetectedUpdate): void {
   if (listeners.size === 0) return;
 
   const event: SetupPushEvent = { type: 'setup_detected', payload };
-
-  for (const listener of listeners) {
-    try {
-      listener(event);
-    } catch (error) {
-      logger.warn('Setup push listener failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  broadcastToListeners(event);
 }

@@ -109,4 +109,110 @@ describe('setupPushChannel', () => {
 
     unsubscribe();
   });
+
+  it('does not crash when a listener subscribes during broadcast', () => {
+    const firstListener = jest.fn();
+    const secondListener = jest.fn();
+    const lateListener = jest.fn();
+    let unsubscribeLate: (() => void) | undefined;
+
+    const unsubscribeFirst = subscribeSetupPushEvents(() => {
+      firstListener();
+      if (!unsubscribeLate) {
+        unsubscribeLate = subscribeSetupPushEvents(lateListener);
+      }
+    });
+    const unsubscribeSecond = subscribeSetupPushEvents(secondListener);
+
+    publishSetupPushHeartbeat({
+      generatedAt: '2026-02-09T15:20:00.000Z',
+      activeSetupCount: 2,
+      uniqueUsers: 1,
+    });
+
+    expect(firstListener).toHaveBeenCalledTimes(1);
+    expect(secondListener).toHaveBeenCalledTimes(1);
+    expect(lateListener).toHaveBeenCalledTimes(0);
+
+    publishSetupPushHeartbeat({
+      generatedAt: '2026-02-09T15:21:00.000Z',
+      activeSetupCount: 2,
+      uniqueUsers: 1,
+    });
+
+    expect(lateListener).toHaveBeenCalledTimes(1);
+
+    unsubscribeFirst();
+    unsubscribeSecond();
+    if (unsubscribeLate) {
+      unsubscribeLate();
+    }
+  });
+
+  it('does not skip listeners when one unsubscribes another during broadcast', () => {
+    const callOrder: string[] = [];
+    const listenerB = jest.fn(() => {
+      callOrder.push('B');
+    });
+    const listenerC = jest.fn(() => {
+      callOrder.push('C');
+    });
+
+    let unsubscribeB: () => void = () => {};
+    const unsubscribeA = subscribeSetupPushEvents(() => {
+      callOrder.push('A');
+      unsubscribeB();
+    });
+    unsubscribeB = subscribeSetupPushEvents(listenerB);
+    const unsubscribeC = subscribeSetupPushEvents(listenerC);
+
+    publishSetupStatusUpdate({
+      setupId: 'setup-2',
+      userId: 'user-2',
+      symbol: 'SPX',
+      setupType: 'fade_at_wall',
+      previousStatus: 'active',
+      status: 'invalidated',
+      currentPrice: 5998.25,
+      reason: 'stop_loss_hit',
+      evaluatedAt: '2026-02-09T15:25:00.000Z',
+    });
+
+    expect(callOrder).toEqual(['A', 'B', 'C']);
+    expect(listenerB).toHaveBeenCalledTimes(1);
+    expect(listenerC).toHaveBeenCalledTimes(1);
+
+    unsubscribeA();
+    unsubscribeB();
+    unsubscribeC();
+  });
+
+  it('continues broadcasting when one listener throws', () => {
+    const throwingListener = jest.fn(() => {
+      throw new Error('listener-failure');
+    });
+    const healthyListener = jest.fn();
+
+    const unsubscribeThrowing = subscribeSetupPushEvents(throwingListener);
+    const unsubscribeHealthy = subscribeSetupPushEvents(healthyListener);
+
+    expect(() =>
+      publishSetupDetected({
+        trackedSetupId: 'tracked-2',
+        detectedSetupId: 'det-2',
+        userId: 'user-2',
+        symbol: 'SPX',
+        setupType: 'trend_pullback',
+        direction: 'bullish',
+        confidence: 71,
+        currentPrice: 6012.5,
+        detectedAt: '2026-02-09T15:30:00.000Z',
+      }),
+    ).not.toThrow();
+    expect(throwingListener).toHaveBeenCalledTimes(1);
+    expect(healthyListener).toHaveBeenCalledTimes(1);
+
+    unsubscribeThrowing();
+    unsubscribeHealthy();
+  });
 });
