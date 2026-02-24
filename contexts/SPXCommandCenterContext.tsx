@@ -20,6 +20,12 @@ import { enrichCoachDecisionExplainability } from '@/lib/spx/coach-explainabilit
 import { distanceToStopPoints, isFlowDivergence, summarizeFlowAlignment } from '@/lib/spx/coach-context'
 import { enrichSPXSetupWithDecisionEngine } from '@/lib/spx/decision-engine'
 import { normalizeSPXRealtimeEvent } from '@/lib/spx/event-schema'
+import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
+import {
+  mergeActionableSetups,
+  mergeSetup,
+  setupLifecycleEpoch,
+} from '@/lib/spx/setup-stream-state'
 import {
   resolveSPXFeedHealth,
   type SPXFeedFallbackReasonCode,
@@ -188,7 +194,6 @@ const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['formin
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const ENTERABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
-const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
 const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
 const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
 const PROACTIVE_COACH_COOLDOWN_MS = 45_000
@@ -263,112 +268,18 @@ function rankSetups(setups: Setup[]): Setup[] {
     if (b.confluenceScore !== a.confluenceScore) return b.confluenceScore - a.confluenceScore
     if (b.probability !== a.probability) return b.probability - a.probability
 
-    const recencyA = a.triggeredAt ? toEpoch(a.triggeredAt) : toEpoch(a.createdAt)
-    const recencyB = b.triggeredAt ? toEpoch(b.triggeredAt) : toEpoch(b.createdAt)
+    const recencyA = setupLifecycleEpoch(a)
+    const recencyB = setupLifecycleEpoch(b)
     if (recencyB !== recencyA) return recencyB - recencyA
 
     return a.id.localeCompare(b.id)
   })
 }
 
-function setupRecencyEpoch(setup: Setup): number {
-  return Math.max(toEpoch(setup.triggeredAt), toEpoch(setup.createdAt))
-}
-
 function roundTo(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals))
 }
 
-function setupSemanticKey(setup: Setup): string {
-  return [
-    setup.type,
-    setup.direction,
-    roundTo(setup.entryZone.low, 2),
-    roundTo(setup.entryZone.high, 2),
-    roundTo(setup.stop, 2),
-    roundTo(setup.target1.price, 2),
-    roundTo(setup.target2.price, 2),
-    setup.regime,
-  ].join('|')
-}
-
-function dedupeSetupsBySemanticKey(setups: Setup[]): Setup[] {
-  const ranked = rankSetups(setups)
-  const deduped: Setup[] = []
-  const seen = new Set<string>()
-
-  for (const setup of ranked) {
-    const key = setupSemanticKey(setup)
-    if (seen.has(key)) continue
-    seen.add(key)
-    deduped.push(setup)
-  }
-
-  return rankSetups(deduped)
-}
-
-function shouldKeepExistingSetup(existing: Setup, incoming: Setup): boolean {
-  const existingPriority = SETUP_STATUS_PRIORITY[existing.status]
-  const incomingPriority = SETUP_STATUS_PRIORITY[incoming.status]
-  const existingRecency = setupRecencyEpoch(existing)
-  const incomingRecency = setupRecencyEpoch(incoming)
-
-  if (existing.status === 'triggered' && (incoming.status === 'ready' || incoming.status === 'forming')) {
-    return incomingRecency <= existingRecency + 60_000
-  }
-
-  if (existingPriority < incomingPriority && existingRecency >= incomingRecency) {
-    return true
-  }
-
-  return false
-}
-
-function mergeSetup(existing: Setup | undefined, incoming: Setup): Setup {
-  if (!existing) return incoming
-  if (shouldKeepExistingSetup(existing, incoming)) {
-    return {
-      ...incoming,
-      ...existing,
-      recommendedContract: existing.recommendedContract ?? incoming.recommendedContract,
-    }
-  }
-
-  return {
-    ...incoming,
-    recommendedContract: incoming.recommendedContract ?? existing.recommendedContract,
-  }
-}
-
-function mergeActionableSetups(existingSetups: Setup[], incomingSetups: Setup[]): Setup[] {
-  const now = Date.now()
-  const incomingIds = new Set(incomingSetups.map((setup) => setup.id))
-  const merged = new Map(existingSetups.map((setup) => [setup.id, setup]))
-
-  for (const incoming of incomingSetups) {
-    const current = merged.get(incoming.id)
-    const nextSetup = mergeSetup(current, incoming)
-    if (ACTIONABLE_SETUP_STATUSES.has(nextSetup.status)) {
-      merged.set(nextSetup.id, nextSetup)
-    } else {
-      merged.delete(nextSetup.id)
-    }
-  }
-
-  for (const existing of existingSetups) {
-    if (incomingIds.has(existing.id)) continue
-    if (!ACTIONABLE_SETUP_STATUSES.has(existing.status)) {
-      merged.delete(existing.id)
-      continue
-    }
-    const isRecent = now - setupRecencyEpoch(existing) <= REALTIME_SETUP_RETENTION_MS
-    if (!isRecent) {
-      merged.delete(existing.id)
-    }
-  }
-
-  return dedupeSetupsBySemanticKey(Array.from(merged.values()))
-}
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -839,8 +750,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [stream.isConnected])
 
   useEffect(() => {
+    const snapshotEpochMs = toEpoch(snapshotData?.generatedAt) || Date.now()
     const snapshotSetups = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
-    setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups))
+    setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups, { nowMs: snapshotEpochMs }))
   }, [snapshotData?.generatedAt, snapshotData?.setups])
 
   const flowEvents = useMemo(() => snapshotData?.flow || [], [snapshotData?.flow])
@@ -927,6 +839,25 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     if (!selectedSetupId) return defaultSetup
     return activeSetups.find((setup) => setup.id === selectedSetupId) || defaultSetup
   }, [activeSetups, inTradeSetupId, selectedSetupId])
+  const alertDisplayPolicy = useMemo(() => buildSetupDisplayPolicy({
+    setups: activeSetups,
+    regime: snapshotData?.regime?.regime || null,
+    prediction: snapshotData?.prediction || null,
+    selectedSetup,
+    primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
+  }), [
+    activeSetups,
+    selectedSetup,
+    snapshotData?.prediction,
+    snapshotData?.regime?.regime,
+  ])
+  const alertableSetupIds = useMemo(() => {
+    const actionable = [
+      ...alertDisplayPolicy.actionablePrimary,
+      ...alertDisplayPolicy.actionableSecondary,
+    ]
+    return new Set(actionable.map((setup) => setup.id))
+  }, [alertDisplayPolicy.actionablePrimary, alertDisplayPolicy.actionableSecondary])
 
   const selectedSetupContract = useMemo<ContractRecommendation | null>(() => {
     if (!selectedSetup) return null
@@ -1593,6 +1524,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     const nextStatusById: Record<string, Setup['status']> = {}
+    let focusTriggeredSetupId: string | null = null
     for (const setup of activeSetups) {
       nextStatusById[setup.id] = setup.status
     }
@@ -1602,7 +1534,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       if (!previousStatus) continue
       if (previousStatus === 'triggered' || setup.status !== 'triggered') continue
 
+      const isAlertable = alertableSetupIds.has(setup.id) || inTradeSetupId === setup.id
+      if (!isAlertable) continue
+
       emitSetupTriggeredNotification(setup)
+      if (!inTradeSetupId && focusTriggeredSetupId == null) {
+        focusTriggeredSetupId = setup.id
+      }
       if (!uxFlags.coachProactive) continue
 
       const flowSummary = summarizeFlowAlignment(flowEvents.slice(0, 12), setup.direction)
@@ -1625,11 +1563,26 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       pushProactiveCoachMessage(message, `triggered:${setup.id}`)
     }
 
+    if (
+      focusTriggeredSetupId
+      && !inTradeSetupId
+      && selectedSetupIdRef.current !== focusTriggeredSetupId
+    ) {
+      setSelectedSetupId(focusTriggeredSetupId)
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'setup_feed',
+        action: 'auto_focus_triggered_setup',
+        setupId: focusTriggeredSetupId,
+      })
+    }
+
     previousSetupStatusByIdRef.current = nextStatusById
   }, [
     activeSetups,
+    alertableSetupIds,
     emitSetupTriggeredNotification,
     flowEvents,
+    inTradeSetupId,
     pushProactiveCoachMessage,
     uxFlags.coachProactive,
   ])
