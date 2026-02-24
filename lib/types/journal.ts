@@ -128,6 +128,14 @@ export interface JournalEntry {
 
   is_favorite: boolean
 
+  /** Setup type from SPX Command Center detector (e.g. "Bull Bounce", "Fade") */
+  setup_type: string | null
+
+  /** Draft state for auto-captured entries */
+  is_draft: boolean
+  draft_status: 'pending' | 'confirmed' | 'dismissed' | null
+  draft_expires_at: string | null
+
   created_at: string
   updated_at: string
 }

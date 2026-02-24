@@ -133,6 +133,14 @@ function asMood(value: unknown): JournalMood | null {
   return parsed.success ? parsed.data : null
 }
 
+const DRAFT_STATUS_VALUES = new Set(['pending', 'confirmed', 'dismissed'])
+
+function asDraftStatus(value: unknown): 'pending' | 'confirmed' | 'dismissed' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  return DRAFT_STATUS_VALUES.has(normalized) ? (normalized as 'pending' | 'confirmed' | 'dismissed') : null
+}
+
 function asTags(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
@@ -234,6 +242,11 @@ export function sanitizeJournalWriteInput(input: Record<string, unknown>): Recor
   if (input.import_id !== undefined) sanitized.import_id = asString(input.import_id, textFieldMaxLengths.import_id)
   if (input.is_favorite !== undefined) sanitized.is_favorite = asBoolean(input.is_favorite) ?? false
 
+  if (input.setup_type !== undefined) sanitized.setup_type = asString(input.setup_type, 120)
+  if (input.is_draft !== undefined) sanitized.is_draft = asBoolean(input.is_draft) ?? false
+  if (input.draft_status !== undefined) sanitized.draft_status = asDraftStatus(input.draft_status)
+  if (input.draft_expires_at !== undefined) sanitized.draft_expires_at = asDateTime(input.draft_expires_at)
+
   return sanitized
 }
 
@@ -302,6 +315,12 @@ export function sanitizeJournalEntry(raw: unknown, fallbackId = 'entry-0'): Jour
     import_id: asString(value.import_id, textFieldMaxLengths.import_id),
 
     is_favorite: asBoolean(value.is_favorite) ?? false,
+
+    setup_type: asString(value.setup_type, 120),
+
+    is_draft: asBoolean(value.is_draft) ?? false,
+    draft_status: asDraftStatus(value.draft_status),
+    draft_expires_at: asDateTime(value.draft_expires_at),
 
     created_at: asDateTime(value.created_at) ?? nowIso,
     updated_at: asDateTime(value.updated_at) ?? nowIso,
