@@ -26,6 +26,39 @@ const CATEGORY_WEIGHT: Record<LevelCategory, number> = {
   fibonacci: 1.2,
 }
 
+const DEFAULT_SETUP_TTL_MS = 30 * 60_000
+
+const REGIME_TTL_MS: Record<Regime, Record<SetupStatus, number>> = {
+  trending: {
+    forming: 15 * 60_000,
+    ready: 25 * 60_000,
+    triggered: 20 * 60_000,
+    invalidated: 0,
+    expired: 0,
+  },
+  breakout: {
+    forming: 10 * 60_000,
+    ready: 20 * 60_000,
+    triggered: 15 * 60_000,
+    invalidated: 0,
+    expired: 0,
+  },
+  compression: {
+    forming: 30 * 60_000,
+    ready: 50 * 60_000,
+    triggered: 30 * 60_000,
+    invalidated: 0,
+    expired: 0,
+  },
+  ranging: {
+    forming: 25 * 60_000,
+    ready: 45 * 60_000,
+    triggered: 25 * 60_000,
+    invalidated: 0,
+    expired: 0,
+  },
+}
+
 export function classifyZoneType(score: number): ZoneType {
   if (score >= 5) return 'fortress'
   if (score >= 3.5) return 'defended'
@@ -259,6 +292,10 @@ export function transitionSetupStatus(
   const now = new Date(context.nowIso ?? new Date().toISOString())
   const createdAt = new Date(setup.createdAt)
   const ageMs = now.getTime() - createdAt.getTime()
+  const setupRegime = (setup as Partial<Setup>).regime
+  const ttlMs = setupRegime
+    ? (REGIME_TTL_MS[setupRegime]?.[setup.status] ?? DEFAULT_SETUP_TTL_MS)
+    : DEFAULT_SETUP_TTL_MS
 
   if (context.invalidated) return 'invalidated'
 
@@ -273,7 +310,7 @@ export function transitionSetupStatus(
     return 'ready'
   }
 
-  if (setup.status !== 'triggered' && ageMs > 30 * 60 * 1000) {
+  if (setup.status !== 'triggered' && ageMs > ttlMs) {
     return 'expired'
   }
 

@@ -126,12 +126,60 @@ describe('transitionSetupStatus', () => {
     },
   )
 
-  it('expires setup after 30 minutes without trigger', () => {
-    const next = transitionSetupStatus(baseSetup, {
-      currentPrice: 5909,
-      nowIso: '2026-02-15T14:40:01.000Z',
-    })
+  it.each([
+    { regime: 'trending', status: 'forming', ttlMinutes: 15 },
+    { regime: 'trending', status: 'ready', ttlMinutes: 25 },
+    { regime: 'trending', status: 'triggered', ttlMinutes: 20 },
+    { regime: 'breakout', status: 'forming', ttlMinutes: 10 },
+    { regime: 'breakout', status: 'ready', ttlMinutes: 20 },
+    { regime: 'breakout', status: 'triggered', ttlMinutes: 15 },
+    { regime: 'compression', status: 'forming', ttlMinutes: 30 },
+    { regime: 'compression', status: 'ready', ttlMinutes: 50 },
+    { regime: 'compression', status: 'triggered', ttlMinutes: 30 },
+    { regime: 'ranging', status: 'forming', ttlMinutes: 25 },
+    { regime: 'ranging', status: 'ready', ttlMinutes: 45 },
+    { regime: 'ranging', status: 'triggered', ttlMinutes: 25 },
+  ] as const)(
+    'uses regime-aware TTL for $regime $status',
+    ({ regime, status, ttlMinutes }) => {
+      const setup = {
+        ...baseSetup,
+        regime,
+        status,
+      } as Setup
+      const atTtlMinusOneSecond = new Date('2026-02-15T14:00:00.000Z').getTime() + (ttlMinutes * 60_000) - 1_000
+      const atTtlPlusOneSecond = new Date('2026-02-15T14:00:00.000Z').getTime() + (ttlMinutes * 60_000) + 1_000
 
-    expect(next).toBe('expired')
+      const beforeTtl = transitionSetupStatus(setup, {
+        currentPrice: 5909,
+        nowIso: new Date(atTtlMinusOneSecond).toISOString(),
+      })
+      expect(beforeTtl).toBe(status)
+
+      const afterTtl = transitionSetupStatus(setup, {
+        currentPrice: 5909,
+        nowIso: new Date(atTtlPlusOneSecond).toISOString(),
+      })
+      expect(afterTtl).toBe(status === 'triggered' ? 'triggered' : 'expired')
+    },
+  )
+
+  it('keeps legacy 30-minute default TTL when regime is missing', () => {
+    const setupWithoutRegime = {
+      ...baseSetup,
+    } as unknown as Setup
+    delete (setupWithoutRegime as Partial<Setup>).regime
+
+    const at29m59s = transitionSetupStatus(setupWithoutRegime, {
+      currentPrice: 5909,
+      nowIso: '2026-02-15T14:29:59.000Z',
+    })
+    expect(at29m59s).toBe('forming')
+
+    const at30m01s = transitionSetupStatus(setupWithoutRegime, {
+      currentPrice: 5909,
+      nowIso: '2026-02-15T14:30:01.000Z',
+    })
+    expect(at30m01s).toBe('expired')
   })
 })
