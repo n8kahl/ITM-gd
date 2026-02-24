@@ -46,6 +46,13 @@ function feedTone(stage: 'live_stream' | 'poll_fallback' | 'snapshot_fallback' |
   return 'text-emerald-300'
 }
 
+function formatFeedAge(ageMs: number | null): string {
+  if (ageMs == null || !Number.isFinite(ageMs)) return '--'
+  const seconds = Math.floor(ageMs / 1000)
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m`
+}
+
 export function SPXHeader({
   onOpenCommandPalette,
   onOpenSettings,
@@ -56,7 +63,7 @@ export function SPXHeader({
   totalLevelsCount,
 }: SPXHeaderProps) {
   const { regime, basis, dataHealth, feedFallbackReasonCode, feedFallbackStage } = useSPXAnalyticsContext()
-  const { spxPrice, spxPriceSource, priceStreamConnected, priceStreamError } = useSPXPriceContext()
+  const { spxPrice, spxPriceSource, spxPriceAgeMs, priceStreamConnected, priceStreamError } = useSPXPriceContext()
   const fallbackReasonLabel = formatSPXFeedFallbackReasonCode(feedFallbackReasonCode)
   const streamStatusLabel = priceStreamConnected ? 'Connected' : 'Disconnected'
   const streamErrorLabel = priceStreamError && priceStreamError.trim().length > 0
@@ -130,6 +137,9 @@ export function SPXHeader({
           </div>
           <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-white/65">
             {streamStatusLabel}
+          </div>
+          <div className="font-mono text-[8px] uppercase tracking-[0.08em] text-white/50">
+            Age {formatFeedAge(spxPriceAgeMs)}
           </div>
           {streamErrorLabel && (
             <div className="max-w-[18rem] truncate font-mono text-[8px] text-rose-200/80" title={streamErrorLabel}>

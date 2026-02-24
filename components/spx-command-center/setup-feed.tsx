@@ -5,6 +5,8 @@ import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import { useTradierBroker } from '@/hooks/use-tradier-broker'
+import { resolveExecutionEntryGate } from '@/lib/spx/execution-gating'
 import { SetupCard } from '@/components/spx-command-center/setup-card'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
@@ -66,7 +68,15 @@ export function SetupFeed({
   suppressLocalPrimaryCta?: boolean
 }) {
   const { uxFlags, standbyGuidance } = useSPXCommandCenter()
-  const { regime, prediction } = useSPXAnalyticsContext()
+  const {
+    regime,
+    prediction,
+    dataHealth,
+    dataHealthMessage,
+    feedFallbackReasonCode,
+    feedFallbackStage,
+    blockTradeEntryByFeedTrust,
+  } = useSPXAnalyticsContext()
   const {
     activeSetups,
     selectedSetup,
@@ -77,6 +87,7 @@ export function SetupFeed({
     enterTrade,
     exitTrade,
   } = useSPXSetupContext()
+  const { isConnected: brokerConnected, executionMode, error: brokerError } = useTradierBroker()
   const { spxPrice } = useSPXPriceContext()
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [showMoreActionable, setShowMoreActionable] = useState(false)
@@ -109,10 +120,27 @@ export function SetupFeed({
   }, [actionable, inTradeSetup, policy.actionableSecondary, selectedSetup?.id])
   const hiddenByTradeFocusCount = inTradeSetup ? Math.max(policy.actionableVisibleCount - 1, 0) : 0
   const forming = inTradeSetup ? [] : policy.forming
-  const selectedEnterable = Boolean(selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
+  const executionGate = resolveExecutionEntryGate({
+    blockTradeEntryByFeedTrust,
+    dataHealthMessage,
+    feedFallbackReasonCode,
+    feedFallbackStage,
+    brokerConnected,
+    executionMode,
+    brokerErrorMessage: brokerError?.message || null,
+  })
+  const feedExecutionBlocked = executionGate.feedBlocked
+  const brokerExecutionBlocked = executionGate.brokerBlocked
+  const executionBlocked = executionGate.blocked
+  const selectedEnterable = Boolean(
+    selectedSetup
+    && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered')
+    && !executionBlocked,
+  )
   const standbyActive = tradeMode !== 'in_trade' && standbyGuidance?.status === 'STANDBY'
   const localPrimaryCtaEnabled = !readOnly && !suppressLocalPrimaryCta
-  const oneClickEntryEnabled = uxFlags.oneClickEntry && localPrimaryCtaEnabled
+  const oneClickEntryEnabled = uxFlags.oneClickEntry && localPrimaryCtaEnabled && !executionBlocked
+  const executionBlockMessage = executionGate.message
 
   const watchlistVisible = forming.length > 0 && (showWatchlist || actionable.length === 0)
   const triggeredAlertHistory = triggeredAlertState.history
@@ -148,6 +176,18 @@ export function SetupFeed({
   }, [triggeredAlertHistory])
 
   const handleOneClickEntry = (setup: Setup) => {
+    if (executionBlocked) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'setup_feed',
+        action: 'enter_rejected_execution_block',
+        setupId: setup.id,
+        feedBlocked: feedExecutionBlocked,
+        brokerBlocked: brokerExecutionBlocked,
+        dataHealth,
+        feedFallbackReasonCode,
+      }, { level: 'warning', persist: true })
+      return
+    }
     selectSetup(setup)
     enterTrade(setup)
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.UX_ONE_CLICK_ENTRY, {
@@ -185,6 +225,22 @@ export function SetupFeed({
 
       {readOnly && (
         <p className="relative z-10 mt-1 text-[10px] text-white/55">Monitoring mode on this surface.</p>
+      )}
+
+      {!readOnly && executionBlocked && (
+        <div className={cn(
+          'relative z-10 mt-2 rounded-lg border px-2.5 py-2',
+          feedExecutionBlocked
+            ? 'border-amber-300/35 bg-amber-500/[0.09] text-amber-100'
+            : 'border-white/15 bg-white/[0.04] text-white/80',
+        )}>
+          <p className="text-[10px] uppercase tracking-[0.1em]">
+            Analysis Only · Entry blocked
+          </p>
+          <p className="mt-1 text-[10px]">
+            {executionBlockMessage}
+          </p>
+        </div>
       )}
 
       <div className="relative z-10 mt-2 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2">
@@ -338,6 +394,8 @@ export function SetupFeed({
               <p className="text-[10px] text-white/68">
                 {!localPrimaryCtaEnabled
                   ? 'Use the mobile primary action rail to select setup and stage trade.'
+                  : executionBlocked
+                  ? 'Execution is blocked. Review setup quality, contract guidance, and flow until feed/broker health recovers.'
                   : oneClickEntryEnabled
                   ? 'Use the Stage Trade CTA on actionable setup cards for one-click staging.'
                   : 'Select a ready/triggered setup, then stage trade with clear risk controls.'}
@@ -348,6 +406,7 @@ export function SetupFeed({
                   disabled={!selectedEnterable}
                   onClick={() => enterTrade(selectedSetup)}
                   className="min-h-[40px] rounded border border-emerald-400/35 bg-emerald-500/14 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/22 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/65 disabled:opacity-40"
+                  title={executionBlocked ? (executionBlockMessage || 'Execution currently blocked') : undefined}
                 >
                   Stage Trade
                 </button>
