@@ -28,9 +28,11 @@ import {
 } from '@/lib/spx/setup-stream-state'
 import {
   resolveSPXFeedHealth,
+  formatSPXFeedFallbackReasonCode,
   type SPXFeedFallbackReasonCode,
   type SPXFeedFallbackStage,
 } from '@/lib/spx/feed-health'
+import { hasSetupPriceProgressionConflict } from '@/lib/spx/setup-viability'
 import {
   createSPXTradeJournalArtifact,
   persistSPXTradeJournalArtifact,
@@ -344,22 +346,6 @@ function parseRealtimeFlowEvent(message: RealtimeSocketMessage): FlowEvent | nul
     timestamp,
   }
 }
-
-function hasSetupPriceProgressionConflict(setup: Setup, currentPrice: number): boolean {
-  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return false
-  if (setup.status === 'triggered' || setup.status === 'invalidated' || setup.status === 'expired') {
-    return false
-  }
-
-  const target1 = setup.target1.price
-  if (!Number.isFinite(target1)) return false
-
-  if (setup.direction === 'bullish') {
-    return currentPrice >= target1
-  }
-  return currentPrice <= target1
-}
-
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -1895,6 +1881,54 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const enterTrade = useCallback((setup?: Setup | null) => {
     const target = setup || selectedSetup
     if (!target) return
+    const streamTrustStateNow = marketDataOrchestratorRef.current.evaluate(Date.now(), stream.isConnected)
+    const liveFeedHealth = resolveSPXFeedHealth({
+      snapshotIsDegraded,
+      snapshotDegradedMessage,
+      errorMessage: snapshotError?.message || stream.error || null,
+      snapshotRequestLate,
+      snapshotAvailable: Boolean(snapshotData),
+      streamConnected: stream.isConnected,
+      spxPriceSource,
+      spxPriceAgeMs,
+      sequenceGapDetected: streamTrustStateNow.sequenceGapDetected,
+      heartbeatStale: streamTrustStateNow.heartbeatStale,
+    })
+    const feedTrustBlocked = E2E_ALLOW_STALE_ENTRY && liveFeedHealth.dataHealth === 'stale'
+      ? false
+      : liveFeedHealth.fallbackPolicy.blockTradeEntry
+    if (feedTrustBlocked) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'trade_focus',
+        action: 'enter_rejected_feed_trust',
+        setupId: target.id,
+        setupStatus: target.status,
+        dataHealth: liveFeedHealth.dataHealth,
+        feedFallbackStage: liveFeedHealth.fallbackPolicy.stage,
+        feedFallbackReasonCode: liveFeedHealth.fallbackPolicy.reasonCode,
+      }, { level: 'warning', persist: true })
+      const reason = formatSPXFeedFallbackReasonCode(liveFeedHealth.fallbackPolicy.reasonCode)
+      toast.error('Trade entry blocked: feed trust guard active', {
+        description: liveFeedHealth.dataHealthMessage || reason || 'Realtime feed state is stale/degraded. Wait for recovery.',
+        duration: 6_000,
+      })
+      return
+    }
+    if (hasSetupPriceProgressionConflict(target, spxPrice)) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'trade_focus',
+        action: 'enter_rejected_price_progression',
+        setupId: target.id,
+        setupStatus: target.status,
+        currentPrice: spxPrice,
+        target1: target.target1.price,
+      }, { level: 'warning', persist: true })
+      toast.error('Trade entry blocked: setup is no longer viable', {
+        description: 'Price has already progressed through first target before trigger confirmation.',
+        duration: 6_000,
+      })
+      return
+    }
     if (!ENTERABLE_SETUP_STATUSES.has(target.status)) {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
         surface: 'trade_focus',
@@ -2009,7 +2043,16 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     selectedContractBySetupId,
     selectedSetup,
     selectedSetupContract,
+    snapshotData,
+    snapshotDegradedMessage,
+    snapshotError?.message,
+    snapshotIsDegraded,
+    snapshotRequestLate,
     spxPrice,
+    spxPriceAgeMs,
+    spxPriceSource,
+    stream.error,
+    stream.isConnected,
     uxFlags.mobileFullTradeFocus,
   ])
 
