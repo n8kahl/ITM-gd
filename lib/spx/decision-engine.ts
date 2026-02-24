@@ -29,6 +29,8 @@ export interface SPXDecisionEngineEvaluation {
   freshnessMs: number
 }
 
+export const FLOW_BIAS_EWMA_DECAY = 0.85
+
 function clamp(value: number, min: number, max: number): number {
   if (value < min) return min
   if (value > max) return max
@@ -84,20 +86,26 @@ function directionalPredictionScore(
   return clamp(direction === 'bullish' ? bullishPct : bearishPct, 0, 1)
 }
 
-function flowAlignmentBias(
+export function flowAlignmentBias(
   direction: Setup['direction'],
   flowEvents: FlowEvent[],
 ): number {
   const scoped = flowEvents.slice(0, 24)
   if (scoped.length === 0) return 0
 
-  let aligned = 0
-  let opposing = 0
-  for (const event of scoped) {
-    if (event.direction === direction) aligned += 1
-    else opposing += 1
+  let weightedAligned = 0
+  let weightedOpposing = 0
+  let totalWeight = 0
+
+  for (let i = 0; i < scoped.length; i += 1) {
+    const weight = FLOW_BIAS_EWMA_DECAY ** i
+    totalWeight += weight
+    if (scoped[i].direction === direction) weightedAligned += weight
+    else weightedOpposing += weight
   }
-  return clamp((aligned - opposing) / scoped.length, -1, 1)
+
+  if (totalWeight <= 0) return 0
+  return clamp((weightedAligned - weightedOpposing) / totalWeight, -1, 1)
 }
 
 function gexDirectionalSupport(direction: Setup['direction'], gex: GEXProfile | null): number {

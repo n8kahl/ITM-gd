@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  FLOW_BIAS_EWMA_DECAY,
   enrichSPXSetupWithDecisionEngine,
   evaluateSPXSetupDecision,
+  flowAlignmentBias,
   regimeCompatibility,
 } from '@/lib/spx/decision-engine'
 import type { FlowEvent, Setup } from '@/lib/types/spx-command-center'
@@ -55,6 +57,53 @@ function buildFlow(direction: FlowEvent['direction'], id: string): FlowEvent {
 }
 
 describe('decision engine', () => {
+  it('uses EWMA flow weights where recent events carry more influence', () => {
+    expect(FLOW_BIAS_EWMA_DECAY ** 0).toBe(1)
+    expect(FLOW_BIAS_EWMA_DECAY ** 5).toBeCloseTo(0.44, 2)
+    expect(FLOW_BIAS_EWMA_DECAY ** 10).toBeCloseTo(0.2, 2)
+  })
+
+  it('keeps the same sign as flat averaging when flow is strongly directional', () => {
+    const events = [
+      buildFlow('bullish', 'f1'),
+      buildFlow('bullish', 'f2'),
+      buildFlow('bullish', 'f3'),
+      buildFlow('bullish', 'f4'),
+      buildFlow('bullish', 'f5'),
+      buildFlow('bullish', 'f6'),
+      buildFlow('bullish', 'f7'),
+      buildFlow('bullish', 'f8'),
+      buildFlow('bullish', 'f9'),
+      buildFlow('bearish', 'f10'),
+    ]
+
+    const ewma = flowAlignmentBias('bullish', events)
+    const flat = ((9 - 1) / 10)
+    expect(Math.sign(ewma)).toBe(Math.sign(flat))
+  })
+
+  it('converges mixed flow toward zero faster than flat averaging', () => {
+    const events = [
+      buildFlow('bullish', 'f1'),
+      buildFlow('bearish', 'f2'),
+      buildFlow('bullish', 'f3'),
+      buildFlow('bearish', 'f4'),
+      buildFlow('bullish', 'f5'),
+      buildFlow('bearish', 'f6'),
+      buildFlow('bullish', 'f7'),
+      buildFlow('bullish', 'f8'),
+      buildFlow('bullish', 'f9'),
+      buildFlow('bullish', 'f10'),
+      buildFlow('bullish', 'f11'),
+      buildFlow('bullish', 'f12'),
+    ]
+
+    const ewma = flowAlignmentBias('bullish', events)
+    const aligned = events.filter((event) => event.direction === 'bullish').length
+    const flat = (aligned - (events.length - aligned)) / events.length
+    expect(Math.abs(ewma)).toBeLessThan(Math.abs(flat))
+  })
+
   it('scores regime compatibility across aligned, adjacent, mild, and strong conflicts', () => {
     expect(regimeCompatibility('trending', null)).toBe(0.5)
     expect(regimeCompatibility('trending', 'trending')).toBe(1)
