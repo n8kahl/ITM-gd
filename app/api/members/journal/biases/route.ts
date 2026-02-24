@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     const result = analyzeBiases(entries)
 
     return successResponse(result)
-  } catch (err: unknown) {
+  } catch (err) {
     if (err instanceof ZodError) {
       return errorResponse('Invalid request', 400, err.flatten())
     }
