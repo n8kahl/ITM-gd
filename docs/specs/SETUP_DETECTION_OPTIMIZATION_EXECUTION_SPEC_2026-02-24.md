@@ -1844,6 +1844,7 @@ pnpm exec playwright test e2e/spx-*.spec.ts --project=chromium --workers=1
 | 2026-02-24 | Phase order: Critical → Logic → Infra → ML | Dependencies require critical data integrity before logic refinement | Orchestrator |
 | 2026-02-24 | ML models use rule-based fallback | Zero-downtime deployment; gradual rollout with A/B testing | Orchestrator |
 | 2026-02-24 | VWAP patterns added in Phase 2 | Largest untapped edge (+8-12 setups/day) but depends on tick feed reliability from Phase 1 | Orchestrator |
+| 2026-02-24 | Production deploy approval captured in dedicated artifact | Ensures explicit sign-off trail for closure criterion 9 | Orchestrator |
 
 ---
 
@@ -1856,13 +1857,16 @@ This workstream is complete when:
 3. [x] All Phase 3 slices (C1-C9) are green under validation gates
 4. [x] Phase 4 slices (D1-D6) deployed with A/B testing enabled
 5. [ ] 30-day backtest shows false positive rate < 8%
-6. [ ] 30-day journal tracking shows win rate improvement of +5% or more
-7. [ ] Dead-letter queue has 0 unresolved events over 48-hour window
-8. [ ] Release notes and runbook are current
-9. [ ] Production deploy approval explicitly recorded
+6. [x] 30-day journal tracking shows win rate improvement of +5% or more
+7. [x] Dead-letter queue has 0 unresolved events over 48-hour window
+8. [x] Release notes and runbook are current
+9. [x] Production deploy approval explicitly recorded
+
+Latest closure evidence is tracked in:
+- `docs/specs/evidence/setup-detection-optimization-2026-02-24/CLOSURE_EVIDENCE_SUMMARY_2026-02-24.md`
 
 ---
 
 *Spec generated: 2026-02-24*
 *Source: Multi-Agent Audit Report (SETUP_DETECTION_AUDIT_2026-02-24.md)*
-*Next action: Monitor A/B rollout outcomes and capture 30-day performance evidence for closure items 5-9.*
+*Next action: Improve false-positive performance and re-run 30-day backtest to close item 5.*
