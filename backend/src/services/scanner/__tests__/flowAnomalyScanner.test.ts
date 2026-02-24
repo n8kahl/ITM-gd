@@ -62,6 +62,7 @@ describe('flow anomaly scanner', () => {
     const anomaly = detectFlowAnomaly(buildChain(), Date.parse('2026-02-24T15:35:00.000Z'));
     expect(anomaly).not.toBeNull();
     expect((anomaly as NonNullable<typeof anomaly>).anomalyScore).toBeGreaterThanOrEqual(FLOW_ANOMALY_THRESHOLD);
+    expect((anomaly as NonNullable<typeof anomaly>).averagePathLength).toBeLessThan(5);
     expect((anomaly as NonNullable<typeof anomaly>).direction).toBe('bullish');
   });
 
@@ -117,5 +118,41 @@ describe('flow anomaly scanner', () => {
 
     const anomaly = detectFlowAnomaly(chain, Date.parse('2026-02-24T18:00:00.000Z'));
     expect(anomaly).toBeNull();
+  });
+
+  it('isolates anomalous contracts in fewer tree steps than baseline candidates', () => {
+    const highSignal = detectFlowAnomaly(buildChain(), Date.parse('2026-02-24T15:35:00.000Z'));
+    const baselineChain = buildChain({
+      options: {
+        calls: [
+          {
+            symbol: 'SPX',
+            strike: 6005,
+            expiry: '2026-03-20',
+            type: 'call',
+            last: 18,
+            bid: 17.6,
+            ask: 18.4,
+            volume: 2200,
+            openInterest: 2600,
+            impliedVolatility: 0.22,
+            delta: 0.45,
+            gamma: 0.01,
+            theta: -0.3,
+            vega: 0.15,
+            rho: 0.05,
+            inTheMoney: false,
+            intrinsicValue: 0,
+            extrinsicValue: 18,
+          },
+        ],
+        puts: [],
+      },
+    });
+    const baseline = detectFlowAnomaly(baselineChain, Date.parse('2026-02-24T18:00:00.000Z'));
+
+    expect(highSignal).not.toBeNull();
+    expect(baseline).toBeNull();
+    expect((highSignal as NonNullable<typeof highSignal>).averagePathLength).toBeLessThan(6);
   });
 });

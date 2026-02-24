@@ -12,11 +12,107 @@ export interface FlowAnomalyCandidate {
   contract: OptionContract;
   direction: 'bullish' | 'bearish';
   anomalyScore: number;
+  averagePathLength: number;
   features: FlowAnomalyFeatures;
   volumeOIRatio: number;
 }
 
 export const FLOW_ANOMALY_THRESHOLD = 0.62;
+const FLOW_IFOREST_SAMPLE_SIZE = 128;
+const EULER_GAMMA = 0.5772156649;
+
+type FlowFeatureKey = keyof FlowAnomalyFeatures;
+
+type IsolationTreeNode =
+  | { pathLength: number }
+  | {
+    feature: FlowFeatureKey;
+    threshold: number;
+    highBranch: 'left' | 'right';
+    left: IsolationTreeNode;
+    right: IsolationTreeNode;
+  };
+
+const FLOW_ISOLATION_TREES: IsolationTreeNode[] = [
+  {
+    feature: 'volumeOiZScore',
+    threshold: 2.1,
+    highBranch: 'left',
+    left: { pathLength: 2 },
+    right: {
+      feature: 'premiumMomentum',
+      threshold: 0.8,
+      highBranch: 'left',
+      left: { pathLength: 4 },
+      right: { pathLength: 8 },
+    },
+  },
+  {
+    feature: 'sweepIntensity',
+    threshold: 0.72,
+    highBranch: 'left',
+    left: { pathLength: 3 },
+    right: {
+      feature: 'timeOfDayNormalizedVolume',
+      threshold: 1.15,
+      highBranch: 'left',
+      left: { pathLength: 5 },
+      right: { pathLength: 8 },
+    },
+  },
+  {
+    feature: 'spreadTighteningRatio',
+    threshold: 0.82,
+    highBranch: 'left',
+    left: {
+      feature: 'volumeOiZScore',
+      threshold: 1.3,
+      highBranch: 'left',
+      left: { pathLength: 4 },
+      right: { pathLength: 7 },
+    },
+    right: { pathLength: 8 },
+  },
+  {
+    feature: 'timeOfDayNormalizedVolume',
+    threshold: 1.0,
+    highBranch: 'left',
+    left: {
+      feature: 'premiumMomentum',
+      threshold: 0.55,
+      highBranch: 'left',
+      left: { pathLength: 4 },
+      right: { pathLength: 7 },
+    },
+    right: { pathLength: 8 },
+  },
+  {
+    feature: 'premiumMomentum',
+    threshold: 0.95,
+    highBranch: 'left',
+    left: { pathLength: 3 },
+    right: {
+      feature: 'volumeOiZScore',
+      threshold: 1.6,
+      highBranch: 'left',
+      left: { pathLength: 5 },
+      right: { pathLength: 8 },
+    },
+  },
+  {
+    feature: 'volumeOiZScore',
+    threshold: 0.95,
+    highBranch: 'left',
+    left: {
+      feature: 'sweepIntensity',
+      threshold: 0.6,
+      highBranch: 'left',
+      left: { pathLength: 4 },
+      right: { pathLength: 7 },
+    },
+    right: { pathLength: 8 },
+  },
+];
 
 function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
@@ -35,6 +131,36 @@ function computeSpreadPct(contract: OptionContract): number {
   return clamp((contract.ask - contract.bid) / mid, 0, 1);
 }
 
+function isLeaf(node: IsolationTreeNode): node is { pathLength: number } {
+  return 'pathLength' in node;
+}
+
+function averagePathLength(sampleSize: number): number {
+  if (sampleSize <= 1) return 0;
+  if (sampleSize === 2) return 1;
+  return (2 * (Math.log(sampleSize - 1) + EULER_GAMMA)) - ((2 * (sampleSize - 1)) / sampleSize);
+}
+
+function normalizeFeatures(features: FlowAnomalyFeatures): FlowAnomalyFeatures {
+  return {
+    volumeOiZScore: clamp(features.volumeOiZScore, 0, 12),
+    premiumMomentum: clamp(features.premiumMomentum, 0, 3),
+    spreadTighteningRatio: clamp(features.spreadTighteningRatio, 0, 1),
+    sweepIntensity: clamp(features.sweepIntensity, 0, 1.5),
+    timeOfDayNormalizedVolume: clamp(features.timeOfDayNormalizedVolume, 0, 3),
+  };
+}
+
+function pathLengthForTree(tree: IsolationTreeNode, features: FlowAnomalyFeatures): number {
+  if (isLeaf(tree)) return tree.pathLength;
+  const value = features[tree.feature];
+  const takeHigh = value > tree.threshold;
+  const next = takeHigh
+    ? (tree.highBranch === 'left' ? tree.left : tree.right)
+    : (tree.highBranch === 'left' ? tree.right : tree.left);
+  return pathLengthForTree(next, features);
+}
+
 function sessionSeasonalityMultiplier(minuteOfSession: number): number {
   // U-shaped volume curve baseline: open/close naturally have higher flow.
   if (minuteOfSession < 60) return 1.5;
@@ -42,15 +168,16 @@ function sessionSeasonalityMultiplier(minuteOfSession: number): number {
   return 1;
 }
 
-function calculateFlowAnomalyScore(features: FlowAnomalyFeatures): number {
-  const rawScore =
-    (clamp(features.volumeOiZScore / 4, 0, 1) * 0.32)
-    + (clamp(features.premiumMomentum, 0, 1) * 0.24)
-    + (clamp(features.spreadTighteningRatio, 0, 1) * 0.15)
-    + (clamp(features.sweepIntensity, 0, 1) * 0.17)
-    + (clamp(features.timeOfDayNormalizedVolume, 0, 1.5) / 1.5 * 0.12);
-
-  return clamp(rawScore, 0, 1);
+function calculateFlowAnomalyScore(features: FlowAnomalyFeatures): { anomalyScore: number; averagePathLength: number } {
+  const normalized = normalizeFeatures(features);
+  const pathLengths = FLOW_ISOLATION_TREES.map((tree) => pathLengthForTree(tree, normalized));
+  const meanPathLength = pathLengths.reduce((sum, value) => sum + value, 0) / pathLengths.length;
+  const expectedPathLength = Math.max(1e-9, averagePathLength(FLOW_IFOREST_SAMPLE_SIZE));
+  const anomalyScore = clamp(2 ** (-meanPathLength / expectedPathLength), 0, 1);
+  return {
+    anomalyScore,
+    averagePathLength: meanPathLength,
+  };
 }
 
 function resolveMinuteOfSession(nowMs: number): number {
@@ -110,12 +237,13 @@ export function detectFlowAnomaly(
       timeOfDayNormalizedVolume,
     };
 
-    const anomalyScore = calculateFlowAnomalyScore(features);
+    const anomaly = calculateFlowAnomalyScore(features);
 
     return {
       contract,
       direction: contract.type === 'call' ? 'bullish' : 'bearish' as const,
-      anomalyScore,
+      anomalyScore: anomaly.anomalyScore,
+      averagePathLength: anomaly.averagePathLength,
       features,
       volumeOIRatio: volumeOiRatio,
     } satisfies FlowAnomalyCandidate;

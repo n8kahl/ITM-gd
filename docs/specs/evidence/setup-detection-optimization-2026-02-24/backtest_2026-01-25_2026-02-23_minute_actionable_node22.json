@@ -1,0 +1,162 @@
+{
+  "dateRange": {
+    "from": "2026-01-25",
+    "to": "2026-02-23"
+  },
+  "sourceUsed": "spx_setup_instances",
+  "setupCount": 46,
+  "evaluatedSetupCount": 46,
+  "skippedSetupCount": 0,
+  "ambiguousBarCount": 6,
+  "missingTarget2Count": 0,
+  "missingBarsSessions": [],
+  "requestedResolution": "minute",
+  "resolutionUsed": "minute",
+  "resolutionFallbackSessions": [],
+  "usedMassiveMinuteBars": true,
+  "executionModel": {
+    "enabled": true,
+    "entrySlipPoints": 0.2,
+    "targetSlipPoints": 0.25,
+    "stopSlipPoints": 0.15,
+    "commissionPerTradeR": 0.04,
+    "partialAtT1Pct": 0.65,
+    "moveStopToBreakevenAfterT1": true
+  },
+  "profitability": {
+    "triggeredCount": 34,
+    "resolvedCount": 34,
+    "withRealizedRCount": 34,
+    "averageRealizedR": 1.0255,
+    "medianRealizedR": 0.9903,
+    "cumulativeRealizedR": 34.868,
+    "expectancyR": 1.0255,
+    "positiveRealizedRatePct": 58.82,
+    "bySetupType": [
+      {
+        "key": "trend_pullback",
+        "tradeCount": 21,
+        "averageRealizedR": 1.5669,
+        "cumulativeRealizedR": 32.9053
+      },
+      {
+        "key": "flip_reclaim",
+        "tradeCount": 13,
+        "averageRealizedR": 0.151,
+        "cumulativeRealizedR": 1.9627
+      }
+    ]
+  },
+  "notes": [
+    "Skipped 125 gate-blocked spx_setup_instances rows (non-actionable).",
+    "Skipped 332 hidden-tier spx_setup_instances rows (non-actionable)."
+  ],
+  "analytics": {
+    "dateRange": {
+      "from": "2026-01-25",
+      "to": "2026-02-23"
+    },
+    "denominator": "resolved_triggered",
+    "triggeredCount": 34,
+    "resolvedCount": 34,
+    "pendingCount": 0,
+    "t1Wins": 20,
+    "t2Wins": 18,
+    "stopsBeforeT1": 14,
+    "invalidatedOther": 0,
+    "expiredUnresolved": 0,
+    "t1WinRatePct": 58.82,
+    "t2WinRatePct": 52.94,
+    "failureRatePct": 41.18,
+    "bySetupType": [
+      {
+        "key": "trend_pullback",
+        "triggeredCount": 21,
+        "resolvedCount": 21,
+        "pendingCount": 0,
+        "t1Wins": 14,
+        "t2Wins": 12,
+        "stopsBeforeT1": 7,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 66.67,
+        "t2WinRatePct": 57.14,
+        "failureRatePct": 33.33
+      },
+      {
+        "key": "flip_reclaim",
+        "triggeredCount": 13,
+        "resolvedCount": 13,
+        "pendingCount": 0,
+        "t1Wins": 6,
+        "t2Wins": 6,
+        "stopsBeforeT1": 7,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 46.15,
+        "t2WinRatePct": 46.15,
+        "failureRatePct": 53.85
+      }
+    ],
+    "byRegime": [
+      {
+        "key": "breakout",
+        "triggeredCount": 23,
+        "resolvedCount": 23,
+        "pendingCount": 0,
+        "t1Wins": 12,
+        "t2Wins": 11,
+        "stopsBeforeT1": 11,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 52.17,
+        "t2WinRatePct": 47.83,
+        "failureRatePct": 47.83
+      },
+      {
+        "key": "trending",
+        "triggeredCount": 11,
+        "resolvedCount": 11,
+        "pendingCount": 0,
+        "t1Wins": 8,
+        "t2Wins": 7,
+        "stopsBeforeT1": 3,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 72.73,
+        "t2WinRatePct": 63.64,
+        "failureRatePct": 27.27
+      }
+    ],
+    "byTier": [
+      {
+        "key": "watchlist",
+        "triggeredCount": 33,
+        "resolvedCount": 33,
+        "pendingCount": 0,
+        "t1Wins": 19,
+        "t2Wins": 17,
+        "stopsBeforeT1": 14,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 57.58,
+        "t2WinRatePct": 51.52,
+        "failureRatePct": 42.42
+      },
+      {
+        "key": "sniper_secondary",
+        "triggeredCount": 1,
+        "resolvedCount": 1,
+        "pendingCount": 0,
+        "t1Wins": 1,
+        "t2Wins": 1,
+        "stopsBeforeT1": 0,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 100,
+        "t2WinRatePct": 100,
+        "failureRatePct": 0
+      }
+    ]
+  }
+}

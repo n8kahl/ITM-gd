@@ -89,15 +89,16 @@ jest.mock('../../services/spx', () => ({
 
 jest.mock('../../config/database', () => ({
   supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          order: jest.fn(() => ({
-            limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-          })),
-        })),
-      })),
-    })),
+    from: jest.fn(() => {
+      const builder: any = {
+        select: jest.fn(() => builder),
+        eq: jest.fn(() => builder),
+        order: jest.fn(() => builder),
+        limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      };
+      return builder;
+    }),
   },
 }));
 
@@ -659,6 +660,13 @@ describe('SPX API integration schema', () => {
         to: expect.any(String),
       }),
       lastOptimizationApplied: expect.any(Boolean),
+    }));
+
+    const optimizerHistory = await request(app).get('/api/spx/analytics/optimizer/history?limit=20');
+    expect(optimizerHistory.status).toBe(200);
+    expect(optimizerHistory.body).toEqual(expect.objectContaining({
+      history: expect.any(Array),
+      count: expect.any(Number),
     }));
 
     const coach = await request(app).get('/api/spx/coach/state');

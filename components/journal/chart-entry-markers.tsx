@@ -117,7 +117,10 @@ export function ChartEntryMarkers({
   }, [symbol, timeStart, timeEnd, width, height])
 
   useEffect(() => {
-    void loadMarkers()
+    const initialFetch = window.setTimeout(() => {
+      void loadMarkers()
+    }, 0)
+    return () => window.clearTimeout(initialFetch)
   }, [loadMarkers])
 
   if (markers.length === 0 || width <= 0 || height <= 0) return null

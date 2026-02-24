@@ -166,7 +166,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
             {message.functionCalls && message.functionCalls.length > 0 && (
               <span className="flex items-center gap-1 text-[11px] text-emerald-500/50">
                 <Wrench className="w-3 h-3" />
-                {message.functionCalls.length} tool{message.functionCalls.length > 1 ? 's' : ''}
+                Live data synced
               </span>
             )}
           </div>

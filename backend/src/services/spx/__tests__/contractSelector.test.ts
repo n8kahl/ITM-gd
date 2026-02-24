@@ -1,6 +1,7 @@
 import type { OptionContract } from '../../options/types';
 import type { Setup } from '../types';
 import {
+  buildIVTimingSignal,
   deltaTargetForSetup as deltaTargetForSetupProd,
   filterCandidates as filterCandidatesProd,
 } from '../contractSelector';
@@ -430,6 +431,56 @@ describe('contractSelector', () => {
 
       expect(filterCandidatesProd(setup, [unstableQuote], false, now)).toHaveLength(0);
       expect(filterCandidatesProd(setup, [unstableQuote], true, now)).toHaveLength(0);
+    });
+
+    it('builds IV timing tailwind signal for rising IV forecasts', () => {
+      const signal = buildIVTimingSignal({
+        horizonMinutes: 60,
+        predictedIV: 23.6,
+        currentIV: 22.1,
+        deltaIV: 1.5,
+        direction: 'up',
+        confidence: 0.78,
+        features: {
+          realizedVolTrend: 0.32,
+          ivMomentum: 0.28,
+          meanReversionPressure: -0.22,
+          termStructureSlope: 0.08,
+          skewPressure: 0.04,
+          volOfVol: 0.2,
+          closeToExpiryPressure: 0.15,
+        },
+      });
+
+      expect(signal).not.toBeNull();
+      expect((signal as NonNullable<typeof signal>).signal).toBe('tailwind');
+      expect((signal as NonNullable<typeof signal>).recommendation).toBe('enter_now');
+      expect((signal as NonNullable<typeof signal>).scoreBias).toBeGreaterThan(0);
+    });
+
+    it('builds wait recommendation for high-confidence falling IV forecasts', () => {
+      const signal = buildIVTimingSignal({
+        horizonMinutes: 60,
+        predictedIV: 20.5,
+        currentIV: 22.2,
+        deltaIV: -1.7,
+        direction: 'down',
+        confidence: 0.82,
+        features: {
+          realizedVolTrend: -0.3,
+          ivMomentum: -0.25,
+          meanReversionPressure: 0.9,
+          termStructureSlope: -0.1,
+          skewPressure: -0.06,
+          volOfVol: 0.22,
+          closeToExpiryPressure: 0.2,
+        },
+      });
+
+      expect(signal).not.toBeNull();
+      expect((signal as NonNullable<typeof signal>).signal).toBe('headwind');
+      expect((signal as NonNullable<typeof signal>).recommendation).toBe('wait_for_better_iv');
+      expect((signal as NonNullable<typeof signal>).scoreBias).toBeLessThan(0);
     });
   });
 });

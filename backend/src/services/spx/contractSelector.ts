@@ -2,7 +2,8 @@ import { cacheGet, cacheSet } from '../../config/redis';
 import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { fetchExpirationDates, fetchOptionsChain } from '../options/optionsChainFetcher';
-import type { OptionContract } from '../options/types';
+import { analyzeIVProfile } from '../options/ivAnalysis';
+import type { IVForecastAnalysis, OptionContract } from '../options/types';
 import { toEasternTime } from '../marketHours';
 import { detectActiveSetups, getSetupById } from './setupDetector';
 import type { ContractRecommendation, Setup } from './types';
@@ -25,6 +26,7 @@ const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;
 const LATE_DAY_MIN_OPEN_INTEREST = 250;
 const DEFAULT_MAX_RISK_PCT = 0.02;
 const DEFAULT_BUYING_POWER_UTILIZATION_PCT = 0.9;
+const DEFAULT_IV_TIMING_ENABLED = true;
 interface RankedContract {
   contract: OptionContract;
   score: number;
@@ -53,8 +55,29 @@ interface ContractSizingResult {
   blockedReason?: 'margin_limit_blocked';
 }
 
+interface IVTimingSignal {
+  signal: 'tailwind' | 'headwind' | 'neutral';
+  scoreBias: number;
+  confidence: number;
+  deltaIV: number | null;
+  recommendation: 'enter_now' | 'wait_for_better_iv' | 'neutral';
+  summary: string;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function parseBooleanFlag(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false;
+  return null;
+}
+
+function resolveIVTimingEnabled(): boolean {
+  return parseBooleanFlag(process.env.SPX_CONTRACT_SELECTOR_IV_TIMING_ENABLED) ?? DEFAULT_IV_TIMING_ENABLED;
 }
 
 function sessionMinuteEt(now: Date): number {
@@ -295,10 +318,77 @@ function scoreContract(setup: Setup, contract: OptionContract, now: Date): numbe
   return 100 - deltaPenalty - spreadPenalty - spreadAbsolutePenalty - thetaPenalty + liquidityBonus + gammaBonus;
 }
 
+export function buildIVTimingSignal(ivForecast: IVForecastAnalysis | null | undefined): IVTimingSignal | null {
+  if (!ivForecast) return null;
+  if (ivForecast.deltaIV == null || !Number.isFinite(ivForecast.deltaIV)) return null;
+  if (!Number.isFinite(ivForecast.confidence) || ivForecast.confidence < 0.3) {
+    return {
+      signal: 'neutral',
+      scoreBias: 0,
+      confidence: 0,
+      deltaIV: ivForecast.deltaIV,
+      recommendation: 'neutral',
+      summary: 'IV forecast confidence too low to influence timing.',
+    };
+  }
+
+  if (ivForecast.direction === 'up') {
+    const scoreBias = clamp((ivForecast.confidence * 8) + Math.min(ivForecast.deltaIV, 2.5), 0, 10);
+    return {
+      signal: 'tailwind',
+      scoreBias: round(scoreBias, 3),
+      confidence: round(ivForecast.confidence, 3),
+      deltaIV: round(ivForecast.deltaIV, 3),
+      recommendation: 'enter_now',
+      summary: '1h IV forecast rising; timing favors immediate entries.',
+    };
+  }
+
+  if (ivForecast.direction === 'down') {
+    const scoreBias = clamp((ivForecast.confidence * 8) + Math.min(Math.abs(ivForecast.deltaIV), 2.5), 0, 10);
+    return {
+      signal: 'headwind',
+      scoreBias: round(-scoreBias, 3),
+      confidence: round(ivForecast.confidence, 3),
+      deltaIV: round(ivForecast.deltaIV, 3),
+      recommendation: ivForecast.confidence >= 0.7 && Math.abs(ivForecast.deltaIV) >= 1 ? 'wait_for_better_iv' : 'neutral',
+      summary: '1h IV forecast falling; better premium may be available on patience.',
+    };
+  }
+
+  return {
+    signal: 'neutral',
+    scoreBias: 0,
+    confidence: round(ivForecast.confidence, 3),
+    deltaIV: round(ivForecast.deltaIV, 3),
+    recommendation: 'neutral',
+    summary: '1h IV forecast flat; no timing edge from volatility.',
+  };
+}
+
+function scoreContractWithIVTiming(
+  baseScore: number,
+  contract: OptionContract,
+  ivTimingSignal: IVTimingSignal | null,
+): number {
+  if (!ivTimingSignal || ivTimingSignal.signal === 'neutral') return baseScore;
+
+  const vega = Math.max(0, Math.abs(contract.vega || 0));
+  const iv = Math.max(0, contract.impliedVolatility || 0);
+  if (ivTimingSignal.signal === 'tailwind') {
+    const vegaBoost = Math.min(6, vega * 0.35);
+    return baseScore + ivTimingSignal.scoreBias + vegaBoost;
+  }
+
+  const expensiveIVPenalty = Math.max(0, iv - 0.2) * 14;
+  return baseScore + ivTimingSignal.scoreBias - Math.min(8, expensiveIVPenalty);
+}
+
 function toContractRecommendation(
   setup: Setup,
   rankedContracts: RankedContract[],
   sizing: ContractSizingResult | null,
+  ivTimingSignal: IVTimingSignal | null,
 ): ContractRecommendation {
   const [{ contract, score }] = rankedContracts;
   const mid = getMid(contract);
@@ -413,7 +503,18 @@ function toContractRecommendation(
         blockedReason: sizing.blockedReason,
       }
       : undefined,
-    reasoning: `Selected for ${setup.type} with model score ${round(score, 1)} and ${health.tier.toUpperCase()} contract health (${health.score}).`,
+    ivTiming: ivTimingSignal
+      ? {
+        signal: ivTimingSignal.signal,
+        confidence: ivTimingSignal.confidence,
+        deltaIV: ivTimingSignal.deltaIV,
+        recommendation: ivTimingSignal.recommendation,
+        summary: ivTimingSignal.summary,
+      }
+      : undefined,
+    reasoning: ivTimingSignal
+      ? `Selected for ${setup.type} with model score ${round(score, 1)} and ${health.tier.toUpperCase()} contract health (${health.score}). ${ivTimingSignal.summary}`
+      : `Selected for ${setup.type} with model score ${round(score, 1)} and ${health.tier.toUpperCase()} contract health (${health.score}).`,
   };
 }
 
@@ -489,7 +590,12 @@ export function filterCandidates(
   });
 }
 
-function rankContracts(setup: Setup, contracts: OptionContract[], now: Date): RankedContract[] {
+function rankContracts(
+  setup: Setup,
+  contracts: OptionContract[],
+  now: Date,
+  ivTimingSignal: IVTimingSignal | null,
+): RankedContract[] {
   let candidates = filterCandidates(setup, contracts, false, now);
 
   if (candidates.length === 0) {
@@ -507,7 +613,7 @@ function rankContracts(setup: Setup, contracts: OptionContract[], now: Date): Ra
   return candidates
     .map((contract) => ({
       contract,
-      score: scoreContract(setup, contract, now),
+      score: scoreContractWithIVTiming(scoreContract(setup, contract, now), contract, ivTimingSignal),
     }))
     .sort((a, b) => {
       if (a.score !== b.score) return b.score - a.score;
@@ -518,8 +624,13 @@ function rankContracts(setup: Setup, contracts: OptionContract[], now: Date): Ra
     });
 }
 
-function topRankedContracts(setup: Setup, contracts: OptionContract[], now: Date): RankedContract[] {
-  const ranked = rankContracts(setup, contracts, now);
+function topRankedContracts(
+  setup: Setup,
+  contracts: OptionContract[],
+  now: Date,
+  ivTimingSignal: IVTimingSignal | null,
+): RankedContract[] {
+  const ranked = rankContracts(setup, contracts, now, ivTimingSignal);
   return ranked.slice(0, 4);
 }
 
@@ -585,8 +696,20 @@ export async function getContractRecommendation(options?: {
   const now = new Date();
   const targetExpiry = await resolveTargetExpiry('SPX', now);
   const chain = await fetchOptionsChain('SPX', targetExpiry, 20);
+  let ivTimingSignal: IVTimingSignal | null = null;
+  if (resolveIVTimingEnabled()) {
+    try {
+      const ivProfile = await analyzeIVProfile('SPX', { maxExpirations: 2 });
+      ivTimingSignal = buildIVTimingSignal(ivProfile.ivForecast ?? null);
+    } catch (error) {
+      logger.warn('Contract selector IV timing analysis unavailable', {
+        setupId: setup.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   const contracts = [...chain.options.calls, ...chain.options.puts];
-  const rankedContracts = topRankedContracts(setup, contracts, now);
+  const rankedContracts = topRankedContracts(setup, contracts, now, ivTimingSignal);
 
   if (rankedContracts.length === 0) {
     logger.warn('SPX contract selector could not find suitable contract', {
@@ -600,7 +723,7 @@ export async function getContractRecommendation(options?: {
   }
 
   const sizing = computeSizingResult(rankedContracts[0].contract.ask, loadedRiskContext);
-  const recommendation = toContractRecommendation(setup, rankedContracts, sizing);
+  const recommendation = toContractRecommendation(setup, rankedContracts, sizing, ivTimingSignal);
   await cacheSet(cacheKey, recommendation, CONTRACT_CACHE_TTL_SECONDS);
 
   return recommendation;

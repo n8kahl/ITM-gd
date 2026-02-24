@@ -41,6 +41,7 @@ import {
 } from '../services/spx/executionStateStore';
 
 const router = Router();
+const KNOWN_MISSING_RELATIONS = new Set<string>();
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
@@ -66,6 +67,42 @@ function parseISODateInput(value: unknown): string | null {
 
 function dateDaysAgoET(days: number): string {
   return toEasternTime(new Date(Date.now() - (days * 86400000))).dateStr;
+}
+
+function parsePositiveInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed < min) return min;
+  if (parsed > max) return max;
+  return parsed;
+}
+
+function isMissingSupabaseRelationError(error: unknown, tableName: string): boolean {
+  const code = typeof (error as { code?: unknown })?.code === 'string'
+    ? String((error as { code: string }).code).toUpperCase()
+    : '';
+  const message = typeof (error as { message?: unknown })?.message === 'string'
+    ? String((error as { message: string }).message).toLowerCase()
+    : '';
+
+  if (code === '42P01' || code === 'PGRST205' || code === 'PGRST116') {
+    return true;
+  }
+
+  if (!message || !message.includes(tableName.toLowerCase())) return false;
+  return (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('not found')
+  );
+}
+
+function isKnownMissingRelation(tableName: string): boolean {
+  return KNOWN_MISSING_RELATIONS.has(tableName);
+}
+
+function markMissingRelation(tableName: string): void {
+  KNOWN_MISSING_RELATIONS.add(tableName);
 }
 
 function parseBacktestSource(value: unknown): SPXWinRateBacktestSource {
@@ -211,6 +248,151 @@ router.get('/analytics/optimizer/schedule', async (_req: Request, res: Response)
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to load SPX optimizer schedule.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/analytics/optimizer/history', async (req: Request, res: Response) => {
+  try {
+    const limit = parsePositiveInteger(req.query.limit, 20, 1, 100);
+
+    if (isKnownMissingRelation('spx_setup_optimizer_history')) {
+      return res.json({ history: [], count: 0 });
+    }
+
+    const { data: rows, error } = await supabase
+      .from('spx_setup_optimizer_history')
+      .select(`
+        id,
+        created_at,
+        mode,
+        action,
+        optimization_applied,
+        actor,
+        reason,
+        reverted_from_history_id,
+        scan_range_from,
+        scan_range_to,
+        training_from,
+        training_to,
+        validation_from,
+        validation_to,
+        previous_profile,
+        next_profile,
+        scorecard
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      if (isMissingSupabaseRelationError(error, 'spx_setup_optimizer_history')) {
+        markMissingRelation('spx_setup_optimizer_history');
+        logger.warn('SPX optimizer history table missing; returning empty history', {
+          code: (error as { code?: unknown })?.code,
+          message: (error as { message?: unknown })?.message,
+        });
+        return res.json({ history: [], count: 0 });
+      }
+      throw error;
+    }
+
+    const history = (rows || []).map((row) => {
+      const previousProfile = typeof (row as { previous_profile?: unknown }).previous_profile === 'object'
+        && (row as { previous_profile?: unknown }).previous_profile != null
+        && !Array.isArray((row as { previous_profile?: unknown }).previous_profile)
+        ? (row as { previous_profile: Record<string, unknown> }).previous_profile
+        : {};
+      const nextProfile = typeof (row as { next_profile?: unknown }).next_profile === 'object'
+        && (row as { next_profile?: unknown }).next_profile != null
+        && !Array.isArray((row as { next_profile?: unknown }).next_profile)
+        ? (row as { next_profile: Record<string, unknown> }).next_profile
+        : {};
+      const scorecard = typeof (row as { scorecard?: unknown }).scorecard === 'object'
+        && (row as { scorecard?: unknown }).scorecard != null
+        && !Array.isArray((row as { scorecard?: unknown }).scorecard)
+        ? (row as { scorecard: Record<string, unknown> }).scorecard
+        : {};
+      const baseline = typeof scorecard.baseline === 'object' && scorecard.baseline && !Array.isArray(scorecard.baseline)
+        ? (scorecard.baseline as Record<string, unknown>)
+        : {};
+      const optimized = typeof scorecard.optimized === 'object' && scorecard.optimized && !Array.isArray(scorecard.optimized)
+        ? (scorecard.optimized as Record<string, unknown>)
+        : {};
+      const improvementPct = typeof scorecard.improvementPct === 'object'
+        && scorecard.improvementPct
+        && !Array.isArray(scorecard.improvementPct)
+        ? (scorecard.improvementPct as Record<string, unknown>)
+        : {};
+      const notes = Array.isArray(scorecard.notes)
+        ? scorecard.notes.filter((entry): entry is string => typeof entry === 'string')
+        : [];
+
+      const numericOrNull = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+      return {
+        id: typeof (row as { id?: unknown }).id === 'number' ? (row as { id: number }).id : 0,
+        createdAt: typeof (row as { created_at?: unknown }).created_at === 'string'
+          ? (row as { created_at: string }).created_at
+          : new Date().toISOString(),
+        mode: typeof (row as { mode?: unknown }).mode === 'string' ? (row as { mode: string }).mode : 'manual',
+        action: typeof (row as { action?: unknown }).action === 'string' ? (row as { action: string }).action : 'scan',
+        optimizationApplied: Boolean((row as { optimization_applied?: unknown }).optimization_applied),
+        actor: typeof (row as { actor?: unknown }).actor === 'string' ? (row as { actor: string }).actor : null,
+        reason: typeof (row as { reason?: unknown }).reason === 'string' ? (row as { reason: string }).reason : null,
+        revertedFromHistoryId: typeof (row as { reverted_from_history_id?: unknown }).reverted_from_history_id === 'number'
+          ? (row as { reverted_from_history_id: number }).reverted_from_history_id
+          : null,
+        scanRange: {
+          from: typeof (row as { scan_range_from?: unknown }).scan_range_from === 'string'
+            ? (row as { scan_range_from: string }).scan_range_from
+            : null,
+          to: typeof (row as { scan_range_to?: unknown }).scan_range_to === 'string'
+            ? (row as { scan_range_to: string }).scan_range_to
+            : null,
+        },
+        trainingRange: {
+          from: typeof (row as { training_from?: unknown }).training_from === 'string'
+            ? (row as { training_from: string }).training_from
+            : null,
+          to: typeof (row as { training_to?: unknown }).training_to === 'string'
+            ? (row as { training_to: string }).training_to
+            : null,
+        },
+        validationRange: {
+          from: typeof (row as { validation_from?: unknown }).validation_from === 'string'
+            ? (row as { validation_from: string }).validation_from
+            : null,
+          to: typeof (row as { validation_to?: unknown }).validation_to === 'string'
+            ? (row as { validation_to: string }).validation_to
+            : null,
+        },
+        previousProfileGeneratedAt: typeof previousProfile.generatedAt === 'string' ? previousProfile.generatedAt : null,
+        nextProfileGeneratedAt: typeof nextProfile.generatedAt === 'string' ? nextProfile.generatedAt : null,
+        scorecardSummary: {
+          baselineTrades: numericOrNull(baseline.tradeCount) ?? 0,
+          optimizedTrades: numericOrNull(optimized.tradeCount) ?? 0,
+          t1Delta: numericOrNull(improvementPct.t1WinRateDelta) ?? 0,
+          t2Delta: numericOrNull(improvementPct.t2WinRateDelta) ?? 0,
+          expectancyDeltaR: numericOrNull(improvementPct.expectancyRDelta) ?? 0,
+          objectiveConservativeDelta: numericOrNull(improvementPct.objectiveConservativeDelta) ?? 0,
+          optimizationApplied: Boolean((row as { optimization_applied?: unknown }).optimization_applied),
+        },
+        notes,
+      };
+    });
+
+    return res.json({
+      history,
+      count: history.length,
+    });
+  } catch (error) {
+    logger.error('SPX optimizer history endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX optimizer history.',
       retryAfter: 10,
     });
   }
@@ -548,25 +730,50 @@ router.get('/broker/tradier/status', async (req: Request, res: Response) => {
       });
     }
 
-    const { data: credentialRow, error: credentialError } = await supabase
-      .from('broker_credentials')
-      .select('broker_name,account_id,is_active,metadata,updated_at')
-      .eq('user_id', userId)
-      .eq('broker_name', 'tradier')
-      .maybeSingle();
-    if (credentialError) {
-      throw credentialError;
+    let credentialRow: Record<string, unknown> | null = null;
+    if (!isKnownMissingRelation('broker_credentials')) {
+      const { data, error: credentialError } = await supabase
+        .from('broker_credentials')
+        .select('broker_name,account_id,is_active,metadata,updated_at')
+        .eq('user_id', userId)
+        .eq('broker_name', 'tradier')
+        .maybeSingle();
+      if (credentialError) {
+        if (isMissingSupabaseRelationError(credentialError, 'broker_credentials')) {
+          markMissingRelation('broker_credentials');
+          logger.warn('broker_credentials table missing; returning Tradier status with configured=false', {
+            code: (credentialError as { code?: unknown })?.code,
+            message: (credentialError as { message?: unknown })?.message,
+          });
+        } else {
+          throw credentialError;
+        }
+      } else {
+        credentialRow = (data as Record<string, unknown> | null) || null;
+      }
     }
 
-    const { data: snapshotRow, error: snapshotError } = await supabase
-      .from('portfolio_snapshots')
-      .select('snapshot_time,total_equity,day_trade_buying_power,realized_pnl_daily')
-      .eq('user_id', userId)
-      .order('snapshot_time', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (snapshotError) {
-      throw snapshotError;
+    let snapshotRow: Record<string, unknown> | null = null;
+    if (!isKnownMissingRelation('portfolio_snapshots')) {
+      const { data: snapshots, error: snapshotError } = await supabase
+        .from('portfolio_snapshots')
+        .select('snapshot_time,total_equity,day_trade_buying_power,realized_pnl_daily')
+        .eq('user_id', userId)
+        .order('snapshot_time', { ascending: false })
+        .limit(1);
+      if (snapshotError) {
+        if (isMissingSupabaseRelationError(snapshotError, 'portfolio_snapshots')) {
+          markMissingRelation('portfolio_snapshots');
+          logger.warn('portfolio_snapshots table missing; returning Tradier status without portfolio snapshot', {
+            code: (snapshotError as { code?: unknown })?.code,
+            message: (snapshotError as { message?: unknown })?.message,
+          });
+        } else {
+          throw snapshotError;
+        }
+      } else if (Array.isArray(snapshots) && snapshots.length > 0) {
+        snapshotRow = (snapshots[0] as Record<string, unknown>) || null;
+      }
     }
 
     const runtime = getTradierExecutionRuntimeStatus();

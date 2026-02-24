@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
@@ -20,6 +20,113 @@ function prioritizeSelected(setups: Setup[], selectedSetupId: string | null): Se
   if (!selected) return setups
   next.unshift(selected)
   return next
+}
+
+interface TriggeredAlertHistoryItem {
+  id: string
+  setupId: string
+  setupType: string
+  direction: Setup['direction']
+  regime: Setup['regime']
+  triggeredAt: string
+  entryLow: number
+  entryHigh: number
+  stop: number
+  target1: number
+  target2: number
+}
+
+interface TriggeredAlertState {
+  history: TriggeredAlertHistoryItem[]
+  previousStatusBySetupId: Record<string, Setup['status']>
+}
+
+type TriggeredAlertAction = {
+  type: 'ingest_setups'
+  setups: Setup[]
+}
+
+const TRIGGER_ALERT_HISTORY_STORAGE_KEY = 'spx_command_center:trigger_alert_history'
+const MAX_TRIGGER_ALERT_HISTORY = 40
+const TRIGGER_ALERT_HISTORY_PREVIEW = 4
+
+function restoreTriggeredAlertHistory(): TriggeredAlertHistoryItem[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(TRIGGER_ALERT_HISTORY_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    const restored = parsed.filter((item): item is TriggeredAlertHistoryItem => (
+      Boolean(item)
+      && typeof (item as TriggeredAlertHistoryItem).id === 'string'
+      && typeof (item as TriggeredAlertHistoryItem).setupId === 'string'
+      && typeof (item as TriggeredAlertHistoryItem).triggeredAt === 'string'
+      && typeof (item as TriggeredAlertHistoryItem).entryLow === 'number'
+      && typeof (item as TriggeredAlertHistoryItem).entryHigh === 'number'
+      && typeof (item as TriggeredAlertHistoryItem).stop === 'number'
+      && typeof (item as TriggeredAlertHistoryItem).target1 === 'number'
+      && typeof (item as TriggeredAlertHistoryItem).target2 === 'number'
+    ))
+    return restored.slice(0, MAX_TRIGGER_ALERT_HISTORY)
+  } catch {
+    return []
+  }
+}
+
+function createTriggeredAlertState(): TriggeredAlertState {
+  return {
+    history: restoreTriggeredAlertHistory(),
+    previousStatusBySetupId: {},
+  }
+}
+
+function triggeredAlertReducer(state: TriggeredAlertState, action: TriggeredAlertAction): TriggeredAlertState {
+  if (action.type !== 'ingest_setups') return state
+
+  const nextStatusBySetupId: Record<string, Setup['status']> = {}
+  const newlyTriggered: TriggeredAlertHistoryItem[] = []
+
+  for (const setup of action.setups) {
+    nextStatusBySetupId[setup.id] = setup.status
+    const previousStatus = state.previousStatusBySetupId[setup.id]
+    if (!previousStatus) continue
+    if (previousStatus === 'triggered' || setup.status !== 'triggered') continue
+
+    const triggeredAt = setup.statusUpdatedAt || setup.triggeredAt || new Date().toISOString()
+    newlyTriggered.push({
+      id: `${setup.id}:${triggeredAt}`,
+      setupId: setup.id,
+      setupType: setup.type,
+      direction: setup.direction,
+      regime: setup.regime,
+      triggeredAt,
+      entryLow: setup.entryZone.low,
+      entryHigh: setup.entryZone.high,
+      stop: setup.stop,
+      target1: setup.target1.price,
+      target2: setup.target2.price,
+    })
+  }
+
+  if (newlyTriggered.length === 0) {
+    return {
+      history: state.history,
+      previousStatusBySetupId: nextStatusBySetupId,
+    }
+  }
+
+  const deduped = new Map<string, TriggeredAlertHistoryItem>()
+  for (const item of [...newlyTriggered, ...state.history]) {
+    deduped.set(item.id, item)
+  }
+
+  return {
+    history: Array.from(deduped.values())
+      .sort((a, b) => Date.parse(b.triggeredAt) - Date.parse(a.triggeredAt))
+      .slice(0, MAX_TRIGGER_ALERT_HISTORY),
+    previousStatusBySetupId: nextStatusBySetupId,
+  }
 }
 
 export function SetupFeed({
@@ -44,6 +151,12 @@ export function SetupFeed({
   const { spxPrice } = useSPXPriceContext()
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [showMoreActionable, setShowMoreActionable] = useState(false)
+  const [showAllTriggeredHistory, setShowAllTriggeredHistory] = useState(false)
+  const [triggeredAlertState, dispatchTriggeredAlertState] = useReducer(
+    triggeredAlertReducer,
+    undefined,
+    createTriggeredAlertState,
+  )
 
   const policy = useMemo(
     () => buildSetupDisplayPolicy({
@@ -72,6 +185,25 @@ export function SetupFeed({
   const oneClickEntryEnabled = uxFlags.oneClickEntry && localPrimaryCtaEnabled
 
   const watchlistVisible = forming.length > 0 && (showWatchlist || actionable.length === 0)
+  const triggeredAlertHistory = triggeredAlertState.history
+  const renderedTriggeredHistory = showAllTriggeredHistory
+    ? triggeredAlertHistory
+    : triggeredAlertHistory.slice(0, TRIGGER_ALERT_HISTORY_PREVIEW)
+
+  useEffect(() => {
+    dispatchTriggeredAlertState({
+      type: 'ingest_setups',
+      setups: activeSetups,
+    })
+  }, [activeSetups])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(
+      TRIGGER_ALERT_HISTORY_STORAGE_KEY,
+      JSON.stringify(triggeredAlertHistory.slice(0, MAX_TRIGGER_ALERT_HISTORY)),
+    )
+  }, [triggeredAlertHistory])
 
   const handleOneClickEntry = (setup: Setup) => {
     selectSetup(setup)
@@ -112,6 +244,57 @@ export function SetupFeed({
       {readOnly && (
         <p className="relative z-10 mt-1 text-[10px] text-white/55">Monitoring mode on this surface.</p>
       )}
+
+      <div className="relative z-10 mt-2 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] uppercase tracking-[0.08em] text-white/65">Triggered Alerts</p>
+          <span className="rounded border border-white/15 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-mono text-white/70">
+            {triggeredAlertHistory.length}
+          </span>
+        </div>
+        {renderedTriggeredHistory.length === 0 ? (
+          <p className="mt-1.5 text-[10px] text-white/45">No recent trigger alerts.</p>
+        ) : (
+          <div className="mt-1.5 space-y-1">
+            {renderedTriggeredHistory.map((item) => {
+              const activeMatch = activeSetups.find((setup) => setup.id === item.setupId) || null
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={!activeMatch}
+                  onClick={() => {
+                    if (!activeMatch) return
+                    selectSetup(activeMatch)
+                    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                      surface: 'trigger_alert_history',
+                      action: 'focus_setup',
+                      setupId: activeMatch.id,
+                    })
+                  }}
+                  className="w-full rounded border border-white/10 bg-white/[0.02] px-2 py-1.5 text-left text-[10px] text-white/75 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <p className="font-mono text-[9px] text-white/55">
+                    {new Date(item.triggeredAt).toLocaleTimeString()} · {item.direction.toUpperCase()} {item.setupType.replace(/_/g, ' ')}
+                  </p>
+                  <p className="mt-0.5 text-[10px]">
+                    Entry {item.entryLow.toFixed(2)}-{item.entryHigh.toFixed(2)} · Stop {item.stop.toFixed(2)} · T1 {item.target1.toFixed(2)} · T2 {item.target2.toFixed(2)}
+                  </p>
+                </button>
+              )
+            })}
+            {triggeredAlertHistory.length > TRIGGER_ALERT_HISTORY_PREVIEW && (
+              <button
+                type="button"
+                onClick={() => setShowAllTriggeredHistory((previous) => !previous)}
+                className="w-full rounded border border-white/10 bg-white/[0.02] px-2 py-1.5 text-[10px] uppercase tracking-[0.08em] text-white/60 transition-colors hover:text-white/85"
+              >
+                {showAllTriggeredHistory ? 'Show fewer alerts' : `Show all alerts (${triggeredAlertHistory.length})`}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {!readOnly && (
         <div className="relative z-10 mt-2 rounded-lg border border-white/12 bg-white/[0.035] px-2.5 py-2.5">

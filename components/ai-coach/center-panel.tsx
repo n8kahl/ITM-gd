@@ -1062,6 +1062,53 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   }, [buildEventMarkers, buildLevelAnnotations, buildGEXAnnotations, buildPositionOverlays, fetchChartData, setCenterView, setSymbol])
 
   useEffect(() => {
+    const handleCenterViewEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        view?: string
+        symbol?: string
+        timeframe?: string
+      }>).detail
+      if (!detail || typeof detail !== 'object') return
+
+      const requestedView = typeof detail.view === 'string' ? detail.view : null
+      const requestedSymbol = typeof detail.symbol === 'string' && /^[A-Z0-9._:-]{1,10}$/.test(detail.symbol)
+        ? detail.symbol
+        : null
+      const requestedTimeframe = typeof detail.timeframe === 'string' && SUPPORTED_CHART_TIMEFRAMES.has(detail.timeframe as ChartTimeframe)
+        ? detail.timeframe as ChartTimeframe
+        : null
+
+      if (requestedSymbol) {
+        setChartSymbol(requestedSymbol)
+        setSymbol(requestedSymbol)
+      }
+
+      if (requestedView === 'preferences') {
+        setIsPreferencesOpen(true)
+        return
+      }
+
+      if (requestedView === 'options') {
+        setActiveView('options')
+        setCenterView('options')
+        return
+      }
+
+      if (requestedView === 'chart') {
+        const symbol = requestedSymbol || chartSymbol
+        const timeframe = requestedTimeframe || chartTimeframe
+        setActiveView('chart')
+        setCenterView('chart')
+        if (requestedTimeframe) setChartTimeframe(requestedTimeframe)
+        fetchChartData(symbol, timeframe)
+      }
+    }
+
+    window.addEventListener('ai-coach-center-view', handleCenterViewEvent)
+    return () => window.removeEventListener('ai-coach-center-view', handleCenterViewEvent)
+  }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView, setSymbol])
+
+  useEffect(() => {
     const handleHover = (event: Event) => {
       const detail = (event as CustomEvent<{
         type?: string

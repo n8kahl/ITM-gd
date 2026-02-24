@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { postSPX, useSPXQuery } from '@/hooks/use-spx-api'
+import { postSPX, SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
 
 export interface SPXOptimizerConfidenceInterval {
   sampleSize: number
@@ -269,6 +269,56 @@ export interface SPXWinRateBacktestSnapshot {
   notes: string[]
 }
 
+const OPTIMIZER_SCORECARD_BASE_REFRESH_MS = 30_000
+const OPTIMIZER_SCHEDULE_BASE_REFRESH_MS = 30_000
+const OPTIMIZER_HISTORY_BASE_REFRESH_MS = 45_000
+const OPTIMIZER_BACKTEST_BASE_REFRESH_MS = 180_000
+const OPTIMIZER_MAX_BACKOFF_MS = 10 * 60 * 1000
+const OPTIMIZER_MISSING_ENDPOINT_BACKOFF_MS = 20 * 60 * 1000
+
+type OptimizerEndpointKey = 'scorecard' | 'schedule' | 'history' | 'backtest'
+type OptimizerFailureState = Record<OptimizerEndpointKey, {
+  consecutiveFailures: number
+  cooldownUntilMs: number
+}>
+
+const optimizerFailureState: OptimizerFailureState = {
+  scorecard: { consecutiveFailures: 0, cooldownUntilMs: 0 },
+  schedule: { consecutiveFailures: 0, cooldownUntilMs: 0 },
+  history: { consecutiveFailures: 0, cooldownUntilMs: 0 },
+  backtest: { consecutiveFailures: 0, cooldownUntilMs: 0 },
+}
+
+function markOptimizerFailure(key: OptimizerEndpointKey, error: Error): void {
+  const state = optimizerFailureState[key]
+  if (error instanceof SPXRequestError && (error.status === 404 || error.status === 405)) {
+    state.consecutiveFailures = 0
+    state.cooldownUntilMs = Date.now() + OPTIMIZER_MISSING_ENDPOINT_BACKOFF_MS
+    return
+  }
+
+  state.consecutiveFailures = Math.min(state.consecutiveFailures + 1, 6)
+  const delay = Math.min(
+    OPTIMIZER_SCORECARD_BASE_REFRESH_MS * (2 ** Math.max(state.consecutiveFailures - 1, 0)),
+    OPTIMIZER_MAX_BACKOFF_MS,
+  )
+  state.cooldownUntilMs = Date.now() + delay
+}
+
+function clearOptimizerFailureState(key: OptimizerEndpointKey): void {
+  optimizerFailureState[key].consecutiveFailures = 0
+  optimizerFailureState[key].cooldownUntilMs = 0
+}
+
+function getOptimizerRefreshInterval(key: OptimizerEndpointKey, baseMs: number): number {
+  const state = optimizerFailureState[key]
+  const now = Date.now()
+  if (state.cooldownUntilMs > now) {
+    return Math.max(state.cooldownUntilMs - now, baseMs)
+  }
+  return baseMs
+}
+
 function getYearStartDateEt(now: Date = new Date()): string {
   const etYear = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -286,22 +336,34 @@ export function useSPXOptimizer() {
   const ytdFromEt = useMemo(() => getYearStartDateEt(), [])
 
   const scorecardQuery = useSPXQuery<SPXOptimizerScorecard>('/api/spx/analytics/optimizer/scorecard', {
-    refreshInterval: 30_000,
+    refreshInterval: () => getOptimizerRefreshInterval('scorecard', OPTIMIZER_SCORECARD_BASE_REFRESH_MS),
     revalidateOnFocus: false,
+    errorRetryCount: 0,
+    onError: (error) => markOptimizerFailure('scorecard', error),
+    onSuccess: () => clearOptimizerFailureState('scorecard'),
   })
   const scheduleQuery = useSPXQuery<SPXOptimizerScheduleStatus>('/api/spx/analytics/optimizer/schedule', {
-    refreshInterval: 30_000,
+    refreshInterval: () => getOptimizerRefreshInterval('schedule', OPTIMIZER_SCHEDULE_BASE_REFRESH_MS),
     revalidateOnFocus: false,
+    errorRetryCount: 0,
+    onError: (error) => markOptimizerFailure('schedule', error),
+    onSuccess: () => clearOptimizerFailureState('schedule'),
   })
   const historyQuery = useSPXQuery<SPXOptimizerHistoryResponse>('/api/spx/analytics/optimizer/history?limit=20', {
-    refreshInterval: 45_000,
+    refreshInterval: () => getOptimizerRefreshInterval('history', OPTIMIZER_HISTORY_BASE_REFRESH_MS),
     revalidateOnFocus: false,
+    errorRetryCount: 0,
+    onError: (error) => markOptimizerFailure('history', error),
+    onSuccess: () => clearOptimizerFailureState('history'),
   })
   const ytdBacktestQuery = useSPXQuery<SPXWinRateBacktestSnapshot>(
     `/api/spx/analytics/win-rate/backtest?source=spx_setup_instances&resolution=second&from=${ytdFromEt}`,
     {
-      refreshInterval: 180_000,
+      refreshInterval: () => getOptimizerRefreshInterval('backtest', OPTIMIZER_BACKTEST_BASE_REFRESH_MS),
       revalidateOnFocus: false,
+      errorRetryCount: 0,
+      onError: (error) => markOptimizerFailure('backtest', error),
+      onSuccess: () => clearOptimizerFailureState('backtest'),
     },
   )
 

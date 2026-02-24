@@ -20,6 +20,12 @@ import { enrichCoachDecisionExplainability } from '@/lib/spx/coach-explainabilit
 import { distanceToStopPoints, isFlowDivergence, summarizeFlowAlignment } from '@/lib/spx/coach-context'
 import { enrichSPXSetupWithDecisionEngine } from '@/lib/spx/decision-engine'
 import { normalizeSPXRealtimeEvent } from '@/lib/spx/event-schema'
+import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
+import {
+  mergeActionableSetups,
+  mergeSetup,
+  setupLifecycleEpoch,
+} from '@/lib/spx/setup-stream-state'
 import {
   resolveSPXFeedHealth,
   type SPXFeedFallbackReasonCode,
@@ -188,9 +194,8 @@ const ACTIONABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['formin
 const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const ENTERABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
-const REALTIME_SETUP_RETENTION_MS = 15 * 60 * 1000
 const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
-const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
+const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX', 'flow:alert'] as const
 const PROACTIVE_COACH_COOLDOWN_MS = 45_000
 const PROACTIVE_FLOW_DIVERGENCE_THRESHOLD = 42
 const PROACTIVE_STOP_DISTANCE_THRESHOLD = 3
@@ -214,11 +219,38 @@ const SETUP_TIER_PRIORITY: Record<NonNullable<Setup['tier']>, number> = {
   watchlist: 2,
   hidden: 3,
 }
+const REALTIME_FLOW_EVENT_LIMIT = 80
 
 function toEpoch(value: string | null | undefined): number {
   if (!value) return 0
   const epoch = Date.parse(value)
   return Number.isFinite(epoch) ? epoch : 0
+}
+
+function parseContractResponseMessage(payload: string): string {
+  if (!payload) return ''
+  try {
+    const parsed = JSON.parse(payload) as { message?: unknown; error?: unknown }
+    if (typeof parsed.message === 'string' && parsed.message.trim().length > 0) {
+      return parsed.message
+    }
+    if (typeof parsed.error === 'string' && parsed.error.trim().length > 0) {
+      return parsed.error
+    }
+  } catch {
+    // Payload might be plain text/HTML. Fall back below.
+  }
+  return payload
+}
+
+function isContractEndpointUnavailableMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  if (!normalized) return false
+  if (normalized.includes('missing spx endpoint path')) return true
+  if (normalized.includes('unable to reach spx backend endpoint')) return true
+  return normalized.includes('contract-select')
+    && normalized.includes('route')
+    && normalized.includes('not found')
 }
 
 function rankSetups(setups: Setup[]): Setup[] {
@@ -237,112 +269,97 @@ function rankSetups(setups: Setup[]): Setup[] {
     if (b.confluenceScore !== a.confluenceScore) return b.confluenceScore - a.confluenceScore
     if (b.probability !== a.probability) return b.probability - a.probability
 
-    const recencyA = a.triggeredAt ? toEpoch(a.triggeredAt) : toEpoch(a.createdAt)
-    const recencyB = b.triggeredAt ? toEpoch(b.triggeredAt) : toEpoch(b.createdAt)
+    const recencyA = setupLifecycleEpoch(a)
+    const recencyB = setupLifecycleEpoch(b)
     if (recencyB !== recencyA) return recencyB - recencyA
 
     return a.id.localeCompare(b.id)
   })
 }
 
-function setupRecencyEpoch(setup: Setup): number {
-  return Math.max(toEpoch(setup.triggeredAt), toEpoch(setup.createdAt))
-}
-
 function roundTo(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals))
 }
 
-function setupSemanticKey(setup: Setup): string {
-  return [
-    setup.type,
-    setup.direction,
-    roundTo(setup.entryZone.low, 2),
-    roundTo(setup.entryZone.high, 2),
-    roundTo(setup.stop, 2),
-    roundTo(setup.target1.price, 2),
-    roundTo(setup.target2.price, 2),
-    setup.regime,
-  ].join('|')
+function parseFlowEventTimestamp(input: unknown): string | null {
+  if (typeof input !== 'string' || input.trim().length === 0) return null
+  const parsed = Date.parse(input)
+  if (!Number.isFinite(parsed)) return null
+  return input
 }
 
-function dedupeSetupsBySemanticKey(setups: Setup[]): Setup[] {
-  const ranked = rankSetups(setups)
-  const deduped: Setup[] = []
-  const seen = new Set<string>()
-
-  for (const setup of ranked) {
-    const key = setupSemanticKey(setup)
-    if (seen.has(key)) continue
-    seen.add(key)
-    deduped.push(setup)
+function mergeFlowEvents(existing: FlowEvent[], incoming: FlowEvent[]): FlowEvent[] {
+  if (incoming.length === 0) {
+    return [...existing]
+      .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+      .slice(0, REALTIME_FLOW_EVENT_LIMIT)
   }
 
-  return rankSetups(deduped)
+  const deduped = new Map<string, FlowEvent>()
+  for (const event of [...incoming, ...existing]) {
+    deduped.set(event.id, event)
+  }
+
+  return Array.from(deduped.values())
+    .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+    .slice(0, REALTIME_FLOW_EVENT_LIMIT)
 }
 
-function shouldKeepExistingSetup(existing: Setup, incoming: Setup): boolean {
-  const existingPriority = SETUP_STATUS_PRIORITY[existing.status]
-  const incomingPriority = SETUP_STATUS_PRIORITY[incoming.status]
-  const existingRecency = setupRecencyEpoch(existing)
-  const incomingRecency = setupRecencyEpoch(incoming)
+function parseRealtimeFlowEvent(message: RealtimeSocketMessage): FlowEvent | null {
+  if (message.type !== 'spx_flow') return null
+  const payload = message.data
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
 
-  if (existing.status === 'triggered' && (incoming.status === 'ready' || incoming.status === 'forming')) {
-    return incomingRecency <= existingRecency + 60_000
-  }
+  const typeRaw = (payload as { type?: unknown }).type
+  const symbolRaw = (payload as { symbol?: unknown }).symbol
+  const directionRaw = (payload as { direction?: unknown }).direction
+  const strike = toFiniteNumber((payload as { strike?: unknown }).strike)
+  const expiry = typeof (payload as { expiry?: unknown }).expiry === 'string'
+    ? (payload as { expiry: string }).expiry
+    : null
+  const size = toFiniteNumber((payload as { size?: unknown }).size)
+  const premium = toFiniteNumber((payload as { premium?: unknown }).premium)
+  const timestamp = parseFlowEventTimestamp(
+    (payload as { timestamp?: unknown }).timestamp
+      ?? message.timestamp
+      ?? new Date().toISOString(),
+  )
 
-  if (existingPriority < incomingPriority && existingRecency >= incomingRecency) {
-    return true
-  }
+  if (typeRaw !== 'sweep' && typeRaw !== 'block') return null
+  if (symbolRaw !== 'SPX' && symbolRaw !== 'SPY') return null
+  if (directionRaw !== 'bullish' && directionRaw !== 'bearish') return null
+  if (strike == null || premium == null || size == null) return null
+  if (!expiry || !timestamp) return null
 
-  return false
-}
-
-function mergeSetup(existing: Setup | undefined, incoming: Setup): Setup {
-  if (!existing) return incoming
-  if (shouldKeepExistingSetup(existing, incoming)) {
-    return {
-      ...incoming,
-      ...existing,
-      recommendedContract: existing.recommendedContract ?? incoming.recommendedContract,
-    }
-  }
-
+  const id = `${symbolRaw}:${typeRaw}:${directionRaw}:${strike}:${expiry}:${size}:${premium}:${timestamp}`
   return {
-    ...incoming,
-    recommendedContract: incoming.recommendedContract ?? existing.recommendedContract,
+    id,
+    type: typeRaw,
+    symbol: symbolRaw,
+    strike,
+    expiry,
+    size,
+    direction: directionRaw,
+    premium,
+    timestamp,
   }
 }
 
-function mergeActionableSetups(existingSetups: Setup[], incomingSetups: Setup[]): Setup[] {
-  const now = Date.now()
-  const incomingIds = new Set(incomingSetups.map((setup) => setup.id))
-  const merged = new Map(existingSetups.map((setup) => [setup.id, setup]))
-
-  for (const incoming of incomingSetups) {
-    const current = merged.get(incoming.id)
-    const nextSetup = mergeSetup(current, incoming)
-    if (ACTIONABLE_SETUP_STATUSES.has(nextSetup.status)) {
-      merged.set(nextSetup.id, nextSetup)
-    } else {
-      merged.delete(nextSetup.id)
-    }
+function hasSetupPriceProgressionConflict(setup: Setup, currentPrice: number): boolean {
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return false
+  if (setup.status === 'triggered' || setup.status === 'invalidated' || setup.status === 'expired') {
+    return false
   }
 
-  for (const existing of existingSetups) {
-    if (incomingIds.has(existing.id)) continue
-    if (!ACTIONABLE_SETUP_STATUSES.has(existing.status)) {
-      merged.delete(existing.id)
-      continue
-    }
-    const isRecent = now - setupRecencyEpoch(existing) <= REALTIME_SETUP_RETENTION_MS
-    if (!isRecent) {
-      merged.delete(existing.id)
-    }
-  }
+  const target1 = setup.target1.price
+  if (!Number.isFinite(target1)) return false
 
-  return dedupeSetupsBySemanticKey(Array.from(merged.values()))
+  if (setup.direction === 'bullish') {
+    return currentPrice >= target1
+  }
+  return currentPrice <= target1
 }
+
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -602,6 +619,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [coachDecisionStatus, setCoachDecisionStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [coachDecisionError, setCoachDecisionError] = useState<string | null>(null)
   const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
+  const [realtimeFlowEvents, setRealtimeFlowEvents] = useState<FlowEvent[]>([])
   const [setupTriggerNotificationsEnabled, setSetupTriggerNotificationsEnabled] = useState(true)
   const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
   const selectedSetupIdRef = useRef<string | null>(null)
@@ -747,6 +765,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return
     }
 
+    const flowEvent = parseRealtimeFlowEvent(message)
+    if (flowEvent) {
+      setRealtimeFlowEvents((previous) => mergeFlowEvents(previous, [flowEvent]))
+      return
+    }
+
     if (message.type === 'spx_coach') {
       const payload = message.data
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
@@ -813,11 +837,21 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   }, [stream.isConnected])
 
   useEffect(() => {
+    const snapshotEpochMs = toEpoch(snapshotData?.generatedAt) || Date.now()
     const snapshotSetups = (snapshotData?.setups || []).filter((setup) => ACTIONABLE_SETUP_STATUSES.has(setup.status))
-    setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups))
+    setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups, { nowMs: snapshotEpochMs }))
   }, [snapshotData?.generatedAt, snapshotData?.setups])
 
-  const flowEvents = useMemo(() => snapshotData?.flow || [], [snapshotData?.flow])
+  useEffect(() => {
+    const snapshotFlow = snapshotData?.flow || []
+    setRealtimeFlowEvents((previous) => mergeFlowEvents(previous, snapshotFlow))
+  }, [snapshotData?.flow])
+
+  const flowEvents = useMemo(
+    () => mergeFlowEvents(realtimeFlowEvents, snapshotData?.flow || []),
+    [realtimeFlowEvents, snapshotData?.flow],
+  )
+  const currentSpxPriceForSetupValidation = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
   const activeSetups = useMemo(() => {
     const nowMs = toEpoch(snapshotData?.generatedAt) || Date.now()
     const enriched = realtimeSetups.map((setup) => enrichSPXSetupWithDecisionEngine(setup, {
@@ -828,8 +862,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       flowEvents,
       nowMs,
     }))
-    return rankSetups(enriched)
+    const filtered = enriched.filter((setup) => !hasSetupPriceProgressionConflict(setup, currentSpxPriceForSetupValidation))
+    return rankSetups(filtered)
   }, [
+    currentSpxPriceForSetupValidation,
     flowEvents,
     realtimeSetups,
     snapshotData?.basis,
@@ -901,6 +937,25 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     if (!selectedSetupId) return defaultSetup
     return activeSetups.find((setup) => setup.id === selectedSetupId) || defaultSetup
   }, [activeSetups, inTradeSetupId, selectedSetupId])
+  const alertDisplayPolicy = useMemo(() => buildSetupDisplayPolicy({
+    setups: activeSetups,
+    regime: snapshotData?.regime?.regime || null,
+    prediction: snapshotData?.prediction || null,
+    selectedSetup,
+    primaryLimit: DEFAULT_PRIMARY_SETUP_LIMIT,
+  }), [
+    activeSetups,
+    selectedSetup,
+    snapshotData?.prediction,
+    snapshotData?.regime?.regime,
+  ])
+  const alertableSetupIds = useMemo(() => {
+    const actionable = [
+      ...alertDisplayPolicy.actionablePrimary,
+      ...alertDisplayPolicy.actionableSecondary,
+    ]
+    return new Set(actionable.map((setup) => setup.id))
+  }, [alertDisplayPolicy.actionablePrimary, alertDisplayPolicy.actionableSecondary])
 
   const selectedSetupContract = useMemo<ContractRecommendation | null>(() => {
     if (!selectedSetup) return null
@@ -1567,6 +1622,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     const nextStatusById: Record<string, Setup['status']> = {}
+    let focusTriggeredSetupId: string | null = null
     for (const setup of activeSetups) {
       nextStatusById[setup.id] = setup.status
     }
@@ -1576,7 +1632,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       if (!previousStatus) continue
       if (previousStatus === 'triggered' || setup.status !== 'triggered') continue
 
+      const isAlertable = alertableSetupIds.has(setup.id) || inTradeSetupId === setup.id
+      if (!isAlertable) continue
+
       emitSetupTriggeredNotification(setup)
+      if (!inTradeSetupId && focusTriggeredSetupId == null) {
+        focusTriggeredSetupId = setup.id
+      }
       if (!uxFlags.coachProactive) continue
 
       const flowSummary = summarizeFlowAlignment(flowEvents.slice(0, 12), setup.direction)
@@ -1599,11 +1661,26 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       pushProactiveCoachMessage(message, `triggered:${setup.id}`)
     }
 
+    if (
+      focusTriggeredSetupId
+      && !inTradeSetupId
+      && selectedSetupIdRef.current !== focusTriggeredSetupId
+    ) {
+      setSelectedSetupId(focusTriggeredSetupId)
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'setup_feed',
+        action: 'auto_focus_triggered_setup',
+        setupId: focusTriggeredSetupId,
+      })
+    }
+
     previousSetupStatusByIdRef.current = nextStatusById
   }, [
     activeSetups,
+    alertableSetupIds,
     emitSetupTriggeredNotification,
     flowEvents,
+    inTradeSetupId,
     pushProactiveCoachMessage,
     uxFlags.coachProactive,
   ])
@@ -2179,6 +2256,25 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
       if (!response.ok) {
         if (response.status === 404) {
+          const responseMessage = parseContractResponseMessage(await response.text())
+          if (isContractEndpointUnavailableMessage(responseMessage)) {
+            contractEndpointModeRef.current = 'unavailable'
+            contractEndpointUnavailableUntilRef.current = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
+            const durationMs = stopTimer({
+              setupId,
+              result: 'endpoint_not_found',
+              status: response.status,
+            })
+            trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+              setupId,
+              result: 'endpoint_not_found',
+              status: response.status,
+              durationMs,
+              backoffMs: CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS,
+            }, { level: 'warning', persist: true })
+            return setup.recommendedContract || null
+          }
+
           contractSetupUnavailableUntilRef.current[setupId] = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
           const durationMs = stopTimer({
             setupId,
@@ -2211,6 +2307,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
             backoffMs: CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS,
           }, { level: 'warning', persist: true })
           return setup.recommendedContract || null
+        }
+
+        if (response.status >= 500) {
+          contractEndpointUnavailableUntilRef.current = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
         }
 
         const durationMs = stopTimer({
@@ -2427,11 +2527,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   ])
 
   const error = snapshotError || null
+  const effectiveFeedError = error?.message || stream.error || null
   const streamTrustState = marketDataOrchestratorRef.current.evaluate(Date.now(), stream.isConnected)
   const resolvedFeedHealth = resolveSPXFeedHealth({
     snapshotIsDegraded,
     snapshotDegradedMessage,
-    errorMessage: error?.message || null,
+    errorMessage: effectiveFeedError,
     snapshotRequestLate,
     snapshotAvailable: Boolean(snapshotData),
     streamConnected: stream.isConnected,

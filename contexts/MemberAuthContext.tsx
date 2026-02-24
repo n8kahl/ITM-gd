@@ -98,6 +98,8 @@ interface MemberAuthContextValue extends MemberAuthState {
 const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
 const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
+const DISCORD_GUILD_ROLES_MISSING_CACHE_KEY = 'member_auth:discord_guild_roles_missing_at_ms'
+const DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 function createE2EBypassAuthState(): MemberAuthState {
   const nowIso = new Date().toISOString()
@@ -231,6 +233,57 @@ function buildRoleTitleMapFromPermissions(rows: any[]): Record<string, string> {
   return roleTitleMap
 }
 
+function isMissingSupabaseRelationError(error: unknown, tableName: string): boolean {
+  const code = typeof (error as { code?: unknown })?.code === 'string'
+    ? String((error as { code: string }).code).toUpperCase()
+    : ''
+  const message = typeof (error as { message?: unknown })?.message === 'string'
+    ? String((error as { message: string }).message).toLowerCase()
+    : ''
+
+  if (code === '42P01' || code === 'PGRST205' || code === 'PGRST116') {
+    return true
+  }
+
+  if (!message) return false
+  if (!message.includes(tableName.toLowerCase())) return false
+
+  return (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('not found')
+  )
+}
+
+function readCachedMissingDiscordGuildRolesFlag(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const raw = window.localStorage.getItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
+    if (!raw) return false
+    const detectedAtMs = Number.parseInt(raw, 10)
+    if (!Number.isFinite(detectedAtMs)) {
+      window.localStorage.removeItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
+      return false
+    }
+    if ((Date.now() - detectedAtMs) > DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS) {
+      window.localStorage.removeItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+function cacheMissingDiscordGuildRolesFlag(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY, String(Date.now()))
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
@@ -270,9 +323,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
+  const discordGuildRolesTableMissingRef = useRef(false)
 
   // Fetch role mapping and tab configurations from config APIs on mount
   useEffect(() => {
+    discordGuildRolesTableMissingRef.current = readCachedMissingDiscordGuildRolesFlag()
+
     // Fetch role mapping
     fetch('/api/config/roles')
       .then(res => res.json())
@@ -605,27 +661,25 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         const permissionRows = Array.isArray(userPermissions) ? userPermissions : []
         const roleTitleMap = buildRoleTitleMapFromPermissions(permissionRows)
 
-        if (roleIds.length > 0) {
-          try {
-            const { data: guildRoleRows, error: guildRoleError } = await supabase
-              .from('discord_guild_roles')
-              .select('discord_role_id, discord_role_name')
-              .in('discord_role_id', roleIds)
+        if (roleIds.length > 0 && !discordGuildRolesTableMissingRef.current) {
+          const { data: guildRoleRows, error: guildRoleError } = await supabase
+            .from('discord_guild_roles')
+            .select('discord_role_id, discord_role_name')
+            .in('discord_role_id', roleIds)
 
-            if (guildRoleError) {
-              console.warn('[MemberAuth] discord_guild_roles lookup skipped (table may not exist yet):', guildRoleError.code)
-            } else {
-              for (const row of guildRoleRows || []) {
-                const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
-                const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
-                if (roleId && roleName && !roleTitleMap[roleId]) {
-                  roleTitleMap[roleId] = roleName
-                }
+          if (guildRoleError) {
+            if (isMissingSupabaseRelationError(guildRoleError, 'discord_guild_roles')) {
+              discordGuildRolesTableMissingRef.current = true
+              cacheMissingDiscordGuildRolesFlag()
+            }
+          } else {
+            for (const row of guildRoleRows || []) {
+              const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
+              const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
+              if (roleId && roleName && !roleTitleMap[roleId]) {
+                roleTitleMap[roleId] = roleName
               }
             }
-          } catch {
-            // Non-fatal: discord_guild_roles table may not exist yet.
-            // Role titles will fall back to "Discord Role" placeholder below.
           }
         }
 

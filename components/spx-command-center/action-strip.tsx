@@ -55,6 +55,7 @@ interface ActionStripProps {
   immersiveToggleEnabled?: boolean
   showAdvancedHud: boolean
   onToggleAdvancedHud: () => void
+  activeLevelCategoryCount?: number
 }
 
 const TIMEFRAMES: ChartTimeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D']
@@ -144,6 +145,8 @@ export function ActionStrip(props: ActionStripProps) {
             </button>
           ))}
 
+          <div className="mx-1 h-5 w-px shrink-0 bg-white/10" />
+
           <button
             type="button"
             aria-pressed={props.showLevels}
@@ -174,7 +177,12 @@ export function ActionStrip(props: ActionStripProps) {
             )}
           >
             Levels
+            {props.activeLevelCategoryCount != null && props.activeLevelCategoryCount < 6 && (
+              <span className="ml-0.5 text-[8px] text-white/40">·{props.activeLevelCategoryCount}</span>
+            )}
           </button>
+
+          <div className="mx-1 h-5 w-px shrink-0 bg-white/10" />
 
           <button
             type="button"
@@ -302,32 +310,37 @@ export function ActionStrip(props: ActionStripProps) {
           <span className="text-[10px] uppercase tracking-[0.1em] text-white/55">Advanced Overlay HUD</span>
         </div>
 
-        <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1" data-testid="spx-action-focus-mode">
-            {FOCUS_MODES.map((mode) => {
-              const active = props.focusMode === mode.key
-              return (
-                <button
-                  key={mode.key}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => props.onFocusModeChange(mode.key)}
-                  data-testid={`spx-action-focus-mode-${mode.key}`}
-                  className={cn(
-                    'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                    active
-                      ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
-                      : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-                  )}
-                >
-                  {mode.label}
-                </button>
-              )
-            })}
+        <div className="mb-2.5 flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[8px] uppercase tracking-[0.12em] text-white/30">Focus</span>
+            <div className="flex items-center gap-1" data-testid="spx-action-focus-mode">
+              {FOCUS_MODES.map((mode) => {
+                const active = props.focusMode === mode.key
+                return (
+                  <button
+                    key={mode.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => props.onFocusModeChange(mode.key)}
+                    data-testid={`spx-action-focus-mode-${mode.key}`}
+                    className={cn(
+                      'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                      active
+                        ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                        : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                    )}
+                  >
+                    {mode.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          <div className="mx-2 h-4 w-px bg-white/10" />
-          <div className="flex items-center gap-1" data-testid="spx-action-replay-controls">
+          <div className="mx-0.5 h-8 w-px bg-white/10" />
+          <div className="flex flex-col gap-1">
+            <span className="text-[8px] uppercase tracking-[0.12em] text-white/30">Replay</span>
+            <div className="flex items-center gap-1" data-testid="spx-action-replay-controls">
             <button
               type="button"
               aria-pressed={props.replayEnabled}
@@ -375,24 +388,31 @@ export function ActionStrip(props: ActionStripProps) {
             >
               {props.replaySpeed}x
             </button>
+            </div>
           </div>
 
-          <div className="mx-2 h-4 w-px bg-white/10" />
-          <button
-            type="button"
-            onClick={props.onToggleAllLevels}
-            className={cn(
-              'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-              props.showAllLevels
-                ? 'border-champagne/40 bg-champagne/12 text-champagne'
-                : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-            )}
-          >
-            {props.showAllLevels ? 'All Levels' : 'Key Levels'}
-          </button>
+          <div className="mx-0.5 h-8 w-px bg-white/10" />
+          <div className="flex flex-col gap-1">
+            <span className="text-[8px] uppercase tracking-[0.12em] text-white/30">Levels</span>
+            <button
+              type="button"
+              onClick={props.onToggleAllLevels}
+              className={cn(
+                'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                props.showAllLevels
+                  ? 'border-champagne/40 bg-champagne/12 text-champagne'
+                  : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+              )}
+            >
+              {props.showAllLevels ? 'Full Map' : 'Near Price'}
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[8px] uppercase tracking-[0.12em] text-white/30">Presets</span>
+            <div className="flex items-center gap-1">
           {props.onSelectOverlayPreset && OVERLAY_PRESETS.map((preset) => {
             const active = props.overlayPreset === preset
             return (
@@ -415,6 +435,8 @@ export function ActionStrip(props: ActionStripProps) {
               </button>
             )
           })}
+            </div>
+          </div>
 
           {props.spatialThrottled && (
             <div
@@ -425,6 +447,10 @@ export function ActionStrip(props: ActionStripProps) {
             </div>
           )}
 
+          <div className="mx-0.5 h-8 w-px bg-white/10" />
+          <div className="flex flex-col gap-1">
+            <span className="text-[8px] uppercase tracking-[0.12em] text-white/30">Overlays</span>
+            <div className="flex items-center gap-1">
           {overlayButtons.map((button) => (
             <button
               key={button.label}
@@ -529,6 +555,8 @@ export function ActionStrip(props: ActionStripProps) {
             Immersive
             <span className="rounded border border-white/15 px-1 py-0.5 text-[7px] text-white/30">I</span>
           </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

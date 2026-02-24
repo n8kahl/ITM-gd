@@ -57,11 +57,10 @@ function buildFollowUps(
     || calledFunctions.has('get_zero_dte_analysis')
     || calledFunctions.has('get_iv_analysis')
     || /options|greeks|implied vol|iv|gamma|delta|theta|vega/.test(lower)
-  const mentionsSPX = /\bspx\b/.test(lower) || symbol === 'SPX'
 
   const candidates: FollowUpChip[] = []
 
-  if (mentionsSPX) {
+  if (symbol === 'SPX') {
     candidates.push(
       {
         label: 'Explain SPX Simply',
@@ -70,6 +69,17 @@ function buildFollowUps(
       {
         label: 'SPX Game Plan',
         prompt: 'Give me the full SPX game plan with key levels, bull and bear triggers, and show it on the chart.',
+      },
+    )
+  } else if (symbol) {
+    candidates.push(
+      {
+        label: `${symbol} Quick Read`,
+        prompt: `Explain the ${symbol} context in plain English: trend, nearest support/resistance, and what would invalidate the current idea.`,
+      },
+      {
+        label: `${symbol} Plan`,
+        prompt: `Give me a clear ${symbol} plan with key levels, one bull trigger, one bear trigger, and show it on the chart.`,
       },
     )
   }
