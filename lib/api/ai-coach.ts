@@ -1279,74 +1279,12 @@ export async function analyzeScreenshot(
 }
 
 // ============================================
-// TRADE JOURNAL API
+// TRADE JOURNAL API (Legacy types preserved for widget-cards compatibility)
+// Journal CRUD moved to /api/members/journal — use that API directly.
 // ============================================
 
 export type TradeOutcome = 'win' | 'loss' | 'breakeven'
 export type JournalPositionType = PositionType
-
-export interface TradeEntry {
-  id: string
-  user_id: string
-  symbol: string
-  position_type: JournalPositionType
-  strategy?: string
-  entry_date: string
-  entry_price: number
-  exit_date?: string
-  exit_price?: number
-  quantity: number
-  pnl?: number
-  pnl_pct?: number
-  trade_outcome?: TradeOutcome
-  hold_time_days?: number
-  exit_reason?: string
-  lessons_learned?: string
-  tags: string[]
-  auto_generated?: boolean
-  session_context?: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
-
-export interface TradeCreateInput {
-  symbol: string
-  position_type: JournalPositionType
-  strategy?: string
-  entry_date: string
-  entry_price: number
-  exit_date?: string
-  exit_price?: number
-  quantity: number
-  exit_reason?: string
-  lessons_learned?: string
-  tags?: string[]
-}
-
-export interface TradesListResponse {
-  trades: TradeEntry[]
-  total: number
-  hasMore: boolean
-}
-
-export interface TradeAnalyticsSummary {
-  totalTrades: number
-  wins: number
-  losses: number
-  breakeven: number
-  winRate: number
-  totalPnl: number
-  avgWin: number
-  avgLoss: number
-  profitFactor: number
-  avgHoldDays: number
-}
-
-export interface TradeAnalyticsResponse {
-  summary: TradeAnalyticsSummary
-  equityCurve: Array<{ date: string; pnl: number }>
-  byStrategy: Record<string, { count: number; pnl: number; winRate: number }>
-}
 
 export interface JournalInsightsSummary {
   summary: string
@@ -1418,28 +1356,6 @@ interface MembersApiError {
   message?: string
 }
 
-interface MembersJournalEntry {
-  id: string
-  user_id?: string
-  symbol?: string
-  contract_type?: JournalPositionType
-  strategy?: string | null
-  trade_date?: string
-  entry_price?: number | null
-  exit_price?: number | null
-  position_size?: number | null
-  pnl?: number | null
-  pnl_percentage?: number | null
-  is_open?: boolean
-  hold_duration_min?: number | null
-  execution_notes?: string | null
-  lessons_learned?: string | null
-  tags?: string[]
-  market_context?: Record<string, unknown> | null
-  created_at?: string
-  updated_at?: string
-}
-
 interface MembersJournalAnalytics {
   period_start: string
   total_trades: number
@@ -1455,53 +1371,6 @@ interface MembersJournalAnalytics {
   equity_curve: Array<{ date: string; equity: number; drawdown: number }>
 }
 
-function toIsoDateFromDay(value?: string): string {
-  if (!value) return new Date().toISOString()
-  const parsed = Date.parse(value)
-  if (!Number.isFinite(parsed)) return new Date().toISOString()
-  return new Date(parsed).toISOString()
-}
-
-function toTradeOutcome(pnl: number | null | undefined): TradeOutcome | undefined {
-  if (typeof pnl !== 'number' || !Number.isFinite(pnl)) return undefined
-  if (pnl > 0) return 'win'
-  if (pnl < 0) return 'loss'
-  return 'breakeven'
-}
-
-function mapMembersEntryToTradeEntry(entry: MembersJournalEntry): TradeEntry {
-  const pnl = typeof entry.pnl === 'number' ? entry.pnl : null
-  const holdDays = typeof entry.hold_duration_min === 'number'
-    ? Math.max(0, Math.round((entry.hold_duration_min / 1440) * 10) / 10)
-    : null
-
-  return {
-    id: entry.id,
-    user_id: entry.user_id || '',
-    symbol: entry.symbol || '',
-    position_type: entry.contract_type || 'stock',
-    strategy: entry.strategy || undefined,
-    entry_date: entry.trade_date || new Date().toISOString(),
-    entry_price: typeof entry.entry_price === 'number' ? entry.entry_price : 0,
-    exit_date: entry.is_open ? undefined : (entry.trade_date || undefined),
-    exit_price: typeof entry.exit_price === 'number' ? entry.exit_price : undefined,
-    quantity: typeof entry.position_size === 'number' && Number.isFinite(entry.position_size)
-      ? Math.max(1, Math.round(entry.position_size))
-      : 1,
-    pnl: pnl ?? undefined,
-    pnl_pct: typeof entry.pnl_percentage === 'number' ? entry.pnl_percentage : undefined,
-    trade_outcome: entry.is_open ? undefined : toTradeOutcome(pnl),
-    hold_time_days: holdDays ?? undefined,
-    exit_reason: entry.execution_notes || undefined,
-    lessons_learned: entry.lessons_learned || undefined,
-    tags: Array.isArray(entry.tags) ? entry.tags : [],
-    auto_generated: false,
-    session_context: entry.market_context || undefined,
-    created_at: entry.created_at || new Date().toISOString(),
-    updated_at: entry.updated_at || new Date().toISOString(),
-  }
-}
-
 async function parseMembersError(response: Response): Promise<APIError> {
   const payload: MembersApiError = await response.json().catch(() => ({}))
   return {
@@ -1515,6 +1384,10 @@ function buildMembersAuthHeaders(token?: string): HeadersInit {
     ? { 'Authorization': `Bearer ${token}` }
     : {}
 }
+
+// getTrades, createTrade, updateTrade, deleteTrade, getTradeAnalytics removed.
+// Journal CRUD is handled by /api/members/journal routes directly.
+// getJournalInsights and importTrades are preserved for widget-cards and chat integration.
 
 function buildJournalInsightsFromAnalytics(
   analytics: MembersJournalAnalytics,
@@ -1580,261 +1453,6 @@ function buildJournalInsightsFromAnalytics(
       },
     },
     cached: false,
-  }
-}
-
-/**
- * Get trades with optional filters
- */
-export async function getTrades(
-  token: string,
-  options?: {
-    limit?: number
-    offset?: number
-    symbol?: string
-    strategy?: string
-    outcome?: TradeOutcome
-  }
-): Promise<TradesListResponse> {
-  const params = new URLSearchParams()
-  if (options?.limit) params.set('limit', options.limit.toString())
-  if (options?.offset) params.set('offset', options.offset.toString())
-  if (options?.symbol) params.set('symbol', options.symbol)
-  if (options?.strategy) params.set('strategy', options.strategy) // server-side filter not currently supported
-  if (options?.outcome === 'win') params.set('isWinner', 'true')
-  if (options?.outcome === 'loss') params.set('isWinner', 'false')
-  params.set('sortBy', 'trade_date')
-  params.set('sortDir', 'desc')
-
-  const response = await fetch(`/api/members/journal?${params.toString()}`, {
-    headers: buildMembersAuthHeaders(token),
-    credentials: 'include',
-  })
-
-  if (!response.ok) {
-    const error = await parseMembersError(response)
-    throw new AICoachAPIError(response.status, error)
-  }
-
-  const payload = await response.json() as {
-    success?: boolean
-    data?: MembersJournalEntry[]
-    total?: number
-  }
-
-  const allTrades = Array.isArray(payload.data)
-    ? payload.data.map((entry) => mapMembersEntryToTradeEntry(entry))
-    : []
-
-  const filtered = options?.outcome === 'breakeven'
-    ? allTrades.filter((trade) => trade.trade_outcome === 'breakeven')
-    : allTrades
-
-  const total = typeof payload.total === 'number' ? payload.total : filtered.length
-  const offset = options?.offset ?? 0
-
-  return {
-    trades: filtered,
-    total,
-    hasMore: offset + filtered.length < total,
-  }
-}
-
-/**
- * Create a new trade entry
- */
-export async function createTrade(
-  trade: TradeCreateInput,
-  token: string
-): Promise<TradeEntry> {
-  const response = await fetch('/api/members/journal', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildMembersAuthHeaders(token),
-    },
-    credentials: 'include',
-    body: JSON.stringify({
-      symbol: trade.symbol,
-      contract_type: trade.position_type,
-      strategy: trade.strategy,
-      trade_date: toIsoDateFromDay(trade.entry_date),
-      entry_price: trade.entry_price,
-      exit_price: trade.exit_price ?? null,
-      position_size: trade.quantity,
-      is_open: trade.exit_price == null,
-      exit_timestamp: trade.exit_date ? toIsoDateFromDay(trade.exit_date) : null,
-      execution_notes: trade.exit_reason ?? null,
-      lessons_learned: trade.lessons_learned ?? null,
-      tags: trade.tags ?? [],
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await parseMembersError(response)
-    throw new AICoachAPIError(response.status, error)
-  }
-
-  const payload = await response.json() as MembersApiSuccess<MembersJournalEntry>
-  return mapMembersEntryToTradeEntry(payload.data)
-}
-
-/**
- * Update a trade entry
- */
-export async function updateTrade(
-  id: string,
-  updates: Partial<TradeCreateInput>,
-  token: string
-): Promise<TradeEntry> {
-  const response = await fetch('/api/members/journal', {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildMembersAuthHeaders(token),
-    },
-    credentials: 'include',
-    body: JSON.stringify({
-      id,
-      symbol: updates.symbol,
-      contract_type: updates.position_type,
-      strategy: updates.strategy,
-      trade_date: updates.entry_date ? toIsoDateFromDay(updates.entry_date) : undefined,
-      entry_price: updates.entry_price,
-      exit_price: updates.exit_price,
-      position_size: updates.quantity,
-      is_open: updates.exit_price == null ? undefined : false,
-      exit_timestamp: updates.exit_date ? toIsoDateFromDay(updates.exit_date) : undefined,
-      execution_notes: updates.exit_reason,
-      lessons_learned: updates.lessons_learned,
-      tags: updates.tags,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await parseMembersError(response)
-    throw new AICoachAPIError(response.status, error)
-  }
-
-  const payload = await response.json() as MembersApiSuccess<MembersJournalEntry>
-  return mapMembersEntryToTradeEntry(payload.data)
-}
-
-/**
- * Delete a trade entry
- */
-export async function deleteTrade(
-  id: string,
-  token: string
-): Promise<{ success: boolean }> {
-  const response = await fetch(`/api/members/journal?id=${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: buildMembersAuthHeaders(token),
-    credentials: 'include',
-  })
-
-  if (!response.ok) {
-    const error = await parseMembersError(response)
-    throw new AICoachAPIError(response.status, error)
-  }
-
-  const payload = await response.json() as { success?: boolean }
-  return { success: payload.success !== false }
-}
-
-/**
- * Get trade performance analytics
- */
-export async function getTradeAnalytics(
-  token: string
-): Promise<TradeAnalyticsResponse> {
-  const response = await fetch('/api/members/journal/analytics?period=all', {
-    headers: buildMembersAuthHeaders(token),
-    credentials: 'include',
-  })
-
-  if (!response.ok) {
-    const error = await parseMembersError(response)
-    throw new AICoachAPIError(response.status, error)
-  }
-
-  const payload = await response.json() as MembersApiSuccess<MembersJournalAnalytics>
-  const analytics = payload.data
-
-  const equityCurve = analytics.equity_curve.map((point, index) => ({
-    date: point.date,
-    pnl: index === 0
-      ? point.equity
-      : point.equity - (analytics.equity_curve[index - 1]?.equity || 0),
-  }))
-
-  let avgWin = 0
-  let avgLoss = 0
-  let byStrategy: Record<string, { count: number; pnl: number; winRate: number }> = {}
-
-  try {
-    const detailResponse = await fetch('/api/members/journal?limit=500&offset=0&sortBy=trade_date&sortDir=desc', {
-      headers: buildMembersAuthHeaders(token),
-      credentials: 'include',
-    })
-
-    if (detailResponse.ok) {
-      const detailPayload = await detailResponse.json() as { data?: MembersJournalEntry[] }
-      const closedTrades = (detailPayload.data || [])
-        .map((entry) => mapMembersEntryToTradeEntry(entry))
-        .filter((entry) => entry.trade_outcome != null)
-
-      const wins = closedTrades.filter((entry) => typeof entry.pnl === 'number' && entry.pnl > 0)
-      const losses = closedTrades.filter((entry) => typeof entry.pnl === 'number' && entry.pnl < 0)
-
-      avgWin = wins.length > 0
-        ? wins.reduce((sum, entry) => sum + (entry.pnl || 0), 0) / wins.length
-        : 0
-      avgLoss = losses.length > 0
-        ? losses.reduce((sum, entry) => sum + (entry.pnl || 0), 0) / losses.length
-        : 0
-
-      const strategyMap: Record<string, { count: number; pnl: number; wins: number }> = {}
-      for (const trade of closedTrades) {
-        const key = trade.strategy?.trim() || 'Unspecified'
-        if (!strategyMap[key]) {
-          strategyMap[key] = { count: 0, pnl: 0, wins: 0 }
-        }
-        strategyMap[key].count += 1
-        strategyMap[key].pnl += trade.pnl || 0
-        if ((trade.pnl || 0) > 0) strategyMap[key].wins += 1
-      }
-
-      byStrategy = Object.fromEntries(
-        Object.entries(strategyMap).map(([key, value]) => ([
-          key,
-          {
-            count: value.count,
-            pnl: value.pnl,
-            winRate: value.count > 0 ? (value.wins / value.count) * 100 : 0,
-          },
-        ])),
-      )
-    }
-  } catch {
-    // Keep summary available if optional detail query fails.
-  }
-
-  return {
-    summary: {
-      totalTrades: analytics.total_trades,
-      wins: analytics.winning_trades,
-      losses: analytics.losing_trades,
-      breakeven: Math.max(0, analytics.total_trades - analytics.winning_trades - analytics.losing_trades),
-      winRate: Number(analytics.win_rate || 0),
-      totalPnl: analytics.total_pnl,
-      avgWin,
-      avgLoss,
-      profitFactor: Number(analytics.profit_factor || 0),
-      avgHoldDays: Number((analytics.avg_hold_minutes || 0) / 1440),
-    },
-    equityCurve,
-    byStrategy,
   }
 }
 
