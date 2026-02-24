@@ -1,4 +1,5 @@
 import {
+  calculateMeanReversionStop,
   calculateAdaptiveStop,
   deriveNearestGEXDistanceBp,
   resolveGEXDirectionalScale,
@@ -52,16 +53,36 @@ describe('spx/stopEngine', () => {
       atrStopMultiplier: 1,
       netGex: -1,
       setupType: 'mean_reversion',
+      regime: 'ranging',
       vixRegime: 'elevated',
       gexDistanceBp: 700,
       vixStopScalingEnabled: true,
       gexMagnitudeScalingEnabled: true,
     });
 
-    expect(output.stop).toBeLessThan(4996);
+    expect(output.stop).toBe(4997.5);
+    expect(output.riskPoints).toBe(3);
     expect(output.atrFloorPoints).toBe(3);
     expect(output.scale.vix).toBe(1.3);
     expect(output.scale.gexDirectional).toBe(1.1);
     expect(output.scale.gexMagnitude).toBe(1.2);
+  });
+
+  it.each([
+    { regime: 'compression', expectedStop: 4992 },
+    { regime: 'ranging', expectedStop: 4991 },
+    { regime: 'trending', expectedStop: 4990 },
+    { regime: 'breakout', expectedStop: 4988 },
+  ] as const)(
+    'caps mean reversion stop distance by regime max points for $regime',
+    ({ regime, expectedStop }) => {
+      const stop = calculateMeanReversionStop(5000, 'bullish', 20, regime);
+      expect(stop).toBe(expectedStop);
+    },
+  );
+
+  it('uses min(ATR × multiple, maxPoints) for mean reversion stops', () => {
+    expect(calculateMeanReversionStop(5000, 'bullish', 5, 'compression')).toBe(4996);
+    expect(calculateMeanReversionStop(5000, 'bullish', 10, 'trending')).toBe(4990);
   });
 });

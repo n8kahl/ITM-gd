@@ -1940,6 +1940,7 @@ function applyStopGeometryPolicy(input: {
   entryHigh: number;
   baseStop: number;
   geometryPolicy: SPXGeometryPolicyEntry;
+  regime?: Regime | null;
   netGex?: number;
   setupType?: string;
   atr14?: number | null;
@@ -1976,6 +1977,7 @@ function applyStopGeometryPolicy(input: {
     atr14: input.atr14,
     atrStopFloorEnabled,
     atrStopMultiplier,
+    regime: input.regime,
     netGex: input.netGex,
     setupType: input.setupType,
     vixRegime: input.vixRegime,
@@ -2914,6 +2916,7 @@ export async function detectActiveSetups(options?: {
       entryHigh,
       baseStop,
       geometryPolicy,
+      regime: regimeState.regime,
       netGex: gex.combined.netGex,
       setupType,
       atr14: indicatorContext?.atr14 ?? null,

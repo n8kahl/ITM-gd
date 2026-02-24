@@ -1,4 +1,4 @@
-import type { Setup, SetupType, SPXVixRegime } from './types';
+import type { Regime, Setup, SetupType, SPXVixRegime } from './types';
 import { round } from './utils';
 
 const MIN_STOP_DISTANCE_POINTS = 0.35;
@@ -11,6 +11,13 @@ const GEX_MEAN_REVERSION_FAMILIES = new Set<SetupType>([
   'fade_at_wall',
   'flip_reclaim',
 ]);
+
+const MEAN_REVERSION_STOP_CONFIG: Record<Regime, { maxPoints: number; atrMultiple: number }> = {
+  compression: { maxPoints: 8, atrMultiple: 0.8 },
+  ranging: { maxPoints: 9, atrMultiple: 1.0 },
+  trending: { maxPoints: 10, atrMultiple: 1.2 },
+  breakout: { maxPoints: 12, atrMultiple: 1.5 },
+};
 
 export interface AdaptiveStopInput {
   direction: Setup['direction'];
@@ -27,6 +34,7 @@ export interface AdaptiveStopInput {
   vixStopScalingEnabled?: boolean;
   gexDistanceBp?: number | null;
   gexMagnitudeScalingEnabled?: boolean;
+  regime?: Regime | null;
 }
 
 export interface AdaptiveStopOutput {
@@ -85,6 +93,24 @@ export function resolveGEXMagnitudeScale(distanceBp: number | null | undefined):
   return 0.7;
 }
 
+export function calculateMeanReversionStop(
+  entryPrice: number,
+  direction: Setup['direction'],
+  atr: number,
+  regime: Regime,
+): number {
+  const config = MEAN_REVERSION_STOP_CONFIG[regime] ?? MEAN_REVERSION_STOP_CONFIG.ranging;
+  const normalizedAtr = Number.isFinite(atr) && atr > 0
+    ? atr
+    : config.maxPoints / Math.max(config.atrMultiple, 0.1);
+  const atrStop = normalizedAtr * config.atrMultiple;
+  const clampedStop = Math.min(atrStop, config.maxPoints);
+
+  return direction === 'bullish'
+    ? round(entryPrice - clampedStop, 2)
+    : round(entryPrice + clampedStop, 2);
+}
+
 export function deriveNearestGEXDistanceBp(input: {
   referencePrice: number;
   callWall?: number | null;
@@ -140,7 +166,24 @@ export function calculateAdaptiveStop(input: AdaptiveStopInput): AdaptiveStopOut
     5,
   );
 
-  const riskPoints = round(Math.max(MIN_STOP_DISTANCE_POINTS, effectiveRisk * totalScale), 2);
+  const uncappedRiskPoints = Math.max(MIN_STOP_DISTANCE_POINTS, effectiveRisk * totalScale);
+  const meanReversionCapPoints = (() => {
+    if (input.setupType !== 'mean_reversion') return null;
+    const entryMid = (input.entryLow + input.entryHigh) / 2;
+    const cappedStop = calculateMeanReversionStop(
+      entryMid,
+      input.direction,
+      toFiniteNumber(input.atr14) ?? NaN,
+      input.regime ?? 'ranging',
+    );
+    return Math.abs(entryMid - cappedStop);
+  })();
+  const riskPoints = round(
+    meanReversionCapPoints != null
+      ? Math.min(uncappedRiskPoints, meanReversionCapPoints)
+      : uncappedRiskPoints,
+    2,
+  );
   const stop = input.direction === 'bullish'
     ? round(entryMid - riskPoints, 2)
     : round(entryMid + riskPoints, 2);
