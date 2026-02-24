@@ -1778,6 +1778,7 @@ LSTM model for 1-hour-ahead IV prediction, improving options entry timing.
 
 **Audit Findings:** #37 (RL stops), #40 (earnings NLP), #41 (dark pool)
 **Agent:** 3 (AI/ML)
+**Status:** deferred (approved 2026-02-24)
 
 These items are tracked but deferred beyond the 8-week timeline. They will be evaluated after Phase 4 core ML models prove value.
 
